@@ -35,18 +35,17 @@ name= "vs_results_display"
 epilog="""
 
 REQUIRED PACKAGES
-        Requires MGLTools-1.5.7. Requires MGLTools-1.5.7/bin/pythonsh aliased as pythonsh.
         Requires numpy, multiprocessing, bashplotlib, matplotlib, sqlite3.
 
 AUTHOR
-        Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD.
+        Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD and Andreas Tillack, PhD.
 
 REPORTING BUGS
         Please report bugs to:
         AutoDock mailing list   http://autodock.scripps.edu/mailing_list
 
 COPYRIGHT
-        Copyright (C) 2021 Stefano Forli, Center for Computational Structural Biology, 
+        Copyright (C) 2021 Stefano Forli Laboratory, Center for Computational Structural Biology, 
                      The Scripps Research Institute.
         GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
 """ 
@@ -455,13 +454,13 @@ def create_interaction_bv_table(conn, num_discrete_interactions):
     interaction_columns = range(num_discrete_interactions)
     interact_columns_str = ""
     for i in interaction_columns:
-        interact_columns_str += str(i+1) + "           INTEGER, "
+        interact_columns_str += "Interaction_"+ str(i+1) + " INTEGER,\n"
 
-    interact_columns_str = interact_columns_str.rstrip(", ")
+    interact_columns_str = interact_columns_str.rstrip(",\n")
 
-    bv_table = """CREATE TABLE Interaction_bitvectors ( 
-        Pose_ID           INTEGER PRIMARY KEY AUTOINCREMENT,
-        {columns} )""".format(columns = interact_columns_str)
+    bv_table = """CREATE TABLE Interaction_bitvectors (
+    Pose_ID INTEGER PRIMARY KEY,
+    {columns})""".format(columns = interact_columns_str)
 
     try:
         cur = conn.cursor()
@@ -558,6 +557,29 @@ def insert_all_interactions(conn, all_interactions):
     try:
         cur = conn.cursor()
         cur.executemany(sql_insert, all_interactions)
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        print(e)
+
+    conn.close()
+
+def insert_interaction_BVs(conn, bitvectors, num_discrete_interactions):
+    print("Inserting interaction bitvectors...")
+    interaction_columns = range(num_discrete_interactions)
+    column_str = ""
+    filler_str = "?,"
+    for i in interaction_columns:
+        column_str += "Interaction_"+ str(i+1) + ", "
+        filler_str += "?,"
+    column_str = column_str.rstrip(", ")
+    filler_str = filler_str.rstrip(",")
+
+    sql_insert = '''INSERT INTO Interaction_bitvectors (Pose_ID, {columns}) VALUES ({fillers})'''.format(columns = column_str, fillers = filler_str)
+
+    try:
+        cur = conn.cursor()
+        cur.executemany(sql_insert, bitvectors)
         conn.commit()
         cur.close()
     except Exception as e:
@@ -698,14 +720,14 @@ def get_all_interactions(interactions_strings):
 
 def write_interaction_bitvector(pose_id, interactions_string, all_interactions):
     """takes string of interactions and all possible interactions and makes bitvector"""
-    pose_bitvector = []
+    pose_bitvector = [pose_id+1]
     for interaction in all_interactions:
-        if interaction in pose:
+        if interaction in interactions_string:
             pose_bitvector.append(1) #true
         else:
             pose_bitvector.append(0) #false
 
-    return pose_id, pose_bitvector
+    return pose_bitvector
 
 def write_result_filtering_sql(filter_list):
     """ takes list of filters, writes sql filtering string"""
@@ -1042,20 +1064,10 @@ if input_sql == None:
     with mp.Pool() as pool:
         write_bv_partial = partial(write_interaction_bitvector, all_interactions=all_interactions)
         print(f'Calculating interaction bitvectors on {mp.cpu_count()} cores')
-        interaction_bitvectors = pool.starmap(write_bv_partial, zip(pose_id_list, all_interactions))
+        interaction_bitvectors = pool.starmap(write_bv_partial, zip(pose_id_list, interaction_rows_list))
 
-    #stack rows of data into numpy array for insertion into the database
-    #print("Creating results database array...")
-    #database_array = []
-    """counter = 1
-    for ligand in results_database_listofrows:
-        for row in ligand:
-            for run in row:
-                print("Stacking array row", counter, "of", expected_results_rows)
-                database_array.append(row)
-                counter += 1"""
     time3 = time.perf_counter()
-    #open sql db
+    #open sql db and create tables
     print("Creating database...")
     conn = create_connection(parsed_opts.output_sql)
     create_results_table(conn)
@@ -1073,6 +1085,9 @@ if input_sql == None:
     insert_ligands(conn, np.array(ligands_array))
     conn = create_connection(parsed_opts.output_sql)
     insert_all_interactions(conn, np.array(all_interactions_split))
+    conn = create_connection(parsed_opts.output_sql)
+    insert_interaction_BVs(conn, interaction_bitvectors, len(all_interactions))
+
     input_sql = parsed_opts.output_sql
 time4 = time.perf_counter()
 
