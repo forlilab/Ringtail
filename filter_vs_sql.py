@@ -756,6 +756,8 @@ def write_result_filtering_sql(filter_list):
             outfield_string += outfield_dict[field] + ", "
     outfield_string = outfield_string.rstrip(", ")
 
+    interaction_filters = []
+
     sql_string = """SELECT {out_columns} FROM Results WHERE """.format(out_columns = outfield_string)
 
     for filter_tuple in filter_list:
@@ -791,14 +793,67 @@ def write_result_filtering_sql(filter_list):
         interaction_filter_keys = ["V",
         "H",
         "R"]
-
+        #compile list of interactions to search for
         for key in interaction_filter_keys:
             if filter_key == key:
                 for interact in filter_value:
-                    interaction_sql_string = "interactions LIKE '%{key1}:{value}%' AND ".format(key1 = key, value = interact[0])
-                    sql_string += interaction_sql_string
+                    interaction_string = key + ":" + interact[0]
+                    interaction_filters.append(interaction_string.split(":"))
+
+    interaction_filter_indices = []
+    #for each interaction, get the index from the interactions_indices table
+    for interaction in interaction_filters:
+        interact_index_str = write_interaction_index_filtering_str(interaction)
+        conn = create_connection(parsed_opts.output_sql)
+        interaction_indices = select_from_db(conn, interact_index_str)
+        for i in interaction_indices:
+            interaction_filter_indices.append(i[0])
+
+    #find pose ids for ligands with desired interactions
+    if interaction_filter_indices != []:
+        interaction_filter_str = write_interaction_filtering_str(interaction_filter_indices)
+        conn = create_connection(parsed_opts.output_sql)
+        interaction_pass_pose_ids = select_from_db(conn, interaction_filter_str)
+
+        sql_string += "("
+        for passed_pose in interaction_pass_pose_ids:
+            passed_pose_str = "Pose_ID = {pose} OR ".format(pose = passed_pose[0])
+            sql_string += passed_pose_str
+        sql_string = sql_string.rstrip("OR ")
+        sql_string += ")"
+
+    if sql_string.endswith("AND "):
+        sql_string = sql_string.rstrip("AND ")
+    if sql_string.endswith("OR "):
+        sql_string = sql_string.rstrip("OR ")
+    return sql_string
+
+def write_interaction_index_filtering_str(interaction_list):
+    """takes list of interaction info for a given ligand, looks up corresponding interaction index"""
+    interaction_info = ["interaction_type", "rec_chain", "rec_resname", "rec_resid", "rec_atom"]
+    sql_string = """SELECT interaction_id FROM Interaction_indices WHERE """
+
+    for i in range(4):
+        item = interaction_list[i]
+        column_name = interaction_info[i]
+        if item != "":
+            sql_string += "{column} LIKE '%{value}%' AND ".format(column = column_name, value = item)
 
     sql_string = sql_string.rstrip("AND ")
+    return sql_string
+
+def write_interaction_filtering_str(interaction_index_list):
+    """takes list of interaction indices and searches for ligand ids which have those interactions"""
+
+    sql_string = """SELECT Pose_id FROM Interaction_bitvectors WHERE """
+
+    for index in interaction_index_list:
+        add_str = "Interaction_{index_n} = 1 OR ".format(index_n = index)
+        sql_string += add_str
+
+    sql_string = sql_string.rstrip("OR ")
+
+    print(sql_string)
     return sql_string
 
 def select_from_db(conn, filter_sql_string):
