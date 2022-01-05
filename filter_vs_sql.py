@@ -701,10 +701,8 @@ def write_ligand_row(ligand_dict):
 
     return [ligand_name, ligand_smile, input_pdbqt, best_binding, best_run]
 
-def get_all_interactions(interactions_strings):
+def get_all_interactions(interactions_strings, all_interactions_list, all_interactions_split):
     all_interactions_dict = {}
-    all_interactions_split = []
-    all_interactions_list = []
     for pose in interactions_strings:
         pose = pose.split(", ")
         for interaction in pose:
@@ -914,6 +912,11 @@ def write_input_pdbqt_sql_call(ligand_name):
 ############ dlg parsing helper functions ###########
 #####################################################
 
+def make_list_chunks(lst):
+    """break list of dlgs into chuncks of 1000 dlgs"""
+    for i in range(0, len(lst), 1000): 
+        yield lst[i:i + 1000] 
+
 def dlg_manager(fname):
     """manager for multiprocessing. Parses dlg to dictionary, opens connection to database, writes ligand row"""
     dlg_dict = parse_dlg_gpu(fname)
@@ -1081,67 +1084,75 @@ if input_sql == None:
 #############################################
 ### Find dlgs and write sql database file ###
 #############################################
-    #read dlgs in parallel
-    manager = Filter.DockingResultManager(sources = file_sources, filters=filters, output=output)
-    print("Initializing database...")
-    conn = create_connection(parsed_opts.output_sql)
-    create_results_table(conn)
-    time1 = time.perf_counter()
 
-    print(f'Reading dlgs on {mp.cpu_count()} cores')
-    results_array = []
-    ligands_array = []
-    interaction_rows_list = []
-    expected_results_rows = 0
-    with mp.Pool() as pool:
-        parsed_dlgs = pool.map(dlg_manager, manager.files_pool)
-        for dlg in parsed_dlgs:
-            results_rows = dlg[0]
-            ligand_row = dlg[1]
-            interaction_rows = dlg[2]
-            for pose in results_rows:
-                results_array.append(pose)
-            for pose in interaction_rows:
-                interaction_rows_list.append(pose)
-            ligands_array.append(ligand_row)
-        
-            for entry in results_rows:
-                expected_results_rows += len(entry)
-
-    time2 = time.perf_counter()
-    print("Preparing interaction data...")
-    #find all unique interactions
-    all_interactions_data = get_all_interactions(interaction_rows_list)
-    all_interactions = all_interactions_data[0]
-    all_interactions_split = all_interactions_data[1]
-    #generate interaction bitvector for each pose
-    pose_id_list = range(len(interaction_rows_list))
-    with mp.Pool() as pool:
-        write_bv_partial = partial(write_interaction_bitvector, all_interactions=all_interactions)
-        print(f'Calculating interaction bitvectors on {mp.cpu_count()} cores')
-        interaction_bitvectors = pool.starmap(write_bv_partial, zip(pose_id_list, interaction_rows_list))
-
-    time3 = time.perf_counter()
     #open sql db and create tables
     print("Creating database...")
     conn = create_connection(parsed_opts.output_sql)
     create_results_table(conn)
     conn = create_connection(parsed_opts.output_sql)
     create_ligands_table(conn)
+    time1 = time.perf_counter()
+
+    #read dlgs in parallel
+    manager = Filter.DockingResultManager(sources = file_sources, filters=filters, output=output)
+
+    dlg_file_list = manager.files_pool
+    dlg_file_list_chunked = list(make_list_chunks(dlg_file_list))
+
+    print(f'Reading dlgs on {mp.cpu_count()} cores')
+    all_interactions = []
+    all_interactions_split = []
+    num_poses = 0
+    interaction_chunks = []
+    for dlg_chunk in dlg_file_list_chunked:
+        results_array = []
+        ligands_array = []
+        interaction_rows_list = []
+        with mp.Pool() as pool:
+            parsed_dlgs = pool.map(dlg_manager, dlg_chunk)
+            for dlg in parsed_dlgs:
+                results_rows = dlg[0]
+                ligand_row = dlg[1]
+                interaction_rows = dlg[2]
+                for pose in results_rows:
+                    results_array.append(pose)
+                for pose in interaction_rows:
+                    interaction_rows_list.append(pose)
+                ligands_array.append(ligand_row)
+
+        #find all unique interactions
+        all_interactions_data = get_all_interactions(interaction_rows_list, all_interactions, all_interactions_split)
+        all_interactions = all_interactions_data[0]
+        all_interactions_split = all_interactions_data[1]
+        num_poses += len(interaction_rows_list)
+        interaction_chunks.append(interaction_rows_list)
+
+        conn = create_connection(parsed_opts.output_sql)
+        insert_results(conn, np.array(results_array))
+        conn = create_connection(parsed_opts.output_sql)
+        insert_ligands(conn, np.array(ligands_array))
+
+    time2 = time.perf_counter()
+
+    #create interaction tables and insert all interactions
     conn = create_connection(parsed_opts.output_sql)
     create_interaction_index_table(conn)
     conn = create_connection(parsed_opts.output_sql)
     create_interaction_bv_table(conn, len(all_interactions))
-
-    #insert data
-    conn = create_connection(parsed_opts.output_sql)
-    insert_results(conn, np.array(results_array))
-    conn = create_connection(parsed_opts.output_sql)
-    insert_ligands(conn, np.array(ligands_array))
     conn = create_connection(parsed_opts.output_sql)
     insert_all_interactions(conn, np.array(all_interactions_split))
-    conn = create_connection(parsed_opts.output_sql)
-    insert_interaction_BVs(conn, interaction_bitvectors, len(all_interactions))
+    #generate interaction bitvector for each pose
+    pose_id_list = range(num_poses)
+    pose_id_chunks = list(make_list_chunks(pose_id_list))
+    for i in range(len(interaction_chunks)):
+        with mp.Pool() as pool:
+            write_bv_partial = partial(write_interaction_bitvector, all_interactions=all_interactions)
+            print(f'Calculating interaction bitvectors on {mp.cpu_count()} cores')
+            interaction_bitvectors = pool.starmap(write_bv_partial, zip(pose_id_chunks[i], interaction_chunks[i]))
+            conn = create_connection(parsed_opts.output_sql)
+            insert_interaction_BVs(conn, interaction_bitvectors, len(all_interactions))
+
+    time3 = time.perf_counter()
 
     input_sql = parsed_opts.output_sql
 time4 = time.perf_counter()
