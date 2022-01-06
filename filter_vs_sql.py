@@ -470,7 +470,7 @@ def insert_results(conn, results_array):
     -conn: database connection
     -ligand_array: numpy array of arrays"""
 
-    print("Inserting results...")
+    #print("Inserting results...")
     sql_insert = """INSERT INTO Results (
     LigName,
     ligand_smile,
@@ -516,7 +516,7 @@ def insert_results(conn, results_array):
     conn.close()
 
 def insert_ligands(conn, ligand_array):
-    print("Inserting ligand data...")
+    #print("Inserting ligand data...")
     sql_insert = '''INSERT INTO Ligands (
     LigName,
     ligand_smile,
@@ -537,7 +537,7 @@ def insert_ligands(conn, ligand_array):
     conn.close()
 
 def insert_all_interactions(conn, all_interactions):
-    print("Inserting interactions...")
+    #rint("Inserting interactions...")
     sql_insert = '''INSERT INTO Interaction_indices (
     interaction_type,
     rec_chain,
@@ -557,8 +557,29 @@ def insert_all_interactions(conn, all_interactions):
 
     conn.close()
 
+def insert_one_interaction(conn, interaction):
+    #print("Inserting interactions...")
+    sql_insert = '''INSERT INTO Interaction_indices (
+    interaction_type,
+    rec_chain,
+    rec_resname,
+    rec_resid,
+    rec_atom,
+    rec_atomid
+    ) VALUES (?,?,?,?,?,?)'''
+
+    try:
+        cur = conn.cursor()
+        cur.execute(sql_insert, interaction)
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        print(e)
+
+    conn.close()
+
 def insert_interaction_BVs(conn, bitvectors, num_discrete_interactions):
-    print("Inserting interaction bitvectors...")
+    #print("Inserting interaction bitvectors...")
     interaction_columns = range(num_discrete_interactions)
     column_str = ""
     filler_str = "?,"
@@ -580,6 +601,19 @@ def insert_interaction_BVs(conn, bitvectors, num_discrete_interactions):
 
     conn.close()
 
+def make_new_interaction_column(conn, column_number):
+    add_column_str = '''ALTER TABLE Interaction_bitvectors ADD COLUMN Interaction_{n_inter}'''.format(n_inter = str(column_number))
+    try:
+        cur = conn.cursor()
+        cur.execute(add_column_str)
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        print(e)
+
+    conn.close()
+
+
 def write_results_interaction_rows(ligand_dict):
     """writes list of lists of ligand values to be inserted into sqlite database"""
 
@@ -589,8 +623,6 @@ def write_results_interaction_rows(ligand_dict):
     #initialize list for sql row with name and smile string
     ligand_name = ligand_dict["ligname"]
     ligand_smile = ligand_dict["ligand_smile_string"]
-
-    #print("Writing database rows for", ligand_name)
 
     ligand_data_keys = ["cluster_rmsds",
     "ref_rmsds",
@@ -709,14 +741,39 @@ def get_all_interactions(interactions_strings, all_interactions_list, all_intera
 
     return all_interactions_list, all_interactions_split
 
+def write_new_interactions(interactions_strings, all_interactions_list, all_interactions_split):
+    """searches for new interactions, adds to interaction tables, adds to lists of all interactions"""
+    all_interactions_dict = dict.fromkeys(all_interactions_list)
+    for pose in interactions_strings:
+        pose = pose.split(", ")
+        for interaction in pose:
+            if interaction.endswith(":"):
+                    interaction = interaction.rstrip(":") #remove trailing colon
+            if interaction not in all_interactions_dict and interaction != "":
+                interaction_attributes= interaction.split(":")
+                all_interactions_dict[interaction] = interaction
+                all_interactions_list.append(interaction)
+                all_interactions_split.append(interaction_attributes) #type,ligand atom, ligand id, chain, residue, resid, residue atom, residue atom id
+
+                #insert new interaction into interaction index table
+                conn = create_connection(parsed_opts.output_sql)
+                insert_one_interaction(conn, interaction_attributes)
+
+                #create new column for interaction
+                conn = create_connection(parsed_opts.output_sql)
+                make_new_interaction_column(conn, len(all_interactions_list))
+
+
+    return all_interactions_list, all_interactions_split
+
 def write_interaction_bitvector(pose_id, interactions_string, all_interactions):
     """takes string of interactions and all possible interactions and makes bitvector"""
-    pose_bitvector = [pose_id+1]
+    pose_bitvector = [pose_id]
     for interaction in all_interactions:
         if interaction in interactions_string:
             pose_bitvector.append(1) #true
         else:
-            pose_bitvector.append(0) #false
+            pose_bitvector.append(None) #false
 
     return pose_bitvector
 
@@ -844,7 +901,6 @@ def write_interaction_filtering_str(interaction_index_list):
 
     sql_string = sql_string.rstrip("OR ")
 
-    print(sql_string)
     return sql_string
 
 def select_from_db(conn, filter_sql_string):
@@ -1096,11 +1152,14 @@ if input_sql == None:
     all_interactions = []
     all_interactions_split = []
     num_poses = 0
-    interaction_chunks = []
+    chunk_index = 0
+    current_pose_id = 1
     for dlg_chunk in dlg_file_list_chunked:
+        print("\rParsing and inserting dlgs for chunk % 4d      " % chunk_index, end="")
         results_array = []
         ligands_array = []
         interaction_rows_list = []
+        pose_id_list = []
         with mp.Pool() as pool:
             parsed_dlgs = pool.map(dlg_manager, dlg_chunk)
             for dlg in parsed_dlgs:
@@ -1111,41 +1170,47 @@ if input_sql == None:
                     results_array.append(pose)
                 for pose in interaction_rows:
                     interaction_rows_list.append(pose)
+                    pose_id_list.append(current_pose_id)
+                    current_pose_id += 1
                 ligands_array.append(ligand_row)
 
-        #find all unique interactions
-        all_interactions_data = get_all_interactions(interaction_rows_list, all_interactions, all_interactions_split)
-        all_interactions = all_interactions_data[0]
-        all_interactions_split = all_interactions_data[1]
-        num_poses += len(interaction_rows_list)
-        interaction_chunks.append(interaction_rows_list)
-
+        #insert data from chunk
         conn = create_connection(parsed_opts.output_sql)
         insert_results(conn, np.array(results_array))
         conn = create_connection(parsed_opts.output_sql)
         insert_ligands(conn, np.array(ligands_array))
 
-    time2 = time.perf_counter()
+        #if first chunk, initialize interaction tables
+        if chunk_index == 0:
+            #find unique interactions in chunk
+            all_interactions_data = get_all_interactions(interaction_rows_list, all_interactions, all_interactions_split)
+            #create interaction tables
+            conn = create_connection(parsed_opts.output_sql)
+            create_interaction_index_table(conn)
+            conn = create_connection(parsed_opts.output_sql)
+            create_interaction_bv_table(conn, len(all_interactions))
+            conn = create_connection(parsed_opts.output_sql)
+            insert_all_interactions(conn, np.array(all_interactions_split))
 
-    #create interaction tables and insert all interactions
-    conn = create_connection(parsed_opts.output_sql)
-    create_interaction_index_table(conn)
-    conn = create_connection(parsed_opts.output_sql)
-    create_interaction_bv_table(conn, len(all_interactions))
-    conn = create_connection(parsed_opts.output_sql)
-    insert_all_interactions(conn, np.array(all_interactions_split))
-    #generate interaction bitvector for each pose
-    pose_id_list = range(num_poses)
-    pose_id_chunks = list(make_list_chunks(pose_id_list))
-    for i in range(len(interaction_chunks)):
+        else:
+            all_interaction_data = write_new_interactions(interaction_rows_list, all_interactions, all_interactions_split)
+
+        all_interactions = all_interactions_data[0]
+        all_interactions_split = all_interactions_data[1]
+
+        #generate interaction bitvector for each pose and insert row
         with mp.Pool() as pool:
             write_bv_partial = partial(write_interaction_bitvector, all_interactions=all_interactions)
             print(f'Calculating interaction bitvectors on {mp.cpu_count()} cores')
-            interaction_bitvectors = pool.starmap(write_bv_partial, zip(pose_id_chunks[i], interaction_chunks[i]))
-            conn = create_connection(parsed_opts.output_sql)
-            insert_interaction_BVs(conn, interaction_bitvectors, len(all_interactions))
+            interaction_bitvectors = pool.starmap(write_bv_partial, zip(pose_id_list, interaction_rows_list))
 
-    time3 = time.perf_counter()
+        conn = create_connection(parsed_opts.output_sql)
+        insert_interaction_BVs(conn, interaction_bitvectors, len(all_interactions))
+
+        chunk_index += 1
+        num_poses += len(interaction_rows_list)
+
+    time2 = time.perf_counter()
 
     input_sql = parsed_opts.output_sql
 time4 = time.perf_counter()
@@ -1154,7 +1219,6 @@ print("Parsing filters...")
 #fetch filters for results table, get sql call
 filter_list = make_results_filter_list(filters)
 sql_filter_str = write_result_filtering_sql(filter_list)
-print(sql_filter_str)
 conn = create_connection(input_sql)
 filtered_results = select_from_db(conn, sql_filter_str)
 
@@ -1215,15 +1279,15 @@ if parsed_opts.plot:
         fig_name = "out.png"
     plt.savefig(fig_name)
 
+time6 = time.perf_counter()
 if write_db_flag:
     print("Time to initialize:", time1-time0, "seconds")
-    print("Time to read dlgs:", time2-time1, "seconds")
-    print("Time to create interaction bitvectors:", time3-time2, "seconds")
-    print("Time to write sql database", time4-time3, "seconds")
+    print("Time to write sql database", time2-time1, "seconds")
     print("Total database write time:", time4-time0, "seconds")
 print("Filtering time:", time5-time4, "seconds")
 if parsed_opts.log != None:
     print("Time to write log:", time6-time5, "seconds")
+print("Total runtime:", time6 - time0, "seconds")
 #if parsed_opts.export_poses_path != None:
     #print("Time to write pdbqts:", time7-time6, "seconds")
 
