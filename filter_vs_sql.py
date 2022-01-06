@@ -1,10 +1,3 @@
-try:
-   import cPickle as pickle
-except:
-   import pickle
-
-from Filter_ADGPU import filter_vs_adgpu as Filter
-
 import sys
 import argparse
 from glob import glob
@@ -16,7 +9,7 @@ import multiprocessing as mp
 from bashplotlib.histogram import plot_hist
 from matplotlib import pyplot as plt
 import time
-from parsers import parse_dlg_gpu
+import parsers as ad_parser
 import sqlite3
 from collections import defaultdict
 import subprocess
@@ -919,7 +912,7 @@ def make_list_chunks(lst):
 
 def dlg_manager(fname):
     """manager for multiprocessing. Parses dlg to dictionary, opens connection to database, writes ligand row"""
-    dlg_dict = parse_dlg_gpu(fname)
+    dlg_dict = ad_parser.parse_dlg_gpu(fname)
     dlg_dict = get_best_cluster_poses(dlg_dict)
     resultsAndInteractions = write_results_interaction_rows(dlg_dict)
     results_rows = resultsAndInteractions[0]
@@ -1094,7 +1087,7 @@ if input_sql == None:
     time1 = time.perf_counter()
 
     #read dlgs in parallel
-    manager = Filter.DockingResultManager(sources = file_sources, filters=filters, output=output)
+    manager = ad_parser.DockingResultManager(sources = file_sources, filters=filters, output=output)
 
     dlg_file_list = manager.files_pool
     dlg_file_list_chunked = list(make_list_chunks(dlg_file_list))

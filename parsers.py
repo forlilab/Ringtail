@@ -1,6 +1,56 @@
 import os
 import gzip
 import numpy as np
+from glob import glob
+
+class DockingResultManager(object):
+    """ the class is used to manage a collection of docking results (e.g., a virtual screening
+        directory), by peforming the folling main operations:
+         - create an instance of the DockingResultFilter
+         - parse raw docking files retrieved from the specified source
+         - pass the processed docking data to the Filter class to perform the actual filtering
+         - manage the result reporting (printing to screen, saving to file, etc...)
+    """
+
+    def __init__(self, sources = None, filters=None, output=None):
+        """ initialize the manager to populate the files list """
+        # define file sources to use
+        self._process_sources(sources)
+
+    def _process_sources(self, sources):
+        """ process the options for input files (parse dictionary) """
+        self.files_pool = []
+        if sources['file'] is not None:
+            # print("DRM> initialized with %d individual files" % len(sources['file']))
+            self.files_pool = sources['file']
+        # update the files pool with the all the files found in the path
+        if sources['file_path'] is not None:
+            # print("DRM> scanning path [%s] (recursive: %s, pattern '%s')" % (sources['file_path']['path'],
+            #         str(sources['file_path']['recursive']), sources['file_path']['pattern']))
+            self.scan_dir(sources['file_path']['path'], 
+                          sources['file_path']['pattern'], 
+                          sources['file_path']['recursive'])
+        # update the files pool with the files specified in the files list
+        if sources['file_list'] is not None:
+            # print("DRM> searching for files listed in [%s]" % sources['file_list'])
+            self.scan_file_list(sources['file_list'])
+
+    def scan_dir(self, path, pattern, recursive=False):
+        """ scan for valid output files in a directory 
+            the pattern is used to glob files
+            optionally, a recursive search is performed
+        """
+        print("-Scanning directory [%s] for DLG files (pattern:|%s|)" % (path, pattern))
+        files = []
+        if recursive:
+            path = os.path.normpath(path)
+            path = os.path.expanduser(path)
+            for dirpath, dirnames, filenames in os.walk(path):
+                files.extend(os.path.join(dirpath,f) for f in fnmatch.filter(filenames,'*'+pattern))
+        else:
+            files = glob(os.path.join(path, pattern))
+        print("-Found %d files." % len(files))
+        self.files_pool.extend(files)
 
 def parse_dlg_gpu(fname, mode='standard'):
     """ parse an ADGPU DLG file uncompressed or gzipped 
