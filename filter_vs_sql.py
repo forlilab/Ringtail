@@ -1154,8 +1154,12 @@ if input_sql == None:
     num_poses = 0
     chunk_index = 0
     current_pose_id = 1
+    parsing_times = []
+    db_writing_times = []
+    bitvector_times = []
     for dlg_chunk in dlg_file_list_chunked:
         print("\rParsing and inserting dlgs for chunk % 4d      " % chunk_index, end="")
+        chunk_time0 = time.perf_counter()
         results_array = []
         ligands_array = []
         interaction_rows_list = []
@@ -1173,6 +1177,8 @@ if input_sql == None:
                     pose_id_list.append(current_pose_id)
                     current_pose_id += 1
                 ligands_array.append(ligand_row)
+
+        chunk_time1 = time.perf_counter()
 
         #insert data from chunk
         conn = create_connection(parsed_opts.output_sql)
@@ -1197,6 +1203,7 @@ if input_sql == None:
 
         all_interactions = all_interactions_data[0]
         all_interactions_split = all_interactions_data[1]
+        chunk_time2 = time.perf_counter()
 
         #generate interaction bitvector for each pose and insert row
         with mp.Pool() as pool:
@@ -1209,6 +1216,11 @@ if input_sql == None:
 
         chunk_index += 1
         num_poses += len(interaction_rows_list)
+        chunk_time3 = time.perf_counter()
+
+        parsing_times.append(chunk_time1 - chunk_time0)
+        db_writing_times.append(chunk_time3 - chunk_time2)
+        bitvector_times.append(chunk_time2 - chunk_time1)
 
     time2 = time.perf_counter()
 
@@ -1282,6 +1294,9 @@ if parsed_opts.plot:
 time6 = time.perf_counter()
 if write_db_flag:
     print("Time to initialize:", time1-time0, "seconds")
+    print("Total parsing time:", sum(parsing_times), "seconds")
+    print("Total db writing time (serial):", sum(db_writing_times), "seconds")
+    print("Total bitvector time:", sum(bitvector_times), "seconds")
     print("Time to write sql database", time2-time1, "seconds")
     print("Total database write time:", time4-time0, "seconds")
 print("Filtering time:", time5-time4, "seconds")
