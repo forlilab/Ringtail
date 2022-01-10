@@ -832,10 +832,10 @@ def write_result_filtering_sql(filter_list):
         #write interaction filters
         if filter_key == 'hb_count':
             if filter_value > 0:
-                hb_count_str = "hb_count > {value} AND ".format(value = filter_value)
+                hb_count_str = "num_hb > {value} AND ".format(value = filter_value)
                 sql_string += hb_count_str
             else:
-                hb_count_str = "hb_count < {value} AND ".format(value = -1*filter_value)
+                hb_count_str = "num_hb < {value} AND ".format(value = -1*filter_value)
                 sql_string += hb_count_str
 
         interaction_filter_keys = ["V",
