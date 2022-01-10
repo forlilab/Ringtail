@@ -852,7 +852,7 @@ def write_result_filtering_sql(filter_list):
     #for each interaction, get the index from the interactions_indices table
     for interaction in interaction_filters:
         interact_index_str = write_interaction_index_filtering_str(interaction)
-        conn = create_connection(parsed_opts.output_sql)
+        conn = create_connection(input_sql)
         interaction_indices = select_from_db(conn, interact_index_str)
         for i in interaction_indices:
             interaction_filter_indices.append(i[0])
@@ -860,15 +860,7 @@ def write_result_filtering_sql(filter_list):
     #find pose ids for ligands with desired interactions
     if interaction_filter_indices != []:
         interaction_filter_str = write_interaction_filtering_str(interaction_filter_indices)
-        conn = create_connection(parsed_opts.output_sql)
-        interaction_pass_pose_ids = select_from_db(conn, interaction_filter_str)
-
-        sql_string += "("
-        for passed_pose in interaction_pass_pose_ids:
-            passed_pose_str = "Pose_ID = {pose} OR ".format(pose = passed_pose[0])
-            sql_string += passed_pose_str
-        sql_string = sql_string.rstrip("OR ")
-        sql_string += ")"
+        sql_string += "Pose_ID IN (" + interaction_filter_str + ")"
 
     if sql_string.endswith("AND "):
         sql_string = sql_string.rstrip("AND ")
@@ -1128,6 +1120,7 @@ file_sources, filters, output, = process_options(parsed_opts)
 
 write_db_flag = False
 input_sql = parsed_opts.sql_db
+
 if input_sql == None:
     write_db_flag = True
 #############################################

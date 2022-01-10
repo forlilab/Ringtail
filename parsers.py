@@ -2,6 +2,7 @@ import os
 import gzip
 import numpy as np
 from glob import glob
+import fnmatch
 
 class DockingResultManager(object):
     """ the class is used to manage a collection of docking results (e.g., a virtual screening
