@@ -28,14 +28,14 @@ name= "vs_results_display"
 epilog="""
 
 REQUIRED PACKAGES
-        Requires numpy, multiprocessing, bashplotlib, matplotlib, sqlite3.
+        Requires numpy, multiprocessing, bashplotlib, matplotlib, sqlite3.\n
 
 AUTHOR
-        Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD and Andreas Tillack, PhD.
+        Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD and Andreas Tillack, PhD.\n
 
 REPORTING BUGS
         Please report bugs to:
-        AutoDock mailing list   http://autodock.scripps.edu/mailing_list
+        AutoDock mailing list   http://autodock.scripps.edu/mailing_list\n
 
 COPYRIGHT
         Copyright (C) 2021 Stefano Forli Laboratory, Center for Computational Structural Biology, 
@@ -171,6 +171,14 @@ option_groups = [
                     ),
                 ('--lebest', {
                     'help':'specify the best ligand efficiency value accepted', 
+                    'action':'store', 'type':float, 'metavar': "FLOAT",},
+                    ),
+                ('--epercentile', {
+                    'help':'specify the worst energy percentile accepted', 
+                    'action':'store', 'type':float, 'metavar': "FLOAT",},
+                    ),
+                ('--leffpercentile', {
+                    'help':'specify the worst ligand efficiency percentile accepted', 
                     'action':'store', 'type':float, 'metavar': "FLOAT",},
                     )
 
@@ -829,6 +837,18 @@ def write_result_filtering_sql(filter_list):
             lebest_str = "leff > {value} AND ".format(value = filter_value)
             sql_string += lebest_str
 
+        if filter_key == 'epercentile':
+            requested_percentile = filter_value
+            percentile_energy = calculate_energy_percentile(requested_percentile)[0]
+            epercentile_string = "energies_binding < {value} AND ".format(value = percentile_energy)
+            sql_string += epercentile_string
+
+        if filter_key == 'leffpercentile':
+            requested_percentile = filter_value
+            percentile_energy = calculate_energy_percentile(requested_percentile)[1]
+            leff_percentile_string = "leff < {value} AND ".format(value = percentile_energy)
+            sql_string += leff_percentile_string
+
         #write interaction filters
         if filter_key == 'hb_count':
             if filter_value > 0:
@@ -939,6 +959,11 @@ def write_plot_results_sql():
 
     return sql_string
 
+def write_results_energies_str():
+    sql_string = "SELECT energies_binding, leff FROM Results"
+
+    return sql_string
+
 def write_statevar_sql_call(ligand_name):
     sql_string = "SELECT trans_x, trans_y, trans_z, axisangle_x, axisangle_y, axisangle_z, axisangle_w, dihedrals FROM Results WHERE LigName LIKE '%{value}%' ".format(value = ligand_name)
 
@@ -1015,6 +1040,28 @@ def make_results_filter_list(filters):
         filters_list.append(count)
 
     return filters_list
+
+def fetch_best_energies_leff():
+    conn = create_connection(input_sql)
+    plot_data_str = write_plot_results_sql()
+    plot_data = select_from_db(conn, plot_data_str)
+
+    energies = []
+    leffs = []
+    for row in plot_data:
+        if int(row[3]) == 1: #only one point per ligand, for best binding energy
+            energies.append(row[1])
+            leffs.append(row[2])
+
+    return energies, leffs, plot_data
+
+def calculate_energy_percentile(percent):
+    energies, leffs = fetch_best_energies_leff()
+
+    energy_percentile = np.percentile(energies, percent)
+    leff_percentile = np.percentile(leffs, percent)
+
+    return energy_percentile, leff_percentile
 
 ###################################################
 ############ output helper functions ##############
@@ -1248,16 +1295,7 @@ time7 = time.perf_counter()
 
 #make energy and le histograms
 if parsed_opts.plot:
-    conn = create_connection(input_sql)
-    plot_data_str = write_plot_results_sql()
-    plot_data = select_from_db(conn, plot_data_str)
-
-    energies = []
-    leffs = []
-    for row in plot_data:
-        if int(row[3]) == 1: #only one point per ligand, for best binding energy
-            energies.append(row[1])
-            leffs.append(row[2])
+    energies, leffs, plot_data = fetch_best_energies_leff()
     plot_hist(energies, title = "Best pose energies", showSummary=True, xlab=True, bincount=150)
     plot_hist(leffs, title = "Best pose ligand efficiency", showSummary=True, xlab=True, bincount=150)
 
