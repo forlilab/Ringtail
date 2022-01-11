@@ -146,7 +146,7 @@ option_groups = [
                     ),
                 ('--overwrite', {
                     'help':('by default, if a log file exists, it doesn\'t get '
-                        'overwritten and an error is returned; this option enable overwriting existing log files'),
+                        'overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database'),
                     'action':'store_true', 'default':False },
                     ),
 
@@ -1170,6 +1170,11 @@ input_sql = parsed_opts.sql_db
 
 if input_sql == None:
     write_db_flag = True
+
+    if parsed_opts.overwrite:
+        if os.path.exists(parsed_opts.output_sql): #check if database file already exists
+            os.remove(parsed_opts.output_sql)
+
 #############################################
 ### Find dlgs and write sql database file ###
 #############################################
