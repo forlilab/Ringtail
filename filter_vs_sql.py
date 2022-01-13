@@ -658,7 +658,7 @@ def write_results_interaction_rows(ligand_dict):
     "pose_quarternions"]
     
     ######get pose-specific data
-    for i in range(len(ligand_dict)):
+    for i in range(len(ligand_dict["sorted_runs"])):
         #check if run is best for a cluster. We are only saving the top pose for each cluster
         pose_rank = i
         run_number = ligand_dict["sorted_runs"][pose_rank]
