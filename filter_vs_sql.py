@@ -271,9 +271,9 @@ class Filtering_input_parser():
             cmdline_opts += self.read_filter_file(ffile)
         # add a function here to validate the cmdline (repeated options?)
         # validate policy of file > cmdline? (or vice versa?)
-        parsed_opts = parser.parse_args(cmdline_opts)
+        self.parsed_opts = parser.parse_args(cmdline_opts)
         #print("PARSED OPTIONS", parsed_opts)
-        self.process_options(parsed_opts)
+        self.process_options(self.parsed_opts)
 
     def read_filter_file(self, fname):
             """ parse the filter file to define filters """
@@ -409,10 +409,6 @@ class VSDB(db_file):
         cur.execute(filter_sql_string)
 
         rows = cur.fetchall()
-
-        if not parsed_opts.no_print:
-            for row in rows:
-                print(row)
 
         cur.close()
 
@@ -703,9 +699,10 @@ def write_input_pdbqt_sql_call(ligand_name):
 ##################################################################
 class DLGparsingManager():
 
-    def __init__(self, screening_db, chunk_size = 1000):
+    def __init__(self, screening_db, chunk_size = 1000, num_clusters):
         self.vs_db = screening_db
         self.chunk_size = chunk_size
+        self.num_clusters
 
         self.dlg_file_list = ad_parser.DockingResultManager(sources = file_sources, filters=filters, output=output).files_pool
         self.dlg_file_list_chunked = list(make_list_chunks(dlg_file_list, self.chunk_size))
@@ -865,7 +862,7 @@ class DLGchunkManager(DLGparsingManager):
             pose_rank = i
             run_number = ligand_dict["sorted_runs"][pose_rank]
             try:
-                cluster_top_pose_runs = ligand_dict["cluster_top_poses"][:parsed_opts.num_clusters] #will only select top n clusters. Default 3
+                cluster_top_pose_runs = ligand_dict["cluster_top_poses"][:self.num_clusters] #will only select top n clusters. Default 3
             except IndexError:
                 cluster_top_pose_runs = ligand_dict["cluster_top_poses"] #catch indexerror if not enough clusters for given ligand
             if run_number in cluster_top_pose_runs:
@@ -935,11 +932,13 @@ def make_list_chunks(lst, chunk_size):
 ############ filtering class ######################
 ###################################################
 
-class VS_filters(filters, vs_db):
+class VS_filters(filters, vs_db, out_fields, filter_file):
 
     def __init__(self):
         self.vs_db = vs_db
         self.filters = filters
+        self.out_fields = out_fields
+        self.filter_file = filter_file
         self.results_filters_list = []
         self.make_results_filter_list()
         self.sql_filter_str = write_result_filtering_sql()
@@ -1023,7 +1022,7 @@ class VS_filters(filters, vs_db):
         """ takes list of filters, writes sql filtering string"""
 
         #parse requested output fields and convert to column names in database
-        output_fields = parsed_opts.out_fields.split(",")
+        output_fields = self.out_fields.split(",")
 
         outfield_dict = {"e":"energies_binding",
                         "le":"leff",
@@ -1183,32 +1182,15 @@ class VS_filters(filters, vs_db):
         else:
             self.filtered_ligands = None
 
-    def write_log(self):
-        log_file = parsed_opts.log
-
-        with open(log_file, 'w') as f:
-            f.write("Filtered poses:\n")
-            f.write("---------------\n")
-            for line in self.filtered_results:
-                f.write(" ".join(map(str,line)))
-                f.write("\n")
-            f.write("\n")
-            f.write("***************\n")
-            f.write("\n")
-            f.write("Filtered Ligands:\n")
-            f.write("-----------------\n")
-            if self.filtered_ligands != None:
-                for line in self.filtered_ligands:
-                    f.write(line + "\n")
-
 ###################################################
 ############ plotting class #######################
 ###################################################
 
-class Plotter(filtering_obj):
+class Outputter(filtering_obj, log_file):
 
     def __init__(self):
         self.filtering = filtering_obj
+        self.log = log_file
         self.filtering.fetch_best_energies_leff()
         self.filter_ligands_flag = self.filtering.filters["filter_ligands_flag"]
         self.energies = filtering_obj.energies
@@ -1217,8 +1199,8 @@ class Plotter(filtering_obj):
         self.passing_results = filtering_obj.filtered_results
         self.passing_ligand = filtering_obj.filtered_ligands
 
-        if parsed_opts.filters_file != None:
-            self.fig_base_name = parsed_opts.filters_file.split(".")[0]
+        if self.filtering.filter_file != None:
+            self.fig_base_name = self.filtering.filter_file.split(".")[0]
         else:
             self.fig_base_name = "all_ligands"
 
@@ -1239,7 +1221,7 @@ class Plotter(filtering_obj):
         plt.close(self.histFig)
 
     def assign_scatter_colors(self):
-        self.colors = []
+        colors = []
         for row in self.plot_data:
             if int(row[3]) == 1:
                 ligand_name = row[0]
@@ -1255,6 +1237,8 @@ class Plotter(filtering_obj):
                 else:
                     colors.append("black")
 
+        self.colors = colors
+
     def make_scatterplot(self):
         plot = plt.scatter(self.energies, self.leffs, c=self.colors)
 
@@ -1262,10 +1246,26 @@ class Plotter(filtering_obj):
         if self.filtering.energy_percentile_flag:
             plot.axvline(c="orange", x = self.filtering.energy_percentile)
         if self.filtering.leff_percentile_flag:
-            plot.axhline(c="green", y=self.filtering.leff_percentile)
+            plot.axhline(c="orange", y=self.filtering.leff_percentile)
 
         plt.savefig(self.fig_base_name + "_scatter.png")
 
+    def write_log(self):
+
+        with open(self.log, 'w') as f:
+            f.write("Filtered poses:\n")
+            f.write("---------------\n")
+            for line in self.passing_results:
+                f.write(" ".join(map(str,line)))
+                f.write("\n")
+            f.write("\n")
+            f.write("***************\n")
+            f.write("\n")
+            f.write("Filtered Ligands:\n")
+            f.write("-----------------\n")
+            if self.filtered_ligands != None:
+                for line in self.passing_ligands:
+                    f.write(line + "\n")
 
 #######################################################################################
 ################ MAIN #################################################################
@@ -1290,7 +1290,7 @@ if __name__ == "__main__":
     #############################################
         vs = VSDB(output_sql)
 
-        dlg_parser = DLGparsingManager(vs, chunk_size = 1000)
+        dlg_parser = DLGparsingManager(vs, chunk_size = 1000, num_clusters = vs_parser.parsed_opts.num_clusters)
         dlg_parser.parse_dlg_chunks()
 
         input_sql = output_sql
@@ -1300,16 +1300,17 @@ if __name__ == "__main__":
     print("Parsing filters...")
     #fetch filters for results table, get sql call
 
-    vs_filters = VS_filters(vs_parser.filters, vs)
+    vs_filters = VS_filters(vs_parser.filters, vs, vs_parser.parsed_opts.out_fields, vs_parser.parsed_opts.filters_file)
     vs_filters.fetch_passing_results_ligands()
 
-    if parsed_opts.log != None:
-        vs_filters.write_log()
+    #write outputs
+    plotter = Outputter(vs_filters, vs_parser.parsed_opts.log)
+    if vs_parser.parsed_opts.log != None:
+        plotter.write_log()
 
     #make energy and le histograms
-    if parsed_opts.plot:
+    if vs_parser.parsed_opts.plot:
 
-        plotter = Plotter(vs_filters)
         plotter.make_histograms()
 
         plotter.assign_scatter_colors()
