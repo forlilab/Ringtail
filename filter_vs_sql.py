@@ -1316,18 +1316,3 @@ if __name__ == "__main__":
         plotter.assign_scatter_colors()
         plotter.make_scatterplot()
 
-
-"""if write_db_flag:
-    print("Time to initialize:", time1-time0, "seconds")
-    print("Total parsing time:", sum(parsing_times), "seconds")
-    print("Total db writing time (serial):", sum(db_writing_times), "seconds")
-    print("Total bitvector time:", sum(bitvector_times), "seconds")
-    print("Time to write sql database", time2-time1, "seconds")
-    print("Total database write time:", time4-time0, "seconds")
-print("Filtering time:", time5-time4, "seconds")
-if parsed_opts.log != None:
-    print("Time to write log:", time6-time5, "seconds")
-print("Total runtime:", time6 - time0, "seconds")
-#if parsed_opts.export_poses_path != None:
-    #print("Time to write pdbqts:", time7-time6, "seconds")"""
-

@@ -4,15 +4,8 @@ import numpy as np
 from glob import glob
 import fnmatch
 
-class DockingResultManager(object):
-    """ the class is used to manage a collection of docking results (e.g., a virtual screening
-        directory), by peforming the folling main operations:
-         - create an instance of the DockingResultFilter
-         - parse raw docking files retrieved from the specified source
-         - pass the processed docking data to the Filter class to perform the actual filtering
-         - manage the result reporting (printing to screen, saving to file, etc...)
-    """
-
+'''class DockingResultManager(object):
+    
     def __init__(self, sources = None, filters=None, output=None):
         """ initialize the manager to populate the files list """
         # define file sources to use
@@ -51,9 +44,9 @@ class DockingResultManager(object):
         else:
             files = glob(os.path.join(path, pattern))
         print("-Found %d files." % len(files))
-        self.files_pool.extend(files)
+        self.files_pool.extend(files)'''
 
-def parse_dlg_gpu(fname, mode='standard'):
+def parse_single_dlg(fname, mode='standard'):
     """ parse an ADGPU DLG file uncompressed or gzipped 
     """
     STD_END = 'DOCKED: ENDMDL'
