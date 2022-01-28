@@ -1,10 +1,11 @@
-
+import sqlite3
+import numpy as np
 
 class DBManager():
     """ DOCUMENTATION GOES HERE """
     def __init__(self, opts={}):
-        self.fname = opts['sqlFile']
-        self.opts = {}
+        self.db_file = opts['sqlFile']
+        self.opts = opts
         self.write_flag = self.opts["write_db_flag"]
         self.conn = self.__create_connection()
         self.bv_table_flag = False
@@ -19,12 +20,79 @@ class DBManager():
     ##########################
     ##### Public methods #####
     ##########################
+    def insert_results(self, results_array):
+        """takes array of database rows to insert, adds data to results table
+        Inputs:
+        -conn: database connection
+        -ligand_array: numpy array of arrays"""
+
+        #print("Inserting results...")
+        sql_insert = """INSERT INTO Results (
+        LigName,
+        ligand_smile,
+        pose_rank,
+        run_number,
+        cluster_rmsd,
+        reference_rmsd,
+        energies_binding,
+        leff,
+        deltas,
+        energies_inter,
+        energies_vdw,
+        energies_electro,
+        energies_flexLig,
+        energies_flexLR,
+        energies_intra,
+        energies_torsional,
+        unbound_energy,
+        nr_interactions,
+        num_hb,
+        about_x,
+        about_y,
+        about_z,
+        trans_x,
+        trans_y,
+        trans_z,
+        axisangle_x,
+        axisangle_y,
+        axisangle_z,
+        axisangle_w,
+        dihedrals
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.executemany(sql_insert, results_array)
+            self.conn.commit()
+            cur.close()
+        except Exception as e:
+            print("ERROR:")
+            print(e)
+
+    def insert_ligands(self, ligand_array):
+        #print("Inserting ligand data...")
+        sql_insert = '''INSERT INTO Ligands (
+        LigName,
+        ligand_smile,
+        input_pdbqt,
+        best_binding,
+        best_run
+        ) VALUES
+        (?,?,?,?,?)'''
+
+        try:
+            cur = self.conn.cursor()
+            cur.executemany(sql_insert, ligand_array)
+            self.conn.commit()
+            cur.close()
+        except Exception as e:
+            print(e)
 
     def insert_interactions(self, unique_interactions = None, unique_interactions_split = None, new_interactions = None, interaction_idx_counter = None):
         #check if we need to initialize the interaction bv table and insert first set of interactions
         if new_interactions == None:
             self.__create_interaction_bv_table(len(unique_interactions))
-            self.__insert_unique_interaction(np.array(unique_interactions_split))
+            self._insert_unique_interactions(np.array(unique_interactions_split))
             self.bv_table_flag = True
 
         #otherwise, insert individual new interactions
@@ -50,7 +118,7 @@ class DBManager():
         try:
             cur = self.conn.cursor()
             cur.executemany(sql_insert, bitvectors)
-            conn.commit()
+            self.conn.commit()
             
         except Exception as e:
             print(e)
@@ -198,7 +266,7 @@ class DBManager():
 
         cur.close()
 
-    def __insert_unique_interactions(self, unique_interactions):
+    def _insert_unique_interactions(self, unique_interactions):
         #rint("Inserting interactions...")
         sql_insert = '''INSERT INTO Interaction_indices (
         interaction_type,
@@ -212,7 +280,7 @@ class DBManager():
         try:
             cur = self.conn.cursor()
             cur.executemany(sql_insert, unique_interactions)
-            conn.commit()
+            self.conn.commit()
         
         except Exception as e:
             print(e)
@@ -233,7 +301,7 @@ class DBManager():
         try:
             cur = self.conn.cursor()
             cur.execute(sql_insert, interaction)
-            conn.commit()
+            self.conn.commit()
     
         except Exception as e:
             print(e)
@@ -245,7 +313,7 @@ class DBManager():
         try:
             cur = self.conn.cursor()
             cur.execute(add_column_str)
-            conn.commit()
+            self.conn.commit()
             
         except Exception as e:
             print(e)

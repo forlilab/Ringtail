@@ -1,5 +1,7 @@
 import sys
 import argparse
+from glob import glob
+import os
 
 class CLOptionParser():
 
@@ -158,11 +160,11 @@ class CLOptionParser():
                             ),
                         ('--epercentile', {
                             'help':'specify the worst energy percentile accepted', 
-                            'action':'store', 'type':float, 'metavar': "FLOAT",},
+                            'action':'store', 'type':float, 'metavar': "FLOAT"},
                             ),
                         ('--leffpercentile', {
                             'help':'specify the worst ligand efficiency percentile accepted', 
-                            'action':'store', 'type':float, 'metavar': "FLOAT",},
+                            'action':'store', 'type':float, 'metavar': "FLOAT"},
                             )
 
                             ],}},
@@ -231,10 +233,10 @@ class CLOptionParser():
                     },},
             ]
 
-        self.__initialize_parser()
-        self.__process_sources()
+        self._initialize_parser()
+        self._process_sources()
 
-    def __initialize_parser(self):
+    def _initialize_parser(self):
         # create parser
         parser = argparse.ArgumentParser(description=self.description, usage=self.usage, epilog=self.epilog,
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -256,6 +258,8 @@ class CLOptionParser():
             idx = cmdline_opts.index('--filters_file')
             cmdline_opts.pop(idx)
             ffile = cmdline_opts.pop(idx)
+            cmdline_opts += self.read_filter_file(ffile)
+            self.filter_file = ffile
         # add a function here to validate the cmdline (repeated options?)
         # validate policy of file > cmdline? (or vice versa?)
         parsed_opts = parser.parse_args(cmdline_opts)
@@ -312,7 +316,7 @@ class CLOptionParser():
             sys.exit(1)
         ##### filters
         # property filters
-        properties = {'eworst':None, 'ebest':None, 'leworst':None, 'lebest':None}
+        properties = {'eworst':None, 'ebest':None, 'leworst':None, 'lebest':None, 'epercentile':None, 'leffpercentile':None}
         for kw, _ in properties.items():
             properties[kw] = getattr(parsed_opts, kw)
         # interaction filters (residues)
@@ -368,17 +372,17 @@ class CLOptionParser():
         filters = {'properties':properties, 'interactions':interactions, 'interactions_count':interactions_count, "ligand_filters":ligand_filters, 'filter_ligands_flag':filter_ligands_flag, 'max_miss':0} 
         self.file_sources = file_sources 
         self.filters = filters
-        self.output = output
+        self.out_opts = output
         self.num_clusters = parsed_opts.num_clusters
         if parsed_opts.sql_db != None:
             sqlFile = parsed_opts.sql_db
         else:
             sqlFile = parsed_opts.output_sql
-            self.write_db_flag = True
+            db_opts['write_db_flag'] = True
             if parsed_opts.overwrite: #confirm user wants to overwrite
                 if os.path.exists(sqlFile): #check if database file already exists
                     os.remove(sqlFile)
-        db_opts['sqlFile'] = self.sqlFile
+        db_opts['sqlFile'] = sqlFile
         self.db_opts = db_opts
 
     def _process_sources(self):

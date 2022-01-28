@@ -6,7 +6,7 @@ class ResultsManager():
         self.dbman = dbman
         self.filelist = filelist
         if mode =='dlg':
-            self.parser = MPManager(filelist = self.filelist, db_obj = self.dbman, chunksize = chunk_size, mode='dlg')
+            self.parser = MPManager(filelist = self.filelist, db_obj = self.dbman, chunksize = chunk_size, mode='dlg', numclusters = numclusters)
         #elif mode == 'vina'
             #self.parser = fileparsers.VinaParser()
 

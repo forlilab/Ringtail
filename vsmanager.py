@@ -3,19 +3,26 @@ from resultsmanager import ResultsManager
 
 class VSManager():
     """ DOCUMENTATION GOES HERE """
-    def __init__(self, db_opts, rman_opts, filters, out_opts):
+    def __init__(self, db_opts, rman_opts, filters, out_opts, filter_fname=None):
         self.dbman = DBManager(opts=db_opts)
-        self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], file_list=rman_opts['filelist'], numclusters=rman_opts['num_clusters'])
+        self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'])
         self.filters = filters
         self.out_opts = out_opts
         self.eworst = self.filters['properties']['eworst'] # has default -3 kcal/mol
+        self.filter_file = filter_fname
 
         #if requested, write database
-        if dbman.write_flag:
+        if self.dbman.write_flag:
+            print("adding results")
             self.add_results()
 
         if self.filters['properties']['epercentile'] is not None or self.filters['properties']['leffpercentile'] is not None or self.out_opts['plot']:
+            print("fetching top energies")
             self.top_energies, self.top_leffs, self.top_data = self.dbman.get_top_energies_leffs()
+        else:
+            self.top_energies = []
+            self.top_leffs = []
+            self.top_data = []
 
     def add_results(self):
         """"""
@@ -38,12 +45,14 @@ class VSManager():
         self.prepare_results_filter_list()
 
         #ask DBManager to fetch results
-        self.filtered_results = dbman.filter_results(self.results_filters_list, self.out_opts['outfields'])
+        print("filtering results")
+        self.filtered_results = self.dbman.filter_results(self.results_filters_list, self.out_opts['outfields'])
 
         #perform ligand filtering if requested
         if self.filters['filter_ligands_flag']:
             ligand_filters = self.filters["ligand_filters"]
-            self.filtered_ligands = dbman.filter_ligands(ligand_filters)
+            print("filtering ligands")
+            self.filtered_ligands = self.dbman.filter_ligands(ligand_filters)
 
     def prepare_results_filter_list(self):
         """takes filters dictionary from option parser. Output list of tuples to be inserted into sql call string"""
@@ -94,12 +103,14 @@ class Outputter():
 
     def __init__(self, vsman, log_file):
         self.log = log_file
+        self.vsman = vsman
         self.filter_ligands_flag = self.vsman.filters["filter_ligands_flag"]
         self.energies = vsman.top_energies
         self.leffs = vsman.top_leffs
         self.plot_data = vsman.top_data
         self.passing_results = vsman.filtered_results
-        self.passing_ligand = vsman.filtered_ligands
+        if self.filter_ligands_flag:
+            self.passing_ligand = vsman.filtered_ligands
 
         if self.vsman.filter_file != None:
             self.fig_base_name = self.vsman.filter_file.split(".")[0]

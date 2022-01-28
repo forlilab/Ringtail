@@ -5,9 +5,11 @@ import numpy as np
 
 class DockingFileReader(multiprocessing.Process):
     """ this class is the individual worker for processing dlgs"""
-    def __init__(self, queueIn, queueOut, mode):
+    def __init__(self, queueIn, queueOut, mode, numclusters):
         #set mode for which file parser to use
         self.mode = mode
+        #set number of clusters to write
+        self.num_clusters = numclusters
         # initialize the parent class to inherit all multiprocessing methods
         multiprocessing.Process.__init__(self)
         # each worker knows about the queue in (where data to process comes from)...
@@ -15,7 +17,7 @@ class DockingFileReader(multiprocessing.Process):
         # ...and a queue out (where to send the results)
         self.queueOut = queueOut
 
-    def get_best_cluster_poses(ligand_dict):
+    def get_best_cluster_poses(self, ligand_dict):
         """takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run" entry with the top scoring run for each cluster"""
         top_poses = []
         cluster_dict = ligand_dict["clusters"]
@@ -24,7 +26,7 @@ class DockingFileReader(multiprocessing.Process):
         ligand_dict["cluster_top_poses"] = top_poses
         return ligand_dict
 
-    def write_results_interaction_rows(ligand_dict):
+    def write_results_interaction_rows(self, ligand_dict):
         """writes list of lists of ligand values to be inserted into sqlite database"""
 
         ligand_rows = []
@@ -116,7 +118,7 @@ class DockingFileReader(multiprocessing.Process):
 
         return ligand_rows, interaction_rows
 
-    def write_ligand_row(ligand_dict):
+    def write_ligand_row(self, ligand_dict):
         """writes row to be inserted into ligand table"""
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
@@ -149,11 +151,11 @@ class DockingFileReader(multiprocessing.Process):
             # generate CPU LOAD
             if self.mode == "dlg":
                 parsed_file_dict = parsers.parse_single_dlg(next_task)
-                parsed_file_dict = get_best_cluster_poses(parsed_file_dict)
-                resultsAndInteractions = write_results_interaction_rows(parsed_file_dict)
+                parsed_file_dict = self.get_best_cluster_poses(parsed_file_dict)
+                resultsAndInteractions = self.write_results_interaction_rows(parsed_file_dict)
                 results_rows = resultsAndInteractions[0]
                 interaction_rows = resultsAndInteractions[1]
-                ligand_row = write_ligand_row(parsed_file_dict)
+                ligand_row = self.write_ligand_row(parsed_file_dict)
                 file_packet = (results_rows, ligand_row, interaction_rows)
             # put the result in the out queue
             self.queueOut.put(file_packet)
@@ -179,7 +181,7 @@ class Writer(multiprocessing.Process):
         self.pose_id_list = []
 
         self.current_pose_id = 1
-        self.unique_interactions = {}
+        self.unique_interactions = set()
         self.unique_interactions_list = []
         self.unique_interactions_split = []
 
@@ -219,7 +221,7 @@ class Writer(multiprocessing.Process):
         self.new_interactions = []
         for pose in self.interaction_rows_list:
             interaction_list = pose.replace(":,",",").split(",")
-            for interaction in pose:
+            for interaction in interaction_list:
                 if interaction.endswith(":"):
                         interaction = interaction.rstrip(":") #remove trailing colon
                 if interaction not in self.unique_interactions and interaction != "":
@@ -236,7 +238,7 @@ class Writer(multiprocessing.Process):
             interactions_string = self.interaction_rows_list[i]
             pose_bitvector = [pose_id]
             for interaction in self.unique_interactions_list:
-                if interaction in interaction_string:
+                if interaction in interactions_string:
                     pose_bitvector.append(1) #true
                 else:
                     pose_bitvector.append(None) #false
@@ -251,6 +253,10 @@ class Writer(multiprocessing.Process):
         #perform operations for inserting iteraction data
         self.new_interaction_idx_counter = len(self.unique_interactions) + 1 #save index of next unique interaction before adding new ones
         self.get_unique_interactions()
+        try:
+            self.unique_interactions_split.remove([' ']) #make sure we are not passing any empty lists to dbman
+        except ValueError:
+            pass
 
         if not self.db.bv_table_flag:
             self.db.insert_interactions(unique_interactions = self.unique_interactions, unique_interactions_split = self.unique_interactions_split)
@@ -259,7 +265,7 @@ class Writer(multiprocessing.Process):
             self.db.insert_interactions(new_interactions = self.new_interactions, interaction_idx_counter = self.new_interaction_idx_counter)
 
         self.write_interaction_bitvectors()
-        self.db.insert_interaction_BVs(self.bitvectors_list, len(unique_interactions))
+        self.db.insert_interaction_BVs(self.bitvectors_list, len(self.unique_interactions))
 
         #reset all data-holders for next chunk
         self.results_array = []
