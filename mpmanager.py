@@ -1,7 +1,7 @@
 import multiprocessing
 from time import sleep
-from fileparser import DockingFileReader
-from fileparser import Writer
+from mpreaderwriter import DockingFileReader
+from mpreaderwriter import Writer
 
 class MPManager():
 
@@ -12,8 +12,8 @@ class MPManager():
 		self.chunksize = chunksize
 
 		self.max_proc = multiprocessing.cpu_count()
-	    self.queueIn = multiprocessing.Queue(maxsize=max_proc)
-	    self.queueOut = multiprocessing.Queue()
+		self.queueIn = multiprocessing.Queue(maxsize=max_proc)
+		self.queueOut = multiprocessing.Queue()
 
 	def process_files(self):
 	    # start the workers in background
@@ -28,7 +28,7 @@ class MPManager():
 
 	    # process items in the queue
 	    for file in self.filelist:
-	        print "Feeding the queue |%s|" % q
+	        print("Feeding the queue |%s|" % q)
 	        self.queueIn.put(file, block=True)
 	    # put as many poison pills in the queue as there are workers
 	    for i in xrange(self.max_proc):

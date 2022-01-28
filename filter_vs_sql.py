@@ -10,7 +10,6 @@ from matplotlib import pyplot as plt
 import time
 import parsers as ad_parser
 import sqlite3
-from functools import partial
 
 ######################################################################################
 

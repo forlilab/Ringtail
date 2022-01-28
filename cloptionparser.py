@@ -1,3 +1,6 @@
+import sys
+import argparse
+
 class CLOptionParser():
 
     def __init__(self):
@@ -233,7 +236,7 @@ class CLOptionParser():
 
     def __initialize_parser(self):
         # create parser
-        parser = argparse.ArgumentParser(description=description, usage=usage, epilog=epilog,
+        parser = argparse.ArgumentParser(description=self.description, usage=self.usage, epilog=self.epilog,
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                 )
         # populate options menu
@@ -247,12 +250,12 @@ class CLOptionParser():
                 for name, args in group_args:
                     group.add_argument(name, **args)
         # parse options
-        self.cmdline_opts = sys.argv[1:]
+        cmdline_opts = sys.argv[1:]
         # hack to allow defining options from a file (argparse does not allow to do it in a clean way)
         if "--filters_file" in cmdline_opts:
-            idx = self.cmdline_opts.index('--filters_file')
-            self.cmdline_opts.pop(idx)
-            ffile = self.cmdline_opts.pop(idx)
+            idx = cmdline_opts.index('--filters_file')
+            cmdline_opts.pop(idx)
+            ffile = cmdline_opts.pop(idx)
         # add a function here to validate the cmdline (repeated options?)
         # validate policy of file > cmdline? (or vice versa?)
         parsed_opts = parser.parse_args(cmdline_opts)
@@ -295,7 +298,7 @@ class CLOptionParser():
                   'stdout': not parsed_opts.no_print,
                   'overwrite': parsed_opts.overwrite,
                   'export_poses_path': parsed_opts.export_poses_path,
-                  'plot': parsed_opts.plot
+                  'plot': parsed_opts.plot,
                   'outfields': parsed_opts.out_fields
                 }
         db_opts = {'num_clusters': parsed_opts.num_clusters}

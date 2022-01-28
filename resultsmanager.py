@@ -2,7 +2,7 @@ from mpmanager import MPManager
 
 class ResultsManager():
 
-    def __init__(self, mode='dlg', dbman=None, filelist=None, chunk_size=1000, numclusters):
+    def __init__(self, mode='dlg', dbman=None, filelist=None, chunk_size=1000, numclusters = 3):
         self.dbman = dbman
         self.filelist = filelist
         if mode =='dlg':

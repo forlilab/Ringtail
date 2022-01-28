@@ -14,7 +14,7 @@ class VSManager():
         if dbman.write_flag:
             self.add_results()
 
-        if self.filters['properties']['epercentile'] not None or self.filters['properties']['leffpercentile'] not None or self.out_opts['plot']:
+        if self.filters['properties']['epercentile'] is not None or self.filters['properties']['leffpercentile'] is not None or self.out_opts['plot']:
             self.top_energies, self.top_leffs, self.top_data = self.dbman.get_top_energies_leffs()
 
     def add_results(self):
@@ -24,11 +24,11 @@ class VSManager():
     def filter(self):
         """"""
         #check if we need to calculate percentiles. If we need to, do so.
-        if self.filters['properties']['epercentile'] not None:
+        if self.filters['properties']['epercentile'] is not None:
             self.calculate_energy_percentile(self.filters['properties']['epercentile'])
             if self.energy_percentile < self.eworst:
                 self.eworst = self.energy_percentile #only keep the most negative (most stringent) filter
-        if self.filters['properties']['leffpercentile'] not None:
+        if self.filters['properties']['leffpercentile'] is not None:
             self.calculate_energy_percentile(self.filters['properties']['leffpercentile'])
             if self.leff_percentile < self.eworst:
                 self.eworst = self.leff_percentile #only keep the most negative (most stringent) filter

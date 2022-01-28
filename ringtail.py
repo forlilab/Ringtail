@@ -1,3 +1,5 @@
+
+
 from cloptionparser import CLOptionParser
 from vsmanager import VSManager, Outputter
 
@@ -24,3 +26,11 @@ if __name__ == '__main__':
     #write logs and plots
     if cl_opts.out_opts['log'] != None:
         plot_writer.write_log()
+
+    #make energy and le histograms
+    if cl_opts.out_opts['plot']:
+
+        plot_writer.make_histograms()
+
+        plot_writer.assign_scatter_colors()
+        plot_writer.make_scatterplot()

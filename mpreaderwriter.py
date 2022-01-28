@@ -6,8 +6,8 @@ import numpy as np
 class DockingFileReader(multiprocessing.Process):
     """ this class is the individual worker for processing dlgs"""
     def __init__(self, queueIn, queueOut, mode):
-    	#set mode for which file parser to use
-    	self.mode = mode
+        #set mode for which file parser to use
+        self.mode = mode
         # initialize the parent class to inherit all multiprocessing methods
         multiprocessing.Process.__init__(self)
         # each worker knows about the queue in (where data to process comes from)...
@@ -141,14 +141,14 @@ class DockingFileReader(multiprocessing.Process):
             # if a poison pill is received, this worker's job is done, quit
             if next_task is None:
                 # the poison pill can be anything
-                print '%s: Exiting' % proc_name
+                print('%s: Exiting' % proc_name)
                 # before leaving, pass the poison pill back in the queue (for the writer, see below)
                 self.queueOut.put(None)
                 break
-            print '%s: %s' % (proc_name, next_task)
+            print('%s: %s' % (proc_name, next_task))
             # generate CPU LOAD
             if self.mode == "dlg":
-            	parsed_file_dict = parsers.parse_single_dlg(next_task)
+                parsed_file_dict = parsers.parse_single_dlg(next_task)
                 parsed_file_dict = get_best_cluster_poses(parsed_file_dict)
                 resultsAndInteractions = write_results_interaction_rows(parsed_file_dict)
                 results_rows = resultsAndInteractions[0]
