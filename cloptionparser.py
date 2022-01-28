@@ -60,7 +60,7 @@ class CLOptionParser():
                     'args': [ 
                         ('--output_sql', {
                             'help':('Name for output SQLite file'), 
-                            'action':'store', 'type':str, 'metavar': "OUTLIST.TXT", 'default':"output.db"},
+                            'action':'store', 'type':str, 'metavar': "OUTLIST.DB", 'default':"output.db"},
                             ),
                         ('--num_clusters', {
                             'help':('n: Store top pose for top n clusters'), 
@@ -295,8 +295,11 @@ class CLOptionParser():
                   'stdout': not parsed_opts.no_print,
                   'overwrite': parsed_opts.overwrite,
                   'export_poses_path': parsed_opts.export_poses_path,
-                  'num_clusters': parsed_opts.num_clusters
+                  'plot': parsed_opts.plot
+                  'outfields': parsed_opts.out_fields
                 }
+        db_opts = {'num_clusters': parsed_opts.num_clusters}
+
         # if a path for saving poses is specified, then the log will be written there
         if not parsed_opts.export_poses_path is None:
             output['log'] = "%s%s%s" % (output['export_poses_path'], os.sep, output['log'])
@@ -365,13 +368,15 @@ class CLOptionParser():
         self.output = output
         self.num_clusters = parsed_opts.num_clusters
         if parsed_opts.sql_db != None:
-            self.sqlFile = parsed_opts.sql_db
+            sqlFile = parsed_opts.sql_db
         else:
-            self.sqlFile = parsed_opts.output_sql
+            sqlFile = parsed_opts.output_sql
             self.write_db_flag = True
             if parsed_opts.overwrite: #confirm user wants to overwrite
-                if os.path.exists(self.sqlFile): #check if database file already exists
-                    os.remove(self.sqlFile)
+                if os.path.exists(sqlFile): #check if database file already exists
+                    os.remove(sqlFile)
+        db_opts['sqlFile'] = self.sqlFile
+        self.db_opts = db_opts
 
     def _process_sources(self):
         """ process the options for input files (parse dictionary) """
