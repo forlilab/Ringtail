@@ -154,10 +154,16 @@ class Outputter():
 
     def write_log(self):
 
+        passing_results_ligands = {}
+        passing_ligand_count = 0
+
         with open(self.log, 'w') as f:
             f.write("Filtered poses:\n")
             f.write("---------------\n")
             for line in self.passing_results:
+                first_el_str = str(line[0])
+                if first_el_str.endswith(".pdbqt"): #make sure we are only counting pdbqts
+                    passing_results_ligands.add(first_el_str) #will only add unique pdbqts
                 f.write(" ".join(map(str,line)))
                 f.write("\n")
             f.write("\n")
@@ -167,7 +173,24 @@ class Outputter():
             f.write("-----------------\n")
             if self.filtered_ligands != None:
                 for line in self.passing_ligands:
+                    passing_ligand_count += 1
                     f.write(line + "\n")
+            f.write("***************\n")
+            f.write("\n")
+            f.write("Unique ligands passing result-based filters:\n")
+            f.write("-----------------\n")
+            for unique_ligand in passing_results_ligands:
+                f.write(unique_ligand + "\n")
+            f.write("***************\n")
+            f.write("\n")
+            f.write("Total Ligands:\n")
+            f.write("-----------------\n")
+            f.write("Ligands passing results-based filters: ")
+            f.write(str(len(passing_results_ligands)) + "\n")
+            f.write("Ligands passing ligand-based filters: ")
+            f.write(str(passing_ligand_count))
+            
+            
 
 
 

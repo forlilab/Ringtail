@@ -20,22 +20,6 @@ class DBManager():
     ##### Public methods #####
     ##########################
 
-
-    def get_results(self, dict_of_filters):
-        """
-
-        dict_of_filters = {
-                'energy' : {'min': None, 'max':None},
-                'leff' : {'min': None, 'max':None},
-                'interactions' : {},
-        }
-
-
-        """
-        # filter by energiy, if requested
-        # filter by LE if requested
-        pass
-
     def insert_interactions(self, unique_interactions = None, unique_interactions_split = None, new_interactions = None, interaction_idx_counter = None):
         #check if we need to initialize the interaction bv table and insert first set of interactions
         if new_interactions == None:
