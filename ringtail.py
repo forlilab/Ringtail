@@ -24,15 +24,5 @@ if __name__ == '__main__':
     #perform filtering
     vsman.filter()
     
-    #write logs and plots
-    plot_writer = Outputter(vsman, out_opts['log'])
-    if cl_opts.out_opts['log'] != None:
-        plot_writer.write_log()
-
-    #make energy and le histograms
-    if cl_opts.out_opts['plot']:
-
-        plot_writer.make_histograms()
-
-        plot_writer.assign_scatter_colors()
-        plot_writer.make_scatterplot()
+    #close database
+    vsman.close_database()

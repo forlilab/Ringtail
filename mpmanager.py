@@ -20,7 +20,7 @@ class MPManager():
 	    # start the workers in background
 	    for i in range(self.max_proc):
 	        # one worker is started for each processor to be used
-	        s = DockingFileReader(self.queueIn, self.queueOut, self.mode, self.numclusters)
+	        s = DockingFileReader(self.queueIn, self.queueOut, self.db, self.mode, self.numclusters)
 	        # this method calls .run() internally
 	        s.start()
 	    # start the writer (only one writer, processing the data from the workers)

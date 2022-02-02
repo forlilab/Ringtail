@@ -2,20 +2,111 @@ import sqlite3
 import numpy as np
 
 class DBManager():
-    """ DOCUMENTATION GOES HERE """
+    """ Prototype class for a generic VS database object
+        this class defines the API of each DBManager object (including sub-classess)
+        which will implement their own functions to return the data requested
+    """
     def __init__(self, opts={}):
         self.db_file = opts['sqlFile']
         self.opts = opts
-        self.write_flag = self.opts["write_db_flag"]
-        self.conn = self.__create_connection()
-        self.bv_table_flag = False
+        self.order_results = self.opts['order_results']
+        self.log_distinct_ligands = self.opts["log_distinct_ligands"]
+        self.write_db_flag = self.opts["write_db_flag"]
+        #initialize dictionary processing kw lists
+        self.interaction_data_kws = ["type", "chain", "residue", "resid", "recname"]
+        self.ligand_data_keys = ["cluster_rmsds",
+        "ref_rmsds",
+        "scores",
+        "leff",
+        "delta",
+        "intermolecular_energy",
+        "vdw_hb_desolv",
+        "electrostatics",
+        "flex_ligand",
+        "flexLigand_flexReceptor",
+        "internal_energy",
+        "torsional_energy",
+        "unbound_energy"]
+        self.ligand_interaction_keys = ["type",
+        "chain",
+        "residue",
+        "resid",
+        "recname",
+        "recid"]
+        self.stateVar_keys = ["pose_about",
+        "pose_translations",
+        "pose_quarternions"]
 
-        if self.write_flag:
-            #create tables in db
-            self.__create_results_table()
-            self.__create_ligands_table()
-            self.__create_interaction_index_table()
 
+    def get_results(self):
+        """ generic function for retrieving results"""
+        raise NotImplemented
+
+
+    def get_top_scores(self):
+        """ this function is expected to return [data in which format?] """
+        raise NotImplemented
+
+    def get_plot_data(self):
+        """ this function is expected to return an ascii plot representation of the results"""
+        # TODO this function could be actually implemented here, if the
+        # plotting mechanism will be common to all the child classes, too
+        # for example, this function could contain the actuall call to the ASCII library,
+        # and call a _fetch_plot_data() function that will be implemented in each child class
+        return self._fetch_plot_data()
+
+    def prune(self):
+        """ do we want a method for deleting rows not satisfying a given requirement? """
+        raise NotImplemented
+
+    def clone(self):
+        """ this function would be useful for creating a copy of the db that can be then pruned?
+            (i.e., a lightweight version of the DB containing only the distilled information)
+        """
+        pass
+
+    def close_connection(self):
+        """close connection to database"""
+        self._close_connection()
+
+class DBManagerSQLite(DBManager):
+    """ DOCUMENTATION GOES HERE """
+    def __init__(self):
+        super().__init__(self, DBManager)
+        self.conn = self._create_connection()
+
+        self.unique_interactions = {}
+        self.next_unique_interaction_idx = 1
+
+        self.field_to_column_name = {"e":"energies_binding",
+                        "le":"leff",
+                        "delta":"deltas",
+                        "ref_rmsd":"reference_rmsd",
+                        "e_inter":"energies_inter",
+                        "e_vdw":"energies_vdw",
+                        "e_elec":"energies_electro",
+                        "e_intra":"energies_intra",
+                        "n_interact":"nr_interactions",
+                        "interactions":"interactions",
+                        "fname":"LigName",
+                        "ligand_smile":"ligand_smile",
+                        "rank":"pose_rank",
+                        "run":"run_number",
+                        "hb":"num_hb"}
+
+        self.energy_filter_sqlite_call_dict = {"eworst":"energies_binding < {value}",
+                        "ebest":"energies_binding > {value}",
+                        "leworst":"leff < {value}",
+                        "lebest":"leff > {value}"
+                        "epercentile":"energy_percentile_rank < {value}",
+                        "leffpercentile":"leff_percentile_rank < {value}"
+                        }
+
+        self.interaction_filter_types = ["V",
+            "H",
+            "R"]
+
+        self._initialize_db()
 
     ##########################
     ##### Public methods #####
@@ -66,8 +157,8 @@ class DBManager():
             self.conn.commit()
             cur.close()
         except Exception as e:
-            print("ERROR:")
             print(e)
+            raise e
 
     def insert_ligands(self, ligand_array):
         #print("Inserting ligand data...")
@@ -87,81 +178,84 @@ class DBManager():
             cur.close()
         except Exception as e:
             print(e)
+            raise e
 
-    def insert_interactions(self, unique_interactions = None, unique_interactions_split = None, new_interactions = None, interaction_idx_counter = None):
-        #check if we need to initialize the interaction bv table and insert first set of interactions
-        if new_interactions == None:
-            self.__create_interaction_bv_table(len(unique_interactions))
-            self._insert_unique_interactions(np.array(unique_interactions_split))
-            self.bv_table_flag = True
+    def insert_interactions(self, interactions_list):
 
-        #otherwise, insert individual new interactions
-        else:
-            for interaction in new_interactions:
-                self.__insert_one_interaction(interaction)
-                self.__make_new_interaction_column(interaction_idx_counter)
-                interaction_idx_counter += 1
+        self._add_unique_interactions(interactions_list)
 
-    def insert_interaction_BVs(self, bitvectors, num_discrete_interactions):
-        #print("Inserting interaction bitvectors...")
-        interaction_columns = range(num_discrete_interactions)
-        column_str = ""
-        filler_str = "?,"
-        for i in interaction_columns:
-            column_str += "Interaction_"+ str(i+1) + ", "
-            filler_str += "?,"
-        column_str = column_str.rstrip(", ")
-        filler_str = filler_str.rstrip(",")
+        #check if we need to initialize the interaction bv table and insert first set of interaction
+        if self.unique_interactions == {}:
+            self._create_interaction_bv_table()
+            self._insert_unique_interactions(np.array(list(self.unique_interactions.keys())))
 
-        sql_insert = '''INSERT INTO Interaction_bitvectors (Pose_ID, {columns}) VALUES ({fillers})'''.format(columns = column_str, fillers = filler_str)
-
-        try:
-            cur = self.conn.cursor()
-            cur.executemany(sql_insert, bitvectors)
-            self.conn.commit()
-            
-        except Exception as e:
-            print(e)
-
-        cur.close()
+       self._insert_interaction_bitvectors(self._generate_interaction_bitvectors())
 
     def get_top_energies_leffs(self):
-        self.__fetch_best_energies_leff()
+        self._fetch_best_energies_leff()
         return self.energies, self.leffs, self.plot_data
 
     def filter_results(self, results_filters_list, output_fields):
-        filter_results_str = self.__write_result_filtering_str_sqlite(results_filters_list, output_fields)
-        filtered_results = self.__select_from_db(filter_results_str)
+        filter_results_str = self._generate_result_filtering_str_sqlite(results_filters_list, output_fields)
+        filtered_results = self._run_query(filter_results_str)
         return filtered_results
 
     def filter_ligands(self, ligand_filters):
-        filter_ligands_str = self.__write_ligand_filtering_sql(ligand_filters)
-        filtered_ligands = self.__select_from_db(filter_ligands_str)
+        filter_ligands_str = self._write_ligand_filtering_sql(ligand_filters)
+        filtered_ligands = self._run_query(filter_ligands_str)
         return filtered_ligands
+
+    def format_rows_from_dict(self, ligand_dict):
+        """takes file dictionary from the mpreader, formats into rows for the database insertion"""
+
+        #initialize row holders
+        result_rows = []
+        interaction_tuples = []
+
+        for i in range(len(ligand_dict["sorted_runs"])):
+            result_rows.append(self._generate_results_row(ligand_dict, i))
+            interaction_tuples.append(self._generate_interaction_tuples(ligand_dict["interactions"][i]))
+
+        return (result_rows, self._generate_ligand_row(ligand_dict), interaction_tuples)
 
     ###########################
     ##### Private methods #####
     ###########################
 
-    def __create_connection(self):
+    def _create_connection(self):
         con = None
         try:
             con = sqlite3.connect(self.db_file)
         except Exception as e:
             print(e)
+            raise e
         return con
 
-    def __select_from_db(self, filter_sql_string):
-        cur = self.conn.cursor()
-        cur.execute(filter_sql_string)
+    def _close_connection(self):
+        self.conn.close()
+
+    def _initialize_db(self):
+        """check if db needs to be written. If so, initialize the tables"""
+        if not self.write_db_flag:
+            return
+        #create tables in db
+        self._create_results_table()
+        self._create_ligands_table()
+        self._create_interaction_index_table()
+
+
+    def _run_query(self, query):
+        """cur = self.conn.cursor()
+        cur.execute(query)
 
         rows = cur.fetchall()
 
         cur.close()
 
-        return rows
+        return rows"""
+        return self.conn.execute(query)
 
-    def __create_results_table(self):
+    def _create_results_table(self):
         sql_results_table = """CREATE TABLE Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
@@ -208,10 +302,11 @@ class DBManager():
             cur.execute(create_index)
         except Exception as e:
             print(e)
+            raise e
 
         cur.close()
 
-    def __create_ligands_table(self):
+    def _create_ligands_table(self):
         ligand_table = """CREATE TABLE Ligands (
             LigName             VARCHAR NOT NULL PRIMARY KEY,
             ligand_smile        VARCHAR NOT NULL,
@@ -224,10 +319,11 @@ class DBManager():
             cur.execute(ligand_table)
         except Exception as e:
             print(e)
+            raise e
 
         cur.close()
 
-    def __create_interaction_index_table(self):
+    def _create_interaction_index_table(self):
         """create table of data about each unique interaction"""
         interaction_index_table = """CREATE TABLE Interaction_indices (
             interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -243,16 +339,12 @@ class DBManager():
             cur.execute(interaction_index_table)
         except Exception as e:
             print(e)
+            raise e
 
         cur.close()
 
-    def __create_interaction_bv_table(self, num_discrete_interactions):
-        interaction_columns = range(num_discrete_interactions)
-        interact_columns_str = ""
-        for i in interaction_columns:
-            interact_columns_str += "Interaction_"+ str(i+1) + " INTEGER,\n"
-
-        interact_columns_str = interact_columns_str.rstrip(",\n")
+    def _create_interaction_bv_table(self):
+        interact_columns_str = ["Interaction_"+ str(i+1) for i in range(len(self.unique_interactions))].join(" INTEGER,\n") + " INTEGER"
 
         bv_table = """CREATE TABLE Interaction_bitvectors (
         Pose_ID INTEGER PRIMARY KEY,
@@ -263,6 +355,7 @@ class DBManager():
             cur.execute(bv_table)
         except Exception as e:
             print(e)
+            raise e
 
         cur.close()
 
@@ -284,10 +377,11 @@ class DBManager():
         
         except Exception as e:
             print(e)
+            raise e
 
         cur.close()
 
-    def __insert_one_interaction(self, interaction):
+    def _insert_one_interaction(self, interaction):
         #print("Inserting interactions...")
         sql_insert = '''INSERT INTO Interaction_indices (
         interaction_type,
@@ -305,10 +399,11 @@ class DBManager():
     
         except Exception as e:
             print(e)
+            raise e
 
         cur.close()
 
-    def __make_new_interaction_column(self, column_number):
+    def _make_new_interaction_column(self, column_number):
         add_column_str = '''ALTER TABLE Interaction_bitvectors ADD COLUMN Interaction_{n_inter}'''.format(n_inter = str(column_number))
         try:
             cur = self.conn.cursor()
@@ -317,169 +412,100 @@ class DBManager():
             
         except Exception as e:
             print(e)
+            raise e
 
         cur.close()
 
-    def __fetch_best_energies_leff(self):
+    def _fetch_plot_data(self):
         conn = self.conn
-        plot_data_str = self.__write_plot_results_sql()
-        plot_data = self.select_from_db(plot_data_str)
+        plot_data_query = self._generate_plot_results_query()
+        return self._run_query(plot_data_query)
 
-        energies = []
-        leffs = []
-        for row in plot_data:
-            if int(row[3]) == 1: #only one point per ligand, for best binding energy
-                energies.append(row[1])
-                leffs.append(row[2])
+    def _generate_plot_results_query(self):
 
-        self.energies = energies
-        self.leffs = leffs
-        self.plot_data = plot_data
-        self.fetch_energies_le_flag = True
+        return "SELECT energies_binding, leff FROM Results GROUP BY LigName"
 
-    def __write_plot_results_sql(self):
-        sql_string = "SELECT LigName, energies_binding, leff, pose_rank FROM Results"
-
-        return sql_string
-
-    def __write_result_filtering_str_sqlite(self, results_filters_list, output_fields):
+    def _generate_result_filtering_str_sqlite(self, results_filters_list, output_fields):
         """ takes list of filters, writes sql filtering string"""
 
         #parse requested output fields and convert to column names in database
-        outfield_dict = {"e":"energies_binding",
-                        "le":"leff",
-                        "delta":"deltas",
-                        "ref_rmsd":"reference_rmsd",
-                        "e_inter":"energies_inter",
-                        "e_vdw":"energies_vdw",
-                        "e_elec":"energies_electro",
-                        "e_intra":"energies_intra",
-                        "n_interact":"nr_interactions",
-                        "interactions":"interactions",
-                        "fname":"LigName",
-                        "ligand_smile":"ligand_smile",
-                        "rank":"pose_rank",
-                        "run":"run_number",
-                        "hb":"num_hb"}
-        outfield_string = ""
-        for field in output_fields:
-            if field in outfield_dict.keys():
-                outfield_string += outfield_dict[field] + ", "
-        outfield_string = outfield_string.rstrip(", ")
+        
+        outfield_string = [self.field_to_column_name[field] for field in output_fields if field in self.field_to_column_name].join(", ")
 
         interaction_filters = []
 
-        sql_string = """SELECT {out_columns} FROM Results WHERE """.format(out_columns = outfield_string)
-
-        energy_filter_sql_call_dict = {"eworst":"energies_binding < {value} AND ",
-                        "ebest":"energies_binding > {value} AND ",
-                        "leworst":"leff < {value} AND ",
-                        "lebest":"leff > {value} AND "
-                        }
-
-        for filter_tuple in results_filters_list:
-            filter_key = filter_tuple[0]
-            filter_value = filter_tuple[1]
-
-            #write energy filters
-            if filter_key in energy_filter_sql_call_dict:
-                energy_fil_str = energy_filter_sql_call_dict[filter_key].format(value = filter_value)
-                sql_string += energy_fil_str
-            """if filter_key == 'eworst':
-                eworst_str = "energies_binding < {value} AND ".format(value = filter_value)
-                sql_string += eworst_str
-
-            if filter_key == 'ebest':
-                ebest_str = "energies_binding > {value} AND ".format(value = filter_value)
-                sql_string += ebest_str
-
-            if filter_key == 'leworst':
-                leworst_str = "leff < {value} AND ".format(value = filter_value)
-                sql_string += leworst_str
-
-            if filter_key == 'lebest':
-                lebest_str = "leff > {value} AND ".format(value = filter_value)
-                sql_string += lebest_str
-
-            if filter_key == 'epercentile':
-                requested_percentile = filter_value
-                self.calculate_energy_percentile(requested_percentile)
-                epercentile_string = "energies_binding < {value} AND ".format(value = self.energy_percentile)
-                sql_string += epercentile_string
-
-            if filter_key == 'leffpercentile':
-                requested_percentile = filter_value
-                self.calculate_leff_percentile(requested_percentile)
-                leff_percentile_string = "leff < {value} AND ".format(value = self.leff_percentile)
-                sql_string += leff_percentile_string"""
-
-            #write interaction filters
+        #write energy filters
+        energy_filter_sql_query = []
+        filtering_window = "Results"
+        for filter_key, filter_value in results_filters_list:
+            if filter_key in self.energy_filter_sqlite_call_dict:
+                if filter_key == "epercentile" or filter_key == "leffpercentile":
+                    #convert from percent to decimal
+                    filter_value = str(float(filter_value)/100)
+                    #reset filtering window to include generated percentile_ranks
+                    filtering_window = self._generate_percentile_rank_window()
+                energy_filter_sql_query.append(self.energy_filter_sqlite_call_dict[filter_key].format(value = filter_value))
+                    
+            
+            #write hb count filter(s)
             if filter_key == 'hb_count':
                 if filter_value > 0:
-                    hb_count_str = "num_hb > {value} AND ".format(value = filter_value)
-                    sql_string += hb_count_str
+                    energy_filter_sql_query.append("num_hb > {value}".format(value = filter_value))
                 else:
-                    hb_count_str = "num_hb < {value} AND ".format(value = -1*filter_value)
-                    sql_string += hb_count_str
+                    energy_filter_sql_query.append("num_hb < {value}".format(value = -1*filter_value))
 
-            interaction_filter_keys = ["V",
-            "H",
-            "R"]
-            #compile list of interactions to search for
-            for key in interaction_filter_keys:
-                if filter_key == key:
-                    for interact in filter_value:
-                        interaction_string = key + ":" + interact[0]
-                        interaction_filters.append(interaction_string.split(":"))
+       sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(out_columns = outfield_string, window = filtering_window)
+       sql_string += energy_filter_sql_query.join(" AND ")
+
+        #compile list of interactions to search for
+        for key in self.interaction_filter_types:
+            if filter_key == key:
+                for interact in filter_value:
+                    interaction_string = key + ":" + interact[0]
+                    interaction_filters.append(interaction_string.split(":"))
 
         interaction_filter_indices = []
         #for each interaction, get the index from the interactions_indices table
         for interaction in interaction_filters:
-            interact_index_str = self.__write_interaction_index_filtering_str(interaction)
-            interaction_indices = self.__select_from_db(interact_index_str)
+            interact_index_str = self._write_interaction_index_filtering_str(interaction)
+            interaction_indices = self._run_query(interact_index_str)
             for i in interaction_indices:
                 interaction_filter_indices.append(i[0])
 
         #find pose ids for ligands with desired interactions
         if interaction_filter_indices != []:
-            interaction_filter_str = self.__write_interaction_filtering_str(interaction_filter_indices)
-            sql_string += "Pose_ID IN (" + interaction_filter_str + ")"
+            interaction_filter_str = self._write_interaction_filtering_str(interaction_filter_indices)
+            sql_string += " AND Pose_ID IN (" + interaction_filter_str + ")"
 
-        if sql_string.endswith("AND "):
-            sql_string = sql_string.rstrip("AND ")
-        if sql_string.endswith("OR "):
-            sql_string = sql_string.rstrip("OR ")
+       #adding if we only want to keep one pose per ligand (will keep first entry)
+        if self.log_distinct_ligands:
+            sql_string += " GROUP BY LigName"
+
+        #add how to order results
+        if self.order_results != None:
+            try:
+                sql_string += " ORDER BY " + self.field_to_column_name[self.order_results]
+            except KeyError:
+                print("Please ensure you are only requesting one option for --order_results and have written it correctly")
+                raise KeyError
 
         return sql_string
 
-    def __write_interaction_index_filtering_str(self, interaction_list):
+    def _write_interaction_index_filtering_str(self, interaction_list):
         """takes list of interaction info for a given ligand, looks up corresponding interaction index"""
         interaction_info = ["interaction_type", "rec_chain", "rec_resname", "rec_resid", "rec_atom"]
         sql_string = """SELECT interaction_id FROM Interaction_indices WHERE """
 
-        for i in range(4):
-            item = interaction_list[i]
-            column_name = interaction_info[i]
-            if item != "":
-                sql_string += "{column} LIKE '%{value}%' AND ".format(column = column_name, value = item)
+        sql_string += ["{column} LIKE '%{value}%'".format(column = interaction_info[i], value = interaction_list[i]) for i in range(4)].join(" AND ") 
 
-        sql_string = sql_string.rstrip("AND ")
         return sql_string
 
-    def __write_interaction_filtering_str(self, interaction_index_list):
+    def _write_interaction_filtering_str(self, interaction_index_list):
         """takes list of interaction indices and searches for ligand ids which have those interactions"""
 
-        sql_string = """SELECT Pose_id FROM Interaction_bitvectors WHERE """
+        return """SELECT Pose_id FROM Interaction_bitvectors WHERE """ + ["Interaction_{index_n} = 1".format(index_n = index) for index in interaction_index_list].join(" OR ")
 
-        for index in interaction_index_list:
-            add_str = "Interaction_{index_n} = 1 OR ".format(index_n = index)
-            sql_string += add_str
-
-        sql_string = sql_string.rstrip("OR ")
-
-        return sql_string
-
-    def __write_ligand_filtering_sql(self, ligand_filters):
+    def _write_ligand_filtering_sql(self, ligand_filters):
         """write string to select from ligand table"""
 
         sql_ligand_string = "SELECT LigName, best_binding FROM Ligands WHERE "
@@ -502,4 +528,117 @@ class DBManager():
             sql_ligand_string = sql_ligand_string.rstrip("OR ")
 
         return sql_ligand_string
+
+    def _generate_results_row(self, ligand_dict, pose_rank):
+        """generate list of lists of ligand values to be inserted into sqlite database"""
+
+        ######get pose-specific data
+        
+        #check if run is best for a cluster. We are only saving the top pose for each cluster
+        try:
+            cluster_top_pose_runs = ligand_dict["cluster_top_poses"][:self.num_clusters] #will only select top n clusters. Default 3
+        except IndexError:
+            cluster_top_pose_runs = ligand_dict["cluster_top_poses"] #catch indexerror if not enough clusters for given ligand
+        if run_number not in cluster_top_pose_runs:
+            continue
+        ligand_data_list = [ligand_dict["ligname"], ligand_dict["ligand_smile_string"], pose_rank+1, ligand_dict["sorted_runs"][pose_rank]]
+        #get energy data
+        for key in self.ligand_data_keys:
+            ligand_data_list.append(ligand_dict[key][pose_rank])
+
+        #add interaction count
+        ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0]) 
+        #count number H bonds, add to ligand data list
+        ligand_data_list.append(ligand_dict["interactions"][pose_rank]["type"].count("H"))
+
+        for key in stateVar_keys:
+            stateVar_data = ligand_dict[key][pose_rank]
+            for dim in stateVar_data:
+                ligand_data_list.append(dim)
+        pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
+        dihedral_string = ""
+        for dihedral in pose_dihedrals:
+            dihedral_string = dihedral_string + str(dihedral) + ", "
+        ligand_data_list.append(dihedral_string)
+
+        return ligand_data_list
+
+    def _generate_ligand_row(self, ligand_dict):
+        """writes row to be inserted into ligand table"""
+        ligand_name = ligand_dict["ligname"]
+        ligand_smile = ligand_dict["ligand_smile_string"]
+        input_pdbqt = "\n".join(ligand_dict["ligand_input_pdbqt"])
+        best_binding = ligand_dict["scores"][0]
+        best_run = ligand_dict["sorted_runs"][0]
+
+        return [ligand_name, ligand_smile, input_pdbqt, best_binding, best_run]
+
+    def _generate_interaction_tuples(self, interaction_dictionary):
+        """takes dictionary of file results, formats list of tuples for interactions"""
+        self.count = interaction_dictionary["count"]
+        interactions = []
+        for i in range(self.count):
+            self.interations.append((self.interaction_dictionaries[kw][i] for kw in self.interaction_data_kw))
+
+    def _add_unique_interactions(self, interactions_list):
+        """takes list of interaction tuple lists. Examines self.unique_interactions, add interactions if not already inserted.
+
+        self.unique_interactions {(interaction tuple): unique_interaction_idx}"""
+
+        for pose in interactions_list:
+            for interaction_tuple in pose:
+                if interaction_tuple is not in self.unique_interactions:
+                    self.unique_interactions[interaction_tuple] = self.next_unique_interaction_idx
+                    if self.interactions_initialized_flag:
+                        self._insert_one_interaction(interaction_tuple)
+                        self._make_new_interaction_column(self.next_unique_interaction_idx)
+                    self.next_unique_interaction_idx += 1
+
+    def _generate_interaction_bitvectors(self, pose_id_list, interactions_list):
+        """takes string of interactions and all unique interactions and makes bitvector"""
+        bitvectors_list = []
+        for i in range(len(pose_id_list)):
+            pose_bitvector = [pose_id_list[i]].append([None]*len(self.unique_interactions))
+            for interaction_tuple in interactions_list[i]:
+                interaction_idx = self.unique_interactions[interaction_tuple]
+                pose_bitvector[interaction_idx - 1] = 1 #index corrected for interaction indices starting at 1 in sqlite table
+
+            bitvectors_list.append(pose_bitvector)
+
+        return bitvectors_list
+
+    def _insert_interaction_bitvectors(self, bitvectors):
+        #print("Inserting interaction bitvectors...")
+        interaction_columns = range(len(self.unique_interactions))
+        column_str = ""
+        filler_str = "?,"
+        for i in interaction_columns:
+            column_str += "Interaction_"+ str(i+1) + ", "
+            filler_str += "?,"
+        column_str = column_str.rstrip(", ")
+        filler_str = filler_str.rstrip(",")
+
+        sql_insert = '''INSERT INTO Interaction_bitvectors (Pose_ID, {columns}) VALUES ({fillers})'''.format(columns = column_str, fillers = filler_str)
+
+        try:
+            cur = self.conn.cursor()
+            cur.executemany(sql_insert, bitvectors)
+            self.conn.commit()
+            
+        except Exception as e:
+            print(e)
+            raise e
+
+        cur.close()
+
+    def _generate_percentile_rank_window(self):
+        """makes window with percentile ranks for percentile filtering"""
+        column_names = self._fetch_results_column_names().join(",")
+        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY energies_binding) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results".format(columns = column_names)
+
+    def _fetch_results_column_names(self):
+        return [column_tuple[1] for column_tuple in self.conn.execute("PRAGMA table_info(Results)")]
+
+
+
 

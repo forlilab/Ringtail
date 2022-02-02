@@ -134,6 +134,35 @@ class CLOptionParser():
                                 'overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database'),
                             'action':'store_true', 'default':False },
                             ),
+                        ('--log_distinct_ligands', {
+                            'help':('by default, will output all poses passing filters, including multiple poses for the same ligand. '
+                                'This flag will cause each ligand passing the filters to only be logged once, with the best pose.'),
+                            'action':'store_true', 'default':False },
+                            ),
+                        ('--order_results', {
+                            'help':'Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION.'
+                            'available fields are:  '
+                            '"e" (energies_binding), '
+                            '"le" (ligand efficiency), '
+                            '"delta" (delta energy from best pose), '
+                            '"ref_rmsd" (RMSD to reference pose), '
+                            '"e_inter" (intermolecular energy), '
+                            '"e_vdw" (van der waals energy), '
+                            '"e_elec" (electrostatic energy), '
+                            '"e_intra" (intermolecular energy), '
+                            '"n_interact" (number of interactions), '
+                            '"interactions" (all interactions), '
+                            '"fname" (full path filename), '
+                            '"rank" (rank of ligand pose), '
+                            '"run" (run number for ligand pose), '
+                            #'"mname" (molecule name from the \'move\' kw in the DLG); '
+                            #'"name" (basename of the dlg[.gz] file); '
+                            '"hb" (hydrogen bonds); '
+                            #'"hba" (hydrogen bond, ligand acceptor); '
+                            #'"hbd" (hydrogen bond, ligand donor); '
+                            'action':'store', 'type':str, 'metavar': "STRING", 
+                            'default':None},
+                            ),
 
 
                         ],
@@ -305,7 +334,7 @@ class CLOptionParser():
                   'plot': parsed_opts.plot,
                   'outfields': parsed_opts.out_fields
                 }
-        db_opts = {'num_clusters': parsed_opts.num_clusters}
+        db_opts = {'num_clusters': parsed_opts.num_clusters, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.log_distinct_ligands}
 
         # if a path for saving poses is specified, then the log will be written there
         if not parsed_opts.export_poses_path is None:

@@ -1,28 +1,23 @@
 from dbmanager import DBManager
 from resultsmanager import ResultsManager
+import 
 
 class VSManager():
     """ DOCUMENTATION GOES HERE """
     def __init__(self, db_opts, rman_opts, filters, out_opts, filter_fname=None):
+        print(db_opts)
         self.dbman = DBManager(opts=db_opts)
         self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'])
         self.filters = filters
         self.out_opts = out_opts
         self.eworst = self.filters['properties']['eworst'] # has default -3 kcal/mol
         self.filter_file = filter_fname
+        self.output_manager = Outputter(self, out_opts['log'])
 
         #if requested, write database
         if self.dbman.write_flag:
             print("adding results")
             self.add_results()
-
-        if self.filters['properties']['epercentile'] is not None or self.filters['properties']['leffpercentile'] is not None or self.out_opts['plot']:
-            print("fetching top energies")
-            self.top_energies, self.top_leffs, self.top_data = self.dbman.get_top_energies_leffs()
-        else:
-            self.top_energies = []
-            self.top_leffs = []
-            self.top_data = []
 
     def add_results(self):
         """"""
@@ -47,12 +42,20 @@ class VSManager():
         #ask DBManager to fetch results
         print("filtering results")
         self.filtered_results = self.dbman.filter_results(self.results_filters_list, self.out_opts['outfields'])
+        for line in self.filtered_results:
+            self.output_manager.write_log_line(line)
+            self.output_manager.plot_single_point(line[0],line[1],"blue") #energy (line[0]) on x axis, le (line[1]) on y axis
 
         #perform ligand filtering if requested
-        if self.filters['filter_ligands_flag']:
-            ligand_filters = self.filters["ligand_filters"]
-            print("filtering ligands")
-            self.filtered_ligands = self.dbman.filter_ligands(ligand_filters)
+        if not self.filters['filter_ligands_flag']:
+            continue
+        ligand_filters = self.filters["ligand_filters"]
+        print("filtering ligands")
+        self.filtered_ligands = self.dbman.filter_ligands(ligand_filters)
+        self.output_manager.write_filtered_ligand_header()
+        for line in self.filtered_ligands:
+            self.output_manager.write_log_line(line)
+            self.output_manager.plot_single_point(line[0],line[1],"red") #energy (line[0]) on x axis, le (line[1]) on y axis
 
     def prepare_results_filter_list(self):
         """takes filters dictionary from option parser. Output list of tuples to be inserted into sql call string"""
@@ -95,20 +98,23 @@ class VSManager():
     def calculate_leff_percentile(self, percent):
         self.leff_percentile = np.percentile(self.leffs, percent)
 
+    def close_database(self):
+        """Tell database we are done and it can close the connection"""
+        self.dbman.close_connection()
+
 ###################################################
 ############ plotting class #######################
 ###################################################
 
 class Outputter():
 
-    def __init__(self, vsman, log_file):
+    def __init__(self, vsman, log_file, plot_flag):
         self.log = log_file
         self.vsman = vsman
         self.filter_ligands_flag = self.vsman.filters["filter_ligands_flag"]
-        self.energies = vsman.top_energies
-        self.leffs = vsman.top_leffs
-        self.plot_data = vsman.top_data
+        self.plot_flag = plot_flag
         self.passing_results = vsman.filtered_results
+        self.num_ligands = self.vsman.results_man.num_result_files
         if self.filter_ligands_flag:
             self.passing_ligand = vsman.filtered_ligands
 
@@ -116,6 +122,28 @@ class Outputter():
             self.fig_base_name = self.vsman.filter_file.split(".")[0]
         else:
             self.fig_base_name = "all_ligands"
+
+        self._create_log_file()
+        if not self.plot_flag:
+            continue
+        self._initialize_scatter_plot()
+
+    def _initialize_scatter_plot(self):
+        self.scatter_plot = plt.subplot(1, 1, 1)
+        self.scatter_plot.scatter([],[])
+        plot_data = self.vsman.dbman.get_plot()
+
+        for line in plot_data:
+            self.plot_single_point(line[0], line[1]) #energy (line[0]) on x axis, le (line[1]) on y axis
+
+    def plot_single_point(self,x,y,color="black"):
+        if not self.plot_flag: #make sure user wants plot
+            continue
+        self.scatter_plot.plot(x,y,color)
+
+    def save_scatterplot(self):
+        plt.savefig(self.fig_base_name + "_scatter.png")
+        plt.close()
 
     def make_histograms(self):
         self.histFig, (en, le) = plt.subplots(2)
@@ -133,25 +161,6 @@ class Outputter():
         plt.savefig(self.fig_base_name + "_hist.png")
         plt.close(self.histFig)
 
-    def assign_scatter_colors(self):
-        colors = []
-        for row in self.plot_data:
-            if int(row[3]) == 1:
-                ligand_name = row[0]
-                if not self.filter_ligands_flag:
-                    filtered_ligands = []
-
-                if ligand_name in [row[0] for row in self.filtered_results] and ligand_name in [row[0] for row in self.filtered_ligands]:
-                    colors.append("purple")
-                elif ligand_name in [row[0] for row in self.filtered_ligands]:
-                    colors.append("red")
-                elif ligand_name in [row[0] for row in self.filtered_results]:
-                    colors.append("blue")
-                else:
-                    colors.append("black")
-
-        self.colors = colors
-
     def make_scatterplot(self):
         plot = plt.scatter(self.energies, self.leffs, c=self.colors)
 
@@ -162,6 +171,20 @@ class Outputter():
             plot.axhline(c="orange", y=self.filtering.leff_percentile)
 
         plt.savefig(self.fig_base_name + "_scatter.png")
+
+    def write_log_line(self, line):
+        """write a single row to the log file"""
+        with open(self.log, "a") as f:
+          f.write(new_line)
+          f.write("\n")
+
+    def write_filtered_ligand_header(self):
+        with open(self.log, "a") as f:
+            f.write("\n")
+            f.write("***************\n")
+            f.write("\n")
+            f.write("Filtered Ligands:\n")
+            f.write("-----------------\n")
 
     def write_log(self):
 
@@ -200,6 +223,11 @@ class Outputter():
             f.write(str(len(passing_results_ligands)) + "\n")
             f.write("Ligands passing ligand-based filters: ")
             f.write(str(passing_ligand_count))
+
+    def _create_log_file(self):
+        with open(self.log, 'w') as f:
+            f.write("Filtered poses:\n")
+            f.write("---------------\n")
             
             
 

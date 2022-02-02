@@ -5,6 +5,7 @@ class ResultsManager():
     def __init__(self, mode='dlg', dbman=None, filelist=None, chunk_size=1000, numclusters = 3):
         self.dbman = dbman
         self.filelist = filelist
+        self.num_result_files = len(filelist)
         if mode =='dlg':
             self.parser = MPManager(filelist = self.filelist, db_obj = self.dbman, chunksize = chunk_size, mode='dlg', numclusters = numclusters)
         #elif mode == 'vina'
