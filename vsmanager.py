@@ -1,21 +1,19 @@
-from dbmanager import DBManager
+from dbmanager import DBManager, DBManagerSQLite
 from resultsmanager import ResultsManager
-import 
 
 class VSManager():
     """ DOCUMENTATION GOES HERE """
     def __init__(self, db_opts, rman_opts, filters, out_opts, filter_fname=None):
-        print(db_opts)
-        self.dbman = DBManager(opts=db_opts)
+        self.dbman = DBManagerSQLite(db_opts)
         self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'])
         self.filters = filters
         self.out_opts = out_opts
         self.eworst = self.filters['properties']['eworst'] # has default -3 kcal/mol
         self.filter_file = filter_fname
-        self.output_manager = Outputter(self, out_opts['log'])
+        self.output_manager = Outputter(self, self.out_opts['log'], self.out_opts['plot'])
 
         #if requested, write database
-        if self.dbman.write_flag:
+        if self.dbman.write_db_flag:
             print("adding results")
             self.add_results()
 
@@ -48,7 +46,7 @@ class VSManager():
 
         #perform ligand filtering if requested
         if not self.filters['filter_ligands_flag']:
-            continue
+            return
         ligand_filters = self.filters["ligand_filters"]
         print("filtering ligands")
         self.filtered_ligands = self.dbman.filter_ligands(ligand_filters)
@@ -113,7 +111,6 @@ class Outputter():
         self.vsman = vsman
         self.filter_ligands_flag = self.vsman.filters["filter_ligands_flag"]
         self.plot_flag = plot_flag
-        self.passing_results = vsman.filtered_results
         self.num_ligands = self.vsman.results_man.num_result_files
         if self.filter_ligands_flag:
             self.passing_ligand = vsman.filtered_ligands
@@ -124,9 +121,8 @@ class Outputter():
             self.fig_base_name = "all_ligands"
 
         self._create_log_file()
-        if not self.plot_flag:
-            continue
-        self._initialize_scatter_plot()
+        if self.plot_flag:
+            self._initialize_scatter_plot()
 
     def _initialize_scatter_plot(self):
         self.scatter_plot = plt.subplot(1, 1, 1)
@@ -138,7 +134,7 @@ class Outputter():
 
     def plot_single_point(self,x,y,color="black"):
         if not self.plot_flag: #make sure user wants plot
-            continue
+            return
         self.scatter_plot.plot(x,y,color)
 
     def save_scatterplot(self):

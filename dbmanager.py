@@ -12,8 +12,9 @@ class DBManager():
         self.order_results = self.opts['order_results']
         self.log_distinct_ligands = self.opts["log_distinct_ligands"]
         self.write_db_flag = self.opts["write_db_flag"]
+        self.num_clusters = self.opts["num_clusters"]
         #initialize dictionary processing kw lists
-        self.interaction_data_kws = ["type", "chain", "residue", "resid", "recname"]
+        self.interaction_data_kws = ["type", "chain", "residue", "resid", "recname", "recid"]
         self.ligand_data_keys = ["cluster_rmsds",
         "ref_rmsds",
         "scores",
@@ -71,12 +72,13 @@ class DBManager():
 
 class DBManagerSQLite(DBManager):
     """ DOCUMENTATION GOES HERE """
-    def __init__(self):
-        super().__init__(self, DBManager)
+    def __init__(self, opts = {}):
+        super().__init__(opts)
         self.conn = self._create_connection()
 
         self.unique_interactions = {}
         self.next_unique_interaction_idx = 1
+        self.interactions_initialized_flag = False
 
         self.field_to_column_name = {"e":"energies_binding",
                         "le":"leff",
@@ -97,7 +99,7 @@ class DBManagerSQLite(DBManager):
         self.energy_filter_sqlite_call_dict = {"eworst":"energies_binding < {value}",
                         "ebest":"energies_binding > {value}",
                         "leworst":"leff < {value}",
-                        "lebest":"leff > {value}"
+                        "lebest":"leff > {value}",
                         "epercentile":"energy_percentile_rank < {value}",
                         "leffpercentile":"leff_percentile_rank < {value}"
                         }
@@ -180,16 +182,17 @@ class DBManagerSQLite(DBManager):
             print(e)
             raise e
 
-    def insert_interactions(self, interactions_list):
+    def insert_interactions(self, pose_id_list, interactions_list):
 
         self._add_unique_interactions(interactions_list)
 
         #check if we need to initialize the interaction bv table and insert first set of interaction
-        if self.unique_interactions == {}:
+        if not self.interactions_initialized_flag:
             self._create_interaction_bv_table()
             self._insert_unique_interactions(np.array(list(self.unique_interactions.keys())))
+            self.interactions_initialized_flag = True
 
-       self._insert_interaction_bitvectors(self._generate_interaction_bitvectors())
+        self._insert_interaction_bitvectors(self._generate_interaction_bitvectors(pose_id_list, interactions_list))
 
     def get_top_energies_leffs(self):
         self._fetch_best_energies_leff()
@@ -213,8 +216,11 @@ class DBManagerSQLite(DBManager):
         interaction_tuples = []
 
         for i in range(len(ligand_dict["sorted_runs"])):
-            result_rows.append(self._generate_results_row(ligand_dict, i))
-            interaction_tuples.append(self._generate_interaction_tuples(ligand_dict["interactions"][i]))
+            cluster_top_pose_runs = self._find_cluster_top_pose_runs(ligand_dict)
+            run_number = int(ligand_dict["sorted_runs"][i])
+            if run_number in cluster_top_pose_runs:
+                result_rows.append(self._generate_results_row(ligand_dict, i, run_number))
+                interaction_tuples.append(self._generate_interaction_tuples(ligand_dict["interactions"][i]))
 
         return (result_rows, self._generate_ligand_row(ligand_dict), interaction_tuples)
 
@@ -344,10 +350,10 @@ class DBManagerSQLite(DBManager):
         cur.close()
 
     def _create_interaction_bv_table(self):
-        interact_columns_str = ["Interaction_"+ str(i+1) for i in range(len(self.unique_interactions))].join(" INTEGER,\n") + " INTEGER"
+        interact_columns_str = " INTEGER,\n".join(["Interaction_"+ str(i+1) for i in range(len(self.unique_interactions))]) + " INTEGER"
 
         bv_table = """CREATE TABLE Interaction_bitvectors (
-        Pose_ID INTEGER PRIMARY KEY,
+        Pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
         {columns})""".format(columns = interact_columns_str)
 
         try:
@@ -430,7 +436,7 @@ class DBManagerSQLite(DBManager):
 
         #parse requested output fields and convert to column names in database
         
-        outfield_string = [self.field_to_column_name[field] for field in output_fields if field in self.field_to_column_name].join(", ")
+        outfield_string = ", ".join([self.field_to_column_name[field] for field in output_fields if field in self.field_to_column_name])
 
         interaction_filters = []
 
@@ -454,8 +460,8 @@ class DBManagerSQLite(DBManager):
                 else:
                     energy_filter_sql_query.append("num_hb < {value}".format(value = -1*filter_value))
 
-       sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(out_columns = outfield_string, window = filtering_window)
-       sql_string += energy_filter_sql_query.join(" AND ")
+        sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(out_columns = outfield_string, window = filtering_window)
+        sql_string += " AND ".join(energy_filter_sql_query)
 
         #compile list of interactions to search for
         for key in self.interaction_filter_types:
@@ -496,14 +502,14 @@ class DBManagerSQLite(DBManager):
         interaction_info = ["interaction_type", "rec_chain", "rec_resname", "rec_resid", "rec_atom"]
         sql_string = """SELECT interaction_id FROM Interaction_indices WHERE """
 
-        sql_string += ["{column} LIKE '%{value}%'".format(column = interaction_info[i], value = interaction_list[i]) for i in range(4)].join(" AND ") 
+        sql_string += " AND ".join(["{column} LIKE '%{value}%'".format(column = interaction_info[i], value = interaction_list[i]) for i in range(4)]) 
 
         return sql_string
 
     def _write_interaction_filtering_str(self, interaction_index_list):
         """takes list of interaction indices and searches for ligand ids which have those interactions"""
 
-        return """SELECT Pose_id FROM Interaction_bitvectors WHERE """ + ["Interaction_{index_n} = 1".format(index_n = index) for index in interaction_index_list].join(" OR ")
+        return """SELECT Pose_id FROM Interaction_bitvectors WHERE """ + " OR ".join(["Interaction_{index_n} = 1".format(index_n = index) for index in interaction_index_list])
 
     def _write_ligand_filtering_sql(self, ligand_filters):
         """write string to select from ligand table"""
@@ -529,19 +535,22 @@ class DBManagerSQLite(DBManager):
 
         return sql_ligand_string
 
-    def _generate_results_row(self, ligand_dict, pose_rank):
+    def _find_cluster_top_pose_runs(self, ligand_dict):
+        """returns list of the run numbers for the top run in the top self.num_clusters clusters"""
+        try:
+            cluster_top_pose_runs = ligand_dict["cluster_top_poses"][:self.num_clusters] #will only select top n clusters. Default 3
+        except IndexError:
+            cluster_top_pose_runs = ligand_dict["cluster_top_poses"] #catch indexerror if not enough clusters for given ligand
+
+        return cluster_top_pose_runs
+
+    def _generate_results_row(self, ligand_dict, pose_rank, run_number):
         """generate list of lists of ligand values to be inserted into sqlite database"""
 
         ######get pose-specific data
         
         #check if run is best for a cluster. We are only saving the top pose for each cluster
-        try:
-            cluster_top_pose_runs = ligand_dict["cluster_top_poses"][:self.num_clusters] #will only select top n clusters. Default 3
-        except IndexError:
-            cluster_top_pose_runs = ligand_dict["cluster_top_poses"] #catch indexerror if not enough clusters for given ligand
-        if run_number not in cluster_top_pose_runs:
-            continue
-        ligand_data_list = [ligand_dict["ligname"], ligand_dict["ligand_smile_string"], pose_rank+1, ligand_dict["sorted_runs"][pose_rank]]
+        ligand_data_list = [ligand_dict["ligname"], ligand_dict["ligand_smile_string"], pose_rank+1, run_number]
         #get energy data
         for key in self.ligand_data_keys:
             ligand_data_list.append(ligand_dict[key][pose_rank])
@@ -551,7 +560,7 @@ class DBManagerSQLite(DBManager):
         #count number H bonds, add to ligand data list
         ligand_data_list.append(ligand_dict["interactions"][pose_rank]["type"].count("H"))
 
-        for key in stateVar_keys:
+        for key in self.stateVar_keys:
             stateVar_data = ligand_dict[key][pose_rank]
             for dim in stateVar_data:
                 ligand_data_list.append(dim)
@@ -575,10 +584,12 @@ class DBManagerSQLite(DBManager):
 
     def _generate_interaction_tuples(self, interaction_dictionary):
         """takes dictionary of file results, formats list of tuples for interactions"""
-        self.count = interaction_dictionary["count"]
+        self.count = interaction_dictionary["count"][0]
         interactions = []
-        for i in range(self.count):
-            self.interations.append((self.interaction_dictionaries[kw][i] for kw in self.interaction_data_kw))
+        for i in range(int(self.count)):
+            interactions.append(tuple(interaction_dictionary[kw][i] for kw in self.interaction_data_kws))
+
+        return interactions
 
     def _add_unique_interactions(self, interactions_list):
         """takes list of interaction tuple lists. Examines self.unique_interactions, add interactions if not already inserted.
@@ -587,7 +598,7 @@ class DBManagerSQLite(DBManager):
 
         for pose in interactions_list:
             for interaction_tuple in pose:
-                if interaction_tuple is not in self.unique_interactions:
+                if interaction_tuple not in self.unique_interactions:
                     self.unique_interactions[interaction_tuple] = self.next_unique_interaction_idx
                     if self.interactions_initialized_flag:
                         self._insert_one_interaction(interaction_tuple)
@@ -598,7 +609,7 @@ class DBManagerSQLite(DBManager):
         """takes string of interactions and all unique interactions and makes bitvector"""
         bitvectors_list = []
         for i in range(len(pose_id_list)):
-            pose_bitvector = [pose_id_list[i]].append([None]*len(self.unique_interactions))
+            pose_bitvector = [None]*len(self.unique_interactions)
             for interaction_tuple in interactions_list[i]:
                 interaction_idx = self.unique_interactions[interaction_tuple]
                 pose_bitvector[interaction_idx - 1] = 1 #index corrected for interaction indices starting at 1 in sqlite table
@@ -611,14 +622,14 @@ class DBManagerSQLite(DBManager):
         #print("Inserting interaction bitvectors...")
         interaction_columns = range(len(self.unique_interactions))
         column_str = ""
-        filler_str = "?,"
+        filler_str = ""
         for i in interaction_columns:
             column_str += "Interaction_"+ str(i+1) + ", "
             filler_str += "?,"
         column_str = column_str.rstrip(", ")
         filler_str = filler_str.rstrip(",")
 
-        sql_insert = '''INSERT INTO Interaction_bitvectors (Pose_ID, {columns}) VALUES ({fillers})'''.format(columns = column_str, fillers = filler_str)
+        sql_insert = '''INSERT INTO Interaction_bitvectors ({columns}) VALUES ({fillers})'''.format(columns = column_str, fillers = filler_str)
 
         try:
             cur = self.conn.cursor()
@@ -633,7 +644,7 @@ class DBManagerSQLite(DBManager):
 
     def _generate_percentile_rank_window(self):
         """makes window with percentile ranks for percentile filtering"""
-        column_names = self._fetch_results_column_names().join(",")
+        column_names = ",".join(self._fetch_results_column_names())
         return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY energies_binding) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results".format(columns = column_names)
 
     def _fetch_results_column_names(self):

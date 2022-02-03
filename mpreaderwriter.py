@@ -125,16 +125,16 @@ class Writer(multiprocessing.Process):
 
     def write_to_db(self):
         #insert result and ligand data
-        self.db.insert_results(np.array(self.results_array))
-        self.db.insert_ligands(np.array(self.ligands_array))
+        self.db.insert_results(filter(None, self.results_array))#filter out stray Nones
+        self.db.insert_ligands(filter(None,self.ligands_array))
 
         #perform operations for inserting iteraction data
-        self.db.insert_interactions(interaction_list)
+        self.db.insert_interactions(self.pose_id_list, self.interactions_list)
 
         #reset all data-holders for next chunk
         self.results_array = []
         self.ligands_array = []
-        self.interaction_rows_list = []
+        self.interactions_list = []
         self.pose_id_list = []
         self.counter = 0
 
@@ -143,7 +143,7 @@ class Writer(multiprocessing.Process):
         for pose in results_rows:
             self.results_array.append(pose)
         for pose in interaction_rows:
-            self.interaction_rows_list.append(pose)
+            self.interactions_list.append(pose)
             self.pose_id_list.append(self.current_pose_id)
             self.current_pose_id += 1
         self.ligands_array.append(ligand_row)

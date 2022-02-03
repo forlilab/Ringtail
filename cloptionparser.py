@@ -13,7 +13,7 @@ class CLOptionParser():
         self.epilog="""
 
         REQUIRED PACKAGES
-                Requires numpy, multiprocessing, bashplotlib, matplotlib, sqlite3.\n
+                Requires numpy, multiprocessing, matplotlib, sqlite3.\n
 
         AUTHOR
                 Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD and Andreas Tillack, PhD.\n
@@ -65,17 +65,17 @@ class CLOptionParser():
                     'args': [ 
                         ('--output_sql', {
                             'help':('Name for output SQLite file'), 
-                            'action':'store', 'type':str, 'metavar': "OUTLIST.DB", 'default':"output.db"},
+                            'action':'store', 'type':str, 'metavar': "[FILE_NAME].DB", 'default':"output.db"},
                             ),
                         ('--num_clusters', {
                             'help':('n: Store top pose for top n clusters'), 
-                            'action':'store', 'type':int, 'default':3},
+                            'action':'store', 'type':int, 'default':3, 'metavar':'INT'},
                             ),
                         ('--log', {
                             'help':('by default, results are printed in the terminal (STDOUT); '
                                 'if this option is used, ligands passing the filters will be written '
                                 'to this file'), 
-                            'action':'store', 'type':str, 'metavar': "OUTLIST.TXT", 'default':None},
+                            'action':'store', 'type':str, 'metavar': "[FILE_NAME].TXT", 'default':"output_log.txt"},
                             ),
                         ('--out_fields', {
                             'help':'defines which fields are used when reporting '
@@ -157,7 +157,7 @@ class CLOptionParser():
                             '"run" (run number for ligand pose), '
                             #'"mname" (molecule name from the \'move\' kw in the DLG); '
                             #'"name" (basename of the dlg[.gz] file); '
-                            '"hb" (hydrogen bonds); '
+                            '"hb" (hydrogen bonds); ',
                             #'"hba" (hydrogen bond, ligand acceptor); '
                             #'"hbd" (hydrogen bond, ligand donor); '
                             'action':'store', 'type':str, 'metavar': "STRING", 
@@ -203,15 +203,15 @@ class CLOptionParser():
                     'args': [ 
                         ('--name', {
                             'help':'specify ligand name(s). Will seach OR', 
-                            'action':'store', 'type':str, 'default':None},
+                            'action':'store', 'type':str, 'default':None, 'metavar': "STRING"},
                             ),
                         ('--substructure', {
                             'help':'specify SMILES substring(s) to search for', 
-                            'action':'store', 'type':str, 'default':None},
+                            'action':'store', 'type':str, 'default':None, 'metavar': "STRING"},
                             ),
                         ('--substruct_flag', {
                             'help':'specify whether to search AND or OR for substructures. Default OR', 
-                            'action':'store', 'type':str, 'default':"OR"},
+                            'action':'store', 'type':str, 'default':"OR", 'metavar': "STRING"},
                             )
                             ],}},
                 {'INTERACTION FILTERS': {
@@ -340,7 +340,7 @@ class CLOptionParser():
         if not parsed_opts.export_poses_path is None:
             output['log'] = "%s%s%s" % (output['export_poses_path'], os.sep, output['log'])
         #print(">>>>>>>>>>>>>chekc that fields are recognized")
-        if (parsed_opts.log is None) and (parsed_opts.no_print is True):
+        if parsed_opts.log is None:
             print("*ERROR* print to STDOUT is disabled and no log file has been specified; at least one output source needs to be used.")
             sys.exit(1)
         ##### filters
