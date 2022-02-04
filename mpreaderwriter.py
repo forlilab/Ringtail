@@ -115,20 +115,6 @@ class Writer(multiprocessing.Process):
 
         return
 
-    """def get_unique_interactions(self):
-        self.new_interactions = []
-        for pose in self.interaction_rows_list:
-            interaction_list = pose.replace(":,",",").split(",")
-            for interaction in interaction_list:
-                if interaction.endswith(":"):
-                        interaction = interaction.rstrip(":") #remove trailing colon
-                if interaction not in self.unique_interactions and interaction != "":
-                    interaction_attributes= interaction.split(":")
-                    self.unique_interactions.add(interaction)
-                    self.unique_interactions_list.append(interaction)
-                    self.unique_interactions_split.append(interaction_attributes) #type,ligand atom, ligand id, chain, residue, resid, residue atom, residue atom id
-                    self.new_interactions.append(interaction_attributes)"""
-
     def write_to_db(self):
         #insert result and ligand data
         self.db.insert_results(filter(None, self.results_array))#filter out stray Nones
