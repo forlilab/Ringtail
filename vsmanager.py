@@ -4,12 +4,13 @@ from resultsmanager import ResultsManager
 class VSManager():
     """ DOCUMENTATION GOES HERE """
     def __init__(self, db_opts, rman_opts, filters, out_opts, filter_fname=None):
-        self.dbman = DBManagerSQLite(db_opts)
-        self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'])
         self.filters = filters
         self.out_opts = out_opts
         self.eworst = self.filters['properties']['eworst'] # has default -3 kcal/mol
         self.filter_file = filter_fname
+
+        self.dbman = DBManagerSQLite(db_opts)
+        self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'], no_print_flag = self.out_opts["no_print"])
         self.output_manager = Outputter(self, self.out_opts['log'], self.out_opts['plot'])
 
         #if requested, write database
@@ -20,6 +21,7 @@ class VSManager():
     def add_results(self):
         """"""
         self.results_man.process_results()
+        return 
 
     def filter(self):
         """"""
@@ -41,7 +43,7 @@ class VSManager():
         print("filtering results")
         self.filtered_results = self.dbman.filter_results(self.results_filters_list, self.out_opts['outfields'])
         for line in self.filtered_results:
-            self.output_manager.write_log_line(line)
+            self.output_manager.write_log_line(str(line))
             self.output_manager.plot_single_point(line[0],line[1],"blue") #energy (line[0]) on x axis, le (line[1]) on y axis
 
         #perform ligand filtering if requested
@@ -89,12 +91,6 @@ class VSManager():
             filters_list.append(count)
 
         self.results_filters_list = filters_list
-
-    def calculate_energy_percentile(self, percent):
-        self.energy_percentile = np.percentile(self.energies, percent)
-
-    def calculate_leff_percentile(self, percent):
-        self.leff_percentile = np.percentile(self.leffs, percent)
 
     def close_database(self):
         """Tell database we are done and it can close the connection"""
@@ -171,7 +167,7 @@ class Outputter():
     def write_log_line(self, line):
         """write a single row to the log file"""
         with open(self.log, "a") as f:
-          f.write(new_line)
+          f.write(line)
           f.write("\n")
 
     def write_filtered_ligand_header(self):

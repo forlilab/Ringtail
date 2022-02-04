@@ -122,7 +122,7 @@ class CLOptionParser():
                             'action':'store_true', 'default':False },
                             ),
                         ('--no_print', {
-                            'help':('suppress printing the results to STDOUT. NOTE: runtime may be faster if no_print option used.'),
+                            'help':('suppress printing of full trace of multiprocessing. NOTE: runtime may be faster if no_print option used.'),
                             'action':'store_true', 'default':False },
                             ),
                         ('--plot', {
@@ -332,7 +332,8 @@ class CLOptionParser():
                   'overwrite': parsed_opts.overwrite,
                   'export_poses_path': parsed_opts.export_poses_path,
                   'plot': parsed_opts.plot,
-                  'outfields': parsed_opts.out_fields
+                  'outfields': parsed_opts.out_fields,
+                  'no_print': parsed_opts.no_print
                 }
         db_opts = {'num_clusters': parsed_opts.num_clusters, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.log_distinct_ligands}
 
@@ -405,6 +406,7 @@ class CLOptionParser():
         self.num_clusters = parsed_opts.num_clusters
         if parsed_opts.sql_db != None:
             sqlFile = parsed_opts.sql_db
+            db_opts['write_db_flag'] = False
         else:
             sqlFile = parsed_opts.output_sql
             db_opts['write_db_flag'] = True

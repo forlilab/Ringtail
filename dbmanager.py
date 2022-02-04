@@ -38,7 +38,6 @@ class DBManager():
         "pose_translations",
         "pose_quarternions"]
 
-
     def get_results(self):
         """ generic function for retrieving results"""
         raise NotImplemented
@@ -158,6 +157,7 @@ class DBManagerSQLite(DBManager):
             cur.executemany(sql_insert, results_array)
             self.conn.commit()
             cur.close()
+            
         except Exception as e:
             print(e)
             raise e
@@ -178,9 +178,11 @@ class DBManagerSQLite(DBManager):
             cur.executemany(sql_insert, ligand_array)
             self.conn.commit()
             cur.close()
+            
         except Exception as e:
             print(e)
             raise e
+        
 
     def insert_interactions(self, pose_id_list, interactions_list):
 
@@ -200,7 +202,9 @@ class DBManagerSQLite(DBManager):
 
     def filter_results(self, results_filters_list, output_fields):
         filter_results_str = self._generate_result_filtering_str_sqlite(results_filters_list, output_fields)
+        print(filter_results_str)
         filtered_results = self._run_query(filter_results_str)
+        print(filtered_results)
         return filtered_results
 
     def filter_ligands(self, ligand_filters):
@@ -238,6 +242,7 @@ class DBManagerSQLite(DBManager):
         return con
 
     def _close_connection(self):
+        print("Closing database")
         self.conn.close()
 
     def _initialize_db(self):
@@ -251,15 +256,29 @@ class DBManagerSQLite(DBManager):
 
 
     def _run_query(self, query):
-        """cur = self.conn.cursor()
-        cur.execute(query)
+        """self.conn = self._create_connection()
+        cur = self.conn.cursor()
+        cur.execute(query+";")
 
         rows = cur.fetchall()
+        print(rows)
 
         cur.close()
+        self.conn.close()
 
         return rows"""
-        return self.conn.execute(query)
+        cur = self.conn.cursor()
+        cur.execute(query)
+        return cur
+
+        
+        """conn = sqlite3.connect('test2_3.db')
+        cursor=conn.cursor()
+        cursor.execute(query)
+
+        for row in cursor:
+            print(row)"""
+
 
     def _create_results_table(self):
         sql_results_table = """CREATE TABLE Results (
@@ -305,12 +324,13 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.execute(sql_results_table)
-            cur.execute(create_index)
+            #cur.execute(create_index)
+            cur.close()
         except Exception as e:
             print(e)
             raise e
 
-        cur.close()
+        
 
     def _create_ligands_table(self):
         ligand_table = """CREATE TABLE Ligands (
@@ -323,11 +343,12 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.execute(ligand_table)
+            cur.close()
         except Exception as e:
             print(e)
             raise e
 
-        cur.close()
+        
 
     def _create_interaction_index_table(self):
         """create table of data about each unique interaction"""
@@ -343,11 +364,12 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.execute(interaction_index_table)
+            cur.close()
         except Exception as e:
             print(e)
             raise e
 
-        cur.close()
+        
 
     def _create_interaction_bv_table(self):
         interact_columns_str = " INTEGER,\n".join(["Interaction_"+ str(i+1) for i in range(len(self.unique_interactions))]) + " INTEGER"
@@ -359,11 +381,12 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.execute(bv_table)
+            cur.close()
         except Exception as e:
             print(e)
             raise e
 
-        cur.close()
+        
 
     def _insert_unique_interactions(self, unique_interactions):
         #rint("Inserting interactions...")
@@ -380,12 +403,13 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.executemany(sql_insert, unique_interactions)
             self.conn.commit()
+            cur.close()
         
         except Exception as e:
             print(e)
             raise e
 
-        cur.close()
+        
 
     def _insert_one_interaction(self, interaction):
         #print("Inserting interactions...")
@@ -402,12 +426,13 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(sql_insert, interaction)
             self.conn.commit()
+            cur.close()
     
         except Exception as e:
             print(e)
             raise e
 
-        cur.close()
+        
 
     def _make_new_interaction_column(self, column_number):
         add_column_str = '''ALTER TABLE Interaction_bitvectors ADD COLUMN Interaction_{n_inter}'''.format(n_inter = str(column_number))
@@ -415,12 +440,13 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(add_column_str)
             self.conn.commit()
+            cur.close()
             
         except Exception as e:
             print(e)
             raise e
 
-        cur.close()
+        
 
     def _fetch_plot_data(self):
         conn = self.conn
@@ -436,7 +462,7 @@ class DBManagerSQLite(DBManager):
 
         #parse requested output fields and convert to column names in database
         
-        outfield_string = ", ".join([self.field_to_column_name[field] for field in output_fields if field in self.field_to_column_name])
+        outfield_string = ", ".join([self.field_to_column_name[field] for field in output_fields.split(",") if field in self.field_to_column_name])
 
         interaction_filters = []
 
@@ -635,12 +661,11 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.executemany(sql_insert, bitvectors)
             self.conn.commit()
+            cur.close()
             
         except Exception as e:
             print(e)
             raise e
-
-        cur.close()
 
     def _generate_percentile_rank_window(self):
         """makes window with percentile ranks for percentile filtering"""

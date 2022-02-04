@@ -5,13 +5,15 @@ import numpy as np
 
 class DockingFileReader(multiprocessing.Process):
     """ this class is the individual worker for processing dlgs"""
-    def __init__(self, queueIn, queueOut, dbman, mode, numclusters):
+    def __init__(self, queueIn, queueOut, dbman, mode, numclusters, no_print):
         #set mode for which file parser to use
         self.mode = mode
         #set number of clusters to write
         self.num_clusters = numclusters
         #set dbmanager
         self.dbman = dbman
+        #set flag for printing
+        self.no_print = no_print
         # initialize the parent class to inherit all multiprocessing methods
         multiprocessing.Process.__init__(self)
         # each worker knows about the queue in (where data to process comes from)...
@@ -43,11 +45,13 @@ class DockingFileReader(multiprocessing.Process):
             # if a poison pill is received, this worker's job is done, quit
             if next_task is None:
                 # the poison pill can be anything
-                print('%s: Exiting' % proc_name)
+                if not self.no_print:
+                    print('%s: Exiting' % proc_name)
                 # before leaving, pass the poison pill back in the queue (for the writer, see below)
                 self.queueOut.put(None)
                 break
-            print('%s: %s' % (proc_name, next_task))
+            if not self.no_print:
+                print('%s: %s' % (proc_name, next_task))
             # generate CPU LOAD
             if self.mode == "dlg":
                 parsed_file_dict = parsers.parse_single_dlg(next_task)
@@ -100,13 +104,15 @@ class Writer(multiprocessing.Process):
 
                 #process next file    
                 self.process_file(next_task) #stack rows onto corresponding arrays
-
             if self.maxProcesses == 0:
                 # received as many poison pills as workers
                 #perform final db write
                 self.write_to_db()
                 # no workers left, no job to do
+                print("Break")
+                self.close()
                 break
+
         return
 
     """def get_unique_interactions(self):
