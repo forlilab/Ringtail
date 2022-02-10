@@ -2,6 +2,7 @@ import sys
 import argparse
 from glob import glob
 import os
+import fnmatch
 
 class CLOptionParser():
 
@@ -134,9 +135,9 @@ class CLOptionParser():
                                 'overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database'),
                             'action':'store_true', 'default':False },
                             ),
-                        ('--log_distinct_ligands', {
+                        ('--one_pose', {
                             'help':('by default, will output all poses passing filters, including multiple poses for the same ligand. '
-                                'This flag will cause each ligand passing the filters to only be logged once, with the best pose.'),
+                                'This flag will cause each ligand passing the filters to only be logged once with the best pose.'),
                             'action':'store_true', 'default':False },
                             ),
                         ('--order_results', {
@@ -335,7 +336,7 @@ class CLOptionParser():
                   'outfields': parsed_opts.out_fields,
                   'no_print': parsed_opts.no_print
                 }
-        db_opts = {'num_clusters': parsed_opts.num_clusters, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.log_distinct_ligands}
+        db_opts = {'num_clusters': parsed_opts.num_clusters, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose}
 
         # if a path for saving poses is specified, then the log will be written there
         if not parsed_opts.export_poses_path is None:

@@ -1,7 +1,9 @@
 import multiprocessing
-from time import sleep
+import time
 import parsers
 import numpy as np
+import sys
+import scipy
 
 class DockingFileReader(multiprocessing.Process):
     """ this class is the individual worker for processing dlgs"""
@@ -45,13 +47,13 @@ class DockingFileReader(multiprocessing.Process):
             # if a poison pill is received, this worker's job is done, quit
             if next_task is None:
                 # the poison pill can be anything
-                if not self.no_print:
-                    print('%s: Exiting' % proc_name)
+                #if not self.no_print:
+                    #print('%s: Exiting' % proc_name)
                 # before leaving, pass the poison pill back in the queue (for the writer, see below)
                 self.queueOut.put(None)
                 break
-            if not self.no_print:
-                print('%s: %s' % (proc_name, next_task))
+            #if not self.no_print:
+                #print('%s: %s' % (proc_name, next_task))
             # generate CPU LOAD
             if self.mode == "dlg":
                 parsed_file_dict = parsers.parse_single_dlg(next_task)
@@ -64,7 +66,7 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, maxProcesses, chunksize, db_obj):
+    def __init__(self, queue, maxProcesses, chunksize, db_obj, num_files):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are
@@ -77,9 +79,12 @@ class Writer(multiprocessing.Process):
         self.ligands_array = []
         self.interactions_list = []
         self.counter = 0
-        self.pose_id_list = []
-
-        self.current_pose_id = 1
+        self.num_files_remaining = num_files
+        self.total_num_files = num_files
+        self.num_files_written = 0
+        self.time0 = time.perf_counter()
+        self.est_time_remaining = 3 * num_files /(1000*60) #based on estimated 3 seconds per 1000 files, converted to minutes
+        self.last_write_time = 0
 
     def run(self):
         # method overload from parent class
@@ -95,6 +100,7 @@ class Writer(multiprocessing.Process):
             if next_task == None:
                 # if a poison pill is found, it means one of the workers quit
                 self.maxProcesses -= 1
+                print("POISON PILL! Remaining maxProcesses:",self.maxProcesses)
             else:
                 # if not a poison pill, process the task item
 
@@ -104,8 +110,15 @@ class Writer(multiprocessing.Process):
 
                 #process next file    
                 self.process_file(next_task) #stack rows onto corresponding arrays
+                #print info about files and time remaining
+                sys.stdout.write('\r')
+                sys.stdout.write("{n} files remaining to process. Estimated time remaining: {est_time:.2f} minutes. Last chunk took {write_time:.2f} seconds to write.".format(n=self.num_files_remaining, est_time=self.est_time_remaining, write_time = self.last_write_time))
+                sys.stdout.flush()
+                self.num_files_remaining -= 1
+
             if self.maxProcesses == 0:
                 # received as many poison pills as workers
+                print("Performing final database write")
                 #perform final db write
                 self.write_to_db()
                 # no workers left, no job to do
@@ -116,19 +129,27 @@ class Writer(multiprocessing.Process):
         return
 
     def write_to_db(self):
+        time1 = time.perf_counter()
         #insert result and ligand data
         self.db.insert_results(filter(None, self.results_array))#filter out stray Nones
         self.db.insert_ligands(filter(None,self.ligands_array))
 
         #perform operations for inserting iteraction data
-        self.db.insert_interactions(self.pose_id_list, self.interactions_list)
+        self.db.insert_interactions(self.interactions_list)
+
+        #calulate time for processing/writing previous chunk
+        self.num_files_written += self.chunksize
+        total_runtime = time.perf_counter() - self.time0
+        self.est_time_remaining = (total_runtime/self.num_files_written) * (self.total_num_files - self.num_files_written) / 60 #converted to minutes
+        self.last_write_time = time.perf_counter() - time1
 
         #reset all data-holders for next chunk
         self.results_array = []
         self.ligands_array = []
         self.interactions_list = []
-        self.pose_id_list = []
         self.counter = 0
+
+        return self.est_time_remaining
 
     def process_file(self, file_packet):
         results_rows, ligand_row, interaction_rows = file_packet
@@ -136,15 +157,6 @@ class Writer(multiprocessing.Process):
             self.results_array.append(pose)
         for pose in interaction_rows:
             self.interactions_list.append(pose)
-            self.pose_id_list.append(self.current_pose_id)
-            self.current_pose_id += 1
         self.ligands_array.append(ligand_row)
-
-
-
-
-
-
-
-
+        self.counter += 1
 

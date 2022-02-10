@@ -184,7 +184,7 @@ class DBManagerSQLite(DBManager):
             raise e
         
 
-    def insert_interactions(self, pose_id_list, interactions_list):
+    def insert_interactions(self, interactions_list):
 
         self._add_unique_interactions(interactions_list)
 
@@ -194,23 +194,26 @@ class DBManagerSQLite(DBManager):
             self._insert_unique_interactions(np.array(list(self.unique_interactions.keys())))
             self.interactions_initialized_flag = True
 
-        self._insert_interaction_bitvectors(self._generate_interaction_bitvectors(pose_id_list, interactions_list))
+        self._insert_interaction_bitvectors(self._generate_interaction_bitvectors(interactions_list))
 
     def get_top_energies_leffs(self):
         self._fetch_best_energies_leff()
         return self.energies, self.leffs, self.plot_data
 
-    def filter_results(self, results_filters_list, output_fields):
-        filter_results_str = self._generate_result_filtering_str_sqlite(results_filters_list, output_fields)
+    def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
+        #create view of passing results
+        filter_results_str = self._generate_result_filtering_str_sqlite(results_filters_list, ligand_filters_list, output_fields)
         print(filter_results_str)
+        self._create_view("passing_results", filter_results_str)
+        #perform filtering
         filtered_results = self._run_query(filter_results_str)
-        print(filtered_results)
+        #get number of passing ligands
         return filtered_results
 
-    def filter_ligands(self, ligand_filters):
-        filter_ligands_str = self._write_ligand_filtering_sql(ligand_filters)
-        filtered_ligands = self._run_query(filter_ligands_str)
-        return filtered_ligands
+    def get_number_passing_ligands(self):
+        cur = self.conn.cursor()
+        cur.execute("SELECT COUNT(DISTINCT LigName) FROM passing_results")
+        return cur.fetchone()
 
     def format_rows_from_dict(self, ligand_dict):
         """takes file dictionary from the mpreader, formats into rows for the database insertion"""
@@ -236,6 +239,10 @@ class DBManagerSQLite(DBManager):
         con = None
         try:
             con = sqlite3.connect(self.db_file)
+            cursor = con.cursor()
+            cursor.execute('PRAGMA synchronous = OFF')
+            cursor.execute('PRAGMA journal_mode = MEMORY')
+            cursor.close() 
         except Exception as e:
             print(e)
             raise e
@@ -279,6 +286,15 @@ class DBManagerSQLite(DBManager):
         for row in cursor:
             print(row)"""
 
+    def _create_view(self, name, query):
+        """takes name and selection query, creates view of query."""
+        cur = self.conn.cursor()
+        #drop old view if there is one
+        cur.execute("DROP VIEW IF EXISTS {name}".format(name = name))
+        cur.execute("CREATE VIEW {name} AS {query}".format(name = name, query = query))
+        cur.close()
+
+
 
     def _create_results_table(self):
         sql_results_table = """CREATE TABLE Results (
@@ -319,12 +335,9 @@ class DBManagerSQLite(DBManager):
         -- for 50 ga_runs per result: (1,270 * 50) Bytes = 63,500 Bytes (62 KB)
         -- for 10,000 results (typical package size) this amounts to about 62 KB * 10,000 = 591 MB"""
 
-        create_index = "CREATE INDEX index_ligand_run on Results (LigName, run_number)"
-
         try:
             cur = self.conn.cursor()
             cur.execute(sql_results_table)
-            #cur.execute(create_index)
             cur.close()
         except Exception as e:
             print(e)
@@ -457,7 +470,7 @@ class DBManagerSQLite(DBManager):
 
         return "SELECT energies_binding, leff FROM Results GROUP BY LigName"
 
-    def _generate_result_filtering_str_sqlite(self, results_filters_list, output_fields):
+    def _generate_result_filtering_str_sqlite(self, results_filters_list, ligand_filters_list, output_fields):
         """ takes list of filters, writes sql filtering string"""
 
         #parse requested output fields and convert to column names in database
@@ -506,8 +519,11 @@ class DBManagerSQLite(DBManager):
 
         #find pose ids for ligands with desired interactions
         if interaction_filter_indices != []:
-            interaction_filter_str = self._write_interaction_filtering_str(interaction_filter_indices)
-            sql_string += " AND Pose_ID IN (" + interaction_filter_str + ")"
+            sql_string += " AND Pose_ID IN ({interaction_str})".format(interaction_str = self._write_interaction_filtering_str(interaction_filter_indices))
+
+        #add ligand filters
+        if ligand_filters_list != []:
+            sql_string += " AND LigName IN ({ligand_str})".format(ligand_str = self._write_ligand_filtering_sql(ligand_filters_list))
 
        #adding if we only want to keep one pose per ligand (will keep first entry)
         if self.log_distinct_ligands:
@@ -540,7 +556,7 @@ class DBManagerSQLite(DBManager):
     def _write_ligand_filtering_sql(self, ligand_filters):
         """write string to select from ligand table"""
 
-        sql_ligand_string = "SELECT LigName, best_binding FROM Ligands WHERE "
+        sql_ligand_string = "SELECT LigName FROM Ligands WHERE "
 
         substruct_flag = ligand_filters['F'][0].upper()
         for kw in ligand_filters.keys():
@@ -631,12 +647,12 @@ class DBManagerSQLite(DBManager):
                         self._make_new_interaction_column(self.next_unique_interaction_idx)
                     self.next_unique_interaction_idx += 1
 
-    def _generate_interaction_bitvectors(self, pose_id_list, interactions_list):
+    def _generate_interaction_bitvectors(self, interactions_list):
         """takes string of interactions and all unique interactions and makes bitvector"""
         bitvectors_list = []
-        for i in range(len(pose_id_list)):
+        for pose_interactions in interactions_list:
             pose_bitvector = [None]*len(self.unique_interactions)
-            for interaction_tuple in interactions_list[i]:
+            for interaction_tuple in pose_interactions:
                 interaction_idx = self.unique_interactions[interaction_tuple]
                 pose_bitvector[interaction_idx - 1] = 1 #index corrected for interaction indices starting at 1 in sqlite table
 

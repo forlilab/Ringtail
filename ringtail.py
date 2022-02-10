@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     #prepare option dictionaries for VSManager
     dbman_opts = cl_opts.db_opts
-    rman_opts = {'chunk_size': 1000,
+    rman_opts = {'chunk_size': 1,
             'filelist': cl_opts.files_pool,
             'mode' : 'dlg',
             'num_clusters':cl_opts.num_clusters
@@ -30,5 +30,5 @@ if __name__ == '__main__':
     time2 = time.perf_counter()
 
     #print performance times
-    print("Time to initialize/write database:" + str(time1-time0))
-    print("Time to perform filtering:" + str(time2-time1))
+    print("Time to initialize/write database: " + str(time1-time0))
+    print("Time to perform filtering: " + str(time2-time1))

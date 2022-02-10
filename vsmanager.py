@@ -39,23 +39,18 @@ class VSManager():
         #prepare list of filter values and keys for DBManager
         self.prepare_results_filter_list()
 
-        #ask DBManager to fetch results
+        
         print("filtering results")
-        self.filtered_results = self.dbman.filter_results(self.results_filters_list, self.out_opts['outfields'])
+        #make sure we have ligand filter list
+        if not self.filters['filter_ligands_flag']:
+            self.filters["ligand_filters"] = []
+        #ask DBManager to fetch results
+        self.filtered_results = self.dbman.filter_results(self.results_filters_list, self.filters["ligand_filters"], self.out_opts['outfields'])
+        number_passing_ligands = self.dbman.get_number_passing_ligands()[0]
+        self.output_manager.log_num_passing_ligands(number_passing_ligands)
         for line in self.filtered_results:
             self.output_manager.write_log_line(str(line))
             self.output_manager.plot_single_point(line[0],line[1],"blue") #energy (line[0]) on x axis, le (line[1]) on y axis
-
-        #perform ligand filtering if requested
-        if not self.filters['filter_ligands_flag']:
-            return
-        ligand_filters = self.filters["ligand_filters"]
-        print("filtering ligands")
-        self.filtered_ligands = self.dbman.filter_ligands(ligand_filters)
-        self.output_manager.write_filtered_ligand_header()
-        for line in self.filtered_ligands:
-            self.output_manager.write_log_line(line)
-            self.output_manager.plot_single_point(line[0],line[1],"red") #energy (line[0]) on x axis, le (line[1]) on y axis
 
     def prepare_results_filter_list(self):
         """takes filters dictionary from option parser. Output list of tuples to be inserted into sql call string"""
@@ -170,56 +165,16 @@ class Outputter():
           f.write(line)
           f.write("\n")
 
-    def write_filtered_ligand_header(self):
+    def log_num_passing_ligands(self, number_passing_ligands):
         with open(self.log, "a") as f:
             f.write("\n")
-            f.write("***************\n")
-            f.write("\n")
-            f.write("Filtered Ligands:\n")
+            f.write("Number passing ligands: {num} \n".format(num=number_passing_ligands))
             f.write("-----------------\n")
-
-    def write_log(self):
-
-        passing_results_ligands = {}
-        passing_ligand_count = 0
-
-        with open(self.log, 'w') as f:
-            f.write("Filtered poses:\n")
-            f.write("---------------\n")
-            for line in self.passing_results:
-                first_el_str = str(line[0])
-                if first_el_str.endswith(".pdbqt"): #make sure we are only counting pdbqts
-                    passing_results_ligands.add(first_el_str) #will only add unique pdbqts
-                f.write(" ".join(map(str,line)))
-                f.write("\n")
-            f.write("\n")
-            f.write("***************\n")
-            f.write("\n")
-            f.write("Filtered Ligands:\n")
-            f.write("-----------------\n")
-            if self.filtered_ligands != None:
-                for line in self.passing_ligands:
-                    passing_ligand_count += 1
-                    f.write(line + "\n")
-            f.write("***************\n")
-            f.write("\n")
-            f.write("Unique ligands passing result-based filters:\n")
-            f.write("-----------------\n")
-            for unique_ligand in passing_results_ligands:
-                f.write(unique_ligand + "\n")
-            f.write("***************\n")
-            f.write("\n")
-            f.write("Total Ligands:\n")
-            f.write("-----------------\n")
-            f.write("Ligands passing results-based filters: ")
-            f.write(str(len(passing_results_ligands)) + "\n")
-            f.write("Ligands passing ligand-based filters: ")
-            f.write(str(passing_ligand_count))
 
     def _create_log_file(self):
         with open(self.log, 'w') as f:
             f.write("Filtered poses:\n")
-            f.write("---------------\n")
+            f.write("***************\n")
             
             
 
