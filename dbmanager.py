@@ -198,7 +198,7 @@ class DBManagerSQLite(DBManager):
         #check if we need to initialize the interaction bv table and insert first set of interaction
         if not self.interactions_initialized_flag:
             self._create_interaction_bv_table()
-            self._insert_unique_interactions(np.array(list(self.unique_interactions.keys())))
+            self._insert_unique_interactions(list(self.unique_interactions.keys()))
             self.interactions_initialized_flag = True
 
         self._insert_interaction_bitvectors(self._generate_interaction_bitvectors(interactions_list))
@@ -239,7 +239,7 @@ class DBManagerSQLite(DBManager):
         for i in range(len(ligand_dict["sorted_runs"])):
             run_number = int(ligand_dict["sorted_runs"][i])
             if run_number in cluster_top_pose_runs: #save everything if this is a cluster top pose
-                if interaction_tuples != []: #don't save interaction data from previous cluster for first cluster
+                if result_rows != []: #don't save interaction data from previous cluster for first cluster
                     pose_interactions = self._generate_interaction_tuples(interaction_dictionaries) #will generate tuples across all dictionaries for last cluster
                     interaction_tuples.append(pose_interactions)
                     if self.interaction_tolerance_cutoff != None and result_rows != []: #only update previous entry if we added tolerated interactions
@@ -256,9 +256,6 @@ class DBManagerSQLite(DBManager):
         if self.interaction_tolerance_cutoff != None: #only update if we added interactions
             result_rows[-1][17] = len(pose_interactions) + int(result_rows[-1][17]) #update number of interactions
             result_rows[-1][18] = sum(1 for interaction in pose_interactions if interaction[0] == "H") + int(result_rows[-1][18]) #count and update number of hydrogen bonds
-
-        if len(interaction_tuples) > 3:
-            print("HELP", len(interaction_tuples))
 
         return (result_rows, self._generate_ligand_row(ligand_dict), interaction_tuples)
 
@@ -383,7 +380,7 @@ class DBManagerSQLite(DBManager):
             ligand_smile        VARCHAR NOT NULL,
             input_pdbqt         VARCHAR[],
             best_binding        FLOAT(4),
-            best_run            SMALLINT[])"""
+            best_run            INTEGER)"""
 
         try:
             cur = self.conn.cursor()
@@ -668,7 +665,7 @@ class DBManagerSQLite(DBManager):
             for i in range(int(count)):
                 interactions.add(tuple(pose_interactions[kw][i] for kw in self.interaction_data_kws))
 
-        return interactions
+        return list(interactions)
 
     def _add_unique_interactions(self, interactions_list):
         """takes list of interaction tuple lists. Examines self.unique_interactions, add interactions if not already inserted.

@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     #prepare option dictionaries for VSManager
     dbman_opts = cl_opts.db_opts
-    rman_opts = {'chunk_size': 100000,
+    rman_opts = {'chunk_size': 10000,
             'filelist': cl_opts.files_pool,
             'mode' : 'dlg',
             'num_clusters':cl_opts.num_clusters
