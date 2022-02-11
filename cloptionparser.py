@@ -54,9 +54,9 @@ class CLOptionParser():
                             'help':'specify a file containing the filter definitions; each line in the file must contain the definition of a single filter, using the keywords of each filter as variable names, e.g.: "eworst=-3.0", "vdw=A:THR:276". NOTE: properties defined here have the precedence on the other CLI options!', 
                             'action':'store', 'type':str, 'metavar': "FILTERS_FILE", 'default':None},
                          ),
-                        ('--sql_db', {
+                        ('--input_db', {
                             'help':'specify a file containing a sqlite database', 
-                            'action':'store', 'type':str, 'metavar': "SQL_DB", 'default':None},
+                            'action':'store', 'type':str, 'metavar': "DATABASE", 'default':None},
                          ),
                             ],
                 },},
@@ -64,9 +64,13 @@ class CLOptionParser():
                 {'OUTPUT': {
                     'desc': 'Manage the type of data reported and where it is written.',
                     'args': [ 
-                        ('--output_sql', {
+                        ('--output_db', {
                             'help':('Name for output SQLite file'), 
                             'action':'store', 'type':str, 'metavar': "[FILE_NAME].DB", 'default':"output.db"},
+                            ),
+                        ('--interaction_tolerance', {
+                            'help':('Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose.'), 
+                            'action':'store', 'type':float, 'metavar': "FLOAT", 'default':None, 'const':0.8, 'nargs':'?'},
                             ),
                         ('--num_clusters', {
                             'help':('n: Store top pose for top n clusters'), 
@@ -322,8 +326,8 @@ class CLOptionParser():
             file_sources['file_path'] = None
         file_sources['file_list'] = parsed_opts.file_list
         print("")
-        if (file_sources['file'] is None) and (file_sources['file_path'] is None) and (file_sources['file_list'] is None) and (parsed_opts.sql_db is None):
-            print("*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --sql_db")
+        if (file_sources['file'] is None) and (file_sources['file_path'] is None) and (file_sources['file_list'] is None) and (parsed_opts.input_db is None):
+            print("*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --input_db")
             sys.exit(1)
         ##### parse output options
         output = {'fields': parsed_opts.out_fields,
@@ -336,7 +340,7 @@ class CLOptionParser():
                   'outfields': parsed_opts.out_fields,
                   'no_print': parsed_opts.no_print
                 }
-        db_opts = {'num_clusters': parsed_opts.num_clusters, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose}
+        db_opts = {'num_clusters': parsed_opts.num_clusters, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose, "interaction_tolerance":parsed_opts.interaction_tolerance}
 
         # if a path for saving poses is specified, then the log will be written there
         if not parsed_opts.export_poses_path is None:
@@ -405,11 +409,11 @@ class CLOptionParser():
         self.filters = filters
         self.out_opts = output
         self.num_clusters = parsed_opts.num_clusters
-        if parsed_opts.sql_db != None:
-            sqlFile = parsed_opts.sql_db
+        if parsed_opts.input_db != None:
+            sqlFile = parsed_opts.input_db
             db_opts['write_db_flag'] = False
         else:
-            sqlFile = parsed_opts.output_sql
+            sqlFile = parsed_opts.output_db
             db_opts['write_db_flag'] = True
             if parsed_opts.overwrite: #confirm user wants to overwrite
                 if os.path.exists(sqlFile): #check if database file already exists

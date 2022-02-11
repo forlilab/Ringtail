@@ -13,6 +13,7 @@ class DBManager():
         self.log_distinct_ligands = self.opts["log_distinct_ligands"]
         self.write_db_flag = self.opts["write_db_flag"]
         self.num_clusters = self.opts["num_clusters"]
+        self.interaction_tolerance_cutoff = self.opts["interaction_tolerance"]
         #initialize dictionary processing kw lists
         self.interaction_data_kws = ["type", "chain", "residue", "resid", "recname", "recid"]
         self.ligand_data_keys = ["cluster_rmsds",
@@ -226,14 +227,38 @@ class DBManagerSQLite(DBManager):
 
         #initialize row holders
         result_rows = []
+        interaction_dictionaries = []
         interaction_tuples = []
 
+        cluster_top_pose_runs = self._find_cluster_top_pose_runs(ligand_dict)
+        if self.interaction_tolerance_cutoff != None:
+            tolerated_interaction_runs = self._find_tolerated_interactions(ligand_dict)
+        else:
+            tolerated_interaction_runs = []
+
         for i in range(len(ligand_dict["sorted_runs"])):
-            cluster_top_pose_runs = self._find_cluster_top_pose_runs(ligand_dict)
             run_number = int(ligand_dict["sorted_runs"][i])
-            if run_number in cluster_top_pose_runs:
+            if run_number in cluster_top_pose_runs: #save everything if this is a cluster top pose
+                if interaction_tuples != []: #don't save interaction data from previous cluster for first cluster
+                    pose_interactions = self._generate_interaction_tuples(interaction_dictionaries) #will generate tuples across all dictionaries for last cluster
+                    interaction_tuples.append(pose_interactions)
+                    if self.interaction_tolerance_cutoff != None and result_rows != []: #only update previous entry if we added tolerated interactions
+                        result_rows[-1][17] = len(pose_interactions) + int(result_rows[-1][17]) #update number of interactions
+                        result_rows[-1][18] = sum(1 for interaction in pose_interactions if interaction[0] == "H") + result_rows[-1][18] #count and update number of hydrogen bonds
+                    interaction_dictionaries = [] #clear the list for the new cluster
                 result_rows.append(self._generate_results_row(ligand_dict, i, run_number))
-                interaction_tuples.append(self._generate_interaction_tuples(ligand_dict["interactions"][i]))
+                interaction_dictionaries.append(ligand_dict["interactions"][i])
+            elif run_number in tolerated_interaction_runs:
+                interaction_dictionaries.append(ligand_dict["interactions"][i]) #adds to list started by best-scoring pose in cluster
+        
+        pose_interactions = self._generate_interaction_tuples(interaction_dictionaries) #will generate tuples across all dictionaries for last cluster
+        interaction_tuples.append(pose_interactions)
+        if self.interaction_tolerance_cutoff != None: #only update if we added interactions
+            result_rows[-1][17] = len(pose_interactions) + int(result_rows[-1][17]) #update number of interactions
+            result_rows[-1][18] = sum(1 for interaction in pose_interactions if interaction[0] == "H") + int(result_rows[-1][18]) #count and update number of hydrogen bonds
+
+        if len(interaction_tuples) > 3:
+            print("HELP", len(interaction_tuples))
 
         return (result_rows, self._generate_ligand_row(ligand_dict), interaction_tuples)
 
@@ -635,12 +660,13 @@ class DBManagerSQLite(DBManager):
 
         return [ligand_name, ligand_smile, input_pdbqt, best_binding, best_run]
 
-    def _generate_interaction_tuples(self, interaction_dictionary):
+    def _generate_interaction_tuples(self, interaction_dictionaries):
         """takes dictionary of file results, formats list of tuples for interactions"""
-        self.count = interaction_dictionary["count"][0]
-        interactions = []
-        for i in range(int(self.count)):
-            interactions.append(tuple(interaction_dictionary[kw][i] for kw in self.interaction_data_kws))
+        interactions = set()
+        for pose_interactions in interaction_dictionaries:
+            count = pose_interactions["count"][0]
+            for i in range(int(count)):
+                interactions.add(tuple(pose_interactions[kw][i] for kw in self.interaction_data_kws))
 
         return interactions
 
@@ -702,6 +728,10 @@ class DBManagerSQLite(DBManager):
     def _fetch_results_column_names(self):
         return [column_tuple[1] for column_tuple in self.conn.execute("PRAGMA table_info(Results)")]
 
-
-
-
+    def _find_tolerated_interactions(self, ligand_dict):
+        """take ligand dict and finds which poses we should save the interactions for as tolerated interactions"""
+        tolerated_runs = []
+        for i in range(len(ligand_dict["sorted_runs"])):
+            if float(ligand_dict["cluster_rmsds"][i]) <= self.interaction_tolerance_cutoff:
+                tolerated_runs.append(ligand_dict["sorted_runs"][i])
+        return tolerated_runs
