@@ -38,6 +38,9 @@ class DBManager():
         "pose_translations",
         "pose_quarternions"]
 
+        #keep track of any open cursors
+        self.open_cursors = []
+
     def get_results(self):
         """ generic function for retrieving results"""
         raise NotImplemented
@@ -53,7 +56,7 @@ class DBManager():
         # plotting mechanism will be common to all the child classes, too
         # for example, this function could contain the actuall call to the ASCII library,
         # and call a _fetch_plot_data() function that will be implemented in each child class
-        return self._fetch_plot_data()
+        return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
 
     def prune(self):
         """ do we want a method for deleting rows not satisfying a given requirement? """
@@ -67,6 +70,10 @@ class DBManager():
 
     def close_connection(self):
         """close connection to database"""
+        #close any open cursors
+        for cur in self.open_cursors:
+            cur.close()
+        #close db itself
         self._close_connection()
 
 class DBManagerSQLite(DBManager):
@@ -89,7 +96,6 @@ class DBManagerSQLite(DBManager):
                         "e_intra":"energies_intra",
                         "n_interact":"nr_interactions",
                         "interactions":"interactions",
-                        "fname":"LigName",
                         "ligand_smile":"ligand_smile",
                         "rank":"pose_rank",
                         "run":"run_number",
@@ -276,6 +282,7 @@ class DBManagerSQLite(DBManager):
         return rows"""
         cur = self.conn.cursor()
         cur.execute(query)
+        self.open_cursors.append(cur)
         return cur
 
         
@@ -459,23 +466,27 @@ class DBManagerSQLite(DBManager):
             print(e)
             raise e
 
-        
+    def _fetch_all_plot_data(self):
+        return self._run_query(self._generate_plot_all_results_query())
 
-    def _fetch_plot_data(self):
-        conn = self.conn
-        plot_data_query = self._generate_plot_results_query()
-        return self._run_query(plot_data_query)
-
-    def _generate_plot_results_query(self):
+    def _generate_plot_all_results_query(self):
 
         return "SELECT energies_binding, leff FROM Results GROUP BY LigName"
+
+    def _fetch_passing_plot_data(self):
+
+        return self._run_query(self._generate_plot_passing_results_query())
+
+    def _generate_plot_passing_results_query(self):
+
+        return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM passing_results) GROUP BY LigName"
 
     def _generate_result_filtering_str_sqlite(self, results_filters_list, ligand_filters_list, output_fields):
         """ takes list of filters, writes sql filtering string"""
 
         #parse requested output fields and convert to column names in database
         
-        outfield_string = ", ".join([self.field_to_column_name[field] for field in output_fields.split(",") if field in self.field_to_column_name])
+        outfield_string = "LigName, " + ", ".join([self.field_to_column_name[field] for field in output_fields.split(",") if field in self.field_to_column_name])
 
         interaction_filters = []
 

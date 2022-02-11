@@ -1,5 +1,7 @@
 from dbmanager import DBManager, DBManagerSQLite
 from resultsmanager import ResultsManager
+import matplotlib.pyplot as plt
+import numpy as np
 
 class VSManager():
     """ DOCUMENTATION GOES HERE """
@@ -8,10 +10,11 @@ class VSManager():
         self.out_opts = out_opts
         self.eworst = self.filters['properties']['eworst'] # has default -3 kcal/mol
         self.filter_file = filter_fname
+        self.plot_flag = self.out_opts['plot']
 
         self.dbman = DBManagerSQLite(db_opts)
         self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'], no_print_flag = self.out_opts["no_print"])
-        self.output_manager = Outputter(self, self.out_opts['log'], self.out_opts['plot'])
+        self.output_manager = Outputter(self, self.out_opts['log'], self.plot_flag)
 
         #if requested, write database
         if self.dbman.write_db_flag:
@@ -40,7 +43,7 @@ class VSManager():
         self.prepare_results_filter_list()
 
         
-        print("filtering results")
+        print("Filtering results")
         #make sure we have ligand filter list
         if not self.filters['filter_ligands_flag']:
             self.filters["ligand_filters"] = []
@@ -50,7 +53,24 @@ class VSManager():
         self.output_manager.log_num_passing_ligands(number_passing_ligands)
         for line in self.filtered_results:
             self.output_manager.write_log_line(str(line))
-            self.output_manager.plot_single_point(line[0],line[1],"blue") #energy (line[0]) on x axis, le (line[1]) on y axis
+
+        print("Creating plot of results")
+        #plot as requested
+        if not self.plot_flag:
+            return
+        all_data, passing_data = self.dbman.get_plot_data()
+        all_plot_data_binned = {}
+        for line in all_data:
+            #add to dictionary as bin of energy and le
+            data_bin = (round(line[0], 3), round(line[1],3))
+            if data_bin not in all_plot_data_binned:
+                all_plot_data_binned[data_bin] = 1
+            else:
+                all_plot_data_binned[data_bin] += 1
+        self.output_manager.plot_all_data(all_plot_data_binned)
+        for line in passing_data:
+            self.output_manager.plot_single_point(line[0],line[1],"red") #energy (line[0]) on x axis, le (line[1]) on y axis
+        self.output_manager.save_scatterplot()
 
     def prepare_results_filter_list(self):
         """takes filters dictionary from option parser. Output list of tuples to be inserted into sql call string"""
@@ -112,52 +132,41 @@ class Outputter():
             self.fig_base_name = "all_ligands"
 
         self._create_log_file()
-        if self.plot_flag:
-            self._initialize_scatter_plot()
 
-    def _initialize_scatter_plot(self):
-        self.scatter_plot = plt.subplot(1, 1, 1)
-        self.scatter_plot.scatter([],[])
-        plot_data = self.vsman.dbman.get_plot()
+    def plot_all_data(self, binned_data):
+        """takes dictionary of binned data where key is the coordinates of the bin and value is the number of points in that bin. Adds to scatter plot colored by value"""
+        #gather data
+        energies = []
+        leffs = []
+        bin_counts = []
+        for data_bin in binned_data.keys():
+            energies.append(data_bin[0])
+            leffs.append(data_bin[1])
+            bin_counts.append(binned_data[data_bin])
 
-        for line in plot_data:
-            self.plot_single_point(line[0], line[1]) #energy (line[0]) on x axis, le (line[1]) on y axis
+        # start with a square Figure
+        fig = plt.figure()
+
+        gs = fig.add_gridspec(2, 2,  width_ratios=(7, 2), height_ratios=(2, 7),
+                      left=0.1, right=0.9, bottom=0.1, top=0.9,
+                      wspace=0.05, hspace=0.05)
+
+        self.ax = fig.add_subplot(gs[1, 0])
+        ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax)
+        ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax)
+        self.ax.set_xlabel("Best Binding Energy / kcal/mol")
+        self.ax.set_ylabel("Best Ligand Efficiency")
+
+        self.scatter_hist(energies, leffs, bin_counts, self.ax, ax_histx, ax_histy)
+
 
     def plot_single_point(self,x,y,color="black"):
-        if not self.plot_flag: #make sure user wants plot
-            return
-        self.scatter_plot.plot(x,y,color)
+        #self.scatter_plot.scatter(x,y,color)
+        self.ax.scatter([x],[y],c=color)
 
     def save_scatterplot(self):
-        plt.savefig(self.fig_base_name + "_scatter.png")
+        plt.savefig(self.fig_base_name + "_scatter.png", bbox_inches="tight")
         plt.close()
-
-    def make_histograms(self):
-        self.histFig, (en, le) = plt.subplots(2)
-        en.set_title("Histogram of energies of best ligand poses")
-        le.set_title("Histogram of ligand efficiencies of best ligand poses")
-        en.hist(self.energies, bins = len(self.energies)/150, histtype = "stepfilled")
-        le.hist(self.leffs, bins = len(self.leffs)/150, histtype = "stepfilled")
-
-        #check if there were energy or leff percentile filters, add to plot if so
-        if self.filtering.energy_percentile_flag:
-            en.axvline(c="red", x = self.filtering.energy_percentile)
-        if self.filtering.leff_percentile_flag:
-            le.axvline(c="red", x=self.filtering.leff_percentile)
-
-        plt.savefig(self.fig_base_name + "_hist.png")
-        plt.close(self.histFig)
-
-    def make_scatterplot(self):
-        plot = plt.scatter(self.energies, self.leffs, c=self.colors)
-
-        #check if there were energy or leff percentile filters, add to plot if so
-        if self.filtering.energy_percentile_flag:
-            plot.axvline(c="orange", x = self.filtering.energy_percentile)
-        if self.filtering.leff_percentile_flag:
-            plot.axhline(c="orange", y=self.filtering.leff_percentile)
-
-        plt.savefig(self.fig_base_name + "_scatter.png")
 
     def write_log_line(self, line):
         """write a single row to the log file"""
@@ -175,6 +184,28 @@ class Outputter():
         with open(self.log, 'w') as f:
             f.write("Filtered poses:\n")
             f.write("***************\n")
+
+    def scatter_hist(self, x, y, z, ax, ax_histx, ax_histy):
+        # no labels
+        ax_histx.tick_params(axis="x", labelbottom=False)
+        ax_histy.tick_params(axis="y", labelleft=False)
+
+        # the scatter plot:
+        ax.scatter(x, y, c=z, cmap = "Blues")
+
+        # now determine nice limits by hand:
+        xbinwidth = 0.25
+        ybinwidth = 0.01
+        xminlim = (int(min(x)/xbinwidth) + 3) * xbinwidth
+        xmaxlim = (int(max(x)/xbinwidth) + 3) * xbinwidth
+        yminlim = (int(min(y)/ybinwidth) + 3) * ybinwidth
+        ymaxlim = (int(max(y)/ybinwidth) + 3) * ybinwidth
+
+        xbins = np.arange(xminlim, xmaxlim + xbinwidth, xbinwidth)
+        ybins = np.arange(yminlim, ymaxlim + ybinwidth, ybinwidth)
+
+        ax_histx.hist(x, bins=xbins)
+        ax_histy.hist(y, bins=ybins, orientation='horizontal')
             
             
 
