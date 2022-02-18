@@ -91,8 +91,6 @@ class VSManager():
         #get interaction filters
         interaction_keys = ['V',
         'H',
-        'HA',
-        'HD',
         'R']
 
         interaction_filters = self.filters['interactions']
@@ -103,7 +101,10 @@ class VSManager():
         #get interaction count filters
         interact_count_filters = self.filters["interactions_count"]
         for count in interact_count_filters:
-            filters_list.append(count)
+            filters_list.append(count) #already a tuple, don't need to reformat
+
+        #add react_any flag
+        filters_list.append(("react_any",self.filters["react_any"]))
 
         self.results_filters_list = filters_list
 

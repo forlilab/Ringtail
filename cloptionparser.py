@@ -111,13 +111,7 @@ class CLOptionParser():
                             '"ligand_smile" , '
                             '"rank" (rank of ligand pose), '
                             '"run" (run number for ligand pose), '
-                            #'"mname" (molecule name from the \'move\' kw in the DLG); '
-                            #'"name" (basename of the dlg[.gz] file); '
                             '"hb" (hydrogen bonds); '
-                            #'"hba" (hydrogen bond, ligand acceptor); '
-                            #'"hbd" (hydrogen bond, ligand donor); '
-                            #'"r" (reacted: 1 (yes), 0 (no));'
-                            #'"ri" (reacted residue info); '
                             '"all" (print all poses passing filters). Fields are '
                             'printed in the order in which they are provided.',
                             'action':'store', 'type':str, 'metavar': "FIELD1,FIELD2,...", 
@@ -168,11 +162,7 @@ class CLOptionParser():
                             '"fname" (full path filename), '
                             '"rank" (rank of ligand pose), '
                             '"run" (run number for ligand pose), '
-                            #'"mname" (molecule name from the \'move\' kw in the DLG); '
-                            #'"name" (basename of the dlg[.gz] file); '
                             '"hb" (hydrogen bonds); ',
-                            #'"hba" (hydrogen bond, ligand acceptor); '
-                            #'"hbd" (hydrogen bond, ligand donor); '
                             'action':'store', 'type':str, 'metavar': "STRING", 
                             'default':None},
                             ),
@@ -243,33 +233,19 @@ class CLOptionParser():
                             'help':'define HB (ligand acceptor or donor) interaction',
                             'action':'append', 'type':str, 'metavar': "[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"},
                             ),
-                        ('--hba', {
-                            'help':'define HB acceptor (ligand as acceptor) interaction',
-                            'action':'append', 'type':str, 'metavar': "[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"},
-                            ),
-                        ('--hbd', {
-                            'help':'define HB donor (ligand as donor) interaction',
-                            'action':'append', 'type':str, 'metavar': "[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"},
-                            ),
                         ('--hb_count', {
                             'help':('accept ligands with at least the requested number of HB interactions. '
                                 'If a negative number is provided, then accept ligands with no more than the '
                                 ' requested number of interactions'),
                             'action':'store', 'type':int, 'metavar': "NUMBER"},
                             ),
-                        # ('--react_any', {
-                        #     'help':'check if ligand reacted with any residue',
-                        #     'action':'store_true'},
-                        #     ),
+                        ('--react_any', {
+                            'help':'check if ligand reacted with any residue',
+                            'action':'store_true', 'default':False},
+                            ),
                         ('--react_res', {
                             'help':'check if ligand reacted with specified residue',
                             'action':'append', 'type':str, 'metavar': "[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"},
-                            ),
-                        ('--react_count', {
-                            'help':('accept ligands that reacted with at least the requested number of residues; '
-                                'if a negative number is provided, then accept ligands that do not react '
-                                'with more than the specified number of residues'),
-                            'action':'store', 'type':int, 'metavar': "NUMBER"},
                             ),
                         ],
                     },},
@@ -364,7 +340,7 @@ class CLOptionParser():
             properties[kw] = getattr(parsed_opts, kw)
         # interaction filters (residues)
         interactions = {}
-        res_interactions_kw = [('vdw', 'V'), ('hb','H'), ('hba','HA'), ('hbd','HD'), ('react_res','R')]
+        res_interactions_kw = [('vdw', 'V'), ('hb','H'), ('react_res','R')]
         for opt, _type in res_interactions_kw:
             interactions[_type] = []
             res_list = getattr(parsed_opts, opt)
@@ -412,7 +388,7 @@ class CLOptionParser():
                     ligand_filters[_type].append(fil)
 
         # TODO combine everything into a single parameters dictionary to be passed to DockingResultManager (with all the kws in its init)
-        filters = {'properties':properties, 'interactions':interactions, 'interactions_count':interactions_count, "ligand_filters":ligand_filters, 'filter_ligands_flag':filter_ligands_flag, 'max_miss':0} 
+        filters = {'properties':properties, 'interactions':interactions, 'interactions_count':interactions_count, "ligand_filters":ligand_filters, 'filter_ligands_flag':filter_ligands_flag, 'max_miss':0, "react_any":parsed_opts.react_any} 
         self.file_sources = file_sources 
         self.filters = filters
         self.out_opts = output

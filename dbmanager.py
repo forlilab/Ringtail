@@ -113,9 +113,7 @@ class DBManagerSQLite(DBManager):
                         "leffpercentile":"leff_percentile_rank < {value}"
                         }
 
-        self.interaction_filter_types = ["V",
-            "H",
-            "R"]
+        self.interaction_filter_types = {"V","H","R"}
 
         self._initialize_db()
 
@@ -532,12 +530,13 @@ class DBManagerSQLite(DBManager):
         #parse requested output fields and convert to column names in database
         
         outfield_string = "LigName, " + ", ".join([self.field_to_column_name[field] for field in output_fields.split(",") if field in self.field_to_column_name])
+        filtering_window = "Results"
+        sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(out_columns = outfield_string, window = filtering_window)
 
+        #write energy filters and compile list of interactions to search for
+        energy_filter_sql_query = []
         interaction_filters = []
 
-        #write energy filters
-        energy_filter_sql_query = []
-        filtering_window = "Results"
         for filter_key, filter_value in results_filters_list:
             if filter_key in self.energy_filter_sqlite_call_dict:
                 if filter_key == "epercentile" or filter_key == "leffpercentile":
@@ -555,18 +554,21 @@ class DBManagerSQLite(DBManager):
                 else:
                     energy_filter_sql_query.append("num_hb < {value}".format(value = -1*filter_value))
 
-        sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(out_columns = outfield_string, window = filtering_window)
-        sql_string += " AND ".join(energy_filter_sql_query)
-
-        #compile list of interactions to search for
-        for key in self.interaction_filter_types:
-            if filter_key == key:
+            #add interaction filters to list
+            if filter_key in self.interaction_filter_types:
                 for interact in filter_value:
-                    interaction_string = key + ":" + interact[0]
+                    interaction_string = filter_key + ":" + interact[0]
                     interaction_filters.append(interaction_string.split(":"))
 
+            #add react_any flag as interaction filter
+            if filter_key == "react_any" and filter_value: #check if react_any is true
+                interaction_filters.append(["R","","","",""])
+
+        #add energy filters to our query string
+        sql_string += " AND ".join(energy_filter_sql_query)
+
+        #for each interaction filter, get the index from the interactions_indices table
         interaction_filter_indices = []
-        #for each interaction, get the index from the interactions_indices table
         for interaction in interaction_filters:
             interact_index_str = self._write_interaction_index_filtering_str(interaction)
             interaction_indices = self._run_query(interact_index_str)
@@ -598,9 +600,10 @@ class DBManagerSQLite(DBManager):
     def _write_interaction_index_filtering_str(self, interaction_list):
         """takes list of interaction info for a given ligand, looks up corresponding interaction index"""
         interaction_info = ["interaction_type", "rec_chain", "rec_resname", "rec_resid", "rec_atom"]
+        len_interaction_info = len(interaction_info)
         sql_string = """SELECT interaction_id FROM Interaction_indices WHERE """
 
-        sql_string += " AND ".join(["{column} LIKE '%{value}%'".format(column = interaction_info[i], value = interaction_list[i]) for i in range(4)]) 
+        sql_string += " AND ".join(["{column} LIKE '%{value}%'".format(column = interaction_info[i], value = interaction_list[i]) if interaction_list[i] != "" for i in range(len_interaction_info)]) 
 
         return sql_string
 
