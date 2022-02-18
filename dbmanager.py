@@ -16,6 +16,7 @@ class DBManager():
         self.interaction_tolerance_cutoff = self.opts["interaction_tolerance"]
         self.results_view_name = self.opts["results_view_name"]
         self.save_all_poses_flag = self.opts["save_all_poses"]
+        self.overwrite_flag = self.opts["overwrite"]
         #initialize dictionary processing kw lists
         self.interaction_data_kws = ["type", "chain", "residue", "resid", "recname", "recid"]
         self.ligand_data_keys = ["cluster_rmsds",
@@ -293,11 +294,24 @@ class DBManagerSQLite(DBManager):
         """check if db needs to be written. If so, initialize the tables"""
         if not self.write_db_flag:
             return
+        #if we want to overwrite old db, drop existing tables
+        if self.overwrite_flag:
+            self._drop_existing_tables()
         #create tables in db
         self._create_results_table()
         self._create_ligands_table()
         self._create_interaction_index_table()
 
+    def _drop_existing_tables(self):
+        """drop any existing tables. Will only be called if self.overwrite_flag is true"""
+        #fetch existing tables
+        cur = self.conn.cursor()
+        cur.execute("SELECT name FROM sqlite_schema WHERE type='table';")
+        tables = cur.fetchall()
+
+        for table in tables:
+            cur.execute("DROP TABLE {table_name}".format(table_name = table))
+        cur.close()
 
     def _run_query(self, query):
         """self.conn = self._create_connection()

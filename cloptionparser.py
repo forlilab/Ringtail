@@ -348,7 +348,7 @@ class CLOptionParser():
                   'outfields': parsed_opts.out_fields,
                   'no_print': parsed_opts.no_print
                 }
-        db_opts = {'num_clusters': parsed_opts.max_poses, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose, "interaction_tolerance":parsed_opts.interaction_tolerance, "results_view_name":parsed_opts.results_name, "store_all_poses":parsed_opts.store_all_poses}
+        db_opts = {'num_clusters': parsed_opts.max_poses, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose, "interaction_tolerance":parsed_opts.interaction_tolerance, "results_view_name":parsed_opts.results_name, "store_all_poses":parsed_opts.store_all_poses, "overwrite":parsed_opts.overwrite}
 
         # if a path for saving poses is specified, then the log will be written there
         if not parsed_opts.export_poses_path is None:
@@ -423,9 +423,6 @@ class CLOptionParser():
         else:
             sqlFile = parsed_opts.output_db
             db_opts['write_db_flag'] = True
-            if parsed_opts.overwrite: #confirm user wants to overwrite
-                if os.path.exists(sqlFile): #check if database file already exists
-                    os.remove(sqlFile)
         db_opts['sqlFile'] = sqlFile
         self.db_opts = db_opts
 
