@@ -10,11 +10,11 @@ class VSManager():
         self.out_opts = out_opts
         self.eworst = self.filters['properties']['eworst'] # has default -3 kcal/mol
         self.filter_file = filter_fname
-        self.plot_flag = self.out_opts['plot']
+        self.no_print_flag = self.out_opts["no_print"]
 
         self.dbman = DBManagerSQLite(db_opts)
         self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'], no_print_flag = self.out_opts["no_print"])
-        self.output_manager = Outputter(self, self.out_opts['log'], self.plot_flag)
+        self.output_manager = Outputter(self, self.out_opts['log'])
 
         #if requested, write database
         if self.dbman.write_db_flag:
@@ -52,14 +52,16 @@ class VSManager():
         number_passing_ligands = self.dbman.get_number_passing_ligands()[0]
         self.output_manager.log_num_passing_ligands(number_passing_ligands)
         for line in self.filtered_results:
+            if not self.no_print_flag:
+                print(line)
             self.output_manager.write_log_line(str(line).replace("()",""))#strip parens from line, which is natively a tuple
 
+    def plot(self):
         print("Creating plot of results")
         #plot as requested
-        if not self.plot_flag:
-            return
         all_data, passing_data = self.dbman.get_plot_data()
         all_plot_data_binned = {}
+        #bin the all_ligands data by 1000ths to make plotting faster
         for line in all_data:
             #add to dictionary as bin of energy and le
             data_bin = (round(line[0], 3), round(line[1],3))
@@ -67,6 +69,7 @@ class VSManager():
                 all_plot_data_binned[data_bin] = 1
             else:
                 all_plot_data_binned[data_bin] += 1
+        #plot the data
         self.output_manager.plot_all_data(all_plot_data_binned)
         for line in passing_data:
             self.output_manager.plot_single_point(line[0],line[1],"red") #energy (line[0]) on x axis, le (line[1]) on y axis
@@ -118,11 +121,10 @@ class VSManager():
 
 class Outputter():
 
-    def __init__(self, vsman, log_file, plot_flag):
+    def __init__(self, vsman, log_file):
         self.log = log_file
         self.vsman = vsman
         self.filter_ligands_flag = self.vsman.filters["filter_ligands_flag"]
-        self.plot_flag = plot_flag
         self.num_ligands = self.vsman.results_man.num_result_files
         if self.filter_ligands_flag:
             self.passing_ligand = vsman.filtered_ligands
@@ -207,11 +209,3 @@ class Outputter():
 
         ax_histx.hist(x, bins=xbins)
         ax_histy.hist(y, bins=ybins, orientation='horizontal')
-            
-            
-
-
-
-
-
-

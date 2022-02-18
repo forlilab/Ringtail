@@ -24,6 +24,10 @@ if __name__ == '__main__':
 
     #perform filtering
     vsman.filter()
+
+    #plot if requested
+    if out_opts["plot"]:
+        vsman.plot()
     
     #close database
     vsman.close_database()
