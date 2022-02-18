@@ -14,6 +14,8 @@ class DBManager():
         self.write_db_flag = self.opts["write_db_flag"]
         self.num_clusters = self.opts["num_clusters"]
         self.interaction_tolerance_cutoff = self.opts["interaction_tolerance"]
+        self.results_view_name = self.opts["results_view_name"]
+        self.save_all_poses_flag = self.opts["save_all_poses"]
         #initialize dictionary processing kw lists
         self.interaction_data_kws = ["type", "chain", "residue", "resid", "recname", "recid"]
         self.ligand_data_keys = ["cluster_rmsds",
@@ -211,7 +213,7 @@ class DBManagerSQLite(DBManager):
         #create view of passing results
         filter_results_str = self._generate_result_filtering_str_sqlite(results_filters_list, ligand_filters_list, output_fields)
         print(filter_results_str)
-        self._create_view("passing_results", filter_results_str)
+        self._create_view(self.results_view_name, filter_results_str)
         #perform filtering
         filtered_results = self._run_query(filter_results_str)
         #get number of passing ligands
@@ -219,7 +221,7 @@ class DBManagerSQLite(DBManager):
 
     def get_number_passing_ligands(self):
         cur = self.conn.cursor()
-        cur.execute("SELECT COUNT(DISTINCT LigName) FROM passing_results")
+        cur.execute("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.results_view_name))
         return cur.fetchone()
 
     def format_rows_from_dict(self, ligand_dict):
@@ -230,15 +232,22 @@ class DBManagerSQLite(DBManager):
         interaction_dictionaries = []
         interaction_tuples = []
 
-        cluster_top_pose_runs = self._find_cluster_top_pose_runs(ligand_dict)
+        #find run numbers for poses we want to save
+        if not self.save_all_poses_flag:
+            poses_to_save = self._find_cluster_top_pose_runs(ligand_dict)
+        else:
+            poses_to_save = ligand_dict["sorted_runs"]
+
+        # find poses we want to save tolerated interactions for
         if self.interaction_tolerance_cutoff != None:
             tolerated_interaction_runs = self._find_tolerated_interactions(ligand_dict)
         else:
             tolerated_interaction_runs = []
 
+        #do the actual result formating
         for i in range(len(ligand_dict["sorted_runs"])):
             run_number = int(ligand_dict["sorted_runs"][i])
-            if run_number in cluster_top_pose_runs: #save everything if this is a cluster top pose
+            if run_number in poses_to_save: #save everything if this is a cluster top pose
                 if result_rows != []: #don't save interaction data from previous cluster for first cluster
                     pose_interactions = self._generate_interaction_tuples(interaction_dictionaries) #will generate tuples across all dictionaries for last cluster
                     interaction_tuples.append(pose_interactions)
@@ -501,7 +510,7 @@ class DBManagerSQLite(DBManager):
 
     def _generate_plot_passing_results_query(self):
 
-        return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM passing_results) GROUP BY LigName"
+        return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(results_view = self.results_view_name)
 
     def _generate_result_filtering_str_sqlite(self, results_filters_list, ligand_filters_list, output_fields):
         """ takes list of filters, writes sql filtering string"""

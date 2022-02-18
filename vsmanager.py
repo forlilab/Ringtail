@@ -52,7 +52,7 @@ class VSManager():
         number_passing_ligands = self.dbman.get_number_passing_ligands()[0]
         self.output_manager.log_num_passing_ligands(number_passing_ligands)
         for line in self.filtered_results:
-            self.output_manager.write_log_line(str(line))
+            self.output_manager.write_log_line(str(line).replace("()",""))#strip parens from line, which is natively a tuple
 
         print("Creating plot of results")
         #plot as requested

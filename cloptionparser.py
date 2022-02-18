@@ -72,15 +72,23 @@ class CLOptionParser():
                             'help':('Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose.'), 
                             'action':'store', 'type':float, 'metavar': "FLOAT", 'default':None, 'const':0.8, 'nargs':'?'},
                             ),
-                        ('--num_clusters', {
+                        ('--max_poses', {
                             'help':('n: Store top pose for top n clusters'), 
                             'action':'store', 'type':int, 'default':3, 'metavar':'INT'},
                             ),
+                        ('--store_all_poses', {
+                            'help':('Store all poses from input files. Overrides --max_poses'), 
+                            'action':'store_true', 'default':False},
+                            ),
                         ('--log', {
-                            'help':('by default, results are printed in the terminal (STDOUT); '
+                            'help':('by default, results are saved in "output_log.txt"; '
                                 'if this option is used, ligands passing the filters will be written '
-                                'to this file'), 
+                                'to specified file'), 
                             'action':'store', 'type':str, 'metavar': "[FILE_NAME].TXT", 'default':"output_log.txt"},
+                            ),
+                        ('--results_name', {
+                            'help':('Specify name for db view of passing results'), 
+                            'action':'store', 'type':str, 'default':"passing_results", 'metavar':'STRING'},
                             ),
                         ('--out_fields', {
                             'help':'defines which fields are used when reporting '
@@ -340,7 +348,7 @@ class CLOptionParser():
                   'outfields': parsed_opts.out_fields,
                   'no_print': parsed_opts.no_print
                 }
-        db_opts = {'num_clusters': parsed_opts.num_clusters, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose, "interaction_tolerance":parsed_opts.interaction_tolerance}
+        db_opts = {'num_clusters': parsed_opts.max_poses, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose, "interaction_tolerance":parsed_opts.interaction_tolerance, "results_view_name":parsed_opts.results_name, "store_all_poses":parsed_opts.store_all_poses}
 
         # if a path for saving poses is specified, then the log will be written there
         if not parsed_opts.export_poses_path is None:
