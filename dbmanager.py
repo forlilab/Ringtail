@@ -603,7 +603,7 @@ class DBManagerSQLite(DBManager):
         len_interaction_info = len(interaction_info)
         sql_string = """SELECT interaction_id FROM Interaction_indices WHERE """
 
-        sql_string += " AND ".join(["{column} LIKE '%{value}%'".format(column = interaction_info[i], value = interaction_list[i]) if interaction_list[i] != "" for i in range(len_interaction_info)]) 
+        sql_string += " AND ".join(["{column} LIKE '%{value}%'".format(column = interaction_info[i], value = interaction_list[i]) for i in range(len_interaction_info) if interaction_list[i] != ""]) 
 
         return sql_string
 
