@@ -390,9 +390,6 @@ class CLOptionParser():
         # TODO combine everything into a single parameters dictionary to be passed to DockingResultManager (with all the kws in its init)
         filters = {'properties':properties, 'interactions':interactions, 'interactions_count':interactions_count, "ligand_filters":ligand_filters, 'filter_ligands_flag':filter_ligands_flag, 'max_miss':0, "react_any":parsed_opts.react_any} 
         self.file_sources = file_sources 
-        self.filters = filters
-        self.out_opts = output
-        self.num_clusters = parsed_opts.num_clusters
         if parsed_opts.input_db != None:
             sqlFile = parsed_opts.input_db
             db_opts['write_db_flag'] = False
@@ -400,7 +397,6 @@ class CLOptionParser():
             sqlFile = parsed_opts.output_db
             db_opts['write_db_flag'] = True
         db_opts['sqlFile'] = sqlFile
-        self.db_opts = db_opts
 
     def _process_sources(self):
         """ process the options for input files (parse dictionary) """
