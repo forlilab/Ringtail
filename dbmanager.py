@@ -302,39 +302,25 @@ class DBManagerSQLite(DBManager):
 
     def _drop_existing_tables(self):
         """drop any existing tables. Will only be called if self.overwrite_flag is true"""
+
         #fetch existing tables
         cur = self.conn.cursor()
         cur.execute("SELECT name FROM sqlite_schema WHERE type='table';")
         tables = cur.fetchall()
 
+        #drop tables
         for table in tables:
-            cur.execute("DROP TABLE {table_name}".format(table_name = table.replace("()", "")))
+            if table[0] == "sqlite_sequence": #cannot drop this, so we catch it instead
+                continue
+            cur.execute("DROP TABLE {table_name}".format(table_name = table[0]))
         cur.close()
 
     def _run_query(self, query):
-        """self.conn = self._create_connection()
-        cur = self.conn.cursor()
-        cur.execute(query+";")
 
-        rows = cur.fetchall()
-        print(rows)
-
-        cur.close()
-        self.conn.close()
-
-        return rows"""
         cur = self.conn.cursor()
         cur.execute(query)
         self.open_cursors.append(cur)
         return cur
-
-        
-        """conn = sqlite3.connect('test2_3.db')
-        cursor=conn.cursor()
-        cursor.execute(query)
-
-        for row in cursor:
-            print(row)"""
 
     def _create_view(self, name, query):
         """takes name and selection query, creates view of query."""
@@ -390,7 +376,7 @@ class DBManagerSQLite(DBManager):
             cur.execute(sql_results_table)
             cur.close()
         except Exception as e:
-            print(e)
+            print("Error while creating results table. If database already exists, use --overwrite to drop existing tables")
             raise e
 
         
