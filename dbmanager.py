@@ -237,6 +237,21 @@ class DBManagerSQLite(DBManager):
         cur.execute("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.passing_results_view_name))
         return cur.fetchone()
 
+    def fetch_passing_ligand_output_info(self):
+        """fetch information required by vsmanager for writing out molecules"""
+        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(results_view = self.passing_results_view_name)
+        return self._run_query(query)
+
+    def fetch_passing_pose_coordinates(self, ligname):
+        """fetch coordinates for poses passing filter for given ligand"""
+        query = "SELECT coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '%{ligand}%')".format(results_view = self.passing_results_view_name, ligand = ligname)
+        return self._run_query(query)
+
+    def fetch_nonpassing_pose_coordinates(self, ligname):
+        """fetch coordinates for poses of ligname which did not pass the filter"""
+        query = "SELECT coordinates FROM Results WHERE LigName LIKE '%{ligand}%' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view}".format(ligand = ligname, results_view = self.passing_results_view_name)
+        return self._run_query(query)
+
     def format_rows_from_dict(self, ligand_dict):
         """takes file dictionary from the mpreader, formats into rows for the database insertion"""
 

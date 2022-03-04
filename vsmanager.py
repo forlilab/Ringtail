@@ -2,6 +2,9 @@ from dbmanager import DBManager, DBManagerSQLite
 from resultsmanager import ResultsManager
 import matplotlib.pyplot as plt
 import numpy as np
+from rdkit import Chem
+from rdkit.Geometry import Point3D
+import re
 
 class VSManager():
     """ DOCUMENTATION GOES HERE """
@@ -111,6 +114,24 @@ class VSManager():
 
         self.results_filters_list = filters_list
 
+    def write_molecule_sdfs(self):
+        """have output manager write sdf molecules for passing results"""
+        passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
+        for (ligname, smiles, atom_indices, hparents) in passing_molecule_info:
+            #create rdkit molecule
+            mol = self.output_manager.create_molecule(ligname, smiles)
+            #fetch coordinates for passing poses and add to rdkit mol
+            passing_coordinates = self.dbman.fetch_passing_pose_coordinates(ligname)
+            for pose in passing_coordinates:
+                mol = self.output_manager.add_pose_to_mol(mol, pose[0], atom_indices)
+            #fetch coordinates for non-passing poses and add to mol
+            nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinate(ligname)
+            for pose in nonpassing_coordinates:
+                mol = self.output_manager.add_pose_to_mol(mol, pose[0], atom_indices)
+
+            #write out molecule
+            self.output_manager.write_out_mol(ligname, mol)
+
     def close_database(self):
         """Tell database we are done and it can close the connection"""
         self.dbman.close_connection()
@@ -182,6 +203,35 @@ class Outputter():
             f.write("\n")
             f.write("Number passing ligands: {num} \n".format(num=number_passing_ligands))
             f.write("-----------------\n")
+
+    def create_molecule(self, ligname, smiles):
+        """creates rdkit molecule from given ligand information"""
+
+        if smiles == "":
+            raise RuntimeError("Need SMILES for {molname}".format(molname=ligname))
+        return Chem.MolFromSmiles(smiles)
+
+    def add_pose_to_mol(self, mol, coordinates, index_map):
+        """add given coordinates to given molecule as new conformer. Index_map maps order of coordinates to order in smile string used to generate rdkit mol"""
+        n_atoms = mol.GetNumAtoms()
+        conf = Chem.Conformer(n_atoms)
+        #split string from database into list, with each element containing the x,y,and z coordinates for one atom
+        atom_coordinates = coordinates.split("],")
+        if len(atom_coordinates) != n_atoms: #confirm we have the right number of coordinates
+            raise RuntimeError("ERROR! Incorrect number of coordinates! Given {n_coords} coordinates for {n_at} atoms!".format(n_coords = len(atom_coordinates), n_at = n_atoms))
+        for i in range(n_atoms):
+            pdbqt_index = index_map[i+1] - 1
+            x, y, z = [float(coord.replace("[","").replace("]","").replace("'","").replace('"','')) for coord in atom_coordinates.split(",")]
+            conf.SetAtomPosition(i, Point3D(x, y, z))
+        conf_id = mol.AddConformer(conf)
+        return mol
+
+    def write_out_mol(self, ligname, mol):
+        """writes out given mol as sdf"""
+        filename = self.vsman.out_opts["export_poses_path"] + ligname.replace(".pdbqt", ".sdf")
+        with SDWriter(filename) as w:
+            w.write(mol)
+
 
     def _create_log_file(self):
         with open(self.log, 'w') as f:

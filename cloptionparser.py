@@ -124,7 +124,8 @@ class CLOptionParser():
                         ('--export_poses_path', {
                             'help':('specify the path where to save poses of ligands passing the filters (PDBQT format); '
                                 'if the directory does not exist, it will be created; if it already exist, it will throw '
-                                'an error, unless the --overwrite is used  [QUESTION????: NOTE: the log file will be automatically saved in this path.]'),
+                                'an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path.'
+                                'Ligands will be stored as SDF files, with the poses passing the filtering criteria first, followed the non-passing poses, in the order specified.'),
                             'action':'store', 'type':str, 'metavar': "DIRECTORY_NAME", 'default':None},
                             ),
                         ('--no_header', {
@@ -335,7 +336,7 @@ class CLOptionParser():
 
         # if a path for saving poses is specified, then the log will be written there
         if not parsed_opts.export_poses_path is None:
-            output['log'] = "%s%s%s" % (output['export_poses_path'], os.sep, output['log'])
+            output['log'] = os.path.join(output["export_poses_path"], output['log'])
         #print(">>>>>>>>>>>>>chekc that fields are recognized")
         if parsed_opts.log is None:
             print("*ERROR* print to STDOUT is disabled and no log file has been specified; at least one output source needs to be used.")
