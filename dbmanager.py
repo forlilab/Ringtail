@@ -15,7 +15,7 @@ class DBManager():
         self.num_clusters = self.opts["num_clusters"]
         self.interaction_tolerance_cutoff = self.opts["interaction_tolerance"]
         self.results_view_name = self.opts["results_view_name"]
-        self.save_all_poses_flag = self.opts["save_all_poses"]
+        self.store_all_poses_flag = self.opts["store_all_poses"]
         self.overwrite_flag = self.opts["overwrite"]
         #initialize dictionary processing kw lists
         self.interaction_data_kws = ["type", "chain", "residue", "resid", "recname", "recid"]
@@ -232,7 +232,7 @@ class DBManagerSQLite(DBManager):
         interaction_tuples = []
 
         #find run numbers for poses we want to save
-        if not self.save_all_poses_flag:
+        if not self.store_all_poses_flag:
             poses_to_save = self._find_cluster_top_pose_runs(ligand_dict)
         else:
             poses_to_save = ligand_dict["sorted_runs"]
