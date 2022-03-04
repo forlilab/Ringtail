@@ -176,11 +176,12 @@ class DBManagerSQLite(DBManager):
         LigName,
         ligand_smile,
         atom_index_map,
+        hydrogen_parents,
         input_pdbqt,
         best_binding,
         best_run
         ) VALUES
-        (?,?,?,?,?,?)'''
+        (?,?,?,?,?,?,?)'''
 
         try:
             cur = self.conn.cursor()
@@ -398,6 +399,7 @@ class DBManagerSQLite(DBManager):
             LigName             VARCHAR NOT NULL PRIMARY KEY,
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
+            hydrogen_parents    VARCHAR[],
             input_pdbqt         VARCHAR[],
             best_binding        FLOAT(4),
             best_run            INT[])"""
@@ -673,11 +675,12 @@ class DBManagerSQLite(DBManager):
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
         ligand_index_map = str(ligand_dict["ligand_index_map"])
+        ligand_h_parents = str(ligand_dict["ligand_h_parents"])
         input_pdbqt = "\n".join(ligand_dict["ligand_input_pdbqt"])
         best_binding = ligand_dict["scores"][0]
         best_run = ligand_dict["sorted_runs"][0]
 
-        return [ligand_name, ligand_smile, ligand_index_map, input_pdbqt, best_binding, best_run]
+        return [ligand_name, ligand_smile, ligand_index_map, ligand_h_parents, input_pdbqt, best_binding, best_run]
 
     def _generate_interaction_tuples(self, interaction_dictionaries):
         """takes dictionary of file results, formats list of tuples for interactions"""
