@@ -308,7 +308,7 @@ class DBManagerSQLite(DBManager):
         tables = cur.fetchall()
 
         for table in tables:
-            cur.execute("DROP TABLE {table_name}".format(table_name = table))
+            cur.execute("DROP TABLE {table_name}".format(table_name = table.replace("()", "")))
         cur.close()
 
     def _run_query(self, query):
