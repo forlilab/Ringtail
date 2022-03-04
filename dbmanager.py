@@ -14,7 +14,7 @@ class DBManager():
         self.write_db_flag = self.opts["write_db_flag"]
         self.num_clusters = self.opts["num_clusters"]
         self.interaction_tolerance_cutoff = self.opts["interaction_tolerance"]
-        self.results_view_name = self.opts["results_view_name"]
+        self.passing_results_view_name = self.opts["results_view_name"]
         self.store_all_poses_flag = self.opts["store_all_poses"]
         self.overwrite_flag = self.opts["overwrite"]
         #initialize dictionary processing kw lists
@@ -70,7 +70,7 @@ class DBManager():
         """ this function would be useful for creating a copy of the db that can be then pruned?
             (i.e., a lightweight version of the DB containing only the distilled information)
         """
-        pass
+        raise NotImplemented
 
     def close_connection(self):
         """close connection to database"""
@@ -191,7 +191,6 @@ class DBManagerSQLite(DBManager):
             print(e)
             raise e
         
-
     def insert_interactions(self, interactions_list):
 
         self._add_unique_interactions(interactions_list)
@@ -204,6 +203,19 @@ class DBManagerSQLite(DBManager):
 
         self._insert_interaction_bitvectors(self._generate_interaction_bitvectors(interactions_list))
 
+    def clone(self):
+        bck = sqlite3.connect(self.db_file+".bk")
+        with bck:
+            self.conn.backup(bck, pages=1)
+        bck.close()
+
+    def prune(self):
+        '''Deletes rows from all tables that are not in passing results view'''
+
+        self._delete_from_results()
+        self._delete_from_ligands()
+        self._delete_from_interactions()
+
     def get_top_energies_leffs(self):
         self._fetch_best_energies_leff()
         return self.energies, self.leffs, self.plot_data
@@ -212,7 +224,7 @@ class DBManagerSQLite(DBManager):
         #create view of passing results
         filter_results_str = self._generate_result_filtering_str_sqlite(results_filters_list, ligand_filters_list, output_fields)
         print(filter_results_str)
-        self._create_view(self.results_view_name, filter_results_str)
+        self._create_view(self.passing_results_view_name, filter_results_str.replace("SELECT ", "SELECT Pose_id,")) # make sure we keep Pose_ID in view
         #perform filtering
         filtered_results = self._run_query(filter_results_str)
         #get number of passing ligands
@@ -220,7 +232,7 @@ class DBManagerSQLite(DBManager):
 
     def get_number_passing_ligands(self):
         cur = self.conn.cursor()
-        cur.execute("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.results_view_name))
+        cur.execute("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.passing_results_view_name))
         return cur.fetchone()
 
     def format_rows_from_dict(self, ligand_dict):
@@ -508,7 +520,7 @@ class DBManagerSQLite(DBManager):
 
     def _generate_plot_passing_results_query(self):
 
-        return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(results_view = self.results_view_name)
+        return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(results_view = self.passing_results_view_name)
 
     def _generate_result_filtering_str_sqlite(self, results_filters_list, ligand_filters_list, output_fields):
         """ takes list of filters, writes sql filtering string"""
@@ -744,3 +756,18 @@ class DBManagerSQLite(DBManager):
             if float(ligand_dict["cluster_rmsds"][i]) <= self.interaction_tolerance_cutoff:
                 tolerated_runs.append(ligand_dict["sorted_runs"][i])
         return tolerated_runs
+
+    def _delete_from_results(self):
+        cur = self.conn.cursor()
+        cur.execute("DELETE FROM Results WHERE Pose_ID NOT IN {view}".format(view=self.passing_results_view_name))
+        cur.close()
+
+    def _delete_from_ligands(self):
+        cur = self.conn.cursor()
+        cur.execute("DELETE FROM Ligands WHERE LigName NOT IN {view}".format(view=self.passing_results_view_name))
+        cur.close()
+
+    def _delete_from_interactions(self):
+        cur.self.conn.cursor()
+        cur.execute("DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN {view}".format(view=self.passing_results_view_name))
+        cur.close()
