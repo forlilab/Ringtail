@@ -28,6 +28,10 @@ if __name__ == '__main__':
     #plot if requested
     if out_opts["plot"]:
         vsman.plot()
+
+    #write out molecules if requested
+    if out_opts["export_poses_path"] != None:
+        vsman.write_molecule_sdfs()
     
     #close database
     vsman.close_database()
