@@ -224,6 +224,7 @@ class Outputter():
             x, y, z = [float(coord.replace("[","").replace("]","").replace("'","").replace('"','')) for coord in atom_coordinates.split(",")]
             conf.SetAtomPosition(i, Point3D(x, y, z))
         conf_id = mol.AddConformer(conf)
+        mol = Chem.AddHs(mol, addCoords=True)
         return mol
 
     def write_out_mol(self, ligname, mol):
