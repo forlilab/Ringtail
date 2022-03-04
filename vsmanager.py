@@ -16,9 +16,9 @@ class VSManager():
         self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'], no_print_flag = self.out_opts["no_print"])
         self.output_manager = Outputter(self, self.out_opts['log'])
 
-        #if requested, write database
-        if self.dbman.write_db_flag:
-            print("adding results")
+        #if requested, write database or add results to an existing one
+        if self.dbman.write_db_flag or db_opts["add_results"]:
+            print("Adding results...")
             self.add_results()
 
     def add_results(self):
