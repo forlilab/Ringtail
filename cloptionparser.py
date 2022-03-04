@@ -398,6 +398,11 @@ class CLOptionParser():
             db_opts['write_db_flag'] = True
         db_opts['sqlFile'] = sqlFile
 
+        #make attributes for parsed opts
+        self.db_opts = db_opts
+        self.filters = filters
+        self.out_opts = output
+
     def _process_sources(self):
         """ process the options for input files (parse dictionary) """
         sources = self.file_sources
