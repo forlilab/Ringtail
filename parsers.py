@@ -60,6 +60,7 @@ def parse_single_dlg(fname, mode='standard'):
         smile_string = ""
         input_pdbqt = []
         index_map = []
+        h_parents = []
         num_interact = 0
         for line in fp.readlines():
             line = line.decode("utf-8")
@@ -86,6 +87,8 @@ def parse_single_dlg(fname, mode='standard'):
                     input_pdbqt.append(' '.join(line.split()[1:]))
                 if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                     index_map += line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX" ).rstrip("\n").split()
+                if line.startswith("INPUT-LIGAND-PDBQT: REMARK H PARENT"):
+                    h_parents += line.lstrip("INPUT-LIGAND-PDBQT: REMARK H PARENT").rstrip("\n").split()
 
             #store poses in each cluster in dictionary as list of ordered runs 
             if "RANKING" in line:
@@ -218,6 +221,7 @@ def parse_single_dlg(fname, mode='standard'):
     return {'ligname':ligname,
             'ligand_input_pdbqt':input_pdbqt,
             'ligand_index_map':index_map,
+            'ligand_h_parents':h_parents,
             'pose_coordinates':pose_coordinates,
             'ligand_smile_string':smile_string,
             'clusters':clusters,
