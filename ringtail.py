@@ -13,7 +13,7 @@ if __name__ == '__main__':
     rman_opts = {'chunk_size': 10000,
             'filelist': cl_opts.files_pool,
             'mode' : 'dlg',
-            'num_clusters':cl_opts.num_clusters
+            'num_clusters':dbman_opts["num_clusters"]
         }
     filters = cl_opts.filters
     out_opts = cl_opts.out_opts
