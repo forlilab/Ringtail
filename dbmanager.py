@@ -760,14 +760,17 @@ class DBManagerSQLite(DBManager):
     def _delete_from_results(self):
         cur = self.conn.cursor()
         cur.execute("DELETE FROM Results WHERE Pose_ID NOT IN {view}".format(view=self.passing_results_view_name))
+        self.conn.commit()
         cur.close()
 
     def _delete_from_ligands(self):
         cur = self.conn.cursor()
         cur.execute("DELETE FROM Ligands WHERE LigName NOT IN {view}".format(view=self.passing_results_view_name))
+        self.conn.commit()
         cur.close()
 
     def _delete_from_interactions(self):
         cur.self.conn.cursor()
         cur.execute("DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN {view}".format(view=self.passing_results_view_name))
+        self.conn.commit()
         cur.close()
