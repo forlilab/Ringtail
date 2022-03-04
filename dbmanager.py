@@ -84,7 +84,6 @@ class DBManagerSQLite(DBManager):
     """ DOCUMENTATION GOES HERE """
     def __init__(self, opts = {}):
         super().__init__(opts)
-        self.conn = self._create_connection()
 
         self.unique_interactions = {}
         self.next_unique_interaction_idx = 1
@@ -157,8 +156,9 @@ class DBManagerSQLite(DBManager):
         axisangle_y,
         axisangle_z,
         axisangle_w,
-        dihedrals
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+        dihedrals,
+        coordinates
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -175,11 +175,12 @@ class DBManagerSQLite(DBManager):
         sql_insert = '''INSERT INTO Ligands (
         LigName,
         ligand_smile,
+        atom_index_map,
         input_pdbqt,
         best_binding,
         best_run
         ) VALUES
-        (?,?,?,?,?)'''
+        (?,?,?,?,?,?)'''
 
         try:
             cur = self.conn.cursor()
@@ -302,6 +303,8 @@ class DBManagerSQLite(DBManager):
 
     def _initialize_db(self):
         """check if db needs to be written. If so, initialize the tables"""
+        self.conn = self._create_connection()
+
         if not self.write_db_flag:
             return
         #if we want to overwrite old db, drop existing tables
@@ -342,8 +345,6 @@ class DBManagerSQLite(DBManager):
         cur.execute("CREATE VIEW {name} AS {query}".format(name = name, query = query))
         cur.close()
 
-
-
     def _create_results_table(self):
         sql_results_table = """CREATE TABLE Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -376,7 +377,8 @@ class DBManagerSQLite(DBManager):
             axisangle_y         FLOAT(4),
             axisangle_z         FLOAT(4),
             axisangle_w         FLOAT(4),
-            dihedrals           VARCHAR[]          -- 8-ish Bytes per dihedral value
+            dihedrals           VARCHAR[],          -- 8-ish Bytes per dihedral value
+            coordinates         VARCHAR[]
         );
         -- total number of Bytes estimated per row for average 50 interactions and 10 torsions:
         --     (64 + 76 + 50 * 21 + 10 * 8) Bytes = 1,270 Bytes
@@ -391,15 +393,14 @@ class DBManagerSQLite(DBManager):
             print("Error while creating results table. If database already exists, use --overwrite to drop existing tables")
             raise e
 
-        
-
     def _create_ligands_table(self):
         ligand_table = """CREATE TABLE Ligands (
             LigName             VARCHAR NOT NULL PRIMARY KEY,
-            ligand_smile        VARCHAR NOT NULL,
+            ligand_smile        VARCHAR[],
+            atom_index_map      VARCHAR[],
             input_pdbqt         VARCHAR[],
             best_binding        FLOAT(4),
-            best_run            INTEGER)"""
+            best_run            INT[])"""
 
         try:
             cur = self.conn.cursor()
@@ -407,9 +408,7 @@ class DBManagerSQLite(DBManager):
             cur.close()
         except Exception as e:
             print(e)
-            raise e
-
-        
+            raise e 
 
     def _create_interaction_index_table(self):
         """create table of data about each unique interaction"""
@@ -430,8 +429,6 @@ class DBManagerSQLite(DBManager):
             print(e)
             raise e
 
-        
-
     def _create_interaction_bv_table(self):
         interact_columns_str = " INTEGER,\n".join(["Interaction_"+ str(i+1) for i in range(len(self.unique_interactions))]) + " INTEGER"
 
@@ -445,9 +442,7 @@ class DBManagerSQLite(DBManager):
             cur.close()
         except Exception as e:
             print(e)
-            raise e
-
-        
+            raise e    
 
     def _insert_unique_interactions(self, unique_interactions):
         #rint("Inserting interactions...")
@@ -469,8 +464,6 @@ class DBManagerSQLite(DBManager):
         except Exception as e:
             print(e)
             raise e
-
-        
 
     def _insert_one_interaction(self, interaction):
         #print("Inserting interactions...")
@@ -659,6 +652,7 @@ class DBManagerSQLite(DBManager):
         #count number H bonds, add to ligand data list
         ligand_data_list.append(ligand_dict["interactions"][pose_rank]["type"].count("H"))
 
+        #add statevars
         for key in self.stateVar_keys:
             stateVar_data = ligand_dict[key][pose_rank]
             for dim in stateVar_data:
@@ -669,17 +663,21 @@ class DBManagerSQLite(DBManager):
             dihedral_string = dihedral_string + str(dihedral) + ", "
         ligand_data_list.append(dihedral_string)
 
+        #add coordinates
+        ligand_data_list.append(str(ligand_dict["pose_coordinates"][pose_rank]))
+
         return ligand_data_list
 
     def _generate_ligand_row(self, ligand_dict):
         """writes row to be inserted into ligand table"""
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
+        ligand_index_map = str(ligand_dict["ligand_index_map"])
         input_pdbqt = "\n".join(ligand_dict["ligand_input_pdbqt"])
         best_binding = ligand_dict["scores"][0]
         best_run = ligand_dict["sorted_runs"][0]
 
-        return [ligand_name, ligand_smile, input_pdbqt, best_binding, best_run]
+        return [ligand_name, ligand_smile, ligand_index_map, input_pdbqt, best_binding, best_run]
 
     def _generate_interaction_tuples(self, interaction_dictionaries):
         """takes dictionary of file results, formats list of tuples for interactions"""

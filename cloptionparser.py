@@ -58,6 +58,10 @@ class CLOptionParser():
                             'help':'specify a file containing a sqlite database', 
                             'action':'store', 'type':str, 'metavar': "DATABASE", 'default':None},
                          ),
+                        ('--add_results', {
+                            'help':'Add new results to an existing database, specified by --input_db', 
+                            'action':'store_true', 'default': False},
+                         ),
                             ],
                 },},
 
@@ -313,6 +317,9 @@ class CLOptionParser():
         if (file_sources['file'] is None) and (file_sources['file_path'] is None) and (file_sources['file_list'] is None) and (parsed_opts.input_db is None):
             print("*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --input_db")
             sys.exit(1)
+        if parsed_opts.add_results and parsed_opts.input_db == None:
+            print("ERRROR! Must specify --input_db if adding results to an existing database")
+            sys.exit()
         ##### parse output options
         output = {'fields': parsed_opts.out_fields,
                   'log': parsed_opts.log,
@@ -324,7 +331,7 @@ class CLOptionParser():
                   'outfields': parsed_opts.out_fields,
                   'no_print': parsed_opts.no_print
                 }
-        db_opts = {'num_clusters': parsed_opts.max_poses, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose, "interaction_tolerance":parsed_opts.interaction_tolerance, "results_view_name":parsed_opts.results_name, "store_all_poses":parsed_opts.store_all_poses, "overwrite":parsed_opts.overwrite}
+        db_opts = {'num_clusters': parsed_opts.max_poses, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose, "interaction_tolerance":parsed_opts.interaction_tolerance, "results_view_name":parsed_opts.results_name, "store_all_poses":parsed_opts.store_all_poses, "overwrite":parsed_opts.overwrite, "add_results":parsed_opts.add_results}
 
         # if a path for saving poses is specified, then the log will be written there
         if not parsed_opts.export_poses_path is None:
@@ -392,6 +399,9 @@ class CLOptionParser():
         self.file_sources = file_sources 
         if parsed_opts.input_db != None:
             sqlFile = parsed_opts.input_db
+            if not os.path.exists(sqlFile):
+                print("WARNING: input database does not exist!")
+                sys.exit(1)
             db_opts['write_db_flag'] = False
         else:
             sqlFile = parsed_opts.output_db

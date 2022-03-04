@@ -48,6 +48,7 @@ def parse_single_dlg(fname, mode='standard'):
     clusters = {}
     pose_interact_count = []
     pose_hb_counts = []
+    pose_coordinates = []
 
     #read poses
     heavy_at_count = 0
@@ -58,6 +59,7 @@ def parse_single_dlg(fname, mode='standard'):
         inside_input = False
         smile_string = ""
         input_pdbqt = []
+        index_map = []
         num_interact = 0
         for line in fp.readlines():
             line = line.decode("utf-8")
@@ -82,6 +84,8 @@ def parse_single_dlg(fname, mode='standard'):
                     if " UNK " in line: #replace ligand atoms ATOM flag with HETATM
                         line = line.replace("ATOM", "HETATM")
                     input_pdbqt.append(' '.join(line.split()[1:]))
+                if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
+                    index_map += line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX" ).rstrip("\n").split()
 
             #store poses in each cluster in dictionary as list of ordered runs 
             if "RANKING" in line:
@@ -102,6 +106,7 @@ def parse_single_dlg(fname, mode='standard'):
                     inside_pose = True
                     interactions.append({})
                     poses.append([])
+                    pose_coordinates.append([])
                 # storing interactions
                 line = line.split("ANALYSIS:")[1]
                 kw, info = line.split(None, 1)
@@ -117,16 +122,6 @@ def parse_single_dlg(fname, mode='standard'):
                     if "TYPE" in line:
                         hb_count = line.count("H")
                         pose_hb_counts.append(hb_count)
-                    """kw, info = line.split(None, 1)
-                    info = info.replace("{", "")
-                    info = info.replace("}", "")
-                    info = info.replace(" ", "")
-                    info = info.strip("\n")
-                    info = info.split(",")
-                    for i in range(interact_count):
-                        interact_list[i] = interact_list[i] + info[i] + ":"
-                    interactions.append(interact_list)"""
-
 
             elif STD_END in line:
                 inside_pose = False
@@ -137,6 +132,10 @@ def parse_single_dlg(fname, mode='standard'):
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
                 poses[-1].append(line)
+                #store pose coordinates
+                if "ATOM" in line:
+                    pose_coordinates[-1].append(line.split()[6:9])
+                #store pose data
                 if "Estimated Free Energy of Binding" in line:
                     e = float(line.split()[7])
                     scores.append(e)
@@ -190,6 +189,7 @@ def parse_single_dlg(fname, mode='standard'):
     # sort poses, scores, and interactions
     #TODO: make this into a helper function
     poses = [poses[i] for i in sorted_idx]
+    pose_coordinates = [pose_coordinates[i] for i in sorted_idx]
     scores = [scores[i] for i in sorted_idx]
     interactions = [interactions[i] for i in sorted_idx]
     intermolecular_energy = [intermolecular_energy[i] for i in sorted_idx]
@@ -206,7 +206,6 @@ def parse_single_dlg(fname, mode='standard'):
     pose_dihedrals = [pose_dihedrals[i] for i in sorted_idx]
     cluster_rmsds = [cluster_rmsds[i] for i in sorted_idx]
     ref_rmsds = [ref_rmsds[i] for i in sorted_idx]
-    #reform_interactions = [reform_interactions[i] for i in sorted_idx]
     pose_interact_count = [pose_interact_count[i] for i in sorted_idx]
     pose_hb_counts = [pose_hb_counts[i] for i in sorted_idx]
 
@@ -218,6 +217,8 @@ def parse_single_dlg(fname, mode='standard'):
 
     return {'ligname':ligname,
             'ligand_input_pdbqt':input_pdbqt,
+            'ligand_index_map':index_map,
+            'pose_coordinates':pose_coordinates,
             'ligand_smile_string':smile_string,
             'clusters':clusters,
             'cluster_rmsds':cluster_rmsds,
@@ -236,11 +237,9 @@ def parse_single_dlg(fname, mode='standard'):
             'interactions':interactions,
             'num_interactions': pose_interact_count,
             'num_hb':pose_hb_counts,
-            #'poses': poses, #store pose pdbqt
             'sorted_runs': [x+1 for x in sorted_idx],
             'pose_about': pose_about,
             'pose_translations':pose_trans,
             'pose_quarternions':pose_quarternions,
             'pose_dihedrals':pose_dihedrals,
-            'fname': fname,
-            'accepted':list(range(len(scores)))}
+            'fname': fname}
