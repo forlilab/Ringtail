@@ -49,14 +49,16 @@ def parse_single_dlg(fname, mode='standard'):
     pose_interact_count = []
     pose_hb_counts = []
     pose_coordinates = []
+    reactive_residues = []
+    reactive_res_coords = []
 
     #read poses
     heavy_at_count = 0
     heavy_at_count_complete = False
-    #print("Reading", fname)
     with open_fn(fname, 'rb') as fp:
         inside_pose = False
         inside_input = False
+        inside_res = False
         smile_string = ""
         input_pdbqt = []
         index_map = []
@@ -68,8 +70,11 @@ def parse_single_dlg(fname, mode='standard'):
             if line[0:11] == "Ligand file":
                 ligname = line.split(":",1)[1].strip()
             #store smile string
-            if "REMARK SMILES" in line:
+            if "REMARK SMILES" in line and "IDX" not in line:
                 smile_string = line.split("REMARK SMILES")[-1]
+            #store reactive residue identities
+            if "INPUT-FLEXRES-PDBQT: BEGIN_RES" in line:
+                reactive_residues.append(line.split()[2])
             #store number of runs
             if "Number of runs:" in line:
                 nruns = int(line.split()[3])
@@ -102,6 +107,13 @@ def parse_single_dlg(fname, mode='standard'):
                 cluster_rmsds[int(run)-1] = float(line.split()[4]) #will be stored in order of runs
                 ref_rmsds[int(run)-1] = float(line.split()[5])
 
+            #set make new reactive residue list if we are in the coordinates for a reactive residue
+            if "DOCKED: BEGIN_RES" in line:
+                reactive_res_coords[-1].append([])
+                inside_res = True
+            if "DOCKED: END_RES" in line:
+                inside_res = False
+
             #store pose anaylsis
             elif line[0:9] == "ANALYSIS:":
                 if inside_pose== False:
@@ -110,6 +122,7 @@ def parse_single_dlg(fname, mode='standard'):
                     interactions.append({})
                     poses.append([])
                     pose_coordinates.append([])
+                    reactive_res_coords.append([])
                 # storing interactions
                 line = line.split("ANALYSIS:")[1]
                 kw, info = line.split(None, 1)
@@ -137,7 +150,10 @@ def parse_single_dlg(fname, mode='standard'):
                 poses[-1].append(line)
                 #store pose coordinates
                 if "ATOM" in line:
-                    pose_coordinates[-1].append(line.split()[6:9])
+                    if inside_res:
+                        reactive_res_coords[-1][-1].append(line.split()[6:9])
+                    else:
+                        pose_coordinates[-1].append(line.split()[6:9])
                 #store pose data
                 if "Estimated Free Energy of Binding" in line:
                     e = float(line.split()[7])
@@ -193,6 +209,7 @@ def parse_single_dlg(fname, mode='standard'):
     #TODO: make this into a helper function
     poses = [poses[i] for i in sorted_idx]
     pose_coordinates = [pose_coordinates[i] for i in sorted_idx]
+    reactive_res_coords = [reactive_res_coords[i] for i in sorted_idx]
     scores = [scores[i] for i in sorted_idx]
     interactions = [interactions[i] for i in sorted_idx]
     intermolecular_energy = [intermolecular_energy[i] for i in sorted_idx]
@@ -223,6 +240,8 @@ def parse_single_dlg(fname, mode='standard'):
             'ligand_index_map':index_map,
             'ligand_h_parents':h_parents,
             'pose_coordinates':pose_coordinates,
+            'reactive_res_coordinates':reactive_res_coords,
+            'reactive_residues':reactive_residues,
             'ligand_smile_string':smile_string,
             'clusters':clusters,
             'cluster_rmsds':cluster_rmsds,
