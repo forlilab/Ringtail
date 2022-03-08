@@ -17,7 +17,7 @@ class CLOptionParser():
                 Requires numpy, multiprocessing, matplotlib, sqlite3.\n
 
         AUTHOR
-                Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD and Andreas Tillack, PhD.\n
+                Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n
 
         REPORTING BUGS
                 Please report bugs to:

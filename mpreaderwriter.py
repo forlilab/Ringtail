@@ -112,7 +112,7 @@ class Writer(multiprocessing.Process):
                 self.process_file(next_task) #stack rows onto corresponding arrays
                 #print info about files and time remaining
                 sys.stdout.write('\r')
-                sys.stdout.write("{n} files remaining to process. Estimated time remaining: {est_time:.2f} minutes. Last chunk took {write_time:.2f} secondsto write.".format(n=self.num_files_remaining, est_time=self.est_time_remaining, write_time = self.last_write_time))
+                sys.stdout.write("{n} files remaining to process. Estimated time remaining: {est_time:.2f} minutes. Last chunk took {write_time:.2f} seconds to write.".format(n=self.num_files_remaining, est_time=self.est_time_remaining, write_time = self.last_write_time))
                 sys.stdout.flush()
                 self.num_files_remaining -= 1
 

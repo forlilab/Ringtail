@@ -42,6 +42,13 @@ class DBManager():
         "pose_translations",
         "pose_quarternions"]
 
+        #reactive residue smiles with atom indices corresponding to flexres heteroatoms in pdbqt
+        self.rxn_residue_smiles = {"LYS":'CCCCCN',
+                                    "CYS":'CCS',
+                                    "TYR":'CC(c4c1).c24.c13.c2c3O',
+                                    "SER":'CCO'
+                                    }
+
         #keep track of any open cursors
         self.open_cursors = []
 
@@ -157,8 +164,10 @@ class DBManagerSQLite(DBManager):
         axisangle_z,
         axisangle_w,
         dihedrals,
-        coordinates
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+        ligand_coordinates,
+        reactive_residues,
+        reactive_res_coordinates
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -394,7 +403,9 @@ class DBManagerSQLite(DBManager):
             axisangle_z         FLOAT(4),
             axisangle_w         FLOAT(4),
             dihedrals           VARCHAR[],          -- 8-ish Bytes per dihedral value
-            coordinates         VARCHAR[]
+            ligand_coordinates         VARCHAR[],
+            reactive_residues   VARCHAR[],
+            reactive_res_coordinates   VARCHAR[]
         );
         -- total number of Bytes estimated per row for average 50 interactions and 10 torsions:
         --     (64 + 76 + 50 * 21 + 10 * 8) Bytes = 1,270 Bytes
@@ -417,7 +428,7 @@ class DBManagerSQLite(DBManager):
             hydrogen_parents    VARCHAR[],
             input_pdbqt         VARCHAR[],
             best_binding        FLOAT(4),
-            best_run            INT[])"""
+            best_run            INTEGER)"""
 
         try:
             cur = self.conn.cursor()
@@ -502,8 +513,6 @@ class DBManagerSQLite(DBManager):
         except Exception as e:
             print(e)
             raise e
-
-        
 
     def _make_new_interaction_column(self, column_number):
         add_column_str = '''ALTER TABLE Interaction_bitvectors ADD COLUMN Interaction_{n_inter}'''.format(n_inter = str(column_number))
@@ -682,6 +691,8 @@ class DBManagerSQLite(DBManager):
 
         #add coordinates
         ligand_data_list.append(str(ligand_dict["pose_coordinates"][pose_rank]))
+        ligand_data_list.append(str(ligand_dict["reactive_residues"]))
+        ligand_data_list.append(str(ligand_dict["reactive_res_coordinates"][pose_rank]))
 
         return ligand_data_list
 
