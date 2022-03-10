@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from rdkit import Chem
 from rdkit.Geometry import Point3D
-import re
+from rdkit.Chem import AllChem
+import json
 
 class VSManager():
     """ DOCUMENTATION GOES HERE """
@@ -122,8 +123,8 @@ class VSManager():
             mol = self.output_manager.create_molecule(ligname, smiles)
             #fetch coordinates for passing poses and add to rdkit mol
             passing_coordinates = self.dbman.fetch_passing_pose_coordinates(ligname)
-            for pose in passing_coordinates:
-                mol = self.output_manager.add_pose_to_mol(mol, pose[0], atom_indices)
+            for ligand_pose, flexres_pose, flexres_names in passing_coordinates:
+                mol = self.output_manager.add_pose_to_mol(mol, ligand_pose, atom_indices, flexres_pose, flexres_names)
             #fetch coordinates for non-passing poses and add to mol
             nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinate(ligname)
             for pose in nonpassing_coordinates:
@@ -143,6 +144,30 @@ class VSManager():
 class Outputter():
 
     def __init__(self, vsman, log_file):
+        #flexible residue smiles with atom indices corresponding to flexres heteroatoms in pdbqt
+        self.flex_residue_smiles = {"LYS":'CCCCCN',
+                                    "CYS":'CCS',
+                                    "TYR":'CC(c4c1).c24.c13.c2c3O',
+                                    "SER":'CCO',
+                                    "ARG":'CCCCN=C(N)N',
+                                    "HIP":'CCC1([NH+]=CNC=1)',
+                                    "VAL":'CC(C)C',
+                                    "ASH":'CCC(=O)O',
+                                    "GLH":'CCCC(=O)O',
+                                    "HIE":'CCC1(N=CNC=1)',
+                                    "GLU":'CCCC(=O)[O-]',
+                                    "LEU":'CCC(C)C',
+                                    "PHE":'CC(c4c1).c24.c13.c2c3',
+                                    "GLN":'CCCC(N)=O',
+                                    "ILE":'CC(C)CC',
+                                    "MET":'CCCSC',
+                                    "ASN":'CCC(=O)N',
+                                    "ASP":'CCC(=O)O',
+                                    "HID":'CCC1(NC=NC=1)',
+                                    "THR":'CC(C)O'
+                                    #TODO: Add trp
+                                    }
+
         self.log = log_file
         self.vsman = vsman
         self.filter_ligands_flag = self.vsman.filters["filter_ligands_flag"]
@@ -204,6 +229,26 @@ class Outputter():
             f.write("Number passing ligands: {num} \n".format(num=number_passing_ligands))
             f.write("-----------------\n")
 
+    def clean_db_string(self, input_str):
+        """take a db string representing a list, strips unwanted characters []'" """
+        return input_str.replace("[","").replace("]","").replace("'","").replace('"','')
+
+    def replace_pdbqt_atomtypes(self, pdbqt_line):
+        """replaces autodock-specific atomtypes with general ones"""
+        old_atomtype = pdbqt_line.split()[-1]
+        
+        #load autodock to standard atomtype dict
+        with open('AD_to_STD_ATOMTYPES.json', 'r') as f:
+            ad_to_std_atomtypes = json.load(f)
+
+        #fetch new atomtype
+        try:
+            new_atomtype = ad_to_std_atomtypes[old_atomtype]
+        except KeyError:
+            raise RuntimeError("ERROR! Unrecognized atomtype {at} in flexible residue pdbqt!".format(at = old_atomtype))
+
+        return pdbqt_line.replace(old_atomtype, new_atomtype)
+
     def create_molecule(self, ligname, smiles):
         """creates rdkit molecule from given ligand information"""
 
@@ -211,20 +256,36 @@ class Outputter():
             raise RuntimeError("Need SMILES for {molname}".format(molname=ligname))
         return Chem.MolFromSmiles(smiles)
 
-    def add_pose_to_mol(self, mol, coordinates, index_map):
+    def add_pose_to_mol(self, mol, ligand_coordinates, index_map, flexres_coordinates, flexres_names):
         """add given coordinates to given molecule as new conformer. Index_map maps order of coordinates to order in smile string used to generate rdkit mol"""
         n_atoms = mol.GetNumAtoms()
         conf = Chem.Conformer(n_atoms)
-        #split string from database into list, with each element containing the x,y,and z coordinates for one atom
-        atom_coordinates = coordinates.split("],")
+        #split ligand coordinate string from database into list, with each element containing the x,y,and z coordinates for one atom
+        atom_coordinates = ligand_coordinates.split("],")
         if len(atom_coordinates) != n_atoms: #confirm we have the right number of coordinates
             raise RuntimeError("ERROR! Incorrect number of coordinates! Given {n_coords} coordinates for {n_at} atoms!".format(n_coords = len(atom_coordinates), n_at = n_atoms))
         for i in range(n_atoms):
             pdbqt_index = index_map[i+1] - 1
-            x, y, z = [float(coord.replace("[","").replace("]","").replace("'","").replace('"','')) for coord in atom_coordinates.split(",")]
+            x, y, z = [float(self.clean_db_string(coord)) for coord in atom_coordinates.split(",")]
             conf.SetAtomPosition(i, Point3D(x, y, z))
         conf_id = mol.AddConformer(conf)
         mol = Chem.AddHs(mol, addCoords=True)
+
+        #make flexres rdkit molecules, add to our ligand molecule
+        flexible_residues = self.clean_db_string(flexres_names).split(",")
+        for i in range(len(flexible_residues)):
+            #get the residue smiles string and pdbqt we need to make the required rdkit molecules
+            res_smile = self.flex_residue_smiles[flexible_residues[i]]
+            flexres_pdbqt = "\n".join(list(filter(None,[self.replace_pdbqt_atomtypes(line) for line in self.clean_db_string(flexres_coordinates.split("],")[i]).split(",")])))
+
+            #make rdkit molecules and use template to ensure correct bond order
+            template = AllChem.MolFromSmiles(res_smile)
+            res_mol = AllChem.MolFromPDBBlock(flexres_pdbqt)
+            res_mol = AllChem.AssignBondOrdersFromTemplate(template, res_mol)
+
+            #combine with existing ligand and previous flexible residues
+            mol = Chem.CombineMols(res_mol, mol)
+
         return mol
 
     def write_out_mol(self, ligname, mol):

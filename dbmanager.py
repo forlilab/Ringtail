@@ -42,13 +42,6 @@ class DBManager():
         "pose_translations",
         "pose_quarternions"]
 
-        #reactive residue smiles with atom indices corresponding to flexres heteroatoms in pdbqt
-        self.rxn_residue_smiles = {"LYS":'CCCCCN',
-                                    "CYS":'CCS',
-                                    "TYR":'CC(c4c1).c24.c13.c2c3O',
-                                    "SER":'CCO'
-                                    }
-
         #keep track of any open cursors
         self.open_cursors = []
 
@@ -165,8 +158,8 @@ class DBManagerSQLite(DBManager):
         axisangle_w,
         dihedrals,
         ligand_coordinates,
-        reactive_residues,
-        reactive_res_coordinates
+        flexible_residues,
+        flexible_res_coordinates
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         try:
@@ -253,7 +246,7 @@ class DBManagerSQLite(DBManager):
 
     def fetch_passing_pose_coordinates(self, ligname):
         """fetch coordinates for poses passing filter for given ligand"""
-        query = "SELECT coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '%{ligand}%')".format(results_view = self.passing_results_view_name, ligand = ligname)
+        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexibles_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '%{ligand}%')".format(results_view = self.passing_results_view_name, ligand = ligname)
         return self._run_query(query)
 
     def fetch_nonpassing_pose_coordinates(self, ligname):
@@ -404,8 +397,8 @@ class DBManagerSQLite(DBManager):
             axisangle_w         FLOAT(4),
             dihedrals           VARCHAR[],          -- 8-ish Bytes per dihedral value
             ligand_coordinates         VARCHAR[],
-            reactive_residues   VARCHAR[],
-            reactive_res_coordinates   VARCHAR[]
+            flexible_residues   VARCHAR[],
+            flexible_res_coordinates   VARCHAR[]
         );
         -- total number of Bytes estimated per row for average 50 interactions and 10 torsions:
         --     (64 + 76 + 50 * 21 + 10 * 8) Bytes = 1,270 Bytes
@@ -691,8 +684,8 @@ class DBManagerSQLite(DBManager):
 
         #add coordinates
         ligand_data_list.append(str(ligand_dict["pose_coordinates"][pose_rank]))
-        ligand_data_list.append(str(ligand_dict["reactive_residues"]))
-        ligand_data_list.append(str(ligand_dict["reactive_res_coordinates"][pose_rank]))
+        ligand_data_list.append(str(ligand_dict["flexible_residues"]))
+        ligand_data_list.append(str(ligand_dict["flexible_res_coordinates"][pose_rank]))
 
         return ligand_data_list
 
