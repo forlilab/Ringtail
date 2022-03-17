@@ -118,13 +118,13 @@ class VSManager():
     def write_molecule_sdfs(self):
         """have output manager write sdf molecules for passing results"""
         passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
-        for (ligname, smiles, atom_indices, hparents) in passing_molecule_info:
+        for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
             #create rdkit molecule
             mol = self.output_manager.create_molecule(ligname, smiles)
             #fetch coordinates for passing poses and add to rdkit mol
             passing_coordinates = self.dbman.fetch_passing_pose_coordinates(ligname)
             for ligand_pose, flexres_pose, flexres_names in passing_coordinates:
-                mol = self.output_manager.add_pose_to_mol(mol, ligand_pose, atom_indices, flexres_pose, flexres_names)
+                mol = self.output_manager.add_pose_to_mol(mol, ligand_pose, atom_indices, flexres_pose, flexres_names, h_parent_line)
             #fetch coordinates for non-passing poses and add to mol
             nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinate(ligname)
             for pose in nonpassing_coordinates:
@@ -164,8 +164,8 @@ class Outputter():
                                     "ASN":'CCC(=O)N',
                                     "ASP":'CCC(=O)O',
                                     "HID":'CCC1(NC=NC=1)',
-                                    "THR":'CC(C)O'
-                                    #TODO: Add trp
+                                    "THR":'CC(C)O',
+                                    "TRP":'C1=CC=C2C(=C1)C(=CN2)CC'
                                     }
 
         self.log = log_file
@@ -256,7 +256,7 @@ class Outputter():
             raise RuntimeError("Need SMILES for {molname}".format(molname=ligname))
         return Chem.MolFromSmiles(smiles)
 
-    def add_pose_to_mol(self, mol, ligand_coordinates, index_map, flexres_coordinates, flexres_names):
+    def add_pose_to_mol(self, mol, ligand_coordinates, index_map, flexres_coordinates, flexres_names, h_parent_line):
         """add given coordinates to given molecule as new conformer. Index_map maps order of coordinates to order in smile string used to generate rdkit mol"""
         n_atoms = mol.GetNumAtoms()
         conf = Chem.Conformer(n_atoms)
@@ -269,7 +269,21 @@ class Outputter():
             x, y, z = [float(self.clean_db_string(coord)) for coord in atom_coordinates.split(",")]
             conf.SetAtomPosition(i, Point3D(x, y, z))
         conf_id = mol.AddConformer(conf)
+        #Add hydrogens and correct their positions to match pdbqt
         mol = Chem.AddHs(mol, addCoords=True)
+        conf = mol.GetConformer()
+        used_h = []
+        h_parent = self._format_h_parents(h_parent_line)
+        for (parent_rdkit_index, h_pdbqt_index) in h_parents:
+            h_pdbqt_index -= 1
+            x, y, z = self._positions[self._current_pose][h_pdbqt_index, :]
+            parent_atom = mol.GetAtomWithIdx(parent_rdkit_index - 1)
+            candidate_hydrogens = [atom.GetIdx() for atom in parent_atom.GetNeighbors() if atom.GetAtomicNum() == 1]
+            for h_rdkit_index in candidate_hydrogens:
+                if h_rdkit_index not in used_h:
+                    break
+            used_h.append(h_rdkit_index)
+            conf.SetAtomPosition(h_rdkit_index, Point3D(x, y, z))
 
         #make flexres rdkit molecules, add to our ligand molecule
         flexible_residues = self.clean_db_string(flexres_names).split(",")
@@ -287,6 +301,18 @@ class Outputter():
             mol = Chem.CombineMols(res_mol, mol)
 
         return mol
+
+    def _format_h_parents(self, h_parent_line):
+        """takes list of h_parent indices from database, formats into list of tuples"""
+
+        h_parents = []
+        integers = [int(self.clean_db_string(integer)) for integer in h_parent_line.split(",")]
+        if len(integers) % 2 == 1:
+            raise RuntimeError("Number of indices in H PARENT is odd")
+        for j in range(int(len(integers) / 2)): 
+            h_parents.append((integers[j*2], integers[j*2 + 1]))
+
+        return h_parents
 
     def write_out_mol(self, ligname, mol):
         """writes out given mol as sdf"""
