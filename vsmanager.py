@@ -8,8 +8,30 @@ from rdkit.Chem import AllChem
 import json
 
 class VSManager():
-    """ DOCUMENTATION GOES HERE """
+    """Manager for coordinating different actions on virtual screening i.e. adding results to db, filtering, output options
+    
+    Attributes:
+        dbman (DBManager): Interface module with database
+        eworst (float): The worst scoring energy filter value requested by user
+        filter_file (string): Name of file containing filters provided by user
+        filtered_results (DB cursor object): Cursor object containing results passing requested filters (iterable)
+        filters (dictionary): Dictionary containing user-specified filters
+        no_print_flag (boolean): Flag specifying whether passing results should be printed to terminal
+        out_opts (dictionary): Specified output options including data fields to output, export_poses_path, log file name
+        output_manager (Outputter object): Manager for output tasks of log-writting, plotting, ligand SDF writing
+        results_filters_list (List): List of tuples of filter option and value
+        results_man (ResultsManager object): Manager for processing result files for insertion into database
+    """
     def __init__(self, db_opts, rman_opts, filters, out_opts, filter_fname=None):
+        """Initialize VSManager object. Will create DBManager object to serve as interface with database (currently implemented in SQLite). Will create ResultsManager to process result files. Will create Outputter object to assist in creating output files.
+        
+        Args:
+            db_opts (dictionary): dictionary of options required by DBManager
+            rman_opts (dictionary): dictionary of options required by results manager
+            filters (dictionary): Dictionary containing user-specified filters
+            out_opts (dictionary): Specified output options including data fields to output, export_poses_path, log file name
+            filter_fname (None/string, optional): Name of file containing filters provided by user. None by default
+        """
         self.filters = filters
         self.out_opts = out_opts
         self.eworst = self.filters['properties']['eworst'] # has default -3 kcal/mol
@@ -17,7 +39,7 @@ class VSManager():
         self.no_print_flag = self.out_opts["no_print"]
 
         self.dbman = DBManagerSQLite(db_opts)
-        self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'], no_print_flag = self.out_opts["no_print"])
+        self.results_man = ResultsManager(mode=rman_opts['mode'], dbman = self.dbman, chunk_size=rman_opts['chunk_size'], filelist=rman_opts['filelist'], numclusters=rman_opts['num_clusters'], no_print_flag = self.no_print_flag)
         self.output_manager = Outputter(self, self.out_opts['log'])
 
         #if requested, write database or add results to an existing one
@@ -26,27 +48,19 @@ class VSManager():
             self.add_results()
 
     def add_results(self):
-        """"""
+        """
+        Call results manager to process result files and add to database
+        """
         self.results_man.process_results()
-        return 
 
     def filter(self):
-        """"""
-        #check if we need to calculate percentiles. If we need to, do so.
-        if self.filters['properties']['epercentile'] is not None:
-            self.calculate_energy_percentile(self.filters['properties']['epercentile'])
-            if self.energy_percentile < self.eworst:
-                self.eworst = self.energy_percentile #only keep the most negative (most stringent) filter
-        if self.filters['properties']['leffpercentile'] is not None:
-            self.calculate_energy_percentile(self.filters['properties']['leffpercentile'])
-            if self.leff_percentile < self.eworst:
-                self.eworst = self.leff_percentile #only keep the most negative (most stringent) filter
-        self.filters['properties']['eworst'] = self.eworst #reset to new value
+        """
+        Prepare list of filters, then hand it off to DBManager to perform filtering. Create log of passing results.
+        """
 
         #prepare list of filter values and keys for DBManager
         self.prepare_results_filter_list()
 
-        
         print("Filtering results")
         #make sure we have ligand filter list
         if not self.filters['filter_ligands_flag']:
@@ -58,11 +72,14 @@ class VSManager():
         for line in self.filtered_results:
             if not self.no_print_flag:
                 print(line)
-            self.output_manager.write_log_line(str(line).replace("()",""))#strip parens from line, which is natively a tuple
+            self.output_manager.write_log_line(str(line).replace("(","").replace(")", ""))#strip parens from line, which is natively a tuple
 
     def plot(self):
+        """
+        Get data needed for creating Ligand Efficiency vs Energy scatter plot from DBManager. Call Outputter to create plot.
+        """
         print("Creating plot of results")
-        #plot as requested
+        #get data from DBMan
         all_data, passing_data = self.dbman.get_plot_data()
         all_plot_data_binned = {}
         #bin the all_ligands data by 1000ths to make plotting faster
@@ -80,7 +97,8 @@ class VSManager():
         self.output_manager.save_scatterplot()
 
     def prepare_results_filter_list(self):
-        """takes filters dictionary from option parser. Output list of tuples to be inserted into sql call string"""
+        """takes filters dictionary from option parser. Output list of tuples to be inserted into sql call string
+        """
 
         filters_list = []
 
@@ -116,7 +134,8 @@ class VSManager():
         self.results_filters_list = filters_list
 
     def write_molecule_sdfs(self):
-        """have output manager write sdf molecules for passing results"""
+        """have output manager write sdf molecules for passing results
+        """
         passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
         for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
             #create rdkit molecule
@@ -134,7 +153,8 @@ class VSManager():
             self.output_manager.write_out_mol(ligname, mol)
 
     def close_database(self):
-        """Tell database we are done and it can close the connection"""
+        """Tell database we are done and it can close the connection
+        """
         self.dbman.close_connection()
 
 ###################################################
@@ -143,7 +163,25 @@ class VSManager():
 
 class Outputter():
 
+    """Class for creating outputs
+    
+    Attributes:
+        ad_to_std_atomtypes (dictionary): Mapping of autodock atomtypes (key) to standard PDB atomtypes (value). Initialized as None, will be loaded from AD_to_STD_ATOMTYPES.json if required
+        ax (pyplot axis): Axis for scatterplot of LE vs Energy
+        fig_base_name (str): Name for figures excluding file extension
+        flex_residue_smiles (Dictionary): Contains smiles used to create RDKit objects for flexible residues
+        log (string): name for log file
+        vsman (VSManager): VSManager object that created outputter
+    
+    """
+    
     def __init__(self, vsman, log_file):
+        """Initialize Outputter object and create log file
+        
+        Args:
+            vsman (VSManager): VSManager object that created outputter
+            log_file (string): name for log file
+        """
         #flexible residue smiles with atom indices corresponding to flexres heteroatoms in pdbqt
         self.flex_residue_smiles = {"LYS":'CCCCCN',
                                     "CYS":'CCS',
@@ -168,12 +206,10 @@ class Outputter():
                                     "TRP":'C1=CC=C2C(=C1)C(=CN2)CC'
                                     }
 
+        self.ad_to_std_atomtypes = None
+
         self.log = log_file
         self.vsman = vsman
-        self.filter_ligands_flag = self.vsman.filters["filter_ligands_flag"]
-        self.num_ligands = self.vsman.results_man.num_result_files
-        if self.filter_ligands_flag:
-            self.passing_ligand = vsman.filtered_ligands
 
         if self.vsman.filter_file != None:
             self.fig_base_name = self.vsman.filter_file.split(".")[0]
@@ -183,7 +219,11 @@ class Outputter():
         self._create_log_file()
 
     def plot_all_data(self, binned_data):
-        """takes dictionary of binned data where key is the coordinates of the bin and value is the number of points in that bin. Adds to scatter plot colored by value"""
+        """takes dictionary of binned data where key is the coordinates of the bin and value is the number of points in that bin. Adds to scatter plot colored by value
+        
+        Args:
+            binned_data (dictionary): Keys are tuples of key and y value for bin. Value is the count of points falling into that bin.
+        """
         #gather data
         energies = []
         leffs = []
@@ -210,63 +250,128 @@ class Outputter():
 
 
     def plot_single_point(self,x,y,color="black"):
-        #self.scatter_plot.scatter(x,y,color)
+        """Add point to scatter plot with given x and y coordinates and color.
+        
+        Args:
+            x (float): x coordinate
+            y (float): y coordinate
+            color (str, optional): Color for point. Default black.
+        """
         self.ax.scatter([x],[y],c=color)
 
     def save_scatterplot(self):
+        """
+        Saves current figure as [self.fig_base_name]_scatter.png
+        """
         plt.savefig(self.fig_base_name + "_scatter.png", bbox_inches="tight")
         plt.close()
 
     def write_log_line(self, line):
-        """write a single row to the log file"""
+        """write a single row to the log file
+        
+        Args:
+            line (string): Line to write to log
+        """
         with open(self.log, "a") as f:
           f.write(line)
           f.write("\n")
 
     def log_num_passing_ligands(self, number_passing_ligands):
+        """
+        Write the number of ligands which pass given filter to log file
+        
+        Args:
+            number_passing_ligands (int): number of ligands that passed filter
+        """
         with open(self.log, "a") as f:
             f.write("\n")
             f.write("Number passing ligands: {num} \n".format(num=number_passing_ligands))
             f.write("-----------------\n")
 
-    def clean_db_string(self, input_str):
-        """take a db string representing a list, strips unwanted characters []'" """
+    def _clean_db_string(self, input_str):
+        """take a db string representing a list, strips unwanted characters []'" 
+        
+        Args:
+            input_str (str)
+        
+        Returns:
+            String: cleaned string
+        """
         return input_str.replace("[","").replace("]","").replace("'","").replace('"','')
 
     def replace_pdbqt_atomtypes(self, pdbqt_line):
-        """replaces autodock-specific atomtypes with general ones"""
+        """replaces autodock-specific atomtypes with general ones. Reads AD-> general atomtype mapping from AD_to_STD_ATOMTYPES.json
+        
+        Args:
+            pdbqt_line (string): Line representing an atom in pdbqt format
+        
+        Returns:
+            String: pdbqt_line with atomtype replaced with general atomtypes recognized by RDKit
+        
+        Raises:
+            RuntimeError: Will raise error if atomtype is not in AD_to_STD_ATOMTYPES.json
+        """
         old_atomtype = pdbqt_line.split()[-1]
         
-        #load autodock to standard atomtype dict
-        with open('AD_to_STD_ATOMTYPES.json', 'r') as f:
-            ad_to_std_atomtypes = json.load(f)
+        #load autodock to standard atomtype dict if not loaded 
+        if self.ad_to_std_atomtypes == None:
+            with open('AD_to_STD_ATOMTYPES.json', 'r') as f:
+                self.ad_to_std_atomtypes = json.load(f)
 
         #fetch new atomtype
         try:
-            new_atomtype = ad_to_std_atomtypes[old_atomtype]
+            new_atomtype = self.ad_to_std_atomtypes[old_atomtype]
         except KeyError:
             raise RuntimeError("ERROR! Unrecognized atomtype {at} in flexible residue pdbqt!".format(at = old_atomtype))
 
         return pdbqt_line.replace(old_atomtype, new_atomtype)
 
     def create_molecule(self, ligname, smiles):
-        """creates rdkit molecule from given ligand information"""
+        """creates rdkit molecule from given ligand information
+        
+        Args:
+            ligname (TYPE): Description
+            smiles (TYPE): Description
+        
+        Returns:
+            TYPE: Description
+        
+        Raises:
+            RuntimeError: Description
+        """
 
         if smiles == "":
             raise RuntimeError("Need SMILES for {molname}".format(molname=ligname))
         return Chem.MolFromSmiles(smiles)
 
-    def add_pose_to_mol(self, mol, ligand_coordinates, index_map, flexres_coordinates, flexres_names, h_parent_line):
-        """add given coordinates to given molecule as new conformer. Index_map maps order of coordinates to order in smile string used to generate rdkit mol"""
+    def add_pose_to_mol(self, mol, ligand_coordinates, index_map, flexres_lines, flexres_names, h_parent_line):
+        """add given coordinates to given molecule as new conformer. Index_map maps order of coordinates to order in smile string used to generate rdkit mol
+        
+        Args:
+            mol (RDKit Mol): RDKit molecule to add pose to
+            ligand_coordinates (String): Ligand coordinate string from database. Will be split and cleaned
+            index_map (string): String from database of index mapping from PDBQT atom order to RDKit molecule. Will be split and cleaned
+            flexres_lines (String): String from database of PDBQT lines for flexible residues. Will be split and cleaned.
+            flexres_names (string): String from database of residue names for flexible residues.
+            h_parent_line (string): String from database of hydrogen atoms and their associated heavy atom.
+        
+        Returns:
+            RDKit Mol: RDKit molecule object
+        
+        Raises:
+            RuntimeError: Will raise error if number of coordinates does not match the number of atoms there are coordinates for.
+        
+        """
         n_atoms = mol.GetNumAtoms()
         conf = Chem.Conformer(n_atoms)
         #split ligand coordinate string from database into list, with each element containing the x,y,and z coordinates for one atom
         atom_coordinates = ligand_coordinates.split("],")
+        index_map = index_map.split(",")
         if len(atom_coordinates) != n_atoms: #confirm we have the right number of coordinates
             raise RuntimeError("ERROR! Incorrect number of coordinates! Given {n_coords} coordinates for {n_at} atoms!".format(n_coords = len(atom_coordinates), n_at = n_atoms))
         for i in range(n_atoms):
-            pdbqt_index = index_map[i+1] - 1
-            x, y, z = [float(self.clean_db_string(coord)) for coord in atom_coordinates.split(",")]
+            pdbqt_index = self._clean_db_string(index_map[i+1]) - 1
+            x, y, z = [float(self._clean_db_string(coord)) for coord in atom_coordinates.split(",")]
             conf.SetAtomPosition(i, Point3D(x, y, z))
         conf_id = mol.AddConformer(conf)
         #Add hydrogens and correct their positions to match pdbqt
@@ -286,11 +391,11 @@ class Outputter():
             conf.SetAtomPosition(h_rdkit_index, Point3D(x, y, z))
 
         #make flexres rdkit molecules, add to our ligand molecule
-        flexible_residues = self.clean_db_string(flexres_names).split(",")
+        flexible_residues = self._clean_db_string(flexres_names).split(",")
         for i in range(len(flexible_residues)):
             #get the residue smiles string and pdbqt we need to make the required rdkit molecules
             res_smile = self.flex_residue_smiles[flexible_residues[i]]
-            flexres_pdbqt = "\n".join(list(filter(None,[self.replace_pdbqt_atomtypes(line) for line in self.clean_db_string(flexres_coordinates.split("],")[i]).split(",")])))
+            flexres_pdbqt = "\n".join(list(filter(None,[self.replace_pdbqt_atomtypes(line) for line in self._clean_db_string(flexres_coordinates.split("],")[i]).split(",")])))
 
             #make rdkit molecules and use template to ensure correct bond order
             template = AllChem.MolFromSmiles(res_smile)
@@ -303,10 +408,20 @@ class Outputter():
         return mol
 
     def _format_h_parents(self, h_parent_line):
-        """takes list of h_parent indices from database, formats into list of tuples"""
+        """takes list of h_parent indices from database, formats into list of tuples
+        
+        Args:
+            h_parent_line (String): H_parent remark line from database. Will clean and reformat.
+        
+        Returns:
+            List: List of tuples (heavy_atom_index, H index)
+        
+        Raises:
+            RuntimeError: Raise error if there is an odd number of indicies (not paired indices for hydrogen and parent)
+        """
 
         h_parents = []
-        integers = [int(self.clean_db_string(integer)) for integer in h_parent_line.split(",")]
+        integers = [int(self._clean_db_string(integer)) for integer in h_parent_line.split(",")]
         if len(integers) % 2 == 1:
             raise RuntimeError("Number of indices in H PARENT is odd")
         for j in range(int(len(integers) / 2)): 
@@ -315,18 +430,37 @@ class Outputter():
         return h_parents
 
     def write_out_mol(self, ligname, mol):
-        """writes out given mol as sdf"""
+        """writes out given mol as sdf
+        
+        Args:
+            ligname (string): name of ligand that will be used to name output SDF file
+            mol (RDKit Mol): RDKit molecule object to be written to SDF
+        """
         filename = self.vsman.out_opts["export_poses_path"] + ligname.replace(".pdbqt", ".sdf")
         with SDWriter(filename) as w:
             w.write(mol)
 
 
     def _create_log_file(self):
+        """
+        Initializes log file
+        """
         with open(self.log, 'w') as f:
             f.write("Filtered poses:\n")
             f.write("***************\n")
 
     def scatter_hist(self, x, y, z, ax, ax_histx, ax_histy):
+        """
+        Makes scatterplot with a histogram on each axis
+        
+        Args:
+            x (list): x coordinates for data
+            y (list): y coordinates for data
+            z (list): z coordinates for data
+            ax (matplotlib axis): scatterplot axis
+            ax_histx (matplotlib axis): x histogram axis
+            ax_histy (matplotlib axis): y histogram axis
+        """
         # no labels
         ax_histx.tick_params(axis="x", labelbottom=False)
         ax_histy.tick_params(axis="y", labelleft=False)
