@@ -766,7 +766,7 @@ class DBManagerSQLite(DBManager):
 
         #parse requested output fields and convert to column names in database
         
-        outfield_string = "LigName, " + ", ".join([self.field_to_column_name[field] for field in output_fields.split(",") if field in self.field_to_column_name])
+        outfield_string = "LigName, " + ", ".join([self.field_to_column_name[field] for field in output_fields])
         filtering_window = "Results"
         sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(out_columns = outfield_string, window = filtering_window)
 

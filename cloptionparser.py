@@ -111,15 +111,14 @@ class CLOptionParser():
                             '"e_intra" (intermolecular energy), '
                             '"n_interact" (number of interactions), '
                             '"interactions" (all interactions), '
-                            '"fname" (full path filename), '
                             '"ligand_smile" , '
                             '"rank" (rank of ligand pose), '
                             '"run" (run number for ligand pose), '
                             '"hb" (hydrogen bonds); '
                             'Fields are '
-                            'printed in the order in which they are provided.',
+                            'printed in the order in which they are provided. Ligand name will always be returned and should not be specified',
                             'action':'store', 'type':str, 'metavar': "FIELD1,FIELD2,...", 
-                            'default':'fname,e'},
+                            'default':'e'},
                             ),
                         ('--export_poses_path', {
                             'help':('specify the path where to save poses of ligands passing the filters (PDBQT format); '
@@ -323,12 +322,12 @@ class CLOptionParser():
         if parsed_opts.add_results and parsed_opts.input_db == None:
             print("ERRROR! Must specify --input_db if adding results to an existing database")
             sys.exit()
+        parsed_opts.out_fields = parsed_opts.out_fields.split(",")
         for outfield in parsed_opts.out_fields:
             if outfield not in self.outfield_options:
                 raise RuntimeError("WARNING: {out_f} is not a valid output option. Please see --help or documentation".format(out_f = outfield))
         ##### parse output options
-        output = {'fields': parsed_opts.out_fields,
-                  'log': parsed_opts.log,
+        output = {'log': parsed_opts.log,
                   'header': not parsed_opts.no_header,
                   'stdout': not parsed_opts.no_print,
                   'overwrite': parsed_opts.overwrite,
