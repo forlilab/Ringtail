@@ -116,7 +116,7 @@ class CLOptionParser():
                             '"rank" (rank of ligand pose), '
                             '"run" (run number for ligand pose), '
                             '"hb" (hydrogen bonds); '
-                            '"all" (print all poses passing filters). Fields are '
+                            'Fields are '
                             'printed in the order in which they are provided.',
                             'action':'store', 'type':str, 'metavar': "FIELD1,FIELD2,...", 
                             'default':'fname,e'},
@@ -256,6 +256,8 @@ class CLOptionParser():
                     },},
             ]
 
+        self.outfield_options = ["e", "le", "delta", "ref_rmsd", "e_inter", "e_vdw", "e_elec", "e_intra", "n_interact", "interactions", "fname", "ligand_smile", "rank", "run", "hb"]
+
         self._initialize_parser()
         self._process_sources()
 
@@ -321,6 +323,9 @@ class CLOptionParser():
         if parsed_opts.add_results and parsed_opts.input_db == None:
             print("ERRROR! Must specify --input_db if adding results to an existing database")
             sys.exit()
+        for outfield in parsed_opts.out_fields:
+            if outfield not in self.outfield_options:
+                raise RuntimeError("WARNING: {out_f} is not a valid output option. Please see --help or documentation".format(out_f = outfield))
         ##### parse output options
         output = {'fields': parsed_opts.out_fields,
                   'log': parsed_opts.log,

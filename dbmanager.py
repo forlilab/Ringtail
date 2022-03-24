@@ -9,10 +9,10 @@ class DBManager():
     which will implement their own functions to return the data requested
     
     Attributes:
-        db_file (TYPE): Description
-        interaction_data_kws (list): Description
-        interaction_tolerance_cutoff (TYPE): Description
-        ligand_data_keys (TYPE): Description
+        db_file (string): Name of file containing database
+        interaction_data_kws (list): List of keywords for different pieces of interaction data
+        interaction_tolerance_cutoff (float): RMSD cutoff for interactions to be added to the top pose for stored clusters
+        ligand_data_keys (list): List of keywords used to look up ligand data in ligand dictionaries from parser
         ligand_interaction_keys (TYPE): Description
         log_distinct_ligands (TYPE): Description
         num_clusters (TYPE): Description
@@ -56,12 +56,12 @@ class DBManager():
         "internal_energy",
         "torsional_energy",
         "unbound_energy"]
-        self.ligand_interaction_keys = ["type",
+        """self.ligand_interaction_keys = ["type",
         "chain",
         "residue",
         "resid",
         "recname",
-        "recid"]
+        "recid"]"""
         self.stateVar_keys = ["pose_about",
         "pose_translations",
         "pose_quarternions"]
@@ -338,6 +338,7 @@ class DBManagerSQLite(DBManager):
             TYPE: Description
         """
         cur = self.conn.cursor()
+        print("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.passing_results_view_name))
         cur.execute("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.passing_results_view_name))
         return cur.fetchone()
 
