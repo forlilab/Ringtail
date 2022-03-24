@@ -338,7 +338,7 @@ class DBManagerSQLite(DBManager):
             TYPE: Description
         """
         cur = self.conn.cursor()
-        cur.execute("SELECT COUNT(DISTINCT LigName) FROM (SELECT LigName FROM {results_view})".format(results_view = self.passing_results_view_name))
+        cur.execute("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.passing_results_view_name))
         return cur.fetchone()
 
     def fetch_passing_ligand_output_info(self):
