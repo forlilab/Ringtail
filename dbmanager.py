@@ -325,7 +325,7 @@ class DBManagerSQLite(DBManager):
         #create view of passing results
         filter_results_str = self._generate_result_filtering_str_sqlite(results_filters_list, ligand_filters_list, output_fields)
         print(filter_results_str)
-        self._create_view(self.passing_results_view_name, filter_results_str.replace("SELECT ", "SELECT Pose_id,")) # make sure we keep Pose_ID in view
+        self._create_view(self.passing_results_view_name, filter_results_str.replace("SELECT ", "SELECT Pose_ID, ", 1)) # make sure we keep Pose_ID in view
         #perform filtering
         filtered_results = self._run_query(filter_results_str)
         #get number of passing ligands
@@ -338,7 +338,6 @@ class DBManagerSQLite(DBManager):
             TYPE: Description
         """
         cur = self.conn.cursor()
-        print("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.passing_results_view_name))
         cur.execute("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.passing_results_view_name))
         return cur.fetchone()
 

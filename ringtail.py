@@ -38,5 +38,5 @@ if __name__ == '__main__':
     time2 = time.perf_counter()
 
     #print performance times
-    print("Time to initialize/write database: " + str(time1-time0))
-    print("Time to perform filtering: " + str(time2-time1))
+    print("Time to initialize/write database: " + str(round(time1-time0,2)) + " seconds")
+    print("Time to perform filtering: " + str(round(time2-time1,2)) + " seconds ")
