@@ -158,31 +158,94 @@ def parse_single_dlg(fname, mode='standard'):
                         pose_coordinates[-1].append(line.split()[6:9])
                 #store pose data
                 if "Estimated Free Energy of Binding" in line:
-                    e = float(line.split()[7])
+                    try:
+                        e = float(line.split()[7])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[6].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     scores.append(e)
                 if "Final Intermolecular Energy" in line:
-                    e = float(line.split()[6])
+                    try:
+                        e = float(line.split()[6])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[5].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     intermolecular_energy.append(e)
                 if "vdW + Hbond + desolv Energy" in line:
-                    e = float(line.split()[8])
+                    try:
+                        e = float(line.split()[8])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[7].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     vdw_hb_desolv.append(e)
                 if "Electrostatic Energy" in line:
-                    e = float(line.split()[4])
+                    try:
+                        e = float(line.split()[4])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[3].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     electrostatic.append(e)
                 if "Moving Ligand-Fixed Receptor" in line:
-                    e = float(line.split()[5])
+                    try:
+                        e = float(line.split()[5])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[4].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     flex_ligand.append(e)
                 if "Moving Ligand-Moving Receptor" in line:
-                    e = float(line.split()[5])
+                    try:
+                        e = float(line.split()[5])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[4].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     flexLigand_flexReceptor.append(e)
                 if "Final Total Internal Energy" in line:
-                    e = float(line.split()[7])
+                    try:
+                        e = float(line.split()[7])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[6].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     internal_energy.append(e)
                 if "Torsional Free Energy" in line:
-                    e = float(line.split()[6])
+                    try:
+                        e = float(line.split()[6])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[5].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     torsion.append(e)
                 if "Unbound System's Energy" in line:
-                    e = float(line.split()[6])
+                    try:
+                        e = float(line.split()[6])
+                    except ValueError: #catch off-by-one error if number is next to =
+                        try:
+                            e = float(line.split()[5].lstrip("="))
+                        except ValueError:
+                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            raise ValueError
                     unbound_energy.append(e)
                 #store state variables
                 if "NEWDPF about" in line:
