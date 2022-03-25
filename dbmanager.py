@@ -804,16 +804,16 @@ class DBManagerSQLite(DBManager):
         sql_string += " AND ".join(energy_filter_sql_query)
 
         #for each interaction filter, get the index from the interactions_indices table
-        interaction_filter_indices = []
         for interaction in interaction_filters:
+            interaction_filter_indices = []
             interact_index_str = self._write_interaction_index_filtering_str(interaction)
             interaction_indices = self._run_query(interact_index_str)
             for i in interaction_indices:
                 interaction_filter_indices.append(i[0])
 
-        #find pose ids for ligands with desired interactions
-        if interaction_filter_indices != []:
-            sql_string += " AND Pose_ID IN ({interaction_str})".format(interaction_str = self._write_interaction_filtering_str(interaction_filter_indices))
+            #find pose ids for ligands with desired interactions
+            for idx in interaction_filter_indices:
+                sql_string += " AND Pose_ID IN ({interaction_str})".format(interaction_str = self._write_interaction_filtering_str(interaction_filter_indices))            
 
         #add ligand filters
         if ligand_filters_list != []:
