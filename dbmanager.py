@@ -812,8 +812,7 @@ class DBManagerSQLite(DBManager):
                 interaction_filter_indices.append(i[0])
 
             #find pose ids for ligands with desired interactions
-            for idx in interaction_filter_indices:
-                sql_string += " AND Pose_ID IN ({interaction_str})".format(interaction_str = self._write_interaction_filtering_str(interaction_filter_indices))            
+            sql_string += " AND Pose_ID IN ({interaction_str})".format(interaction_str = self._write_interaction_filtering_str(interaction_filter_indices))            
 
         #add ligand filters
         if ligand_filters_list != []:
