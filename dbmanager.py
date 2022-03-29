@@ -514,6 +514,7 @@ class DBManagerSQLite(DBManager):
         cur = self.conn.cursor()
         #drop old view if there is one
         cur.execute("DROP VIEW IF EXISTS {name}".format(name = name))
+        print("CREATE VIEW {name} AS {query}".format(name = name, query = query))
         cur.execute("CREATE VIEW {name} AS {query}".format(name = name, query = query))
         cur.close()
 
@@ -579,7 +580,7 @@ class DBManagerSQLite(DBManager):
             e: Description
         """
         ligand_table = """CREATE TABLE Ligands (
-            LigName             VARCHAR NOT NULL PRIMARY KEY,
+            LigName             VARCHAR NOT NULL,
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
