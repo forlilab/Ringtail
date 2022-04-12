@@ -429,17 +429,6 @@ class DBManager():
         """
         raise NotImplementedError
 
-    def format_rows_from_dict(self, ligand_dict):
-        """takes file dictionary from the file parser, formats into rows for the database insertion
-        
-        Args:
-            ligand_dict (dict): Dictionary containing data from the fileparser
-        
-        Returns:
-            Tuple: Tuple of lists ([result_row_1, result_row_2,...], ligand_row, [interaction_tuple_1, interaction_tuple_2, ...])
-        """
-        raise NotImplementedError
-
     def _create_connection(self):
         """Creates database connection to self.db_file
         
