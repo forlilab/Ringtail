@@ -103,12 +103,9 @@ class DBManager():
         """this function is expected to return an ascii plot representation of the results
         
         Returns:
-            TYPE: Description
+            DB cursors: DB cursors as [<all data cursor>, <passing data cursor>]
         """
-        # TODO this function could be actually implemented here, if the
-        # plotting mechanism will be common to all the child classes, too
-        # for example, this function could contain the actuall call to the ASCII library,
-        # and call a _fetch_plot_data() function that will be implemented in each child class
+
         return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
 
     def prune(self):
@@ -735,10 +732,10 @@ class DBManagerSQLite(DBManager):
     
     """
     def __init__(self, opts = {}):
-        """Summary
+        """Initialize superclass and subclass-specific instance variables
         
         Args:
-            opts (dict, optional): Description
+            opts (dict, optional): Dictionary of database options
         """
         super().__init__(opts)
 
@@ -867,15 +864,6 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: Cursor with all fields and rows in passing results view
         """
         return self._run_query("SELECT * FROM {passing_view}".format(passing_view = self.passing_results_view_name))
-
-    """def get_top_energies_leffs(self):
-        Summary
-        
-        Returns:
-            TYPE: Description
-        
-        self._fetch_best_energies_leff()
-        return self.energies, self.leffs, self.plot_data"""
 
     def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
         """Generate and execute database queries from given filters.
