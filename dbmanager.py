@@ -10,26 +10,30 @@ class DBManager():
     
     Attributes:
         db_file (string): Name of file containing database
+        field_to_column_name (dictionary): Dictionary for converting command-line field options into DB column names
         interaction_data_kws (list): List of keywords for different pieces of interaction data
+        interaction_filter_types (set): Set for types of interaction filters
         interaction_tolerance_cutoff (float): RMSD cutoff for interactions to be added to the top pose for stored clusters
+        interactions_initialized_flag (boolean): Flag indicating if interaction tables have been created
         ligand_data_keys (list): List of keywords used to look up ligand data in ligand dictionaries from parser
-        ligand_interaction_keys (TYPE): Description
-        log_distinct_ligands (TYPE): Description
-        num_clusters (TYPE): Description
-        open_cursors (list): Description
-        opts (TYPE): Description
-        order_results (TYPE): Description
-        overwrite_flag (TYPE): Description
-        passing_results_view_name (TYPE): Description
-        stateVar_keys (TYPE): Description
-        store_all_poses_flag (TYPE): Description
-        write_db_flag (TYPE): Description
+        log_distinct_ligands (boolean): Flag dictating, if true, only top pose for given ligand will be stored
+        next_unique_interaction_idx (int): Index for the next unique interaction to be added to interaction_index table
+        num_clusters (int): Number of ligand clusters that top pose should be stored for.
+        open_cursors (list): Storage for any DB cursors which are opened and not closed by the function that opened them. Will be closed by close_connection method.
+        opts (dict): Dictionary of database options
+        order_results (string): string indicating result field that passing results should be ordered by in log.
+        overwrite_flag (boolean): Flag indictating that DBMan should drop all existing tables and add nes data
+        passing_results_view_name (string): Name for the view of passing results to be created after filtering
+        stateVar_keys (list): List of strings for the different state variables
+        store_all_poses_flag (boolean): Flag indicating that all poses should be stored, not just the top pose from top N clusters where N=self.num_clusters
+        unique_interactions (dict): Dictionary for storing unique interactions to be written in interaction_index table
+        write_db_flag (boolean): Flag indicating that DBMan will be writing new data to DB
     """
     def __init__(self, opts={}):
-        """Summary
+        """Initialize instance variables common to all DBMan subclasses
         
         Args:
-            opts (dict, optional): Description
+            opts (dict): Dictionary of database options
         """
         self.db_file = opts['sqlFile']
         self.opts = opts
@@ -66,84 +70,6 @@ class DBManager():
         "pose_translations",
         "pose_quarternions"]
 
-        #keep track of any open cursors
-        self.open_cursors = []
-
-    def get_results(self):
-        """generic function for retrieving results
-        
-        Raises:
-            NotImplemented: Description
-        """
-        raise NotImplemented
-
-
-    def get_top_scores(self):
-        """this function is expected to return [data in which format?] 
-        
-        Raises:
-            NotImplemented: Description
-        """
-        raise NotImplemented
-
-    def get_plot_data(self):
-        """this function is expected to return an ascii plot representation of the results
-        
-        Returns:
-            TYPE: Description
-        """
-        # TODO this function could be actually implemented here, if the
-        # plotting mechanism will be common to all the child classes, too
-        # for example, this function could contain the actuall call to the ASCII library,
-        # and call a _fetch_plot_data() function that will be implemented in each child class
-        return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
-
-    def prune(self):
-        """do we want a method for deleting rows not satisfying a given requirement? 
-        
-        Raises:
-            NotImplemented: Description
-        """
-        raise NotImplemented
-
-    def clone(self):
-        """this function would be useful for creating a copy of the db that can be then pruned?
-        (i.e., a lightweight version of the DB containing only the distilled information)
-        
-        Raises:
-            NotImplemented: Description
-        """
-        raise NotImplemented
-
-    def close_connection(self):
-        """close connection to database
-        """
-        #close any open cursors
-        for cur in self.open_cursors:
-            cur.close()
-        #close db itself
-        self._close_connection()
-
-class DBManagerSQLite(DBManager):
-    """DOCUMENTATION GOES HERE 
-    
-    Attributes:
-        conn (TYPE): Description
-        energy_filter_sqlite_call_dict (TYPE): Description
-        field_to_column_name (TYPE): Description
-        interaction_filter_types (set): Description
-        interactions_initialized_flag (bool): Description
-        next_unique_interaction_idx (int): Description
-        unique_interactions (dict): Description
-    """
-    def __init__(self, opts = {}):
-        """Summary
-        
-        Args:
-            opts (dict, optional): Description
-        """
-        super().__init__(opts)
-
         self.unique_interactions = {}
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
@@ -162,6 +88,659 @@ class DBManagerSQLite(DBManager):
                         "rank":"pose_rank",
                         "run":"run_number",
                         "hb":"num_hb"}
+        self.interaction_filter_types = {"V","H","R"}
+
+        #keep track of any open cursors
+        self.open_cursors = []
+
+        self._initialize_db()
+
+    ################################
+    ### Common DBManager methods ###
+    ################################
+
+    def get_plot_data(self):
+        """this function is expected to return an ascii plot representation of the results
+        
+        Returns:
+            TYPE: Description
+        """
+        # TODO this function could be actually implemented here, if the
+        # plotting mechanism will be common to all the child classes, too
+        # for example, this function could contain the actuall call to the ASCII library,
+        # and call a _fetch_plot_data() function that will be implemented in each child class
+        return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
+
+    def prune(self):
+        """Deletes rows from results, ligands, and interactions if they do not pass filtering criteria
+        """
+        self._delete_from_results()
+        self._delete_from_ligands()
+        self._delete_from_interactions()
+
+    def close_connection(self):
+        """close connection to database
+        """
+        #close any open cursors
+        self._close_open_cursors()
+        #close db itself
+        self._close_connection()
+
+    def _find_cluster_top_pose_runs(self, ligand_dict):
+        """returns list of the run numbers for the top run in the top self.num_clusters clusters
+        
+        Args:
+            ligand_dict (Dictionary): Dictionary of ligand data from parser
+        
+        Returns:
+            List: List of run numbers to save, which are the top runs from the first self.num_clusters clusters
+        """
+        try:
+            cluster_top_pose_runs = ligand_dict["cluster_top_poses"][:self.num_clusters] #will only select top n clusters. Default 3
+        except IndexError:
+            cluster_top_pose_runs = ligand_dict["cluster_top_poses"] #catch indexerror if not enough clusters for given ligand
+
+        return cluster_top_pose_runs
+
+    def _generate_results_row(self, ligand_dict, pose_rank, run_number):
+        """generate list of lists of ligand values to be inserted into sqlite database
+        
+        Args:
+            ligand_dict (Dictionary): Dictionary of ligand data from parser
+            pose_rank (int): Rank of pose to generate row for among all runs for the given ligand
+            run_number (int): Run number of pose to generate row for among all runs for the given ligand
+        
+        Returns:
+            List: List of pose data to be inserted into Results table. In same order as expected in _insert_results:
+            LigName,
+            ligand_smile,
+            pose_rank,
+            run_number,
+            cluster_rmsd,
+            reference_rmsd,
+            energies_binding,
+            leff,
+            deltas,
+            energies_inter,
+            energies_vdw,
+            energies_electro,
+            energies_flexLig,
+            energies_flexLR,
+            energies_intra,
+            energies_torsional,
+            unbound_energy,
+            nr_interactions,
+            num_hb,
+            about_x,
+            about_y,
+            about_z,
+            trans_x,
+            trans_y,
+            trans_z,
+            axisangle_x,
+            axisangle_y,
+            axisangle_z,
+            axisangle_w,
+            dihedrals,
+            ligand_coordinates,
+            flexible_residues,
+            flexible_res_coordinates
+        """
+
+        ######get pose-specific data
+        
+        #check if run is best for a cluster. We are only saving the top pose for each cluster
+        ligand_data_list = [ligand_dict["ligname"], ligand_dict["ligand_smile_string"], pose_rank+1, run_number]
+        #get energy data
+        for key in self.ligand_data_keys:
+            ligand_data_list.append(ligand_dict[key][pose_rank])
+
+        #add interaction count
+        ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0]) 
+        #count number H bonds, add to ligand data list
+        ligand_data_list.append(ligand_dict["interactions"][pose_rank]["type"].count("H"))
+
+        #add statevars
+        for key in self.stateVar_keys:
+            stateVar_data = ligand_dict[key][pose_rank]
+            for dim in stateVar_data:
+                ligand_data_list.append(dim)
+        pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
+        dihedral_string = ""
+        for dihedral in pose_dihedrals:
+            dihedral_string = dihedral_string + str(dihedral) + ", "
+        ligand_data_list.append(dihedral_string)
+
+        #add coordinates
+        ligand_data_list.append(str(ligand_dict["pose_coordinates"][pose_rank]))
+        ligand_data_list.append(str(ligand_dict["flexible_residues"]))
+        ligand_data_list.append(str(ligand_dict["flexible_res_coordinates"][pose_rank]))
+
+        return ligand_data_list
+
+    def _generate_ligand_row(self, ligand_dict):
+        """writes row to be inserted into ligand table
+        
+        Args:
+            ligand_dict (Dictionary): Dictionary of ligand data from parser
+        
+        Returns:
+            List: List of data to be written as row in ligand table. Format:
+            [ligand_name, ligand_smile, ligand_index_map, ligand_h_parents, input_pdbqt, best_binding, best_run]
+        """
+        ligand_name = ligand_dict["ligname"]
+        ligand_smile = ligand_dict["ligand_smile_string"]
+        ligand_index_map = str(ligand_dict["ligand_index_map"])
+        ligand_h_parents = str(ligand_dict["ligand_h_parents"])
+        input_pdbqt = "\n".join(ligand_dict["ligand_input_pdbqt"])
+        best_binding = ligand_dict["scores"][0]
+        best_run = ligand_dict["sorted_runs"][0]
+
+        return [ligand_name, ligand_smile, ligand_index_map, ligand_h_parents, input_pdbqt, best_binding, best_run]
+
+    def _generate_interaction_tuples(self, interaction_dictionaries):
+        """takes dictionary of file results, formats list of tuples for interactions
+        
+        Args:
+            interaction_dictionaries (List): List of pose interaction dictionaries from parser
+        
+        Returns:
+            List: List of tuples of interaction data
+        """
+        interactions = set()
+        for pose_interactions in interaction_dictionaries:
+            count = pose_interactions["count"][0]
+            for i in range(int(count)):
+                interactions.add(tuple(pose_interactions[kw][i] for kw in self.interaction_data_kws))
+
+        return list(interactions)
+
+    def _add_unique_interactions(self, interactions_list):
+        """takes list of interaction tuple lists. Examines self.unique_interactions, add interactions if not already inserted.
+        
+        self.unique_interactions {(interaction tuple): unique_interaction_idx}
+        
+        Args:
+            interactions_list (List): List of interaction tuples for insertion into database
+        """
+
+        for pose in interactions_list:
+            for interaction_tuple in pose:
+                if interaction_tuple not in self.unique_interactions:
+                    self.unique_interactions[interaction_tuple] = self.next_unique_interaction_idx
+                    if self.interactions_initialized_flag:
+                        self._insert_one_interaction(interaction_tuple)
+                        self._make_new_interaction_column(self.next_unique_interaction_idx)
+                    self.next_unique_interaction_idx += 1
+
+    def _find_tolerated_interactions(self, ligand_dict):
+        """take ligand dict and finds which poses we should save the interactions for as tolerated interactions for the top pose of the cluster. These runs are within the <self.interaction_tolerance_cutoff> angstroms RMSD of the top pose for a given cluster. All data for the cluster's top pose is saved.
+        
+        Args:
+            ligand_dict (Dictionary): Dictionary of ligand data from parser
+        
+        Returns:
+            List: List of run numbers of tolerated runs
+        """
+        tolerated_runs = []
+        for i in range(len(ligand_dict["sorted_runs"])):
+            if float(ligand_dict["cluster_rmsds"][i]) <= self.interaction_tolerance_cutoff:
+                tolerated_runs.append(ligand_dict["sorted_runs"][i])
+        return tolerated_runs
+
+    def format_rows_from_dict(self, ligand_dict):
+        """takes file dictionary from the file parser, formats into rows for the database insertion
+        
+        Args:
+            ligand_dict (dict): Dictionary containing data from the fileparser
+        
+        Returns:
+            Tuple: Tuple of lists ([result_row_1, result_row_2,...], ligand_row, [interaction_tuple_1, interaction_tuple_2, ...])
+        """
+
+        #initialize row holders
+        result_rows = []
+        interaction_dictionaries = []
+        interaction_tuples = []
+
+        #find run numbers for poses we want to save
+        if not self.store_all_poses_flag:
+            poses_to_save = self._find_cluster_top_pose_runs(ligand_dict)
+        else:
+            poses_to_save = ligand_dict["sorted_runs"]
+
+        # find poses we want to save tolerated interactions for
+        if self.interaction_tolerance_cutoff != None:
+            tolerated_interaction_runs = self._find_tolerated_interactions(ligand_dict)
+        else:
+            tolerated_interaction_runs = []
+
+        #do the actual result formating
+        for i in range(len(ligand_dict["sorted_runs"])):
+            run_number = int(ligand_dict["sorted_runs"][i])
+            if run_number in poses_to_save: #save everything if this is a cluster top pose
+                if result_rows != []: #don't save interaction data from previous cluster for first cluster
+                    pose_interactions = self._generate_interaction_tuples(interaction_dictionaries) #will generate tuples across all dictionaries for last cluster
+                    interaction_tuples.append(pose_interactions)
+                    if self.interaction_tolerance_cutoff != None and result_rows != []: #only update previous entry if we added tolerated interactions
+                        result_rows[-1][17] = len(pose_interactions) + int(result_rows[-1][17]) #update number of interactions
+                        result_rows[-1][18] = sum(1 for interaction in pose_interactions if interaction[0] == "H") + result_rows[-1][18] #count and update number of hydrogen bonds
+                    interaction_dictionaries = [] #clear the list for the new cluster
+                result_rows.append(self._generate_results_row(ligand_dict, i, run_number))
+                interaction_dictionaries.append(ligand_dict["interactions"][i])
+            elif run_number in tolerated_interaction_runs:
+                interaction_dictionaries.append(ligand_dict["interactions"][i]) #adds to list started by best-scoring pose in cluster
+        
+        pose_interactions = self._generate_interaction_tuples(interaction_dictionaries) #will generate tuples across all dictionaries for last cluster
+        interaction_tuples.append(pose_interactions)
+        if self.interaction_tolerance_cutoff != None: #only update if we added interactions
+            result_rows[-1][17] = len(pose_interactions) + int(result_rows[-1][17]) #update number of interactions
+            result_rows[-1][18] = sum(1 for interaction in pose_interactions if interaction[0] == "H") + int(result_rows[-1][18]) #count and update number of hydrogen bonds
+
+        return (result_rows, self._generate_ligand_row(ligand_dict), interaction_tuples)
+
+    ##############################
+    ### Child-specific methods ###
+    ##############################
+
+    def insert_results(self, results_array):
+        """takes array of database rows to insert, adds data to results table
+        
+        Args:
+            results_array (numpy array): numpy array of arrays containing formatted result rows
+
+        """
+        raise NotImplemented
+
+    def insert_ligands(self, ligand_array):
+        """Takes array of ligand rows, inserts into Ligands table.
+        
+        Args:
+            ligand_array (numpy array): Numpy array of arrays containing formatted ligand rows
+        
+        """
+
+    def insert_interactions(self, interactions_list):
+        """generic function for inserting interactions from given interaction list into DB
+        
+        Args:
+            interactions_list (list): List of tuples for interactions in form ("type", "chain", "residue", "resid", "recname", "recid")
+        """
+        raise NotImplemented
+
+    def get_results(self):
+        """Gets all fields for filtered results
+        
+        Returns:
+            DB cursor: Cursor with all fields and rows in passing results view
+        """
+        raise NotImplemented
+
+    def clone(self):
+        """Creates a copy of the db
+        """
+        raise NotImplemented
+
+    def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
+        """Generate and execute database queries from given filters.
+        
+        Args:
+            results_filters_list (list): list of tuples with first element indicating column to filter and second element indicating passing value
+            ligand_filters_list (TYPE): list of tuples with first element indicating column to filter and second element indicating passing value
+            output_fields (list): List of fields (columns) to be included in log
+        
+        Returns:
+            DB Cursor: Cursor of passing results
+        """
+        raise NotImplemented
+
+    def get_number_passing_ligands(self):
+        """Returns count of the number of ligands that passed filtering criteria
+        
+        Returns:
+            Int: Number of passing ligands
+        """
+        raise NotImplemented
+
+    def fetch_passing_ligand_output_info(self):
+        """fetch information required by vsmanager for writing out molecules
+        
+        Returns:
+            DB cursor: contains LigName, ligand_smile, atom_index_map, hydrogen_parents
+        """
+        raise NotImplemented
+
+    def fetch_passing_pose_coordinates(self, ligname):
+        """fetch coordinates for poses passing filter for given ligand
+        
+        Args:
+            ligname (string): name of ligand to return coordinates for
+        
+        Returns:
+            DB cursor: contains ligand_coordinates, flexible_res_coordinates, flexibles_residues
+        """
+        raise NotImplemented
+
+    def fetch_nonpassing_pose_coordinates(self, ligname):
+        """fetch coordinates for poses of ligname which did not pass the filter
+        
+        Args:
+            ligname (string): name of ligand to fetch coordinates for
+        
+        Returns:
+            DB cursor: contains ligand_coordinates, flexible_res_coordinates, flexibles_residues
+        """
+        raise NotImplemented
+
+    def format_rows_from_dict(self, ligand_dict):
+        """takes file dictionary from the file parser, formats into rows for the database insertion
+        
+        Args:
+            ligand_dict (dict): Dictionary containing data from the fileparser
+        
+        Returns:
+            Tuple: Tuple of lists ([result_row_1, result_row_2,...], ligand_row, [interaction_tuple_1, interaction_tuple_2, ...])
+        """
+        raise NotImplemented
+
+    def _create_connection(self):
+        """Creates database connection to self.db_file
+        
+        Returns:
+            DB connection: Connection object to self.db_file
+        
+        """
+        raise NotImplemented
+
+    def _close_connection(self):
+        """Closes connection to database
+        """
+        raise NotImplemented
+
+    def _close_open_cursors(self):
+        """closes any cursors stored in self.open_cursors. Resets self.open_cursors to empty list
+        """
+        raise NotImplemented
+
+    def _initialize_db(self):
+        """Create connection to db. Then, check if db needs to be written. If so, (if self.overwrite_flag drop existing tables and ) initialize the tables
+        """
+        raise NotImplemented
+
+    def _drop_existing_tables(self):
+        """drop any existing tables. Will only be called if self.overwrite_flag is true
+        """
+        raise NotImplemented
+
+    def _run_query(self, query):
+        """Executes provided SQLite query. Returns cursor for results
+        
+        Args:
+            query (string): Formated SQLite query as string
+        
+        Returns:
+            DB cursor: Contains results of query
+        """
+        raise NotImplemented
+
+    def _create_view(self, name, query):
+        """takes name and selection query, creates view of query stored as name.
+        
+        Args:
+            name (string): Name for view which will be created
+            query (string): DB-formated query which will be used to create view
+        """
+        raise NotImplemented
+
+    def _create_results_table(self):
+        """Creates table for results. Columns are:
+            Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
+            LigName             VARCHAR NOT NULL,
+            ligand_smile        VARCHAR[],
+            pose_rank           INT[],
+            run_number          INT[],
+            energies_binding    FLOAT(4),          
+            leff                FLOAT(4),
+            deltas              FLOAT(4),
+            cluster_rmsd        FLOAT(4),
+            reference_rmsd      FLOAT(4),
+            energies_inter      FLOAT(4),
+            energies_vdw        FLOAT(4),
+            energies_electro    FLOAT(4),
+            energies_flexLig    FLOAT(4),
+            energies_flexLR     FLOAT(4),
+            energies_intra      FLOAT(4),
+            energies_torsional  FLOAT(4),
+            unbound_energy      FLOAT(4),
+            nr_interactions     INT[],          
+            num_hb              INT[],
+            about_x             FLOAT(4),          
+            about_y             FLOAT(4),
+            about_z             FLOAT(4),
+            trans_x             FLOAT(4),          
+            trans_y             FLOAT(4),
+            trans_z             FLOAT(4),
+            axisangle_x         FLOAT(4),          
+            axisangle_y         FLOAT(4),
+            axisangle_z         FLOAT(4),
+            axisangle_w         FLOAT(4),
+            dihedrals           VARCHAR[],          
+            ligand_coordinates         VARCHAR[],
+            flexible_residues   VARCHAR[],
+            flexible_res_coordinates   VARCHAR[]
+        """
+        raise NotImplemented
+
+    def _create_ligands_table(self):
+        """Create table for ligands. Columns are:
+            LigName             VARCHAR NOT NULL,
+            ligand_smile        VARCHAR[],
+            atom_index_map      VARCHAR[],
+            hydrogen_parents    VARCHAR[],
+            input_pdbqt         VARCHAR[],
+            best_binding        FLOAT(4),
+            best_run            INTEGER)
+
+        """
+        raise NotImplemented
+
+    def _create_interaction_index_table(self):
+        """create table of data for each unique interaction. Columns are:
+            interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            interaction_type    VARCHAR[],
+            rec_chain           VARCHAR[],
+            rec_resname         VARCHAR[],
+            rec_resid           VARCHAR[],
+            rec_atom            VARCHAR[],
+            rec_atomid          VARCHAR[]
+        
+        """
+        raise NotImplemented
+
+    def _create_interaction_bv_table(self):
+        """Create table of interaction bits for each pose. Columns are:
+            Pose_ID INTERGER PRIMARY KEY AUTOINCREMENT
+            Interaction_1
+            Interaction_2
+            ...
+            Interaction_n
+
+        """
+        raise NotImplemented
+
+    def _insert_unique_interactions(self, unique_interactions):
+        """Inserts interaction data for unique interactions into Interaction_index table
+        
+        Args:
+            unique_interactions (list): List of tuples of interactions to be inserted
+        """
+        raise NotImplemented
+
+    def _insert_one_interaction(self, interaction):
+        """Insert interaction data for a single new interaction into the interaction indices table
+        
+        Args:
+            interaction (tuple): Tuple of interaction data (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
+        
+        """
+        raise NotImplemented
+
+    def _make_new_interaction_column(self, column_number):
+        """Add column for new interaction to interaction bitvector table
+        
+        Args:
+            column_number (int): Index for new interaction
+        """
+        raise NotImplemented
+
+    def _fetch_all_plot_data(self):
+        """Fetches cursor for best energies and leff for all ligands
+        
+        Returns:
+            DB Cursor: Cursor containing energies_binding, leff for the first pose for each ligand
+        """
+        raise NotImplemented
+
+    def _generate_plot_all_results_query(self):
+        """Make DB-formatted query string to get energies_binding, leff of first pose for each ligand
+        
+        Returns:
+            String: DB-formatted query string
+        """
+        raise NotImplemented
+
+    def _fetch_passing_plot_data(self):
+        """Fetches cursor for best energies and leffs for ligands passing filtering
+        
+        Returns:
+            SQLite cursor: Cursor containing energies_binding, leff for the first pose for passing ligands
+        """
+        raise NotImplemented
+
+    def _generate_plot_passing_results_query(self):
+        """Make DB-formatted query string to get energies_binding, leff of first pose for passing ligands
+        
+        Returns:
+            String: DB-formatted query string
+        """
+        raise NotImplemented
+
+    def _generate_result_filtering_query(self, results_filters_list, ligand_filters_list, output_fields):
+        """takes lists of filters, writes sql filtering string
+        
+        Args:
+            results_filters_list (list): list of tuples where (filter column/key, filtering cutoff)
+            ligand_filters_list (list): list of filters on ligand information
+            output_fields (list): List of result column data to include in output
+        
+        Returns:
+            String: DB-formatted string for filtering query
+        
+        Raises:
+            KeyError: Raises KeyError if user requests result ordering by invalid or multiple options
+        """
+        raise NotImplemented
+
+    def _generate_interaction_index_filtering_query(self, interaction_list):
+        """takes list of interaction info for a given ligand, looks up corresponding interaction index
+        
+        Args:
+            interaction_list (List): List containing interaction info to look up in format [<interaction_type>, <rec_chain>, <rec_resname>, <rec_resid>, <rec_atom>]
+        
+        Returns:
+            String: DB-formated query on Interaction_indices table
+        """
+        raise NotImplemented
+
+    def _generate_interaction_filtering_query(self, interaction_index_list):
+        """takes list of interaction indices and searches for ligand ids which have those interactions
+        
+        Args:
+            interaction_index_list (list): List of interaction indices to search for
+        
+        Returns:
+            String: DB-formatted query
+        """
+        raise NotImplemented
+
+    def _generate_ligand_filtering_query(self, ligand_filters):
+        """write string to select from ligand table
+        
+        Args:
+            ligand_filters (list): List of filters on ligand table
+        
+        Returns:
+            String: DB-formatted query
+        """
+        raise NotImplemented
+
+    def _generate_interaction_bitvectors(self, interactions_list):
+        """takes string of interactions and all unique interactions and makes bitvector
+        
+        Args:
+            interactions_list (list): list of list of tuples. Inner lists contain interaction tuples for the saved poses for a single ligand
+        
+        Returns:
+            List: List of bitvectors for saved poses
+        """
+        raise NotImplemented
+
+    def _insert_interaction_bitvectors(self, bitvectors):
+        """Insert bitvectors of interaction data into database
+        
+        Args:
+            bitvectors (List): List of lists With inner list representing interaction bitvector for a pose
+        """
+        raise NotImplemented
+
+    def _generate_percentile_rank_window(self):
+        """makes window with percentile ranks for percentile filtering
+        
+        Returns:
+            String: DB-formatted string for creating percent ranks on energies_binding and leff
+        """
+        raise NotImplemented
+
+    def _fetch_results_column_names(self):
+        """Fetches list of string for column names in results table
+        
+        Returns:
+            List: List of strings of results table column names
+        """
+        raise NotImplemented
+
+    def _delete_from_results(self):
+        """Remove rows from results table if they did not pass filtering
+        """
+        raise NotImplemented
+
+    def _delete_from_ligands(self):
+        """Remove rows from ligands table if they did not pass filtering
+        """
+        raise NotImplemented
+
+    def _delete_from_interactions(self):
+        """Remove rows from interactions bitvector table if they did not pass filtering
+        """
+        raise NotImplemented
+
+#######################################################################################################
+
+class DBManagerSQLite(DBManager):
+    """SQLite-specific DBManager subclass
+    
+    Attributes:
+        conn (SQLite connection): Connection to database
+        energy_filter_sqlite_call_dict (dictionary): Dictionary for translating filter options 
+    
+    """
+    def __init__(self, opts = {}):
+        """Summary
+        
+        Args:
+            opts (dict, optional): Description
+        """
+        super().__init__(opts)
 
         self.energy_filter_sqlite_call_dict = {"eworst":"energies_binding < {value}",
                         "ebest":"energies_binding > {value}",
@@ -171,25 +750,15 @@ class DBManagerSQLite(DBManager):
                         "leffpercentile":"leff_percentile_rank < {value}"
                         }
 
-        self.interaction_filter_types = {"V","H","R"}
-
-        self._initialize_db()
-
     ##########################
     ##### Public methods #####
     ##########################
     def insert_results(self, results_array):
         """takes array of database rows to insert, adds data to results table
         
-        Inputs:
-            -conn: database connection
-            -ligand_array: numpy array of arrays
-        
         Args:
-            results_array (TYPE): Description
-        
-        Raises:
-            e: Description
+            results_array (numpy array): numpy array of arrays containing formatted result rows
+
         """
 
         #print("Inserting results...")
@@ -240,15 +809,12 @@ class DBManagerSQLite(DBManager):
             raise e
 
     def insert_ligands(self, ligand_array):
-        """Summary
+        """Takes array of ligand rows, inserts into Ligands table.
         
         Args:
-            ligand_array (TYPE): Description
+            ligand_array (numpy array): Numpy array of arrays containing formatted ligand rows
         
-        Raises:
-            e: Description
         """
-        #print("Inserting ligand data...")
         sql_insert = '''INSERT INTO Ligands (
         LigName,
         ligand_smile,
@@ -271,10 +837,10 @@ class DBManagerSQLite(DBManager):
             raise e
         
     def insert_interactions(self, interactions_list):
-        """Summary
+        """Takes list of interactions, inserts into database
         
         Args:
-            interactions_list (TYPE): Description
+            interactions_list (list): List of tuples for interactions in form ("type", "chain", "residue", "resid", "recname", "recid")
         """
         self._add_unique_interactions(interactions_list)
 
@@ -287,43 +853,43 @@ class DBManagerSQLite(DBManager):
         self._insert_interaction_bitvectors(self._generate_interaction_bitvectors(interactions_list))
 
     def clone(self):
-        """Summary
+        """Creates a copy of the db
         """
         bck = sqlite3.connect(self.db_file+".bk")
         with bck:
             self.conn.backup(bck, pages=1)
         bck.close()
 
-    def prune(self):
-        '''Deletes rows from all tables that are not in passing results view
-        '''
+    def get_results(self):
+        """Gets all fields for filtered results
+        
+        Returns:
+            SQLite cursor: Cursor with all fields and rows in passing results view
+        """
+        return self._run_query("SELECT * FROM {passing_view}".format(passing_view = self.passing_results_view_name))
 
-        self._delete_from_results()
-        self._delete_from_ligands()
-        self._delete_from_interactions()
-
-    def get_top_energies_leffs(self):
-        """Summary
+    """def get_top_energies_leffs(self):
+        Summary
         
         Returns:
             TYPE: Description
-        """
+        
         self._fetch_best_energies_leff()
-        return self.energies, self.leffs, self.plot_data
+        return self.energies, self.leffs, self.plot_data"""
 
     def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
-        """Summary
+        """Generate and execute database queries from given filters.
         
         Args:
-            results_filters_list (TYPE): Description
-            ligand_filters_list (TYPE): Description
-            output_fields (TYPE): Description
+            results_filters_list (list): list of tuples with first element indicating column to filter and second element indicating passing value
+            ligand_filters_list (TYPE): list of tuples with first element indicating column to filter and second element indicating passing value
+            output_fields (list): List of fields (columns) to be included in log
         
         Returns:
-            TYPE: Description
+            SQLite Cursor: Cursor of passing results
         """
         #create view of passing results
-        filter_results_str = self._generate_result_filtering_str_sqlite(results_filters_list, ligand_filters_list, output_fields)
+        filter_results_str = self._generate_result_filtering_query(results_filters_list, ligand_filters_list, output_fields)
         print(filter_results_str)
         self._create_view(self.passing_results_view_name, filter_results_str.replace("SELECT ", "SELECT Pose_ID, ", 1)) # make sure we keep Pose_ID in view
         #perform filtering
@@ -332,20 +898,20 @@ class DBManagerSQLite(DBManager):
         return filtered_results
 
     def get_number_passing_ligands(self):
-        """Summary
+        """Returns count of the number of ligands that passed filtering criteria
         
         Returns:
-            TYPE: Description
+            Int: Number of passing ligands
         """
         cur = self.conn.cursor()
         cur.execute("SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(results_view = self.passing_results_view_name))
-        return cur.fetchone()
+        return int(cur.fetchone()[0])
 
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
         
         Returns:
-            TYPE: Description
+            SQLite cursor: contains LigName, ligand_smile, atom_index_map, hydrogen_parents
         """
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(results_view = self.passing_results_view_name)
         return self._run_query(query)
@@ -354,10 +920,10 @@ class DBManagerSQLite(DBManager):
         """fetch coordinates for poses passing filter for given ligand
         
         Args:
-            ligname (TYPE): Description
+            ligname (string): name of ligand to fetch coordinates for
         
         Returns:
-            TYPE: Description
+            SQLite cursor: contains ligand_coordinates, flexible_res_coordinates, flexibles_residues
         """
         query = "SELECT ligand_coordinates, flexible_res_coordinates, flexibles_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '%{ligand}%')".format(results_view = self.passing_results_view_name, ligand = ligname)
         return self._run_query(query)
@@ -366,77 +932,24 @@ class DBManagerSQLite(DBManager):
         """fetch coordinates for poses of ligname which did not pass the filter
         
         Args:
-            ligname (TYPE): Description
+            ligname (string): name of ligand to fetch coordinates for
         
         Returns:
-            TYPE: Description
+            SQLite cursor: contains ligand_coordinates, flexible_res_coordinates, flexibles_residues
         """
-        query = "SELECT coordinates FROM Results WHERE LigName LIKE '%{ligand}%' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view}".format(ligand = ligname, results_view = self.passing_results_view_name)
+        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexibles_residues FROM Results WHERE LigName LIKE '%{ligand}%' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view}".format(ligand = ligname, results_view = self.passing_results_view_name)
         return self._run_query(query)
-
-    def format_rows_from_dict(self, ligand_dict):
-        """takes file dictionary from the mpreader, formats into rows for the database insertion
-        
-        Args:
-            ligand_dict (TYPE): Description
-        
-        Returns:
-            TYPE: Description
-        """
-
-        #initialize row holders
-        result_rows = []
-        interaction_dictionaries = []
-        interaction_tuples = []
-
-        #find run numbers for poses we want to save
-        if not self.store_all_poses_flag:
-            poses_to_save = self._find_cluster_top_pose_runs(ligand_dict)
-        else:
-            poses_to_save = ligand_dict["sorted_runs"]
-
-        # find poses we want to save tolerated interactions for
-        if self.interaction_tolerance_cutoff != None:
-            tolerated_interaction_runs = self._find_tolerated_interactions(ligand_dict)
-        else:
-            tolerated_interaction_runs = []
-
-        #do the actual result formating
-        for i in range(len(ligand_dict["sorted_runs"])):
-            run_number = int(ligand_dict["sorted_runs"][i])
-            if run_number in poses_to_save: #save everything if this is a cluster top pose
-                if result_rows != []: #don't save interaction data from previous cluster for first cluster
-                    pose_interactions = self._generate_interaction_tuples(interaction_dictionaries) #will generate tuples across all dictionaries for last cluster
-                    interaction_tuples.append(pose_interactions)
-                    if self.interaction_tolerance_cutoff != None and result_rows != []: #only update previous entry if we added tolerated interactions
-                        result_rows[-1][17] = len(pose_interactions) + int(result_rows[-1][17]) #update number of interactions
-                        result_rows[-1][18] = sum(1 for interaction in pose_interactions if interaction[0] == "H") + result_rows[-1][18] #count and update number of hydrogen bonds
-                    interaction_dictionaries = [] #clear the list for the new cluster
-                result_rows.append(self._generate_results_row(ligand_dict, i, run_number))
-                interaction_dictionaries.append(ligand_dict["interactions"][i])
-            elif run_number in tolerated_interaction_runs:
-                interaction_dictionaries.append(ligand_dict["interactions"][i]) #adds to list started by best-scoring pose in cluster
-        
-        pose_interactions = self._generate_interaction_tuples(interaction_dictionaries) #will generate tuples across all dictionaries for last cluster
-        interaction_tuples.append(pose_interactions)
-        if self.interaction_tolerance_cutoff != None: #only update if we added interactions
-            result_rows[-1][17] = len(pose_interactions) + int(result_rows[-1][17]) #update number of interactions
-            result_rows[-1][18] = sum(1 for interaction in pose_interactions if interaction[0] == "H") + int(result_rows[-1][18]) #count and update number of hydrogen bonds
-
-        return (result_rows, self._generate_ligand_row(ligand_dict), interaction_tuples)
 
     ###########################
     ##### Private methods #####
     ###########################
 
     def _create_connection(self):
-        """Summary
+        """Creates database connection to self.db_file
         
         Returns:
-            TYPE: Description
+            SQLite connection: Connection object to self.db_file
         
-        Raises:
-            e: Description
         """
         con = None
         try:
@@ -446,21 +959,26 @@ class DBManagerSQLite(DBManager):
             cursor.execute('PRAGMA journal_mode = MEMORY')
             cursor.close() 
         except Exception as e:
-            print(e)
+            print("Error while creating database connection")
             raise e
         return con
 
     def _close_connection(self):
-        """Summary
+        """Closes connection to database
         """
         print("Closing database")
         self.conn.close()
 
+    def _close_open_cursors(self):
+        """closes any cursors stored in self.open_cursors. Resets self.open_cursors to empty list
+        """
+        for cur in self.open_cursors:
+            cur.close()
+
+        self.open_cursors = []
+
     def _initialize_db(self):
-        """check if db needs to be written. If so, initialize the tables
-        
-        Returns:
-            TYPE: Description
+        """Create connection to db. Then, check if db needs to be written. If so, (if self.overwrite_flag drop existing tables and ) initialize the tables
         """
         self.conn = self._create_connection()
 
@@ -491,13 +1009,13 @@ class DBManagerSQLite(DBManager):
         cur.close()
 
     def _run_query(self, query):
-        """Summary
+        """Executes provided SQLite query. Returns cursor for results. Since cursor remains open, added to list of open cursors
         
         Args:
-            query (TYPE): Description
+            query (string): Formated SQLite query as string
         
         Returns:
-            TYPE: Description
+            SQLite cursor: Contains results of query
         """
         cur = self.conn.cursor()
         cur.execute(query)
@@ -505,11 +1023,11 @@ class DBManagerSQLite(DBManager):
         return cur
 
     def _create_view(self, name, query):
-        """takes name and selection query, creates view of query.
+        """takes name and selection query, creates view of query stored as name.
         
         Args:
-            name (TYPE): Description
-            query (TYPE): Description
+            name (string): Name for view which will be created
+            query (string): SQLite-formated query which will be used to create view
         """
         cur = self.conn.cursor()
         #drop old view if there is one
@@ -519,10 +1037,41 @@ class DBManagerSQLite(DBManager):
         cur.close()
 
     def _create_results_table(self):
-        """Summary
-        
-        Raises:
-            e: Description
+        """Creates table for results. Columns are:
+            Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
+            LigName             VARCHAR NOT NULL,
+            ligand_smile        VARCHAR[],
+            pose_rank           INT[],
+            run_number          INT[],
+            energies_binding    FLOAT(4),          
+            leff                FLOAT(4),
+            deltas              FLOAT(4),
+            cluster_rmsd        FLOAT(4),
+            reference_rmsd      FLOAT(4),
+            energies_inter      FLOAT(4),
+            energies_vdw        FLOAT(4),
+            energies_electro    FLOAT(4),
+            energies_flexLig    FLOAT(4),
+            energies_flexLR     FLOAT(4),
+            energies_intra      FLOAT(4),
+            energies_torsional  FLOAT(4),
+            unbound_energy      FLOAT(4),
+            nr_interactions     INT[],          
+            num_hb              INT[],
+            about_x             FLOAT(4),          
+            about_y             FLOAT(4),
+            about_z             FLOAT(4),
+            trans_x             FLOAT(4),          
+            trans_y             FLOAT(4),
+            trans_z             FLOAT(4),
+            axisangle_x         FLOAT(4),          
+            axisangle_y         FLOAT(4),
+            axisangle_z         FLOAT(4),
+            axisangle_w         FLOAT(4),
+            dihedrals           VARCHAR[],          
+            ligand_coordinates         VARCHAR[],
+            flexible_residues   VARCHAR[],
+            flexible_res_coordinates   VARCHAR[]
         """
         sql_results_table = """CREATE TABLE Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -574,10 +1123,15 @@ class DBManagerSQLite(DBManager):
             raise e
 
     def _create_ligands_table(self):
-        """Summary
-        
-        Raises:
-            e: Description
+        """Create table for ligands. Columns are:
+            LigName             VARCHAR NOT NULL,
+            ligand_smile        VARCHAR[],
+            atom_index_map      VARCHAR[],
+            hydrogen_parents    VARCHAR[],
+            input_pdbqt         VARCHAR[],
+            best_binding        FLOAT(4),
+            best_run            INTEGER)
+
         """
         ligand_table = """CREATE TABLE Ligands (
             LigName             VARCHAR NOT NULL,
@@ -593,14 +1147,19 @@ class DBManagerSQLite(DBManager):
             cur.execute(ligand_table)
             cur.close()
         except Exception as e:
-            print(e)
+            print("Error while creating ligands table. If database already exists, use --overwrite to drop existing tables")
             raise e 
 
     def _create_interaction_index_table(self):
-        """create table of data about each unique interaction
+        """create table of data for each unique interaction. Columns are:
+            interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            interaction_type    VARCHAR[],
+            rec_chain           VARCHAR[],
+            rec_resname         VARCHAR[],
+            rec_resid           VARCHAR[],
+            rec_atom            VARCHAR[],
+            rec_atomid          VARCHAR[]
         
-        Raises:
-            e: Description
         """
         interaction_index_table = """CREATE TABLE Interaction_indices (
             interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -616,14 +1175,17 @@ class DBManagerSQLite(DBManager):
             cur.execute(interaction_index_table)
             cur.close()
         except Exception as e:
-            print(e)
+            print("Error while creating interaction index table. If database already exists, use --overwrite to drop existing tables")
             raise e
 
     def _create_interaction_bv_table(self):
-        """Summary
-        
-        Raises:
-            e: Description
+        """Create table of interaction bits for each pose. Columns are:
+            Pose_ID INTERGER PRIMARY KEY AUTOINCREMENT
+            Interaction_1
+            Interaction_2
+            ...
+            Interaction_n
+
         """
         interact_columns_str = " INTEGER,\n".join(["Interaction_"+ str(i+1) for i in range(len(self.unique_interactions))]) + " INTEGER"
 
@@ -636,19 +1198,15 @@ class DBManagerSQLite(DBManager):
             cur.execute(bv_table)
             cur.close()
         except Exception as e:
-            print(e)
+            print("Error while creating interaction bitvector table. If database already exists, use --overwrite to drop existing tables")
             raise e    
 
     def _insert_unique_interactions(self, unique_interactions):
-        """Summary
+        """Inserts interaction data for unique interactions into Interaction_index table
         
         Args:
-            unique_interactions (TYPE): Description
-        
-        Raises:
-            e: Description
+            unique_interactions (list): List of tuples of interactions to be inserted
         """
-        #rint("Inserting interactions...")
         sql_insert = '''INSERT INTO Interaction_indices (
         interaction_type,
         rec_chain,
@@ -665,19 +1223,16 @@ class DBManagerSQLite(DBManager):
             cur.close()
         
         except Exception as e:
-            print(e)
+            print("Error while inserting unique interactions into interaction index table")
             raise e
 
     def _insert_one_interaction(self, interaction):
-        """Summary
+        """Insert interaction data for a single new interaction into the interaction indices table
         
         Args:
-            interaction (TYPE): Description
+            interaction (tuple): Tuple of interaction data (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
         
-        Raises:
-            e: Description
         """
-        #print("Inserting interactions...")
         sql_insert = '''INSERT INTO Interaction_indices (
         interaction_type,
         rec_chain,
@@ -694,17 +1249,14 @@ class DBManagerSQLite(DBManager):
             cur.close()
     
         except Exception as e:
-            print(e)
+            print("Error inserting interaction {interact} into interaction index table".format(interact = str(interaction)))
             raise e
 
     def _make_new_interaction_column(self, column_number):
-        """Summary
+        """Add column for new interaction to interaction bitvector table
         
         Args:
-            column_number (TYPE): Description
-        
-        Raises:
-            e: Description
+            column_number (int): Index for new interaction
         """
         add_column_str = '''ALTER TABLE Interaction_bitvectors ADD COLUMN Interaction_{n_inter}'''.format(n_inter = str(column_number))
         try:
@@ -714,54 +1266,54 @@ class DBManagerSQLite(DBManager):
             cur.close()
             
         except Exception as e:
-            print(e)
+            print("Error adding column for Interaction_{num} to interaction bitvector table".format(num=str(column_number)))
             raise e
 
     def _fetch_all_plot_data(self):
-        """Summary
+        """Fetches cursor for best energies and leff for all ligands
         
         Returns:
-            TYPE: Description
+            SQLite Cursor: Cursor containing energies_binding, leff for the first pose for each ligand
         """
         return self._run_query(self._generate_plot_all_results_query())
 
     def _generate_plot_all_results_query(self):
-        """Summary
+        """Make SQLite-formatted query string to get energies_binding, leff of first pose of all ligands
         
         Returns:
-            TYPE: Description
+            String: SQLite-formatted query string
         """
         return "SELECT energies_binding, leff FROM Results GROUP BY LigName"
 
     def _fetch_passing_plot_data(self):
-        """Summary
+        """Fetches cursor for best energies and leffs for ligands passing filtering
         
         Returns:
-            TYPE: Description
+            SQLite cursor: Cursor containing energies_binding, leff for the first pose for passing ligands
         """
         return self._run_query(self._generate_plot_passing_results_query())
 
     def _generate_plot_passing_results_query(self):
-        """Summary
+        """Make SQLite-formatted query string to get energies_binding, leff of first pose for passing ligands
         
         Returns:
-            TYPE: Description
+            String: SQLite-formatted query string
         """
         return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(results_view = self.passing_results_view_name)
 
-    def _generate_result_filtering_str_sqlite(self, results_filters_list, ligand_filters_list, output_fields):
-        """takes list of filters, writes sql filtering string
+    def _generate_result_filtering_query(self, results_filters_list, ligand_filters_list, output_fields):
+        """takes lists of filters, writes sql filtering string
         
         Args:
-            results_filters_list (TYPE): Description
-            ligand_filters_list (TYPE): Description
-            output_fields (TYPE): Description
+            results_filters_list (list): list of tuples where (filter column/key, filtering cutoff)
+            ligand_filters_list (list): list of filters on ligand information
+            output_fields (list): List of result column data to include in output
         
         Returns:
-            TYPE: Description
+            String: SQLite-formatted string for filtering query
         
         Raises:
-            KeyError: Description
+            KeyError: Raises KeyError if user requests result ordering by invalid or multiple options
         """
 
         #parse requested output fields and convert to column names in database
@@ -807,17 +1359,17 @@ class DBManagerSQLite(DBManager):
         #for each interaction filter, get the index from the interactions_indices table
         for interaction in interaction_filters:
             interaction_filter_indices = []
-            interact_index_str = self._write_interaction_index_filtering_str(interaction)
+            interact_index_str = self._generate_interaction_index_filtering_query(interaction)
             interaction_indices = self._run_query(interact_index_str)
             for i in interaction_indices:
                 interaction_filter_indices.append(i[0])
 
             #find pose ids for ligands with desired interactions
-            sql_string += " AND Pose_ID IN ({interaction_str})".format(interaction_str = self._write_interaction_filtering_str(interaction_filter_indices))            
+            sql_string += " AND Pose_ID IN ({interaction_str})".format(interaction_str = self._generate_interaction_filtering_query(interaction_filter_indices))            
 
         #add ligand filters
         if ligand_filters_list != []:
-            sql_string += " AND LigName IN ({ligand_str})".format(ligand_str = self._write_ligand_filtering_sql(ligand_filters_list))
+            sql_string += " AND LigName IN ({ligand_str})".format(ligand_str = self._generate_ligand_filtering_query(ligand_filters_list))
 
        #adding if we only want to keep one pose per ligand (will keep first entry)
         if self.log_distinct_ligands:
@@ -833,14 +1385,14 @@ class DBManagerSQLite(DBManager):
 
         return sql_string
 
-    def _write_interaction_index_filtering_str(self, interaction_list):
+    def _generate_interaction_index_filtering_query(self, interaction_list):
         """takes list of interaction info for a given ligand, looks up corresponding interaction index
         
         Args:
-            interaction_list (TYPE): Description
+            interaction_list (List): List containing interaction info to look up in format [<interaction_type>, <rec_chain>, <rec_resname>, <rec_resid>, <rec_atom>]
         
         Returns:
-            TYPE: Description
+            String: SQLite-formated query on Interaction_indices table
         """
         interaction_info = ["interaction_type", "rec_chain", "rec_resname", "rec_resid", "rec_atom"]
         len_interaction_info = len(interaction_info)
@@ -850,26 +1402,26 @@ class DBManagerSQLite(DBManager):
 
         return sql_string
 
-    def _write_interaction_filtering_str(self, interaction_index_list):
+    def _generate_interaction_filtering_query(self, interaction_index_list):
         """takes list of interaction indices and searches for ligand ids which have those interactions
         
         Args:
-            interaction_index_list (TYPE): Description
+            interaction_index_list (list): List of interaction indices to search for
         
         Returns:
-            TYPE: Description
+            String: SQLite-formatted query
         """
 
         return """SELECT Pose_id FROM Interaction_bitvectors WHERE """ + " OR ".join(["Interaction_{index_n} = 1".format(index_n = index) for index in interaction_index_list])
 
-    def _write_ligand_filtering_sql(self, ligand_filters):
+    def _generate_ligand_filtering_query(self, ligand_filters):
         """write string to select from ligand table
         
         Args:
-            ligand_filters (TYPE): Description
+            ligand_filters (list): List of filters on ligand table
         
         Returns:
-            TYPE: Description
+            String: SQLite-formatted query
         """
 
         sql_ligand_string = "SELECT LigName FROM Ligands WHERE "
@@ -893,127 +1445,14 @@ class DBManagerSQLite(DBManager):
 
         return sql_ligand_string
 
-    def _find_cluster_top_pose_runs(self, ligand_dict):
-        """returns list of the run numbers for the top run in the top self.num_clusters clusters
-        
-        Args:
-            ligand_dict (TYPE): Description
-        
-        Returns:
-            TYPE: Description
-        """
-        try:
-            cluster_top_pose_runs = ligand_dict["cluster_top_poses"][:self.num_clusters] #will only select top n clusters. Default 3
-        except IndexError:
-            cluster_top_pose_runs = ligand_dict["cluster_top_poses"] #catch indexerror if not enough clusters for given ligand
-
-        return cluster_top_pose_runs
-
-    def _generate_results_row(self, ligand_dict, pose_rank, run_number):
-        """generate list of lists of ligand values to be inserted into sqlite database
-        
-        Args:
-            ligand_dict (TYPE): Description
-            pose_rank (TYPE): Description
-            run_number (TYPE): Description
-        
-        Returns:
-            TYPE: Description
-        """
-
-        ######get pose-specific data
-        
-        #check if run is best for a cluster. We are only saving the top pose for each cluster
-        ligand_data_list = [ligand_dict["ligname"], ligand_dict["ligand_smile_string"], pose_rank+1, run_number]
-        #get energy data
-        for key in self.ligand_data_keys:
-            ligand_data_list.append(ligand_dict[key][pose_rank])
-
-        #add interaction count
-        ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0]) 
-        #count number H bonds, add to ligand data list
-        ligand_data_list.append(ligand_dict["interactions"][pose_rank]["type"].count("H"))
-
-        #add statevars
-        for key in self.stateVar_keys:
-            stateVar_data = ligand_dict[key][pose_rank]
-            for dim in stateVar_data:
-                ligand_data_list.append(dim)
-        pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
-        dihedral_string = ""
-        for dihedral in pose_dihedrals:
-            dihedral_string = dihedral_string + str(dihedral) + ", "
-        ligand_data_list.append(dihedral_string)
-
-        #add coordinates
-        ligand_data_list.append(str(ligand_dict["pose_coordinates"][pose_rank]))
-        ligand_data_list.append(str(ligand_dict["flexible_residues"]))
-        ligand_data_list.append(str(ligand_dict["flexible_res_coordinates"][pose_rank]))
-
-        return ligand_data_list
-
-    def _generate_ligand_row(self, ligand_dict):
-        """writes row to be inserted into ligand table
-        
-        Args:
-            ligand_dict (TYPE): Description
-        
-        Returns:
-            TYPE: Description
-        """
-        ligand_name = ligand_dict["ligname"]
-        ligand_smile = ligand_dict["ligand_smile_string"]
-        ligand_index_map = str(ligand_dict["ligand_index_map"])
-        ligand_h_parents = str(ligand_dict["ligand_h_parents"])
-        input_pdbqt = "\n".join(ligand_dict["ligand_input_pdbqt"])
-        best_binding = ligand_dict["scores"][0]
-        best_run = ligand_dict["sorted_runs"][0]
-
-        return [ligand_name, ligand_smile, ligand_index_map, ligand_h_parents, input_pdbqt, best_binding, best_run]
-
-    def _generate_interaction_tuples(self, interaction_dictionaries):
-        """takes dictionary of file results, formats list of tuples for interactions
-        
-        Args:
-            interaction_dictionaries (TYPE): Description
-        
-        Returns:
-            TYPE: Description
-        """
-        interactions = set()
-        for pose_interactions in interaction_dictionaries:
-            count = pose_interactions["count"][0]
-            for i in range(int(count)):
-                interactions.add(tuple(pose_interactions[kw][i] for kw in self.interaction_data_kws))
-
-        return list(interactions)
-
-    def _add_unique_interactions(self, interactions_list):
-        """takes list of interaction tuple lists. Examines self.unique_interactions, add interactions if not already inserted.
-        
-        self.unique_interactions {(interaction tuple): unique_interaction_idx}
-        
-        Args:
-            interactions_list (TYPE): Description
-        """
-
-        for pose in interactions_list:
-            for interaction_tuple in pose:
-                if interaction_tuple not in self.unique_interactions:
-                    self.unique_interactions[interaction_tuple] = self.next_unique_interaction_idx
-                    if self.interactions_initialized_flag:
-                        self._insert_one_interaction(interaction_tuple)
-                        self._make_new_interaction_column(self.next_unique_interaction_idx)
-                    self.next_unique_interaction_idx += 1
-
     def _generate_interaction_bitvectors(self, interactions_list):
         """takes string of interactions and all unique interactions and makes bitvector
         
         Args:
-            interactions_list (TYPE): Description
+            interactions_list (list): list of list of tuples. Inner lists contain interaction tuples for the saved poses for a single ligand
         
         Returns:
-            TYPE: Description
+            List: List of bitvectors for saved poses
         """
         bitvectors_list = []
         for pose_interactions in interactions_list:
@@ -1027,15 +1466,12 @@ class DBManagerSQLite(DBManager):
         return bitvectors_list
 
     def _insert_interaction_bitvectors(self, bitvectors):
-        """Summary
+        """Insert bitvectors of interaction data into database
         
         Args:
-            bitvectors (TYPE): Description
-        
-        Raises:
-            e: Description
+            bitvectors (List): List of lists With inner list representing interaction bitvector for a pose
         """
-        #print("Inserting interaction bitvectors...")
+
         interaction_columns = range(len(self.unique_interactions))
         column_str = ""
         filler_str = ""
@@ -1054,43 +1490,28 @@ class DBManagerSQLite(DBManager):
             cur.close()
             
         except Exception as e:
-            print(e)
+            print("Error while inserting bitvectors")
             raise e
 
     def _generate_percentile_rank_window(self):
         """makes window with percentile ranks for percentile filtering
         
         Returns:
-            TYPE: Description
+            String: SQLite-formatted string for creating percent ranks on energies_binding and leff
         """
         column_names = ",".join(self._fetch_results_column_names())
         return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY energies_binding) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results".format(columns = column_names)
 
     def _fetch_results_column_names(self):
-        """Summary
+        """Fetches list of string for column names in results table
         
         Returns:
-            TYPE: Description
+            List: List of strings of results table column names
         """
         return [column_tuple[1] for column_tuple in self.conn.execute("PRAGMA table_info(Results)")]
 
-    def _find_tolerated_interactions(self, ligand_dict):
-        """take ligand dict and finds which poses we should save the interactions for as tolerated interactions
-        
-        Args:
-            ligand_dict (TYPE): Description
-        
-        Returns:
-            TYPE: Description
-        """
-        tolerated_runs = []
-        for i in range(len(ligand_dict["sorted_runs"])):
-            if float(ligand_dict["cluster_rmsds"][i]) <= self.interaction_tolerance_cutoff:
-                tolerated_runs.append(ligand_dict["sorted_runs"][i])
-        return tolerated_runs
-
     def _delete_from_results(self):
-        """Summary
+        """Remove rows from results table if they did not pass filtering
         """
         cur = self.conn.cursor()
         cur.execute("DELETE FROM Results WHERE Pose_ID NOT IN {view}".format(view=self.passing_results_view_name))
@@ -1098,7 +1519,7 @@ class DBManagerSQLite(DBManager):
         cur.close()
 
     def _delete_from_ligands(self):
-        """Summary
+        """Remove rows from ligands table if they did not pass filtering
         """
         cur = self.conn.cursor()
         cur.execute("DELETE FROM Ligands WHERE LigName NOT IN {view}".format(view=self.passing_results_view_name))
@@ -1106,7 +1527,7 @@ class DBManagerSQLite(DBManager):
         cur.close()
 
     def _delete_from_interactions(self):
-        """Summary
+        """Remove rows from interactions bitvector table if they did not pass filtering
         """
         cur.self.conn.cursor()
         cur.execute("DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN {view}".format(view=self.passing_results_view_name))

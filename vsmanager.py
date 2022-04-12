@@ -67,7 +67,7 @@ class VSManager():
             self.filters["ligand_filters"] = []
         #ask DBManager to fetch results
         self.filtered_results = self.dbman.filter_results(self.results_filters_list, self.filters["ligand_filters"], self.out_opts['outfields'])
-        number_passing_ligands = self.dbman.get_number_passing_ligands()[0]
+        number_passing_ligands = self.dbman.get_number_passing_ligands()
         self.output_manager.log_num_passing_ligands(number_passing_ligands)
         for line in self.filtered_results:
             if not self.no_print_flag:
@@ -285,7 +285,7 @@ class Outputter():
         """
         with open(self.log, "a") as f:
             f.write("\n")
-            f.write("Number passing ligands: {num} \n".format(num=number_passing_ligands))
+            f.write("Number passing ligands: {num} \n".format(num=str(number_passing_ligands)))
             f.write("-----------------\n")
 
     def _clean_db_string(self, input_str):
