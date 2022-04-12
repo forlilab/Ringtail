@@ -347,7 +347,7 @@ class DBManager():
             results_array (numpy array): numpy array of arrays containing formatted result rows
 
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def insert_ligands(self, ligand_array):
         """Takes array of ligand rows, inserts into Ligands table.
@@ -363,7 +363,7 @@ class DBManager():
         Args:
             interactions_list (list): List of tuples for interactions in form ("type", "chain", "residue", "resid", "recname", "recid")
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def get_results(self):
         """Gets all fields for filtered results
@@ -371,12 +371,12 @@ class DBManager():
         Returns:
             DB cursor: Cursor with all fields and rows in passing results view
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def clone(self):
         """Creates a copy of the db
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
         """Generate and execute database queries from given filters.
@@ -389,7 +389,7 @@ class DBManager():
         Returns:
             DB Cursor: Cursor of passing results
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def get_number_passing_ligands(self):
         """Returns count of the number of ligands that passed filtering criteria
@@ -397,7 +397,7 @@ class DBManager():
         Returns:
             Int: Number of passing ligands
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
@@ -405,7 +405,7 @@ class DBManager():
         Returns:
             DB cursor: contains LigName, ligand_smile, atom_index_map, hydrogen_parents
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def fetch_passing_pose_coordinates(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
@@ -416,7 +416,7 @@ class DBManager():
         Returns:
             DB cursor: contains ligand_coordinates, flexible_res_coordinates, flexibles_residues
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def fetch_nonpassing_pose_coordinates(self, ligname):
         """fetch coordinates for poses of ligname which did not pass the filter
@@ -427,7 +427,7 @@ class DBManager():
         Returns:
             DB cursor: contains ligand_coordinates, flexible_res_coordinates, flexibles_residues
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def format_rows_from_dict(self, ligand_dict):
         """takes file dictionary from the file parser, formats into rows for the database insertion
@@ -438,7 +438,7 @@ class DBManager():
         Returns:
             Tuple: Tuple of lists ([result_row_1, result_row_2,...], ligand_row, [interaction_tuple_1, interaction_tuple_2, ...])
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _create_connection(self):
         """Creates database connection to self.db_file
@@ -447,27 +447,27 @@ class DBManager():
             DB connection: Connection object to self.db_file
         
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _close_connection(self):
         """Closes connection to database
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _close_open_cursors(self):
         """closes any cursors stored in self.open_cursors. Resets self.open_cursors to empty list
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _initialize_db(self):
         """Create connection to db. Then, check if db needs to be written. If so, (if self.overwrite_flag drop existing tables and ) initialize the tables
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _drop_existing_tables(self):
         """drop any existing tables. Will only be called if self.overwrite_flag is true
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _run_query(self, query):
         """Executes provided SQLite query. Returns cursor for results
@@ -478,7 +478,7 @@ class DBManager():
         Returns:
             DB cursor: Contains results of query
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _create_view(self, name, query):
         """takes name and selection query, creates view of query stored as name.
@@ -487,7 +487,7 @@ class DBManager():
             name (string): Name for view which will be created
             query (string): DB-formated query which will be used to create view
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _create_results_table(self):
         """Creates table for results. Columns are:
@@ -526,7 +526,7 @@ class DBManager():
             flexible_residues   VARCHAR[],
             flexible_res_coordinates   VARCHAR[]
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _create_ligands_table(self):
         """Create table for ligands. Columns are:
@@ -539,7 +539,7 @@ class DBManager():
             best_run            INTEGER)
 
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _create_interaction_index_table(self):
         """create table of data for each unique interaction. Columns are:
@@ -552,7 +552,7 @@ class DBManager():
             rec_atomid          VARCHAR[]
         
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _create_interaction_bv_table(self):
         """Create table of interaction bits for each pose. Columns are:
@@ -563,7 +563,7 @@ class DBManager():
             Interaction_n
 
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _insert_unique_interactions(self, unique_interactions):
         """Inserts interaction data for unique interactions into Interaction_index table
@@ -571,7 +571,7 @@ class DBManager():
         Args:
             unique_interactions (list): List of tuples of interactions to be inserted
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _insert_one_interaction(self, interaction):
         """Insert interaction data for a single new interaction into the interaction indices table
@@ -580,7 +580,7 @@ class DBManager():
             interaction (tuple): Tuple of interaction data (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
         
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _make_new_interaction_column(self, column_number):
         """Add column for new interaction to interaction bitvector table
@@ -588,7 +588,7 @@ class DBManager():
         Args:
             column_number (int): Index for new interaction
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _fetch_all_plot_data(self):
         """Fetches cursor for best energies and leff for all ligands
@@ -596,7 +596,7 @@ class DBManager():
         Returns:
             DB Cursor: Cursor containing energies_binding, leff for the first pose for each ligand
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _generate_plot_all_results_query(self):
         """Make DB-formatted query string to get energies_binding, leff of first pose for each ligand
@@ -604,7 +604,7 @@ class DBManager():
         Returns:
             String: DB-formatted query string
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _fetch_passing_plot_data(self):
         """Fetches cursor for best energies and leffs for ligands passing filtering
@@ -612,7 +612,7 @@ class DBManager():
         Returns:
             SQLite cursor: Cursor containing energies_binding, leff for the first pose for passing ligands
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _generate_plot_passing_results_query(self):
         """Make DB-formatted query string to get energies_binding, leff of first pose for passing ligands
@@ -620,7 +620,7 @@ class DBManager():
         Returns:
             String: DB-formatted query string
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _generate_result_filtering_query(self, results_filters_list, ligand_filters_list, output_fields):
         """takes lists of filters, writes sql filtering string
@@ -636,7 +636,7 @@ class DBManager():
         Raises:
             KeyError: Raises KeyError if user requests result ordering by invalid or multiple options
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _generate_interaction_index_filtering_query(self, interaction_list):
         """takes list of interaction info for a given ligand, looks up corresponding interaction index
@@ -647,7 +647,7 @@ class DBManager():
         Returns:
             String: DB-formated query on Interaction_indices table
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _generate_interaction_filtering_query(self, interaction_index_list):
         """takes list of interaction indices and searches for ligand ids which have those interactions
@@ -658,7 +658,7 @@ class DBManager():
         Returns:
             String: DB-formatted query
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _generate_ligand_filtering_query(self, ligand_filters):
         """write string to select from ligand table
@@ -669,7 +669,7 @@ class DBManager():
         Returns:
             String: DB-formatted query
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _generate_interaction_bitvectors(self, interactions_list):
         """takes string of interactions and all unique interactions and makes bitvector
@@ -680,7 +680,7 @@ class DBManager():
         Returns:
             List: List of bitvectors for saved poses
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _insert_interaction_bitvectors(self, bitvectors):
         """Insert bitvectors of interaction data into database
@@ -688,7 +688,7 @@ class DBManager():
         Args:
             bitvectors (List): List of lists With inner list representing interaction bitvector for a pose
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _generate_percentile_rank_window(self):
         """makes window with percentile ranks for percentile filtering
@@ -696,7 +696,7 @@ class DBManager():
         Returns:
             String: DB-formatted string for creating percent ranks on energies_binding and leff
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _fetch_results_column_names(self):
         """Fetches list of string for column names in results table
@@ -704,22 +704,22 @@ class DBManager():
         Returns:
             List: List of strings of results table column names
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _delete_from_results(self):
         """Remove rows from results table if they did not pass filtering
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _delete_from_ligands(self):
         """Remove rows from ligands table if they did not pass filtering
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def _delete_from_interactions(self):
         """Remove rows from interactions bitvector table if they did not pass filtering
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 #######################################################################################################
 
