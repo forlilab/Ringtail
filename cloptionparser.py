@@ -73,7 +73,7 @@ class CLOptionParser():
                             'action':'store', 'type':str, 'metavar': "[FILE_NAME].DB", 'default':"output.db"},
                             ),
                         ('--interaction_tolerance', {
-                            'help':('Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose.'), 
+                            'help':('Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as fla with default tollerance of 0.8, or give other value as desired'), 
                             'action':'store', 'type':float, 'metavar': "FLOAT", 'default':None, 'const':0.8, 'nargs':'?'},
                             ),
                         ('--max_poses', {
@@ -163,7 +163,6 @@ class CLOptionParser():
                             '"e_intra" (intermolecular energy), '
                             '"n_interact" (number of interactions), '
                             '"interactions" (all interactions), '
-                            '"fname" (full path filename), '
                             '"rank" (rank of ligand pose), '
                             '"run" (run number for ligand pose), '
                             '"hb" (hydrogen bonds); ',
