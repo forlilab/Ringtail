@@ -162,7 +162,6 @@ class CLOptionParser():
                             '"e_elec" (electrostatic energy), '
                             '"e_intra" (intermolecular energy), '
                             '"n_interact" (number of interactions), '
-                            '"interactions" (all interactions), '
                             '"rank" (rank of ligand pose), '
                             '"run" (run number for ligand pose), '
                             '"hb" (hydrogen bonds); ',

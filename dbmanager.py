@@ -336,6 +336,26 @@ class DBManager():
 
         return (result_rows, self._generate_ligand_row(ligand_dict), interaction_tuples)
 
+    def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
+        """Generate and execute database queries from given filters.
+        
+        Args:
+            results_filters_list (list): list of tuples with first element indicating column to filter and second element indicating passing value
+            ligand_filters_list (TYPE): list of tuples with first element indicating column to filter and second element indicating passing value
+            output_fields (list): List of fields (columns) to be included in log
+        
+        Returns:
+            SQLite Cursor: Cursor of passing results
+        """
+        #create view of passing results
+        filter_results_str = self._generate_result_filtering_query(results_filters_list, ligand_filters_list, output_fields)
+        print(filter_results_str)
+        self._create_view(self.passing_results_view_name, filter_results_str) # make sure we keep Pose_ID in view
+        #perform filtering
+        filtered_results = self._run_query(filter_results_str)
+        #get number of passing ligands
+        return filtered_results
+
     ##############################
     ### Child-specific methods ###
     ##############################
@@ -375,19 +395,6 @@ class DBManager():
 
     def clone(self):
         """Creates a copy of the db
-        """
-        raise NotImplementedError
-
-    def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
-        """Generate and execute database queries from given filters.
-        
-        Args:
-            results_filters_list (list): list of tuples with first element indicating column to filter and second element indicating passing value
-            ligand_filters_list (TYPE): list of tuples with first element indicating column to filter and second element indicating passing value
-            output_fields (list): List of fields (columns) to be included in log
-        
-        Returns:
-            DB Cursor: Cursor of passing results
         """
         raise NotImplementedError
 
@@ -854,26 +861,6 @@ class DBManagerSQLite(DBManager):
         """
         return self._run_query("SELECT * FROM {passing_view}".format(passing_view = self.passing_results_view_name))
 
-    def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
-        """Generate and execute database queries from given filters.
-        
-        Args:
-            results_filters_list (list): list of tuples with first element indicating column to filter and second element indicating passing value
-            ligand_filters_list (TYPE): list of tuples with first element indicating column to filter and second element indicating passing value
-            output_fields (list): List of fields (columns) to be included in log
-        
-        Returns:
-            SQLite Cursor: Cursor of passing results
-        """
-        #create view of passing results
-        filter_results_str = self._generate_result_filtering_query(results_filters_list, ligand_filters_list, output_fields)
-        print(filter_results_str)
-        self._create_view(self.passing_results_view_name, filter_results_str.replace("SELECT ", "SELECT Pose_ID, ", 1)) # make sure we keep Pose_ID in view
-        #perform filtering
-        filtered_results = self._run_query(filter_results_str)
-        #get number of passing ligands
-        return filtered_results
-
     def get_number_passing_ligands(self):
         """Returns count of the number of ligands that passed filtering criteria
         
@@ -1007,6 +994,7 @@ class DBManagerSQLite(DBManager):
             query (string): SQLite-formated query which will be used to create view
         """
         cur = self.conn.cursor()
+        query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
         #drop old view if there is one
         cur.execute("DROP VIEW IF EXISTS {name}".format(name = name))
         print("CREATE VIEW {name} AS {query}".format(name = name, query = query))
@@ -1297,7 +1285,6 @@ class DBManagerSQLite(DBManager):
         
         outfield_string = "LigName, " + ", ".join([self.field_to_column_name[field] for field in output_fields])
         filtering_window = "Results"
-        sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(out_columns = outfield_string, window = filtering_window)
 
         #write energy filters and compile list of interactions to search for
         energy_filter_sql_query = []
@@ -1309,7 +1296,7 @@ class DBManagerSQLite(DBManager):
                     #convert from percent to decimal
                     filter_value = str(float(filter_value)/100)
                     #reset filtering window to include generated percentile_ranks
-                    filtering_window = self._generate_percentile_rank_window()
+                    filtering_window = "({percentile_window})".format(percentile_window=self._generate_percentile_rank_window())
                 energy_filter_sql_query.append(self.energy_filter_sqlite_call_dict[filter_key].format(value = filter_value))
                     
             
@@ -1329,6 +1316,9 @@ class DBManagerSQLite(DBManager):
             #add react_any flag as interaction filter
             if filter_key == "react_any" and filter_value: #check if react_any is true
                 interaction_filters.append(["R","","","",""])
+
+        #initialize query string
+        sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(out_columns = outfield_string, window = filtering_window)
 
         #add energy filters to our query string
         sql_string += " AND ".join(energy_filter_sql_query)
