@@ -193,11 +193,11 @@ class CLOptionParser():
                             'action':'store', 'type':float, 'metavar': "FLOAT",},
                             ),
                         ('--epercentile', {
-                            'help':'specify the worst energy percentile accepted', 
+                            'help':'specify the worst energy percentile accepted. Express as percentage i.e. 1 for top 1%.', 
                             'action':'store', 'type':float, 'metavar': "FLOAT"},
                             ),
                         ('--leffpercentile', {
-                            'help':'specify the worst ligand efficiency percentile accepted', 
+                            'help':'specify the worst ligand efficiency percentile accepted. Express as percentage i.e. 1 for top 1%.', 
                             'action':'store', 'type':float, 'metavar': "FLOAT"},
                             )
 
