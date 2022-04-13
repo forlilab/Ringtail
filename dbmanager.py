@@ -997,7 +997,6 @@ class DBManagerSQLite(DBManager):
         query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
         #drop old view if there is one
         cur.execute("DROP VIEW IF EXISTS {name}".format(name = name))
-        print("CREATE VIEW {name} AS {query}".format(name = name, query = query))
         cur.execute("CREATE VIEW {name} AS {query}".format(name = name, query = query))
         cur.close()
 
@@ -1331,6 +1330,9 @@ class DBManagerSQLite(DBManager):
             for i in interaction_indices:
                 interaction_filter_indices.append(i[0])
 
+            if interaction_filter_indices == []: #catch if interaction not found in results
+                print("Interaction {i} not found in results, excluded from filtering".format(i= ":".join(interaction)))
+                continue
             #find pose ids for ligands with desired interactions
             sql_string += " AND Pose_ID IN ({interaction_str})".format(interaction_str = self._generate_interaction_filtering_query(interaction_filter_indices))            
 
