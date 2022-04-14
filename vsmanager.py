@@ -5,7 +5,9 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Geometry import Point3D
 from rdkit.Chem import AllChem
+from rdkit.Chem import SDWriter
 import json
+import os
 
 class VSManager():
     """Manager for coordinating different actions on virtual screening i.e. adding results to db, filtering, output options
@@ -140,16 +142,34 @@ class VSManager():
         """
         passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
         for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
-            #create rdkit molecule
-            mol = self.output_manager.create_molecule(ligname, smiles)
-            #fetch coordinates for passing poses and add to rdkit mol
+            print("Writing " + ligname.split(".")[0] + ".sdf")
+            saved_poses = [] #save pose coordinate lists for adjusting hydrogens later
+            #initialize rdkit ligand molecule and flexible residue container
+            #mol = self.output_manager.create_ligand_molecule(ligname, smiles)
+            mol = None
+            ligand_mol = None
+            flex_res_mols = []
+
+            #fetch coordinates for passing poses and add to rdkit ligand mol, add flexible residues
             passing_coordinates = self.dbman.fetch_passing_pose_coordinates(ligname)
             for ligand_pose, flexres_pose, flexres_names in passing_coordinates:
-                mol = self.output_manager.add_pose_to_mol(mol, ligand_pose, atom_indices, flexres_pose, flexres_names, h_parent_line)
-            #fetch coordinates for non-passing poses and add to mol
-            nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinate(ligname)
-            for pose in nonpassing_coordinates:
-                mol = self.output_manager.add_pose_to_mol(mol, pose[0], atom_indices)
+                mol, ligand_mol, flex_res_mols = self.output_manager.add_pose_to_mol(mol, ligname, smiles, ligand_pose, atom_indices, flexres_pose, flexres_names, flex_res_mols, ligand_mol)
+                saved_poses.append(ligand_pose)
+
+            #fetch coordinates for non-passing poses and add to ligand mol, flexible residue mols
+            nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinates(ligname)
+            for ligand_pose, flexres_pose, flexres_names in nonpassing_coordinates:
+                mol, ligand_mol, flex_res_mols = self.output_manager.add_pose_to_mol(mol, ligname, smiles, ligand_pose, atom_indices, flexres_pose, flexres_names, flex_res_mols, ligand_mol)
+                saved_poses.append(ligand_pose)
+
+            #adjust hydrogen positions
+            i=0 #counter for conf number
+            for pose in saved_poses:
+                mol = self.output_manager.add_hydrogens_to_pose(mol, i, pose, h_parent_line)
+                i += 1
+
+            #combine ligand and flexible residues
+            #mol = self.output_manager.combine_ligand_flexres(mol, flex_res_mols)
 
             #write out molecule
             self.output_manager.write_out_mol(ligname, mol)
@@ -170,6 +190,7 @@ class Outputter():
     Attributes:
         ad_to_std_atomtypes (dictionary): Mapping of autodock atomtypes (key) to standard PDB atomtypes (value). Initialized as None, will be loaded from AD_to_STD_ATOMTYPES.json if required
         ax (pyplot axis): Axis for scatterplot of LE vs Energy
+        conformer_indices (list): Description
         fig_base_name (str): Name for figures excluding file extension
         flex_residue_smiles (Dictionary): Contains smiles used to create RDKit objects for flexible residues
         log (string): name for log file
@@ -190,7 +211,7 @@ class Outputter():
                                     "TYR":'CC(c4c1).c24.c13.c2c3O',
                                     "SER":'CCO',
                                     "ARG":'CCCCN=C(N)N',
-                                    "HIP":'CCC1([NH+]=CNC=1)',
+                                    "HIP":'CCC1([N+]=CNC=1)',
                                     "VAL":'CC(C)C',
                                     "ASH":'CCC(=O)O',
                                     "GLH":'CCCC(=O)O',
@@ -299,7 +320,7 @@ class Outputter():
         Returns:
             String: cleaned string
         """
-        return input_str.replace("[","").replace("]","").replace("'","").replace('"','')
+        return input_str.replace("[","").replace("]","").replace("'","").replace('"','').replace("\n", "").replace("\\n", "")
 
     def replace_pdbqt_atomtypes(self, pdbqt_line):
         """replaces autodock-specific atomtypes with general ones. Reads AD-> general atomtype mapping from AD_to_STD_ATOMTYPES.json
@@ -317,7 +338,7 @@ class Outputter():
         
         #load autodock to standard atomtype dict if not loaded 
         if self.ad_to_std_atomtypes == None:
-            with open('AD_to_STD_ATOMTYPES.json', 'r') as f:
+            with open(os.path.join(os.path.dirname(__file__), 'AD_to_STD_ATOMTYPES.json'), 'r') as f:
                 self.ad_to_std_atomtypes = json.load(f)
 
         #fetch new atomtype
@@ -328,7 +349,7 @@ class Outputter():
 
         return pdbqt_line.replace(old_atomtype, new_atomtype)
 
-    def create_molecule(self, ligname, smiles):
+    def _create_ligand_molecule(self, ligname, smiles):
         """creates rdkit molecule from given ligand information
         
         Args:
@@ -344,9 +365,47 @@ class Outputter():
 
         if smiles == "":
             raise RuntimeError("Need SMILES for {molname}".format(molname=ligname))
+
         return Chem.MolFromSmiles(smiles)
 
-    def add_pose_to_mol(self, mol, ligand_coordinates, index_map, flexres_lines, flexres_names, h_parent_line):
+    def _create_flexres_molecules(self, flexres_lines, flexres_names):
+        """Creates RDKit molecules for flexible residues, returns list of RDKit Mol objects
+        
+        Args:
+            flexres_lines (TYPE): Description
+            flexres_names (TYPE): Description
+        
+        Returns:
+            TYPE: Description
+        """
+        flex_res_mols = []
+
+        #make flexres rdkit molecules, add to our list of flex_res_mols
+        flexible_residues = self._clean_db_string(flexres_names).split(",")
+        for i in range(len(flexible_residues)):
+            #get the residue smiles string and pdbqt we need to make the required rdkit molecules
+            res_smile = self.flex_residue_smiles[flexible_residues[i]]
+            flexres_pdbqt = self._generate_pdbqt_block(flexres_lines.split("],")[i])
+
+            #make rdkit molecules and use template to ensure correct bond order
+            template = AllChem.MolFromSmiles(res_smile)
+            res_mol = AllChem.MolFromPDBBlock(flexres_pdbqt)
+            res_mol = AllChem.AssignBondOrdersFromTemplate(template, res_mol)
+
+            #Add to list of all flexible residue molecules
+            flex_res_mols.append(res_mol)
+
+        return flex_res_mols
+
+    def _generate_pdbqt_block(self, pqdbqt_lines):
+        """Generate pdbqt block from given lines from a pdbqt
+        
+        Args:
+            flexres_lines (TYPE): Description
+        """
+        return "\n".join([line.lstrip(" ") for line in list(filter(None,[self.replace_pdbqt_atomtypes(line) for line in self._clean_db_string(pqdbqt_lines).split(",")]))])
+
+    def add_pose_to_mol(self, mol, ligname, smiles, ligand_coordinates, index_map, flexres_lines, flexres_names, flex_res_mols, ligand_mol):
         """add given coordinates to given molecule as new conformer. Index_map maps order of coordinates to order in smile string used to generate rdkit mol
         
         Args:
@@ -361,29 +420,75 @@ class Outputter():
             RDKit Mol: RDKit molecule object
         
         Raises:
-            RuntimeError: Will raise error if number of coordinates does not match the number of atoms there are coordinates for.
+            RuntimeError: Will raise error if number of coordinates does not match the number of atoms there should be coordinates for.
         
         """
-        n_atoms = mol.GetNumAtoms()
-        conf = Chem.Conformer(n_atoms)
+        #generate flexible residue and combined mols if we haven't yet
+        if flex_res_mols == []:
+            flex_res_mols = self._create_flexres_molecules(flexres_lines, flexres_names)
+            ligand_mol = self._create_ligand_molecule(ligname, smiles)
+            mol = ligand_mol
+            for res in flex_res_mols:
+                mol = Chem.CombineMols(mol,res)
+                print(Chem.MolToSmiles(combo))
+
         #split ligand coordinate string from database into list, with each element containing the x,y,and z coordinates for one atom
         atom_coordinates = ligand_coordinates.split("],")
+        n_atoms = mol.GetNumAtoms()
+        n_atoms_lig = ligand_mol.GetNumAtoms()
+        conf = Chem.Conformer(n_atoms)
         index_map = index_map.split(",")
-        if len(atom_coordinates) != n_atoms: #confirm we have the right number of coordinates
-            raise RuntimeError("ERROR! Incorrect number of coordinates! Given {n_coords} coordinates for {n_at} atoms!".format(n_coords = len(atom_coordinates), n_at = n_atoms))
-        for i in range(n_atoms):
-            pdbqt_index = self._clean_db_string(index_map[i+1]) - 1
-            x, y, z = [float(self._clean_db_string(coord)) for coord in atom_coordinates.split(",")]
-            conf.SetAtomPosition(i, Point3D(x, y, z))
-        conf_id = mol.AddConformer(conf)
+        if n_atoms_lig != len(index_map)/2: #confirm we have the right number of coordinates
+            raise RuntimeError("ERROR! Incorrect number of coordinates! Given {n_coords} ligand atom coordinates for {n_at} atoms!".format(n_coords = n_atoms_lig, n_at = len(index_map)/2))
+        for i in range(n_atoms_lig):
+            pdbqt_index = int(self._clean_db_string(index_map[i*2+1])) - 1
+            x, y, z = [float(self._clean_db_string(coord)) for coord in atom_coordinates[pdbqt_index].split(",")]
+            conf.SetAtomPosition(int(self._clean_db_string(index_map[i*2]))-1, Point3D(x, y, z))
+        
+        #add new pose to each of the flexible residue molecules
+        res_atoms_counter = 0 #keep track of how many flexible residue atoms we have already adjusted
+        for i in range(len(flex_res_mols)):
+            #make a new conformer
+            flex_res = flex_res_mols[i]
+            n_atoms_res = flex_res.GetNumAtoms()
+
+            #make an RDKit molecule from the flexres pdbqt to use as a template for setting the coordinates of the conformer
+            flexres_pdbqt = self._generate_pdbqt_block(flexres_lines.split("],")[i])
+            template = AllChem.MolFromPDBBlock(flexres_pdbqt)
+
+            #iterate through atoms in template, set corresponding atom in new conformer to the position of the template atom
+            for j in range(n_atoms_res):
+                position = template.GetConformer().GetAtomPosition(i)
+                conf.SetAtomPosition(j+n_atoms_lig+res_atoms_counter, position)
+
+            res_atoms_counter += n_atoms_res
+
+            #add new conformer to flex_res object and add object back to flex_res_mols
+            #conf_id = flex_res.AddConformer(conf, assignId=True)
+            #flex_res_mols[i] = flex_res
+
+        mol.AddConformer(conf, assignId=True)
+
+        return mol, ligand_mol, flex_res_mols
+
+    def add_hydrogens_to_pose(self, mol, conformer_idx, ligand_coordinates, h_parent_line):
+        """Summary
+        
+        Args:
+            mol (TYPE): Description
+            conformer_idx (TYPE): Description
+            ligand_coordinates (TYPE): Description
+            h_parent_line (TYPE): Description
+        """
         #Add hydrogens and correct their positions to match pdbqt
+        atom_coordinates = ligand_coordinates.split("],")
         mol = Chem.AddHs(mol, addCoords=True)
-        conf = mol.GetConformer()
+        conf = mol.GetConformer(conformer_idx)
         used_h = []
-        h_parent = self._format_h_parents(h_parent_line)
+        h_parents = self._format_h_parents(h_parent_line)
         for (parent_rdkit_index, h_pdbqt_index) in h_parents:
             h_pdbqt_index -= 1
-            x, y, z = self._positions[self._current_pose][h_pdbqt_index, :]
+            x, y, z = [float(self._clean_db_string(coord)) for coord in atom_coordinates[h_pdbqt_index].split(",")]
             parent_atom = mol.GetAtomWithIdx(parent_rdkit_index - 1)
             candidate_hydrogens = [atom.GetIdx() for atom in parent_atom.GetNeighbors() if atom.GetAtomicNum() == 1]
             for h_rdkit_index in candidate_hydrogens:
@@ -392,22 +497,21 @@ class Outputter():
             used_h.append(h_rdkit_index)
             conf.SetAtomPosition(h_rdkit_index, Point3D(x, y, z))
 
-        #make flexres rdkit molecules, add to our ligand molecule
-        flexible_residues = self._clean_db_string(flexres_names).split(",")
-        for i in range(len(flexible_residues)):
-            #get the residue smiles string and pdbqt we need to make the required rdkit molecules
-            res_smile = self.flex_residue_smiles[flexible_residues[i]]
-            flexres_pdbqt = "\n".join(list(filter(None,[self.replace_pdbqt_atomtypes(line) for line in self._clean_db_string(flexres_coordinates.split("],")[i]).split(",")])))
-
-            #make rdkit molecules and use template to ensure correct bond order
-            template = AllChem.MolFromSmiles(res_smile)
-            res_mol = AllChem.MolFromPDBBlock(flexres_pdbqt)
-            res_mol = AllChem.AssignBondOrdersFromTemplate(template, res_mol)
-
-            #combine with existing ligand and previous flexible residues
-            mol = Chem.CombineMols(res_mol, mol)
-
         return mol
+
+    def combine_ligand_flexres(self, ligand_mol, flex_res_mols):
+        """Combine RDKit mols for ligand and flexible residues
+        
+        Args:
+            ligand_mol (TYPE): Description
+            flex_res_mols (TYPE): Description
+        """
+        for flexres in flex_res_mols:
+            for i in range(len(mol.GetConformers())):
+                lig_conf = ligand_mol.GetConformer(i)
+                flexres_conf = flexres.GetConformer(i)
+
+
 
     def _format_h_parents(self, h_parent_line):
         """takes list of h_parent indices from database, formats into list of tuples
@@ -423,7 +527,7 @@ class Outputter():
         """
 
         h_parents = []
-        integers = [int(self._clean_db_string(integer)) for integer in h_parent_line.split(",")]
+        integers = [int(self._clean_db_string(integer)) for integer in h_parent_line.split(",") if integer != "[]"] #catch if there are no h-parents
         if len(integers) % 2 == 1:
             raise RuntimeError("Number of indices in H PARENT is odd")
         for j in range(int(len(integers) / 2)): 
@@ -440,7 +544,8 @@ class Outputter():
         """
         filename = self.vsman.out_opts["export_poses_path"] + ligname.replace(".pdbqt", ".sdf")
         with SDWriter(filename) as w:
-            w.write(mol)
+            for conf in mol.GetConformers():
+                w.write(mol, conf.GetId())
 
 
     def _create_log_file(self):
