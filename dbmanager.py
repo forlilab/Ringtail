@@ -901,7 +901,7 @@ class DBManagerSQLite(DBManager):
         Returns:
             SQLite cursor: contains ligand_coordinates, flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '%{ligand}%' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view}".format(ligand = ligname, results_view = self.passing_results_view_name)
+        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '%{ligand}%' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(ligand = ligname, results_view = self.passing_results_view_name)
         return self._run_query(query)
 
     ###########################
