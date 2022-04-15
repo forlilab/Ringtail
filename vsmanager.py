@@ -382,8 +382,14 @@ class Outputter():
         flexible_residues = self._clean_db_string(flexres_names).split(",")
         for i in range(len(flexible_residues)):
             #get the residue smiles string and pdbqt we need to make the required rdkit molecules
-            res_smile = self.flex_residue_smiles[flexible_residues[i]]
-            flexres_pdbqt = self._generate_pdbqt_block(flexres_lines.split("],")[i])
+            try:
+                res_smile = self.flex_residue_smiles[flexible_residues[i]]
+                flexres_pdbqt = self._generate_pdbqt_block(flexres_lines.split("],")[i])
+            except KeyError:
+                if flexible_residues[i] == '':
+                    pass
+                else:
+                    raise KeyError
 
             #make rdkit molecules and use template to ensure correct bond order
             template = AllChem.MolFromSmiles(res_smile)
