@@ -387,7 +387,7 @@ class Outputter():
                 flexres_pdbqt = self._generate_pdbqt_block(flexres_lines.split("],")[i])
             except KeyError:
                 if flexible_residues[i] == '':
-                    pass
+                    continue
                 else:
                     raise KeyError
 
