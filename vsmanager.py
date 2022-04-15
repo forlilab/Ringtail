@@ -495,20 +495,6 @@ class Outputter():
             ligand_mol (TYPE): Description
             flex_res_mols (TYPE): Description
         """
-        """combined_mol = None
-        flexres_blocks = []
-        for i in range(ligand_mol.GetNumConformers()):
-            #add ligand block first
-            new_pose = Chem.MolFromMolBlock(Chem.MolToMolBlock(ligand_mol, confId=i), removeHs=False)#enables us to select single conformer
-            for flexres in flex_res_mols:            
-                new_pose = Chem.CombineMols(new_pose, Chem.MolFromMolBlock(Chem.MolToMolBlock(flexres, confId=i), removeHs=False))
-
-            #Make or add conf to combine_mol
-            if combined_mol == None:
-                combined_mol = new_pose
-            else:
-                conf_id = combined_mol.AddConformer(new_pose.GetConformer(),assignId=True)"""
-
         combined_mol = ligand_mol
         for flex_res in flex_res_mols:
             combined_mol = Chem.CombineMols(combined_mol, flex_res)
