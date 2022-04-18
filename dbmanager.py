@@ -1,7 +1,7 @@
 """Summary
 """
 import sqlite3
-import numpy as np
+import json
 
 class DBManager():
     """Prototype class for a generic VS database object
@@ -205,13 +205,13 @@ class DBManager():
         pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
         dihedral_string = ""
         for dihedral in pose_dihedrals:
-            dihedral_string = dihedral_string + str(dihedral) + ", "
+            dihedral_string = dihedral_string + json.dumps(dihedral) + ", "
         ligand_data_list.append(dihedral_string)
 
         #add coordinates
-        ligand_data_list.append(str(ligand_dict["pose_coordinates"][pose_rank]))
-        ligand_data_list.append(str(ligand_dict["flexible_residues"]))
-        ligand_data_list.append(str(ligand_dict["flexible_res_coordinates"][pose_rank]))
+        ligand_data_list.append(json.dumps(ligand_dict["pose_coordinates"][pose_rank])) #convert to string for storage as VARCHAR
+        ligand_data_list.append(json.dumps(ligand_dict["flexible_residues"]))
+        ligand_data_list.append(json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank]))
 
         return ligand_data_list
 
@@ -227,9 +227,9 @@ class DBManager():
         """
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
-        ligand_index_map = str(ligand_dict["ligand_index_map"])
-        ligand_h_parents = str(ligand_dict["ligand_h_parents"])
-        input_pdbqt = "\n".join(ligand_dict["ligand_input_pdbqt"])
+        ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
+        ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
+        input_pdbqt = json.dumps(ligand_dict["ligand_input_pdbqt"])
         best_binding = ligand_dict["scores"][0]
         best_run = ligand_dict["sorted_runs"][0]
 
