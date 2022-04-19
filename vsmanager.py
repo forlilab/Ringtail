@@ -8,6 +8,7 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import SDWriter
 import json
 import os
+import warnings
 
 
 class VSManager():
@@ -172,7 +173,7 @@ class VSManager():
         """have output manager write sdf molecules for passing results
         """
         if not self.dbman.check_passing_view_exists():
-            raise RuntimeWarning("Passing results view does not exist in database. Cannot write passing molecule SDFs")
+            warnings.warn("Passing results view does not exist in database. Cannot write passing molecule SDFs")
             return
         passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
         for (ligname, smiles, atom_indices,
@@ -370,7 +371,7 @@ class Outputter():
             f.write("\n")
             f.write("Number passing ligands: {num} \n".format(
                 num=str(number_passing_ligands)))
-            f.write("-----------------\n")
+            f.write("---------------\n")
 
     def _clean_db_string(self, input_str):
         """take a db string representing a list,
