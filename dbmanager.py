@@ -281,12 +281,10 @@ class DBManager():
         ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
         ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
         input_pdbqt = json.dumps(ligand_dict["ligand_input_pdbqt"])
-        best_binding = ligand_dict["scores"][0]
-        best_run = ligand_dict["sorted_runs"][0]
 
         return [
             ligand_name, ligand_smile, ligand_index_map, ligand_h_parents,
-            input_pdbqt, best_binding, best_run
+            input_pdbqt
         ]
 
     def _generate_interaction_tuples(self, interaction_dictionaries):
@@ -661,9 +659,7 @@ class DBManager():
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
-            input_pdbqt         VARCHAR[],
-            best_binding        FLOAT(4),
-            best_run            INTEGER)
+            input_pdbqt         VARCHAR[]
 
         """
         raise NotImplementedError
@@ -1301,9 +1297,7 @@ class DBManagerSQLite(DBManager):
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
-            input_pdbqt         VARCHAR[],
-            best_binding        FLOAT(4),
-            best_run            INTEGER)
+            input_pdbqt         VARCHAR[]
 
         """
         ligand_table = """CREATE TABLE Ligands (
@@ -1311,9 +1305,7 @@ class DBManagerSQLite(DBManager):
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
-            input_pdbqt         VARCHAR[],
-            best_binding        FLOAT(4),
-            best_run            INT[])"""
+            input_pdbqt         VARCHAR[])"""
 
         try:
             cur = self.conn.cursor()
