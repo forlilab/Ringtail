@@ -332,6 +332,8 @@ class CLOptionParser():
         ##### parse output options
         if not parsed_opts.export_poses_path.endswith("/"):
             parsed_opts.export_poses_path += "/"
+        if not os.path.isdir(parsed_opts.export_poses_path):
+            raise FileNotFoundError("--export_poses_path directory does not exist. Please create directory first")
         output = {'log': parsed_opts.log,
                   'header': not parsed_opts.no_header,
                   'stdout': not parsed_opts.no_print,
