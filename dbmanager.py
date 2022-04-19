@@ -274,7 +274,7 @@ class DBManager():
         Returns:
             List: List of data to be written as row in ligand table. Format:
             [ligand_name, ligand_smile, ligand_index_map,
-            ligand_h_parents, input_pdbqt, best_binding, best_run]
+            ligand_h_parents, input_pdbqt]
         """
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
@@ -974,11 +974,9 @@ class DBManagerSQLite(DBManager):
         ligand_smile,
         atom_index_map,
         hydrogen_parents,
-        input_pdbqt,
-        best_binding,
-        best_run
+        input_pdbqt
         ) VALUES
-        (?,?,?,?,?,?,?)'''
+        (?,?,?,?,?)'''
 
         try:
             cur = self.conn.cursor()
