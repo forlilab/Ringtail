@@ -1,6 +1,6 @@
 import time
 from cloptionparser import CLOptionParser
-from vsmanager import VSManager, Outputter
+from vsmanager import VSManager
 
 if __name__ == '__main__':
 
@@ -23,16 +23,17 @@ if __name__ == '__main__':
     time1 = time.perf_counter()
 
     #perform filtering
-    vsman.filter()
+    if not out_opts["no_filter"]:
+        vsman.filter()
 
     #plot if requested
     if out_opts["plot"]:
         vsman.plot()
 
     #write out molecules if requested
-    if out_opts["export_poses_path"] != None:
+    if out_opts["export_poses_path"] is not None:
         vsman.write_molecule_sdfs()
-    
+
     #close database
     vsman.close_database()
     time2 = time.perf_counter()
