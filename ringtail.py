@@ -26,6 +26,10 @@ if __name__ == '__main__':
     if not out_opts["no_filter"]:
         vsman.filter()
 
+    # Write log with new data for previous filtering results if we did not filter
+    if out_opts["no_filter"] and out_opts["data_from_subset"]:
+        vsman.get_previous_filter_data()
+
     #plot if requested
     if out_opts["plot"]:
         vsman.plot()

@@ -460,6 +460,15 @@ class DBManager():
         # get number of passing ligands
         return filtered_results
 
+    def fetch_data_for_passing_results(self, outfields):
+        """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.passing_results_view_name
+        
+        Args:
+            outfields (List): List of fields (columns) to be
+                included in log
+        """
+        return self._run_query(self._generate_results_data_query(outfields))
+
     def _fetch_view_names(self):
         """Returns DB curor with the names of all view in DB
         """
@@ -809,6 +818,14 @@ class DBManager():
 
         Returns:
             String: DB-formatted query
+        """
+        raise NotImplementedError
+
+    def _generate_results_data_query(self, output_fields):
+        """Generates SQLite-formatted query string to select outfields data for ligands in self.passing_results_view_name
+        
+        Args:
+            output_fields (List): List of result column data for output
         """
         raise NotImplementedError
 
@@ -1680,6 +1697,18 @@ class DBManagerSQLite(DBManager):
             sql_ligand_string = sql_ligand_string.rstrip("OR ")
 
         return sql_ligand_string
+
+    def _generate_results_data_query(self, output_fields):
+        """Generates SQLite-formatted query string to select outfields data for ligands in self.passing_results_view_name
+        
+        Args:
+            output_fields (List): List of result column data for output
+        """
+        outfield_string = "LigName, " + ", ".join(
+            [self.field_to_column_name[field] for field in output_fields])
+
+        return "SELECT " + outfield_string + " FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {0})".format(self.passing_results_view_name)
+
 
     def _generate_interaction_bitvectors(self, interactions_list):
         """takes string of interactions and makes bitvector

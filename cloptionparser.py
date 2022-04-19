@@ -170,7 +170,7 @@ class CLOptionParser():
                             },
                         ),
                         (
-                            '--results_name',
+                            '--subset_name',
                             {
                                 'help': ('Specify name for db view of passing results'),
                                 'action': 'store',
@@ -210,6 +210,14 @@ class CLOptionParser():
                                 'type': str,
                                 'metavar': "FIELD1,FIELD2,...",
                                 'default':'e'
+                            },
+                        ),
+                        (
+                            '--data_from_subset',
+                            {
+                                'help': ('Write log of --out_fields data for subset specified by --subset_name. Must use with --no_filter.'),
+                                'action': 'store_true',
+                                'default': False
                             },
                         ),
                         (
@@ -497,7 +505,7 @@ class CLOptionParser():
         self.outfield_options = [
             "e", "le", "delta", "ref_rmsd", "e_inter", "e_vdw", "e_elec",
             "e_intra", "n_interact", "interactions", "fname", "ligand_smile",
-            "rank", "run", "hb"
+            "rank", "run", "hb", "source_file"
         ]
 
         self._initialize_parser()
@@ -537,7 +545,6 @@ class CLOptionParser():
             self.filter_file = ffile
         # add a function here to validate the cmdline (repeated options?)
         # validate policy of file > cmdline? (or vice versa?)
-        print(cmdline_opts)
         parsed_opts = parser.parse_args(cmdline_opts)
         #print("PARSED OPTIONS", parsed_opts)
         self.process_options(parsed_opts)
@@ -609,14 +616,15 @@ class CLOptionParser():
             'plot': parsed_opts.plot,
             'outfields': parsed_opts.out_fields,
             'no_print': parsed_opts.no_print,
-            'no_filter': parsed_opts.no_filter
+            'no_filter': parsed_opts.no_filter,
+            'data_from_subset': parsed_opts.data_from_subset
         }
         db_opts = {
             'num_clusters': parsed_opts.max_poses,
             "order_results": parsed_opts.order_results,
             "log_distinct_ligands": parsed_opts.one_pose,
             "interaction_tolerance": parsed_opts.interaction_tolerance,
-            "results_view_name": parsed_opts.results_name,
+            "results_view_name": parsed_opts.subset_name,
             "store_all_poses": parsed_opts.store_all_poses,
             "overwrite": parsed_opts.overwrite,
             "add_results": parsed_opts.add_results
