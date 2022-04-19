@@ -142,7 +142,7 @@ class DBManager():
     def check_passing_view_exists(self):
         """Return if self.passing_results_view_name in database
         """
-        return self.passing_results_view_name in self._fetch_view_names().fetchall()
+        return self.passing_results_view_name in [name[0] for name in self._fetch_view_names().fetchall()]
 
     def close_connection(self):
         """close connection to database
@@ -1050,9 +1050,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains LigName, ligand_smile,
                 atom_index_map, hydrogen_parents
         """
-        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents\
-             FROM Ligands WHERE LigName IN \
-            (SELECT DISTINCT LigName FROM {results_view})".format(
+        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.passing_results_view_name)
         return self._run_query(query)
 
@@ -1066,9 +1064,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues\
-         FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} \
-         WHERE LigName LIKE '%{ligand}%')".format(
+        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '%{ligand}%')".format(
             results_view=self.passing_results_view_name, ligand=ligname)
         return self._run_query(query)
 
@@ -1082,9 +1078,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues\
-         FROM Results WHERE LigName LIKE '%{ligand}%' \
-         AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
+        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '%{ligand}%' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
             ligand=ligname, results_view=self.passing_results_view_name)
         return self._run_query(query)
 
@@ -1275,8 +1269,7 @@ class DBManagerSQLite(DBManager):
             cur.close()
         except Exception as e:
             print(
-                "Error while creating results table. If database already \
-                exists, use --overwrite to drop existing tables"
+                "Error while creating results table. If database already exists, use --overwrite to drop existing tables"
             )
             raise e
 
@@ -1306,8 +1299,7 @@ class DBManagerSQLite(DBManager):
             cur.close()
         except Exception as e:
             print(
-                "Error while creating ligands table. If database already \
-                exists, use --overwrite to drop existing tables"
+                "Error while creating ligands table. If database already exists, use --overwrite to drop existing tables"
             )
             raise e
 
@@ -1337,8 +1329,7 @@ class DBManagerSQLite(DBManager):
             cur.close()
         except Exception as e:
             print(
-                "Error while creating interaction index table. If database \
-                already exists, use --overwrite to drop existing tables"
+                "Error while creating interaction index table. If database already exists, use --overwrite to drop existing tables"
             )
             raise e
 
@@ -1366,8 +1357,7 @@ class DBManagerSQLite(DBManager):
             cur.close()
         except Exception as e:
             print(
-                "Error while creating interaction bitvector table. If database\
-                 already exists, use --overwrite to drop existing tables"
+                "Error while creating interaction bitvector table. If database already exists, use --overwrite to drop existing tables"
             )
             raise e
 
@@ -1396,8 +1386,7 @@ class DBManagerSQLite(DBManager):
 
         except Exception as e:
             print(
-                "Error while inserting unique interactions \
-                into interaction index table"
+                "Error while inserting unique interactions into interaction index table"
             )
             raise e
 
@@ -1428,8 +1417,7 @@ class DBManagerSQLite(DBManager):
 
         except Exception as e:
             print(
-                "Error inserting interaction {interact} \
-                into interaction index table"
+                "Error inserting interaction {interact} into interaction index table"
                 .format(interact=str(interaction)))
             raise e
 
@@ -1439,8 +1427,7 @@ class DBManagerSQLite(DBManager):
         Args:
             column_number (int): Index for new interaction
         """
-        add_column_str = '''ALTER TABLE Interaction_bitvectors \
-            ADD COLUMN Interaction_{n_inter}'''.format(
+        add_column_str = '''ALTER TABLE Interaction_bitvectors ADD COLUMN Interaction_{n_inter}'''.format(
             n_inter=str(column_number))
         try:
             cur = self.conn.cursor()
@@ -1450,8 +1437,7 @@ class DBManagerSQLite(DBManager):
 
         except Exception as e:
             print(
-                "Error adding column for Interaction_{num} \
-                to interaction bitvector table"
+                "Error adding column for Interaction_{num} to interaction bitvector table"
                 .format(num=str(column_number)))
             raise e
 
@@ -1490,9 +1476,7 @@ class DBManagerSQLite(DBManager):
         Returns:
             String: SQLite-formatted query string
         """
-        return "SELECT energies_binding, leff FROM Results \
-            WHERE LigName IN (SELECT DISTINCT LigName FROM \
-            {results_view}) GROUP BY LigName".format(
+        return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
             results_view=self.passing_results_view_name)
 
     def _generate_result_filtering_query(self, results_filters_list,
@@ -1576,8 +1560,7 @@ class DBManagerSQLite(DBManager):
             # catch if interaction not found in results
             if interaction_filter_indices == []:
                 print(
-                    "Interaction {i} not found in results, \
-                        excluded from filtering"
+                    "Interaction {i} not found in results, excluded from filtering"
                     .format(i=":".join(interaction)))
                 continue
             # find pose ids for ligands with desired interactions
@@ -1603,8 +1586,7 @@ class DBManagerSQLite(DBManager):
                     self.order_results]
             except KeyError:
                 print(
-                    "Please ensure you are only requesting one option \
-                    for --order_results and have written it correctly"
+                    "Please ensure you are only requesting one option for --order_results and have written it correctly"
                 )
                 raise KeyError
 
@@ -1748,9 +1730,7 @@ class DBManagerSQLite(DBManager):
                 percent ranks on energies_binding and leff
         """
         column_names = ",".join(self._fetch_results_column_names())
-        return "SELECT {columns}, PERCENT_RANK() OVER \
-            (ORDER BY energies_binding) energy_percentile_rank, PERCENT_RANK() OVER \
-            (ORDER BY leff) leff_percentile_rank FROM Results".format(
+        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY energies_binding) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results".format(
             columns=column_names)
 
     def _fetch_results_column_names(self):
