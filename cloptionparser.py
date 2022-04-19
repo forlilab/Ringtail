@@ -236,17 +236,6 @@ class CLOptionParser():
                             },
                         ),
                         (
-                            '--no_header',
-                            {
-                                'help':
-                                ('by default, a commented header ("#") with a summary of the filters used '
-                                 'is written to both STDOUT and the log file; this option suppresses the header'
-                                 ),
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
                             '--no_print',
                             {
                                 'help':
@@ -512,7 +501,7 @@ class CLOptionParser():
         self._process_sources()
 
         # confirm that files were found, else throw error
-        if len(self.files_pool) == 0 and self.db_opts["write_db_flag"] is True:
+        if len(self.files_pool) == 0 and (self.db_opts["write_db_flag"] or self.db_opts["add_results"]):
             raise RuntimeError(
                 "No input files found. Please check file source.")
 
@@ -609,8 +598,6 @@ class CLOptionParser():
                 )
         output = {
             'log': parsed_opts.log,
-            'header': not parsed_opts.no_header,
-            'stdout': not parsed_opts.no_print,
             'overwrite': parsed_opts.overwrite,
             'export_poses_path': parsed_opts.export_poses_path,
             'plot': parsed_opts.plot,

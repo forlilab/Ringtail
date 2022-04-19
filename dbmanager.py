@@ -1016,7 +1016,7 @@ class DBManagerSQLite(DBManager):
 
         # check if we need to initialize the interaction bv table and
         # insert first set of interaction
-        if not self.interactions_initialized_flag:
+        if not self.interactions_initialized_flag and not self.opts["add_results"]:
             self._create_interaction_bv_table()
             self._insert_unique_interactions(
                 list(self.unique_interactions.keys()))
