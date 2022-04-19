@@ -126,7 +126,7 @@ class DBManager():
         """
 
         # checks if we have filtered by looking for view name in list of view names
-        if self.passing_results_view_name in self._fetch_view_names():
+        if self.check_passing_view_exists():
             return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
         else:
             return self._fetch_all_plot_data(), []
@@ -588,6 +588,12 @@ class DBManager():
         """
         raise NotImplementedError
 
+    def _drop_existing_views(self):
+        """drop any existing views. Will only be called
+            if self.overwrite_flag is true
+        """
+        raise NotImplementedError
+
     def _run_query(self, query):
         """Executes provided SQLite query. Returns cursor for results
 
@@ -911,7 +917,6 @@ class DBManagerSQLite(DBManager):
 
         """
 
-        # print("Inserting results...")
         sql_insert = """INSERT INTO Results (
         LigName,
         ligand_smile,
@@ -1153,6 +1158,23 @@ class DBManagerSQLite(DBManager):
             if table[0] == "sqlite_sequence":
                 continue
             cur.execute("DROP TABLE {table_name}".format(table_name=table[0]))
+        cur.close()
+
+    def _drop_existing_views(self):
+        """Drop any existing views
+        Will only be called if self.overwrite_flag is true
+        """
+        # fetch existing views
+        cur = self.conn.cursor()
+        cur.execute("SELECT name FROM sqlite_schema WHERE type='view';")
+        views = cur.fetchall()
+
+        # drop views
+        for view in views:
+            # cannot drop this, so we catch it instead
+            if view[0] == "sqlite_sequence":
+                continue
+            cur.execute("DROP VIEW {view_name}".format(view_name=view[0]))
         cur.close()
 
     def _run_query(self, query):

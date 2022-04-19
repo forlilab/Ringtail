@@ -330,6 +330,8 @@ class CLOptionParser():
             if outfield not in self.outfield_options:
                 raise RuntimeError("WARNING: {out_f} is not a valid output option. Please see --help or documentation".format(out_f = outfield))
         ##### parse output options
+        if not parsed_opts.export_poses_path.endswith("/"):
+            parsed_opts.export_poses_path += "/"
         output = {'log': parsed_opts.log,
                   'header': not parsed_opts.no_header,
                   'stdout': not parsed_opts.no_print,
