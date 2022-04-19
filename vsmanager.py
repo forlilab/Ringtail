@@ -101,13 +101,13 @@ class VSManager():
             self.out_opts['outfields'])
         number_passing_ligands = self.dbman.get_number_passing_ligands()
         self.output_manager.log_num_passing_ligands(number_passing_ligands)
-        for line in self.filtered_results:
-            if not self.no_print_flag:
-                print(line)
-            self.output_manager.write_log_line(
-                str(line).replace("(", "").replace(
-                    ")",
-                    ""))  # strip parens from line, which is natively a tuple
+        self.write_log(self.filtered_results)
+
+    def get_previous_filter_data(self):
+        """Get data requested in self.out_opts['outfields'] from the results view of a previous filtering
+        """
+        new_data = self.dbman.fetch_data_for_passing_results(self.out_opts['outfields'])
+        self.write_log(new_data)
 
     def plot(self):
         """
@@ -134,6 +134,21 @@ class VSManager():
                     line[0], line[1],
                     "red")  # energy (line[0]) on x axis, le (line[1]) on y axis
         self.output_manager.save_scatterplot()
+
+    def write_log(self, lines):
+        """Writes lines from results cursor into log file
+        
+        Args:
+            lines (DB cursor): Iterable cursor with tuples of data for writing into log
+        """
+
+        for line in lines:
+            if not self.no_print_flag:
+                print(line)
+            self.output_manager.write_log_line(
+                str(line).replace("(", "").replace(
+                    ")",
+                    ""))  # strip parens from line, which is natively a tuple
 
     def prepare_results_filter_list(self):
         """takes filters dictionary from option parser.
