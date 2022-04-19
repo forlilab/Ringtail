@@ -78,6 +78,7 @@ class Writer(multiprocessing.Process):
         self.results_array = []
         self.ligands_array = []
         self.interactions_list = []
+        # progress tracking instance variables
         self.counter = 0
         self.num_files_remaining = num_files
         self.total_num_files = num_files

@@ -1,8 +1,6 @@
 import os
 import gzip
 import numpy as np
-from glob import glob
-import fnmatch
 
 def parse_single_dlg(fname, mode='standard'):
     """ parse an ADGPU DLG file uncompressed or gzipped 
@@ -64,12 +62,11 @@ def parse_single_dlg(fname, mode='standard'):
         input_pdbqt = []
         index_map = []
         h_parents = []
-        num_interact = 0
         for line in fp.readlines():
             line = line.decode("utf-8")
             #store ligand file name
             if line[0:11] == "Ligand file":
-                ligname = line.split(":",1)[1].strip()
+                ligname = line.split(":",1)[1].strip().split(".")[0]
             #store smile string
             if "REMARK SMILES" in line and "IDX" not in line:
                 smile_string = line.split("REMARK SMILES")[-1]
@@ -134,7 +131,6 @@ def parse_single_dlg(fname, mode='standard'):
                 interactions[-1][kw.lower()] =  [x.strip() for x in info.split(",")]
                 if "COUNT" in line:
                     interact_count = int(line.split()[1])
-                    interact_list = [''] * interact_count
                     pose_interact_count.append(str(interact_count))
                 else:
                     if "TYPE" in line:
@@ -149,8 +145,6 @@ def parse_single_dlg(fname, mode='standard'):
             elif (line[0:len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
-                print(line)
-                (quit)
                 poses[-1].append(line)
                 #store pose coordinates
                 if "ATOM" in line:

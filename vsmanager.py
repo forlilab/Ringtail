@@ -225,7 +225,7 @@ class VSManager():
 
 
 # # # # # # # # # # # # # #
-# # # plotting class # # #
+# # # Output class # # #
 # # # # # # # # # # # # # #
 
 
