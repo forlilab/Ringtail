@@ -59,6 +59,7 @@ def parse_single_dlg(fname, mode='standard'):
         inside_pose = False
         inside_input = False
         inside_res = False
+        analysis_flag = False
         smile_string = ""
         input_pdbqt = []
         index_map = []
@@ -116,6 +117,7 @@ def parse_single_dlg(fname, mode='standard'):
 
             #store pose anaylsis
             elif line[0:9] == "ANALYSIS:":
+                analysis_flag = True
                 if inside_pose== False:
                     # first time inside a pose block
                     inside_pose = True
@@ -147,6 +149,8 @@ def parse_single_dlg(fname, mode='standard'):
             elif (line[0:len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
+                print(line)
+                (quit)
                 poses[-1].append(line)
                 #store pose coordinates
                 if "ATOM" in line:
@@ -155,7 +159,7 @@ def parse_single_dlg(fname, mode='standard'):
                         if "H" not in line_split[2] or "CH" in line_split[2]: #don't save flex res hydrogen coordinates
                             flexible_res_coords[-1][-1].append(line)
                     else:
-                        pose_coordinates[-1].append(line.split()[6:9])
+                        pose_coordinates[-1].append(line.split()[5:8])
                 #store pose data
                 if "Estimated Free Energy of Binding" in line:
                     try:
@@ -295,12 +299,15 @@ def parse_single_dlg(fname, mode='standard'):
     pose_hb_counts = [pose_hb_counts[i] for i in sorted_idx]
 
     if len(poses)==0 or len(scores)==0 or len(interactions)==0 or len(intermolecular_energy)==0 or len(vdw_hb_desolv)==0 or len(electrostatic)==0 or len(internal_energy)==0 or len(torsion)==0 or len(unbound_energy)==0:
-        raise ValueError
+        if not analysis_flag:
+            raise RuntimeError("No interaction analysis data in {0}. Rerun AD with interaction analysis".format(fname))
+        raise ValueError("Incomplete data in " + fname)
     # calculate ligand efficiency and deltas from the best pose
     leff = [ x/heavy_at_count for x in scores]
     delta = [x-scores[0] for x in scores ]
 
     return {'ligname':ligname,
+            'source_file':fname,
             'ligand_input_pdbqt':input_pdbqt,
             'ligand_index_map':index_map,
             'ligand_h_parents':h_parents,

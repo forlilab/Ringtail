@@ -114,6 +114,7 @@ class CLOptionParser():
                             '"ligand_smile" , '
                             '"rank" (rank of ligand pose), '
                             '"run" (run number for ligand pose), '
+                            '"source_file" (file that data for row was taken from),'
                             '"hb" (hydrogen bonds); '
                             'Fields are '
                             'printed in the order in which they are provided. Ligand name will always be returned and should not be specified',
@@ -134,6 +135,10 @@ class CLOptionParser():
                             ),
                         ('--no_print', {
                             'help':('suppress printing of full trace of multiprocessing. NOTE: runtime may be faster if no_print option used.'),
+                            'action':'store_true', 'default':False },
+                            ),
+                        ('--no_filter', {
+                            'help':('Do not perform any filtering.'),
                             'action':'store_true', 'default':False },
                             ),
                         ('--plot', {
@@ -332,7 +337,8 @@ class CLOptionParser():
                   'export_poses_path': parsed_opts.export_poses_path,
                   'plot': parsed_opts.plot,
                   'outfields': parsed_opts.out_fields,
-                  'no_print': parsed_opts.no_print
+                  'no_print': parsed_opts.no_print,
+                  'no_filter': parsed_opts.no_filter
                 }
         db_opts = {'num_clusters': parsed_opts.max_poses, "order_results":parsed_opts.order_results, "log_distinct_ligands":parsed_opts.one_pose, "interaction_tolerance":parsed_opts.interaction_tolerance, "results_view_name":parsed_opts.results_name, "store_all_poses":parsed_opts.store_all_poses, "overwrite":parsed_opts.overwrite, "add_results":parsed_opts.add_results}
 

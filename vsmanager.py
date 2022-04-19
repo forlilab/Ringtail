@@ -13,7 +13,7 @@ import os
 class VSManager():
     """Manager for coordinating different actions on virtual screening
     i.e. adding results to db, filtering, output options
-
+    
     Attributes:
         dbman (DBManager): Interface module with database
         eworst (float): The worst scoring energy filter value requested by user
@@ -42,7 +42,7 @@ class VSManager():
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
         Will create Outputter object to assist in creating output files.
-
+        
         Args:
             db_opts (dictionary): dictionary of options required by DBManager
             rman_opts (dictionary): dictionary of options required by
@@ -127,10 +127,11 @@ class VSManager():
                 all_plot_data_binned[data_bin] += 1
         # plot the data
         self.output_manager.plot_all_data(all_plot_data_binned)
-        for line in passing_data:
-            self.output_manager.plot_single_point(
-                line[0], line[1],
-                "red")  # energy (line[0]) on x axis, le (line[1]) on y axis
+        if passing_data != []: # handle if no passing ligands
+            for line in passing_data:
+                self.output_manager.plot_single_point(
+                    line[0], line[1],
+                    "red")  # energy (line[0]) on x axis, le (line[1]) on y axis
         self.output_manager.save_scatterplot()
 
     def prepare_results_filter_list(self):
@@ -170,6 +171,9 @@ class VSManager():
     def write_molecule_sdfs(self):
         """have output manager write sdf molecules for passing results
         """
+        if not self.dbman.check_passing_view_exists():
+            raise RuntimeWarning("Passing results view does not exist in database. Cannot write passing molecule SDFs")
+            return
         passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
         for (ligname, smiles, atom_indices,
              h_parent_line) in passing_molecule_info:

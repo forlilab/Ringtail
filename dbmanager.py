@@ -103,7 +103,8 @@ class DBManager():
             "ligand_smile": "ligand_smile",
             "rank": "pose_rank",
             "run": "run_number",
-            "hb": "num_hb"
+            "hb": "num_hb",
+            "source_file": "source_file"
         }
         self.interaction_filter_types = {"V", "H", "R"}
 
@@ -124,7 +125,11 @@ class DBManager():
             Tuple: cursors as [<all data cursor>, <passing data cursor>]
         """
 
-        return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
+        # checks if we have filtered by looking for view name in list of view names
+        if self.passing_results_view_name in self._fetch_view_names():
+            return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
+        else:
+            return self._fetch_all_plot_data(), []
 
     def prune(self):
         """Deletes rows from results, ligands, and interactions
@@ -133,6 +138,11 @@ class DBManager():
         self._delete_from_results()
         self._delete_from_ligands()
         self._delete_from_interactions()
+
+    def check_passing_view_exists(self):
+        """Return if self.passing_results_view_name in database
+        """
+        return self.passing_results_view_name in self._fetch_view_names().fetchall()
 
     def close_connection(self):
         """close connection to database
@@ -180,6 +190,7 @@ class DBManager():
             In same order as expected in _insert_results:
             LigName,
             ligand_smile,
+            source_file,
             pose_rank,
             run_number,
             cluster_rmsd,
@@ -219,7 +230,7 @@ class DBManager():
         # We are only saving the top pose for each cluster
         ligand_data_list = [
             ligand_dict["ligname"], ligand_dict["ligand_smile_string"],
-            pose_rank + 1, run_number
+            ligand_dict["source_file"], pose_rank + 1, run_number
         ]
         # get energy data
         for key in self.ligand_data_keys:
@@ -451,6 +462,11 @@ class DBManager():
         # get number of passing ligands
         return filtered_results
 
+    def _fetch_view_names(self):
+        """Returns DB curor with the names of all view in DB
+        """
+        return self._run_query(self._generate_view_names_query())
+
     # # # # # # # # # # # # # # # # #
     # # # Child-specific methods # # #
     # # # # # # # # # # # # # # # # #
@@ -598,6 +614,7 @@ class DBManager():
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
             ligand_smile        VARCHAR[],
+            source_file         VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
             energies_binding    FLOAT(4),
@@ -847,6 +864,10 @@ class DBManager():
         """
         raise NotImplementedError
 
+    def _generate_view_names_query(self):
+        """Generate string to return names of views in database
+        """
+        raise NotImplementedError
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -894,6 +915,7 @@ class DBManagerSQLite(DBManager):
         sql_insert = """INSERT INTO Results (
         LigName,
         ligand_smile,
+        source_file,
         pose_rank,
         run_number,
         cluster_rmsd,
@@ -926,7 +948,7 @@ class DBManagerSQLite(DBManager):
         flexible_residues,
         flexible_res_coordinates
         ) VALUES \
-        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -1002,6 +1024,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: Cursor with all fields
                 and rows in passing results view
         """
+        # check if we have previously filtered and saved view
         return self._run_query("SELECT * FROM {passing_view}".format(
             passing_view=self.passing_results_view_name))
 
@@ -1016,7 +1039,9 @@ class DBManagerSQLite(DBManager):
         cur.execute(
             "SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(
                 results_view=self.passing_results_view_name))
-        return int(cur.fetchone()[0])
+        n_ligands = int(cur.fetchone()[0])
+        cur.close()
+        return n_ligands
 
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
@@ -1172,6 +1197,7 @@ class DBManagerSQLite(DBManager):
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
             ligand_smile        VARCHAR[],
+            source_file         VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
             energies_binding    FLOAT(4),
@@ -1208,6 +1234,7 @@ class DBManagerSQLite(DBManager):
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
             ligand_smile        VARCHAR[],
+            source_file         VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
             energies_binding    FLOAT(4),
@@ -1271,7 +1298,7 @@ class DBManagerSQLite(DBManager):
             hydrogen_parents    VARCHAR[],
             input_pdbqt         VARCHAR[],
             best_binding        FLOAT(4),
-            best_run            INTEGER)"""
+            best_run            INT[])"""
 
         try:
             cur = self.conn.cursor()
@@ -1765,3 +1792,9 @@ class DBManagerSQLite(DBManager):
             format(view=self.passing_results_view_name))
         self.conn.commit()
         cur.close()
+
+    def _generate_view_names_query(self):
+        """Generate string to return names of views in database
+        """
+        return "SELECT name FROM sqlite_schema WHERE type = 'view'"
+
