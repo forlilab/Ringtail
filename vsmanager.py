@@ -681,8 +681,7 @@ class Outputter():
                 name output SDF file
             mol (RDKit Mol): RDKit molecule object to be written to SDF
         """
-        filename = self.vsman.out_opts["export_poses_path"] + ligname.replace(
-            ".pdbqt", ".sdf")
+        filename = self.vsman.out_opts["export_poses_path"] + ligname + ".sdf"
         with SDWriter(filename) as w:
             for conf in mol.GetConformers():
                 w.write(mol, conf.GetId())
