@@ -157,7 +157,7 @@ def parse_single_dlg(fname, mode='standard'):
                 # store pose coordinates
                 if "ATOM" in line:
                     if inside_res:
-                        line_split = line.split()
+
                         flexible_res_coords[-1][-1].append(line)
                     else:
                         pose_coordinates[-1].append(line.split()[6:9])
@@ -165,109 +165,109 @@ def parse_single_dlg(fname, mode='standard'):
                 if "Estimated Free Energy of Binding" in line:
                     try:
                         e = float(line.split()[7])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[6].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     scores.append(e)
                 if "Final Intermolecular Energy" in line:
                     try:
                         e = float(line.split()[6])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     intermolecular_energy.append(e)
                 if "vdW + Hbond + desolv Energy" in line:
                     try:
                         e = float(line.split()[8])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[7].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     vdw_hb_desolv.append(e)
                 if "Electrostatic Energy" in line:
                     try:
                         e = float(line.split()[4])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[3].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     electrostatic.append(e)
                 if "Moving Ligand-Fixed Receptor" in line:
                     try:
                         e = float(line.split()[5])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[4].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     flex_ligand.append(e)
                 if "Moving Ligand-Moving Receptor" in line:
                     try:
                         e = float(line.split()[5])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[4].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     flexLigand_flexReceptor.append(e)
                 if "Final Total Internal Energy" in line:
                     try:
                         e = float(line.split()[7])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[6].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     internal_energy.append(e)
                 if "Torsional Free Energy" in line:
                     try:
                         e = float(line.split()[6])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     torsion.append(e)
                 if "Unbound System's Energy" in line:
                     try:
                         e = float(line.split()[6])
-                    except ValueError:  #catch off-by-one error if number is next to =
+                    except ValueError:  # catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
                             print(
-                                "ERROR! Cannot parse {this_line} in {this_file}"
-                                .format(this_line=line, this_file=fname))
+                                "ERROR! Cannot parse {0} in {1}"
+                                .format(line, fname))
                             raise ValueError
                     unbound_energy.append(e)
                 # store state variables
