@@ -14,7 +14,7 @@ import warnings
 class VSManager():
     """Manager for coordinating different actions on virtual screening
     i.e. adding results to db, filtering, output options
-    
+
     Attributes:
         dbman (DBManager): Interface module with database
         eworst (float): The worst scoring energy filter value requested by user
@@ -43,7 +43,7 @@ class VSManager():
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
         Will create Outputter object to assist in creating output files.
-        
+
         Args:
             db_opts (dictionary): dictionary of options required by DBManager
             rman_opts (dictionary): dictionary of options required by
@@ -104,9 +104,11 @@ class VSManager():
         self.write_log(self.filtered_results)
 
     def get_previous_filter_data(self):
-        """Get data requested in self.out_opts['outfields'] from the results view of a previous filtering
+        """Get data requested in self.out_opts['outfields'] from the
+        results view of a previous filtering
         """
-        new_data = self.dbman.fetch_data_for_passing_results(self.out_opts['outfields'])
+        new_data = self.dbman.fetch_data_for_passing_results(
+            self.out_opts['outfields'])
         self.write_log(new_data)
 
     def plot(self):
@@ -128,18 +130,19 @@ class VSManager():
                 all_plot_data_binned[data_bin] += 1
         # plot the data
         self.output_manager.plot_all_data(all_plot_data_binned)
-        if passing_data != []: # handle if no passing ligands
+        if passing_data != []:  # handle if no passing ligands
             for line in passing_data:
                 self.output_manager.plot_single_point(
-                    line[0], line[1],
-                    "red")  # energy (line[0]) on x axis, le (line[1]) on y axis
+                    line[0], line[1], "red"
+                )  # energy (line[0]) on x axis, le (line[1]) on y axis
         self.output_manager.save_scatterplot()
 
     def write_log(self, lines):
         """Writes lines from results cursor into log file
-        
+
         Args:
-            lines (DB cursor): Iterable cursor with tuples of data for writing into log
+            lines (DB cursor): Iterable cursor with tuples of data for
+                writing into log
         """
 
         for line in lines:
@@ -188,7 +191,9 @@ class VSManager():
         """have output manager write sdf molecules for passing results
         """
         if not self.dbman.check_passing_view_exists():
-            warnings.warn("Passing results view does not exist in database. Cannot write passing molecule SDFs")
+            warnings.warn(
+                "Passing results view does not exist in database. Cannot write passing molecule SDFs"
+            )
             return
         passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
         for (ligname, smiles, atom_indices,
@@ -499,7 +504,7 @@ class Outputter():
             # make rdkit molecules and use template to
             # ensure correct bond order
             template = AllChem.MolFromSmiles(res_smile)
-            res_mol = AllChem.MolFromPDBBlock(flexres_pdbqt)
+            res_mol = AllChem.MolFromPDBBlock(flexres_pdbqt, removeHs=False)
             res_mol = AllChem.AssignBondOrdersFromTemplate(template, res_mol)
 
             # Add to list of all flexible residue molecules
@@ -555,13 +560,11 @@ class Outputter():
         n_atoms = mol.GetNumAtoms()
         conf = Chem.Conformer(n_atoms)
         index_map = self._db_string_to_list(index_map)
-        if n_atoms != len(
-                index_map
-        ) / 2:  # confirm we have the right number of coordinates
+        if n_atoms != len(index_map) / 2:  # confirm we have the right number of coordinates
             raise RuntimeError(
                 "ERROR! Incorrect number of coordinates! Given {n_coords} \
-                atom coordinates for {n_at} atoms!"
-                .format(n_coords=n_atoms, n_at=len(index_map) / 2))
+                atom coordinates for {n_at} atoms!".format(
+                    n_coords=n_atoms, n_at=len(index_map) / 2))
         for i in range(n_atoms):
             pdbqt_index = int(index_map[i * 2 + 1]) - 1
             x, y, z = [float(coord) for coord in atom_coordinates[pdbqt_index]]
@@ -583,7 +586,7 @@ class Outputter():
                 # make an RDKit molecule from the flexres pdbqt to use as a
                 # template for setting the coordinates of the conformer
                 flexres_pdbqt = self._generate_pdbqt_block(flexres_lines[idx])
-                template = AllChem.MolFromPDBBlock(flexres_pdbqt)
+                template = AllChem.MolFromPDBBlock(flexres_pdbqt, removeHs=False)
 
                 # iterate through atoms in template, set corresponding atom in
                 # new conformer to the position of the template atom
@@ -600,7 +603,8 @@ class Outputter():
 
     def add_hydrogens_to_pose(self, mol, conformer_idx, ligand_coordinates,
                               h_parent_line):
-        """Summary
+        """Add hydrogen atoms to ligand RDKit mol, adjust the positions of
+            polar hydrogens to match pdbqt
 
         Args:
             mol (TYPE): Description
