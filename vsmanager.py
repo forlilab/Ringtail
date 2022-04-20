@@ -483,15 +483,15 @@ class Outputter():
         # make flexres rdkit molecules, add to our list of flex_res_mols
 
         flexible_residues = self._db_string_to_list(flexres_names)
-        for i in range(len(flexible_residues)):
+        for idx, flex_res in enumerate(flexible_residues):
             # get the residue smiles string and pdbqt we need
             # to make the required rdkit molecules
             try:
-                res_smile = self.flex_residue_smiles[flexible_residues[i]]
+                res_smile = self.flex_residue_smiles[flex_res]
                 flexres_pdbqt = self._generate_pdbqt_block(
-                    json.loads(flexres_lines)[i])
+                    json.loads(flexres_lines)[idx])
             except KeyError:
-                if flexible_residues[i] == '':
+                if flex_res == '':
                     continue
                 else:
                     raise KeyError
@@ -575,15 +575,14 @@ class Outputter():
         else:
             flexres_lines = self._db_string_to_list(flexres_lines)
             # add new pose to each of the flexible residue molecules
-            for i in range(len(flex_res_mols)):
+            for idx, flex_res in enumerate(flex_res_mols):
                 # make a new conformer
-                flex_res = flex_res_mols[i]
                 n_atoms = flex_res.GetNumAtoms()
                 conf = Chem.Conformer(n_atoms)
 
                 # make an RDKit molecule from the flexres pdbqt to use as a
                 # template for setting the coordinates of the conformer
-                flexres_pdbqt = self._generate_pdbqt_block(flexres_lines[i])
+                flexres_pdbqt = self._generate_pdbqt_block(flexres_lines[idx])
                 template = AllChem.MolFromPDBBlock(flexres_pdbqt)
 
                 # iterate through atoms in template, set corresponding atom in
@@ -595,7 +594,7 @@ class Outputter():
                 # add new conformer to flex_res object and add object back
                 # to flex_res_mols
                 flex_res.AddConformer(conf, assignId=True)
-                flex_res_mols[i] = flex_res
+                flex_res_mols[idx] = flex_res
 
         return mol, flex_res_mols
 

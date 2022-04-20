@@ -344,10 +344,10 @@ class DBManager():
             List: List of run numbers of tolerated runs
         """
         tolerated_runs = []
-        for i in range(len(ligand_dict["sorted_runs"])):
+        for idx, run in enumerate(ligand_dict["sorted_runs"]):
             if float(ligand_dict["cluster_rmsds"]
-                     [i]) <= self.interaction_tolerance_cutoff:
-                tolerated_runs.append(ligand_dict["sorted_runs"][i])
+                     [idx]) <= self.interaction_tolerance_cutoff:
+                tolerated_runs.append(run)
         return tolerated_runs
 
     def format_rows_from_dict(self, ligand_dict):
@@ -382,8 +382,7 @@ class DBManager():
             tolerated_interaction_runs = []
 
         # do the actual result formating
-        for i in range(len(ligand_dict["sorted_runs"])):
-            run_number = int(ligand_dict["sorted_runs"][i])
+        for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
             # save everything if this is a cluster top pose
             if run_number in poses_to_save:
                 # don't save interaction data from previous
@@ -406,13 +405,13 @@ class DBManager():
                     interaction_dictionaries = [
                     ]  # clear the list for the new cluster
                 result_rows.append(
-                    self._generate_results_row(ligand_dict, i, run_number))
-                interaction_dictionaries.append(ligand_dict["interactions"][i])
+                    self._generate_results_row(ligand_dict, idx, run_number))
+                interaction_dictionaries.append(ligand_dict["interactions"][idx])
             elif run_number in tolerated_interaction_runs:
                 # adds to list started by best-scoring pose in cluster
                 interaction_dictionaries.append(
                     ligand_dict["interactions"]
-                    [i])
+                    [idx])
 
         pose_interactions = self._generate_interaction_tuples(
             interaction_dictionaries
