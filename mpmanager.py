@@ -6,6 +6,7 @@ class MPManager():
 
     def __init__(self, filelist, mode, db_obj, chunksize, numclusters,
                  no_print_flag):
+        # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg"]
         if mode not in self.implemented_modes:
             raise NotImplementedError(

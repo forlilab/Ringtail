@@ -52,12 +52,14 @@ class DockingFileReader(multiprocessing.Process):
                 break
 
             # generate CPU LOAD
+            # parser depends on requested mode
             if self.mode == "dlg":
                 parsed_file_dict = parsers.parse_single_dlg(next_task)
-                parsed_file_dict = self.find_best_cluster_poses(
-                    parsed_file_dict)
-                file_packet = self.dbman.format_rows_from_dict(
-                    parsed_file_dict)
+            # future: Vina parser, etc
+            # elif self.mode == "vina":
+            #    parsed_file_dict = parser.parse_single_vina_log(next_task)
+            parsed_file_dict = self.find_best_cluster_poses(parsed_file_dict)
+            file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
             # put the result in the out queue
             self.queueOut.put(file_packet)
         return
@@ -138,7 +140,8 @@ class Writer(multiprocessing.Process):
     def write_to_db(self):
         time1 = time.perf_counter()
         # insert result and ligand data
-        self.db.insert_results(filter(None, self.results_array))  # filter out stray Nones
+        self.db.insert_results(filter(
+            None, self.results_array))  # filter out stray Nones
         self.db.insert_ligands(filter(None, self.ligands_array))
 
         # perform operations for inserting iteraction data
