@@ -2,8 +2,9 @@ import os
 import gzip
 import numpy as np
 
+
 def parse_single_dlg(fname, mode='standard'):
-    """ parse an ADGPU DLG file uncompressed or gzipped 
+    """ parse an ADGPU DLG file uncompressed or gzipped
     """
     STD_END = 'DOCKED: ENDMDL'
     STD_KW = 'DOCKED: '
@@ -13,7 +14,6 @@ def parse_single_dlg(fname, mode='standard'):
 
     INPUT_KW = "INPUT LIGAND PDBQT FILE"
     INPUT_END = "FINAL DOCKED STATE"
-
 
     # split the first name/extension
     fname_clean = os.path.basename(fname)
@@ -27,7 +27,7 @@ def parse_single_dlg(fname, mode='standard'):
     else:
         open_fn = open
 
-    #intialize lists for pose data
+    # intialize containers for pose data
     poses = []
     interactions = []
     scores = []
@@ -50,7 +50,7 @@ def parse_single_dlg(fname, mode='standard'):
     flexible_residues = []
     flexible_res_coords = []
 
-    #read poses
+    # read poses
     heavy_at_count = 0
     heavy_at_count_complete = False
     with open_fn(fname, 'rb') as fp:
@@ -64,36 +64,41 @@ def parse_single_dlg(fname, mode='standard'):
         h_parents = []
         for line in fp.readlines():
             line = line.decode("utf-8")
-            #store ligand file name
+            # store ligand file name
             if line[0:11] == "Ligand file":
-                ligname = line.split(":",1)[1].strip().split(".")[0]
-            #store smile string
+                ligname = line.split(":", 1)[1].strip().split(".")[0]
+            # store smile string
             if "REMARK SMILES" in line and "IDX" not in line:
                 smile_string = line.split("REMARK SMILES")[-1]
-            #store flexible residue identities
+            # store flexible residue identities
             if "INPUT-FLEXRES-PDBQT: BEGIN_RES" in line:
                 flexible_residues.append(line.split()[2])
-            #store number of runs
+            # store number of runs
             if "Number of runs:" in line:
                 nruns = int(line.split()[3])
                 cluster_rmsds = list(range(nruns))
                 ref_rmsds = list(range(nruns))
-            #store input pdbqt lines
+            # store input pdbqt lines
             if INPUT_KW in line:
                 inside_input = True
             if INPUT_END in line:
                 inside_input = False
-            if inside_input == True:
-                if line.startswith("INPUT-LIGAND-PDBQT") or line.startswith("INPUT-FLEXRES-PDBQT"):
-                    if " UNK " in line: #replace ligand atoms ATOM flag with HETATM
+            if inside_input is True:
+                if line.startswith("INPUT-LIGAND-PDBQT") or line.startswith(
+                        "INPUT-FLEXRES-PDBQT"):
+                    if " UNK " in line:  # replace ligand atoms ATOM flag with HETATM
                         line = line.replace("ATOM", "HETATM")
                     input_pdbqt.append(' '.join(line.split()[1:]))
                 if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
-                    index_map += line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX" ).rstrip("\n").split()
+                    index_map += line.lstrip(
+                        "INPUT-LIGAND-PDBQT: REMARK SMILES IDX").rstrip(
+                            "\n").split()
                 if line.startswith("INPUT-LIGAND-PDBQT: REMARK H PARENT"):
-                    h_parents += line.lstrip("INPUT-LIGAND-PDBQT: REMARK H PARENT").rstrip("\n").split()
+                    h_parents += line.lstrip(
+                        "INPUT-LIGAND-PDBQT: REMARK H PARENT").rstrip(
+                            "\n").split()
 
-            #store poses in each cluster in dictionary as list of ordered runs 
+            # store poses in each cluster in dictionary as list of ordered runs
             if "RANKING" in line:
                 cluster_num = line.split()[0]
                 run = line.split()[2]
@@ -102,20 +107,21 @@ def parse_single_dlg(fname, mode='standard'):
                 else:
                     clusters[cluster_num] = [int(run)]
 
-                cluster_rmsds[int(run)-1] = float(line.split()[4]) #will be stored in order of runs
-                ref_rmsds[int(run)-1] = float(line.split()[5])
+                cluster_rmsds[int(run) - 1] = float(
+                    line.split()[4])  # will be stored in order of runs
+                ref_rmsds[int(run) - 1] = float(line.split()[5])
 
-            #set make new flexible residue list if we are in the coordinates for a flexible residue
+            # make new flexible residue list if in the coordinates for a flexible residue
             if "DOCKED: BEGIN_RES" in line:
                 flexible_res_coords[-1].append([])
                 inside_res = True
             if "DOCKED: END_RES" in line:
                 inside_res = False
 
-            #store pose anaylsis
+            # store pose anaylsis
             elif line[0:9] == "ANALYSIS:":
                 analysis_flag = True
-                if inside_pose== False:
+                if inside_pose is False:
                     # first time inside a pose block
                     inside_pose = True
                     interactions.append({})
@@ -128,7 +134,9 @@ def parse_single_dlg(fname, mode='standard'):
                 info = info.replace("{", "")
                 info = info.replace("}", "")
                 info = info.replace('"', '')
-                interactions[-1][kw.lower()] =  [x.strip() for x in info.split(",")]
+                interactions[-1][kw.lower()] = [
+                    x.strip() for x in info.split(",")
+                ]
                 if "COUNT" in line:
                     interact_count = int(line.split()[1])
                     pose_interact_count.append(str(interact_count))
@@ -146,106 +154,123 @@ def parse_single_dlg(fname, mode='standard'):
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
                 poses[-1].append(line)
-                #store pose coordinates
+                # store pose coordinates
                 if "ATOM" in line:
                     if inside_res:
                         line_split = line.split()
-                        if "H" not in line_split[2] or "CH" in line_split[2]: #don't save flex res hydrogen coordinates
-                            flexible_res_coords[-1][-1].append(line)
+                        flexible_res_coords[-1][-1].append(line)
                     else:
-                        pose_coordinates[-1].append(line.split()[5:8])
-                #store pose data
+                        pose_coordinates[-1].append(line.split()[6:9])
+                # store pose data
                 if "Estimated Free Energy of Binding" in line:
                     try:
                         e = float(line.split()[7])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[6].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     scores.append(e)
                 if "Final Intermolecular Energy" in line:
                     try:
                         e = float(line.split()[6])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     intermolecular_energy.append(e)
                 if "vdW + Hbond + desolv Energy" in line:
                     try:
                         e = float(line.split()[8])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[7].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     vdw_hb_desolv.append(e)
                 if "Electrostatic Energy" in line:
                     try:
                         e = float(line.split()[4])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[3].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     electrostatic.append(e)
                 if "Moving Ligand-Fixed Receptor" in line:
                     try:
                         e = float(line.split()[5])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[4].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     flex_ligand.append(e)
                 if "Moving Ligand-Moving Receptor" in line:
                     try:
                         e = float(line.split()[5])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[4].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     flexLigand_flexReceptor.append(e)
                 if "Final Total Internal Energy" in line:
                     try:
                         e = float(line.split()[7])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[6].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     internal_energy.append(e)
                 if "Torsional Free Energy" in line:
                     try:
                         e = float(line.split()[6])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     torsion.append(e)
                 if "Unbound System's Energy" in line:
                     try:
                         e = float(line.split()[6])
-                    except ValueError: #catch off-by-one error if number is next to =
+                    except ValueError:  #catch off-by-one error if number is next to =
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
-                            print("ERROR! Cannot parse {this_line} in {this_file}".format(this_line = line, this_file = fname))
+                            print(
+                                "ERROR! Cannot parse {this_line} in {this_file}"
+                                .format(this_line=line, this_file=fname))
                             raise ValueError
                     unbound_energy.append(e)
-                #store state variables
+                # store state variables
                 if "NEWDPF about" in line:
                     ind_pose_abt = [float(i) for i in line.split()[3:]]
                     pose_about.append(ind_pose_abt)
@@ -269,7 +294,7 @@ def parse_single_dlg(fname, mode='standard'):
 
     sorted_idx = np.argsort(scores)
     # sort poses, scores, and interactions
-    #TODO: make this into a helper function
+    # TODO: make this into a helper function
     poses = [poses[i] for i in sorted_idx]
     pose_coordinates = [pose_coordinates[i] for i in sorted_idx]
     flexible_res_coords = [flexible_res_coords[i] for i in sorted_idx]
@@ -292,43 +317,50 @@ def parse_single_dlg(fname, mode='standard'):
     pose_interact_count = [pose_interact_count[i] for i in sorted_idx]
     pose_hb_counts = [pose_hb_counts[i] for i in sorted_idx]
 
-    if len(poses)==0 or len(scores)==0 or len(interactions)==0 or len(intermolecular_energy)==0 or len(vdw_hb_desolv)==0 or len(electrostatic)==0 or len(internal_energy)==0 or len(torsion)==0 or len(unbound_energy)==0:
+    if len(poses) == 0 or len(scores) == 0 or len(interactions) == 0 or len(
+            intermolecular_energy) == 0 or len(vdw_hb_desolv) == 0 or len(
+                electrostatic) == 0 or len(internal_energy) == 0 or len(
+                    torsion) == 0 or len(unbound_energy) == 0:
         if not analysis_flag:
-            raise RuntimeError("No interaction analysis data in {0}. Rerun AD with interaction analysis".format(fname))
+            raise RuntimeError(
+                "No interaction analysis data in {0}. Rerun AD with interaction analysis"
+                .format(fname))
         raise ValueError("Incomplete data in " + fname)
     # calculate ligand efficiency and deltas from the best pose
-    leff = [ x/heavy_at_count for x in scores]
-    delta = [x-scores[0] for x in scores ]
+    leff = [x / heavy_at_count for x in scores]
+    delta = [x - scores[0] for x in scores]
 
-    return {'ligname':ligname,
-            'source_file':fname,
-            'ligand_input_pdbqt':input_pdbqt,
-            'ligand_index_map':index_map,
-            'ligand_h_parents':h_parents,
-            'pose_coordinates':pose_coordinates,
-            'flexible_res_coordinates':flexible_res_coords,
-            'flexible_residues':flexible_residues,
-            'ligand_smile_string':smile_string,
-            'clusters':clusters,
-            'cluster_rmsds':cluster_rmsds,
-            'ref_rmsds':ref_rmsds,
-            'scores':scores, 
-            'leff':leff, 
-            'delta':delta,             
-            'intermolecular_energy':intermolecular_energy,
-            'vdw_hb_desolv':vdw_hb_desolv,
-            'electrostatics':electrostatic,
-            'flex_ligand':flex_ligand,
-            'flexLigand_flexReceptor':flexLigand_flexReceptor,
-            'internal_energy':internal_energy,
-            'torsional_energy':torsion,
-            'unbound_energy':unbound_energy,
-            'interactions':interactions,
-            'num_interactions': pose_interact_count,
-            'num_hb':pose_hb_counts,
-            'sorted_runs': [x+1 for x in sorted_idx],
-            'pose_about': pose_about,
-            'pose_translations':pose_trans,
-            'pose_quarternions':pose_quarternions,
-            'pose_dihedrals':pose_dihedrals,
-            'fname': fname}
+    return {
+        'ligname': ligname,
+        'source_file': fname,
+        'ligand_input_pdbqt': input_pdbqt,
+        'ligand_index_map': index_map,
+        'ligand_h_parents': h_parents,
+        'pose_coordinates': pose_coordinates,
+        'flexible_res_coordinates': flexible_res_coords,
+        'flexible_residues': flexible_residues,
+        'ligand_smile_string': smile_string,
+        'clusters': clusters,
+        'cluster_rmsds': cluster_rmsds,
+        'ref_rmsds': ref_rmsds,
+        'scores': scores,
+        'leff': leff,
+        'delta': delta,
+        'intermolecular_energy': intermolecular_energy,
+        'vdw_hb_desolv': vdw_hb_desolv,
+        'electrostatics': electrostatic,
+        'flex_ligand': flex_ligand,
+        'flexLigand_flexReceptor': flexLigand_flexReceptor,
+        'internal_energy': internal_energy,
+        'torsional_energy': torsion,
+        'unbound_energy': unbound_energy,
+        'interactions': interactions,
+        'num_interactions': pose_interact_count,
+        'num_hb': pose_hb_counts,
+        'sorted_runs': [x + 1 for x in sorted_idx],
+        'pose_about': pose_about,
+        'pose_translations': pose_trans,
+        'pose_quarternions': pose_quarternions,
+        'pose_dihedrals': pose_dihedrals,
+        'fname': fname
+    }
