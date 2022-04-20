@@ -525,7 +525,7 @@ class CLOptionParser():
                     group.add_argument(name, **args)
         # parse options
         cmdline_opts = sys.argv[1:]
-        # hack to allow defining options from a file (argparse does not allow to do it in a clean way)
+        # allows defining options from file (argparse does not allow to do it in a clean way)
         if "--filters_file" in cmdline_opts:
             idx = cmdline_opts.index('--filters_file')
             cmdline_opts.pop(idx)
@@ -535,30 +535,29 @@ class CLOptionParser():
         # add a function here to validate the cmdline (repeated options?)
         # validate policy of file > cmdline? (or vice versa?)
         parsed_opts = parser.parse_args(cmdline_opts)
-        #print("PARSED OPTIONS", parsed_opts)
         self.process_options(parsed_opts)
 
     def read_filter_file(self, fname):
         """ parse the filter file to define filters """
         opts = []
         with open(fname, 'r') as fp:
-            for l in fp.readlines():
-                l = l.strip()
+            for line in fp.readlines():
+                line = line.strip()
                 # remove empty lines
-                if not len(l):
+                if not len(line):
                     continue
                 # remove comments
-                if l[0] == "#":
+                if line[0] == "#":
                     continue
-                opts.append("--%s" % l.strip())
+                opts.append("--%s" % line.strip())
         self.cmdline_opts += opts
 
     def process_options(self, parsed_opts):
         """ convert command line options to the dict of filters """
         # check that required input options are provided
-        file_sources = {}  #'file':None, 'files_path':None, 'file_list':None}
+        file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
         file_sources['file'] = parsed_opts.file
-        if not parsed_opts.file_path is None:
+        if parsed_opts.file_path is not None:
             file_sources['file_path'] = {
                 'path': parsed_opts.file_path,
                 'pattern': parsed_opts.pattern,
@@ -576,7 +575,7 @@ class CLOptionParser():
                 "*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
             )
             sys.exit(1)
-        if parsed_opts.add_results and parsed_opts.input_db == None:
+        if parsed_opts.add_results and parsed_opts.input_db is None:
             print(
                 "ERRROR! Must specify --input_db if adding results to an existing database"
             )
@@ -587,7 +586,7 @@ class CLOptionParser():
                 raise RuntimeError(
                     "WARNING: {out_f} is not a valid output option. Please see --help or documentation"
                     .format(out_f=outfield))
-        ##### parse output options
+        # parse output options
         # Make sure that export_poses_path has trailing /, is directory
         if parsed_opts.export_poses_path is not None:
             if not parsed_opts.export_poses_path.endswith("/"):
@@ -621,13 +620,12 @@ class CLOptionParser():
         if not parsed_opts.export_poses_path is None:
             output['log'] = os.path.join(output["export_poses_path"],
                                          output['log'])
-        #print(">>>>>>>>>>>>>chekc that fields are recognized")
         if parsed_opts.log is None:
             print(
                 "*ERROR* print to STDOUT is disabled and no log file has been specified; at least one output source needs to be used."
             )
             sys.exit(1)
-        ##### filters
+        # # # filters
         # property filters
         properties = {
             'eworst': None,
@@ -675,7 +673,7 @@ class CLOptionParser():
             if c is None:
                 continue
             interactions_count.append((pool, c))
-        #make dictionary for ligand filters
+        # make dictionary for ligand filters
         ligand_filters_kw = [('name', 'N'), ('substructure', 'S'),
                              ('substruct_flag', 'F')]
         ligand_filters = {}
@@ -690,7 +688,6 @@ class CLOptionParser():
                 for fil in ligand_filter_list:
                     ligand_filters[_type].append(fil)
 
-        # TODO combine everything into a single parameters dictionary to be passed to DockingResultManager (with all the kws in its init)
         filters = {
             'properties': properties,
             'interactions': interactions,
@@ -701,7 +698,7 @@ class CLOptionParser():
             "react_any": parsed_opts.react_any
         }
         self.file_sources = file_sources
-        if parsed_opts.input_db != None:
+        if parsed_opts.input_db is not None:
             sqlFile = parsed_opts.input_db
             if not os.path.exists(sqlFile):
                 print("WARNING: input database does not exist!")
@@ -712,7 +709,7 @@ class CLOptionParser():
             db_opts['write_db_flag'] = True
         db_opts['sqlFile'] = sqlFile
 
-        #make attributes for parsed opts
+        # make attributes for parsed opts
         self.db_opts = db_opts
         self.filters = filters
         self.out_opts = output
@@ -722,22 +719,18 @@ class CLOptionParser():
         sources = self.file_sources
         self.files_pool = []
         if sources['file'] is not None:
-            # print("DRM> initialized with %d individual files" % len(sources['file']))
             self.files_pool = sources['file']
         # update the files pool with the all the files found in the path
         if sources['file_path'] is not None:
-            # print("DRM> scanning path [%s] (recursive: %s, pattern '%s')" % (sources['file_path']['path'],
-            #         str(sources['file_path']['recursive']), sources['file_path']['pattern']))
             self.scan_dir(sources['file_path']['path'],
                           sources['file_path']['pattern'],
                           sources['file_path']['recursive'])
         # update the files pool with the files specified in the files list
         if sources['file_list'] is not None:
-            # print("DRM> searching for files listed in [%s]" % sources['file_list'])
             self.scan_file_list(sources['file_list'])
 
     def scan_dir(self, path, pattern, recursive=False):
-        """ scan for valid output files in a directory 
+        """ scan for valid output files in a directory
             the pattern is used to glob files
             optionally, a recursive search is performed
         """
@@ -761,17 +754,15 @@ class CLOptionParser():
         accepted = []
         c = 0
         with open(filename, 'r') as fp:
-            for l in fp.readlines():
-                l = l.strip()
+            for line in fp.readlines():
+                line = line.strip()
                 c += 1
-                if os.path.isfile(l):
-                    accepted.append(l)
+                if os.path.isfile(line):
+                    accepted.append(line)
                 else:
-                    print("Warning! file |%s| does not exist" % l)
+                    print("Warning! file |%s| does not exist" % line)
         if len(accepted) == 0:
-            print("*ERROR* No valid files were found when reading from |%s|" %
-                  filename)
-            #sys.exit(1)
+            raise FileNotFoundError("*ERROR* No valid files were found when reading from |%s|" % filename)
         print("# [ %5.3f%% files in list accepted (%d) ]" %
               (len(accepted) / c * 100, c))
         self.files_pool.extend(accepted)
