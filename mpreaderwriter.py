@@ -104,7 +104,7 @@ class Writer(multiprocessing.Process):
             if next_task is None:
                 # if a poison pill is found, it means one of the workers quit
                 self.maxProcesses -= 1
-                print("POISON PILL! Remaining maxProcesses:",
+                print("Closing process. Remaining open processes:",
                       self.maxProcesses)
             else:
                 # if not a poison pill, process the task item
