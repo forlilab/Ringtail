@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import json
 import warnings
-from meeko import PDBQTMolecule
+from meeko import RDKitMolCreate
+from rdkit import Chem
+from rdkit.Chem import SDWriter
 
 
 class VSManager():
@@ -115,7 +117,7 @@ class VSManager():
         print("Creating plot of results")
         # get data from DBMan
         all_data, passing_data = self.dbman.get_plot_data()
-        all_plot_data_binned = {}
+        all_plot_data_binned = dict()
         # bin the all_ligands data by 1000ths to make plotting faster
         for line in all_data:
             # add to dictionary as bin of energy and le
@@ -196,40 +198,33 @@ class VSManager():
         for (ligname, smiles, atom_indices,
              h_parent_line) in passing_molecule_info:
             print("Writing " + ligname.split(".")[0] + ".sdf")
-            # save pose coordinate lists for adjusting hydrogens later
-            saved_poses = []
             # create rdkit ligand molecule and flexible residue container
             if smiles == '':
                 warnings.warn(f"No SMILES found for {ligname}. Cannot create SDF.")
                 continue
-            mol = PDBQTMolecule('', manual_mode=True)
-            mol.create_rdkit_mol_manually(ligname, smiles, self._db_string_to_list(atom_indices), self._format_h_parents(h_parent_line))
-            flex_res_mols = []
+            mol = Chem.MolFromSmiles(smiles)
+            atom_indices = self._db_string_to_list(atom_indices)
+            flexres_mols = {}
+            saved_coords = []
 
             # fetch coordinates for passing poses and add to
             # rdkit ligand mol, add flexible residues
             passing_coordinates = self.dbman.fetch_passing_pose_coordinates(
                 ligname)
-            for ligand_pose, flexres_pose, flexres_names in passing_coordinates:
-                ligand_pose = self._db_string_to_list(ligand_pose)
-                flexres_pose = self._db_string_to_list(flexres_pose)
-                flexres_names = self._db_string_to_list(flexres_names)
-                flexres_pdbqts = [self._generate_pdbqt_block(res) for res in flexres_pose]
-                mol.add_pose_to_mol(ligand_pose, flexres_pdbqts, flexres_names)
+            mol, flexres_mols, saved_coords = self._add_poses(atom_indices, passing_coordinates,
+                                                              mol, flexres_mols, saved_coords)
 
             # fetch coordinates for non-passing poses
             # and add to ligand mol, flexible residue mols
             nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinates(
                 ligname)
-            for ligand_pose, flexres_pose, flexres_names in nonpassing_coordinates:
-                ligand_pose = self._db_string_to_list(ligand_pose)
-                flexres_pose = self._db_string_to_list(flexres_pose)
-                flexres_names = self._db_string_to_list(flexres_names)
-                flexres_pdbqts = [self._generate_pdbqt_block(res) for res in flexres_pose]
-                mol.add_pose_to_mol(ligand_pose, flexres_pdbqts, flexres_names)
+            mol, flexres_mols, saved_coords = self._add_poses(atom_indices, nonpassing_coordinates,
+                                                              mol, flexres_mols, saved_coords)
 
             # write out molecule
-            self.output_manager.write_out_mol(ligname, mol)
+            # h_parents = self._format_h_parents(h_parent_line)
+            h_parents = [int(idx) for idx in self._db_string_to_list(h_parent_line)]
+            self.output_manager.write_out_mol(ligname, mol, flexres_mols, saved_coords, h_parents)
 
     def close_database(self):
         """Tell database we are done and it can close the connection
@@ -261,7 +256,6 @@ class VSManager():
 
         return json.loads(input_str)
 
-
     def _generate_pdbqt_block(self, pdbqt_lines):
         """Generate pdbqt block from given lines from a pdbqt
 
@@ -273,6 +267,28 @@ class VSManager():
             line.lstrip(" ") for line in list(
                 filter(None, [self._clean_db_string(line) for line in pdbqt_lines]))
         ])
+
+    def _add_poses(self, atom_indices, poses, mol, flexres_mols, saved_coords):
+        """Add poses from given cursor to rdkit mols for ligand and flexible residues
+
+        Args:
+            atom_indices (List): List of ints indicating mapping of coordinate indices to smiles indices
+            poses (iterable): iterable containing ligand_pose, flexres_pose, flexres_names
+            mol (RDKit Mol): RDKit molecule for ligand
+            flexres_mols (Dict): Dictionary of rdkit molecules for flexible residues
+            saved_coords (list): list of coordinates to save for adding hydrogens later
+        """
+        for ligand_pose, flexres_pose, flexres_names in poses:
+            ligand_pose = self._db_string_to_list(ligand_pose)
+            flexres_pose = self._db_string_to_list(flexres_pose)
+            flexres_names = [name + str(idx) for idx, name in enumerate(self._db_string_to_list(flexres_names))]
+            flexres_pdbqts = [self._generate_pdbqt_block(res) for res in flexres_pose]
+            mol, flexres_mols = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices,
+                                                               flexres_mols=flexres_mols,
+                                                               flexres_poses=flexres_pdbqts,
+                                                               flexres_names=flexres_names)
+            saved_coords.append(ligand_pose)
+        return mol, flexres_mols, saved_coords
 
     def _format_h_parents(self, h_parent_line):
         """takes list of h_parent indices from database,
@@ -423,7 +439,7 @@ class Outputter():
                 num=str(number_passing_ligands)))
             f.write("---------------\n")
 
-    def write_out_mol(self, ligname, mol):
+    def write_out_mol(self, ligname, mol, flexres_mols, saved_coords, h_parents):
         """writes out given mol as sdf
 
         Args:
@@ -432,7 +448,10 @@ class Outputter():
             mol (meeko PDBQTMolecule object): Meeko PDBQTMolecule object to be written to SDF
         """
         filename = self.vsman.out_opts["export_poses_path"] + ligname + ".sdf"
-        mol.write_sdf(filename)
+        mol = RDKitMolCreate.export_combined_rdkit_mol(mol, flexres_mols, saved_coords, h_parents)
+        with SDWriter(filename) as w:
+            for conf in mol.GetConformers():
+                w.write(mol, conf.GetId())
 
     def _create_log_file(self):
         """

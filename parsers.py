@@ -44,6 +44,8 @@ def parse_single_dlg(fname, mode='standard'):
     pose_quarternions = []
     pose_dihedrals = []
     clusters = {}
+    cluster_sizes = {}
+    cluster_list = []  # list indicating cluster each run belongs to
     pose_interact_count = []
     pose_hb_counts = []
     pose_coordinates = []
@@ -76,6 +78,7 @@ def parse_single_dlg(fname, mode='standard'):
             # store number of runs
             if "Number of runs:" in line:
                 nruns = int(line.split()[3])
+                cluster_list = list(range(nruns))
                 cluster_rmsds = list(range(nruns))
                 ref_rmsds = list(range(nruns))
             # store input pdbqt lines
@@ -102,10 +105,13 @@ def parse_single_dlg(fname, mode='standard'):
             if "RANKING" in line:
                 cluster_num = line.split()[0]
                 run = line.split()[2]
+                cluster_list[int(run) - 1] = cluster_num
                 if cluster_num in clusters:
                     clusters[cluster_num].append(int(run))
+                    cluster_sizes[cluster_num] += 1
                 else:
                     clusters[cluster_num] = [int(run)]
+                    cluster_sizes[cluster_num] = 1
 
                 cluster_rmsds[int(run) - 1] = float(
                     line.split()[4])  # will be stored in order of runs
@@ -316,6 +322,7 @@ def parse_single_dlg(fname, mode='standard'):
     ref_rmsds = [ref_rmsds[i] for i in sorted_idx]
     pose_interact_count = [pose_interact_count[i] for i in sorted_idx]
     pose_hb_counts = [pose_hb_counts[i] for i in sorted_idx]
+    cluster_list = [cluster_list[i] for i in sorted_idx]
 
     if len(poses) == 0 or len(scores) == 0 or len(interactions) == 0 or len(
             intermolecular_energy) == 0 or len(vdw_hb_desolv) == 0 or len(
@@ -342,6 +349,8 @@ def parse_single_dlg(fname, mode='standard'):
         'ligand_smile_string': smile_string,
         'clusters': clusters,
         'cluster_rmsds': cluster_rmsds,
+        'cluster_sizes': cluster_sizes,
+        'cluster_list': cluster_list,
         'ref_rmsds': ref_rmsds,
         'scores': scores,
         'leff': leff,

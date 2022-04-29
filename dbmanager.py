@@ -208,6 +208,7 @@ class DBManager():
             unbound_energy,
             nr_interactions,
             num_hb,
+            cluster_size,
             about_x,
             about_y,
             about_z,
@@ -230,7 +231,7 @@ class DBManager():
         # We are only saving the top pose for each cluster
         ligand_data_list = [
             ligand_dict["ligname"], ligand_dict["ligand_smile_string"],
-            ligand_dict["source_file"], pose_rank + 1, run_number
+            ligand_dict["source_file"], pose_rank + 1, int(run_number)
         ]
         # get energy data
         for key in self.ligand_data_keys:
@@ -242,6 +243,9 @@ class DBManager():
         # count number H bonds, add to ligand data list
         ligand_data_list.append(
             ligand_dict["interactions"][pose_rank]["type"].count("H"))
+        # Add the cluster size for the cluster this pose belongs to
+        ligand_data_list.append(
+            ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]])
 
         # add statevars
         for key in self.stateVar_keys:
@@ -633,6 +637,7 @@ class DBManager():
             leff                FLOAT(4),
             deltas              FLOAT(4),
             cluster_rmsd        FLOAT(4),
+            cluster_size        INT[],
             reference_rmsd      FLOAT(4),
             energies_inter      FLOAT(4),
             energies_vdw        FLOAT(4),
@@ -821,8 +826,9 @@ class DBManager():
         raise NotImplementedError
 
     def _generate_results_data_query(self, output_fields):
-        """Generates SQLite-formatted query string to select outfields data for ligands in self.passing_results_view_name
-        
+        """Generates SQLite-formatted query string to select outfields data
+            for ligands in self.passing_results_view_name
+
         Args:
             output_fields (List): List of result column data for output
         """
@@ -950,6 +956,7 @@ class DBManagerSQLite(DBManager):
         unbound_energy,
         nr_interactions,
         num_hb,
+        cluster_size,
         about_x,
         about_y,
         about_z,
@@ -965,7 +972,7 @@ class DBManagerSQLite(DBManager):
         flexible_residues,
         flexible_res_coordinates
         ) VALUES \
-        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -1230,6 +1237,7 @@ class DBManagerSQLite(DBManager):
             leff                FLOAT(4),
             deltas              FLOAT(4),
             cluster_rmsd        FLOAT(4),
+            cluster_size        INT[],
             reference_rmsd      FLOAT(4),
             energies_inter      FLOAT(4),
             energies_vdw        FLOAT(4),
@@ -1267,6 +1275,7 @@ class DBManagerSQLite(DBManager):
             leff                FLOAT(4),
             deltas              FLOAT(4),
             cluster_rmsd        FLOAT(4),
+            cluster_size        INT[],
             reference_rmsd      FLOAT(4),
             energies_inter      FLOAT(4),
             energies_vdw        FLOAT(4),
