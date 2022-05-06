@@ -40,6 +40,12 @@ if __name__ == '__main__':
     if out_opts["export_poses_path"] is not None:
         vsman.write_molecule_sdfs()
 
+    # write out requested CSVs
+    if out_opts["export_table"] is not None:
+        vsman.export_csv(out_opts["export_table"], out_opts["export_table"] + ".csv")
+    if out_opts["export_query"] is not None:
+        vsman.export_csv(out_opts["export_query"], "query.csv")
+
     # close database
     vsman.close_database()
     time2 = time.perf_counter()

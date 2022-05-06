@@ -7,6 +7,7 @@ import warnings
 from meeko import RDKitMolCreate
 from rdkit import Chem
 from rdkit.Chem import SDWriter
+import pandas as pd
 
 
 class VSManager():
@@ -225,6 +226,16 @@ class VSManager():
             # h_parents = self._format_h_parents(h_parent_line)
             h_parents = [int(idx) for idx in self._db_string_to_list(h_parent_line)]
             self.output_manager.write_out_mol(ligname, mol, flexres_mols, saved_coords, h_parents)
+
+    def export_csv(self, requested_data, csv_name):
+        """Get requested data from database, export as CSV
+
+        Args:
+            requested_data (string): Table name or SQL-formatted query
+            csv_name (string): Name for exported CSV file
+        """
+        df = self.dbman.fetch_dataframe_from_db(requested_data)
+        df.to_csv(csv_name)
 
     def close_database(self):
         """Tell database we are done and it can close the connection

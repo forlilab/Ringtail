@@ -2,6 +2,7 @@
 """
 import sqlite3
 import json
+import pandas as pd
 
 
 class DBManager():
@@ -465,12 +466,21 @@ class DBManager():
 
     def fetch_data_for_passing_results(self, outfields):
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.passing_results_view_name
-        
+
         Args:
             outfields (List): List of fields (columns) to be
                 included in log
         """
         return self._run_query(self._generate_results_data_query(outfields))
+
+    def fetch_dataframe_from_db(self, requested_data):
+        """Returns dataframe of table or query given as requested_data
+
+        Args:
+            requested_data (string): String containing SQL-formatted query or table name
+        """
+        return pd.read_sql(requested_data, self.conn)
+
 
     def _fetch_view_names(self):
         """Returns DB curor with the names of all view in DB
@@ -589,6 +599,11 @@ class DBManager():
         """Create connection to db. Then, check if db needs to be written.
             If so, (if self.overwrite_flag drop existing tables and )
             initialize the tables
+        """
+        raise NotImplementedError
+
+    def _fetch_existing_tables(self):
+        """Returns list of all tables in database
         """
         raise NotImplementedError
 
@@ -1159,6 +1174,14 @@ class DBManagerSQLite(DBManager):
         self._create_ligands_table()
         self._create_interaction_index_table()
 
+    def _fetch_existing_tables(self):
+        """Returns list of all tables in database
+        """
+
+        cur = self.conn.cursor()
+        cur.execute("SELECT name FROM sqlite_schema WHERE type='table';")
+        return cur.fetchall()
+
     def _drop_existing_tables(self):
         """drop any existing tables.
         Will only be called if self.overwrite_flag is true
@@ -1166,8 +1189,7 @@ class DBManagerSQLite(DBManager):
 
         # fetch existing tables
         cur = self.conn.cursor()
-        cur.execute("SELECT name FROM sqlite_schema WHERE type='table';")
-        tables = cur.fetchall()
+        tables = self._fetch_existing_tables()
 
         # drop tables
         for table in tables:
