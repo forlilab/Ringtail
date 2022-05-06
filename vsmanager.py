@@ -290,33 +290,6 @@ class VSManager():
             saved_coords.append(ligand_pose)
         return mol, flexres_mols, saved_coords
 
-    def _format_h_parents(self, h_parent_line):
-        """takes list of h_parent indices from database,
-            formats into list of tuples
-
-        Args:
-            h_parent_line (String): H_parent remark line from database.
-
-        Returns:
-            List: List of tuples (heavy_atom_index, H index)
-
-        Raises:
-            RuntimeError: Raise error if there is an odd number of indicies
-            (not paired indices for hydrogen and parent)
-        """
-
-        h_parents = []
-        integers = [
-            int(integer) for integer in self._db_string_to_list(h_parent_line)
-            if integer != "[]"
-        ]  # catch if there are no h-parents
-        if len(integers) % 2 == 1:
-            raise RuntimeError("Number of indices in H PARENT is odd")
-        for j in range(int(len(integers) / 2)):
-            h_parents.append((integers[j * 2], integers[j * 2 + 1]))
-
-        return h_parents
-
 
 # # # # # # # # # # # # # #
 # # # Output class # # #

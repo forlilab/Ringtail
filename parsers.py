@@ -69,6 +69,9 @@ def parse_single_dlg(fname, mode='standard'):
             # store ligand file name
             if line[0:11] == "Ligand file":
                 ligname = line.split(":", 1)[1].strip().split(".")[0]
+            # store receptor name
+            if line[:13] == "Receptor name":
+                receptor = line.split()[2]
             # store smile string
             if "REMARK SMILES" in line and "IDX" not in line:
                 smile_string = line.split("REMARK SMILES")[-1]
@@ -339,6 +342,7 @@ def parse_single_dlg(fname, mode='standard'):
 
     return {
         'ligname': ligname,
+        'receptor': receptor,
         'source_file': fname,
         'ligand_input_pdbqt': input_pdbqt,
         'ligand_index_map': index_map,
