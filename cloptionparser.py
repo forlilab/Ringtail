@@ -128,6 +128,26 @@ class CLOptionParser():
                             },
                         ),
                         (
+                            '--export_table_csv',
+                            {
+                                'help': ('Create csv of the requested database table. Output as <table_name>.csv'),
+                                'action': 'store',
+                                'type': str,
+                                'metavar': "TABLE_NAME",
+                                'default': None
+                            },
+                        ),
+                        (
+                            '--export_query_csv',
+                            {
+                                'help': ('Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]'),
+                                'action': 'store',
+                                'type': str,
+                                'metavar': "[VALID SQL QUERY]",
+                                'default': None
+                            },
+                        ),
+                        (
                             '--interaction_tolerance',
                             {
                                 'help': ('Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired'),
@@ -603,7 +623,9 @@ class CLOptionParser():
             'outfields': parsed_opts.out_fields,
             'no_print': parsed_opts.no_print,
             'no_filter': parsed_opts.no_filter,
-            'data_from_subset': parsed_opts.data_from_subset
+            'data_from_subset': parsed_opts.data_from_subset,
+            'export_table': parsed_opts.export_table_csv,
+            'export_query': parsed_opts.export_query_csv
         }
         db_opts = {
             'num_clusters': parsed_opts.max_poses,
