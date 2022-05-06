@@ -104,7 +104,7 @@ class DBManager():
             "rank": "pose_rank",
             "run": "run_number",
             "hb": "num_hb",
-            "source_file": "source_file"
+            "receptor": "receptor"
         }
         self.interaction_filter_types = {"V", "H", "R"}
 
@@ -190,7 +190,7 @@ class DBManager():
             In same order as expected in _insert_results:
             LigName,
             ligand_smile,
-            source_file,
+            receptor,
             pose_rank,
             run_number,
             cluster_rmsd,
@@ -231,7 +231,7 @@ class DBManager():
         # We are only saving the top pose for each cluster
         ligand_data_list = [
             ligand_dict["ligname"], ligand_dict["ligand_smile_string"],
-            ligand_dict["source_file"], pose_rank + 1, int(run_number)
+            ligand_dict["receptor"], pose_rank + 1, int(run_number)
         ]
         # get energy data
         for key in self.ligand_data_keys:
@@ -630,7 +630,7 @@ class DBManager():
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
             ligand_smile        VARCHAR[],
-            source_file         VARCHAR[],
+            receptor            VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
             energies_binding    FLOAT(4),
@@ -938,7 +938,7 @@ class DBManagerSQLite(DBManager):
         sql_insert = """INSERT INTO Results (
         LigName,
         ligand_smile,
-        source_file,
+        receptor
         pose_rank,
         run_number,
         cluster_rmsd,
@@ -1230,7 +1230,7 @@ class DBManagerSQLite(DBManager):
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
             ligand_smile        VARCHAR[],
-            source_file         VARCHAR[],
+            receptor            VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
             energies_binding    FLOAT(4),
@@ -1268,7 +1268,7 @@ class DBManagerSQLite(DBManager):
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
             ligand_smile        VARCHAR[],
-            source_file         VARCHAR[],
+            receptor            VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
             energies_binding    FLOAT(4),
