@@ -52,6 +52,9 @@ def parse_single_dlg(fname, mode='standard'):
     flexible_residues = []
     flexible_res_coords = []
 
+    # Define empty center list for backwards compatibility with DLGs without grid centers
+    center = [None, None, None]
+
     # read poses
     heavy_at_count = 0
     heavy_at_count_complete = False
@@ -69,9 +72,15 @@ def parse_single_dlg(fname, mode='standard'):
             # store ligand file name
             if line[0:11] == "Ligand file":
                 ligname = line.split(":", 1)[1].strip().split(".")[0]
-            # store receptor name
+            # store receptor name and grid parameters
             if line[:13] == "Receptor name":
                 receptor = line.split()[2]
+            if line[:21] == "Number of grid points":
+                npts = [pts.rstrip("\n").replace(" ", "") for pts in line.split(":")[1].split(",")]
+            if line[:12] == "Grid spacing":
+                spacing = line.split()[2].rstrip("A")  # remove A unit from string
+            if line[:11] == "Grid center":
+                center = [coord.rstrip("\n").replace(" ", "") for coord in line.split(":")[1].split(",")]
             # store smile string
             if "REMARK SMILES" in line and "IDX" not in line:
                 smile_string = line.split("REMARK SMILES")[-1]
@@ -343,6 +352,9 @@ def parse_single_dlg(fname, mode='standard'):
     return {
         'ligname': ligname,
         'receptor': receptor,
+        'grid_center': center,
+        'grid_dim': npts,
+        'grid_spacing': spacing,
         'source_file': fname,
         'ligand_input_pdbqt': input_pdbqt,
         'ligand_index_map': index_map,
