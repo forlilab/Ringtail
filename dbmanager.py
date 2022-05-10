@@ -66,6 +66,7 @@ class DBManager():
         self.passing_results_view_name = self.opts["results_view_name"]
         self.store_all_poses_flag = self.opts["store_all_poses"]
         self.overwrite_flag = self.opts["overwrite"]
+        self.conflict_opt = self.opts["conflict_opt"]
         # initialize dictionary processing kw lists
         self.interaction_data_kws = [
             "type", "chain", "residue", "resid", "recname", "recid"
@@ -292,6 +293,20 @@ class DBManager():
             input_pdbqt
         ]
 
+    def _generate_receptor_row(self, ligand_dict):
+        """Writes row to be inserted into receptor table
+
+        Args:
+            ligand_dict (Dictionary): Dictionary of ligand data from parser
+        """
+        rec_name = ligand_dict["receptor"]
+        box_dim = json.dumps(ligand_dict["grid_dim"])
+        box_center = json.dumps(ligand_dict["grid_center"])
+        grid_spacing = float(ligand_dict["grid_spacing"])
+        flexible_residues = json.dumps(ligand_dict["flexible_residues"])
+
+        return [rec_name, box_dim, box_center, grid_spacing, flexible_residues]
+
     def _generate_interaction_tuples(self, interaction_dictionaries):
         """takes dictionary of file results, formats as
         list of tuples for interactions
@@ -433,7 +448,7 @@ class DBManager():
                     [18])  # count and update number of hydrogen bonds
 
         return (result_rows, self._generate_ligand_row(ligand_dict),
-                interaction_tuples)
+                interaction_tuples, self._generate_receptor_row(ligand_dict))
 
     def filter_results(self, results_filters_list, ligand_filters_list,
                        output_fields):
@@ -481,7 +496,6 @@ class DBManager():
         """
         return pd.read_sql(requested_data, self.conn)
 
-
     def _fetch_view_names(self):
         """Returns DB curor with the names of all view in DB
         """
@@ -495,7 +509,7 @@ class DBManager():
         """takes array of database rows to insert, adds data to results table
 
         Args:
-            results_array (numpy array): numpy array of arrays
+            results_array (list): list of lists
                 containing formatted result rows
 
         """
@@ -505,10 +519,20 @@ class DBManager():
         """Takes array of ligand rows, inserts into Ligands table.
 
         Args:
-            ligand_array (numpy array): Numpy array of arrays
+            ligand_array (list): List of lists
                 containing formatted ligand rows
 
         """
+        raise NotImplementedError
+
+    def insert_receptors(self, receptor_array):
+        """Takes array of receptor rows, inserts into Receptors table
+
+        Args:
+            receptor_array (list): List of lists
+                containing formatted ligand rows
+        """
+        raise NotImplementedError
 
     def insert_interactions(self, interactions_list):
         """generic function for inserting interactions from given
@@ -689,6 +713,18 @@ class DBManager():
             hydrogen_parents    VARCHAR[],
             input_pdbqt         VARCHAR[]
 
+        """
+        raise NotImplementedError
+
+    def _create_receptors_table(self):
+        """Create table for receptors. Columns are:
+            Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
+            RecName                VARCHAR NOT NULL,
+            box_dim             VARCHAR[],
+            box_center          VARCHAR[],
+            grid_spacing        INT[],
+            flexible_residues   VARCHAR[],
+            receptor_object     BLOB
         """
         raise NotImplementedError
 
@@ -953,7 +989,7 @@ class DBManagerSQLite(DBManager):
         sql_insert = """INSERT INTO Results (
         LigName,
         ligand_smile,
-        receptor
+        receptor,
         pose_rank,
         run_number,
         cluster_rmsd,
@@ -1019,6 +1055,32 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.executemany(sql_insert, ligand_array)
+            self.conn.commit()
+            cur.close()
+
+        except Exception as e:
+            print(e)
+            raise e
+
+    def insert_receptors(self, receptor_array):
+        """Takes array of receptor rows, inserts into Receptors table
+
+        Args:
+            receptor_array (list): List of lists
+                containing formatted ligand rows
+        """
+        sql_insert = '''INSERT INTO Receptors (
+        RecName,
+        box_dim,
+        box_center,
+        grid_spacing,
+        flexible_residues
+        ) VALUES
+        (?,?,?,?,?)'''
+
+        try:
+            cur = self.conn.cursor()
+            cur.executemany(sql_insert, receptor_array)
             self.conn.commit()
             cur.close()
 
@@ -1172,6 +1234,7 @@ class DBManagerSQLite(DBManager):
         # create tables in db
         self._create_results_table()
         self._create_ligands_table()
+        self._create_receptors_table()
         self._create_interaction_index_table()
 
     def _fetch_existing_tables(self):
@@ -1286,6 +1349,14 @@ class DBManagerSQLite(DBManager):
             flexible_residues   VARCHAR[],
             flexible_res_coordinates   VARCHAR[]
         """
+        unique_string = ""
+        if self.conflict_opt is not None:
+            unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
+                   trans_x, trans_y, trans_z,
+                   axisangle_x, axisangle_y, axisangle_z, axisangle_w,
+                   dihedrals) ON CONFLICT {0}""".format(self.conflict_opt)
+
+
         sql_results_table = """CREATE TABLE Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
@@ -1323,8 +1394,9 @@ class DBManagerSQLite(DBManager):
             ligand_coordinates         VARCHAR[],
             flexible_residues   VARCHAR[],
             flexible_res_coordinates   VARCHAR[]
+            {0}
         );
-        """
+        """.format(unique_string)
 
         try:
             cur = self.conn.cursor()
@@ -1333,6 +1405,38 @@ class DBManagerSQLite(DBManager):
         except Exception as e:
             print(
                 "Error while creating results table. If database already exists, use --overwrite to drop existing tables"
+            )
+            raise e
+
+    def _create_receptors_table(self):
+        """Create table for receptors. Columns are:
+            Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
+            RecName                VARCHAR NOT NULL,
+            box_dim             VARCHAR[],
+            box_center          VARCHAR[],
+            grid_spacing        INT[],
+            flexible_residues   VARCHAR[],
+            receptor_object     BLOB
+        """
+        receptors_table = """CREATE TABLE Receptors (
+            Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
+            RecName             VARCHAR NOT NULL,
+            box_dim             VARCHAR[],
+            box_center          VARCHAR[],
+            grid_spacing        INT[],
+            flexible_residues   VARCHAR[],
+            receptor_object     BLOB,
+            UNIQUE(RecName, box_dim, box_center, grid_spacing, flexible_residues)
+            ON CONFLICT IGNORE
+        )"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(receptors_table)
+            cur.close()
+        except Exception as e:
+            print(
+                "Error while creating receptor table. If database already exists, use --overwrite to drop existing tables"
             )
             raise e
 
@@ -1346,7 +1450,7 @@ class DBManagerSQLite(DBManager):
 
         """
         ligand_table = """CREATE TABLE Ligands (
-            LigName             VARCHAR NOT NULL,
+            LigName             VARCHAR NOT NULL PRIMARY KEY ON CONFLICT IGNORE,
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],

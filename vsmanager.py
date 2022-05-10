@@ -67,7 +67,8 @@ class VSManager():
             chunk_size=rman_opts['chunk_size'],
             filelist=rman_opts['filelist'],
             numclusters=rman_opts['num_clusters'],
-            no_print_flag=self.no_print_flag)
+            no_print_flag=self.no_print_flag,
+            single_receptor=out_opts['single_receptor'])
         self.output_manager = Outputter(self, self.out_opts['log'])
 
         # if requested, write database or add results to an existing one

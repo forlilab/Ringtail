@@ -68,19 +68,22 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, maxProcesses, chunksize, db_obj, num_files):
+    def __init__(self, queue, maxProcesses, chunksize, db_obj, num_files, single_receptor):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are
         self.maxProcesses = maxProcesses
-        # assign pointer to db object, set chunksize
+        # assign pointer to db object, set chunksize, single_receptor flag
         self.db = db_obj
         self.chunksize = chunksize
+        self.single_receptor = single_receptor
         # initialize data arrays
         self.results_array = []
         self.ligands_array = []
         self.interactions_list = []
+        self.receptor_array = []
         # progress tracking instance variables
+        self.first_insert = True
         self.counter = 0
         self.num_files_remaining = num_files
         self.total_num_files = num_files
@@ -139,10 +142,14 @@ class Writer(multiprocessing.Process):
 
     def write_to_db(self):
         time1 = time.perf_counter()
-        # insert result and ligand data
+        # insert result, ligand, and receptor data
         self.db.insert_results(filter(
             None, self.results_array))  # filter out stray Nones
         self.db.insert_ligands(filter(None, self.ligands_array))
+        # if this is the first insert or we have multiple receptors, insert the receptor array
+        if self.first_insert or not self.single_receptor:
+            self.db.insert_receptors(filter(None, self.receptor_array))
+            self.first_insert = False
 
         # perform operations for inserting iteraction data
         self.db.insert_interactions(self.interactions_list)
@@ -163,10 +170,11 @@ class Writer(multiprocessing.Process):
         return self.est_time_remaining
 
     def process_file(self, file_packet):
-        results_rows, ligand_row, interaction_rows = file_packet
+        results_rows, ligand_row, interaction_rows, receptor_row = file_packet
         for pose in results_rows:
             self.results_array.append(pose)
         for pose in interaction_rows:
             self.interactions_list.append(pose)
         self.ligands_array.append(ligand_row)
+        self.receptor_array.append(receptor_row)
         self.counter += 1

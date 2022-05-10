@@ -3,6 +3,7 @@ import argparse
 from glob import glob
 import os
 import fnmatch
+import warnings
 
 
 class CLOptionParser():
@@ -105,6 +106,24 @@ class CLOptionParser():
                             '--add_results',
                             {
                                 'help': 'Add new results to an existing database, specified by --input_db',
+                                'action': 'store_true',
+                                'default': False
+                            },
+                        ),
+                        (
+                            '--conflict_handling',
+                            {
+                                'help': 'specify how conflicting Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will duplicate entries.',
+                                'action': 'store',
+                                'type': str,
+                                'metavar': "'ignore' or 'replace'",
+                                'default': None
+                            },
+                        ),
+                        (
+                            '--one_receptor',
+                            {
+                                'help': 'Indicates that all results being added to database share the same receptor. Decreases runtime.',
                                 'action': 'store_true',
                                 'default': False
                             },
@@ -615,6 +634,15 @@ class CLOptionParser():
                 raise FileNotFoundError(
                     "--export_poses_path directory does not exist. Please create directory first"
                 )
+        # confirm that conflict_handling is an allowed option
+        conflict_options = {"IGNORE", "REPLACE"}
+        conflict_handling = parsed_opts.conflict_handling
+        if conflict_handling is not None:
+            conflict_handling = parsed_opts.conflict_handling.upper()
+            if conflict_handling not in conflict_options:
+                warnings.warn(f"--conflict_handing option {parsed_opts.conflict_handling} not allowed. Reverting to default behavior.")
+                conflict_handling = None
+
         output = {
             'log': parsed_opts.log,
             'overwrite': parsed_opts.overwrite,
@@ -625,7 +653,8 @@ class CLOptionParser():
             'no_filter': parsed_opts.no_filter,
             'data_from_subset': parsed_opts.data_from_subset,
             'export_table': parsed_opts.export_table_csv,
-            'export_query': parsed_opts.export_query_csv
+            'export_query': parsed_opts.export_query_csv,
+            'single_receptor': parsed_opts.one_receptor
         }
         db_opts = {
             'num_clusters': parsed_opts.max_poses,
@@ -635,7 +664,8 @@ class CLOptionParser():
             "results_view_name": parsed_opts.subset_name,
             "store_all_poses": parsed_opts.store_all_poses,
             "overwrite": parsed_opts.overwrite,
-            "add_results": parsed_opts.add_results
+            "add_results": parsed_opts.add_results,
+            "conflict_opt": conflict_handling
         }
 
         # if a path for saving poses is specified, then the log will be written there

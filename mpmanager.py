@@ -5,7 +5,7 @@ from mpreaderwriter import DockingFileReader, Writer
 class MPManager():
 
     def __init__(self, filelist, mode, db_obj, chunksize, numclusters,
-                 no_print_flag):
+                 no_print_flag, single_receptor):
         # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg"]
         if mode not in self.implemented_modes:
@@ -18,6 +18,7 @@ class MPManager():
         self.chunksize = chunksize
         self.numclusters = numclusters
         self.no_print = no_print_flag
+        self.single_receptor = single_receptor
         self.num_files = len(self.filelist)
 
         self.max_proc = multiprocessing.cpu_count()
@@ -35,7 +36,7 @@ class MPManager():
 
         # start the writer to process the data from the workers
         w = Writer(self.queueOut, self.max_proc, self.chunksize, self.db,
-                   self.num_files)
+                   self.num_files, self.single_receptor)
         w.start()
 
         # process items in the queue
