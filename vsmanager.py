@@ -7,7 +7,6 @@ import warnings
 from meeko import RDKitMolCreate
 from rdkit import Chem
 from rdkit.Chem import SDWriter
-import pandas as pd
 
 
 class VSManager():
@@ -293,7 +292,7 @@ class VSManager():
         for ligand_pose, flexres_pose, flexres_names in poses:
             ligand_pose = self._db_string_to_list(ligand_pose)
             flexres_pose = self._db_string_to_list(flexres_pose)
-            flexres_names = [name + str(idx) for idx, name in enumerate(self._db_string_to_list(flexres_names))]
+            flexres_names = [name for idx, name in enumerate(self._db_string_to_list(flexres_names))]
             flexres_pdbqts = [self._generate_pdbqt_block(res) for res in flexres_pose]
             mol, flexres_mols = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices,
                                                                flexres_mols=flexres_mols,
