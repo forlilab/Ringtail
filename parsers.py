@@ -403,6 +403,9 @@ def pdbqt_parser(fname):
 
     lines = []
     for line in raw_lines:
+        line = line.decode("utf-8")
+        if not line.startswith("ATOM") and not line.startswith("HETATM"):
+            continue
         line_dict = {}
         # column magic numbers from PDBQT format
         line_dict["atm_flag"] = line[:6]

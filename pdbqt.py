@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass, field
 from parsers import pdbqt_parser
 import os
@@ -8,7 +9,10 @@ import json
 class PDBQT:
     name: str
     sequence: str = field(default_factory=str, hash=False)
-    residues: set = field(default_factory=set, compare=False, hash=False)
+    residues: dict = field(default_factory=dict, compare=False, hash=False, repr=False)
+
+    def add_AA_to_sequence(self, new_AA: str) -> "PDBQT":
+        return dataclasses.replace(self, sequence=self.sequence + new_AA)
 
 
 @dataclass(frozen=True)
@@ -16,7 +20,7 @@ class Residue:
     name: str
     num: int
     chain: str
-    atoms: set = field(default_factory=set, compare=False, hash=False)
+    atoms: set = field(default_factory=set, compare=False, hash=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -74,7 +78,7 @@ class PDBQTReader():
                 pdbqt.residues[current_res].atoms.add(new_atom)
             else:
                 current_res.atoms.add(new_atom)
-                pdbqt.residues.add(current_res)
-                pdbqt.sequence += aminoacid_codes_dict[current_res.name.replace(" ", "")]
+                pdbqt.residues[current_res] = current_res
+                pdbqt = pdbqt.add_AA_to_sequence(aminoacid_codes_dict[current_res.name.replace(" ", "")])
 
         return pdbqt
