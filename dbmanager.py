@@ -558,6 +558,14 @@ class DBManager():
         """
         raise NotImplementedError
 
+    def fetch_receptor_object_by_name(self, rec_name):
+        """Returns Receptor object from database for given rec_name
+
+        Args:
+            rec_name (string): Name of receptor to return object for
+        """
+        raise NotImplementedError
+
     def get_results(self):
         """Gets all fields for filtered results
 
@@ -1143,6 +1151,17 @@ class DBManagerSQLite(DBManager):
         except Exception as e:
             print(e)
             raise e
+
+    def fetch_receptor_object_by_name(self, rec_name):
+        """Returns Receptor object from database for given rec_name
+
+        Args:
+            rec_name (string): Name of receptor to return object for
+        """
+
+        cursor = self._run_query("""SELECT receptor_object FROM Receptors WHERE RecName LIKE '{0}'""".format(rec_name))
+        rec_pickle = str(cursor.fetchone())
+        return pickle.loads(rec_pickle)
 
     def clone(self):
         """Creates a copy of the db
