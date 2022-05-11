@@ -20,7 +20,7 @@ class Residue:
     name: str
     num: int
     chain: str
-    atoms: set = field(default_factory=set, compare=False, hash=False, repr=False)
+    atoms: dict = field(default_factory=dict, compare=False, hash=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -75,9 +75,9 @@ class PDBQTReader():
             chain = atom["chain"]
             current_res = Residue(resname, resnum, chain)
             if current_res in pdbqt.residues:
-                pdbqt.residues[current_res].atoms.add(new_atom)
+                pdbqt.residues[current_res].atoms[new_atom] = new_atom
             else:
-                current_res.atoms.add(new_atom)
+                current_res.atoms[new_atom] = new_atom
                 pdbqt.residues[current_res] = current_res
                 pdbqt = pdbqt.add_AA_to_sequence(aminoacid_codes_dict[current_res.name.replace(" ", "")])
 

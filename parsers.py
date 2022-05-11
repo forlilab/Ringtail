@@ -420,7 +420,7 @@ def pdbqt_parser(fname):
         line_dict["occupancy"] = float(line[54:60])
         line_dict["b_iso"] = float(line[60:66])
         line_dict["q"] = float(line[70:76])
-        line_dict["atomtype"] = line[76:]
+        line_dict["atomtype"] = line[76:79]
 
         lines.append(line_dict)
 
