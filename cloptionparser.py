@@ -39,18 +39,18 @@ class CLOptionParser():
                         (
                             '--file',
                             {
-                                'help': 'ligand DLG or DLG.gz (compressed) file to filter',
+                                'help': 'ligand DLG and receptor PDBQT file(s) to save and filter. Compressed (.gz) files allowed',
                                 'action': 'append',
                                 'type': str,
-                                'metavar': "FILENAME.DLG[.gz]",
+                                'metavar': "FILENAME.[DLG/PDBQT][.gz]",
                                 'required': False
                             },
                         ),
                         (
                             '--file_path',
                             {
-                                'help': 'directory containing DLG or DLG.gz (compressed) files to filter',
-                                'action': 'store',
+                                'help': 'directory(s) containing DLG and PDBQT files to save and filter. Compressed (.gz) files allowed',
+                                'action': 'append',
                                 'type': str,
                                 'metavar': "DIRNAME"
                             },
@@ -58,10 +58,18 @@ class CLOptionParser():
                         (
                             '--file_list',
                             {
-                                'help': 'file containing the list of DLG or DLG.gz (compressed) files to filter; relative or absolute paths are allowed',
-                                'action': 'store',
+                                'help': 'file(s) containing the list of DLG and PDBQT files to filter; relative or absolute paths are allowed. Compressed (.gz) files allowed',
+                                'action': 'append',
                                 'type': str,
                                 'metavar': "FILENAME"
+                            },
+                        ),
+                        (
+                            '--save_receptors',
+                            {
+                                'help': 'Saves receptor PDBQTs to database. Receptor location(s) must be specied with in --file, --file_path directory or --file_list file',
+                                'action': 'store_true',
+                                'default': False
                             },
                         ),
                         (
@@ -75,7 +83,7 @@ class CLOptionParser():
                         (
                             '--pattern',
                             {
-                                'help': 'specify which pattern to use when searching for files to process in directories [only with "--dir", default "*.dlg*"]',
+                                'help': 'specify which pattern to use when searching for DLG files to process in directories [only with "--file_path", default "*.dlg*"]',
                                 'action': 'store',
                                 'type': str,
                                 'metavar': 'PATTERN',
@@ -540,9 +548,15 @@ class CLOptionParser():
         self._process_sources()
 
         # confirm that files were found, else throw error
-        if len(self.files_pool) == 0 and (self.db_opts["write_db_flag"] or self.db_opts["add_results"]):
+        # if only receptor files found and --save_receptor, assume we just want to add receptor and not modify the rest of the db, so turn off write_db_flag
+        if len(self.lig_files_pool) == 0 and len(self.rec_files_pool) != 0 and self.save_receptors:
+            self.db_opts["write_db_flag"] = False
+            # raise error if not input db not given
+            if self.input_db is None:
+                raise RuntimeError("No input database given for saving receptor(s)")
+        if len(self.lig_files_pool) == 0 and (self.db_opts["write_db_flag"] or self.db_opts["add_results"]):
             raise RuntimeError(
-                "No input files found. Please check file source.")
+                "No ligand files found. Please check file source.")
 
     def _initialize_parser(self):
         # create parser
@@ -596,6 +610,7 @@ class CLOptionParser():
         # check that required input options are provided
         file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
         file_sources['file'] = parsed_opts.file
+        self.save_receptors = parsed_opts.save_receptors
         if parsed_opts.file_path is not None:
             file_sources['file_path'] = {
                 'path': parsed_opts.file_path,
@@ -750,6 +765,7 @@ class CLOptionParser():
             "react_any": parsed_opts.react_any
         }
         self.file_sources = file_sources
+        self.input_db = parsed_opts.input_db
         if parsed_opts.input_db is not None:
             sqlFile = parsed_opts.input_db
             if not os.path.exists(sqlFile):
@@ -769,24 +785,41 @@ class CLOptionParser():
     def _process_sources(self):
         """ process the options for input files (parse dictionary) """
         sources = self.file_sources
-        self.files_pool = []
+        self.lig_files_pool = []
+        self.rec_files_pool = []
         if sources['file'] is not None:
-            self.files_pool = sources['file']
+            self.lig_files_pool = list(filter(lambda file: file.endswith(".dlg") or file.endswith(".dlg.gz"), sources['file']))
+            self.rec_files_pool = list(filter(lambda file: file.endswith(".pdbqt") or file.endswith(".pdbqt.gz"), sources['file']))
         # update the files pool with the all the files found in the path
         if sources['file_path'] is not None:
-            self.scan_dir(sources['file_path']['path'],
-                          sources['file_path']['pattern'],
-                          sources['file_path']['recursive'])
+            for path in sources['file_path']['path']:
+                # scan for ligand dlgs
+                self.scan_dir(path,
+                              sources['file_path']['pattern'],
+                              sources['file_path']['recursive'])
+                # scan for receptor pdbqts
+                if self.save_receptors:
+                    self.scan_dir(path,
+                                  "*.pdbqt*",
+                                  sources['file_path']['recursive'])
         # update the files pool with the files specified in the files list
         if sources['file_list'] is not None:
-            self.scan_file_list(sources['file_list'])
+            for file in sources['file_list']:
+                self.scan_file_list(file)
+
+        print("-Found %d ligand files." % len(self.lig_files_pool))
+        print("-Found %d receptor files." % len(self.rec_files_pool))
+
+        # raise error if --save_receptors and none found
+        if self.save_receptors and len(self.rec_files_pool) == 0:
+            raise FileNotFoundError("--save_receptors flag specified but no receptor PDBQTs found. Please check location of receptor files and file source options")
 
     def scan_dir(self, path, pattern, recursive=False):
         """ scan for valid output files in a directory
             the pattern is used to glob files
             optionally, a recursive search is performed
         """
-        print("-Scanning directory [%s] for DLG files (pattern:|%s|)" %
+        print("-Scanning directory [%s] for files (pattern:|%s|)" %
               (path, pattern))
         files = []
         if recursive:
@@ -798,23 +831,30 @@ class CLOptionParser():
                     for f in fnmatch.filter(filenames, '*' + pattern))
         else:
             files = glob(os.path.join(path, pattern))
-        print("-Found %d files." % len(files))
-        self.files_pool.extend(files)
+        if "dlg" in pattern:
+            self.lig_files_pool.extend(files)
+        elif "pdbqt" in pattern:
+            self.rec_files_pool.extend(files)
 
     def scan_file_list(self, filename):
         """ read file names from file list """
-        accepted = []
+        lig_accepted = []
+        rec_accepted = []
         c = 0
         with open(filename, 'r') as fp:
             for line in fp.readlines():
                 line = line.strip()
                 c += 1
                 if os.path.isfile(line):
-                    accepted.append(line)
+                    if line.endswith(".dlg") or line.endswith(".dlg.gz"):
+                        lig_accepted.append(line)
+                    if line.endswith(".pdbqt"):
+                        rec_accepted.append(line)
                 else:
                     print("Warning! file |%s| does not exist" % line)
-        if len(accepted) == 0:
+        if len(lig_accepted) + len(rec_accepted) == 0:
             raise FileNotFoundError("*ERROR* No valid files were found when reading from |%s|" % filename)
         print("# [ %5.3f%% files in list accepted (%d) ]" %
-              (len(accepted) / c * 100, c))
-        self.files_pool.extend(accepted)
+              ((len(lig_accepted) + len(rec_accepted)) / c * 100, c))
+        self.lig_files_pool.extend(lig_accepted)
+        self.rec_files_pool.extend(rec_accepted)

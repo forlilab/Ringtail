@@ -391,11 +391,12 @@ def parse_single_dlg(fname, mode='standard'):
         'fname': fname
     }
 
-def pdbqt_parser(fname):
-    """Parse PDBQT file into list of dictionary with dictionary containing data for a single atom line
+
+def receptor_pdbqt_parser(fname):
+    """Parse receptor PDBQT file into list of dictionary with dictionary containing data for a single atom line
 
     Args:
-        fname (string): name of file to parse
+        fname (string): name of receptor pdbqt file to parse
     """
 
     with open(fname, 'rb') as f:

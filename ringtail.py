@@ -1,6 +1,7 @@
 import time
 from cloptionparser import CLOptionParser
 from vsmanager import VSManager
+from receptormanager import ReceptorManager
 
 if __name__ == '__main__':
 
@@ -11,7 +12,7 @@ if __name__ == '__main__':
     # prepare option dictionaries for VSManager
     dbman_opts = cl_opts.db_opts
     rman_opts = {'chunk_size': 1,
-                 'filelist': cl_opts.files_pool,
+                 'filelist': cl_opts.lig_files_pool,
                  'mode': 'dlg',
                  'num_clusters': dbman_opts["num_clusters"]}
     filters = cl_opts.filters
@@ -22,6 +23,11 @@ if __name__ == '__main__':
                       rman_opts=rman_opts,
                       filters=filters,
                       out_opts=out_opts)
+
+    # Add receptors to database if requested
+    recman = ReceptorManager(cl_opts.rec_files_pool, vsman.dbman)
+    recman.add_receptors_to_db()
+
     time1 = time.perf_counter()
 
     # perform filtering

@@ -3,6 +3,10 @@
 import sqlite3
 import json
 import pandas as pd
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 
 class DBManager():
@@ -542,6 +546,15 @@ class DBManager():
             interactions_list (list): List of tuples for interactions
                 in form
                 ("type", "chain", "residue", "resid", "recname", "recid")
+        """
+        raise NotImplementedError
+
+    def add_receptor_object_to_row(self, receptor, rec_name):
+        """Takes object of Receptor class, updates the column in Receptor table for the row with rec_name
+
+        Args:
+            receptor (Receptor): Receptor object to be inserted into DB
+            rec_name (string): Name of receptor. Used to insert into correct row of DB
         """
         raise NotImplementedError
 
@@ -1108,6 +1121,29 @@ class DBManagerSQLite(DBManager):
         self._insert_interaction_bitvectors(
             self._generate_interaction_bitvectors(interactions_list))
 
+    def add_receptor_object_to_row(self, receptor, rec_name):
+        """Takes object of Receptor class, updates the column in Receptor table for the row with rec_name to contain receptor BLOB
+
+        Args:
+            receptor (Receptor): Receptor object to be inserted into DB
+            rec_name (string): Name of receptor. Used to insert into correct row of DB
+        """
+
+        # must convert to binary
+        rec_pickle = pickle.dumps(receptor)
+
+        sql_update = """UPDATE Receptors SET receptor_object = ? WHERE RecName LIKE '{0}'""".format(rec_name)
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(sql_update, (sqlite3.Binary(rec_pickle),))
+            self.conn.commit()
+            cur.close()
+
+        except Exception as e:
+            print(e)
+            raise e
+
     def clone(self):
         """Creates a copy of the db
         """
@@ -1163,7 +1199,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '%{ligand}%')".format(
+        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
             results_view=self.passing_results_view_name, ligand=ligname)
         return self._run_query(query)
 
@@ -1177,7 +1213,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '%{ligand}%' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
+        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
             ligand=ligname, results_view=self.passing_results_view_name)
         return self._run_query(query)
 
@@ -1411,7 +1447,7 @@ class DBManagerSQLite(DBManager):
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
             Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
-            RecName                VARCHAR NOT NULL,
+            RecName             VARCHAR NOT NULL,
             box_dim             VARCHAR[],
             box_center          VARCHAR[],
             grid_spacing        INT[],
@@ -1775,7 +1811,7 @@ class DBManagerSQLite(DBManager):
         sql_string = "SELECT interaction_id FROM Interaction_indices WHERE "
 
         sql_string += " AND ".join([
-            "{column} LIKE '%{value}%'".format(column=interaction_info[i],
+            "{column} LIKE '{value}'".format(column=interaction_info[i],
                                                value=interaction_list[i])
             for i in range(len_interaction_info) if interaction_list[i] != ""
         ])
@@ -1816,7 +1852,7 @@ class DBManagerSQLite(DBManager):
             fils = ligand_filters[kw]
             if kw == 'N':
                 for name in fils:
-                    name_sql_str = "LigName LIKE '%{value}%' OR ".format(
+                    name_sql_str = "LigName LIKE '{value}' OR ".format(
                         value=name)
                     sql_ligand_string += name_sql_str
             if kw == "S":
