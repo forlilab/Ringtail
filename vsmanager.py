@@ -7,6 +7,7 @@ import warnings
 from meeko import RDKitMolCreate
 from rdkit import Chem
 from rdkit.Chem import SDWriter
+import itertools
 
 
 class VSManager():
@@ -87,20 +88,29 @@ class VSManager():
             perform filtering. Create log of passing results.
         """
 
-        # prepare list of filter values and keys for DBManager
-        self.prepare_results_filter_list()
-
         print("Filtering results")
-        # make sure we have ligand filter list
-        if not self.filters['filter_ligands_flag']:
-            self.filters["ligand_filters"] = []
-        # ask DBManager to fetch results
-        self.filtered_results = self.dbman.filter_results(
-            self.results_filters_list, self.filters["ligand_filters"],
-            self.out_opts['outfields'])
-        number_passing_ligands = self.dbman.get_number_passing_ligands()
-        self.output_manager.log_num_passing_ligands(number_passing_ligands)
-        self.write_log(self.filtered_results)
+        # get possible permutations of interaction with max_miss excluded
+        interaction_combs = self._generate_interaction_combinations(self.filters["max_miss"])
+
+        for ic_idx, combination in enumerate(interaction_combs):
+            print(combination)
+            # prepare list of filter values and keys for DBManager
+            results_filters_list = self.prepare_results_filter_list(combination)
+
+            # make sure we have ligand filter list
+            if not self.filters['filter_ligands_flag']:
+                self.filters["ligand_filters"] = []
+            # set DBMan's internal ic_counter to reflect current ic_idx
+            if len(interaction_combs) > 1:
+                self.dbman.set_view_suffix(str(ic_idx))
+            # ask DBManager to fetch results
+            self.filtered_results = self.dbman.filter_results(
+                results_filters_list, self.filters["ligand_filters"],
+                self.out_opts['outfields'])
+            number_passing_ligands = self.dbman.get_number_passing_ligands()
+            self.output_manager.write_filters_to_log(self.filters, combination)
+            self.output_manager.log_num_passing_ligands(number_passing_ligands)
+            self.write_log(self.filtered_results)
 
     def get_previous_filter_data(self):
         """Get data requested in self.out_opts['outfields'] from the
@@ -151,10 +161,14 @@ class VSManager():
                 str(line).replace("(", "").replace(
                     ")",
                     ""))  # strip parens from line, which is natively a tuple
+        self.output_manager.write_log_line("***************\n")
 
-    def prepare_results_filter_list(self):
+    def prepare_results_filter_list(self, included_interactions):
         """takes filters dictionary from option parser.
         Output list of tuples to be inserted into sql call string
+
+        Args:
+            included_interactions (tuple): Tuple of interactions to include in filter
         """
 
         filters_list = []
@@ -173,7 +187,12 @@ class VSManager():
         interaction_filters = self.filters['interactions']
         for key in interaction_filters:
             if interaction_filters[key] is not None:
-                filters_list.append((key, interaction_filters[key]))
+                kept_interactions = []
+                for interaction in interaction_filters[key]:
+                    # only keep interactions specified by included_interactions
+                    if key + "-" + interaction[0] in included_interactions:
+                        kept_interactions.append(interaction)
+                filters_list.append((key, kept_interactions))
 
         # get interaction count filters
         interact_count_filters = self.filters["interactions_count"]
@@ -184,7 +203,7 @@ class VSManager():
         # add react_any flag
         filters_list.append(("react_any", self.filters["react_any"]))
 
-        self.results_filters_list = filters_list
+        return filters_list
 
     def write_molecule_sdfs(self):
         """have output manager write sdf molecules for passing results
@@ -301,11 +320,33 @@ class VSManager():
             saved_coords.append(ligand_pose)
         return mol, flexres_mols, saved_coords
 
+    def _generate_interaction_combinations(self, max_miss=0):
+        """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
+
+        Args:
+            max_miss (int): Maximum number of interactions to be excluded
+        """
+
+        all_interactions = []
+        for _type, interactions in self.filters["interactions"].items():
+            for interact in interactions:
+                all_interactions.append(_type + "-" + interact[0])
+
+        # warn if max_miss greater than number of interactions
+        if max_miss > len(all_interactions):
+            warnings.warn("Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters")
+            max_miss = len(all_interactions)
+
+        # BASE CASE:
+        if max_miss == 0:
+            return [tuple(all_interactions)]
+        else:
+            combinations = list(itertools.combinations(all_interactions, len(all_interactions) - max_miss))
+            return combinations + self._generate_interaction_combinations(max_miss=max_miss - 1)
 
 # # # # # # # # # # # # # #
 # # # Output class # # #
 # # # # # # # # # # # # # #
-
 
 class Outputter():
     """Class for creating outputs
@@ -477,3 +518,44 @@ class Outputter():
 
         ax_histx.hist(x, bins=xbins)
         ax_histy.hist(y, bins=ybins, orientation='horizontal')
+
+    def write_filters_to_log(self, filters_dict, included_interactions):
+        """Takes dictionary of filters, formats as string and writes to log file
+
+        Args:
+            filters_dict (dict): dictionary of filtering options
+        """
+
+        buff = ['##### PROPERTIES']
+        for k, v in filters_dict["properties"].items():
+            if v is not None:
+                v = "%2.3f" % v
+            else:
+                v = " [ none ]"
+            buff.append("#  % 7s : %s" % (k, v))
+        if filters_dict['filter_ligands_flag']:
+            buff.append("#### LIGAND FILTERS")
+            for k, v in filters_dict["ligand_filters"].items():
+                if v is not None:
+                    v = "%2.3f" % v
+                else:
+                    v = " [ none ]"
+                buff.append("#  % 7s : %s" % (k, v))
+        buff.append("#### INTERACTIONS")
+        labels = ['-', '+']
+        for _type, info in filters_dict["interactions"].items():
+            kept_interactions = []
+            if len(info) == 0:
+                buff.append("#  % 7s :  [ none ]" % (_type))
+                continue
+            for interact in info:
+                if _type + "-" + interact[0] not in included_interactions:
+                    continue
+                else:
+                    kept_interactions.append(interact)
+            res_str = ", ".join(['(%s)%s' % (labels[int(x[1])], x[0]) for x in kept_interactions])
+            l_str = "#  % 7s : %s" % (_type, res_str)
+            buff.append(l_str)
+
+        for line in buff:
+            self.write_log_line(line)
