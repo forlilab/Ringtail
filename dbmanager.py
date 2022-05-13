@@ -114,6 +114,8 @@ class DBManager():
         }
         self.interaction_filter_types = {"V", "H", "R"}
 
+        self.view_suffix = None
+
         # keep track of any open cursors
         self.open_cursors = []
 
@@ -454,6 +456,15 @@ class DBManager():
         return (result_rows, self._generate_ligand_row(ligand_dict),
                 interaction_tuples, self._generate_receptor_row(ligand_dict))
 
+    def set_view_suffix(self, suffix):
+        """Sets internal view_suffix variable
+
+        Args:
+            suffix(str): suffix to attached to view-related queries or creation
+        """
+
+        self.view_suffix = suffix
+
     def filter_results(self, results_filters_list, ligand_filters_list,
                        output_fields):
         """Generate and execute database queries from given filters.
@@ -462,7 +473,7 @@ class DBManager():
             results_filters_list (list): list of tuples with first element
                 indicating column to filter and second element
                 indicating passing value
-            ligand_filters_list (TYPE): list of tuples with first element
+            ligand_filters_list (list): list of tuples with first element
                 indicating column to filter and second element
                 indicating passing value
             output_fields (list): List of fields (columns) to be
@@ -475,6 +486,9 @@ class DBManager():
         filter_results_str = self._generate_result_filtering_query(
             results_filters_list, ligand_filters_list, output_fields)
         print(filter_results_str)
+        # if max_miss is not 0, we want to give each passing view a new name by changing the self.passing_results_view_name
+        if self.view_suffix is not None:
+            self.passing_results_view_name += "_" + self.view_suffix
         self._create_view(
             self.passing_results_view_name,
             filter_results_str)  # make sure we keep Pose_ID in view

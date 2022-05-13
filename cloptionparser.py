@@ -500,6 +500,17 @@ class CLOptionParser():
                             },
                         ),
                         (
+                            '--max_miss',
+                            {
+                                'help':
+                                'Will separately log all possible permutations of interaction filters in log file excluding up to max_miss numer of interactions from given set.',
+                                'action': 'store',
+                                'type': int,
+                                'metavar': "INTEGER",
+                                'default': 0
+                            },
+                        ),
+                        (
                             '--hb_count',
                             {
                                 'help':
@@ -725,7 +736,7 @@ class CLOptionParser():
                     print((
                         '*ERROR* [%s]: to specify a residue use '
                         'the format CHAIN:RES:NUM:ATOM_NAME. Any item can be omitted, '
-                        'as far as the number of semicolons is always 3 '
+                        'as long as the number of semicolons is always 3 '
                         '(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)') % res)
                     sys.exit()
                 if res[0] == '-':
@@ -761,7 +772,7 @@ class CLOptionParser():
             'interactions_count': interactions_count,
             "ligand_filters": ligand_filters,
             'filter_ligands_flag': filter_ligands_flag,
-            'max_miss': 0,
+            'max_miss': parsed_opts.max_miss,
             "react_any": parsed_opts.react_any
         }
         self.file_sources = file_sources
