@@ -636,15 +636,24 @@ class CLOptionParser():
                 None) and (file_sources['file_path'] is
                            None) and (file_sources['file_list'] is
                                       None) and (parsed_opts.input_db is None):
-            print(
+            raise FileNotFoundError(
                 "*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
             )
-            sys.exit(1)
         if parsed_opts.add_results and parsed_opts.input_db is None:
-            print(
+            raise RuntimeError(
                 "ERRROR! Must specify --input_db if adding results to an existing database"
             )
-            sys.exit()
+        if parsed_opts.max_miss < 0:
+            raise RuntimeError("--max_miss must be greater than or equal to 0")
+        if parsed_opts.max_miss > 0:
+            if parsed_opts.plot:
+                raise RuntimeError("Cannot use --plot with --max_miss > 0. Can plot for desired subset with --no_filter,--data_from_subset and, --subset_name.")
+            if parsed_opts.export_poses_path is not None:
+                raise RuntimeError("Cannot use --export_poses_path with --max_miss > 0. Can export poses for desired subset with --no_filter, --data_from_subset, and --subset_name")
+            if parsed_opts.export_query_csv is not None:
+                raise RuntimeError("Cannot use --export_query_csv with --max_miss > 0. Can export CSV for desired subset with --no_filter, --data_from_subset, and --subset_name")
+            if parsed_opts.export_table_csv is not None:
+                raise RuntimeError("Cannot use --export_table_csv with --max_miss > 0. Can export CSV for desired subset with --no_filter, --data_from_subset, and --subset_name")
         parsed_opts.out_fields = parsed_opts.out_fields.split(",")
         for outfield in parsed_opts.out_fields:
             if outfield not in self.outfield_options:

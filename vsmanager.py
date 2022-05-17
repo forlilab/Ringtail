@@ -107,7 +107,9 @@ class VSManager():
                 results_filters_list, self.filters["ligand_filters"],
                 self.out_opts['outfields'])
             number_passing_ligands = self.dbman.get_number_passing_ligands()
+            result_subset_name = self.dbman.get_current_view_name()
             self.output_manager.write_filters_to_log(self.filters, combination)
+            self.output_manager.write_results_subset_to_log(result_subset_name)
             self.output_manager.log_num_passing_ligands(number_passing_ligands)
             self.write_log(self.filtered_results)
 
@@ -464,6 +466,16 @@ class Outputter():
                 num=str(number_passing_ligands)))
             f.write("---------------\n")
 
+    def write_results_subset_to_log(self, subset_name):
+        """Write the name of the result subset into log
+
+        Args:
+            subset_name (string): name of current results' subset in db
+        """
+        with open(self.log, "a") as f:
+            f.write("\n")
+            f.write(f"Result subset name: {subset_name}\n")
+
     def write_out_mol(self, ligname, mol, flexres_mols, saved_coords, h_parents):
         """writes out given mol as sdf
 
@@ -542,7 +554,7 @@ class Outputter():
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
         buff.append("#### INTERACTIONS")
-        labels = ['-', '+']
+        labels = ['~', '']
         for _type, info in filters_dict["interactions"].items():
             kept_interactions = []
             if len(info) == 0:
