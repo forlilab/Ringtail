@@ -488,9 +488,11 @@ class DBManager():
         print(filter_results_str)
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.passing_results_view_name
         if self.view_suffix is not None:
-            self.passing_results_view_name += "_" + self.view_suffix
+            self.current_view_name = self.passing_results_view_name + "_" + self.view_suffix
+        else:
+            self.current_view_name = self.passing_results_view_name
         self._create_view(
-            self.passing_results_view_name,
+            self.current_view_name,
             filter_results_str)  # make sure we keep Pose_ID in view
         # perform filtering
         filtered_results = self._run_query(filter_results_str)
@@ -1206,7 +1208,7 @@ class DBManagerSQLite(DBManager):
         cur = self.conn.cursor()
         cur.execute(
             "SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(
-                results_view=self.passing_results_view_name))
+                results_view=self.current_view_name))
         n_ligands = int(cur.fetchone()[0])
         cur.close()
         return n_ligands
@@ -1761,11 +1763,11 @@ class DBManagerSQLite(DBManager):
                     energy_filter_sql_query.append(
                         "num_hb < {value}".format(value=-1 * filter_value))
 
-            # add interaction filters to list
+            # reformat interaction filters as list
             if filter_key in self.interaction_filter_types:
                 for interact in filter_value:
                     interaction_string = filter_key + ":" + interact[0]
-                    interaction_filters.append(interaction_string.split(":"))
+                    interaction_filters.append(interaction_string.split(":") + [interact[1]])  # add bool flag for included (T) or excluded (F) interaction
 
             # add react_any flag as interaction filter
             # check if react_any is true
@@ -1784,21 +1786,27 @@ class DBManagerSQLite(DBManager):
         for interaction in interaction_filters:
             interaction_filter_indices = []
             interact_index_str = self._generate_interaction_index_filtering_query(
-                interaction)
+                interaction[:-1])  # remove bool include/exclude flag
             interaction_indices = self._run_query(interact_index_str)
             for i in interaction_indices:
                 interaction_filter_indices.append(i[0])
 
             # catch if interaction not found in results
             if interaction_filter_indices == []:
-                print(
+                Warning.warn(
                     "Interaction {i} not found in results, excluded from filtering"
                     .format(i=":".join(interaction)))
                 continue
+            # determine include/exclude string
+            if interaction[-1] is True:
+                include_str = "IN"
+            elif interaction[-1] is False:
+                include_str = "NOT IN"
+            else:
+                raise RuntimeError("Unrecognized flag in interaction. Please contact developer with traceback and context.")
             # find pose ids for ligands with desired interactions
-            sql_string += " AND Pose_ID IN ({interaction_str})".format(
-                interaction_str=self._generate_interaction_filtering_query(
-                    interaction_filter_indices))
+            sql_string += " AND Pose_ID {include_str} ({interaction_str})".format(include_str=include_str,
+                                                                                  interaction_str=self._generate_interaction_filtering_query(interaction_filter_indices))
 
         # add ligand filters
         if ligand_filters_list != []:
@@ -1817,10 +1825,7 @@ class DBManagerSQLite(DBManager):
                 sql_string += " ORDER BY " + self.field_to_column_name[
                     self.order_results]
             except KeyError:
-                print(
-                    "Please ensure you are only requesting one option for --order_results and have written it correctly"
-                )
-                raise KeyError
+                raise KeyError("Please ensure you are only requesting one option for --order_results and have written it correctly")
 
         return sql_string
 
@@ -1903,7 +1908,7 @@ class DBManagerSQLite(DBManager):
 
     def _generate_results_data_query(self, output_fields):
         """Generates SQLite-formatted query string to select outfields data for ligands in self.passing_results_view_name
-        
+
         Args:
             output_fields (List): List of result column data for output
         """

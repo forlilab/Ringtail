@@ -93,7 +93,6 @@ class VSManager():
         interaction_combs = self._generate_interaction_combinations(self.filters["max_miss"])
 
         for ic_idx, combination in enumerate(interaction_combs):
-            print(combination)
             # prepare list of filter values and keys for DBManager
             results_filters_list = self.prepare_results_filter_list(combination)
 
@@ -184,6 +183,7 @@ class VSManager():
             if property_filters[key] is not None:
                 filters_list.append((key, property_filters[key]))
 
+        # interaction filters
         interaction_filters = self.filters['interactions']
         for key in interaction_filters:
             if interaction_filters[key] is not None:
