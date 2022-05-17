@@ -474,7 +474,7 @@ class CLOptionParser():
                     ('Specify interaction filters, either by count or by specific residue interaction. '
                      'Residue specifications are described using CHAIN:RES:NUM:ATOM_NAME, '
                      'and any combination is allowed, e.g.: CHAIN:::, :RES::, ::NUM:, :::ATOM_NAME, :RES:NUM:, etc... '
-                     'Unwanted interactions can be defined by prepending "-" to the residue specification, e.g. "-B:THR:276:". '
+                     'Unwanted interactions can be defined by prepending "~" to the residue specification, e.g. "~B:THR:276:". '
                      'Multiple residues can be specified in a single option by separating them with a comma (e.g.: --vdw=B:THR:276:,B:HIS:226:), '
                      'or by repeating the interaction options (e.g. --vdw=B:THR:276: --vdw=B:HIS:226: ).'
                      ),
@@ -739,7 +739,7 @@ class CLOptionParser():
                         'as long as the number of semicolons is always 3 '
                         '(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)') % res)
                     sys.exit()
-                if res[0] == '-':
+                if res[0] == '~':
                     res = res[1:]
                     wanted = False
                 interactions[_type].append((res, wanted))
