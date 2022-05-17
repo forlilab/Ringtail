@@ -1252,6 +1252,14 @@ class DBManagerSQLite(DBManager):
             ligand=ligname, results_view=self.passing_results_view_name)
         return self._run_query(query)
 
+    def get_current_view_name(self):
+        """returns current view name
+        
+        Returns:
+            string: name of last passing results view used by database
+        """
+        return self.current_view_name
+
     # # # # # # # # # # # # # # # # #
     # # # # #Private methods # # # # #
     # # # # # # # # # # # # # # # # #
