@@ -1,6 +1,5 @@
 import dataclasses
 from dataclasses import dataclass, field
-from parsers import receptor_pdbqt_parser
 import os
 import json
 

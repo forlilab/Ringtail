@@ -1,5 +1,3 @@
-from dbmanager import DBManagerSQLite
-from resultsmanager import ResultsManager
 import matplotlib.pyplot as plt
 import numpy as np
 import json

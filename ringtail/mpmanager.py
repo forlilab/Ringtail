@@ -1,5 +1,5 @@
 import multiprocessing
-from mpreaderwriter import DockingFileReader, Writer
+# from mpreaderwriter import DockingFileReader, Writer
 
 
 class MPManager():

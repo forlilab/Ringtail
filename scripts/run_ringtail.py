@@ -1,7 +1,7 @@
 import time
-from cloptionparser import CLOptionParser
-from vsmanager import VSManager
-from receptormanager import ReceptorManager
+from ringtail import CLOptionParser
+from ringtail import VSManager
+from ringtail import ReceptorManager
 
 if __name__ == '__main__':
 

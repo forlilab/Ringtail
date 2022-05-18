@@ -1,4 +1,3 @@
-from receptor import make_receptor_object
 
 
 class ReceptorManager():
