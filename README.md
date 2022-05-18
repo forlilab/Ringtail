@@ -61,7 +61,7 @@ There are a few quick checks the user can make to ensure that the data has been 
 - The number of rows in the `Ligands` table should match the number of DLG files
 - The number of rows in the `Results` and `Interaction_bitvectors` tables should match
 - The number of rows in the `Results` table should be ~`max_poses`\* `number of DLGs` and should be less than or equal to that number. Not every ligand may have up to `max_poses`, which is why the number of rows is typically smaller than `max_poses`\* `number of DLGs`.
-- No ligand should have more than `max_poses` rows in the `Results` table (unless storing results from multiple virtual screenining in the same database).
+- No ligand should have more than `max_poses` rows in the `Results` table (unless storing results from multiple virtual screenings in the same database).
 
 ## Available outputs
 The primary outputs from running Ringtail are the database itself and the filtering log file. There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
