@@ -53,6 +53,10 @@ max_miss=1
 ## Potential pitfalls
 When importing DLG files into a database with Ringtail, the files must have interaction analysis already performed. This is specified with `-C 1` when running [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU).
 
+Issues can arise if errors are encountered during multiprocessing (DLG parsing and database writting) where the program will issue error notifications but not fully exit, nor will it progress to filtering. If this occurs, the program may be stopped from the Command Line (`CTRL+c`). Before attempting to rerun Ringtail, the cause of the error should be corrected.
+
+Occassionally, errors may occur during database reading/writing that corrupt the database. If this occurs and you start running into unclear errors related to the SQLite3 package, it is recommended to delete the existing database and re-write it from scratch.
+
 ## Supported arguments
 
 | Argument          | Description                                           | Default value    <tr><td colspan="3">**INPUT**</td></tr>
