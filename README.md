@@ -23,6 +23,7 @@ It is recommended that you create a new Conda environment for installing Ringtai
 Installation is outlined below:
 ```
 conda create -n ringtail
+conda activate ringtail
 conda install -c conda-forge rdkit scipy
 ```
 Now, navigate to the desired directory for installing Meeko and do the following:
