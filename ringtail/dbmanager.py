@@ -1,5 +1,9 @@
-"""Summary
-"""
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail database adaptors
+#
+
 import sqlite3
 import json
 import pandas as pd

@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail multiprocessing workers
+#
+
 import multiprocessing
 import time
 import sys

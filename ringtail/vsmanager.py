@@ -1,8 +1,16 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail virtual screening manager
+#
+
 import matplotlib.pyplot as plt
 import numpy as np
 import json
 import warnings
 from meeko import RDKitMolCreate
+from ringtail import DBManagerSQLite
+from ringtail import ResultsManager
 from rdkit import Chem
 from rdkit.Chem import SDWriter
 import itertools

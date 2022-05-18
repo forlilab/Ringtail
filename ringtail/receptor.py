@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail receptor dataclass
+#
+
 import dataclasses
 from dataclasses import dataclass, field
 import os
