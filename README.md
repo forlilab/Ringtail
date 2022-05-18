@@ -98,7 +98,15 @@ hb_count=10
 max_miss=1
 ```
 ## Exploring the database in the Command Line
-View the data contained within the database using the Command Line, we recommend using the [VisiData tool](https://www.visidata.org/).
+View the data contained within the database using a terminal, we recommend using the [VisiData tool](https://www.visidata.org/). Upon opening the database with `vd`, the terminal should look like this:
+
+![Screenshot from 2022-05-18 14-57-22](https://user-images.githubusercontent.com/41704502/169162632-3a71d338-faa1-4109-8f04-40a96ee6d24e.png)
+
+In this example, the database contains ~3 poses for 9999 discrete ligands. Each of the rows here is a separate table or view within the database. From this screen, you can easily perform the sanity checks outline below. To more fully explore a given table, one may use the arrow keys or mouse to navigate to it, then press `Enter/Return` to access that table/view. The user may then scroll horizontally with the arrow keys, or press `q` to return up a level.
+
+Using `vd` is particularly helpful to examine possible interactions of interest, stored within the `Interaction_indices` table.
+
+To exit, return to the screen shown in the image above by pressing `q`, then press `q` to exit.
 
 ## Data integrity sanity checks
 There are a few quick checks the user can make to ensure that the data has been properly written from the DLGs to the database. Discrepancies may indicate an error occurred while writting the database or the DLG format did not that which Ringtail expected.
