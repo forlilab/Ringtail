@@ -28,14 +28,18 @@ changed with the `--max_poses` option. The `--store_all_poses` flag may also be 
 
 The default log name is `output_log.txt` and by default will include the ligand name and binding energy of every pose passing filtering criteria. The log name
 may be changed with the `--log` option and the information written to the log can be specified with `--out_fields`. By default, only the information for the
-top-scoring binding pose will be written to the log. If desire, each individual passing pose can be written by using the `--all_poses` flag.
-#### Filters
-When running with default settings (no user-specified filters), the only filter used is `--epercentile 1.0`. This gives the top 1% of poses by overall binding energy score.
+top-scoring binding pose will be written to the log. If desire, each individual passing pose can be written by using the `--all_poses` flag. The passing results may
+also be ordered in the log file using the `--order_results` option.
 
-## Interaction filter formatting
+When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--subset_name` option. Other data for poses in a view may be accessed later using the `--data_from_subset` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<subset_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
+
+#### Filters
+When running with default settings (no user-specified filters), the only filter used is `--epercentile 1.0`. This gives the top 1% of poses by overall binding energy score. All available filters are listed below in the table of supported arguments.
+
+### Interaction filter formatting
 The `--vdw`, `--hb`, and `--react_res` interaction filters must be specified in the order `CHAIN:RES:NUM:ATOM_NAME`. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. `--vdw`) may be specified with a single option tag (`--vdw=B:THR:276:,B:HIS:226:`) or separate tags (`--vdw=B:THR:276: --vdw=B:HIS:226:`).
 
-## Using filters file
+### Using filters file
 Filters may also be read from a text file given with the `--filters_file` tag. Below is an example of a filters text file:
 ```
 #     this is a comment
@@ -49,6 +53,25 @@ react_count=1
 hb_count=10
 max_miss=1
 ```
+## Exploring the database in the Command Line
+View the data contained within the database using the Command Line, we recommend using the [VisiData tool](https://www.visidata.org/).
+
+## Data integrity sanity checks
+There are a few quick checks the user can make to ensure that the data has been properly written from the DLGs to the database. Discrepancies may indicate an error occurred while writting the database or the DLG format did not that which Ringtail expected.
+- The number of rows in the `Ligands` table should match the number of DLG files
+- The number of rows in the `Results` and `Interaction_bitvectors` tables should match
+- The number of rows in the `Results` table should be ~`max_poses`\* `number of DLGs` and should be less than or equal to that number. Not every ligand may have up to `max_poses`, which is why the number of rows is typically smaller than `max_poses`\* `number of DLGs`.
+- No ligand should have more than `max_poses` rows in the `Results` table unless multiple receptors were present.
+
+## Available outputs
+The primary outputs from running Ringtail are the database itself and the filtering log file. There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
+
+The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the subset given with `--subset_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
+
+Using the `--export_poses_path` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the subset given with `--subset_name`. The SDF will contain all poses for a given ligand, with the poses passing the filter/in the subset being first (ordered by increasing binding energy), followed by the poses which do not pass the filter/are not in the subset. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking.
+
+If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_table_csv`, which takes a string for the name of a table in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
+The second option is `--export_query_csv`. This takes a string of a properly-formatted SQL query to run on the database, returning the results of that query as `query.csv`. This option allows the user full, unobstructed access to all data in the database.
 
 ## Potential pitfalls
 When importing DLG files into a database with Ringtail, the files must have interaction analysis already performed. This is specified with `-C 1` when running [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU).
