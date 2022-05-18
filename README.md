@@ -42,9 +42,16 @@ If you wish to make the code for either Meeko or Ringtail editable without re-ru
 ```
 pip install --editable .
 ```
+## Definitions
+- _DLG_: Docking Log File, output from AutoDock-GPU
+- _Cluster_: Each DLG contains a number of independent runs, usually 20-50. These independent poses are then clustered by RMSD, giving groups of similar poses called clusters.
+- _Pose_: The predicted ligand shape and position for single run of a single ligand in a single receptor
+- _Binding score/ binding energy_: The predicited binding energy from AutoDock
+- _Ringtail_: 
+> Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
 ## Basic Usage
-Upon calling Ringtail for the first time, the user must specify where the program can find DLGs to write to the newly-created database. This is done using the
+The script for writing a database and filtering is `run_ringtail.py`. Upon calling Ringtail for the first time, the user must specify where the program can find DLGs to write to the newly-created database. This is done using the
 `--file`, `--file_path`, and/or `--file_list` options. Any combination of these options can be used, and multiple arguments for each are accepted. dlg.gz files
 are also accepted. After this initial run, a database is created and may be read directory for subsequent filtering operations.
 #### Inputs
@@ -69,8 +76,12 @@ When filtering, the passing results are saved as a view in the database. This vi
 #### Filters
 When running with default settings (no user-specified filters), the only filter used is `--epercentile 1.0`. This gives the top 1% of poses by overall binding energy score. All available filters are listed below in the table of supported arguments.
 
-### Interaction filter formatting
+### Interaction filter formatting and options
 The `--vdw`, `--hb`, and `--react_res` interaction filters must be specified in the order `CHAIN:RES:NUM:ATOM_NAME`. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. `--vdw`) may be specified with a single option tag (`--vdw=B:THR:276:,B:HIS:226:`) or separate tags (`--vdw=B:THR:276: --vdw=B:HIS:226:`).
+
+The `--max_miss` option allows the user to separately filter each combination of the given interaction filters excluding up to `max_miss` interactions. This gives ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination of interaction filters will be written separately in the log file. This option cannot be used with `--plot` or `--export_poses_path`.
+
+The `--interaction_tolerance` option also allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. When used as a flag, the `interaction_tolerance` default is 0.8 angstroms. The user may also specify their own cutoff.
 
 ### Using filters file
 Filters may also be read from a text file given with the `--filters_file` tag. Below is an example of a filters text file:
