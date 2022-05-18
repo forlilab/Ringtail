@@ -10,6 +10,34 @@ Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
 
+## Installation
+It is recommended that you create a new Conda environment for installing Ringtail. Ringtail requires the following:
+- RDKit
+- SciPy
+- [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
+
+Installation is outlined below:
+```
+conda create -n ringtail
+conda install -c conda-forge rdkit scipy
+```
+Now, navigate to the desired directory for installing Meeko and do the following:
+```
+$ git clone git@github.com:forlilab/Meeko.git
+$ cd Meeko
+$ pip install .
+```
+After this, navigate to the desired directory for installing Ringtail and do the following:
+```
+$ git clone git@github.com:forlilab/Ringtail.git
+$ cd Ringtail
+$ pip install .
+```
+If you wish to make the code for either Meeko or Ringtail editable without re-running `pip install .`, instead use
+```
+pip install --editable .
+```
+
 ## Basic Usage
 Upon calling Ringtail for the first time, the user must specify where the program can find DLGs to write to the newly-created database. This is done using the
 `--file`, `--file_path`, and/or `--file_list` options. Any combination of these options can be used, and multiple arguments for each are accepted. dlg.gz files
