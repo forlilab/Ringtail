@@ -110,7 +110,7 @@ class DBManager():
             "rank": "pose_rank",
             "run": "run_number",
             "hb": "num_hb",
-            "receptor": "receptor"
+            # "receptor": "receptor"
         }
         self.interaction_filter_types = {"V", "H", "R"}
 
@@ -1254,7 +1254,7 @@ class DBManagerSQLite(DBManager):
 
     def get_current_view_name(self):
         """returns current view name
-        
+
         Returns:
             string: name of last passing results view used by database
         """
@@ -1434,7 +1434,6 @@ class DBManagerSQLite(DBManager):
                    trans_x, trans_y, trans_z,
                    axisangle_x, axisangle_y, axisangle_z, axisangle_w,
                    dihedrals) ON CONFLICT {0}""".format(self.conflict_opt)
-
 
         sql_results_table = """CREATE TABLE Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,

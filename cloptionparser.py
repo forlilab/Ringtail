@@ -75,7 +75,7 @@ class CLOptionParser():
                         (
                             '--recursive',
                             {
-                                'help': 'enable recursive directory scan when --dir is used',
+                                'help': 'enable recursive directory scan when --file_path is used',
                                 'action': 'store_true',
                                 'default': False
                             },
@@ -103,7 +103,7 @@ class CLOptionParser():
                         (
                             '--input_db',
                             {
-                                'help': 'specify a file containing a sqlite database',
+                                'help': 'specify a database file to perform actions with',
                                 'action': 'store',
                                 'type': str,
                                 'metavar': "DATABASE",
@@ -147,7 +147,7 @@ class CLOptionParser():
                         (
                             '--output_db',
                             {
-                                'help': ('Name for output SQLite file'),
+                                'help': ('Name for output database file'),
                                 'action': 'store',
                                 'type': str,
                                 'metavar': "[FILE_NAME].DB",
@@ -231,8 +231,8 @@ class CLOptionParser():
                             {
                                 'help':
                                 'defines which fields are used when reporting '
-                                'the results (either to stdout or to the log file); in the output, values '
-                                'are separated by a "|" symbol; fields are specified '
+                                'the results (to stdout and to the log file); '
+                                'fields are specified '
                                 'as comma-separated values, e.g. "--out_fields=e,le,hb"; by '
                                 'default, energies_binding (energy) and ligand name are reported; ligand always reported in first column'
                                 'available fields are:  '
@@ -245,11 +245,9 @@ class CLOptionParser():
                                 '"e_elec" (electrostatic energy), '
                                 '"e_intra" (intermolecular energy), '
                                 '"n_interact" (number of interactions), '
-                                '"interactions" (all interactions), '
                                 '"ligand_smile" , '
                                 '"rank" (rank of ligand pose), '
                                 '"run" (run number for ligand pose), '
-                                '"source_file" (file that data for row was taken from), '
                                 '"hb" (hydrogen bonds); '
                                 'Fields are '
                                 'printed in the order in which they are provided. Ligand name will always be returned and should not be specified',
@@ -271,7 +269,7 @@ class CLOptionParser():
                             '--export_poses_path',
                             {
                                 'help':
-                                ('specify the path where to save poses of ligands passing the filters (PDBQT format); '
+                                ('specify the path where to save poses of ligands passing the filters (SDF format); '
                                  'if the directory does not exist, it will be created; if it already exist, it will throw '
                                  'an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path.'
                                  'Ligands will be stored as SDF files, with the poses passing the filtering criteria first, followed the non-passing poses, in the order specified.'
@@ -286,7 +284,7 @@ class CLOptionParser():
                             '--no_print',
                             {
                                 'help':
-                                ('suppress printing of full trace of multiprocessing. NOTE: runtime may be faster if no_print option used.'
+                                ('suppress printing of results passing filtering criteria. NOTE: runtime may be faster if no_print option used.'
                                  ),
                                 'action':
                                 'store_true',
@@ -306,7 +304,7 @@ class CLOptionParser():
                             '--plot',
                             {
                                 'help':
-                                ('Makes best energy and le histograms and displays in command line. Makes scatterplot of LE vs Best Energy, saves as [filters_file].png or out.png if no filters_file given.'
+                                ('Makes scatterplot of LE vs Best Energy, saves as [filters_file].png or out.png if no filters_file given.'
                                  ),
                                 'action': 'store_true',
                                 'default': False
@@ -324,14 +322,14 @@ class CLOptionParser():
                             },
                         ),
                         (
-                            '--one_pose',
+                            '--all_poses',
                             {
                                 'help':
-                                ('by default, will output all poses passing filters, including multiple poses for the same ligand. '
-                                 'This flag will cause each ligand passing the filters to only be logged once with the best pose.'
+                                ('by default, will output only top-scoring pose passing filters per ligand. '
+                                 'This flag will cause each pose passing the filters to be logged.'
                                  ),
-                                'action': 'store_true',
-                                'default': False
+                                'action': 'store_false',
+                                'default': True
                             },
                         ),
                         (
@@ -371,8 +369,7 @@ class CLOptionParser():
                             'help': 'specify the worst energy value accepted',
                             'action': 'store',
                             'type': float,
-                            'metavar': "FLOAT",
-                            'default': -3.0
+                            'metavar': "FLOAT"
                         },
                     ),
                      (
@@ -408,17 +405,18 @@ class CLOptionParser():
                          '--epercentile',
                          {
                              'help':
-                             'specify the worst energy percentile accepted. Express as percentage i.e. 1 for top 1 percent.',
+                             'specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.',
                              'action': 'store',
                              'type': float,
-                             'metavar': "FLOAT"
+                             'metavar': "FLOAT",
+                             'default': 1.0
                          },
                      ),
                      (
                          '--leffpercentile',
                          {
                              'help':
-                             'specify the worst ligand efficiency percentile accepted. Express as percentage i.e. 1 for top 1 percent.',
+                             'specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.',
                              'action': 'store',
                              'type': float,
                              'metavar': "FLOAT"
@@ -447,7 +445,7 @@ class CLOptionParser():
                             '--substructure',
                             {
                                 'help':
-                                'specify SMILES substring(s) to search for',
+                                'specify SMILES substring(s) to search for. Join multiple strings with "," ',
                                 'action': 'store',
                                 'type': str,
                                 'default': None,
@@ -455,7 +453,7 @@ class CLOptionParser():
                             },
                         ),
                         (
-                            '--substruct_flag',
+                            '--substruct_join',
                             {
                                 'help':
                                 'specify whether to search AND or OR for substructures. Default OR',
@@ -503,7 +501,7 @@ class CLOptionParser():
                             '--max_miss',
                             {
                                 'help':
-                                'Will separately log all possible permutations of interaction filters in log file excluding up to max_miss numer of interactions from given set.',
+                                'Will separately log all possible combinations of interaction filters in log file excluding up to max_miss numer of interactions from given set. Cannot be used with --plot or --export_poses_path.',
                                 'action': 'store',
                                 'type': int,
                                 'metavar': "INTEGER",
@@ -650,10 +648,6 @@ class CLOptionParser():
                 raise RuntimeError("Cannot use --plot with --max_miss > 0. Can plot for desired subset with --no_filter,--data_from_subset and, --subset_name.")
             if parsed_opts.export_poses_path is not None:
                 raise RuntimeError("Cannot use --export_poses_path with --max_miss > 0. Can export poses for desired subset with --no_filter, --data_from_subset, and --subset_name")
-            if parsed_opts.export_query_csv is not None:
-                raise RuntimeError("Cannot use --export_query_csv with --max_miss > 0. Can export CSV for desired subset with --no_filter, --data_from_subset, and --subset_name")
-            if parsed_opts.export_table_csv is not None:
-                raise RuntimeError("Cannot use --export_table_csv with --max_miss > 0. Can export CSV for desired subset with --no_filter, --data_from_subset, and --subset_name")
         parsed_opts.out_fields = parsed_opts.out_fields.split(",")
         for outfield in parsed_opts.out_fields:
             if outfield not in self.outfield_options:
@@ -694,7 +688,7 @@ class CLOptionParser():
         db_opts = {
             'num_clusters': parsed_opts.max_poses,
             "order_results": parsed_opts.order_results,
-            "log_distinct_ligands": parsed_opts.one_pose,
+            "log_distinct_ligands": parsed_opts.all_poses,
             "interaction_tolerance": parsed_opts.interaction_tolerance,
             "results_view_name": parsed_opts.subset_name,
             "store_all_poses": parsed_opts.store_all_poses,
@@ -762,7 +756,7 @@ class CLOptionParser():
             interactions_count.append((pool, c))
         # make dictionary for ligand filters
         ligand_filters_kw = [('name', 'N'), ('substructure', 'S'),
-                             ('substruct_flag', 'F')]
+                             ('substruct_join', 'F')]
         ligand_filters = {}
         filter_ligands_flag = True
         for kw, _type in ligand_filters_kw:
