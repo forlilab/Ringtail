@@ -1,3 +1,4 @@
+![ringtail logo with text](https://user-images.githubusercontent.com/41704502/168933741-8b4a78f7-6e23-4d74-9c4c-4b47633e42c7.png)
 # Ringtail
 Package for creating SQLite database from virtual screening DLGs and performing filtering on results.
 
