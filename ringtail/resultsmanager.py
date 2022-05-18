@@ -1,4 +1,3 @@
-from mpmanager import MPManager
 
 
 class ResultsManager():

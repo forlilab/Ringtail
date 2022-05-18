@@ -1,6 +1,5 @@
 import multiprocessing
 import time
-import parsers
 import sys
 
 
