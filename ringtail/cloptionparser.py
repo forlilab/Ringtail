@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail command line option parser
+#
+
 import sys
 import argparse
 from glob import glob
@@ -16,7 +22,7 @@ class CLOptionParser():
         self.epilog = """
 
         REQUIRED PACKAGES
-                Requires numpy, multiprocessing, matplotlib, sqlite3.\n
+                Requires RDkit, SciPy, Meeko.\n
 
         AUTHOR
                 Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n

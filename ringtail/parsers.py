@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail file parsers
+#
+
 import os
 import gzip
 import numpy as np

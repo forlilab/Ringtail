@@ -1,4 +1,8 @@
-
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail receptor manager
+#
 
 class ReceptorManager():
 

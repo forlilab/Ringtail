@@ -1,5 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail multiprocessing manager
+#
+
 import multiprocessing
-# from mpreaderwriter import DockingFileReader, Writer
 
 
 class MPManager():

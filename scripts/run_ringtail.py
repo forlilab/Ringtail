@@ -1,3 +1,8 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+#
+
 import time
 from ringtail import CLOptionParser
 from ringtail import VSManager

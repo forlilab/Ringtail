@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail results manager
+#
+
+from ringtail import MPManager
 
 
 class ResultsManager():
