@@ -7,6 +7,7 @@
 import multiprocessing
 import time
 import sys
+from .parsers import parse_single_dlg
 
 
 class DockingFileReader(multiprocessing.Process):
@@ -59,7 +60,7 @@ class DockingFileReader(multiprocessing.Process):
             # generate CPU LOAD
             # parser depends on requested mode
             if self.mode == "dlg":
-                parsed_file_dict = parsers.parse_single_dlg(next_task)
+                parsed_file_dict = parse_single_dlg(next_task)
             # future: Vina parser, etc
             # elif self.mode == "vina":
             #    parsed_file_dict = parser.parse_single_vina_log(next_task)

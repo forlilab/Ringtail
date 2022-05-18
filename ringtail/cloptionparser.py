@@ -181,18 +181,6 @@ class CLOptionParser():
                             },
                         ),
                         (
-                            '--interaction_tolerance',
-                            {
-                                'help': ('Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired'),
-                                'action': 'store',
-                                'type': float,
-                                'metavar': "FLOAT",
-                                'default': None,
-                                'const': 0.8,
-                                'nargs': '?'
-                            },
-                        ),
-                        (
                             '--max_poses',
                             {
                                 'help': ('n: Store top pose for top n clusters'),
@@ -546,6 +534,18 @@ class CLOptionParser():
                                 'action': 'append',
                                 'type': str,
                                 'metavar': "[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"
+                            },
+                        ),
+                        (
+                            '--interaction_tolerance',
+                            {
+                                'help': ('Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired'),
+                                'action': 'store',
+                                'type': float,
+                                'metavar': "FLOAT",
+                                'default': None,
+                                'const': 0.8,
+                                'nargs': '?'
                             },
                         ),
                     ],
