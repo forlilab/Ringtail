@@ -4,7 +4,7 @@ Package for creating SQLite database from virtual screening DLGs and performing 
 
 Ringtail reads collections of DLG results from virtual screenings performed with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) and deposits them into
 a SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of simple result plots, export of resulting
-molecule poses, and export of CSVs of result data. DLG parsing is parallelized accross the user's CPU.
+molecule poses, and export of CSVs of result data. DLG parsing is parallelized across the user's CPU.
 
 Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
@@ -30,10 +30,15 @@ The default log name is `output_log.txt` and by default will include the ligand 
 may be changed with the `--log` option and the information written to the log can be specified with `--out_fields`. If desired, only the information for the
 top-scoring binding pose may be written to the log by using the `--one_pose` flag.
 
+## Using interaction filters
+
+## Potential pitfalls
+When importing DLG files into a database with Ringtail, the files must have interaction analysis already performed. This is specified with `-C 1` when running [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU).
+
 ## Supported arguments
 
 | Argument          | Description                                           | Default value    <tr><td colspan="3">**INPUT**</td></tr>
-|:------------------|:------------------------------------------------------|-----------------:|
+|:---------------------|:---------------------------------------------------|-----------------:|
 |--file             | DLG file(s) to be read into database                  | no default       |
 |--file_path        | Path(s) to DLG files to read into database            | no default       |
 |--file_list        | File(s) with list of DLG files to read into database  | no default       |
@@ -61,4 +66,19 @@ top-scoring binding pose may be written to the log by using the `--one_pose` fla
 |--plot             | Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        |
 |--one_pose         | Flag that if mutiple poses for same ligand pass filters, only log best pose | FALSE        |
 |--overwrite        | Flag to overwrite existing log and database           | FALSE       |
-|--order_results    | String for field by which the passing results should be ordered in log file. | no default  |
+|--order_results    | String for field by which the passing results should be ordered in log file. | no default  <tr><td colspan="3">**PROPERTY FILTERS**</td></tr>
+|--eworst           | Worst energy value accepted (kcal/mol)                | -3.0        |
+|--ebest            | Best energy value accepted (kcal/mol)                 | no default  |
+|--leworst          | Worst ligand efficiency value accepted                | no default  |
+|--lebest           | Best ligand efficiency value accepted                 | no default  |
+|--epercentile      | Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default  |
+|--leffpercentile   | Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default  <tr><td colspan="3">**LIGAND FILTERS**</td></tr>
+|--name             | Search for specific ligand name. Joined by "OR" with substructure search | no default  |
+|--substructure     | SMILES substring to search for. *Performs substring search, will not find equivalent chemical structures with different SMILES denotations.* | no default  |
+|--substruct_join   | Specify whether to join separate substructure searchs with "AND" or "OR". | "OR"  <tr><td colspan="3">**INTERACTION FILTERS**</td></tr>
+|--vdw              | Filter for van der Waals interaction with given receptor information  | no default  |
+|--hb               | Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  |
+|--max_miss         | Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  |
+|--hb_count          | Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  |
+|--react_any         | Filter for poses with reaction with any residue       | FALSE     |
+|--react_res         | Filter for reation with residue containing specified information | no default  |
