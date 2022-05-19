@@ -62,6 +62,9 @@ When searching for DLG files in the directory specified with `--file_path`, Ring
 is enabled with the `--recursive` flag.
 
 Once a database is written, this database can be read in directly without re-writting using the `--input_db` option. To add new DLGs to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. To overwrite an existing database, use the `--overwrite` flag in combination with `--file`, `--file_path`, and/or `--file_list` options.
+
+One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database. Ringtail will throw an exception if this flag is given but no receptor is found or if the name of the receptor file does not match that found in a DLG.
+
 #### Outputs
 By default, the newly-created database will be named `output.db`. This name may be changed with the `--output_db` option.
 
