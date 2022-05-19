@@ -143,7 +143,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 ## Supported arguments
 
 | Argument          | Description                                           | Default value    <tr><td colspan="3">**INPUT**</td></tr>
-|:----------------------|:--------------------------------------------------|-----------------:|
+|:------------------------|:-------------------------------------------------|----------------:|
 |--file             | DLG file(s) to be read into database                  | no default       |
 |--file_path        | Path(s) to DLG files to read into database            | no default       |
 |--file_list        | File(s) with list of DLG files to read into database  | no default       |
