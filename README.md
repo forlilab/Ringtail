@@ -61,7 +61,7 @@ When searching for DLG files in the directory specified with `--file_path`, Ring
 `--pattern` option. Note also that, by default, Ringtail will only search the directory provided in `--file_path` and not subdirectories. Subdirectory searching
 is enabled with the `--recursive` flag.
 
-Once a database is written, this database can be read in directly without re-writting using the `--input_db` option. To add new DLGs to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. If one is concerned about adding conflicting results, the `--conflict_handling` option can be used to specify how conflicting entries should be handled. However, this option make database writing significantly slower.
+Once a database is written, this database can be read in directly without re-writting using the `--input_db` option. To add new DLGs to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. If one is concerned about adding duplicate results, the `--conflict_handling` option can be used to specify how conflicting entries should be handled. However, this option make database writing significantly slower.
 
 To overwrite an existing database, use the `--overwrite` flag in combination with `--file`, `--file_path`, and/or `--file_list` options.
 
