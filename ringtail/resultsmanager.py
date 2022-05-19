@@ -16,7 +16,7 @@ class ResultsManager():
                  chunk_size=1000,
                  numclusters=3,
                  no_print_flag=False,
-                 single_receptor=False):
+                 target=None):
         self.dbman = dbman
         self.filelist = filelist
         self.num_result_files = len(filelist)
@@ -27,7 +27,7 @@ class ResultsManager():
                                 mode=mode,
                                 numclusters=numclusters,
                                 no_print_flag=self.no_print_flag,
-                                single_receptor=single_receptor)
+                                target=target)
 
     def process_results(self):
         # start MP process

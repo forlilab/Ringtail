@@ -74,7 +74,7 @@ class VSManager():
             filelist=rman_opts['filelist'],
             numclusters=rman_opts['num_clusters'],
             no_print_flag=self.no_print_flag,
-            single_receptor=out_opts['single_receptor'])
+            target=rman_opts["target"])
         self.output_manager = Outputter(self, self.out_opts['log'])
 
         # if requested, write database or add results to an existing one
