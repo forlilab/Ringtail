@@ -4,6 +4,8 @@
 # Ringtail receptor manager
 #
 
+import gzip
+
 class ReceptorManager():
 
     def __init__(self, rec_file_list, dbmanager):
@@ -12,16 +14,21 @@ class ReceptorManager():
         self.receptors = []
         self.dbman = dbmanager
 
-        self._make_receptor_objects()
+        self._make_receptor_blobs()
 
     def _make_receptor_objects(self):
         for rec_file in self.file_list:
+            # check file extension, compress to bytes if needed
             rec_name = rec_file.split(".")[0]
-            rec_obj = make_receptor_object(rec_file, rec_name)
-            self.receptors.append(rec_obj)
+            if rec_file.endswith(".gz"):
+                with open(rec_file, 'rb') as r:
+                    self.receptors.append((r.read(), rec_name))
+            else:
+                with open(rec_file, 'r') as r:
+                    self.receptors.append((gzip.compress(r.read()), rec_name))
 
     def add_receptors_to_db(self):
-        for rec in self.receptors:
+        for rec, rec_name in self.receptors:
             # NOTE: in current implementation, only one receptor allowed per database
             # Check that receptor table is empty before inserting
             receptor_rows = self.dbman.get_number_receptor_rows()

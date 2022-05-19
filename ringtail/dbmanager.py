@@ -1153,18 +1153,15 @@ class DBManagerSQLite(DBManager):
         """Takes object of Receptor class, updates the column in Receptor table for the row with rec_name to contain receptor BLOB
 
         Args:
-            receptor (Receptor): Receptor object to be inserted into DB
+            receptor (bytes): bytes receptor object to be inserted into DB
             rec_name (string): Name of receptor. Used to insert into correct row of DB
         """
-
-        # must convert to binary
-        rec_pickle = pickle.dumps(receptor)
 
         sql_update = """UPDATE Receptors SET receptor_object = ? WHERE RecName LIKE '{0}'""".format(rec_name)
 
         try:
             cur = self.conn.cursor()
-            cur.execute(sql_update, (sqlite3.Binary(rec_pickle),))
+            cur.execute(sql_update, (sqlite3.Binary(receptor),))
             self.conn.commit()
             cur.close()
 
