@@ -37,7 +37,7 @@ if __name__ == '__main__':
                       out_opts=out_opts)
 
     # Add receptors to database if requested
-    if cl_opts.save_receptors:
+    if cl_opts.save_receptor:
         recman = ReceptorManager(cl_opts.rec_files_pool, vsman.dbman)
         recman.add_receptors_to_db()
 

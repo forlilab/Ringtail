@@ -71,9 +71,9 @@ class CLOptionParser():
                             },
                         ),
                         (
-                            '--save_receptors',
+                            '--save_receptor',
                             {
-                                'help': 'Saves receptor PDBQTs to database. Receptor location(s) must be specied with in --file, --file_path directory or --file_list file',
+                                'help': 'Saves receptor PDBQT to database. Receptor location must be specied with in --file, --file_path directory or --file_list file',
                                 'action': 'store_true',
                                 'default': False
                             },
@@ -811,7 +811,7 @@ class CLOptionParser():
                               sources['file_path']['pattern'],
                               sources['file_path']['recursive'])
                 # scan for receptor pdbqts
-                if self.save_receptors:
+                if self.save_receptor:
                     self.scan_dir(path,
                                   "*.pdbqt*",
                                   sources['file_path']['recursive'])
@@ -825,8 +825,8 @@ class CLOptionParser():
             print("-Found %d receptor files." % len(self.rec_files_pool))
 
         # raise error if --save_receptors and none found
-        if self.save_receptors and len(self.rec_files_pool) == 0:
-            raise FileNotFoundError("--save_receptors flag specified but no receptor PDBQT found. Please check location of receptor file and file source options")
+        if self.save_receptor and len(self.rec_files_pool) == 0:
+            raise FileNotFoundError("--save_receptor flag specified but no receptor PDBQT found. Please check location of receptor file and file source options")
 
     def scan_dir(self, path, pattern, recursive=False):
         """ scan for valid output files in a directory
