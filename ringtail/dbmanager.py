@@ -1437,7 +1437,7 @@ class DBManagerSQLite(DBManager):
             unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
                    trans_x, trans_y, trans_z,
                    axisangle_x, axisangle_y, axisangle_z, axisangle_w,
-                   dihedrals) ON CONFLICT {0}""".format(self.conflict_opt)
+                   dihedrals, flexible_residues) ON CONFLICT {0}""".format(self.conflict_opt)
 
         sql_results_table = """CREATE TABLE Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,

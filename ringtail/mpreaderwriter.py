@@ -80,15 +80,14 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, maxProcesses, chunksize, db_obj, num_files, single_receptor):
+    def __init__(self, queue, maxProcesses, chunksize, db_obj, num_files):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are
         self.maxProcesses = maxProcesses
-        # assign pointer to db object, set chunksize, single_receptor flag
+        # assign pointer to db object, set chunksize
         self.db = db_obj
         self.chunksize = chunksize
-        self.single_receptor = single_receptor
         # initialize data arrays
         self.results_array = []
         self.ligands_array = []
@@ -159,7 +158,7 @@ class Writer(multiprocessing.Process):
             None, self.results_array))  # filter out stray Nones
         self.db.insert_ligands(filter(None, self.ligands_array))
         # if this is the first insert or we have multiple receptors, insert the receptor array
-        if self.first_insert or not self.single_receptor:
+        if self.first_insert:
             self.db.insert_receptors(filter(None, self.receptor_array))
             self.first_insert = False
 
