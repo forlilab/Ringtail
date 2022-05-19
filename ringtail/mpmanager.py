@@ -33,25 +33,29 @@ class MPManager():
         self.queueOut = multiprocessing.Queue()
 
     def process_files(self):
-        # start the workers in background
-        for i in range(self.max_proc):
-            # one worker is started for each processor to be used
-            s = DockingFileReader(self.queueIn, self.queueOut, self.db,
-                                  self.mode, self.numclusters, self.no_print, self.target)
-            # this method calls .run() internally
-            s.start()
+        try:
+            # start the workers in background
+            for i in range(self.max_proc):
+                # one worker is started for each processor to be used
+                s = DockingFileReader(self.queueIn, self.queueOut, self.db,
+                                      self.mode, self.numclusters, self.no_print, self.target)
+                # this method calls .run() internally
+                s.start()
 
-        # start the writer to process the data from the workers
-        w = Writer(self.queueOut, self.max_proc, self.chunksize, self.db,
-                   self.num_files)
-        w.start()
+            # start the writer to process the data from the workers
+            w = Writer(self.queueOut, self.max_proc, self.chunksize, self.db,
+                       self.num_files)
+            w.start()
 
-        # process items in the queue
-        for file in self.filelist:
+            # process items in the queue
+            for file in self.filelist:
 
-            self.queueIn.put(file, block=True)
-        # put as many poison pills in the queue as there are workers
-        for i in range(self.max_proc):
-            self.queueIn.put(None)
+                self.queueIn.put(file, block=True)
+            # put as many poison pills in the queue as there are workers
+            for i in range(self.max_proc):
+                self.queueIn.put(None)
 
-        w.join()
+            w.join()
+        except Exception as e:
+            print("Error occured during multiprocessing. Please check traceback")
+            raise e
