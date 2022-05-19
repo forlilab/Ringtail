@@ -556,7 +556,7 @@ class CLOptionParser():
 
         # confirm that files were found, else throw error
         # if only receptor files found and --save_receptor, assume we just want to add receptor and not modify the rest of the db, so turn off write_db_flag
-        if len(self.lig_files_pool) == 0 and len(self.rec_files_pool) != 0 and self.save_receptors:
+        if len(self.lig_files_pool) == 0 and len(self.rec_files_pool) != 0 and self.save_receptor:
             self.db_opts["write_db_flag"] = False
             # raise error if not input db not given
             if self.input_db is None:
@@ -566,6 +566,8 @@ class CLOptionParser():
                 "No ligand files found. Please check file source.")
         if len(self.rec_files_pool) > 1:
             raise RuntimeError("Found more than 1 receptor PDBQTs. Please check input files and only include receptor associated with DLGs")
+        if self.db_opts["add_results"] and self.save_receptor:
+            raise RuntimeError("Cannot use --add_results with --save_receptor. Please remove the --save_receptor flag")
 
     def _initialize_parser(self):
         # create parser
@@ -619,7 +621,7 @@ class CLOptionParser():
         # check that required input options are provided
         file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
         file_sources['file'] = parsed_opts.file
-        self.save_receptors = parsed_opts.save_receptors
+        self.save_receptor = parsed_opts.save_receptor
         if parsed_opts.file_path is not None:
             file_sources['file_path'] = {
                 'path': parsed_opts.file_path,
@@ -824,7 +826,7 @@ class CLOptionParser():
             print("-Found %d ligand files." % len(self.lig_files_pool))
             print("-Found %d receptor files." % len(self.rec_files_pool))
 
-        # raise error if --save_receptors and none found
+        # raise error if --save_receptor and none found
         if self.save_receptor and len(self.rec_files_pool) == 0:
             raise FileNotFoundError("--save_receptor flag specified but no receptor PDBQT found. Please check location of receptor file and file source options")
 

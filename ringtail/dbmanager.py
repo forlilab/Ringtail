@@ -1264,6 +1264,18 @@ class DBManagerSQLite(DBManager):
         """
         return self.current_view_name
 
+    def get_number_receptor_rows(self):
+        """returns number of rows in Receptors table
+
+        Returns:
+            int: number of rows in receptors table
+        """
+        cur = self.conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM Receptors")
+        row_count = cur.fetchone()[0]
+        cur.close()
+        return row_count
+
     # # # # # # # # # # # # # # # # #
     # # # # #Private methods # # # # #
     # # # # # # # # # # # # # # # # #
@@ -1507,9 +1519,7 @@ class DBManagerSQLite(DBManager):
             box_center          VARCHAR[],
             grid_spacing        INT[],
             flexible_residues   VARCHAR[],
-            receptor_object     BLOB,
-            UNIQUE(RecName, box_dim, box_center, grid_spacing, flexible_residues)
-            ON CONFLICT IGNORE
+            receptor_object     BLOB
         )"""
 
         try:
