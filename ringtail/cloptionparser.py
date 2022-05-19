@@ -16,9 +16,9 @@ class CLOptionParser():
 
     def __init__(self):
         self.write_db_flag = False
-        self.description = """description something of something"""
-        self.usage = "READ THE MANUAL!"
-        self.name = "vs_results_display"
+        self.description = """Package for creating SQLite database from virtual screening DLGs and performing filtering on results."""
+        self.usage = "Please see GitHub for full usage details."
+        self.name = "Ringtail"
         self.epilog = """
 
         REQUIRED PACKAGES
@@ -32,7 +32,7 @@ class CLOptionParser():
                 AutoDock mailing list   http://autodock.scripps.edu/mailing_list\n
 
         COPYRIGHT
-                Copyright (C) 2021 Stefano Forli Laboratory, Center for Computational Structural Biology, 
+                Copyright (C) 2022 Stefano Forli Laboratory, Center for Computational Structural Biology, 
                              The Scripps Research Institute.
                 GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
         """
@@ -45,7 +45,7 @@ class CLOptionParser():
                         (
                             '--file',
                             {
-                                'help': 'ligand DLG and receptor PDBQT file(s) to save and filter. Compressed (.gz) files allowed',
+                                'help': 'ligand DLG(s) and receptor PDBQT file to save and filter. Compressed (.gz) files allowed. Only 1 receptor allowed.',
                                 'action': 'append',
                                 'type': str,
                                 'metavar': "FILENAME.[DLG/PDBQT][.gz]",
@@ -132,14 +132,6 @@ class CLOptionParser():
                                 'type': str,
                                 'metavar': "'ignore' or 'replace'",
                                 'default': None
-                            },
-                        ),
-                        (
-                            '--one_receptor',
-                            {
-                                'help': 'Indicates that all results being added to database share the same receptor. Decreases runtime.',
-                                'action': 'store_true',
-                                'default': False
                             },
                         ),
                     ],
@@ -572,6 +564,8 @@ class CLOptionParser():
         if len(self.lig_files_pool) == 0 and (self.db_opts["write_db_flag"] or self.db_opts["add_results"]):
             raise RuntimeError(
                 "No ligand files found. Please check file source.")
+        if len(self.rec_files_pool) > 1:
+            raise RuntimeError("Found more than 1 receptor PDBQTs. Please check input files and only include receptor associated with DLGs")
 
     def _initialize_parser(self):
         # create parser
@@ -689,7 +683,6 @@ class CLOptionParser():
             'data_from_subset': parsed_opts.data_from_subset,
             'export_table': parsed_opts.export_table_csv,
             'export_query': parsed_opts.export_query_csv,
-            'single_receptor': parsed_opts.one_receptor
         }
         db_opts = {
             'num_clusters': parsed_opts.max_poses,
@@ -827,12 +820,13 @@ class CLOptionParser():
             for file in sources['file_list']:
                 self.scan_file_list(file)
 
-        print("-Found %d ligand files." % len(self.lig_files_pool))
-        print("-Found %d receptor files." % len(self.rec_files_pool))
+        if len(self.lig_files_pool) > 0 or len(self.rec_files_pool) > 0:
+            print("-Found %d ligand files." % len(self.lig_files_pool))
+            print("-Found %d receptor files." % len(self.rec_files_pool))
 
         # raise error if --save_receptors and none found
         if self.save_receptors and len(self.rec_files_pool) == 0:
-            raise FileNotFoundError("--save_receptors flag specified but no receptor PDBQTs found. Please check location of receptor files and file source options")
+            raise FileNotFoundError("--save_receptors flag specified but no receptor PDBQT found. Please check location of receptor file and file source options")
 
     def scan_dir(self, path, pattern, recursive=False):
         """ scan for valid output files in a directory

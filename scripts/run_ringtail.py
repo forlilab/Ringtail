@@ -14,12 +14,19 @@ if __name__ == '__main__':
     # parse command line options and filters file (if given)
     cl_opts = CLOptionParser()
 
+    # save target name
+    if len(cl_opts.rec_files_pool) != 0:
+        receptor = cl_opts.rec_files_pool[0].split(".")[0]  # remove file extension
+    else:
+        receptor = None
+
     # prepare option dictionaries for VSManager
     dbman_opts = cl_opts.db_opts
     rman_opts = {'chunk_size': 1,
                  'filelist': cl_opts.lig_files_pool,
                  'mode': 'dlg',
-                 'num_clusters': dbman_opts["num_clusters"]}
+                 'num_clusters': dbman_opts["num_clusters"],
+                 'target': receptor}
     filters = cl_opts.filters
     out_opts = cl_opts.out_opts
 
