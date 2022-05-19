@@ -148,8 +148,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--filters_file     | Text file specifying filters. Override command line filters  | no default|
 |--input_db         | Database file to use instead of creating new database | no default       |
 |--add_results      | Add new DLG files to existing database given with --input_db  | FALSE       |
-|--conflict_handling| Specify how conflicting results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of conflict handling causes increase in database writing time*| None      |
-|--one_receptor     | Flag to indicate that all results being added share the same receptor. Decreased runtime when using --save_receptors  | FALSE <tr><td colspan="3">**OUTPUT**</td></tr>
+|--conflict_handling| Specify how conflicting results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of conflict handling causes increase in database writing time*| None <tr><td colspan="3">**OUTPUT**</td></tr>
 |--output_db        | Name for output database                              | output.db        |
 |--export_table_csv | Name of database table to be exported as CSV. Output as <table_name>.csv | no default      |
 |--export_query_csv | Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      |
