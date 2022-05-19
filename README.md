@@ -61,7 +61,9 @@ When searching for DLG files in the directory specified with `--file_path`, Ring
 `--pattern` option. Note also that, by default, Ringtail will only search the directory provided in `--file_path` and not subdirectories. Subdirectory searching
 is enabled with the `--recursive` flag.
 
-Once a database is written, this database can be read in directly without re-writting using the `--input_db` option. To add new DLGs to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. To overwrite an existing database, use the `--overwrite` flag in combination with `--file`, `--file_path`, and/or `--file_list` options.
+Once a database is written, this database can be read in directly without re-writting using the `--input_db` option. To add new DLGs to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. If one is concerned about adding conflicting results, the `--conflict_handling` option can be used to specify how conflicting entries should be handled. However, this option make database writing significantly slower.
+
+To overwrite an existing database, use the `--overwrite` flag in combination with `--file`, `--file_path`, and/or `--file_list` options.
 
 One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database. Ringtail will throw an exception if this flag is given but no receptor is found, if the name of the receptor file does not match that found in any DLG, or the this flag is used with a database that already has a receptor. `--save_receptor` can be used to add a receptor to an existing database given with `--input_db`. `--save_receptor` may not be used with the `--add_results` option.
 
@@ -121,7 +123,7 @@ There are a few quick checks the user can make to ensure that the data has been 
 - The number of rows in the `Results` table should be ~`max_poses`\* `number of DLGs` and should be less than or equal to that number. Not every ligand may have up to `max_poses`, which is why the number of rows is typically smaller than `max_poses`\* `number of DLGs`.
 - No ligand should have more than `max_poses` rows in the `Results` table (unless storing results from multiple virtual screenings in the same database).
 
-## Available outputs
+## Other available outputs
 The primary outputs from running Ringtail are the database itself and the filtering log file. There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
 The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the subset given with `--subset_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
@@ -141,7 +143,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 ## Supported arguments
 
 | Argument          | Description                                           | Default value    <tr><td colspan="3">**INPUT**</td></tr>
-|:---------------------|:---------------------------------------------------|-----------------:|
+|:----------------------|:--------------------------------------------------|-----------------:|
 |--file             | DLG file(s) to be read into database                  | no default       |
 |--file_path        | Path(s) to DLG files to read into database            | no default       |
 |--file_list        | File(s) with list of DLG files to read into database  | no default       |
@@ -155,7 +157,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--output_db        | Name for output database                              | output.db        |
 |--export_table_csv | Name of database table to be exported as CSV. Output as <table_name>.csv | no default      |
 |--export_query_csv | Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      |
-|--interaction_tolerance | Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  |
+|--interaction_tolerance| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  |
 |--max_poses        | Number of cluster for which to store top-scoring pose in database| 3     |
 |--store_all_poses  | Flag to indicate that all poses should be stored in database| FALSE      |
 |--log              | Name for log of filtered results                      | output_log.txt   |
