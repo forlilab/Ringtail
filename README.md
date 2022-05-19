@@ -62,6 +62,9 @@ When searching for DLG files in the directory specified with `--file_path`, Ring
 is enabled with the `--recursive` flag.
 
 Once a database is written, this database can be read in directly without re-writting using the `--input_db` option. To add new DLGs to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. To overwrite an existing database, use the `--overwrite` flag in combination with `--file`, `--file_path`, and/or `--file_list` options.
+
+One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database. Ringtail will throw an exception if this flag is given but no receptor is found, if the name of the receptor file does not match that found in any DLG, or the this flag is used with a database that already has a receptor. `--save_receptor` can be used to add a receptor to an existing database given with `--input_db`. `--save_receptor` may not be used with the `--add_results` option.
+
 #### Outputs
 By default, the newly-created database will be named `output.db`. This name may be changed with the `--output_db` option.
 
@@ -142,14 +145,13 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--file             | DLG file(s) to be read into database                  | no default       |
 |--file_path        | Path(s) to DLG files to read into database            | no default       |
 |--file_list        | File(s) with list of DLG files to read into database  | no default       |
-|--save_receptors   | Flag to specify that receptor files should be imported to database. Receptor files must also be in locations specified with --file, --file_path, and/or --file_list| FALSE   |
+|--save_receptor    | Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   |
 |--recursive        | Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      |
 |--pattern          | Specify patter to serach for when finding DLG files   | \*.dlg\*         |
 |--filters_file     | Text file specifying filters. Override command line filters  | no default|
 |--input_db         | Database file to use instead of creating new database | no default       |
 |--add_results      | Add new DLG files to existing database given with --input_db  | FALSE       |
-|--conflict_handling| Specify how conflicting results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of conflict handling causes increase in database writing time*| None      |
-|--one_receptor     | Flag to indicate that all results being added share the same receptor. Decreased runtime when using --save_receptors  | FALSE <tr><td colspan="3">**OUTPUT**</td></tr>
+|--conflict_handling| Specify how conflicting results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of conflict handling causes increase in database writing time*| None <tr><td colspan="3">**OUTPUT**</td></tr>
 |--output_db        | Name for output database                              | output.db        |
 |--export_table_csv | Name of database table to be exported as CSV. Output as <table_name>.csv | no default      |
 |--export_query_csv | Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      |
