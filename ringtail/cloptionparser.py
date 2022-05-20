@@ -49,7 +49,8 @@ class CLOptionParser():
                                 'action': 'append',
                                 'type': str,
                                 'metavar': "FILENAME.[DLG/PDBQT][.gz]",
-                                'required': False
+                                'required': False,
+                                'nargs': '+'
                             },
                         ),
                         (
@@ -58,7 +59,8 @@ class CLOptionParser():
                                 'help': 'directory(s) containing DLG and PDBQT files to save and filter. Compressed (.gz) files allowed',
                                 'action': 'append',
                                 'type': str,
-                                'metavar': "DIRNAME"
+                                'metavar': "DIRNAME",
+                                'nargs': '+'
                             },
                         ),
                         (
@@ -67,7 +69,8 @@ class CLOptionParser():
                                 'help': 'file(s) containing the list of DLG and PDBQT files to filter; relative or absolute paths are allowed. Compressed (.gz) files allowed',
                                 'action': 'append',
                                 'type': str,
-                                'metavar': "FILENAME"
+                                'metavar': "FILENAME",
+                                'nargs': '+'
                             },
                         ),
                         (
@@ -803,24 +806,26 @@ class CLOptionParser():
         self.lig_files_pool = []
         self.rec_files_pool = []
         if sources['file'] is not None:
-            self.lig_files_pool = list(filter(lambda file: file.endswith(".dlg") or file.endswith(".dlg.gz"), sources['file']))
-            self.rec_files_pool = list(filter(lambda file: file.endswith(".pdbqt") or file.endswith(".pdbqt.gz"), sources['file']))
+            self.lig_files_pool = [file for file_list in sources['file'] for file in file_list if file.endswith(".dlg") or file.endswith(".dlg.gz")]
+            self.rec_files_pool = [file for file_list in sources['file'] for file in file_list if file.endswith(".pdbqt") or file.endswith(".pdbqt.gz")]
         # update the files pool with the all the files found in the path
         if sources['file_path'] is not None:
-            for path in sources['file_path']['path']:
-                # scan for ligand dlgs
-                self.scan_dir(path,
-                              sources['file_path']['pattern'],
-                              sources['file_path']['recursive'])
-                # scan for receptor pdbqts
-                if self.save_receptor:
+            for path_list in sources['file_path']['path']:
+                for path in path_list:
+                    # scan for ligand dlgs
                     self.scan_dir(path,
-                                  "*.pdbqt*",
+                                  sources['file_path']['pattern'],
                                   sources['file_path']['recursive'])
+                    # scan for receptor pdbqts
+                    if self.save_receptor:
+                        self.scan_dir(path,
+                                      "*.pdbqt*",
+                                      sources['file_path']['recursive'])
         # update the files pool with the files specified in the files list
         if sources['file_list'] is not None:
-            for file in sources['file_list']:
-                self.scan_file_list(file)
+            for filelist_list in sources['file_list']:
+                for filelist in filelist_list:
+                    self.scan_file_list(filelist)
 
         if len(self.lig_files_pool) > 0 or len(self.rec_files_pool) > 0:
             print("-Found %d ligand files." % len(self.lig_files_pool))
@@ -864,7 +869,7 @@ class CLOptionParser():
                 if os.path.isfile(line):
                     if line.endswith(".dlg") or line.endswith(".dlg.gz"):
                         lig_accepted.append(line)
-                    if line.endswith(".pdbqt"):
+                    if line.endswith(".pdbqt") or line.endswith(".pdbqt.gz"):
                         rec_accepted.append(line)
                 else:
                     print("Warning! file |%s| does not exist" % line)

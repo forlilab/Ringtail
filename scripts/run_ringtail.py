@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     # save target name
     if len(cl_opts.rec_files_pool) != 0:
-        receptor = cl_opts.rec_files_pool[0].split(".")[0]  # remove file extension
+        receptor = cl_opts.rec_files_pool[0].split(".")[0].split("/")[-1]  # remove file extension and path
     else:
         receptor = None
 
@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
     # write out requested CSVs
     if out_opts["export_table"] is not None:
-        vsman.export_csv(out_opts["export_table"], out_opts["export_table"] + ".csv")
+        vsman.export_csv(out_opts["export_table"], out_opts["export_table"] + ".csv", table=True)
     if out_opts["export_query"] is not None:
         vsman.export_csv(out_opts["export_query"], "query.csv")
 
