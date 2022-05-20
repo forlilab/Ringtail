@@ -45,15 +45,15 @@ If you wish to make the code for either Meeko or Ringtail editable without re-ru
 pip install --editable .
 ```
 ## Definitions
-- _DLG_: Docking Log File, output from AutoDock-GPU
-- _Cluster_: Each DLG contains a number of independent runs, usually 20-50. These independent poses are then clustered by RMSD, giving groups of similar poses called clusters.
-- _Pose_: The predicted ligand shape and position for single run of a single ligand in a single receptor
-- _Binding score/ binding energy_: The predicited binding energy from AutoDock
-- _Ringtail_: 
+- __DLG__: Docking Log File, output from AutoDock-GPU.
+- __Cluster__: Each DLG contains a number of independent runs, usually 20-50. These independent poses are then clustered by RMSD, giving groups of similar poses called clusters.
+- __Pose__: The predicted ligand shape and position for single run of a single ligand in a single receptor.
+- __Binding score/ binding energy__: The predicited binding energy from AutoDock.
+- __Ringtail__: 
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
 ## Basic Usage
-The script for writing a database and filtering is `run_ringtail.py`. Upon calling Ringtail for the first time, the user must specify where the program can find DLGs to write to the newly-created database. This is done using the
+The script for writing a database and filtering is `run_ringtail.py`. __This is intended to be used for a set of DLGs pertaining to a single target. This may include multiple ligand libraries as long as the target is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ Upon calling Ringtail for the first time, the user must specify where the program can find DLGs to write to the newly-created database. This is done using the
 `--file`, `--file_path`, and/or `--file_list` options. Any combination of these options can be used, and multiple arguments for each are accepted. dlg.gz files
 are also accepted. After this initial run, a database is created and may be read directory for subsequent filtering operations.
 #### Inputs
