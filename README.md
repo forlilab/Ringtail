@@ -130,7 +130,7 @@ The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy
 
 Using the `--export_poses_path` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the subset given with `--subset_name`. The SDF will contain all poses for a given ligand, with the poses passing the filter/in the subset being first (ordered by increasing binding energy), followed by the poses which do not pass the filter/are not in the subset. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking.
 
-If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_table_csv`, which takes a string for the name of a table in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
+If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_table_csv`, which takes a string for the name of a table or result subset in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
 The second option is `--export_query_csv`. This takes a string of a properly-formatted SQL query to run on the database, returning the results of that query as `query.csv`. This option allows the user full, unobstructed access to all data in the database.
 
 ## Potential pitfalls
@@ -155,7 +155,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--add_results      | Add new DLG files to existing database given with --input_db  | FALSE       |
 |--conflict_handling| Specify how conflicting results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of conflict handling causes increase in database writing time*| None <tr><td colspan="3">**OUTPUT**</td></tr>
 |--output_db        | Name for output database                              | output.db        |
-|--export_table_csv | Name of database table to be exported as CSV. Output as <table_name>.csv | no default      |
+|--export_table_csv | Name of database table or result subset to be exported as CSV. Output as <table_name>.csv | no default      |
 |--export_query_csv | Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      |
 |--max_poses        | Number of cluster for which to store top-scoring pose in database| 3     |
 |--store_all_poses  | Flag to indicate that all poses should be stored in database| FALSE      |
