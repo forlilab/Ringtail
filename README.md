@@ -149,7 +149,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--file_list        | File(s) with list of DLG files to read into database  | no default       |
 |--save_receptor    | Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   |
 |--recursive        | Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      |
-|--pattern          | Specify patter to serach for when finding DLG files   | \*.dlg\*         |
+|--pattern          | Specify patter to search for when finding DLG files   | \*.dlg\*         |
 |--filters_file     | Text file specifying filters. Override command line filters  | no default|
 |--input_db         | Database file to use instead of creating new database | no default       |
 |--add_results      | Add new DLG files to existing database given with --input_db  | FALSE       |
