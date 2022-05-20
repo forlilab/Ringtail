@@ -157,7 +157,6 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--output_db        | Name for output database                              | output.db        |
 |--export_table_csv | Name of database table to be exported as CSV. Output as <table_name>.csv | no default      |
 |--export_query_csv | Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      |
-|--interaction_tolerance| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  |
 |--max_poses        | Number of cluster for which to store top-scoring pose in database| 3     |
 |--store_all_poses  | Flag to indicate that all poses should be stored in database| FALSE      |
 |--log              | Name for log of filtered results                      | output_log.txt   |
@@ -182,6 +181,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--substruct_join   | Specify whether to join separate substructure searchs with "AND" or "OR". | "OR"  <tr><td colspan="3">**INTERACTION FILTERS**</td></tr>
 |--vdw              | Filter for van der Waals interaction with given receptor information.  | no default  |
 |--hb               | Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  |
+|--interaction_tolerance| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  |
 |--max_miss         | Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  |
 |--hb_count          | Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  |
 |--react_any         | Filter for poses with reaction with any residue       | FALSE     |
