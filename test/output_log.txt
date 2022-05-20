@@ -1,0 +1,21 @@
+Filtered poses:
+***************
+##### PROPERTIES
+#   eworst :  [ none ]
+#    ebest :  [ none ]
+#  leworst :  [ none ]
+#   lebest :  [ none ]
+#  epercentile : 1.000
+#  leffpercentile :  [ none ]
+#### INTERACTIONS
+#        V :  [ none ]
+#        H :  [ none ]
+#        R :  [ none ]
+
+Result subset name: passing_results
+
+Number passing ligands: 1 
+---------------
+'OB3Z3759440327_RX1--4xfx_mon_prep--tyr169', -12.96
+***************
+

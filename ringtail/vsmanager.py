@@ -254,14 +254,15 @@ class VSManager():
             h_parents = [int(idx) for idx in self._db_string_to_list(h_parent_line)]
             self.output_manager.write_out_mol(ligname, mol, flexres_mols, saved_coords, h_parents)
 
-    def export_csv(self, requested_data, csv_name):
+    def export_csv(self, requested_data, csv_name, table=False):
         """Get requested data from database, export as CSV
 
         Args:
             requested_data (string): Table name or SQL-formatted query
             csv_name (string): Name for exported CSV file
+            table (bool): flag indicating is requested data is a table name
         """
-        df = self.dbman.fetch_dataframe_from_db(requested_data)
+        df = self.dbman.fetch_dataframe_from_db(requested_data, table=table)
         df.to_csv(csv_name)
 
     def close_database(self):

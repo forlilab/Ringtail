@@ -512,14 +512,6 @@ class DBManager():
         """
         return self._run_query(self._generate_results_data_query(outfields))
 
-    def fetch_dataframe_from_db(self, requested_data):
-        """Returns dataframe of table or query given as requested_data
-
-        Args:
-            requested_data (string): String containing SQL-formatted query or table name
-        """
-        return pd.read_sql(requested_data, self.conn)
-
     def _fetch_view_names(self):
         """Returns DB curor with the names of all view in DB
         """
@@ -637,6 +629,15 @@ class DBManager():
         Returns:
             DB cursor: contains
                 ligand_coordinates, flexible_res_coordinates, flexible_residues
+        """
+        raise NotImplementedError
+
+    def fetch_dataframe_from_db(self, requested_data, table=False):
+        """Returns dataframe of table or query given as requested_data
+
+        Args:
+            requested_data (string): String containing SQL-formatted query or table name
+            table (bool): Flag indicating if requested_data is table name or not
         """
         raise NotImplementedError
 
@@ -1161,7 +1162,7 @@ class DBManagerSQLite(DBManager):
 
         try:
             cur = self.conn.cursor()
-            cur.execute(sql_update, (sqlite3.Binary(receptor),))
+            cur.execute(sql_update, (receptor,))
             self.conn.commit()
             cur.close()
 
@@ -1261,17 +1262,29 @@ class DBManagerSQLite(DBManager):
         """
         return self.current_view_name
 
-    def get_number_receptor_rows(self):
-        """returns number of rows in Receptors table
+    def get_number_filled_receptor_rows(self):
+        """returns number of rows in Receptors table where receptor_object already has blob
 
         Returns:
             int: number of rows in receptors table
         """
         cur = self.conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Receptors")
+        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         row_count = cur.fetchone()[0]
         cur.close()
         return row_count
+
+    def fetch_dataframe_from_db(self, requested_data, table=False):
+        """Returns dataframe of table or query given as requested_data
+
+        Args:
+            requested_data (string): String containing SQL-formatted query or table name
+            table (bool): Flag indicating if requested_data is table name or not
+        """
+        if table:
+            return pd.read_sql_query("SELECT * FROM {0}".format(requested_data), self.conn)
+        else:
+            return pd.read_sql_query(requested_data, self.conn)
 
     # # # # # # # # # # # # # # # # #
     # # # # #Private methods # # # # #

@@ -68,7 +68,7 @@ class DockingFileReader(multiprocessing.Process):
             #    parsed_file_dict = parser.parse_single_vina_log(next_task)
 
             # check receptor name from file against that which we expect
-            if parsed_file_dict["receptor"] != self.target:
+            if parsed_file_dict["receptor"] != self.target and self.target is not None:
                 raise ValueError("Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(parsed_file_dict["receptor"], next_task, self.target))
             parsed_file_dict = self.find_best_cluster_poses(parsed_file_dict)
             file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
