@@ -81,7 +81,7 @@ also be ordered in the log file using the `--order_results` option.
 When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--subset_name` option. Other data for poses in a view may be accessed later using the `--data_from_subset` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<subset_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
 
 #### Filters
-When running with default settings (no user-specified filters), the only filter used is `--epercentile 1.0`. This gives the top 1% of poses by overall binding energy score. All available filters are listed below in the table of supported arguments.
+When running with default settings (no user-specified filters), the only filter used is `--epercentile 1.0`. This gives the top 1% of poses by overall binding energy score. All available filters are listed below in the table of supported arguments. **Note that if a less-strict energy filter is desired, `--epercentile` must be set to a large value i.e. 100.**
 
 ### Interaction filter formatting and options
 The `--vdw`, `--hb`, and `--react_res` interaction filters must be specified in the order `CHAIN:RES:NUM:ATOM_NAME`. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. `--vdw`) may be specified with a single option tag (`--vdw=B:THR:276:,B:HIS:226:`) or separate tags (`--vdw=B:THR:276: --vdw=B:HIS:226:`).
