@@ -151,7 +151,8 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--file_list        | File(s) with list of DLG files to read into database  | no default       ||
 |--save_receptor    | Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   |No |
 |--recursive        | Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      ||
-|--pattern          | Specify patter to search for when finding DLG files   | \*.dlg\*         ||
+|--mode          | specify AutoDock program used to generate results. Available options are "ADGPU" and "Vina". Vina mode will automatically change --pattern to \*.pdbqt   | ADGPU         ||
+|--pattern          | Specify pattern to search for when finding DLG files   | \*.dlg\*         ||
 |--filters_file     | Text file specifying filters. Override command line filters  | no default||
 |--input_db         | Database file to use instead of creating new database | no default       ||
 |--add_results      | Add new DLG files to existing database given with --input_db  | FALSE       ||
@@ -183,8 +184,8 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--substruct_join   | Specify whether to join separate substructure searchs with "AND" or "OR". | "OR" | No  <tr><td colspan="4">**INTERACTION FILTERS**</td></tr>
 |--vdw              | Filter for van der Waals interaction with given receptor information.  | no default  | No|
 |--hb               | Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  | No|
+|--react_any         | Filter for poses with reaction with any residue       | FALSE     | No|
+|--react_res         | Filter for reation with residue containing specified information | no default  | No|
 |--interaction_tolerance| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  | No|
 |--max_miss         | Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  | No|
 |--hb_count          | Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | No|
-|--react_any         | Filter for poses with reaction with any residue       | FALSE     | No|
-|--react_res         | Filter for reation with residue containing specified information | no default  | No|
