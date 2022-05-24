@@ -177,7 +177,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--epercentile      | Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  |
 |--leffpercentile   | Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default  <tr><td colspan="3">**LIGAND FILTERS**</td></tr>
 |--name             | Search for specific ligand name. Joined by "OR" with substructure search | no default  |
-|--substructure     | SMILES substring to search for. *Performs substring search, will not find equivalent chemical structures with different SMILES denotations.* | no default  |
+|--substructure     | SMILES substring to search for. *Performs substring search, will not find equivalent chemical structures with different SMILES denotations.* Multiple filters should be designated with separate option flags | no default  |
 |--substruct_join   | Specify whether to join separate substructure searchs with "AND" or "OR". | "OR"  <tr><td colspan="3">**INTERACTION FILTERS**</td></tr>
 |--vdw              | Filter for van der Waals interaction with given receptor information.  | no default  |
 |--hb               | Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  |
