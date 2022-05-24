@@ -142,7 +142,7 @@ Issues can arise if errors are encountered during multiprocessing (DLG parsing a
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. If this occurs and you start running into unclear errors related to the SQLite3 package, it is recommended to delete the existing database and re-write it from scratch.
 
-## Supported arguments
+## run_ringtail.py Supported arguments
 
 | Argument          | Description                                           | Default value   | Vina-compatible <tr><td colspan="4">**INPUT**</td></tr>
 |:------------------------|:-------------------------------------------------|:----------------|----:|
