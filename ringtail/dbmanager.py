@@ -1879,7 +1879,6 @@ class DBManagerSQLite(DBManager):
         len_interaction_info = len(interaction_info)
         sql_string = "SELECT interaction_id FROM Interaction_indices WHERE "
 
-        print(interaction_list)
         sql_string += " AND ".join([
             "{column} LIKE '{value}'".format(column=interaction_info[i],
                                              value=interaction_list[i])
@@ -1922,6 +1921,8 @@ class DBManagerSQLite(DBManager):
             fils = ligand_filters[kw]
             if kw == 'N':
                 for name in fils:
+                    if name == '':
+                        continue
                     name_sql_str = "LigName LIKE '{value}' OR ".format(
                         value=name)
                     sql_ligand_string += name_sql_str
