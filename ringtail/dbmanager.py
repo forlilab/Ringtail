@@ -430,8 +430,8 @@ class DBManager():
                             [17])  # update number of interactions
                         result_rows[-1][18] = sum(
                             1 for interaction in pose_interactions
-                            if interaction[0] == "H") + result_rows[-1][
-                                18]  # update number of hydrogen bonds
+                            if interaction[0] == "H") + int(result_rows[-1][
+                                18])  # update number of hydrogen bonds
                     interaction_dictionaries = [
                     ]  # clear the list for the new cluster
                 result_rows.append(
@@ -1803,7 +1803,7 @@ class DBManagerSQLite(DBManager):
             # add react_any flag as interaction filter
             # check if react_any is true
             if filter_key == "react_any" and filter_value:
-                interaction_filters.append(["R", "", "", "", ""])
+                interaction_filters.append(["R", "", "", "", "", True])
 
         # initialize query string
         sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(
@@ -1834,7 +1834,7 @@ class DBManagerSQLite(DBManager):
             elif interaction[-1] is False:
                 include_str = "NOT IN"
             else:
-                raise RuntimeError("Unrecognized flag in interaction. Please contact developer with traceback and context.")
+                raise RuntimeError("Unrecognized flag in interaction. Please contact Forli Lab with traceback and context.")
             # find pose ids for ligands with desired interactions
             sql_string += " AND Pose_ID {include_str} ({interaction_str})".format(include_str=include_str,
                                                                                   interaction_str=self._generate_interaction_filtering_query(interaction_filter_indices))
@@ -1879,9 +1879,10 @@ class DBManagerSQLite(DBManager):
         len_interaction_info = len(interaction_info)
         sql_string = "SELECT interaction_id FROM Interaction_indices WHERE "
 
+        print(interaction_list)
         sql_string += " AND ".join([
             "{column} LIKE '{value}'".format(column=interaction_info[i],
-                                               value=interaction_list[i])
+                                             value=interaction_list[i])
             for i in range(len_interaction_info) if interaction_list[i] != ""
         ])
 
