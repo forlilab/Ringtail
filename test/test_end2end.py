@@ -6,8 +6,9 @@
 
 import sqlite3
 import os
-import pytest
-"""class TestInputs:
+
+
+class TestInputs:
 	def test_multiple_files1(self):
 		os.system("python ../scripts/run_ringtail.py --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz --no_print")
 
@@ -400,7 +401,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         assert status == 0
-        assert count == ligcount * 50"""
+        assert count == ligcount * 50
 
 
 class TestFilters():
@@ -461,14 +462,14 @@ class TestFilters():
         assert status == 0
 
     def test_substruct_join_or(self):
-        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --substructure CO --substructure OC")
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --substructure CO,OC")
 
         os.system("rm output.db")
 
         assert status == 0
 
     def test_substruct_join_and(self):
-        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --substructure CO --substructure C=C --substruct_join AND")
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --substructure CO,C=C --substruct_join AND")
 
         os.system("rm output.db")
 
@@ -483,6 +484,160 @@ class TestFilters():
 
     def test_react_any(self):
         status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --react_any")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_react1(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --react_res A:TYR:169:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_react2(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --react_res :TYR:169:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_react3(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --react_res :TYR::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_react4(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --react_res A:TYR::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_react5(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --react_res A::169:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_react6(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --react_res A:::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_react7(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --react_res ::169:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_hb1(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --hb A:MET:214:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_hb2(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --hb :MET:214:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_hb3(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --hb :MET::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_hb4(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --hb A:MET::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_hb5(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --hb A::214:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_hb6(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --hb A:::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_hb7(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --hb ::214:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_vdw1(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --vdw A:PRO:207:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_vdw2(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --vdw :PRO:207:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_vdw3(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --vdw :PRO::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_vdw4(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --vdw A:PRO::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_vdw5(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --vdw A::207:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_vdw6(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --vdw A:::")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_vdw7(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --vdw ::207:")
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_all_filters(self):
+        status = os.system("python ../scripts/run_ringtail.py --file_list filelist1.txt --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --epercentile 99 --leffpercentile 99 --name OB3Z3759440327_RX1--4xfx_mon_prep--tyr169,OB3Z3759440327_RX1--4xfx_mon_prep--tyr169 --substructure CO,C=C --substruct_join AND, --hb_count 5 --react_any --hb A:MET:214: --vdw A:PRO:207: --react_res A:TYR:169:")
 
         os.system("rm output.db")
 

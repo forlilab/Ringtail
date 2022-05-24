@@ -556,7 +556,8 @@ class Outputter():
             buff.append("#### LIGAND FILTERS")
             for k, v in filters_dict["ligand_filters"].items():
                 if v is not None:
-                    v = "%2.3f" % v
+                    if isinstance(v, list):
+                        v = ", ".join([f for f in v if f != ''])
                 else:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
