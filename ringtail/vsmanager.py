@@ -211,8 +211,11 @@ class VSManager():
 
         return filters_list
 
-    def write_molecule_sdfs(self):
+    def write_molecule_sdfs(self, write_nonpassing=False):
         """have output manager write sdf molecules for passing results
+
+        Args:
+            write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
         """
 
         if not self.dbman.check_passing_view_exists():
@@ -242,10 +245,11 @@ class VSManager():
 
             # fetch coordinates for non-passing poses
             # and add to ligand mol, flexible residue mols
-            nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinates(
-                ligname)
-            mol, flexres_mols, saved_coords = self._add_poses(atom_indices, nonpassing_coordinates,
-                                                              mol, flexres_mols, saved_coords)
+            if write_nonpassing:
+                nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinates(
+                    ligname)
+                mol, flexres_mols, saved_coords = self._add_poses(atom_indices, nonpassing_coordinates,
+                                                                  mol, flexres_mols, saved_coords)
 
             # write out molecule
             # h_parents = self._format_h_parents(h_parent_line)
