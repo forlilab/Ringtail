@@ -44,11 +44,11 @@ if __name__ == '__main__':
     time1 = time.perf_counter()
 
     # perform filtering
-    if not out_opts["no_filter"]:
+    if cl_opts.filter:
         vsman.filter()
 
     # Write log with new data for previous filtering results
-    if out_opts["no_filter"] and out_opts["data_from_subset"]:
+    if out_opts["data_from_subset"] and not cl_opts.filter:
         vsman.get_previous_filter_data()
 
     # plot if requested
