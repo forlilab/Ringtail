@@ -12,7 +12,7 @@ class TestInputs:
 
     def test_multiple_files1(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz --no_print"
+            "python ../scripts/run_ringtail.py --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz"
         )
 
         conn = sqlite3.connect("output.db")
@@ -29,7 +29,7 @@ class TestInputs:
 
     def test_multiple_files2(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz --no_print"
+            "python ../scripts/run_ringtail.py --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz"
         )
 
         conn = sqlite3.connect("output.db")
@@ -46,7 +46,7 @@ class TestInputs:
 
     def test_multiple_paths1(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000003-results --file_path test_data/TEST_0000005-results --no_print"
+            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000003-results --file_path test_data/TEST_0000005-results"
         )
 
         conn = sqlite3.connect("output.db")
@@ -63,7 +63,7 @@ class TestInputs:
 
     def test_multiple_paths2(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000003-results test_data/TEST_0000005-results --no_print"
+            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000003-results test_data/TEST_0000005-results"
         )
 
         conn = sqlite3.connect("output.db")
@@ -80,7 +80,7 @@ class TestInputs:
 
     def test_filelist1(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file_list filelist2.txt --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file_list filelist2.txt"
         )
 
         conn = sqlite3.connect("output.db")
@@ -97,7 +97,7 @@ class TestInputs:
 
     def test_filelist2(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist1.txt filelist2.txt --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt filelist2.txt"
         )
 
         conn = sqlite3.connect("output.db")
@@ -130,7 +130,7 @@ class TestInputs:
         )
 
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist3.txt --file test_data/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz --file_path test_data/TEST_0000003-results --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist3.txt --file test_data/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz --file_path test_data/TEST_0000003-results"
         )
 
         conn = sqlite3.connect("output.db")
@@ -162,10 +162,10 @@ class TestInputs:
 
     def test_add_results(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000005-results --no_print"
+            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000005-results"
         )
         os.system(
-            "python ../scripts/run_ringtail.py --input_db output.db --file_path test_data/TEST_0000003-results --add_results --no_print"
+            "python ../scripts/run_ringtail.py --input_db output.db --file_path test_data/TEST_0000003-results --add_results"
         )
 
         conn = sqlite3.connect("output.db")
@@ -180,12 +180,12 @@ class TestInputs:
 
         assert count == 19999
 
-    def test_conflict_handling_ign(self):
+    def test_conflict_handling(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000005-results --no_print"
+            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000005-results"
         )
         os.system(
-            "python ../scripts/run_ringtail.py --input_db output.db --file_path test_data/TEST_0000005-results --add_results --no_print --conflict_handling ignore"
+            "python ../scripts/run_ringtail.py --input_db output.db --file_path test_data/TEST_0000005-results --add_results --conflict_handling ignore"
         )
 
         conn = sqlite3.connect("output.db")
@@ -202,10 +202,10 @@ class TestInputs:
 
     def test_conflict_handling_rpl(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000005-results --no_print"
+            "python ../scripts/run_ringtail.py --file_path test_data/TEST_0000005-results"
         )
         os.system(
-            "python ../scripts/run_ringtail.py --input_db output.db --file_path test_data/TEST_0000005-results --add_results --no_print --conflict_handling replace"
+            "python ../scripts/run_ringtail.py --input_db output.db --file_path test_data/TEST_0000005-results --add_results --conflict_handling replace"
         )
 
         conn = sqlite3.connect("output.db")
@@ -222,7 +222,7 @@ class TestInputs:
 
     def test_save_rec_file(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt --save_receptor --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -240,7 +240,7 @@ class TestInputs:
 
     def test_save_rec_filepath(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file_path test_data/rec --save_receptor --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file_path test_data/rec --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -258,7 +258,7 @@ class TestInputs:
 
     def test_save_rec_filelist(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist4.txt --save_receptor --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist4.txt --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -276,7 +276,7 @@ class TestInputs:
 
     def test_save_rec_file_gz(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt.gz --save_receptor --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt.gz --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -294,7 +294,7 @@ class TestInputs:
 
     def test_save_rec_filepath_gz(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file_path test_data/rec_gz --save_receptor --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --file_path test_data/rec_gz --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -312,7 +312,7 @@ class TestInputs:
 
     def test_save_rec_filelist_gz(self):
         os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist5.txt --save_receptor --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist5.txt --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -333,7 +333,7 @@ class TestOutputs:
 
     def test_export_table_csv(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist1.txt --export_table_csv Ligands --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --export_table_csv Ligands"
         )
 
         os.system("rm output.db")
@@ -342,7 +342,7 @@ class TestOutputs:
 
     def test_export_query_csv(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py --file_list filelist1.txt --export_query_csv 'SELECT * FROM Results' --no_print"
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --export_query_csv 'SELECT * FROM Results'"
         )
 
         os.system("rm output.db")
