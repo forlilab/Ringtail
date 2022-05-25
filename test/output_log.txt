@@ -1,20 +1,16 @@
 Filtered poses:
 ***************
 ##### PROPERTIES
-#   eworst : -15.000
-#    ebest : -16.000
-#  leworst : -0.400
-#   lebest : -0.500
-#  epercentile : 99.000
-#  leffpercentile : 99.000
-#### LIGAND FILTERS
-#        N : OB3Z3759440327_RX1--4xfx_mon_prep--tyr169, OB3Z3759440327_RX1--4xfx_mon_prep--tyr169
-#        S : CO, C=C
-#        F : AND
+#   eworst : -14.000
+#    ebest :  [ none ]
+#  leworst :  [ none ]
+#   lebest :  [ none ]
+#  epercentile :  [ none ]
+#  leffpercentile :  [ none ]
 #### INTERACTIONS
-#        V : ()A:PRO:207:
-#        H : ()A:MET:214:
-#        R : ()A:TYR:169:
+#        V :  [ none ]
+#        H :  [ none ]
+#        R :  [ none ]
 
 Result subset name: passing_results
 
