@@ -152,7 +152,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 #### Export results from a previous filtering as a CSV
 ```
 run_ringtail.py --file_path Files/ --epercentile 0.1 --subset_name filter1
-run_ringtail.py --input_db output.db --export_table_csv filter1 --no_filter
+run_ringtail.py --input_db output.db --export_table_csv filter1
 ```
 
 ## run_ringtail.py Supported arguments
@@ -178,10 +178,9 @@ run_ringtail.py --input_db output.db --export_table_csv filter1 --no_filter
 |--log              | Name for log of filtered results                      | output_log.txt   ||
 |--subset_name      | Name for subset view in database                      | passing_results  ||
 |--out_fields       | Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
-|--data_from_subset | Flag that out_fields data should be written to log for results in given --subset_name. Requires --no_filter. | FALSE       ||
+|--data_from_subset | Flag that out_fields data should be written to log for results in given --subset_name. Requires no filters. | FALSE       ||
 |--export_poses_path| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       |No|
 |--no_print         | Flag indicating that passing results should not be printed to STDOUT | FALSE        ||
-|--no_filter        | Flag that no filtering should be performed            | FALSE       ||
 |--plot             | Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        ||
 |--all_poses        | Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||
 |--overwrite        | Flag to overwrite existing log and database           | FALSE       ||
