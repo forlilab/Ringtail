@@ -185,7 +185,7 @@ def parse_single_dlg(fname, mode='standard'):
 
                         flexible_res_coords[-1][-1].append(line)
                     else:
-                        pose_coordinates[-1].append(line.split()[6:9])
+                        pose_coordinates[-1].append([line[30:38], line[38:46], line[46:54]])
                 # store pose data
                 if "Estimated Free Energy of Binding" in line:
                     try:
@@ -362,7 +362,6 @@ def parse_single_dlg(fname, mode='standard'):
         'grid_center': center,
         'grid_dim': npts,
         'grid_spacing': spacing,
-        'source_file': fname,
         'ligand_input_pdbqt': input_pdbqt,
         'ligand_index_map': index_map,
         'ligand_h_parents': h_parents,
@@ -394,6 +393,103 @@ def parse_single_dlg(fname, mode='standard'):
         'pose_translations': pose_trans,
         'pose_quarternions': pose_quarternions,
         'pose_dihedrals': pose_dihedrals,
+        'fname': fname
+    }
+
+
+def parse_vina_pdbqt(fname):
+
+    # split the first name/extension
+    fname_clean = os.path.basename(fname)
+    name, ext = os.path.splitext(fname_clean)
+    ext = ext[1:].lower()
+    if ext == 'gz':
+        open_fn = gzip.open
+        # split the second name/extension
+        name, ext = os.path.splitext(name)
+        ext = ext[1:].lower()
+    else:
+        open_fn = open
+
+    ligname = fname.split(".pdbqt")[0].split("/")[-1]
+    pose_coordinates = []
+    scores = []
+    sorted_runs = []
+    leff = []
+    delta = []
+    intermolecular_energy = []
+    internal_energy = []
+    unbound_energy = []
+    interactions = []
+    count_atoms = True
+    num_heavy_atoms = 0
+
+    with open_fn(fname, 'rb') as fp:
+        for line in fp.readlines():
+            line = line.decode("utf-8")
+            try:
+                if line.startswith("MODEL"):
+                    pose_coordinates.append([])
+                    interactions.append({})
+                    sorted_runs.append(line.split()[1])
+                if line.startswith("REMARK VINA RESULT:"):
+                    scores.append(float(line.split()[3]))
+                if line.startswith("REMARK INTER:"):
+                    intermolecular_energy.append(float(line.split()[2]))
+                if line.startswith("REMARK INTRA:"):
+                    internal_energy.append(float(line.split()[2]))
+                if line.startswith("REMARK UNBOUND:"):
+                    unbound_energy.append(float(line.split()[2]))
+                if line.startswith("HETATM"):
+                    if count_atoms and line[13] != "H":
+                        num_heavy_atoms += 1
+                    pose_coordinates[-1].append([line[30:38], line[38:46], line[46:54]])
+                if line == "ENDMDL" and count_atoms:
+                    count_atoms = False
+            except ValueError:
+                raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, fname))
+
+    # calculate ligand efficiency and deltas from the best pose
+    leff = [x / num_heavy_atoms for x in scores]
+    delta = [x - scores[0] for x in scores]
+
+    return {
+        'ligname': ligname,  # string
+        'receptor': "",
+        'grid_center': "",
+        'grid_dim': "",
+        'grid_spacing': "",
+        'ligand_input_pdbqt': "",
+        'ligand_index_map': "",
+        'ligand_h_parents': "",
+        'pose_coordinates': pose_coordinates,  # list
+        'flexible_res_coordinates': "",
+        'flexible_residues': "",
+        'ligand_smile_string': "",
+        'clusters': {},
+        'cluster_rmsds': [],
+        'cluster_sizes': {},
+        'cluster_list': [],
+        'ref_rmsds': [],
+        'scores': scores,  # list
+        'leff': leff,  # list
+        'delta': delta,  # list
+        'intermolecular_energy': intermolecular_energy,  # list
+        'vdw_hb_desolv': [],
+        'electrostatics': [],
+        'flex_ligand': [],
+        'flexLigand_flexReceptor': [],
+        'internal_energy': internal_energy,  # list
+        'torsional_energy': [],
+        'unbound_energy': unbound_energy,  # list
+        'interactions': interactions,  # list of dictionaries
+        'num_interactions': [],
+        'num_hb': [],
+        'sorted_runs': sorted_runs,
+        'pose_about': [],
+        'pose_translations': [],
+        'pose_quarternions': [],
+        'pose_dihedrals': [],
         'fname': fname
     }
 

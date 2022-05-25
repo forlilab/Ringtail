@@ -24,7 +24,7 @@ if __name__ == '__main__':
     dbman_opts = cl_opts.db_opts
     rman_opts = {'chunk_size': 1,
                  'filelist': cl_opts.lig_files_pool,
-                 'mode': 'dlg',
+                 'mode': cl_opts.mode,
                  'num_clusters': dbman_opts["num_clusters"],
                  'target': receptor}
     filters = cl_opts.filters
