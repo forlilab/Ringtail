@@ -259,7 +259,7 @@ class CLOptionParser():
                         (
                             '--data_from_subset',
                             {
-                                'help': ('Write log of --out_fields data for subset specified by --subset_name. Must use with --no_filter.'),
+                                'help': ('Write log of --out_fields data for subset specified by --subset_name. Must use without any filters.'),
                                 'action': 'store_true',
                                 'default': False
                             },
@@ -289,14 +289,6 @@ class CLOptionParser():
                                 'store_true',
                                 'default':
                                 False
-                            },
-                        ),
-                        (
-                            '--no_filter',
-                            {
-                                'help': ('Do not perform any filtering.'),
-                                'action': 'store_true',
-                                'default': False
                             },
                         ),
                         (
@@ -408,7 +400,7 @@ class CLOptionParser():
                              'action': 'store',
                              'type': float,
                              'metavar': "FLOAT",
-                             'default': 1.0
+                             #'default': 1.0
                          },
                      ),
                      (
@@ -693,9 +685,9 @@ class CLOptionParser():
             raise RuntimeError("--max_miss must be greater than or equal to 0")
         if parsed_opts.max_miss > 0:
             if parsed_opts.plot:
-                raise RuntimeError("Cannot use --plot with --max_miss > 0. Can plot for desired subset with --no_filter,--data_from_subset and, --subset_name.")
+                raise RuntimeError("Cannot use --plot with --max_miss > 0. Can plot for desired subset with no filters,--data_from_subset and, --subset_name.")
             if parsed_opts.export_poses_path is not None:
-                raise RuntimeError("Cannot use --export_poses_path with --max_miss > 0. Can export poses for desired subset with --no_filter, --data_from_subset, and --subset_name")
+                raise RuntimeError("Cannot use --export_poses_path with --max_miss > 0. Can export poses for desired subset with no filters, --data_from_subset, and --subset_name")
         parsed_opts.out_fields = parsed_opts.out_fields.split(",")
         for outfield in parsed_opts.out_fields:
             if outfield not in self.outfield_options:
@@ -727,7 +719,6 @@ class CLOptionParser():
             'plot': parsed_opts.plot,
             'outfields': parsed_opts.out_fields,
             'no_print': parsed_opts.no_print,
-            'no_filter': parsed_opts.no_filter,
             'data_from_subset': parsed_opts.data_from_subset,
             'export_table': parsed_opts.export_table_csv,
             'export_query': parsed_opts.export_query_csv,
@@ -755,6 +746,7 @@ class CLOptionParser():
             )
             sys.exit(1)
         # # # filters
+        self.filter = False  # set flag indicating if any filters given
         # property filters
         properties = {
             'eworst': None,
@@ -766,6 +758,8 @@ class CLOptionParser():
         }
         for kw, _ in properties.items():
             properties[kw] = getattr(parsed_opts, kw)
+            if properties[kw] is not None:
+                self.filter = True
         # interaction filters (residues)
         interactions = {}
         res_interactions_kw = [('vdw', 'V'), ('hb', 'H'), ('react_res', 'R')]
@@ -808,6 +802,7 @@ class CLOptionParser():
                 warnings.warn("Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(opt))
                 continue
             interactions_count.append((pool, c))
+            self.filter = True
         # make dictionary for ligand filters
         ligand_filters_kw = [('name', 'N'), ('substructure', 'S'),
                              ('substruct_join', 'F')]
@@ -822,6 +817,8 @@ class CLOptionParser():
                 ligand_filter_list = ligand_filter_list.split(",")
                 for fil in ligand_filter_list:
                     ligand_filters[_type].append(fil)
+        if filter_ligands_flag:
+            self.filter = True
 
         filters = {
             'properties': properties,

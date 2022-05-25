@@ -61,8 +61,6 @@ class VSManager():
         """
         self.filters = filters
         self.out_opts = out_opts
-        self.eworst = self.filters['properties'][
-            'eworst']  # has default -3 kcal/mol
         self.filter_file = filter_fname
         self.no_print_flag = self.out_opts["no_print"]
 
