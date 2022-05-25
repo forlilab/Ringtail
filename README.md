@@ -1,16 +1,16 @@
 ![ringtail logo with text](https://user-images.githubusercontent.com/41704502/169367003-27531216-df0e-42f7-86bc-79e8891e6f0b.png)
 
 # Ringtail
-Package for creating SQLite database from virtual screening DLGs and performing filtering on results.
+Package for creating SQLite database from AutoDock virtual screening results and performing filtering on results. Compatible with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina).
 
 [![AD compat](https://img.shields.io/badge/AutoDock_Compatibility-ADGPU|Vina-brightgreen)](https://shields.io/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![API stability](https://img.shields.io/badge/stable%20API-no-orange)](https://shields.io/)
 [![made-with-python](https://img.shields.io/badge/Made%20with-Python-1f425f.svg)](https://www.python.org/)
 
-Ringtail reads collections of Docking Log File (DLG) results from virtual screenings performed with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) and deposits them into
+Ringtail reads collections of Docking Log File (DLG) or PDBQT results from virtual screenings performed with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina), respectively, and deposits them into
 a SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of simple result plots, export of resulting
-molecule poses, and export of CSVs of result data. DLG parsing is parallelized across the user's CPU.
+molecule poses, and export of CSVs of result data. Result file parsing is parallelized across the user's CPU.
 
 Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
@@ -46,6 +46,7 @@ pip install --editable .
 ```
 ## Definitions
 - __DLG__: Docking Log File, output from AutoDock-GPU.
+- __PDBQT__: Modified PDB format, used for receptors (input to AutoDock-GPU and Vina) and output ligand poses from AutoDock-Vina.
 - __Cluster__: Each DLG contains a number of independent runs, usually 20-50. These independent poses are then clustered by RMSD, giving groups of similar poses called clusters.
 - __Pose__: The predicted ligand shape and position for single run of a single ligand in a single receptor.
 - __Binding score/ binding energy__: The predicited binding energy from AutoDock.
@@ -53,25 +54,25 @@ pip install --editable .
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
 ## Basic Usage
-The script for writing a database and filtering is `run_ringtail.py`. __This is intended to be used for a set of DLGs pertaining to a single target. This may include multiple ligand libraries as long as the target is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ Upon calling Ringtail for the first time, the user must specify where the program can find DLGs to write to the newly-created database. This is done using the
-`--file`, `--file_path`, and/or `--file_list` options. Any combination of these options can be used, and multiple arguments for each are accepted. dlg.gz files
-are also accepted. After this initial run, a database is created and may be read directory for subsequent filtering operations.
+The script for writing a database and filtering is `run_ringtail.py`. __This is intended to be used for a set of DLGs/Vina PDBQTs pertaining to a single target. This may include multiple ligand libraries as long as the target is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ One receptor PDBQT may also be included if using with DLGs. Upon calling run_ringtail.py for the first time, the user must specify where the program can find files to write to the newly-created database. This is done using the
+`--file`, `--file_path`, and/or `--file_list` options. Any combination of these options can be used, and multiple arguments for each are accepted. Compressed `.gz` files
+are also accepted. After this initial run, a database is created and may be read directly by run_ringtail.py for subsequent filtering operations.
 #### Inputs
-When searching for DLG files in the directory specified with `--file_path`, Ringtail will search for files with the pattern `*.dlg*`. This may be changed with the
+When searching for result files in the directory specified with `--file_path`, run_ringtail.py will search for files with the pattern `*.dlg*` by default. This may be changed with the
 `--pattern` option. Note also that, by default, Ringtail will only search the directory provided in `--file_path` and not subdirectories. Subdirectory searching
 is enabled with the `--recursive` flag.
 
-Once a database is written, this database can be read in directly without re-writting using the `--input_db` option. To add new DLGs to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. If one is concerned about adding duplicate results, the `--conflict_handling` option can be used to specify how conflicting entries should be handled. However, this option makes database writing significantly slower.
+Once a database is written, this database can be read in directly without re-writting using the `--input_db` option. To add new files to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. If one is concerned about adding duplicate results, the `--conflict_handling` option can be used to specify how conflicting entries should be handled. However, this option makes database writing significantly slower.
 
 To overwrite an existing database, use the `--overwrite` flag in combination with `--file`, `--file_path`, and/or `--file_list` options.
 
-One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database. Ringtail will throw an exception if this flag is given but no receptor is found, if the name of the receptor file does not match that found in any DLG, or the this flag is used with a database that already has a receptor. `--save_receptor` can be used to add a receptor to an existing database given with `--input_db`. `--save_receptor` may not be used with the `--add_results` option.
+One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database and is only enabled for use with DLGs. Ringtail will throw an exception if this flag is given but no receptor is found, if the name of the receptor in any DLG does not match the receptor file, or if this flag is used with a database that already has a receptor. `--save_receptor` can be used to add a receptor to an existing database given with `--input_db`. `--save_receptor` may not be used with the `--add_results` option and will not be able to be used with a database created from Vina PDBQTs.
 
 #### Outputs
 By default, the newly-created database will be named `output.db`. This name may be changed with the `--output_db` option.
 
-By default, Ringtail will store the best-scored (lowest energy) binding pose from the first 3 pose clusters in the DLG. The number of clusters stored may be
-changed with the `--max_poses` option. The `--store_all_poses` flag may also be used to override `--max_poses` and store every pose from every DLG.
+By default (for DLGs), Ringtail will store the best-scored (lowest energy) binding pose from the first 3 pose clusters in the DLG. The number of clusters stored may be
+changed with the `--max_poses` option. The `--store_all_poses` flag may also be used to override `--max_poses` and store every pose from every DLG. All poses from a Vina PDBQT are saved to the database.
 
 The default log name is `output_log.txt` and by default will include the ligand name and binding energy of every pose passing filtering criteria. The log name
 may be changed with the `--log` option and the information written to the log can be specified with `--out_fields`. By default, only the information for the
@@ -81,9 +82,12 @@ also be ordered in the log file using the `--order_results` option.
 When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--subset_name` option. Other data for poses in a view may be accessed later using the `--data_from_subset` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<subset_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
 
 #### Filters
-When running with default settings (no user-specified filters), the only filter used is `--epercentile 1.0`. This gives the top 1% of poses by overall binding energy score. All available filters are listed below in the table of supported arguments. **Note that if a less-strict energy filter is desired, `--epercentile` must be set to a large value i.e. 100.**
+When running with default settings (no user-specified filters), the only filter used is `--epercentile 1.0`. This gives the top 1% of poses by overall binding energy score. All available filters are listed below in the table of supported arguments. **Note that if a less-strict energy filter is desired, `--epercentile` should be set to a large value i.e. 100.**
 
 ### Interaction filter formatting and options
+
+**Interaction filtering is not available for databases created with Vina PDBQTs.**
+
 The `--vdw`, `--hb`, and `--react_res` interaction filters must be specified in the order `CHAIN:RES:NUM:ATOM_NAME`. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. `--vdw`) may be specified with a single option tag (`--vdw=B:THR:276:,B:HIS:226:`) or separate tags (`--vdw=B:THR:276: --vdw=B:HIS:226:`).
 
 The `--max_miss` option allows the user to separately filter each combination of the given interaction filters excluding up to `max_miss` interactions. This gives ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination of interaction filters will be written separately in the log file. This option cannot be used with `--plot` or `--export_poses_path`.
@@ -109,7 +113,7 @@ View the data contained within the database using a terminal, we recommend using
 
 ![Screenshot from 2022-05-18 14-57-22](https://user-images.githubusercontent.com/41704502/169162632-3a71d338-faa1-4109-8f04-40a96ee6d24e.png)
 
-In this example, the database contains ~3 poses for 9999 discrete ligands. Each of the rows here is a separate table or view within the database. From this screen, you can easily perform the sanity checks outline below. One should note that the number of column displayed on the first screen is 1 greater than the actual number of columns in a table (the number is correct for views). To more fully explore a given table, one may use the arrow keys or mouse to navigate to it, then press `Enter/Return` to access that table/view. The user may then scroll horizontally with the arrow keys, or press `q` to return up a level.
+In this example (made with DLGs), the database contains ~3 poses for 9999 discrete ligands. Each of the rows here is a separate table or view within the database. From this screen, you can easily perform the sanity checks outline below. One should note that the number of column displayed on the first screen is 1 greater than the actual number of columns in a table (the number is correct for views). To more fully explore a given table, one may use the arrow keys or mouse to navigate to it, then press `Enter/Return` to access that table/view. The user may then scroll horizontally with the arrow keys, or press `q` to return up a level.
 
 Using `vd` is particularly helpful to examine possible interactions of interest, stored within the `Interaction_indices` table.
 
@@ -117,14 +121,15 @@ To exit, return to the screen shown in the image above by pressing `q`, then pre
 
 ## Data integrity sanity checks
 There are a few quick checks the user can make to ensure that the data has been properly written from the DLGs to the database. Discrepancies may indicate an error occurred while writting the database or the DLG format did not that which Ringtail expected.
-- The number of rows in the `Ligands` table should match the number of DLG files
-- The number of rows in the `Results` and `Interaction_bitvectors` tables should match
+- The number of rows in the `Ligands` table should match the number of input ligand files
+- The number of rows in the `Results` and `Interaction_bitvectors` tables should match (DLGs only)
 - Number of columns in the `Interactions_bitvectors` table should match the number of rows in the `Interaction_indices` table + 1 (+2 if using `vd`)
-- The number of rows in the `Results` table should be ~`max_poses`\* `number of DLGs` and should be less than or equal to that number. Not every ligand may have up to `max_poses`, which is why the number of rows is typically smaller than `max_poses`\* `number of DLGs`.
-- No ligand should have more than `max_poses` rows in the `Results` table (unless storing results from multiple virtual screenings in the same database).
+- The number of rows in the `Results` table should be ~`max_poses`\* `number of DLGs` and should be less than or equal to that number. Not every ligand may have up to `max_poses`, which is why the number of rows is typically smaller than `max_poses`\* `number of DLGs`. (DLGs only)
+- No ligand should have more than `max_poses` rows in the `Results` table (unless storing results from multiple virtual screenings in the same database; DLGs only).
+- If reading from Vina PDBQTs/using storing all poses, the number of rows in the Results table should match the `number of ligands` * `number of output poses`.
 
 ## Other available outputs
-The primary outputs from running Ringtail are the database itself and the filtering log file. There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
+The primary outputs from run_ringtail are the database itself and the filtering log file. There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
 The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the subset given with `--subset_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
 
@@ -141,6 +146,14 @@ Any PDBQT files specified through any of the input options will be read by `run_
 Issues can arise if errors are encountered during multiprocessing (DLG parsing and database writting) where the program will issue error notifications but not fully exit, nor will it progress to filtering. If this occurs, the program may be stopped from the Command Line (`CTRL+c`). Before attempting to rerun Ringtail, the cause of the error should be corrected.
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. If this occurs and you start running into unclear errors related to the SQLite3 package, it is recommended to delete the existing database and re-write it from scratch.
+
+## Usage examples
+
+#### Export results from a previous filtering as a CSV
+```
+run_ringtail.py --file_path Files/ --epercentile 0.1 --subset_name filter1
+run_ringtail.py --input_db output.db --export_table_csv filter1 --no_filter
+```
 
 ## run_ringtail.py Supported arguments
 
