@@ -82,7 +82,7 @@ also be ordered in the log file using the `--order_results` option.
 When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--subset_name` option. Other data for poses in a view may be accessed later using the `--data_from_subset` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<subset_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
 
 #### Filters
-When running with default settings (no user-specified filters), the only filter used is `--epercentile 1.0`. This gives the top 1% of poses by overall binding energy score. All available filters are listed below in the table of supported arguments. **Note that if a less-strict energy filter is desired, `--epercentile` should be set to a large value i.e. 100.**
+No filtering is performed if no filters are given. If both `--eworst` and `--epercentile` are used together, the `--eworst` cutoff alone is used. The same is true of `--leworst` and `--leffpercentile`.
 
 ### Interaction filter formatting and options
 
@@ -95,7 +95,7 @@ The `--max_miss` option allows the user to separately filter each combination of
 The `--interaction_tolerance` option also allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. When used as a flag, the `interaction_tolerance` default is 0.8 angstroms. The user may also specify their own cutoff.
 
 ### Using filters file
-Filters may also be read from a text file given with the `--filters_file` tag. Below is an example of a filters text file:
+Filters may also be read from a text file given with the `--filters_file` tag. This overrides any conflicting filters given in the command line. Below is an example of a filters text file:
 ```
 #     this is a comment
 eworst=-0.4
