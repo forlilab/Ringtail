@@ -14,7 +14,7 @@ class MPManager():
     def __init__(self, filelist, mode, db_obj, chunksize, numclusters,
                  no_print_flag, target):
         # confirm that requested parser mode is implemented
-        self.implemented_modes = ["dlg"]
+        self.implemented_modes = ["dlg", "vina"]
         if mode not in self.implemented_modes:
             raise NotImplementedError(
                 "Requested file parsing mode {0} not yet implemented".format(
@@ -44,7 +44,7 @@ class MPManager():
 
             # start the writer to process the data from the workers
             w = Writer(self.queueOut, self.max_proc, self.chunksize, self.db,
-                       self.num_files)
+                       self.num_files, self.mode)
             w.start()
 
             # process items in the queue

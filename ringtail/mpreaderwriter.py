@@ -7,7 +7,7 @@
 import multiprocessing
 import time
 import sys
-from .parsers import parse_single_dlg
+from .parsers import parse_single_dlg, parse_vina_pdbqt
 
 
 class DockingFileReader(multiprocessing.Process):
@@ -63,12 +63,12 @@ class DockingFileReader(multiprocessing.Process):
             # parser depends on requested mode
             if self.mode == "dlg":
                 parsed_file_dict = parse_single_dlg(next_task)
-            # future: Vina parser, etc
-            # elif self.mode == "vina":
-            #    parsed_file_dict = parser.parse_single_vina_log(next_task)
+            elif self.mode == "vina":
+                parsed_file_dict = parse_vina_pdbqt(next_task)
+            # future: NG parser, etc
 
             # check receptor name from file against that which we expect
-            if parsed_file_dict["receptor"] != self.target and self.target is not None:
+            if parsed_file_dict["receptor"] != self.target and self.target is not None and self.mode != "vina":
                 raise ValueError("Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(parsed_file_dict["receptor"], next_task, self.target))
             parsed_file_dict = self.find_best_cluster_poses(parsed_file_dict)
             file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
@@ -80,12 +80,13 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, maxProcesses, chunksize, db_obj, num_files):
+    def __init__(self, queue, maxProcesses, chunksize, db_obj, num_files, mode="dlg"):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are
         self.maxProcesses = maxProcesses
         # assign pointer to db object, set chunksize
+        self.mode = mode
         self.db = db_obj
         self.chunksize = chunksize
         # initialize data arrays
@@ -158,12 +159,13 @@ class Writer(multiprocessing.Process):
             None, self.results_array))  # filter out stray Nones
         self.db.insert_ligands(filter(None, self.ligands_array))
         # if this is the first insert or we have multiple receptors, insert the receptor array
-        if self.first_insert:
+        if self.first_insert and self.mode != "vina":
             self.db.insert_receptors(filter(None, self.receptor_array))
             self.first_insert = False
 
         # perform operations for inserting iteraction data
-        self.db.insert_interactions(self.interactions_list)
+        if self.mode != "vina":
+            self.db.insert_interactions(self.interactions_list)
 
         # calulate time for processing/writing previous chunk
         self.num_files_written += self.chunksize

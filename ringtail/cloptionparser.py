@@ -90,6 +90,16 @@ class CLOptionParser():
                             },
                         ),
                         (
+                            '--mode',
+                            {
+                                'help': 'specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
+                                'action': 'store',
+                                'type': str,
+                                'metavar': '[dlg] or [vina]',
+                                'default': "dlg"
+                            },
+                        ),
+                        (
                             '--pattern',
                             {
                                 'help': 'specify which pattern to use when searching for DLG files to process in directories [only with "--file_path", default "*.dlg*"]',
@@ -621,6 +631,38 @@ class CLOptionParser():
 
     def process_options(self, parsed_opts):
         """ convert command line options to the dict of filters """
+        # make sure mode is allowed
+        allowed_modes = {"dlg", "vina"}
+        self.mode = parsed_opts.mode.lower()
+        if self.mode not in allowed_modes:
+            raise ValueError("Given mode {0} not allowed. Please be sure that requested mode is 'vina' or 'dlg'".format(self.mode))
+        if self.mode == "vina":
+            # Guard against non-compatible options being called in Vina mode
+            if parsed_opts.save_receptor:
+                warnings.warn("Used incompatible --save_recepetor flag with Vina mode. Setting --save_receptor to False")
+                parsed_opts.save_receptor = False
+            if parsed_opts.export_poses_path is not None:
+                warnings.warn("Cannot use --export_poses_path with Vina mode. Setting export_poses_path to None.")
+                parsed_opts.export_poses_path = None
+            if parsed_opts.substructure is not None:
+                warnings.warn("Cannot use --substructure filter with Vina mode. Removing filter.")
+                parsed_opts.substructure = None
+            if parsed_opts.react_any:
+                warnings.warn("Cannot use interaction filters with Vina mode. Removing react_any filter.")
+                parsed_opts.react_any = False
+            if parsed_opts.interaction_tolerance is not None:
+                warnings.warn("Cannot use interaction filters with Vina mode. Removing interaction_tolerance.")
+                parsed_opts.interaction_tolerance = None
+            if parsed_opts.max_miss != 0:
+                warnings.warn("Cannot use interaction filters with Vina mode. Removing max_miss filter.")
+                parsed_opts.max_miss = 0
+            if parsed_opts.hb_count is not None:
+                warnings.warn("Cannot use interaction filters with Vina mode. Removing hb_count filter.")
+                parsed_opts.hb_count = None
+            # set pattern to .pdbqt
+            parsed_opts.pattern = "*.pdbqt*"
+            # set store all poses, since vina does not cluster poses
+            parsed_opts.store_all_poses = True
         # check that required input options are provided
         file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
         file_sources['file'] = parsed_opts.file
@@ -634,6 +676,7 @@ class CLOptionParser():
         else:
             file_sources['file_path'] = None
         file_sources['file_list'] = parsed_opts.file_list
+        self.pattern = parsed_opts.pattern
         print("")
         if (file_sources['file'] is
                 None) and (file_sources['file_path'] is
@@ -698,7 +741,8 @@ class CLOptionParser():
             "store_all_poses": parsed_opts.store_all_poses,
             "overwrite": parsed_opts.overwrite,
             "add_results": parsed_opts.add_results,
-            "conflict_opt": conflict_handling
+            "conflict_opt": conflict_handling,
+            "mode": parsed_opts.mode
         }
 
         # if a path for saving poses is specified, then the log will be written there
@@ -730,6 +774,9 @@ class CLOptionParser():
             res_list = getattr(parsed_opts, opt)
             if res_list is None:
                 continue
+            elif self.mode == "vina":
+                warnings.warn("Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(opt))
+                continue
             found_res = []
             for res in res_list:
                 if "," in res:
@@ -756,6 +803,9 @@ class CLOptionParser():
         for kw, pool in count_kw:
             c = getattr(parsed_opts, kw, None)
             if c is None:
+                continue
+            if self.mode == "vina":
+                warnings.warn("Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(opt))
                 continue
             interactions_count.append((pool, c))
         # make dictionary for ligand filters
@@ -806,30 +856,35 @@ class CLOptionParser():
         self.lig_files_pool = []
         self.rec_files_pool = []
         if sources['file'] is not None:
-            self.lig_files_pool = [file for file_list in sources['file'] for file in file_list if file.endswith(".dlg") or file.endswith(".dlg.gz")]
-            self.rec_files_pool = [file for file_list in sources['file'] for file in file_list if file.endswith(".pdbqt") or file.endswith(".pdbqt.gz")]
+            self.lig_files_pool = [file for file_list in sources['file'] for file in file_list if fnmatch.fnmatch(file, self.pattern)]
+            if self.mode != "vina" and self.save_receptor:
+                self.rec_files_pool = [file for file_list in sources['file'] for file in file_list if fnmatch.fnmatch(file, "*.pdbqt*")]
         # update the files pool with the all the files found in the path
         if sources['file_path'] is not None:
             for path_list in sources['file_path']['path']:
                 for path in path_list:
                     # scan for ligand dlgs
                     self.scan_dir(path,
-                                  sources['file_path']['pattern'],
+                                  self.pattern,
                                   sources['file_path']['recursive'])
                     # scan for receptor pdbqts
-                    if self.save_receptor:
+                    if self.save_receptor and self.mode != "vina":
                         self.scan_dir(path,
                                       "*.pdbqt*",
                                       sources['file_path']['recursive'])
         # update the files pool with the files specified in the files list
+        find_rec = True
+        if self.mode == "vina":
+            find_rec = False
         if sources['file_list'] is not None:
             for filelist_list in sources['file_list']:
                 for filelist in filelist_list:
-                    self.scan_file_list(filelist)
+                    self.scan_file_list(filelist, self.pattern.replace("*", ""), find_rec)
 
         if len(self.lig_files_pool) > 0 or len(self.rec_files_pool) > 0:
             print("-Found %d ligand files." % len(self.lig_files_pool))
-            print("-Found %d receptor files." % len(self.rec_files_pool))
+            if self.save_receptor:
+                print("-Found %d receptor files." % len(self.rec_files_pool))
 
         # raise error if --save_receptor and none found
         if self.save_receptor and len(self.rec_files_pool) == 0:
@@ -857,7 +912,7 @@ class CLOptionParser():
         elif "pdbqt" in pattern:
             self.rec_files_pool.extend(files)
 
-    def scan_file_list(self, filename):
+    def scan_file_list(self, filename, pattern=".dlg", find_rec=True):
         """ read file names from file list """
         lig_accepted = []
         rec_accepted = []
@@ -867,10 +922,11 @@ class CLOptionParser():
                 line = line.strip()
                 c += 1
                 if os.path.isfile(line):
-                    if line.endswith(".dlg") or line.endswith(".dlg.gz"):
+                    if line.endswith(pattern) or line.endswith(pattern + ".gz"):
                         lig_accepted.append(line)
-                    if line.endswith(".pdbqt") or line.endswith(".pdbqt.gz"):
-                        rec_accepted.append(line)
+                    if find_rec:
+                        if line.endswith(".pdbqt") or line.endswith(".pdbqt.gz"):
+                            rec_accepted.append(line)
                 else:
                     print("Warning! file |%s| does not exist" % line)
         if len(lig_accepted) + len(rec_accepted) == 0:

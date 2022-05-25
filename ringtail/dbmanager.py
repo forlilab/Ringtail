@@ -75,6 +75,7 @@ class DBManager():
         self.store_all_poses_flag = self.opts["store_all_poses"]
         self.overwrite_flag = self.opts["overwrite"]
         self.conflict_opt = self.opts["conflict_opt"]
+        self.mode = self.opts["mode"]
         # initialize dictionary processing kw lists
         self.interaction_data_kws = [
             "type", "chain", "residue", "resid", "recname", "recid"
@@ -247,37 +248,46 @@ class DBManager():
         ]
         # get energy data
         for key in self.ligand_data_keys:
-            ligand_data_list.append(ligand_dict[key][pose_rank])
+            if ligand_dict[key] == []:  # guard against incomplete data
+                ligand_data_list.append(None)
+            else:
+                ligand_data_list.append(ligand_dict[key][pose_rank])
 
-        # add interaction count
-        ligand_data_list.append(
-            ligand_dict["interactions"][pose_rank]["count"][0])
-        # count number H bonds, add to ligand data list
-        ligand_data_list.append(
-            ligand_dict["interactions"][pose_rank]["type"].count("H"))
-        # Add the cluster size for the cluster this pose belongs to
-        ligand_data_list.append(
-            ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]])
+        if self.mode != "vina":
+            # add interaction count
+            ligand_data_list.append(
+                ligand_dict["interactions"][pose_rank]["count"][0])
+            # count number H bonds, add to ligand data list
+            ligand_data_list.append(
+                ligand_dict["interactions"][pose_rank]["type"].count("H"))
+            # Add the cluster size for the cluster this pose belongs to
+            ligand_data_list.append(
+                ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]])
 
-        # add statevars
-        for key in self.stateVar_keys:
-            stateVar_data = ligand_dict[key][pose_rank]
-            for dim in stateVar_data:
-                ligand_data_list.append(dim)
-        pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
-        dihedral_string = ""
-        for dihedral in pose_dihedrals:
-            dihedral_string = dihedral_string + json.dumps(dihedral) + ", "
-        ligand_data_list.append(dihedral_string)
+            # add statevars
+            for key in self.stateVar_keys:
+                stateVar_data = ligand_dict[key][pose_rank]
+                for dim in stateVar_data:
+                    ligand_data_list.append(dim)
+            pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
+            dihedral_string = ""
+            for dihedral in pose_dihedrals:
+                dihedral_string = dihedral_string + json.dumps(dihedral) + ", "
+            ligand_data_list.append(dihedral_string)
+        else:
+            ligand_data_list.extend([None, None, None, None, None, None, None, None, None, None, None, None, None, None])
 
         # add coordinates
         # convert to string for storage as VARCHAR
         ligand_data_list.append(
             json.dumps(ligand_dict["pose_coordinates"]
                        [pose_rank]))
-        ligand_data_list.append(json.dumps(ligand_dict["flexible_residues"]))
-        ligand_data_list.append(
-            json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank]))
+        if self.mode != "vina":
+            ligand_data_list.append(json.dumps(ligand_dict["flexible_residues"]))
+            ligand_data_list.append(
+                json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank]))
+        else:
+            ligand_data_list.extend([None, None])
 
         return ligand_data_list
 
@@ -309,6 +319,10 @@ class DBManager():
         Args:
             ligand_dict (Dictionary): Dictionary of ligand data from parser
         """
+
+        if self.mode == "vina":
+            return [None, None, None, None, None]
+
         rec_name = ligand_dict["receptor"]
         box_dim = json.dumps(ligand_dict["grid_dim"])
         box_center = json.dumps(ligand_dict["grid_center"])
@@ -415,9 +429,8 @@ class DBManager():
         for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
             # save everything if this is a cluster top pose
             if run_number in poses_to_save:
-                # don't save interaction data from previous
-                # cluster for first cluster
-                if result_rows != []:
+                # don't save interaction data from previous cluster for first cluster
+                if result_rows != [] and self.mode != "vina":
                     pose_interactions = self._generate_interaction_tuples(
                         interaction_dictionaries
                     )
@@ -432,10 +445,8 @@ class DBManager():
                             1 for interaction in pose_interactions
                             if interaction[0] == "H") + int(result_rows[-1][
                                 18])  # update number of hydrogen bonds
-                    interaction_dictionaries = [
-                    ]  # clear the list for the new cluster
-                result_rows.append(
-                    self._generate_results_row(ligand_dict, idx, run_number))
+                    interaction_dictionaries = []  # clear the list for the new cluster
+                result_rows.append(self._generate_results_row(ligand_dict, idx, run_number))
                 interaction_dictionaries.append(ligand_dict["interactions"][idx])
             elif run_number in tolerated_interaction_runs:
                 # adds to list started by best-scoring pose in cluster
@@ -443,19 +454,20 @@ class DBManager():
                     ligand_dict["interactions"]
                     [idx])
 
-        pose_interactions = self._generate_interaction_tuples(
-            interaction_dictionaries
-        )  # will generate tuples across all dictionaries for last cluster
-        interaction_tuples.append(pose_interactions)
-        # only update if we added interactions
-        if self.interaction_tolerance_cutoff is not None:
-            result_rows[-1][17] = len(pose_interactions) + int(
-                result_rows[-1][17])  # update number of interactions
-            result_rows[-1][18] = sum(
-                1 for interaction in pose_interactions
-                if interaction[0] == "H") + int(
-                    result_rows[-1]
-                    [18])  # count and update number of hydrogen bonds
+        if self.mode != "vina":
+            pose_interactions = self._generate_interaction_tuples(
+                interaction_dictionaries
+            )  # will generate tuples across all dictionaries for last cluster
+            interaction_tuples.append(pose_interactions)
+            # only update if we added interactions
+            if self.interaction_tolerance_cutoff is not None:
+                result_rows[-1][17] = len(pose_interactions) + int(
+                    result_rows[-1][17])  # update number of interactions
+                result_rows[-1][18] = sum(
+                    1 for interaction in pose_interactions
+                    if interaction[0] == "H") + int(
+                        result_rows[-1]
+                        [18])  # count and update number of hydrogen bonds
 
         return (result_rows, self._generate_ligand_row(ligand_dict),
                 interaction_tuples, self._generate_receptor_row(ligand_dict))
@@ -1515,7 +1527,7 @@ class DBManagerSQLite(DBManager):
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
             Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
-            RecName             VARCHAR NOT NULL,
+            RecName             VARCHAR,
             box_dim             VARCHAR[],
             box_center          VARCHAR[],
             grid_spacing        INT[],
@@ -1524,7 +1536,7 @@ class DBManagerSQLite(DBManager):
         """
         receptors_table = """CREATE TABLE Receptors (
             Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
-            RecName             VARCHAR NOT NULL,
+            RecName             VARCHAR,
             box_dim             VARCHAR[],
             box_center          VARCHAR[],
             grid_spacing        INT[],
