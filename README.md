@@ -159,9 +159,9 @@ run_ringtail.py --input_db output.db --export_table_csv filter1
 
 | Argument          | Description                                           | Default value   | Vina-compatible <tr><td colspan="4">**INPUT**</td></tr>
 |:------------------------|:-------------------------------------------------|:----------------|----:|
-|--file             | DLG file(s) to be read into database                  | no default       ||
-|--file_path        | Path(s) to DLG files to read into database            | no default       ||
-|--file_list        | File(s) with list of DLG files to read into database  | no default       ||
+|--file             | DLG/Vina PDBQT/receptor file(s) to be read into database                  | no default       ||
+|--file_path        | Path(s) to files to read into database            | no default       ||
+|--file_list        | File(s) with list of files to read into database  | no default       ||
 |--save_receptor    | Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   |No |
 |--recursive        | Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      ||
 |--mode          | specify AutoDock program used to generate results. Available options are "ADGPU" and "Vina". Vina mode will automatically change --pattern to \*.pdbqt   | ADGPU         ||
