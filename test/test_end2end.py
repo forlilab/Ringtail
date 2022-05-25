@@ -532,6 +532,24 @@ class TestFilters():
 
         assert status == 0
 
+    def test_epercentile_eworst(self):
+        status = os.system(
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --epercentile 0.1 --eworst -14"
+        )
+
+        os.system("rm output.db")
+
+        assert status == 0
+
+    def test_lepercentile_leworst(self):
+        status = os.system(
+            "python ../scripts/run_ringtail.py --file_list filelist1.txt --leffpercentile 0.1 --leworst -0.4"
+        )
+
+        os.system("rm output.db")
+
+        assert status == 0
+
     def test_name(self):
         status = os.system(
             "python ../scripts/run_ringtail.py --file_list filelist1.txt --name OB3Z3759440327_RX1--4xfx_mon_prep--tyr169"

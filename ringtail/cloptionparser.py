@@ -760,6 +760,13 @@ class CLOptionParser():
             properties[kw] = getattr(parsed_opts, kw)
             if properties[kw] is not None:
                 self.filter = True
+        # Cannot use energy/le cuttoffs with percentiles. Override percentile with given cutoff
+        if properties["eworst"] is not None and properties["epercentile"] is not None:
+            warnings.warn("Cannot use --eworst cutoff with --epercentile. Overiding epercentile with eworst.")
+            properties["epercentile"] = None
+        if properties["leworst"] is not None and properties["leffpercentile"] is not None:
+            warnings.warn("Cannot use --leworst cutoff with --leffpercentile. Overiding leffpercentile with leworst.")
+            properties["leffpercentile"] = None
         # interaction filters (residues)
         interactions = {}
         res_interactions_kw = [('vdw', 'V'), ('hb', 'H'), ('react_res', 'R')]
@@ -819,6 +826,11 @@ class CLOptionParser():
                     ligand_filters[_type].append(fil)
         if filter_ligands_flag:
             self.filter = True
+
+        # confirm that data_from_subset flag not used with filters, warn if so
+        if parsed_opts.data_from_subset and self.filter:
+            warnings.warn("Cannot filter with --data_from_subset option. Skipping filtering.")
+            self.filter = False
 
         filters = {
             'properties': properties,
