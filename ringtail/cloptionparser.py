@@ -280,15 +280,14 @@ class CLOptionParser():
                             },
                         ),
                         (
-                            '--no_print',
+                            '--verbose',
                             {
                                 'help':
-                                ('suppress printing of results passing filtering criteria. NOTE: runtime may be faster if no_print option used.'
+                                ('Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.'
                                  ),
                                 'action':
                                 'store_true',
-                                'default':
-                                False
+                                'default': False
                             },
                         ),
                         (
@@ -718,7 +717,7 @@ class CLOptionParser():
             'export_poses_path': parsed_opts.export_poses_path,
             'plot': parsed_opts.plot,
             'outfields': parsed_opts.out_fields,
-            'no_print': parsed_opts.no_print,
+            'no_print': not parsed_opts.verbose,
             'data_from_subset': parsed_opts.data_from_subset,
             'export_table': parsed_opts.export_table_csv,
             'export_query': parsed_opts.export_query_csv,
