@@ -136,53 +136,56 @@ The second option is `--export_query_csv`. This takes a string of a properly-for
 ## Potential pitfalls
 When importing DLG files into a database with Ringtail, the files must have interaction analysis already performed. This is specified with `-C 1` when running [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU).
 
+Any PDBQT files specified through any of the input options will be read by `run_ringtail.py` as receptor files, even if the files actually represent ligands. Therefore, ligand PDBQT files should not be present in any directories given with `--file_path`.
+
 Issues can arise if errors are encountered during multiprocessing (DLG parsing and database writting) where the program will issue error notifications but not fully exit, nor will it progress to filtering. If this occurs, the program may be stopped from the Command Line (`CTRL+c`). Before attempting to rerun Ringtail, the cause of the error should be corrected.
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. If this occurs and you start running into unclear errors related to the SQLite3 package, it is recommended to delete the existing database and re-write it from scratch.
 
-## Supported arguments
+## run_ringtail.py Supported arguments
 
-| Argument          | Description                                           | Default value    <tr><td colspan="3">**INPUT**</td></tr>
-|:------------------------|:-------------------------------------------------|----------------:|
-|--file             | DLG file(s) to be read into database                  | no default       |
-|--file_path        | Path(s) to DLG files to read into database            | no default       |
-|--file_list        | File(s) with list of DLG files to read into database  | no default       |
-|--save_receptor    | Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   |
-|--recursive        | Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      |
-|--pattern          | Specify patter to search for when finding DLG files   | \*.dlg\*         |
-|--filters_file     | Text file specifying filters. Override command line filters  | no default|
-|--input_db         | Database file to use instead of creating new database | no default       |
-|--add_results      | Add new DLG files to existing database given with --input_db  | FALSE       |
-|--conflict_handling| Specify how conflicting results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of conflict handling causes increase in database writing time*| None <tr><td colspan="3">**OUTPUT**</td></tr>
-|--output_db        | Name for output database                              | output.db        |
-|--export_table_csv | Name of database table or result subset to be exported as CSV. Output as <table_name>.csv | no default      |
-|--export_query_csv | Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      |
-|--max_poses        | Number of cluster for which to store top-scoring pose in database| 3     |
-|--store_all_poses  | Flag to indicate that all poses should be stored in database| FALSE      |
-|--log              | Name for log of filtered results                      | output_log.txt   |
-|--subset_name      | Name for subset view in database                      | passing_results  |
-|--out_fields       | Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        |
-|--data_from_subset | Flag that out_fields data should be written to log for results in given --subset_name. Requires --no_filter. | FALSE       |
-|--export_poses_path| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       |
-|--no_print         | Flag indicating that passing results should not be printed to STDOUT | FALSE        |
-|--no_filter        | Flag that no filtering should be performed            | FALSE       |
-|--plot             | Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        |
-|--all_poses        | Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        |
-|--overwrite        | Flag to overwrite existing log and database           | FALSE       |
-|--order_results    | String for field by which the passing results should be ordered in log file. | no default  <tr><td colspan="3">**PROPERTY FILTERS**</td></tr>
-|--eworst           | Worst energy value accepted (kcal/mol)                | no_default  |
-|--ebest            | Best energy value accepted (kcal/mol)                 | no default  |
-|--leworst          | Worst ligand efficiency value accepted                | no default  |
-|--lebest           | Best ligand efficiency value accepted                 | no default  |
-|--epercentile      | Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  |
-|--leffpercentile   | Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default  <tr><td colspan="3">**LIGAND FILTERS**</td></tr>
-|--name             | Search for specific ligand name. Joined by "OR" with substructure search and multiple names. Multiple filters should be separated by commas | no default  |
-|--substructure     | SMILES substring to search for. *Performs substring search, will not find equivalent chemical structures with different SMILES denotations.* Multiple filters should be separated by commas | no default  |
-|--substruct_join   | Specify whether to join separate substructure searchs with "AND" or "OR". | "OR"  <tr><td colspan="3">**INTERACTION FILTERS**</td></tr>
-|--vdw              | Filter for van der Waals interaction with given receptor information.  | no default  |
-|--hb               | Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  |
-|--interaction_tolerance| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  |
-|--max_miss         | Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  |
-|--hb_count          | Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  |
-|--react_any         | Filter for poses with reaction with any residue       | FALSE     |
-|--react_res         | Filter for reation with residue containing specified information | no default  |
+| Argument          | Description                                           | Default value   | Vina-compatible <tr><td colspan="4">**INPUT**</td></tr>
+|:------------------------|:-------------------------------------------------|:----------------|----:|
+|--file             | DLG file(s) to be read into database                  | no default       ||
+|--file_path        | Path(s) to DLG files to read into database            | no default       ||
+|--file_list        | File(s) with list of DLG files to read into database  | no default       ||
+|--save_receptor    | Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   |No |
+|--recursive        | Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      ||
+|--mode          | specify AutoDock program used to generate results. Available options are "ADGPU" and "Vina". Vina mode will automatically change --pattern to \*.pdbqt   | ADGPU         ||
+|--pattern          | Specify pattern to search for when finding DLG files   | \*.dlg\*         ||
+|--filters_file     | Text file specifying filters. Override command line filters  | no default||
+|--input_db         | Database file to use instead of creating new database | no default       ||
+|--add_results      | Add new DLG files to existing database given with --input_db  | FALSE       ||
+|--conflict_handling| Specify how conflicting results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of conflict handling causes increase in database writing time*| None| <tr><td colspan="4">**OUTPUT**</td></tr>
+|--output_db        | Name for output database                              | output.db        ||
+|--export_table_csv | Name of database table or result subset to be exported as CSV. Output as <table_name>.csv | no default      ||
+|--export_query_csv | Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      ||
+|--max_poses        | Number of cluster for which to store top-scoring pose in database| 3     |No|
+|--store_all_poses  | Flag to indicate that all poses should be stored in database| FALSE      |No|
+|--log              | Name for log of filtered results                      | output_log.txt   ||
+|--subset_name      | Name for subset view in database                      | passing_results  ||
+|--out_fields       | Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
+|--data_from_subset | Flag that out_fields data should be written to log for results in given --subset_name. Requires --no_filter. | FALSE       ||
+|--export_poses_path| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       |No|
+|--no_print         | Flag indicating that passing results should not be printed to STDOUT | FALSE        ||
+|--no_filter        | Flag that no filtering should be performed            | FALSE       ||
+|--plot             | Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        ||
+|--all_poses        | Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||
+|--overwrite        | Flag to overwrite existing log and database           | FALSE       ||
+|--order_results    | String for field by which the passing results should be ordered in log file. | no default |  <tr><td colspan="4">**PROPERTY FILTERS**</td></tr>
+|--eworst           | Worst energy value accepted (kcal/mol)                | no_default  ||
+|--ebest            | Best energy value accepted (kcal/mol)                 | no default  ||
+|--leworst          | Worst ligand efficiency value accepted                | no default  ||
+|--lebest           | Best ligand efficiency value accepted                 | no default  ||
+|--epercentile      | Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  ||
+|--leffpercentile   | Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default |  <tr><td colspan="4">**LIGAND FILTERS**</td></tr>
+|--name             | Search for specific ligand name. Joined by "OR" with substructure search and multiple names. Multiple filters should be separated by commas | no default  ||
+|--substructure     | SMILES substring to search for. *Performs substring search, will not find equivalent chemical structures with different SMILES denotations.* Multiple filters should be separated by commas | no default  | No|
+|--substruct_join   | Specify whether to join separate substructure searchs with "AND" or "OR". | "OR" | No  <tr><td colspan="4">**INTERACTION FILTERS**</td></tr>
+|--vdw              | Filter for van der Waals interaction with given receptor information.  | no default  | No|
+|--hb               | Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  | No|
+|--react_any         | Filter for poses with reaction with any residue       | FALSE     | No|
+|--react_res         | Filter for reation with residue containing specified information | no default  | No|
+|--interaction_tolerance| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  | No|
+|--max_miss         | Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  | No|
+|--hb_count          | Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | No|
