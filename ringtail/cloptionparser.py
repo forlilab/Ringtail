@@ -814,15 +814,17 @@ class CLOptionParser():
                              ('substruct_join', 'F')]
         ligand_filters = {}
         filter_ligands_flag = True
+        ligand_filter_list = []
         for kw, _type in ligand_filters_kw:
             ligand_filters[_type] = []
             ligand_filter_list = getattr(parsed_opts, kw)
             if ligand_filter_list is None:
-                filter_ligands_flag = False
-            else:
-                ligand_filter_list = ligand_filter_list.split(",")
-                for fil in ligand_filter_list:
-                    ligand_filters[_type].append(fil)
+                continue
+            ligand_filter_list = ligand_filter_list.split(",")
+            for fil in ligand_filter_list:
+                ligand_filters[_type].append(fil)
+        if ligand_filters["N"] == [] and ligand_filters["S"] == []:
+            filter_ligands_flag = False
         if filter_ligands_flag:
             self.filter = True
 

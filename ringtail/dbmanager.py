@@ -620,7 +620,7 @@ class DBManager():
         """
         raise NotImplementedError
 
-    def fetch_passing_pose_coordinates(self, ligname):
+    def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
 
         Args:
@@ -628,11 +628,11 @@ class DBManager():
 
         Returns:
             DB cursor: contains
-                ligand_coordinates, flexible_res_coordinates, flexible_residues
+                Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
         """
         raise NotImplementedError
 
-    def fetch_nonpassing_pose_coordinates(self, ligname):
+    def fetch_nonpassing_pose_properties(self, ligname):
         """fetch coordinates for poses of ligname which did not pass the filter
 
         Args:
@@ -640,7 +640,29 @@ class DBManager():
 
         Returns:
             DB cursor: contains
-                ligand_coordinates, flexible_res_coordinates, flexible_residues
+                Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
+        """
+        raise NotImplementedError
+
+    def fetch_interaction_bitvector(self, pose_id):
+        """Returns tuple containing interaction bitvector line for given pose_id
+
+        Args:
+            pose_id (int): pose id to fetch interaction bitvector for
+
+        Returns:
+            tuple: tuple representing interaction bitvector
+        """
+        raise NotImplementedError
+
+    def fetch_interaction_info_by_index(self, interaction_idx):
+        """Returns tuple containing interaction info for given interaction_idx
+
+        Args:
+            interaction_idx (int): interaction index to fetch info for
+
+        Returns:
+            tuple: tuple of info for requested interaction
         """
         raise NotImplementedError
 
@@ -1238,33 +1260,58 @@ class DBManagerSQLite(DBManager):
             results_view=self.passing_results_view_name)
         return self._run_query(query)
 
-    def fetch_passing_pose_coordinates(self, ligname):
+    def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
 
         Args:
             ligname (string): name of ligand to fetch coordinates for
 
         Returns:
-            SQLite cursor: contains ligand_coordinates,
+            SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
+        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
             results_view=self.passing_results_view_name, ligand=ligname)
         return self._run_query(query)
 
-    def fetch_nonpassing_pose_coordinates(self, ligname):
+    def fetch_nonpassing_pose_properties(self, ligname):
         """fetch coordinates for poses of ligname which did not pass the filter
 
         Args:
             ligname (string): name of ligand to fetch coordinates for
 
         Returns:
-            SQLite cursor: contains ligand_coordinates,
+            SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
+        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
             ligand=ligname, results_view=self.passing_results_view_name)
         return self._run_query(query)
+
+    def fetch_interaction_bitvector(self, pose_id):
+        """Returns tuple containing interaction bitvector line for given pose_id
+
+        Args:
+            pose_id (int): pose id to fetch interaction bitvector for
+
+        Returns:
+            tuple: tuple representing interaction bitvector
+        """
+
+        query = "SELECT * FROM Interaction_bitvectors WHERE Pose_ID = {0}".format(pose_id)
+        return self._run_query(query).fetchone()[1:]  # cut off pose id
+
+    def fetch_interaction_info_by_index(self, interaction_idx):
+        """Returns tuple containing interaction info for given interaction_idx
+
+        Args:
+            interaction_idx (int): interaction index to fetch info for
+
+        Returns:
+            tuple: tuple of info for requested interaction
+        """
+        query = "SELECT * FROM Interaction_indices WHERE interaction_id = {0}".format(interaction_idx)
+        return self._run_query(query).fetchone()[1:]  # cut off interaction index
 
     def get_current_view_name(self):
         """returns current view name
@@ -1781,7 +1828,7 @@ class DBManagerSQLite(DBManager):
         filtering_window = "Results"
 
         # write energy filters and compile list of interactions to search for
-        energy_filter_sql_query = []
+        queries = []
         interaction_filters = []
 
         for filter_key, filter_value in results_filters_list:
@@ -1793,17 +1840,17 @@ class DBManagerSQLite(DBManager):
                     filtering_window = "({percentile_window})".format(
                         percentile_window=self.
                         _generate_percentile_rank_window())
-                energy_filter_sql_query.append(
+                queries.append(
                     self.energy_filter_sqlite_call_dict[filter_key].format(
                         value=filter_value))
 
             # write hb count filter(s)
             if filter_key == 'hb_count':
                 if filter_value > 0:
-                    energy_filter_sql_query.append(
+                    queries.append(
                         "num_hb > {value}".format(value=filter_value))
                 else:
-                    energy_filter_sql_query.append(
+                    queries.append(
                         "num_hb < {value}".format(value=-1 * filter_value))
 
             # reformat interaction filters as list
@@ -1816,13 +1863,6 @@ class DBManagerSQLite(DBManager):
             # check if react_any is true
             if filter_key == "react_any" and filter_value:
                 interaction_filters.append(["R", "", "", "", "", True])
-
-        # initialize query string
-        sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(
-            out_columns=outfield_string, window=filtering_window)
-
-        # add energy filters to our query string
-        sql_string += " AND ".join(energy_filter_sql_query)
 
         # for each interaction filter, get the index
         # from the interactions_indices table
@@ -1848,14 +1888,19 @@ class DBManagerSQLite(DBManager):
             else:
                 raise RuntimeError("Unrecognized flag in interaction. Please contact Forli Lab with traceback and context.")
             # find pose ids for ligands with desired interactions
-            sql_string += " AND Pose_ID {include_str} ({interaction_str})".format(include_str=include_str,
-                                                                                  interaction_str=self._generate_interaction_filtering_query(interaction_filter_indices))
+            queries.append("Pose_ID {include_str} ({interaction_str})".format(include_str=include_str,
+                                                                              interaction_str=self._generate_interaction_filtering_query(interaction_filter_indices)))
 
         # add ligand filters
         if ligand_filters_list != []:
-            sql_string += " AND LigName IN ({ligand_str})".format(
+            queries.append("LigName IN ({ligand_str})".format(
                 ligand_str=self._generate_ligand_filtering_query(
-                    ligand_filters_list))
+                    ligand_filters_list)))
+
+        # initialize query string
+        sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(
+            out_columns=outfield_string, window=filtering_window)
+        sql_string += " AND ".join(queries)
 
         # adding if we only want to keep
         # one pose per ligand (will keep first entry)
