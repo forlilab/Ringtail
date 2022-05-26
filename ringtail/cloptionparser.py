@@ -10,6 +10,8 @@ from glob import glob
 import os
 import fnmatch
 import warnings
+import logging
+from ringtail import OptionError
 
 
 class CLOptionParser():
@@ -564,14 +566,14 @@ class CLOptionParser():
             self.db_opts["write_db_flag"] = False
             # raise error if not input db not given
             if self.input_db is None:
-                raise RuntimeError("No input database given for saving receptor(s)")
+                raise OptionError("No input database given for saving receptor(s)")
         if len(self.lig_files_pool) == 0 and (self.db_opts["write_db_flag"] or self.db_opts["add_results"]):
-            raise RuntimeError(
+            raise OptionError(
                 "No ligand files found. Please check file source.")
         if len(self.rec_files_pool) > 1:
-            raise RuntimeError("Found more than 1 receptor PDBQTs. Please check input files and only include receptor associated with DLGs")
+            raise OptionError("Found more than 1 receptor PDBQTs. Please check input files and only include receptor associated with DLGs")
         if self.db_opts["add_results"] and self.save_receptor:
-            raise RuntimeError("Cannot use --add_results with --save_receptor. Please remove the --save_receptor flag")
+            raise OptionError("Cannot use --add_results with --save_receptor. Please remove the --save_receptor flag")
 
     def _initialize_parser(self):
         # create parser
@@ -626,7 +628,7 @@ class CLOptionParser():
         allowed_modes = {"dlg", "vina"}
         self.mode = parsed_opts.mode.lower()
         if self.mode not in allowed_modes:
-            raise ValueError("Given mode {0} not allowed. Please be sure that requested mode is 'vina' or 'dlg'".format(self.mode))
+            raise OptionError("Given mode {0} not allowed. Please be sure that requested mode is 'vina' or 'dlg'".format(self.mode))
         if self.mode == "vina":
             # Guard against non-compatible options being called in Vina mode
             if parsed_opts.save_receptor:
@@ -673,24 +675,24 @@ class CLOptionParser():
                 None) and (file_sources['file_path'] is
                            None) and (file_sources['file_list'] is
                                       None) and (parsed_opts.input_db is None):
-            raise FileNotFoundError(
+            raise OptionError(
                 "*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
             )
         if parsed_opts.add_results and parsed_opts.input_db is None:
-            raise RuntimeError(
+            raise OptionError(
                 "ERRROR! Must specify --input_db if adding results to an existing database"
             )
         if parsed_opts.max_miss < 0:
-            raise RuntimeError("--max_miss must be greater than or equal to 0")
+            raise OptionError("--max_miss must be greater than or equal to 0")
         if parsed_opts.max_miss > 0:
             if parsed_opts.plot:
-                raise RuntimeError("Cannot use --plot with --max_miss > 0. Can plot for desired subset with no filters,--data_from_subset and, --subset_name.")
+                raise OptionError("Cannot use --plot with --max_miss > 0. Can plot for desired subset with no filters,--data_from_subset and, --subset_name.")
             if parsed_opts.export_poses_path is not None:
-                raise RuntimeError("Cannot use --export_poses_path with --max_miss > 0. Can export poses for desired subset with no filters, --data_from_subset, and --subset_name")
+                raise OptionError("Cannot use --export_poses_path with --max_miss > 0. Can export poses for desired subset with no filters, --data_from_subset, and --subset_name")
         parsed_opts.out_fields = parsed_opts.out_fields.split(",")
         for outfield in parsed_opts.out_fields:
             if outfield not in self.outfield_options:
-                raise RuntimeError(
+                raise OptionError(
                     "WARNING: {out_f} is not a valid output option. Please see --help or documentation"
                     .format(out_f=outfield))
         # parse output options
@@ -699,7 +701,7 @@ class CLOptionParser():
             if not parsed_opts.export_poses_path.endswith("/"):
                 parsed_opts.export_poses_path += "/"
             if not os.path.isdir(parsed_opts.export_poses_path):
-                raise FileNotFoundError(
+                raise OptionError(
                     "--export_poses_path directory does not exist. Please create directory first"
                 )
         # confirm that conflict_handling is an allowed option
@@ -735,15 +737,6 @@ class CLOptionParser():
             "mode": parsed_opts.mode
         }
 
-        # if a path for saving poses is specified, then the log will be written there
-        if not parsed_opts.export_poses_path is None:
-            output['log'] = os.path.join(output["export_poses_path"],
-                                         output['log'])
-        if parsed_opts.log is None:
-            print(
-                "*ERROR* print to STDOUT is disabled and no log file has been specified; at least one output source needs to be used."
-            )
-            sys.exit(1)
         # # # filters
         self.filter = False  # set flag indicating if any filters given
         # property filters
@@ -787,12 +780,11 @@ class CLOptionParser():
             for res in found_res:
                 wanted = True
                 if not res.count(":") == 3:
-                    print((
+                    raise OptionError((
                         '*ERROR* [%s]: to specify a residue use '
                         'the format CHAIN:RES:NUM:ATOM_NAME. Any item can be omitted, '
                         'as long as the number of semicolons is always 3 '
                         '(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)') % res)
-                    sys.exit()
                 if res[0] == '~':
                     res = res[1:]
                     wanted = False
@@ -898,7 +890,7 @@ class CLOptionParser():
 
         # raise error if --save_receptor and none found
         if self.save_receptor and len(self.rec_files_pool) == 0:
-            raise FileNotFoundError("--save_receptor flag specified but no receptor PDBQT found. Please check location of receptor file and file source options")
+            raise OptionError("--save_receptor flag specified but no receptor PDBQT found. Please check location of receptor file and file source options")
 
     def scan_dir(self, path, pattern, recursive=False):
         """ scan for valid output files in a directory
@@ -940,7 +932,7 @@ class CLOptionParser():
                 else:
                     print("Warning! file |%s| does not exist" % line)
         if len(lig_accepted) + len(rec_accepted) == 0:
-            raise FileNotFoundError("*ERROR* No valid files were found when reading from |%s|" % filename)
+            raise OptionError("*ERROR* No valid files were found when reading from |%s|" % filename)
         print("# [ %5.3f%% files in list accepted (%d) ]" %
               ((len(lig_accepted) + len(rec_accepted)) / c * 100, c))
         self.lig_files_pool.extend(lig_accepted)

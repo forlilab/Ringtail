@@ -5,6 +5,7 @@
 #
 
 from ringtail import MPManager
+from ringtail import MultiprocessingError, ResultsProcessingError
 
 
 class ResultsManager():
@@ -30,5 +31,8 @@ class ResultsManager():
                                 target=target)
 
     def process_results(self):
-        # start MP process
-        self.parser.process_files()
+        try:
+            # start MP process
+            self.parser.process_files()
+        except MultiprocessingError as e:
+            raise ResultsProcessingError("Error occurred while processing results") from e

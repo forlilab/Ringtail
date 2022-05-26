@@ -11,6 +11,8 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
+from ringtail import DatabaseError, DatabaseInsertionError, DatabaseConnectionError, DatabaseTableCreationError
+from ringtail import DatabaseQueryError, DatabaseViewCreationError
 
 
 class DBManager():
@@ -1107,9 +1109,8 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
 
-        except Exception as e:
-            print(e)
-            raise e
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError("Error while inserting results.") from e
 
     def insert_ligands(self, ligand_array):
         """Takes array of ligand rows, inserts into Ligands table.
@@ -1134,9 +1135,8 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
 
-        except Exception as e:
-            print(e)
-            raise e
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError("Error while inserting ligands.") from e
 
     def insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
@@ -1160,9 +1160,8 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
 
-        except Exception as e:
-            print(e)
-            raise e
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError("Error while inserting receptor.") from e
 
     def insert_interactions(self, interactions_list):
         """Takes list of interactions, inserts into database
@@ -1200,9 +1199,8 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
 
-        except Exception as e:
-            print(e)
-            raise e
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError("Error while adding receptor blob to database") from e
 
     def fetch_receptor_object_by_name(self, rec_name):
         """Returns Receptor object from database for given rec_name
@@ -1241,13 +1239,16 @@ class DBManagerSQLite(DBManager):
         Returns:
             Int: Number of passing ligands
         """
-        cur = self.conn.cursor()
-        cur.execute(
-            "SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(
-                results_view=self.current_view_name))
-        n_ligands = int(cur.fetchone()[0])
-        cur.close()
-        return n_ligands
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                "SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(
+                    results_view=self.current_view_name))
+            n_ligands = int(cur.fetchone()[0])
+            cur.close()
+            return n_ligands
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError("Error while getting number of passing ligands") from e
 
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
@@ -1327,11 +1328,14 @@ class DBManagerSQLite(DBManager):
         Returns:
             int: number of rows in receptors table
         """
-        cur = self.conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
-        row_count = cur.fetchone()[0]
-        cur.close()
-        return row_count
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+            row_count = cur.fetchone()[0]
+            cur.close()
+            return row_count
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError("Error occured while fetching number of receptor rows containing PDBQT blob") from e
 
     def fetch_dataframe_from_db(self, requested_data, table=False):
         """Returns dataframe of table or query given as requested_data
@@ -1363,9 +1367,8 @@ class DBManagerSQLite(DBManager):
             cursor.execute('PRAGMA synchronous = OFF')
             cursor.execute('PRAGMA journal_mode = MEMORY')
             cursor.close()
-        except Exception as e:
-            print("Error while creating database connection")
-            raise e
+        except sqlite3.OperationalError as e:
+            raise DatabaseConnectionError("Error while establishing database connection") from e
         return con
 
     def _close_connection(self):
@@ -1405,9 +1408,12 @@ class DBManagerSQLite(DBManager):
         """Returns list of all tables in database
         """
 
-        cur = self.conn.cursor()
-        cur.execute("SELECT name FROM sqlite_schema WHERE type='table';")
-        return cur.fetchall()
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT name FROM sqlite_schema WHERE type='table';")
+            return cur.fetchall()
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError("Error while getting names of existing database tables") from e
 
     def _drop_existing_tables(self):
         """drop any existing tables.
@@ -1423,7 +1429,10 @@ class DBManagerSQLite(DBManager):
             # cannot drop this, so we catch it instead
             if table[0] == "sqlite_sequence":
                 continue
-            cur.execute("DROP TABLE {table_name}".format(table_name=table[0]))
+            try:
+                cur.execute("DROP TABLE {table_name}".format(table_name=table[0]))
+            except sqlite3.OperationalError as e:
+                raise DatabaseError("Error occurred while dropping table {0}".format(table[0])) from e
         cur.close()
 
     def _drop_existing_views(self):
@@ -1431,17 +1440,20 @@ class DBManagerSQLite(DBManager):
         Will only be called if self.overwrite_flag is true
         """
         # fetch existing views
-        cur = self.conn.cursor()
-        cur.execute("SELECT name FROM sqlite_schema WHERE type='view';")
-        views = cur.fetchall()
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT name FROM sqlite_schema WHERE type='view';")
+            views = cur.fetchall()
 
-        # drop views
-        for view in views:
-            # cannot drop this, so we catch it instead
-            if view[0] == "sqlite_sequence":
-                continue
-            cur.execute("DROP VIEW {view_name}".format(view_name=view[0]))
-        cur.close()
+            # drop views
+            for view in views:
+                # cannot drop this, so we catch it instead
+                if view[0] == "sqlite_sequence":
+                    continue
+                cur.execute("DROP VIEW {view_name}".format(view_name=view[0]))
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError("Error occured while dropping existing database views") from e
 
     def _run_query(self, query):
         """Executes provided SQLite query. Returns cursor for results.
@@ -1453,9 +1465,12 @@ class DBManagerSQLite(DBManager):
         Returns:
             SQLite cursor: Contains results of query
         """
-        cur = self.conn.cursor()
-        cur.execute(query)
-        self.open_cursors.append(cur)
+        try:
+            cur = self.conn.cursor()
+            cur.execute(query)
+            self.open_cursors.append(cur)
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
 
     def _create_view(self, name, query):
@@ -1469,10 +1484,13 @@ class DBManagerSQLite(DBManager):
         cur = self.conn.cursor()
         query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
         # drop old view if there is one
-        cur.execute("DROP VIEW IF EXISTS {name}".format(name=name))
-        cur.execute("CREATE VIEW {name} AS {query}".format(name=name,
-                                                           query=query))
-        cur.close()
+        try:
+            cur.execute("DROP VIEW IF EXISTS {name}".format(name=name))
+            cur.execute("CREATE VIEW {name} AS {query}".format(name=name,
+                                                               query=query))
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseViewCreationError("Error creating view from query \n{0}".format(query)) from e
 
     def _create_results_table(self):
         """Creates table for results. Columns are:
@@ -1565,11 +1583,10 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(sql_results_table)
             cur.close()
-        except Exception as e:
-            print(
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
                 "Error while creating results table. If database already exists, use --overwrite to drop existing tables"
-            )
-            raise e
+            ) from e
 
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
@@ -1595,11 +1612,10 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(receptors_table)
             cur.close()
-        except Exception as e:
-            print(
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
                 "Error while creating receptor table. If database already exists, use --overwrite to drop existing tables"
-            )
-            raise e
+            ) from e
 
     def _create_ligands_table(self):
         """Create table for ligands. Columns are:
@@ -1621,11 +1637,10 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(ligand_table)
             cur.close()
-        except Exception as e:
-            print(
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
                 "Error while creating ligands table. If database already exists, use --overwrite to drop existing tables"
-            )
-            raise e
+            ) from e
 
     def _create_interaction_index_table(self):
         """create table of data for each unique interaction. Columns are:
@@ -1651,11 +1666,10 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(interaction_index_table)
             cur.close()
-        except Exception as e:
-            print(
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
                 "Error while creating interaction index table. If database already exists, use --overwrite to drop existing tables"
-            )
-            raise e
+            ) from e
 
     def _create_interaction_bv_table(self):
         """Create table of interaction bits for each pose. Columns are:
@@ -1679,11 +1693,10 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(bv_table)
             cur.close()
-        except Exception as e:
-            print(
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
                 "Error while creating interaction bitvector table. If database already exists, use --overwrite to drop existing tables"
-            )
-            raise e
+            ) from e
 
     def _insert_unique_interactions(self, unique_interactions):
         """Inserts interaction data for unique interactions
@@ -1708,11 +1721,10 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
 
-        except Exception as e:
-            print(
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(
                 "Error while inserting unique interactions into interaction index table"
-            )
-            raise e
+            ) from e
 
     def _insert_one_interaction(self, interaction):
         """Insert interaction data for a single new interaction
@@ -1739,11 +1751,10 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
 
-        except Exception as e:
-            print(
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(
                 "Error inserting interaction {interact} into interaction index table"
-                .format(interact=str(interaction)))
-            raise e
+                .format(interact=str(interaction))) from e
 
     def _make_new_interaction_column(self, column_number):
         """Add column for new interaction to interaction bitvector table
@@ -1759,11 +1770,10 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
 
-        except Exception as e:
-            print(
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(
                 "Error adding column for Interaction_{num} to interaction bitvector table"
-                .format(num=str(column_number)))
-            raise e
+                .format(num=str(column_number))) from e
 
     def _fetch_all_plot_data(self):
         """Fetches cursor for best energies and leff for all ligands
@@ -1913,7 +1923,7 @@ class DBManagerSQLite(DBManager):
                 sql_string += " ORDER BY " + self.field_to_column_name[
                     self.order_results]
             except KeyError:
-                raise KeyError("Please ensure you are only requesting one option for --order_results and have written it correctly")
+                raise RuntimeError("Please ensure you are only requesting one option for --order_results and have written it correctly") from None
 
         return sql_string
 
@@ -2057,9 +2067,8 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
 
-        except Exception as e:
-            print("Error while inserting bitvectors")
-            raise e
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError("Error while inserting bitvectors") from e
 
     def _generate_percentile_rank_window(self):
         """makes window with percentile ranks for percentile filtering
@@ -2078,42 +2087,53 @@ class DBManagerSQLite(DBManager):
         Returns:
             List: List of strings of results table column names
         """
-        return [
-            column_tuple[1]
-            for column_tuple in self.conn.execute("PRAGMA table_info(Results)")
-        ]
+        try:
+            return [
+                column_tuple[1]
+                for column_tuple in self.conn.execute("PRAGMA table_info(Results)")
+            ]
+        except sqlite3.OperationalError as e:
+            raise DatabaseError("Error while fetching column names from Results table") from e
 
     def _delete_from_results(self):
         """Remove rows from results table if they did not pass filtering
         """
-        cur = self.conn.cursor()
-        cur.execute("DELETE FROM Results WHERE Pose_ID NOT IN {view}".format(
-            view=self.passing_results_view_name))
-        self.conn.commit()
-        cur.close()
+        try:
+            cur = self.conn.cursor()
+            cur.execute("DELETE FROM Results WHERE Pose_ID NOT IN {view}".format(
+                view=self.passing_results_view_name))
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(f"Error occured while pruning Results not in {self.passing_results_view_name}") from e
 
     def _delete_from_ligands(self):
         """Remove rows from ligands table if they did not pass filtering
         """
-        cur = self.conn.cursor()
-        cur.execute("DELETE FROM Ligands WHERE LigName NOT IN {view}".format(
-            view=self.passing_results_view_name))
-        self.conn.commit()
-        cur.close()
+        try:
+            cur = self.conn.cursor()
+            cur.execute("DELETE FROM Ligands WHERE LigName NOT IN {view}".format(
+                view=self.passing_results_view_name))
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(f"Error occured while pruning Ligands not in {self.passing_results_view_name}") from e
 
     def _delete_from_interactions(self):
         """Remove rows from interactions bitvector table
             if they did not pass filtering
         """
-        cur = self.conn.cursor()
-        cur.execute(
-            "DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN {view}".
-            format(view=self.passing_results_view_name))
-        self.conn.commit()
-        cur.close()
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                "DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN {view}".
+                format(view=self.passing_results_view_name))
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(f"Error occured while pruning Interaction_bitvectors not in {self.passing_results_view_name}") from e
 
     def _generate_view_names_query(self):
         """Generate string to return names of views in database
         """
         return "SELECT name FROM sqlite_schema WHERE type = 'view'"
-
