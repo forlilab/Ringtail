@@ -194,10 +194,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[6].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     scores.append(e)
                 if "Final Intermolecular Energy" in line:
                     try:
@@ -206,10 +205,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     intermolecular_energy.append(e)
                 if "vdW + Hbond + desolv Energy" in line:
                     try:
@@ -218,10 +216,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[7].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     vdw_hb_desolv.append(e)
                 if "Electrostatic Energy" in line:
                     try:
@@ -230,10 +227,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[3].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     electrostatic.append(e)
                 if "Moving Ligand-Fixed Receptor" in line:
                     try:
@@ -242,10 +238,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[4].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     flex_ligand.append(e)
                 if "Moving Ligand-Moving Receptor" in line:
                     try:
@@ -254,10 +249,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[4].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     flexLigand_flexReceptor.append(e)
                 if "Final Total Internal Energy" in line:
                     try:
@@ -266,10 +260,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[6].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     internal_energy.append(e)
                 if "Torsional Free Energy" in line:
                     try:
@@ -278,10 +271,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     torsion.append(e)
                 if "Unbound System's Energy" in line:
                     try:
@@ -290,10 +282,9 @@ def parse_single_dlg(fname, mode='standard'):
                         try:
                             e = float(line.split()[5].lstrip("="))
                         except ValueError:
-                            print(
+                            raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}"
                                 .format(line, fname))
-                            raise ValueError
                     unbound_energy.append(e)
                 # store state variables
                 if "NEWDPF about" in line:

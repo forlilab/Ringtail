@@ -16,18 +16,15 @@ class ResultsManager():
                  filelist=None,
                  chunk_size=1000,
                  numclusters=3,
-                 no_print_flag=False,
                  target=None):
         self.dbman = dbman
         self.filelist = filelist
         self.num_result_files = len(filelist)
-        self.no_print_flag = no_print_flag
         self.parser = MPManager(filelist=self.filelist,
                                 db_obj=self.dbman,
                                 chunksize=chunk_size,
                                 mode=mode,
                                 numclusters=numclusters,
-                                no_print_flag=self.no_print_flag,
                                 target=target)
 
     def process_results(self):
