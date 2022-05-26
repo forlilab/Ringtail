@@ -238,23 +238,26 @@ class VSManager():
 
             # fetch coordinates for passing poses and add to
             # rdkit ligand mol, add flexible residues
-            passing_coordinates = self.dbman.fetch_passing_pose_coordinates(
+            properties = {"Binding energies": [],
+                          "Ligand effiencies": [],
+                          "Interactions": []}
+            passing_properties = self.dbman.fetch_passing_pose_properties(
                 ligname)
-            mol, flexres_mols, saved_coords = self._add_poses(atom_indices, passing_coordinates,
-                                                              mol, flexres_mols, saved_coords)
+            mol, flexres_mols, saved_coords, properties = self._add_poses(atom_indices, passing_properties,
+                                                                          mol, flexres_mols, saved_coords, properties)
 
             # fetch coordinates for non-passing poses
             # and add to ligand mol, flexible residue mols
             if write_nonpassing:
-                nonpassing_coordinates = self.dbman.fetch_nonpassing_pose_coordinates(
+                nonpassing_properties = self.dbman.fetch_nonpassing_pose_properties(
                     ligname)
-                mol, flexres_mols, saved_coords = self._add_poses(atom_indices, nonpassing_coordinates,
-                                                                  mol, flexres_mols, saved_coords)
+                mol, flexres_mols, saved_coords, properties = self._add_poses(atom_indices, nonpassing_properties,
+                                                                              mol, flexres_mols, saved_coords, properties)
 
             # write out molecule
             # h_parents = self._format_h_parents(h_parent_line)
             h_parents = [int(idx) for idx in self._db_string_to_list(h_parent_line)]
-            self.output_manager.write_out_mol(ligname, mol, flexres_mols, saved_coords, h_parents)
+            self.output_manager.write_out_mol(ligname, mol, flexres_mols, saved_coords, h_parents, properties)
 
     def export_csv(self, requested_data, csv_name, table=False):
         """Get requested data from database, export as CSV
@@ -309,17 +312,36 @@ class VSManager():
                 filter(None, [self._clean_db_string(line) for line in pdbqt_lines]))
         ])
 
-    def _add_poses(self, atom_indices, poses, mol, flexres_mols, saved_coords):
+    def _add_poses(self, atom_indices, poses, mol, flexres_mols, saved_coords, properties):
         """Add poses from given cursor to rdkit mols for ligand and flexible residues
-
+        
         Args:
             atom_indices (List): List of ints indicating mapping of coordinate indices to smiles indices
             poses (iterable): iterable containing ligand_pose, flexres_pose, flexres_names
             mol (RDKit Mol): RDKit molecule for ligand
             flexres_mols (Dict): Dictionary of rdkit molecules for flexible residues
             saved_coords (list): list of coordinates to save for adding hydrogens later
+            properties (dict): Dictionary of lists of properties, with each element corresponding to that conformer in the rdkit mol
+
         """
-        for ligand_pose, flexres_pose, flexres_names in poses:
+        for Pose_ID, energies_binding, leff, ligand_pose, flexres_pose, flexres_names in poses:
+            # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
+            pose_bitvector = self.dbman.fetch_interaction_bitvector(Pose_ID)
+            interaction_indices = []
+            interactions_list = []
+            for idx, bit in enumerate(pose_bitvector):
+                if bit == 1:
+                    interaction_indices.append(idx + 1)  # adjust for indexing starting at 1
+            for int_idx in interaction_indices:
+                interaction_info = self.dbman.fetch_interaction_info_by_index(int_idx)
+                interaction = interaction_info[0] + "-" + ":".join(interaction_info[1:])
+                interactions_list.append(interaction)
+            interactions_str = ", ".join(interactions_list)
+            # add properties to dictionary lists
+            properties["Binding energies"].append(energies_binding)
+            properties["Ligand effiencies"].append(leff)
+            properties["Interactions"].append(interactions_str)
+            # get pose coordinate info
             ligand_pose = self._db_string_to_list(ligand_pose)
             flexres_pose = self._db_string_to_list(flexres_pose)
             flexres_names = [name for idx, name in enumerate(self._db_string_to_list(flexres_names))]
@@ -329,7 +351,7 @@ class VSManager():
                                                                flexres_poses=flexres_pdbqts,
                                                                flexres_names=flexres_names)
             saved_coords.append(ligand_pose)
-        return mol, flexres_mols, saved_coords
+        return mol, flexres_mols, saved_coords, properties
 
     def _generate_interaction_combinations(self, max_miss=0):
         """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
@@ -485,16 +507,28 @@ class Outputter():
             f.write("\n")
             f.write(f"Result subset name: {subset_name}\n")
 
-    def write_out_mol(self, ligname, mol, flexres_mols, saved_coords, h_parents):
+    def write_out_mol(self, ligname, mol, flexres_mols, saved_coords, h_parents, properties):
         """writes out given mol as sdf
 
         Args:
             ligname (string): name of ligand that will be used to
                 name output SDF file
-            mol (meeko PDBQTMolecule object): Meeko PDBQTMolecule object to be written to SDF
+            mol (RDKit mol object): RDKit molobject to be written to SDF
+            flexres_mols (dict): dictionary of rdkit molecules for flexible residues
+            saved_coords (list): list of coordinates that have been used already
+            h_parents (list): list of atom indices of hydrogens and their parents
+            properties (dict): dictionary of list of properties to add to mol before writing
         """
         filename = self.vsman.out_opts["export_poses_path"] + ligname + ".sdf"
         mol = RDKitMolCreate.export_combined_rdkit_mol(mol, flexres_mols, saved_coords, h_parents)
+        # convert properties to strings as needed
+        for k, v in properties.items():
+            if isinstance(v, list):
+                properties[k] = json.dumps(v)
+            elif not isinstance(v, str):
+                properties[k] = str(v)
+        RDKitMolCreate.add_properties_to_mol(mol, properties)
+
         with SDWriter(filename) as w:
             for conf in mol.GetConformers():
                 w.write(mol, conf.GetId())
