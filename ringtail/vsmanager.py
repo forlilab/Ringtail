@@ -65,7 +65,6 @@ class VSManager():
         self.filters = filters
         self.out_opts = out_opts
         self.filter_file = filter_fname
-        self.no_print_flag = self.out_opts["no_print"]
         self.rman_opts = rman_opts
         self.db_opts = db_opts
 
@@ -87,7 +86,6 @@ class VSManager():
             chunk_size=self.rman_opts['chunk_size'],
             filelist=self.rman_opts['filelist'],
             numclusters=self.rman_opts['num_clusters'],
-            no_print_flag=self.no_print_flag,
             target=self.rman_opts["target"])
 
         try:
@@ -97,7 +95,7 @@ class VSManager():
 
         # if requested, write database or add results to an existing one
         if self.dbman.write_db_flag or self.db_opts["add_results"]:
-            print("Adding results...")
+            logging.info("Adding results...")
             try:
                 self.add_results()
             except ResultsProcessingError as e:
@@ -114,13 +112,30 @@ class VSManager():
         """
         self.results_man.process_results()
 
+    def add_receptors_to_db(self, receptors):
+        """Add receptor to database
+
+        Args:
+            receptors (list): list of receptor blobs to add to database
+        """
+        for rec, rec_name in receptors:
+            # NOTE: in current implementation, only one receptor allowed per database
+            # Check that any receptor row is incomplete (needs receptor blob) before inserting
+            try:
+                filled_receptor_rows = self.dbman.get_number_filled_receptor_rows()
+                if filled_receptor_rows != 0:
+                    raise VirtualScreeningError("Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(filled_receptor_rows))
+                self.dbman.add_receptor_object_to_row(rec, rec_name)
+            except DatabaseError as e:
+                raise VirtualScreeningError("Error occurred while adding receptor to database") from e
+
     def filter(self):
         """
         Prepare list of filters, then hand it off to DBManager to
             perform filtering. Create log of passing results.
         """
 
-        print("Filtering results")
+        logging.info("Filtering results")
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(self.filters["max_miss"])
 
@@ -169,7 +184,7 @@ class VSManager():
         Energy scatter plot from DBManager. Call Outputter to create plot.
         """
         try:
-            print("Creating plot of results")
+            logging.info("Creating plot of results")
             # get data from DBMan
             all_data, passing_data = self.dbman.get_plot_data()
             all_plot_data_binned = dict()
@@ -270,7 +285,7 @@ class VSManager():
             passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
             for (ligname, smiles, atom_indices,
                  h_parent_line) in passing_molecule_info:
-                print("Writing " + ligname.split(".")[0] + ".sdf")
+                logging.info("Writing " + ligname.split(".")[0] + ".sdf")
                 # create rdkit ligand molecule and flexible residue container
                 if smiles == '':
                     warnings.warn(f"No SMILES found for {ligname}. Cannot create SDF.")

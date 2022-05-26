@@ -14,8 +14,7 @@ from .exceptions import MultiprocessingError
 
 class MPManager():
 
-    def __init__(self, filelist, mode, db_obj, chunksize, numclusters,
-                 no_print_flag, target):
+    def __init__(self, filelist, mode, db_obj, chunksize, numclusters, target):
         # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg", "vina"]
         if mode not in self.implemented_modes:
@@ -27,7 +26,6 @@ class MPManager():
         self.db = db_obj
         self.chunksize = chunksize
         self.numclusters = numclusters
-        self.no_print = no_print_flag
         self.target = target
         self.num_files = len(self.filelist)
 
@@ -42,7 +40,7 @@ class MPManager():
         for i in range(self.max_proc):
             # one worker is started for each processor to be used
             s = DockingFileReader(self.queueIn, self.queueOut, c_conn, self.db,
-                                  self.mode, self.numclusters, self.no_print, self.target)
+                                  self.mode, self.numclusters, self.target)
             # this method calls .run() internally
             s.start()
             workers.append(s)

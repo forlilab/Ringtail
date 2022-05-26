@@ -10,21 +10,19 @@ import sys
 import logging
 import traceback
 from .parsers import parse_single_dlg, parse_vina_pdbqt
-from .exceptions import FileParsingError, WriteToDatabaseError, DatabaseInsertionError
+from .exceptions import FileParsingError, WriteToDatabaseError
 
 
 class DockingFileReader(multiprocessing.Process):
     """ this class is the individual worker for processing dlgs"""
 
-    def __init__(self, queueIn, queueOut, pipe_conn, dbman, mode, numclusters, no_print, target):
+    def __init__(self, queueIn, queueOut, pipe_conn, dbman, mode, numclusters, target):
         # set mode for which file parser to use
         self.mode = mode
         # set number of clusters to write
         self.num_clusters = numclusters
         # set dbmanager
         self.dbman = dbman
-        # set flag for printing
-        self.no_print = no_print
         # set target name to check against
         self.target = target
         # initialize the parent class to inherit all multiprocessing methods
@@ -135,7 +133,7 @@ class Writer(multiprocessing.Process):
                 if next_task is None:
                     # if a poison pill is found, it means one of the workers quit
                     self.maxProcesses -= 1
-                    print("Closing process. Remaining open processes:",
+                    logging.info("Closing process. Remaining open processes:",
                           self.maxProcesses)
                 else:
                     # if not a poison pill, process the task item
@@ -158,16 +156,16 @@ class Writer(multiprocessing.Process):
 
                 if self.maxProcesses == 0:
                     # received as many poison pills as workers
-                    print("Performing final database write")
+                    logging.info("Performing final database write")
                     # perform final db write
                     self.write_to_db()
                     # no workers left, no job to do
-                    print("File processing completed")
+                    logging.info("File processing completed")
                     self.close()
                     break
-        except DatabaseInsertionError as e:
+        except Exception:
             tb = traceback.format_exc()
-            self.pipe.send((e, tb))
+            self.pipe.send((WriteToDatabaseError("Error occured while writing database"), tb))
         finally:
             return
 
