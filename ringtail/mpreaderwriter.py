@@ -8,6 +8,7 @@ import multiprocessing
 import time
 import sys
 from .parsers import parse_single_dlg, parse_vina_pdbqt
+from ringtail import FileParsingError, WriteToDatabaseError, DatabaseInsertionError
 
 
 class DockingFileReader(multiprocessing.Process):
@@ -50,31 +51,35 @@ class DockingFileReader(multiprocessing.Process):
         # each multiprocessing.Process class must have a "run" method which
         # is called by the initialization (see below) with start()
         #
-        while True:
-            # retrieve from the queue in the next task to be done
-            next_task = self.queueIn.get()
-            # if a poison pill is received, this worker's job is done, quit
-            if next_task is None:
-                # before leaving, pass the poison pill back in the queue
-                self.queueOut.put(None)
-                break
+        try:
+            while True:
+                # retrieve from the queue in the next task to be done
+                next_task = self.queueIn.get()
+                # if a poison pill is received, this worker's job is done, quit
+                if next_task is None:
+                    # before leaving, pass the poison pill back in the queue
+                    self.queueOut.put(None)
+                    break
 
-            # generate CPU LOAD
-            # parser depends on requested mode
-            if self.mode == "dlg":
-                parsed_file_dict = parse_single_dlg(next_task)
-            elif self.mode == "vina":
-                parsed_file_dict = parse_vina_pdbqt(next_task)
-            # future: NG parser, etc
+                # generate CPU LOAD
+                # parser depends on requested mode
+                if self.mode == "dlg":
+                    parsed_file_dict = parse_single_dlg(next_task)
+                elif self.mode == "vina":
+                    parsed_file_dict = parse_vina_pdbqt(next_task)
+                # future: NG parser, etc
 
-            # check receptor name from file against that which we expect
-            if parsed_file_dict["receptor"] != self.target and self.target is not None and self.mode != "vina":
-                raise ValueError("Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(parsed_file_dict["receptor"], next_task, self.target))
-            parsed_file_dict = self.find_best_cluster_poses(parsed_file_dict)
-            file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
-            # put the result in the out queue
-            self.queueOut.put(file_packet)
-        return
+                # check receptor name from file against that which we expect
+                if parsed_file_dict["receptor"] != self.target and self.target is not None and self.mode != "vina":
+                    raise FileParsingError("Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(parsed_file_dict["receptor"], next_task, self.target))
+                parsed_file_dict = self.find_best_cluster_poses(parsed_file_dict)
+                file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
+                # put the result in the out queue
+                self.queueOut.put(file_packet)
+        except Exception as e:
+            raise FileParsingError("Error while parsing file {0}".format(next_task)) from e
+        finally:
+            return
 
 
 class Writer(multiprocessing.Process):
@@ -113,44 +118,48 @@ class Writer(multiprocessing.Process):
         # each multiprocessing.Process class must have a "run" method which
         # is called by the initialization (see below) with start()
         #
-        while True:
-            # retrieve the next task from the queue
-            next_task = self.queue.get()
-            if next_task is None:
-                # if a poison pill is found, it means one of the workers quit
-                self.maxProcesses -= 1
-                print("Closing process. Remaining open processes:",
-                      self.maxProcesses)
-            else:
-                # if not a poison pill, process the task item
+        try:
+            while True:
+                # retrieve the next task from the queue
+                next_task = self.queue.get()
+                if next_task is None:
+                    # if a poison pill is found, it means one of the workers quit
+                    self.maxProcesses -= 1
+                    print("Closing process. Remaining open processes:",
+                          self.maxProcesses)
+                else:
+                    # if not a poison pill, process the task item
 
-                # after every n (chunksize) files, write to db
-                if self.counter >= self.chunksize:
+                    # after every n (chunksize) files, write to db
+                    if self.counter >= self.chunksize:
+                        self.write_to_db()
+
+                    # process next file
+                    self.process_file(next_task)
+                    # print info about files and time remaining
+                    sys.stdout.write('\r')
+                    sys.stdout.write(
+                        "{n} files remaining to process. Estimated time remaining: {est_time:.2f} minutes. Last chunk took {write_time:.2f} seconds to write."
+                        .format(n=self.num_files_remaining,
+                                est_time=self.est_time_remaining,
+                                write_time=self.last_write_time))
+                    sys.stdout.flush()
+                    self.num_files_remaining -= 1
+
+                if self.maxProcesses == 0:
+                    # received as many poison pills as workers
+                    print("Performing final database write")
+                    # perform final db write
                     self.write_to_db()
+                    # no workers left, no job to do
+                    print("File processing completed")
+                    self.close()
+                    break
+        except DatabaseInsertionError as e:
+            raise WriteToDatabaseError("Error while writing chunk to database") from e
 
-                # process next file
-                self.process_file(next_task)
-                # print info about files and time remaining
-                sys.stdout.write('\r')
-                sys.stdout.write(
-                    "{n} files remaining to process. Estimated time remaining: {est_time:.2f} minutes. Last chunk took {write_time:.2f} seconds to write."
-                    .format(n=self.num_files_remaining,
-                            est_time=self.est_time_remaining,
-                            write_time=self.last_write_time))
-                sys.stdout.flush()
-                self.num_files_remaining -= 1
-
-            if self.maxProcesses == 0:
-                # received as many poison pills as workers
-                print("Performing final database write")
-                # perform final db write
-                self.write_to_db()
-                # no workers left, no job to do
-                print("File processing completed")
-                self.close()
-                break
-
-        return
+        finally:
+            return
 
     def write_to_db(self):
         time1 = time.perf_counter()

@@ -11,9 +11,12 @@ import warnings
 from meeko import RDKitMolCreate
 from ringtail import DBManagerSQLite
 from ringtail import ResultsManager
+from ringtail import DatabaseConnectionError, DatabaseTableCreationError, DatabaseError
+from ringtail import VirtualScreeningError, ResultsProcessingError, OutputError
 from rdkit import Chem
 from rdkit.Chem import SDWriter
 import itertools
+import logging
 
 
 class VSManager():
@@ -63,22 +66,47 @@ class VSManager():
         self.out_opts = out_opts
         self.filter_file = filter_fname
         self.no_print_flag = self.out_opts["no_print"]
+        self.rman_opts = rman_opts
+        self.db_opts = db_opts
 
-        self.dbman = DBManagerSQLite(db_opts)
+    def __enter__(self):
+        try:
+            self.dbman = DBManagerSQLite(self.db_opts)
+        except DatabaseConnectionError as e:
+            raise VirtualScreeningError(
+                "Error encountered while connecting to database. Please ensure that given database file name is correct.") from e
+        except DatabaseTableCreationError as e:
+            raise VirtualScreeningError(
+                "Error encountered while creating database tables. If database already exists, use --add_results or --overwrite.") from e
+            self.close_database()
+        except DatabaseError as e:
+            self.close_database()
+            raise VirtualScreeningError("Error occurred while initializing database.") from e
+
         self.results_man = ResultsManager(
-            mode=rman_opts['mode'],
+            mode=self.rman_opts['mode'],
             dbman=self.dbman,
-            chunk_size=rman_opts['chunk_size'],
-            filelist=rman_opts['filelist'],
-            numclusters=rman_opts['num_clusters'],
+            chunk_size=self.rman_opts['chunk_size'],
+            filelist=self.rman_opts['filelist'],
+            numclusters=self.rman_opts['num_clusters'],
             no_print_flag=self.no_print_flag,
-            target=rman_opts["target"])
-        self.output_manager = Outputter(self, self.out_opts['log'])
+            target=self.rman_opts["target"])
+
+        try:
+            self.output_manager = Outputter(self, self.out_opts['log'])
+        except OutputError as e:
+            raise VirtualScreeningError("Error occured while creating output manager") from e
 
         # if requested, write database or add results to an existing one
-        if self.dbman.write_db_flag or db_opts["add_results"]:
+        if self.dbman.write_db_flag or self.db_opts["add_results"]:
             print("Adding results...")
-            self.add_results()
+            try:
+                self.add_results()
+            except ResultsProcessingError as e:
+                raise VirtualScreeningError("Error occured while adding results") from e
+
+    def __exit__(self):
+        self.close_database()
 
     def add_results(self):
         """
@@ -107,49 +135,64 @@ class VSManager():
             if len(interaction_combs) > 1:
                 self.dbman.set_view_suffix(str(ic_idx))
             # ask DBManager to fetch results
-            self.filtered_results = self.dbman.filter_results(
-                results_filters_list, self.filters["ligand_filters"],
-                self.out_opts['outfields'])
-            number_passing_ligands = self.dbman.get_number_passing_ligands()
-            result_subset_name = self.dbman.get_current_view_name()
-            self.output_manager.write_filters_to_log(self.filters, combination)
-            self.output_manager.write_results_subset_to_log(result_subset_name)
-            self.output_manager.log_num_passing_ligands(number_passing_ligands)
-            self.write_log(self.filtered_results)
+            try:
+                self.filtered_results = self.dbman.filter_results(
+                    results_filters_list, self.filters["ligand_filters"],
+                    self.out_opts['outfields'])
+                number_passing_ligands = self.dbman.get_number_passing_ligands()
+                result_subset_name = self.dbman.get_current_view_name()
+                self.output_manager.write_filters_to_log(self.filters, combination)
+                self.output_manager.write_results_subset_to_log(result_subset_name)
+                self.output_manager.log_num_passing_ligands(number_passing_ligands)
+                self.write_log(self.filtered_results)
+            except DatabaseError as e:
+                raise VirtualScreeningError("Database error occurred while filtering") from e
+            except Exception as e:
+                raise VirtualScreeningError("Error occurred while filtering") from e
 
     def get_previous_filter_data(self):
         """Get data requested in self.out_opts['outfields'] from the
         results view of a previous filtering
         """
-        new_data = self.dbman.fetch_data_for_passing_results(
-            self.out_opts['outfields'])
-        self.write_log(new_data)
+        try:
+            new_data = self.dbman.fetch_data_for_passing_results(
+                self.out_opts['outfields'])
+            self.write_log(new_data)
+        except DatabaseError as e:
+            raise VirtualScreeningError("Database error occurred while fetching data for subset") from e
+        except Exception as e:
+            raise VirtualScreeningError("Error occurred while fetching data for subset") from e
 
     def plot(self):
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from DBManager. Call Outputter to create plot.
         """
-        print("Creating plot of results")
-        # get data from DBMan
-        all_data, passing_data = self.dbman.get_plot_data()
-        all_plot_data_binned = dict()
-        # bin the all_ligands data by 1000ths to make plotting faster
-        for line in all_data:
-            # add to dictionary as bin of energy and le
-            data_bin = (round(line[0], 3), round(line[1], 3))
-            if data_bin not in all_plot_data_binned:
-                all_plot_data_binned[data_bin] = 1
-            else:
-                all_plot_data_binned[data_bin] += 1
-        # plot the data
-        self.output_manager.plot_all_data(all_plot_data_binned)
-        if passing_data != []:  # handle if no passing ligands
-            for line in passing_data:
-                self.output_manager.plot_single_point(
-                    line[0], line[1], "red"
-                )  # energy (line[0]) on x axis, le (line[1]) on y axis
-        self.output_manager.save_scatterplot()
+        try:
+            print("Creating plot of results")
+            # get data from DBMan
+            all_data, passing_data = self.dbman.get_plot_data()
+            all_plot_data_binned = dict()
+            # bin the all_ligands data by 1000ths to make plotting faster
+            for line in all_data:
+                # add to dictionary as bin of energy and le
+                data_bin = (round(line[0], 3), round(line[1], 3))
+                if data_bin not in all_plot_data_binned:
+                    all_plot_data_binned[data_bin] = 1
+                else:
+                    all_plot_data_binned[data_bin] += 1
+            # plot the data
+            self.output_manager.plot_all_data(all_plot_data_binned)
+            if passing_data != []:  # handle if no passing ligands
+                for line in passing_data:
+                    self.output_manager.plot_single_point(
+                        line[0], line[1], "red"
+                    )  # energy (line[0]) on x axis, le (line[1]) on y axis
+            self.output_manager.save_scatterplot()
+        except DatabaseError as e:
+            raise VirtualScreeningError("Database error occurred while fetching data for plot") from e
+        except Exception as e:
+            raise VirtualScreeningError("Error occurred during plotting") from e
 
     def write_log(self, lines):
         """Writes lines from results cursor into log file
@@ -158,15 +201,16 @@ class VSManager():
             lines (DB cursor): Iterable cursor with tuples of data for
                 writing into log
         """
-
-        for line in lines:
-            if not self.no_print_flag:
-                print(line)
-            self.output_manager.write_log_line(
-                str(line).replace("(", "").replace(
-                    ")",
-                    ""))  # strip parens from line, which is natively a tuple
-        self.output_manager.write_log_line("***************\n")
+        try:
+            for line in lines:
+                logging.info(line)
+                self.output_manager.write_log_line(
+                    str(line).replace("(", "").replace(
+                        ")",
+                        ""))  # strip parens from line, which is natively a tuple
+            self.output_manager.write_log_line("***************\n")
+        except OutputError as e:
+            raise VirtualScreeningError("Error occurred during log writing") from e
 
     def prepare_results_filter_list(self, included_interactions):
         """takes filters dictionary from option parser.
@@ -217,47 +261,54 @@ class VSManager():
         Args:
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
         """
+        try:
+            if not self.dbman.check_passing_view_exists():
+                warnings.warn(
+                    "Passing results view does not exist in database. Cannot write passing molecule SDFs"
+                )
+                return
+            passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
+            for (ligname, smiles, atom_indices,
+                 h_parent_line) in passing_molecule_info:
+                print("Writing " + ligname.split(".")[0] + ".sdf")
+                # create rdkit ligand molecule and flexible residue container
+                if smiles == '':
+                    warnings.warn(f"No SMILES found for {ligname}. Cannot create SDF.")
+                    continue
+                mol = Chem.MolFromSmiles(smiles)
+                atom_indices = self._db_string_to_list(atom_indices)
+                flexres_mols = {}
+                saved_coords = []
 
-        if not self.dbman.check_passing_view_exists():
-            warnings.warn(
-                "Passing results view does not exist in database. Cannot write passing molecule SDFs"
-            )
-            return
-        passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
-        for (ligname, smiles, atom_indices,
-             h_parent_line) in passing_molecule_info:
-            print("Writing " + ligname.split(".")[0] + ".sdf")
-            # create rdkit ligand molecule and flexible residue container
-            if smiles == '':
-                warnings.warn(f"No SMILES found for {ligname}. Cannot create SDF.")
-                continue
-            mol = Chem.MolFromSmiles(smiles)
-            atom_indices = self._db_string_to_list(atom_indices)
-            flexres_mols = {}
-            saved_coords = []
-
-            # fetch coordinates for passing poses and add to
-            # rdkit ligand mol, add flexible residues
-            properties = {"Binding energies": [],
-                          "Ligand effiencies": [],
-                          "Interactions": []}
-            passing_properties = self.dbman.fetch_passing_pose_properties(
-                ligname)
-            mol, flexres_mols, saved_coords, properties = self._add_poses(atom_indices, passing_properties,
-                                                                          mol, flexres_mols, saved_coords, properties)
-
-            # fetch coordinates for non-passing poses
-            # and add to ligand mol, flexible residue mols
-            if write_nonpassing:
-                nonpassing_properties = self.dbman.fetch_nonpassing_pose_properties(
+                # fetch coordinates for passing poses and add to
+                # rdkit ligand mol, add flexible residues
+                properties = {"Binding energies": [],
+                              "Ligand effiencies": [],
+                              "Interactions": []}
+                passing_properties = self.dbman.fetch_passing_pose_properties(
                     ligname)
-                mol, flexres_mols, saved_coords, properties = self._add_poses(atom_indices, nonpassing_properties,
+                mol, flexres_mols, saved_coords, properties = self._add_poses(atom_indices, passing_properties,
                                                                               mol, flexres_mols, saved_coords, properties)
 
-            # write out molecule
-            # h_parents = self._format_h_parents(h_parent_line)
-            h_parents = [int(idx) for idx in self._db_string_to_list(h_parent_line)]
-            self.output_manager.write_out_mol(ligname, mol, flexres_mols, saved_coords, h_parents, properties)
+                # fetch coordinates for non-passing poses
+                # and add to ligand mol, flexible residue mols
+                if write_nonpassing:
+                    nonpassing_properties = self.dbman.fetch_nonpassing_pose_properties(
+                        ligname)
+                    mol, flexres_mols, saved_coords, properties = self._add_poses(atom_indices, nonpassing_properties,
+                                                                                  mol, flexres_mols, saved_coords, properties)
+
+                # write out molecule
+                # h_parents = self._format_h_parents(h_parent_line)
+                h_parents = [int(idx) for idx in self._db_string_to_list(h_parent_line)]
+                self.output_manager.write_out_mol(ligname, mol, flexres_mols, saved_coords, h_parents, properties)
+
+        except DatabaseError as e:
+            raise VirtualScreeningError("Error occurred while fetching database information for SDF output") from e
+        except OutputError as e:
+            raise VirtualScreeningError(f"Error occured while writing {ligname} to an SDF") from e
+        except Exception as e:
+            raise VirtualScreeningError("Error occurred during SDF output") from e
 
     def export_csv(self, requested_data, csv_name, table=False):
         """Get requested data from database, export as CSV
@@ -267,8 +318,13 @@ class VSManager():
             csv_name (string): Name for exported CSV file
             table (bool): flag indicating is requested data is a table name
         """
-        df = self.dbman.fetch_dataframe_from_db(requested_data, table=table)
-        df.to_csv(csv_name)
+        try:
+            df = self.dbman.fetch_dataframe_from_db(requested_data, table=table)
+            df.to_csv(csv_name)
+        except DatabaseError as e:
+            raise VirtualScreeningError(f"Error occured while getting data for exporting CSV of {requested_data}") from e
+        except Exception as e:
+            raise VirtualScreeningError(f"Error occured while exporting CSV of {requested_data}") from e
 
     def close_database(self):
         """Tell database we are done and it can close the connection
@@ -425,34 +481,37 @@ class Outputter():
             binned_data (dict): Keys are tuples of key and y value for bin.
                 Value is the count of points falling into that bin.
         """
-        # gather data
-        energies = []
-        leffs = []
-        bin_counts = []
-        for data_bin in binned_data.keys():
-            energies.append(data_bin[0])
-            leffs.append(data_bin[1])
-            bin_counts.append(binned_data[data_bin])
+        try:
+            # gather data
+            energies = []
+            leffs = []
+            bin_counts = []
+            for data_bin in binned_data.keys():
+                energies.append(data_bin[0])
+                leffs.append(data_bin[1])
+                bin_counts.append(binned_data[data_bin])
 
-        # start with a square Figure
-        fig = plt.figure()
+            # start with a square Figure
+            fig = plt.figure()
 
-        gs = fig.add_gridspec(2,
-                              2,
-                              width_ratios=(7, 2),
-                              height_ratios=(2, 7),
-                              left=0.1,
-                              right=0.9,
-                              bottom=0.1,
-                              top=0.9,
-                              wspace=0.05,
-                              hspace=0.05)
+            gs = fig.add_gridspec(2,
+                                  2,
+                                  width_ratios=(7, 2),
+                                  height_ratios=(2, 7),
+                                  left=0.1,
+                                  right=0.9,
+                                  bottom=0.1,
+                                  top=0.9,
+                                  wspace=0.05,
+                                  hspace=0.05)
 
-        self.ax = fig.add_subplot(gs[1, 0])
-        ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax)
-        ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax)
-        self.ax.set_xlabel("Best Binding Energy / kcal/mol")
-        self.ax.set_ylabel("Best Ligand Efficiency")
+            self.ax = fig.add_subplot(gs[1, 0])
+            ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax)
+            ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax)
+            self.ax.set_xlabel("Best Binding Energy / kcal/mol")
+            self.ax.set_ylabel("Best Ligand Efficiency")
+        except Exception as e:
+            raise OutputError("Error occurred while initializing plot") from e
 
         self.scatter_hist(energies, leffs, bin_counts, self.ax, ax_histx,
                           ax_histy)
@@ -465,14 +524,20 @@ class Outputter():
             y (float): y coordinate
             color (str, optional): Color for point. Default black.
         """
-        self.ax.scatter([x], [y], c=color)
+        try:
+            self.ax.scatter([x], [y], c=color)
+        except Exception as e:
+            raise OutputError("Error occurred while plotting") from e
 
     def save_scatterplot(self):
         """
         Saves current figure as [self.fig_base_name]_scatter.png
         """
-        plt.savefig(self.fig_base_name + "_scatter.png", bbox_inches="tight")
-        plt.close()
+        try:
+            plt.savefig(self.fig_base_name + "_scatter.png", bbox_inches="tight")
+            plt.close()
+        except Exception as e:
+            raise OutputError("Error while saving figure") from e
 
     def write_log_line(self, line):
         """write a single row to the log file
@@ -480,9 +545,12 @@ class Outputter():
         Args:
             line (string): Line to write to log
         """
-        with open(self.log, "a") as f:
-            f.write(line)
-            f.write("\n")
+        try:
+            with open(self.log, "a") as f:
+                f.write(line)
+                f.write("\n")
+        except Exception as e:
+            raise OutputError(f"Error writing line {line} to log") from e
 
     def log_num_passing_ligands(self, number_passing_ligands):
         """
@@ -491,11 +559,14 @@ class Outputter():
         Args:
             number_passing_ligands (int): number of ligands that passed filter
         """
-        with open(self.log, "a") as f:
-            f.write("\n")
-            f.write("Number passing ligands: {num} \n".format(
-                num=str(number_passing_ligands)))
-            f.write("---------------\n")
+        try:
+            with open(self.log, "a") as f:
+                f.write("\n")
+                f.write("Number passing ligands: {num} \n".format(
+                    num=str(number_passing_ligands)))
+                f.write("---------------\n")
+        except Exception as e:
+            raise OutputError("Error writing number of passing ligands in log") from e
 
     def write_results_subset_to_log(self, subset_name):
         """Write the name of the result subset into log
@@ -503,9 +574,12 @@ class Outputter():
         Args:
             subset_name (string): name of current results' subset in db
         """
-        with open(self.log, "a") as f:
-            f.write("\n")
-            f.write(f"Result subset name: {subset_name}\n")
+        try:
+            with open(self.log, "a") as f:
+                f.write("\n")
+                f.write(f"Result subset name: {subset_name}\n")
+        except Exception as e:
+            raise OutputError("Error writing subset name to log") from e
 
     def write_out_mol(self, ligname, mol, flexres_mols, saved_coords, h_parents, properties):
         """writes out given mol as sdf
@@ -519,27 +593,34 @@ class Outputter():
             h_parents (list): list of atom indices of hydrogens and their parents
             properties (dict): dictionary of list of properties to add to mol before writing
         """
-        filename = self.vsman.out_opts["export_poses_path"] + ligname + ".sdf"
-        mol = RDKitMolCreate.export_combined_rdkit_mol(mol, flexres_mols, saved_coords, h_parents)
-        # convert properties to strings as needed
-        for k, v in properties.items():
-            if isinstance(v, list):
-                properties[k] = json.dumps(v)
-            elif not isinstance(v, str):
-                properties[k] = str(v)
-        RDKitMolCreate.add_properties_to_mol(mol, properties)
+        try:
+            filename = self.vsman.out_opts["export_poses_path"] + ligname + ".sdf"
+            mol = RDKitMolCreate.export_combined_rdkit_mol(mol, flexres_mols, saved_coords, h_parents)
+            # convert properties to strings as needed
+            for k, v in properties.items():
+                if isinstance(v, list):
+                    properties[k] = json.dumps(v)
+                elif not isinstance(v, str):
+                    properties[k] = str(v)
+            RDKitMolCreate.add_properties_to_mol(mol, properties)
 
-        with SDWriter(filename) as w:
-            for conf in mol.GetConformers():
-                w.write(mol, conf.GetId())
+            with SDWriter(filename) as w:
+                for conf in mol.GetConformers():
+                    w.write(mol, conf.GetId())
+
+        except Exception as e:
+            raise OutputError("Error occurred while writing SDF from RDKit Mol") from e
 
     def _create_log_file(self):
         """
         Initializes log file
         """
-        with open(self.log, 'w') as f:
-            f.write("Filtered poses:\n")
-            f.write("***************\n")
+        try:
+            with open(self.log, 'w') as f:
+                f.write("Filtered poses:\n")
+                f.write("***************\n")
+        except Exception as e:
+            raise OutputError("Error while creating log file") from e
 
     def scatter_hist(self, x, y, z, ax, ax_histx, ax_histy):
         """
@@ -553,26 +634,29 @@ class Outputter():
             ax_histx (matplotlib axis): x histogram axis
             ax_histy (matplotlib axis): y histogram axis
         """
-        # no labels
-        ax_histx.tick_params(axis="x", labelbottom=False)
-        ax_histy.tick_params(axis="y", labelleft=False)
+        try:
+            # no labels
+            ax_histx.tick_params(axis="x", labelbottom=False)
+            ax_histy.tick_params(axis="y", labelleft=False)
 
-        # the scatter plot:
-        ax.scatter(x, y, c=z, cmap="Blues")
+            # the scatter plot:
+            ax.scatter(x, y, c=z, cmap="Blues")
 
-        # now determine nice limits by hand:
-        xbinwidth = 0.25
-        ybinwidth = 0.01
-        xminlim = (int(min(x) / xbinwidth) + 3) * xbinwidth
-        xmaxlim = (int(max(x) / xbinwidth) + 3) * xbinwidth
-        yminlim = (int(min(y) / ybinwidth) + 3) * ybinwidth
-        ymaxlim = (int(max(y) / ybinwidth) + 3) * ybinwidth
+            # now determine nice limits by hand:
+            xbinwidth = 0.25
+            ybinwidth = 0.01
+            xminlim = (int(min(x) / xbinwidth) + 3) * xbinwidth
+            xmaxlim = (int(max(x) / xbinwidth) + 3) * xbinwidth
+            yminlim = (int(min(y) / ybinwidth) + 3) * ybinwidth
+            ymaxlim = (int(max(y) / ybinwidth) + 3) * ybinwidth
 
-        xbins = np.arange(xminlim, xmaxlim + xbinwidth, xbinwidth)
-        ybins = np.arange(yminlim, ymaxlim + ybinwidth, ybinwidth)
+            xbins = np.arange(xminlim, xmaxlim + xbinwidth, xbinwidth)
+            ybins = np.arange(yminlim, ymaxlim + ybinwidth, ybinwidth)
 
-        ax_histx.hist(x, bins=xbins)
-        ax_histy.hist(y, bins=ybins, orientation='horizontal')
+            ax_histx.hist(x, bins=xbins)
+            ax_histy.hist(y, bins=ybins, orientation='horizontal')
+        except Exception as e:
+            raise OutputError("Error occurred while adding all data to plot") from e
 
     def write_filters_to_log(self, filters_dict, included_interactions):
         """Takes dictionary of filters, formats as string and writes to log file
@@ -580,38 +664,41 @@ class Outputter():
         Args:
             filters_dict (dict): dictionary of filtering options
         """
-
-        buff = ['##### PROPERTIES']
-        for k, v in filters_dict["properties"].items():
-            if v is not None:
-                v = "%2.3f" % v
-            else:
-                v = " [ none ]"
-            buff.append("#  % 7s : %s" % (k, v))
-        if filters_dict['filter_ligands_flag']:
-            buff.append("#### LIGAND FILTERS")
-            for k, v in filters_dict["ligand_filters"].items():
+        try:
+            buff = ['##### PROPERTIES']
+            for k, v in filters_dict["properties"].items():
                 if v is not None:
-                    if isinstance(v, list):
-                        v = ", ".join([f for f in v if f != ''])
+                    v = "%2.3f" % v
                 else:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
-        buff.append("#### INTERACTIONS")
-        labels = ['~', '']
-        for _type, info in filters_dict["interactions"].items():
-            kept_interactions = []
-            if len(info) == 0:
-                buff.append("#  % 7s :  [ none ]" % (_type))
-                continue
-            for interact in info:
-                if _type + "-" + interact[0] not in included_interactions:
+            if filters_dict['filter_ligands_flag']:
+                buff.append("#### LIGAND FILTERS")
+                for k, v in filters_dict["ligand_filters"].items():
+                    if v is not None:
+                        if isinstance(v, list):
+                            v = ", ".join([f for f in v if f != ''])
+                    else:
+                        v = " [ none ]"
+                    buff.append("#  % 7s : %s" % (k, v))
+            buff.append("#### INTERACTIONS")
+            labels = ['~', '']
+            for _type, info in filters_dict["interactions"].items():
+                kept_interactions = []
+                if len(info) == 0:
+                    buff.append("#  % 7s :  [ none ]" % (_type))
                     continue
-                else:
-                    kept_interactions.append(interact)
-            res_str = ", ".join(['(%s)%s' % (labels[int(x[1])], x[0]) for x in kept_interactions])
-            l_str = "#  % 7s : %s" % (_type, res_str)
-            buff.append(l_str)
+                for interact in info:
+                    if _type + "-" + interact[0] not in included_interactions:
+                        continue
+                    else:
+                        kept_interactions.append(interact)
+                res_str = ", ".join(['(%s)%s' % (labels[int(x[1])], x[0]) for x in kept_interactions])
+                l_str = "#  % 7s : %s" % (_type, res_str)
+                buff.append(l_str)
 
-        for line in buff:
-            self.write_log_line(line)
+            for line in buff:
+                self.write_log_line(line)
+
+        except Exception as e:
+            raise OutputError("Error occurred while writing filters to log") from e
