@@ -5,7 +5,7 @@
 #
 
 from ringtail import MPManager
-from ringtail import MultiprocessingError, ResultsProcessingError
+from .exceptions import MultiprocessingError, ResultsProcessingError
 
 
 class ResultsManager():

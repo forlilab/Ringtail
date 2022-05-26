@@ -11,8 +11,8 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
-from ringtail import DatabaseError, DatabaseInsertionError, DatabaseConnectionError, DatabaseTableCreationError
-from ringtail import DatabaseQueryError, DatabaseViewCreationError
+from .exceptions import DatabaseError, DatabaseInsertionError, DatabaseConnectionError, DatabaseTableCreationError
+from .exceptions import DatabaseQueryError, DatabaseViewCreationError
 
 
 class DBManager():

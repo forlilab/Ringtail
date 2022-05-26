@@ -5,10 +5,11 @@
 #
 
 import multiprocessing
+from time import sleep
+import logging
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
-from ringtail import FileParsingError, WriteToDatabaseError
-from ringtail import MultiprocessingError
+from .exceptions import MultiprocessingError
 
 
 class MPManager():
@@ -36,30 +37,39 @@ class MPManager():
 
     def process_files(self):
         # start the workers in background
+        workers = []
+        p_conn, c_conn = multiprocessing.Pipe(False)
         for i in range(self.max_proc):
             # one worker is started for each processor to be used
-            s = DockingFileReader(self.queueIn, self.queueOut, self.db,
+            s = DockingFileReader(self.queueIn, self.queueOut, c_conn, self.db,
                                   self.mode, self.numclusters, self.no_print, self.target)
             # this method calls .run() internally
-            try:
-                s.start()
-            except FileParsingError as e:
-                raise MultiprocessingError("Error occurred during file parsing!") from e
+            s.start()
+            workers.append(s)
 
         # start the writer to process the data from the workers
-        w = Writer(self.queueOut, self.max_proc, self.chunksize, self.db,
+        w = Writer(self.queueOut, self.max_proc, c_conn, self.chunksize, self.db,
                    self.num_files, self.mode)
-        try:
-            w.start()
-        except WriteToDatabaseError as e:
-            raise MultiprocessingError("Error occurred during database writing!") from e
+
+        w.start()
+        workers.append(w)
 
         # process items in the queue
         for file in self.filelist:
-
             self.queueIn.put(file, block=True)
         # put as many poison pills in the queue as there are workers
         for i in range(self.max_proc):
             self.queueIn.put(None)
+
+        # check for exceptions
+        while w.is_alive():
+            sleep(1)
+            if p_conn.poll():
+                logging.debug("Caught error in multiprocessing")
+                error, tb = p_conn.recv()
+                for s in workers:
+                    s.kill()
+                logging.debug(tb)
+                raise MultiprocessingError("Error occurred during file parsing!")
 
         w.join()
