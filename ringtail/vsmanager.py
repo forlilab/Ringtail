@@ -11,8 +11,8 @@ import warnings
 from meeko import RDKitMolCreate
 from ringtail import DBManagerSQLite
 from ringtail import ResultsManager
-from ringtail import DatabaseConnectionError, DatabaseTableCreationError, DatabaseError
-from ringtail import VirtualScreeningError, ResultsProcessingError, OutputError
+from .exceptions import DatabaseConnectionError, DatabaseTableCreationError, DatabaseError
+from .exceptions import VirtualScreeningError, ResultsProcessingError, OutputError
 from rdkit import Chem
 from rdkit.Chem import SDWriter
 import itertools
@@ -105,7 +105,7 @@ class VSManager():
             except ResultsProcessingError as e:
                 raise VirtualScreeningError("Error occured while adding results") from e
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_value, traceback):
         self.close_database()
 
     def add_results(self):

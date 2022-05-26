@@ -7,14 +7,16 @@
 import multiprocessing
 import time
 import sys
+import logging
+import traceback
 from .parsers import parse_single_dlg, parse_vina_pdbqt
-from ringtail import FileParsingError, WriteToDatabaseError, DatabaseInsertionError
+from .exceptions import FileParsingError, WriteToDatabaseError, DatabaseInsertionError
 
 
 class DockingFileReader(multiprocessing.Process):
     """ this class is the individual worker for processing dlgs"""
 
-    def __init__(self, queueIn, queueOut, dbman, mode, numclusters, no_print, target):
+    def __init__(self, queueIn, queueOut, pipe_conn, dbman, mode, numclusters, no_print, target):
         # set mode for which file parser to use
         self.mode = mode
         # set number of clusters to write
@@ -31,6 +33,10 @@ class DockingFileReader(multiprocessing.Process):
         self.queueIn = queueIn
         # ...and a queue out (where to send the results)
         self.queueOut = queueOut
+        # ...and a pipe to the parent
+        self.pipe = pipe_conn
+
+        self.exception = None
 
     def find_best_cluster_poses(self, ligand_dict):
         """takes input ligand dictionary, reads run pose clusters,
@@ -55,6 +61,7 @@ class DockingFileReader(multiprocessing.Process):
             while True:
                 # retrieve from the queue in the next task to be done
                 next_task = self.queueIn.get()
+                logging.debug("Next Task: " + str(next_task))
                 # if a poison pill is received, this worker's job is done, quit
                 if next_task is None:
                     # before leaving, pass the poison pill back in the queue
@@ -76,8 +83,9 @@ class DockingFileReader(multiprocessing.Process):
                 file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
                 # put the result in the out queue
                 self.queueOut.put(file_packet)
-        except Exception as e:
-            raise FileParsingError("Error while parsing file {0}".format(next_task)) from e
+        except Exception:
+            tb = traceback.format_exc()
+            self.pipe.send((FileParsingError("Error while parsing file"), tb))
         finally:
             return
 
@@ -85,7 +93,7 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, maxProcesses, chunksize, db_obj, num_files, mode="dlg"):
+    def __init__(self, queue, maxProcesses, pipe_conn, chunksize, db_obj, num_files, mode="dlg"):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are
@@ -109,6 +117,8 @@ class Writer(multiprocessing.Process):
         # based on estimated 3 seconds per 1000 files, converted to minutes
         self.est_time_remaining = 3 * num_files / (1000 * 60)
         self.last_write_time = 0
+
+        self.pipe = pipe_conn
 
     def run(self):
         # method overload from parent class
@@ -156,8 +166,8 @@ class Writer(multiprocessing.Process):
                     self.close()
                     break
         except DatabaseInsertionError as e:
-            raise WriteToDatabaseError("Error while writing chunk to database") from e
-
+            tb = traceback.format_exc()
+            self.pipe.send((e, tb))
         finally:
             return
 

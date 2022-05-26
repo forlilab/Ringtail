@@ -11,7 +11,7 @@ import os
 import fnmatch
 import warnings
 import logging
-from ringtail import OptionError
+from .exceptions import OptionError
 
 
 class CLOptionParser():
