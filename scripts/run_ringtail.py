@@ -90,5 +90,5 @@ if __name__ == '__main__':
 
     # print performance times
     time2 = time.perf_counter()
-    print("Time to initialize/write database: " + str(round(time1 - time0, 2)) + " seconds")
-    print("Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds ")
+    logging.info("Time to initialize/write database: " + str(round(time1 - time0, 2)) + " seconds")
+    logging.info("Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds ")

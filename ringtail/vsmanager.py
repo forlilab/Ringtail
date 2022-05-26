@@ -78,9 +78,7 @@ class VSManager():
         except DatabaseTableCreationError as e:
             raise VirtualScreeningError(
                 "Error encountered while creating database tables. If database already exists, use --add_results or --overwrite.") from e
-            self.close_database()
         except DatabaseError as e:
-            self.close_database()
             raise VirtualScreeningError("Error occurred while initializing database.") from e
 
         self.results_man = ResultsManager(
@@ -104,6 +102,8 @@ class VSManager():
                 self.add_results()
             except ResultsProcessingError as e:
                 raise VirtualScreeningError("Error occured while adding results") from e
+
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close_database()
