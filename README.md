@@ -1,4 +1,5 @@
-![ringtail logo final](https://user-images.githubusercontent.com/41704502/170766565-5b3323e8-560d-475c-8ad0-031331b6dff2.png)
+![ringtail logo final](https://user-images.githubusercontent.com/41704502/170797800-53a9d94a-932e-4936-9bea-e2d292b0c62b.png)
+
 
 
 # Ringtail
