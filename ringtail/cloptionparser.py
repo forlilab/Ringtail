@@ -14,11 +14,66 @@ import logging
 from .exceptions import OptionError
 
 
+def cmdline_parser(defaults):
+
+    parser = argparse.ArgumentParser(
+        usage="Please see GitHub for full usage details.",
+        description="Package for creating database from AutoDock virtual screening results and performing filtering on results.",
+        epilog="""
+
+        REQUIRED PACKAGES
+                Requires RDkit, SciPy, Meeko.\n
+
+        AUTHOR
+                Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n
+
+        REPORTING BUGS
+                Please report bugs to:
+                AutoDock mailing list   http://autodock.scripps.edu/mailing_list\n
+
+        COPYRIGHT
+                Copyright (C) 2022 Stefano Forli Laboratory, Center for Computational Structural Biology, 
+                             The Scripps Research Institute.
+                GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+        """)
+
+    parser.add_argument("--input_db", help='specify a database file to perform actions with',
+                        action='store', type=str, metavar="DATABASE")
+    parser.add_argument('-c', '--config', help='specify a JSON-format file containing the option definitions. NOTE: option defined here have the precedence on the other command line options!',
+                        action='store', type=str, metavar="FILTERS_FILE")
+    subparsers = parser.add_subparsers(help="Specify if should write to or read from database")
+
+    write_parser = subparsers.add_parser('write', help="Write new files to database")
+    write_parser.add_argument('-f', '--file',
+                              help='ligand DLG(s) and receptor PDBQT file to save and filter. Compressed (.gz) files allowed. Only 1 receptor allowed.',
+                              action='append', type=str, metavar="FILENAME.[DLG/PDBQT][.gz]", nargs='+')
+    write_parser.add_argument('-fp', '--file_path', help='directory(s) containing DLG and PDBQT files to save and filter. Compressed (.gz) files allowed',
+                              action='append', type=str, metavar="DIRNAME", nargs='+')
+    write_parser.add_argument('-fl', '--file_list', help='file(s) containing the list of DLG and PDBQT files to filter; relative or absolute paths are allowed. Compressed (.gz) files allowed',
+                              action='append', type=str, metavar="FILENAME", nargs='+')
+    write_parser.add_argument('-r', '--recursive', help='enable recursive directory scan when --file_path is used',
+                              action='store_true')
+    write_parser.add_argument('-sr', '--save_receptor', help='Saves receptor PDBQT to database. Receptor location must be specied with in --file, --file_path directory or --file_list file',
+                              action='store_true')
+    write_parser.add_argument('-m', '--mode', help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
+                              action='store', type=str, metavar='[dlg] or [vina]')
+    write_parser.add_argument('-p', '--pattern', help='specify which pattern to use when searching for result files to process [only with "--file_path", default "*.dlg*"]',
+                              action='store', type=str, metavar='PATTERN')
+    write_parser.add_argument('-a', '--add_results', help='Add new results to an existing database, specified by --input_db',
+                              action='store_true',)
+    write_parser.add_argument('-ch', '--conflict_handling', help='specify how conflicting Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will duplicate entries.',
+                              action='store', type=str, metavar="'ignore' or 'replace'")
+    write_parser.add_argument('-o', '--output_db_name', help='Name for output database file', action='store',
+                              type=str, metavar="[FILE_NAME].DB",)
+
+    read_parser = subparsers.add_parser('read', help="Read input database, filters and/or outputs data")
+
+
 class CLOptionParser():
 
     def __init__(self):
         self.write_db_flag = False
-        self.description = """Package for creating SQLite database from virtual screening DLGs and performing filtering on results."""
+        self.description = """Package for creating database from AutoDock virtual screening results and performing filtering on results."""
         self.usage = "Please see GitHub for full usage details."
         self.name = "Ringtail"
         self.epilog = """
@@ -670,7 +725,6 @@ class CLOptionParser():
             file_sources['file_path'] = None
         file_sources['file_list'] = parsed_opts.file_list
         self.pattern = parsed_opts.pattern
-        print("")
         if (file_sources['file'] is
                 None) and (file_sources['file_path'] is
                            None) and (file_sources['file_list'] is
@@ -839,8 +893,7 @@ class CLOptionParser():
         if parsed_opts.input_db is not None:
             sqlFile = parsed_opts.input_db
             if not os.path.exists(sqlFile):
-                print("WARNING: input database does not exist!")
-                sys.exit(1)
+                raise OptionError("WARNING: input database does not exist!")
             db_opts['write_db_flag'] = False
         else:
             sqlFile = parsed_opts.output_db
@@ -884,9 +937,9 @@ class CLOptionParser():
                     self.scan_file_list(filelist, self.pattern.replace("*", ""), find_rec)
 
         if len(self.lig_files_pool) > 0 or len(self.rec_files_pool) > 0:
-            print("-Found %d ligand files." % len(self.lig_files_pool))
+            logging.info("-Found %d ligand files." % len(self.lig_files_pool))
             if self.save_receptor:
-                print("-Found %d receptor files." % len(self.rec_files_pool))
+                logging.info("-Found %d receptor files." % len(self.rec_files_pool))
 
         # raise error if --save_receptor and none found
         if self.save_receptor and len(self.rec_files_pool) == 0:
@@ -897,8 +950,7 @@ class CLOptionParser():
             the pattern is used to glob files
             optionally, a recursive search is performed
         """
-        print("-Scanning directory [%s] for files (pattern:|%s|)" %
-              (path, pattern))
+        logging.info("-Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern))
         files = []
         if recursive:
             path = os.path.normpath(path)
@@ -930,10 +982,9 @@ class CLOptionParser():
                         if line.endswith(".pdbqt") or line.endswith(".pdbqt.gz"):
                             rec_accepted.append(line)
                 else:
-                    print("Warning! file |%s| does not exist" % line)
+                    warnings.warn("Warning! file |%s| does not exist" % line)
         if len(lig_accepted) + len(rec_accepted) == 0:
             raise OptionError("*ERROR* No valid files were found when reading from |%s|" % filename)
-        print("# [ %5.3f%% files in list accepted (%d) ]" %
-              ((len(lig_accepted) + len(rec_accepted)) / c * 100, c))
+        logging.info("# [ %5.3f%% files in list accepted (%d) ]" % ((len(lig_accepted) + len(rec_accepted)) / c * 100, c))
         self.lig_files_pool.extend(lig_accepted)
         self.rec_files_pool.extend(rec_accepted)
