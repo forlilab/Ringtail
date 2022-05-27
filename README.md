@@ -1,4 +1,5 @@
-![ringtail logo with text](https://user-images.githubusercontent.com/41704502/169367003-27531216-df0e-42f7-86bc-79e8891e6f0b.png)
+![ringtail logo final](https://user-images.githubusercontent.com/41704502/170766565-5b3323e8-560d-475c-8ad0-031331b6dff2.png)
+
 
 # Ringtail
 Package for creating SQLite database from AutoDock virtual screening results and performing filtering on results. Compatible with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina).
