@@ -5,10 +5,10 @@ Filtered poses:
 #    ebest : -16.000
 #  leworst : -0.400
 #   lebest : -0.500
-#  epercentile :  [ none ]
-#  leffpercentile :  [ none ]
+#  energy_percentile :  [ none ]
+#  le_percentile :  [ none ]
 #### LIGAND FILTERS
-#        N : OB3Z3759440327_RX1--4xfx_mon_prep--tyr169, OB3Z3759440327_RX1--4xfx_mon_prep--tyr169
+#        N : OB3Z3759440327_RX1--4xfx_mon_prep--tyr169,OB3Z3759440327_RX1--4xfx_mon_prep--tyr169
 #        S : CO, C=C
 #        F : AND
 #### INTERACTIONS

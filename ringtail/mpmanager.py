@@ -61,7 +61,7 @@ class MPManager():
 
         # check for exceptions
         while w.is_alive():
-            sleep(1)
+            sleep(0.5)
             if p_conn.poll():
                 logging.debug("Caught error in multiprocessing")
                 error, tb = p_conn.recv()

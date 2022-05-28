@@ -1048,8 +1048,8 @@ class DBManagerSQLite(DBManager):
             "ebest": "energies_binding > {value}",
             "leworst": "leff < {value}",
             "lebest": "leff > {value}",
-            "epercentile": "energy_percentile_rank < {value}",
-            "leffpercentile": "leff_percentile_rank < {value}"
+            "energy_percentile": "energy_percentile_rank < {value}",
+            "le_percentile": "leff_percentile_rank < {value}"
         }
 
     # # # # # # # # # # # # # # # # #
@@ -1843,7 +1843,7 @@ class DBManagerSQLite(DBManager):
 
         for filter_key, filter_value in results_filters_list:
             if filter_key in self.energy_filter_sqlite_call_dict:
-                if filter_key == "epercentile" or filter_key == "leffpercentile":
+                if filter_key == "energy_percentile" or filter_key == "le_percentile":
                     # convert from percent to decimal
                     filter_value = str(float(filter_value) / 100)
                     # reset filtering window to include percentile_ranks
@@ -1983,7 +1983,7 @@ class DBManagerSQLite(DBManager):
 
         sql_ligand_string = "SELECT LigName FROM Ligands WHERE "
 
-        substruct_flag = ligand_filters['F'][0].upper()
+        substruct_flag = ligand_filters['F'].upper()
         for kw in ligand_filters.keys():
             fils = ligand_filters[kw]
             if kw == 'N':
@@ -1999,6 +1999,7 @@ class DBManagerSQLite(DBManager):
                         value=substruct, flag=substruct_flag)
                     sql_ligand_string += substruct_sql_str
 
+        print(sql_ligand_string)
         if sql_ligand_string.endswith("AND "):
             sql_ligand_string = sql_ligand_string.rstrip("AND ")
         if sql_ligand_string.endswith("OR "):
