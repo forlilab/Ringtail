@@ -10,6 +10,7 @@ from ringtail import VSManager
 from ringtail import ReceptorManager
 from ringtail import VirtualScreeningError, OptionError
 import logging
+import traceback
 
 if __name__ == '__main__':
 
@@ -18,6 +19,8 @@ if __name__ == '__main__':
     try:
         cl_opts = CLOptionParser()
     except OptionError as e:
+        tb = traceback.format_exc()
+        logging.debug(tb)
         logging.critical(e)
         sys.exit(1)
 
@@ -39,7 +42,7 @@ if __name__ == '__main__':
 
     # set logging level
     no_print = out_opts["no_print"]
-    debug = False
+    debug = True
     if debug:
         level = logging.DEBUG
     elif not no_print:
@@ -62,29 +65,32 @@ if __name__ == '__main__':
 
             time1 = time.perf_counter()
 
-            # perform filtering
-            if cl_opts.filter:
-                vsman.filter()
+            if cl_opts.rr_mode == "read":
+                # perform filtering
+                if cl_opts.filter:
+                    vsman.filter()
 
-            # Write log with new data for previous filtering results
-            if out_opts["data_from_subset"] and not cl_opts.filter:
-                vsman.get_previous_filter_data()
+                # Write log with new data for previous filtering results
+                if out_opts["data_from_subset"] and not cl_opts.filter:
+                    vsman.get_previous_filter_data()
 
-            # plot if requested
-            if out_opts["plot"]:
-                vsman.plot()
+                # plot if requested
+                if out_opts["plot"]:
+                    vsman.plot()
 
-            # write out molecules if requested
-            if out_opts["export_poses_path"] is not None:
-                vsman.write_molecule_sdfs()
+                # write out molecules if requested
+                if out_opts["export_poses_path"] is not None:
+                    vsman.write_molecule_sdfs()
 
-            # write out requested CSVs
-            if out_opts["export_table"] is not None:
-                vsman.export_csv(out_opts["export_table"], out_opts["export_table"] + ".csv", table=True)
-            if out_opts["export_query"] is not None:
-                vsman.export_csv(out_opts["export_query"], "query.csv")
+                # write out requested CSVs
+                if out_opts["export_table"] is not None:
+                    vsman.export_csv(out_opts["export_table"], out_opts["export_table"] + ".csv", table=True)
+                if out_opts["export_query"] is not None:
+                    vsman.export_csv(out_opts["export_query"], "query.csv")
 
     except VirtualScreeningError as e:
+        tb = traceback.format_exc()
+        logging.debug(tb)
         logging.critical(e)
         sys.exit(1)
 

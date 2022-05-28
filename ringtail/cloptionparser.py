@@ -6,6 +6,7 @@
 
 import sys
 import argparse
+import json
 from glob import glob
 import os
 import fnmatch
@@ -14,7 +15,61 @@ import logging
 from .exceptions import OptionError
 
 
-def cmdline_parser(defaults):
+def cmdline_parser(defaults={}):
+
+    conf_parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
+    conf_parser.add_argument('-c', '--config',
+            help='specify a JSON-format file containing the option definitions. NOTE: options defined here will be overridden by command line options!')
+    confargs, remaining_argv = conf_parser.parse_known_args()
+
+    defaults = {'input_db': None,
+                'subset_name': "passing_results",
+                'verbose': None,
+                'file': None,
+                'file_path': None,
+                'mode': "dlg",
+                'pattern': "*.dlg*",
+                'recursive': None,
+                'add_results': None,
+                'conflict_handling': None,
+                'save_receptor': None,
+                'output_db': "output.db",
+                'overwrite': None,
+                'max_poses': 3,
+                'store_all_poses': None,
+                'interaction_tolerance': None,
+                'log': "output_log.txt",
+                'out_fields': "e",
+                'order_results': None,
+                'all_poses': None,
+                'export_subset_csv': None,
+                'export_query_csv': None,
+                'export_sdf_path': None,
+                'new_data_from_subset': None,
+                'plot': None,
+                'eworst': None,
+                'ebest': None,
+                'leworst': None,
+                'lebest': None,
+                'energy_percentile': None,
+                'le_percentile': None,
+                'name': None,
+                'substructure': None,
+                'substructure_join': "OR",
+                'van_der_waals': None,
+                'hydrogen_bond': None,
+                'reactive_res': None,
+                'hb_count': None,
+                'react_any': None,
+                'max_miss': 0}
+
+    config = json.loads(json.dumps(defaults)) # using dict -> str -> dict as a safe copy method
+
+    if confargs.config is not None:
+        logging.info("Reading options from config file")
+        with open(confargs.config) as f:
+            c = json.load(f)
+            config.update(c)
 
     parser = argparse.ArgumentParser(
         usage="Please see GitHub for full usage details.",
@@ -35,15 +90,20 @@ def cmdline_parser(defaults):
                 Copyright (C) 2022 Stefano Forli Laboratory, Center for Computational Structural Biology, 
                              The Scripps Research Institute.
                 GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
-        """)
+        """,
+        exit_on_error=False)
 
-    parser.add_argument("--input_db", help='specify a database file to perform actions with',
-                        action='store', type=str, metavar="DATABASE")
-    parser.add_argument('-c', '--config', help='specify a JSON-format file containing the option definitions. NOTE: option defined here have the precedence on the other command line options!',
-                        action='store', type=str, metavar="FILTERS_FILE")
-    subparsers = parser.add_subparsers(help="Specify if should write to or read from database")
+    subparsers = parser.add_subparsers(help="Specify if should write to or read from database", dest="rr_mode")
 
     write_parser = subparsers.add_parser('write', help="Write new files to database")
+    write_parser.add_argument('-i', "--input_db", help='specify a database file to perform actions with',
+                        action='store', type=str, metavar="DATABASE")
+    write_parser.add_argument('-s', '--subset_name', help='Specify name for db view of passing results to create (write mode) or export from (read mode)', action='store',
+                         type=str, metavar='STRING')
+    write_parser.add_argument('-m', '--mode', help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
+                              action='store', type=str, metavar='[dlg] or [vina]')
+    write_parser.add_argument('-v', '--verbose', help='Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.',
+                        action='store_true')
     write_parser.add_argument('-f', '--file',
                               help='ligand DLG(s) and receptor PDBQT file to save and filter. Compressed (.gz) files allowed. Only 1 receptor allowed.',
                               action='append', type=str, metavar="FILENAME.[DLG/PDBQT][.gz]", nargs='+')
@@ -51,561 +111,128 @@ def cmdline_parser(defaults):
                               action='append', type=str, metavar="DIRNAME", nargs='+')
     write_parser.add_argument('-fl', '--file_list', help='file(s) containing the list of DLG and PDBQT files to filter; relative or absolute paths are allowed. Compressed (.gz) files allowed',
                               action='append', type=str, metavar="FILENAME", nargs='+')
+    write_parser.add_argument('-p', '--pattern', help='specify which pattern to use when searching for result files to process [only with "--file_path"]', action='store', type=str, metavar='PATTERN')
     write_parser.add_argument('-r', '--recursive', help='enable recursive directory scan when --file_path is used',
                               action='store_true')
-    write_parser.add_argument('-sr', '--save_receptor', help='Saves receptor PDBQT to database. Receptor location must be specied with in --file, --file_path directory or --file_list file',
-                              action='store_true')
-    write_parser.add_argument('-m', '--mode', help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
-                              action='store', type=str, metavar='[dlg] or [vina]')
-    write_parser.add_argument('-p', '--pattern', help='specify which pattern to use when searching for result files to process [only with "--file_path", default "*.dlg*"]',
-                              action='store', type=str, metavar='PATTERN')
     write_parser.add_argument('-a', '--add_results', help='Add new results to an existing database, specified by --input_db',
                               action='store_true',)
     write_parser.add_argument('-ch', '--conflict_handling', help='specify how conflicting Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will duplicate entries.',
                               action='store', type=str, metavar="'ignore' or 'replace'")
-    write_parser.add_argument('-o', '--output_db_name', help='Name for output database file', action='store',
+    write_parser.add_argument('-sr', '--save_receptor', help='Saves receptor PDBQT to database. Receptor location must be specied with in --file, --file_path directory or --file_list file',
+                              action='store_true')
+    write_parser.add_argument('-o', '--output_db', help='Name for output database file', action='store',
                               type=str, metavar="[FILE_NAME].DB",)
+    write_parser.add_argument('-ov', '--overwrite', help='by default, if a log file exists, it doesn\'t get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database',
+                              action='store_true')
+    write_parser.add_argument('-mp', '--max_poses', help='n: Store top pose for top n clusters', action='store',
+                              type=int, metavar='INT')
+    write_parser.add_argument('-sa', '--store_all_poses', help='Store all poses from input files. Overrides --max_poses', action='store_true')
+    write_parser.add_argument('-it', '--interaction_tolerance', help='Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired',
+                              action='store', type=float, metavar="FLOAT", const=0.8, nargs='?')
 
     read_parser = subparsers.add_parser('read', help="Read input database, filters and/or outputs data")
+    read_parser.add_argument('-i', "--input_db", help='specify a database file to perform actions with',
+                        action='store', type=str, metavar="DATABASE")
+    read_parser.add_argument('-s', '--subset_name', help='Specify name for db view of passing results to create (write mode) or export from (read mode)', action='store',
+                         type=str, metavar='STRING')
+    read_parser.add_argument('-m', '--mode', help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
+                              action='store', type=str, metavar='[dlg] or [vina]')
+    read_parser.add_argument('-v', '--verbose', help='Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.',
+                        action='store_true')
+    output_group = read_parser.add_argument_group("Output options")
+    output_group.add_argument('-l', '--log', help='by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file',
+                             action='store', type=str, metavar="[FILE_NAME].TXT")
+    output_group.add_argument('-of', '--out_fields', help=('defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--out_fields=e,le,hb"; by default, energies_binding (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
+                             '"e" (energies_binding), '
+                             '"le" (ligand efficiency), '
+                             '"delta" (delta energy from best pose), '
+                             '"ref_rmsd" (RMSD to reference pose), '
+                             '"e_inter" (intermolecular energy), '
+                             '"e_vdw" (van der waals energy), '
+                             '"e_elec" (electrostatic energy), '
+                             '"e_intra" (intermolecular energy), '
+                             '"n_interact" (number of interactions), '
+                             '"ligand_smile" , '
+                             '"rank" (rank of ligand pose), '
+                             '"run" (run number for ligand pose), '
+                             '"hb" (hydrogen bonds); '
+                             'Fields are '
+                             'printed in the order in which they are provided. Ligand name will always be returned and should not be specified'),
+                             action='store', type=str, metavar="FIELD1,FIELD2,...")
+    output_group.add_argument('-ord', '--order_results', help='Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION.'
+                              'available fields are:  '
+                              '"e" (energies_binding), '
+                              '"le" (ligand efficiency), '
+                              '"delta" (delta energy from best pose), '
+                              '"ref_rmsd" (RMSD to reference pose), '
+                              '"e_inter" (intermolecular energy), '
+                              '"e_vdw" (van der waals energy), '
+                              '"e_elec" (electrostatic energy), '
+                              '"e_intra" (intermolecular energy), '
+                              '"n_interact" (number of interactions), '
+                              '"rank" (rank of ligand pose), '
+                              '"run" (run number for ligand pose), '
+                              '"hb" (hydrogen bonds); ',
+                              action='store', type=str, metavar="STRING")
+    output_group.add_argument('-ap', '--all_poses', help='by default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.',
+                              action='store_false')
+    output_group.add_argument("-xs", '--export_subset_csv', help='Create csv of the subset given with subset_name. Output as <subset_name>.csv. Can also export full database tables',
+                             action='store', type=str, metavar="SUBSET_NAME")
+    output_group.add_argument('-xq', '--export_query_csv', help='Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]',
+                             action='store', type=str, metavar="[VALID SQL QUERY]")
+    output_group.add_argument('-sdf', '--export_SDF_path', help='specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.', action='store', type=str, metavar="DIRECTORY_NAME")
+    output_group.add_argument('-nd', '--new_data_from_subset', help='Write log of --out_fields data for subset specified by --subset_name. Must use without any filters.',
+                              action='store_true')
+    output_group.add_argument('-p', '--plot', help='Makes scatterplot of LE vs Best Energy, saves as [config_file].png or out.png if no config_file given.', action='store_true')
+
+    properties_group = read_parser.add_argument_group("Property Filters", "Specify energy and ligand efficiency filters")
+    properties_group.add_argument('-e', '--eworst', help='specify the worst energy value accepted', action='store',
+                                  type=float, metavar="FLOAT")
+    properties_group.add_argument('-eb', '--ebest', help='specify the best energy value accepted', action='store',
+                                  type=float, metavar="FLOAT")
+    properties_group.add_argument('-le', '--leworst', help='specify the worst ligand efficiency value accepted',
+                                  action='store', type=float, metavar="FLOAT")
+    properties_group.add_argument('-leb', '--lebest', help='specify the best ligand efficiency value accepted',
+                                  action='store', type=float, metavar="FLOAT")
+    properties_group.add_argument('-pe', '--energy_percentile', help='specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.',
+                                  action='store', type=float, metavar="FLOAT")
+    properties_group.add_argument('-ple', '--le_percentile', help='specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.',
+                                  action='store', type=float, metavar="FLOAT")
+
+    ligand_group = read_parser.add_argument_group("Ligand Filters", 'Specify ligand substructure or name filter(s)')
+    ligand_group.add_argument('-n', '--name', help='specify ligand name(s). Will combine name filters with OR',
+                              action='store', type=str, metavar="STRING", nargs='+')
+    ligand_group.add_argument('-st', '--substructure', help='specify SMILES substring(s) to search for.',
+                              action='store', type=str, metavar="STRING", nargs='+')
+    ligand_group.add_argument('-sj', '--substructure_join', help='specify whether to join substructures filters with AND or OR.',
+                              action='store', type=str, metavar="STRING")
+
+    interaction_group = read_parser.add_argument_group("Interaction Filters", 'Specify interaction filters, either by count or by specific residue interaction. Residue specifications are described using CHAIN:RES:NUM:ATOM_NAME, and any combination is allowed, e.g.: CHAIN:::, :RES::, ::NUM:, :::ATOM_NAME, :RES:NUM:, etc... Unwanted interactions can be defined by prepending "~" to the residue specification, e.g. "~B:THR:276:". Multiple residues can be specified in a single option by separating them with a space (e.g.: --vdw=B:THR:276: B:HIS:226:), or by repeating the interaction options (e.g. --vdw=B:THR:276: --vdw=B:HIS:226: ).')
+    interaction_group.add_argument('-vdw', '--van_der_waals', help='define van der Waals interactions with residue',
+                                   action='append', type=str, metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]")
+    interaction_group.add_argument('-hb', '--hydrogen_bond', help='define HB (ligand acceptor or donor) interaction',
+                                   action='append', type=str, metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]")
+    interaction_group.add_argument('-r', '--reactive_res', help='check if ligand reacted with specified residue',
+                                   action='append', type=str, metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]")
+    interaction_group.add_argument('-hc', '--hb_count', help='accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions',
+                                   action='store', type=int, metavar="NUMBER")
+    interaction_group.add_argument('-ra', '--react_any', help='check if ligand reacted with any residue',
+                                   action='store_true')
+    interaction_group.add_argument('-mm', '--max_miss', help='Will separately log all possible combinations of interaction filters in log file excluding up to max_miss numer of interactions from given set. Cannot be used with --plot or --export_sdf_path.',
+                                   action='store', type=int, metavar="INTEGER")
+
+    parser.set_defaults(**config)
+    write_parser.set_defaults(**config)
+    read_parser.set_defaults(**config)
+    args = parser.parse_args(remaining_argv)
+
+    return args
 
 
 class CLOptionParser():
 
     def __init__(self):
-        self.write_db_flag = False
-        self.description = """Package for creating database from AutoDock virtual screening results and performing filtering on results."""
-        self.usage = "Please see GitHub for full usage details."
-        self.name = "Ringtail"
-        self.epilog = """
-
-        REQUIRED PACKAGES
-                Requires RDkit, SciPy, Meeko.\n
-
-        AUTHOR
-                Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n
-
-        REPORTING BUGS
-                Please report bugs to:
-                AutoDock mailing list   http://autodock.scripps.edu/mailing_list\n
-
-        COPYRIGHT
-                Copyright (C) 2022 Stefano Forli Laboratory, Center for Computational Structural Biology, 
-                             The Scripps Research Institute.
-                GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
-        """
-
-        self.option_groups = [
-            {
-                "INPUT": {
-                    'desc':'Specify input data',
-                    'args': [
-                        (
-                            '--file',
-                            {
-                                'help': 'ligand DLG(s) and receptor PDBQT file to save and filter. Compressed (.gz) files allowed. Only 1 receptor allowed.',
-                                'action': 'append',
-                                'type': str,
-                                'metavar': "FILENAME.[DLG/PDBQT][.gz]",
-                                'required': False,
-                                'nargs': '+'
-                            },
-                        ),
-                        (
-                            '--file_path',
-                            {
-                                'help': 'directory(s) containing DLG and PDBQT files to save and filter. Compressed (.gz) files allowed',
-                                'action': 'append',
-                                'type': str,
-                                'metavar': "DIRNAME",
-                                'nargs': '+'
-                            },
-                        ),
-                        (
-                            '--file_list',
-                            {
-                                'help': 'file(s) containing the list of DLG and PDBQT files to filter; relative or absolute paths are allowed. Compressed (.gz) files allowed',
-                                'action': 'append',
-                                'type': str,
-                                'metavar': "FILENAME",
-                                'nargs': '+'
-                            },
-                        ),
-                        (
-                            '--save_receptor',
-                            {
-                                'help': 'Saves receptor PDBQT to database. Receptor location must be specied with in --file, --file_path directory or --file_list file',
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--recursive',
-                            {
-                                'help': 'enable recursive directory scan when --file_path is used',
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--mode',
-                            {
-                                'help': 'specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
-                                'action': 'store',
-                                'type': str,
-                                'metavar': '[dlg] or [vina]',
-                                'default': "dlg"
-                            },
-                        ),
-                        (
-                            '--pattern',
-                            {
-                                'help': 'specify which pattern to use when searching for DLG files to process in directories [only with "--file_path", default "*.dlg*"]',
-                                'action': 'store',
-                                'type': str,
-                                'metavar': 'PATTERN',
-                                'default': "*.dlg*"
-                            },
-                        ),
-                        (
-                            '--filters_file',
-                            {
-                                'help': 'specify a file containing the filter definitions; each line in the file must contain the definition of a single filter, using the keywords of each filter as variable names, e.g.: "eworst=-3.0", "vdw=A:THR:276". NOTE: properties defined here have the precedence on the other CLI options!',
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "FILTERS_FILE",
-                                'default': None
-                            },
-                        ),
-                        (
-                            '--input_db',
-                            {
-                                'help': 'specify a database file to perform actions with',
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "DATABASE",
-                                'default': None
-                            },
-                        ),
-                        (
-                            '--add_results',
-                            {
-                                'help': 'Add new results to an existing database, specified by --input_db',
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--conflict_handling',
-                            {
-                                'help': 'specify how conflicting Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will duplicate entries.',
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "'ignore' or 'replace'",
-                                'default': None
-                            },
-                        ),
-                    ],
-                },
-            },
-            {
-                'OUTPUT': {
-                    'desc':
-                    'Manage the type of data reported and where it is written.',
-                    'args': [
-                        (
-                            '--output_db',
-                            {
-                                'help': ('Name for output database file'),
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "[FILE_NAME].DB",
-                                'default': "output.db"
-                            },
-                        ),
-                        (
-                            '--export_table_csv',
-                            {
-                                'help': ('Create csv of the requested database table. Output as <table_name>.csv'),
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "TABLE_NAME",
-                                'default': None
-                            },
-                        ),
-                        (
-                            '--export_query_csv',
-                            {
-                                'help': ('Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]'),
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "[VALID SQL QUERY]",
-                                'default': None
-                            },
-                        ),
-                        (
-                            '--max_poses',
-                            {
-                                'help': ('n: Store top pose for top n clusters'),
-                                'action': 'store',
-                                'type': int,
-                                'default': 3,
-                                'metavar': 'INT'
-                            },
-                        ),
-                        (
-                            '--store_all_poses',
-                            {
-                                'help': ('Store all poses from input files. Overrides --max_poses'),
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--log',
-                            {
-                                'help': ('by default, results are saved in "output_log.txt"; '
-                                 'if this option is used, ligands passing the filters will be written '
-                                 'to specified file'),
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "[FILE_NAME].TXT",
-                                'default': "output_log.txt"
-                            },
-                        ),
-                        (
-                            '--subset_name',
-                            {
-                                'help': ('Specify name for db view of passing results'),
-                                'action': 'store',
-                                'type': str,
-                                'default': "passing_results",
-                                'metavar': 'STRING'
-                            },
-                        ),
-                        (
-                            '--out_fields',
-                            {
-                                'help':
-                                'defines which fields are used when reporting '
-                                'the results (to stdout and to the log file); '
-                                'fields are specified '
-                                'as comma-separated values, e.g. "--out_fields=e,le,hb"; by '
-                                'default, energies_binding (energy) and ligand name are reported; ligand always reported in first column'
-                                'available fields are:  '
-                                '"e" (energies_binding), '
-                                '"le" (ligand efficiency), '
-                                '"delta" (delta energy from best pose), '
-                                '"ref_rmsd" (RMSD to reference pose), '
-                                '"e_inter" (intermolecular energy), '
-                                '"e_vdw" (van der waals energy), '
-                                '"e_elec" (electrostatic energy), '
-                                '"e_intra" (intermolecular energy), '
-                                '"n_interact" (number of interactions), '
-                                '"ligand_smile" , '
-                                '"rank" (rank of ligand pose), '
-                                '"run" (run number for ligand pose), '
-                                '"hb" (hydrogen bonds); '
-                                'Fields are '
-                                'printed in the order in which they are provided. Ligand name will always be returned and should not be specified',
-                                'action':'store',
-                                'type': str,
-                                'metavar': "FIELD1,FIELD2,...",
-                                'default':'e'
-                            },
-                        ),
-                        (
-                            '--data_from_subset',
-                            {
-                                'help': ('Write log of --out_fields data for subset specified by --subset_name. Must use without any filters.'),
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--export_poses_path',
-                            {
-                                'help':
-                                ('specify the path where to save poses of ligands passing the filters (SDF format); '
-                                 'if the directory does not exist, it will be created; if it already exist, it will throw '
-                                 'an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path.'
-                                 'Ligands will be stored as SDF files, with the poses passing the filtering criteria first, followed the non-passing poses, in the order specified.'
-                                 ),
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "DIRECTORY_NAME",
-                                'default': None
-                            },
-                        ),
-                        (
-                            '--verbose',
-                            {
-                                'help':
-                                ('Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.'
-                                 ),
-                                'action':
-                                'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--plot',
-                            {
-                                'help':
-                                ('Makes scatterplot of LE vs Best Energy, saves as [filters_file].png or out.png if no filters_file given.'
-                                 ),
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--overwrite',
-                            {
-                                'help':
-                                ('by default, if a log file exists, it doesn\'t get '
-                                 'overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database'
-                                 ),
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--all_poses',
-                            {
-                                'help':
-                                ('by default, will output only top-scoring pose passing filters per ligand. '
-                                 'This flag will cause each pose passing the filters to be logged.'
-                                 ),
-                                'action': 'store_false',
-                                'default': True
-                            },
-                        ),
-                        (
-                            '--order_results',
-                            {
-                                'help':
-                                'Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION.'
-                                'available fields are:  '
-                                '"e" (energies_binding), '
-                                '"le" (ligand efficiency), '
-                                '"delta" (delta energy from best pose), '
-                                '"ref_rmsd" (RMSD to reference pose), '
-                                '"e_inter" (intermolecular energy), '
-                                '"e_vdw" (van der waals energy), '
-                                '"e_elec" (electrostatic energy), '
-                                '"e_intra" (intermolecular energy), '
-                                '"n_interact" (number of interactions), '
-                                '"rank" (rank of ligand pose), '
-                                '"run" (run number for ligand pose), '
-                                '"hb" (hydrogen bonds); ',
-                                'action': 'store',
-                                'type': str,
-                                'metavar': "STRING",
-                                'default': None
-                            },
-                        ),
-                    ],
-                },
-            },
-            {
-                'PROPERTY FILTERS': {
-                    'desc': ('Specify energy and ligand efficiency filters'),
-                    'args':
-                    [(
-                        '--eworst',
-                        {
-                            'help': 'specify the worst energy value accepted',
-                            'action': 'store',
-                            'type': float,
-                            'metavar': "FLOAT"
-                        },
-                    ),
-                     (
-                         '--ebest',
-                         {
-                             'help': 'specify the best energy value accepted',
-                             'action': 'store',
-                             'type': float,
-                             'metavar': "FLOAT",
-                         },
-                     ),
-                     (
-                         '--leworst',
-                         {
-                             'help':
-                             'specify the worst ligand efficiency value accepted',
-                             'action': 'store',
-                             'type': float,
-                             'metavar': "FLOAT"
-                         },
-                     ),
-                     (
-                         '--lebest',
-                         {
-                             'help':
-                             'specify the best ligand efficiency value accepted',
-                             'action': 'store',
-                             'type': float,
-                             'metavar': "FLOAT",
-                         },
-                     ),
-                     (
-                         '--epercentile',
-                         {
-                             'help':
-                             'specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.',
-                             'action': 'store',
-                             'type': float,
-                             'metavar': "FLOAT",
-                             #'default': 1.0
-                         },
-                     ),
-                     (
-                         '--leffpercentile',
-                         {
-                             'help':
-                             'specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.',
-                             'action': 'store',
-                             'type': float,
-                             'metavar': "FLOAT"
-                         },
-                     )],
-                }
-            },
-            {
-                'LIGAND FILTERS': {
-                    'desc':
-                    ('Specify filters on ligands, including substructures or names'
-                     ),
-                    'args': [
-                        (
-                            '--name',
-                            {
-                                'help':
-                                'specify ligand name(s). Will seach OR',
-                                'action': 'store',
-                                'type': str,
-                                'default': None,
-                                'metavar': "STRING"
-                            },
-                        ),
-                        (
-                            '--substructure',
-                            {
-                                'help':
-                                'specify SMILES substring(s) to search for. Join multiple strings with "," ',
-                                'action': 'store',
-                                'type': str,
-                                'default': None,
-                                'metavar': "STRING"
-                            },
-                        ),
-                        (
-                            '--substruct_join',
-                            {
-                                'help':
-                                'specify whether to search AND or OR for substructures. Default OR',
-                                'action': 'store',
-                                'type': str,
-                                'default': "OR",
-                                'metavar': "STRING"
-                            },
-                        )
-                    ],
-                }
-            },
-            {
-                'INTERACTION FILTERS': {
-                    'desc':
-                    ('Specify interaction filters, either by count or by specific residue interaction. '
-                     'Residue specifications are described using CHAIN:RES:NUM:ATOM_NAME, '
-                     'and any combination is allowed, e.g.: CHAIN:::, :RES::, ::NUM:, :::ATOM_NAME, :RES:NUM:, etc... '
-                     'Unwanted interactions can be defined by prepending "~" to the residue specification, e.g. "~B:THR:276:". '
-                     'Multiple residues can be specified in a single option by separating them with a comma (e.g.: --vdw=B:THR:276:,B:HIS:226:), '
-                     'or by repeating the interaction options (e.g. --vdw=B:THR:276: --vdw=B:HIS:226: ).'
-                     ),
-                    'args': [
-                        (
-                            '--vdw',
-                            {
-                                'help':
-                                'define van der Waals interactions with residue',
-                                'action': 'append',
-                                'type': str,
-                                'metavar': "[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"
-                            },
-                        ),
-                        (
-                            '--hb',
-                            {
-                                'help':
-                                'define HB (ligand acceptor or donor) interaction',
-                                'action': 'append',
-                                'type': str,
-                                'metavar': "[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"
-                            },
-                        ),
-                        (
-                            '--max_miss',
-                            {
-                                'help':
-                                'Will separately log all possible combinations of interaction filters in log file excluding up to max_miss numer of interactions from given set. Cannot be used with --plot or --export_poses_path.',
-                                'action': 'store',
-                                'type': int,
-                                'metavar': "INTEGER",
-                                'default': 0
-                            },
-                        ),
-                        (
-                            '--hb_count',
-                            {
-                                'help':
-                                ('accept ligands with at least the requested number of HB interactions. '
-                                 'If a negative number is provided, then accept ligands with no more than the '
-                                 ' requested number of interactions'),
-                                'action':
-                                'store',
-                                'type':
-                                int,
-                                'metavar':
-                                "NUMBER"
-                            },
-                        ),
-                        (
-                            '--react_any',
-                            {
-                                'help':
-                                'check if ligand reacted with any residue',
-                                'action': 'store_true',
-                                'default': False
-                            },
-                        ),
-                        (
-                            '--react_res',
-                            {
-                                'help':
-                                'check if ligand reacted with specified residue',
-                                'action': 'append',
-                                'type': str,
-                                'metavar': "[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"
-                            },
-                        ),
-                        (
-                            '--interaction_tolerance',
-                            {
-                                'help': ('Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired'),
-                                'action': 'store',
-                                'type': float,
-                                'metavar': "FLOAT",
-                                'default': None,
-                                'const': 0.8,
-                                'nargs': '?'
-                            },
-                        ),
-                    ],
-                },
-            },
-        ]
-
+       
         self.outfield_options = [
             "e", "le", "delta", "ref_rmsd", "e_inter", "e_vdw", "e_elec",
             "e_intra", "n_interact", "interactions", "fname", "ligand_smile",
@@ -613,7 +240,8 @@ class CLOptionParser():
         ]
 
         self._initialize_parser()
-        self._process_sources()
+        if self.rr_mode == "write":
+          self._process_sources()
 
         # confirm that files were found, else throw error
         # if only receptor files found and --save_receptor, assume we just want to add receptor and not modify the rest of the db, so turn off write_db_flag
@@ -632,35 +260,12 @@ class CLOptionParser():
 
     def _initialize_parser(self):
         # create parser
-        parser = argparse.ArgumentParser(
-            description=self.description,
-            usage=self.usage,
-            epilog=self.epilog,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        )
-        # populate options menu
-        for group_class in self.option_groups:
-            for group_name, group_info in group_class.items():
-                group_desc = group_info['desc']
-                group_args = group_info['args']
-                # create new group
-                group = parser.add_argument_group(group_name, group_desc)
-                # add options to the group
-                for name, args in group_args:
-                    group.add_argument(name, **args)
-        # parse options
-        cmdline_opts = sys.argv[1:]
-        # allows defining options from file (argparse does not allow to do it in a clean way)
-        if "--filters_file" in cmdline_opts:
-            idx = cmdline_opts.index('--filters_file')
-            cmdline_opts.pop(idx)
-            ffile = cmdline_opts.pop(idx)
-            cmdline_opts += self.read_filter_file(ffile)
-            self.filter_file = ffile
-        # add a function here to validate the cmdline (repeated options?)
-        # validate policy of file > cmdline? (or vice versa?)
-        parsed_opts = parser.parse_args(cmdline_opts)
+        try:
+            parsed_opts = cmdline_parser()
+        except argparse.ArgumentError as e:
+            raise OptionError("Invalid option or option ordering. Be sure to put read/write mode before any other arguments") from e
         self.process_options(parsed_opts)
+
 
     def read_filter_file(self, fname):
         """ parse the filter file to define filters """
@@ -679,6 +284,14 @@ class CLOptionParser():
 
     def process_options(self, parsed_opts):
         """ convert command line options to the dict of filters """
+        self.filter = False  # set flag indicating if any filters given
+        conflict_handling = None
+        file_sources = None
+        self.lig_files_pool = []
+        self.rec_files_pool = []
+        filters = {}
+        db_opts = {}
+        out_opts = {}
         # make sure mode is allowed
         allowed_modes = {"dlg", "vina"}
         self.mode = parsed_opts.mode.lower()
@@ -687,11 +300,11 @@ class CLOptionParser():
         if self.mode == "vina":
             # Guard against non-compatible options being called in Vina mode
             if parsed_opts.save_receptor:
-                warnings.warn("Used incompatible --save_recepetor flag with Vina mode. Setting --save_receptor to False")
+                warnings.warn("Used incompatible --save_receptor flag with Vina mode. Setting --save_receptor to False")
                 parsed_opts.save_receptor = False
-            if parsed_opts.export_poses_path is not None:
-                warnings.warn("Cannot use --export_poses_path with Vina mode. Setting export_poses_path to None.")
-                parsed_opts.export_poses_path = None
+            if parsed_opts.export_sdf_path is not None:
+                warnings.warn("Cannot use --export_sdf_path with Vina mode. Setting export_sdf_path to None.")
+                parsed_opts.export_sdf_path = None
             if parsed_opts.substructure is not None:
                 warnings.warn("Cannot use --substructure filter with Vina mode. Removing filter.")
                 parsed_opts.substructure = None
@@ -711,73 +324,171 @@ class CLOptionParser():
             parsed_opts.pattern = "*.pdbqt*"
             # set store all poses, since vina does not cluster poses
             parsed_opts.store_all_poses = True
-        # check that required input options are provided
-        file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
-        file_sources['file'] = parsed_opts.file
-        self.save_receptor = parsed_opts.save_receptor
-        if parsed_opts.file_path is not None:
-            file_sources['file_path'] = {
-                'path': parsed_opts.file_path,
-                'pattern': parsed_opts.pattern,
-                'recursive': parsed_opts.recursive
-            }
-        else:
-            file_sources['file_path'] = None
-        file_sources['file_list'] = parsed_opts.file_list
-        self.pattern = parsed_opts.pattern
-        if (file_sources['file'] is
-                None) and (file_sources['file_path'] is
-                           None) and (file_sources['file_list'] is
-                                      None) and (parsed_opts.input_db is None):
-            raise OptionError(
-                "*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
-            )
-        if parsed_opts.add_results and parsed_opts.input_db is None:
-            raise OptionError(
-                "ERRROR! Must specify --input_db if adding results to an existing database"
-            )
-        if parsed_opts.max_miss < 0:
-            raise OptionError("--max_miss must be greater than or equal to 0")
-        if parsed_opts.max_miss > 0:
-            if parsed_opts.plot:
-                raise OptionError("Cannot use --plot with --max_miss > 0. Can plot for desired subset with no filters,--data_from_subset and, --subset_name.")
-            if parsed_opts.export_poses_path is not None:
-                raise OptionError("Cannot use --export_poses_path with --max_miss > 0. Can export poses for desired subset with no filters, --data_from_subset, and --subset_name")
-        parsed_opts.out_fields = parsed_opts.out_fields.split(",")
-        for outfield in parsed_opts.out_fields:
-            if outfield not in self.outfield_options:
-                raise OptionError(
-                    "WARNING: {out_f} is not a valid output option. Please see --help or documentation"
-                    .format(out_f=outfield))
-        # parse output options
-        # Make sure that export_poses_path has trailing /, is directory
-        if parsed_opts.export_poses_path is not None:
-            if not parsed_opts.export_poses_path.endswith("/"):
-                parsed_opts.export_poses_path += "/"
-            if not os.path.isdir(parsed_opts.export_poses_path):
-                raise OptionError(
-                    "--export_poses_path directory does not exist. Please create directory first"
-                )
-        # confirm that conflict_handling is an allowed option
-        conflict_options = {"IGNORE", "REPLACE"}
-        conflict_handling = parsed_opts.conflict_handling
-        if conflict_handling is not None:
-            conflict_handling = parsed_opts.conflict_handling.upper()
-            if conflict_handling not in conflict_options:
-                warnings.warn(f"--conflict_handing option {parsed_opts.conflict_handling} not allowed. Reverting to default behavior.")
-                conflict_handling = None
 
-        output = {
+        self.pattern = parsed_opts.pattern
+        self.save_receptor = parsed_opts.save_receptor
+
+        # check options for write mode
+        self.rr_mode = parsed_opts.rr_mode
+        if self.rr_mode == "write":
+            # check that required input options are provided
+            file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
+            file_sources['file'] = parsed_opts.file
+            if parsed_opts.file_path is not None:
+                file_sources['file_path'] = {
+                    'path': parsed_opts.file_path,
+                    'pattern': parsed_opts.pattern,
+                    'recursive': parsed_opts.recursive
+                }
+            else:
+                file_sources['file_path'] = None
+            file_sources['file_list'] = parsed_opts.file_list
+            if (file_sources['file'] is
+                    None) and (file_sources['file_path'] is
+                               None) and (file_sources['file_list'] is
+                                          None) and (parsed_opts.input_db is None):
+                raise OptionError(
+                    "*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
+                )
+            if parsed_opts.add_results and parsed_opts.input_db is None:
+                raise OptionError(
+                    "ERRROR! Must specify --input_db if adding results to an existing database"
+                )
+            # confirm that conflict_handling is an allowed option
+            conflict_options = {"IGNORE", "REPLACE"}
+            conflict_handling = parsed_opts.conflict_handling
+            if conflict_handling is not None:
+                conflict_handling = parsed_opts.conflict_handling.upper()
+                if conflict_handling not in conflict_options:
+                    warnings.warn(f"--conflict_handing option {parsed_opts.conflict_handling} not allowed. Reverting to default behavior.")
+                    conflict_handling = None
+        else:
+            if parsed_opts.max_miss < 0:
+                raise OptionError("--max_miss must be greater than or equal to 0")
+            if parsed_opts.max_miss > 0:
+                if parsed_opts.plot:
+                    raise OptionError("Cannot use --plot with --max_miss > 0. Can plot for desired subset with --subset_name.")
+                if parsed_opts.export_sdf_path is not None:
+                    raise OptionError("Cannot use --export_sdf_path with --max_miss > 0. Can export poses for desired subset --subset_name")
+            parsed_opts.out_fields = parsed_opts.out_fields.split(",")
+            for outfield in parsed_opts.out_fields:
+                if outfield not in self.outfield_options:
+                    raise OptionError(
+                        "WARNING: {out_f} is not a valid output option. Please see --help or documentation"
+                        .format(out_f=outfield))
+            # parse output options
+            # Make sure that export_sdf_path has trailing /, is directory
+            if parsed_opts.export_sdf_path is not None:
+                if not parsed_opts.export_sdf_path.endswith("/"):
+                    parsed_opts.export_sdf_path += "/"
+                if not os.path.isdir(parsed_opts.export_sdf_path):
+                    raise OptionError(
+                        "--export_sdf_path directory does not exist. Please create directory first"
+                    )
+
+            # # # filters
+            # property filters
+            properties = {
+                'eworst': None,
+                'ebest': None,
+                'leworst': None,
+                'lebest': None,
+                'energy_percentile': None,
+                'le_percentile': None
+            }
+            for kw, _ in properties.items():
+                properties[kw] = getattr(parsed_opts, kw)
+                if properties[kw] is not None:
+                    self.filter = True
+            # Cannot use energy/le cuttoffs with percentiles. Override percentile with given cutoff
+            if properties["eworst"] is not None and properties["energy_percentile"] is not None:
+                warnings.warn("Cannot use --eworst cutoff with --energy_percentile. Overiding energy_percentile with eworst.")
+                properties["energy_percentile"] = None
+            if properties["leworst"] is not None and properties["le_percentile"] is not None:
+                warnings.warn("Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst.")
+                properties["le_percentile"] = None
+            # interaction filters (residues)
+            interactions = {}
+            res_interactions_kw = [('van_der_waals', 'V'), ('hydrogen_bond', 'H'), ('reactive_res', 'R')]
+            for opt, _type in res_interactions_kw:
+                interactions[_type] = []
+                res_list = getattr(parsed_opts, opt)
+                if res_list is None:
+                    continue
+                elif self.mode == "vina":
+                    warnings.warn("Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(opt))
+                    continue
+                found_res = []
+                for res in res_list:
+                    if "," in res:
+                        for r in res.split(','):
+                            found_res.append(r)
+                    else:
+                        found_res.append(res)
+                for res in found_res:
+                    wanted = True
+                    if not res.count(":") == 3:
+                        raise OptionError((
+                            '*ERROR* [%s]: to specify a residue use '
+                            'the format CHAIN:RES:NUM:ATOM_NAME. Any item can be omitted, '
+                            'as long as the number of semicolons is always 3 '
+                            '(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)') % res)
+                    if res[0] == '~':
+                        res = res[1:]
+                        wanted = False
+                    interactions[_type].append((res, wanted))
+            # count interactions
+            interactions_count = []
+            count_kw = [('hb_count', ("hb_count")), ('react_count', ('R'))]
+            for kw, pool in count_kw:
+                c = getattr(parsed_opts, kw, None)
+                if c is None:
+                    continue
+                if self.mode == "vina":
+                    warnings.warn("Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(opt))
+                    continue
+                interactions_count.append((pool, c))
+                self.filter = True
+            # make dictionary for ligand filters
+            ligand_filters_kw = [('name', 'N'), ('substructure', 'S')]
+            ligand_filters = {}
+            filter_ligands_flag = True
+            ligand_filter_list = []
+            for kw, _type in ligand_filters_kw:
+                ligand_filters[_type] = []
+                ligand_filter_list = getattr(parsed_opts, kw)
+                if ligand_filter_list is None:
+                    continue
+                for fil in ligand_filter_list:
+                    ligand_filters[_type].append(fil)
+            ligand_filters["F"] = getattr(parsed_opts, "substructure_join")
+            if ligand_filters["N"] == [] and ligand_filters["S"] == []:
+                filter_ligands_flag = False
+            if filter_ligands_flag:
+                self.filter = True
+
+            filters = {
+                'properties': properties,
+                'interactions': interactions,
+                'interactions_count': interactions_count,
+                "ligand_filters": ligand_filters,
+                'filter_ligands_flag': filter_ligands_flag,
+                'max_miss': parsed_opts.max_miss,
+                "react_any": parsed_opts.react_any
+            }
+
+        out_opts = {
             'log': parsed_opts.log,
             'overwrite': parsed_opts.overwrite,
-            'export_poses_path': parsed_opts.export_poses_path,
+            'export_poses_path': parsed_opts.export_sdf_path,
             'plot': parsed_opts.plot,
             'outfields': parsed_opts.out_fields,
             'no_print': not parsed_opts.verbose,
-            'data_from_subset': parsed_opts.data_from_subset,
-            'export_table': parsed_opts.export_table_csv,
+            'export_table': parsed_opts.export_subset_csv,
             'export_query': parsed_opts.export_query_csv,
+            'data_from_subset': parsed_opts.new_data_from_subset
         }
+
         db_opts = {
             'num_clusters': parsed_opts.max_poses,
             "order_results": parsed_opts.order_results,
@@ -791,103 +502,6 @@ class CLOptionParser():
             "mode": parsed_opts.mode
         }
 
-        # # # filters
-        self.filter = False  # set flag indicating if any filters given
-        # property filters
-        properties = {
-            'eworst': None,
-            'ebest': None,
-            'leworst': None,
-            'lebest': None,
-            'epercentile': None,
-            'leffpercentile': None
-        }
-        for kw, _ in properties.items():
-            properties[kw] = getattr(parsed_opts, kw)
-            if properties[kw] is not None:
-                self.filter = True
-        # Cannot use energy/le cuttoffs with percentiles. Override percentile with given cutoff
-        if properties["eworst"] is not None and properties["epercentile"] is not None:
-            warnings.warn("Cannot use --eworst cutoff with --epercentile. Overiding epercentile with eworst.")
-            properties["epercentile"] = None
-        if properties["leworst"] is not None and properties["leffpercentile"] is not None:
-            warnings.warn("Cannot use --leworst cutoff with --leffpercentile. Overiding leffpercentile with leworst.")
-            properties["leffpercentile"] = None
-        # interaction filters (residues)
-        interactions = {}
-        res_interactions_kw = [('vdw', 'V'), ('hb', 'H'), ('react_res', 'R')]
-        for opt, _type in res_interactions_kw:
-            interactions[_type] = []
-            res_list = getattr(parsed_opts, opt)
-            if res_list is None:
-                continue
-            elif self.mode == "vina":
-                warnings.warn("Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(opt))
-                continue
-            found_res = []
-            for res in res_list:
-                if "," in res:
-                    for r in res.split(','):
-                        found_res.append(r)
-                else:
-                    found_res.append(res)
-            for res in found_res:
-                wanted = True
-                if not res.count(":") == 3:
-                    raise OptionError((
-                        '*ERROR* [%s]: to specify a residue use '
-                        'the format CHAIN:RES:NUM:ATOM_NAME. Any item can be omitted, '
-                        'as long as the number of semicolons is always 3 '
-                        '(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)') % res)
-                if res[0] == '~':
-                    res = res[1:]
-                    wanted = False
-                interactions[_type].append((res, wanted))
-        # count interactions
-        interactions_count = []
-        count_kw = [('hb_count', ("hb_count")), ('react_count', ('R'))]
-        for kw, pool in count_kw:
-            c = getattr(parsed_opts, kw, None)
-            if c is None:
-                continue
-            if self.mode == "vina":
-                warnings.warn("Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(opt))
-                continue
-            interactions_count.append((pool, c))
-            self.filter = True
-        # make dictionary for ligand filters
-        ligand_filters_kw = [('name', 'N'), ('substructure', 'S'),
-                             ('substruct_join', 'F')]
-        ligand_filters = {}
-        filter_ligands_flag = True
-        ligand_filter_list = []
-        for kw, _type in ligand_filters_kw:
-            ligand_filters[_type] = []
-            ligand_filter_list = getattr(parsed_opts, kw)
-            if ligand_filter_list is None:
-                continue
-            ligand_filter_list = ligand_filter_list.split(",")
-            for fil in ligand_filter_list:
-                ligand_filters[_type].append(fil)
-        if ligand_filters["N"] == [] and ligand_filters["S"] == []:
-            filter_ligands_flag = False
-        if filter_ligands_flag:
-            self.filter = True
-
-        # confirm that data_from_subset flag not used with filters, warn if so
-        if parsed_opts.data_from_subset and self.filter:
-            warnings.warn("Cannot filter with --data_from_subset option. Skipping filtering.")
-            self.filter = False
-
-        filters = {
-            'properties': properties,
-            'interactions': interactions,
-            'interactions_count': interactions_count,
-            "ligand_filters": ligand_filters,
-            'filter_ligands_flag': filter_ligands_flag,
-            'max_miss': parsed_opts.max_miss,
-            "react_any": parsed_opts.react_any
-        }
         self.file_sources = file_sources
         self.input_db = parsed_opts.input_db
         if parsed_opts.input_db is not None:
@@ -903,7 +517,7 @@ class CLOptionParser():
         # make attributes for parsed opts
         self.db_opts = db_opts
         self.filters = filters
-        self.out_opts = output
+        self.out_opts = out_opts
 
     def _process_sources(self):
         """ process the options for input files (parse dictionary) """

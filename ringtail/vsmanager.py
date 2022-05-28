@@ -239,8 +239,8 @@ class VSManager():
 
         # get property filters
         properties_keys = [
-            'eworst', 'ebest', 'leworst', 'lebest', 'epercentile',
-            'leffpercentile'
+            'eworst', 'ebest', 'leworst', 'lebest', 'energy_percentile',
+            'le_percentile'
         ]
 
         property_filters = self.filters['properties']
