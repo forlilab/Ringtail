@@ -153,20 +153,6 @@ The `--vdw`, `--hb`, and `--react_res` interaction filters must be specified in 
 
 The `--max_miss` option allows the user to separately filter each combination of the given interaction filters excluding up to `max_miss` interactions. This gives ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination of interaction filters will be written separately in the log file. This option cannot be used with `--plot` or `--export_poses_path`.
 
-### Using config file
-Filters and other options may also be read from a text file given with the `--config` option. This file is overridden by any conflicting options given in the command line. Below is an example of a filters text file:
-```
-#     this is a comment
-eworst=-0.4
-ebest=-100
-leworst=-0.2
-#    vdw=A:THR:276:
-#    vdw=B:HIS:36:
-react_res=A:LYS:307:
-react_count=1
-hb_count=10
-max_miss=1
-```
 ## Exploring the database in the Command Line
 View the data contained within the database using a terminal, we recommend using the [VisiData tool](https://www.visidata.org/). In addition to command line visualization, this tool has a number of other feature, including ploting. Upon opening the database with `vd`, the terminal should look like this:
 
