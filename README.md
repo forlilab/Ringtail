@@ -93,8 +93,9 @@ run_ringtail.py write --file_path Files/
 run_ringtail.py read --input_db output.db --epercentile 0.1 --subset_name filter1
 run_ringtail.py read --input_db output.db --subset_name filter1 --plot
 ```
-![all_ligands_scatter](https://user-images.githubusercontent.com/41704502/171295726-7315f929-edfa-49a0-b984-dacadf1a4327.png)
+`all_ligands_scatter.png`
 
+![all_ligands_scatter](https://user-images.githubusercontent.com/41704502/171295726-7315f929-edfa-49a0-b984-dacadf1a4327.png)
 
 ## Usage Details
 The script for writing a database and filtering is `run_ringtail.py`. __This is intended to be used for a set of DLGs/Vina PDBQTs pertaining to a single target. This may include multiple ligand libraries as long as the target is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ One receptor PDBQT may also be included if using with DLGs. 
