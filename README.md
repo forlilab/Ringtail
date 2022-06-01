@@ -80,6 +80,28 @@ lig3.dlg
 lig4.dlg.gz
 rec1.pdbqt
 ```
+#### Write and filter using a config file
+```
+run_ringtail.py -c config_w.json write
+```
+`config_w.json`
+
+```
+{
+"file_path": "path1/",
+"output_db": "example.db"
+}
+```
+```
+run_ringtail.py -c config_r.json read
+```
+`config_r.json`
+
+```
+{
+"energy_percentile": "0.1"
+}
+```
 
 #### Export results from a previous filtering as a CSV
 ```
