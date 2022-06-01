@@ -84,7 +84,7 @@ rec1.pdbqt
 ```
 run_ringtail.py -c config_w.json write
 ```
-`config_w.json`
+config_w.json:
 
 ```
 {
@@ -95,7 +95,7 @@ run_ringtail.py -c config_w.json write
 ```
 run_ringtail.py -c config_r.json read
 ```
-`config_r.json`
+config_r.json:
 
 ```
 {
