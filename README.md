@@ -83,6 +83,7 @@ rec1.pdbqt
 #### Write and filter using a config file
 ```
 run_ringtail.py -c config_w.json write
+run_ringtail.py -c config_r.json read
 ```
 config_w.json:
 
@@ -92,9 +93,7 @@ config_w.json:
 "output_db": "example.db"
 }
 ```
-```
-run_ringtail.py -c config_r.json read
-```
+
 config_r.json:
 
 ```
