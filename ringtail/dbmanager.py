@@ -123,6 +123,8 @@ class DBManager():
 
         self.view_suffix = None
 
+        self.tempview_suffix = 0
+
         # keep track of any open cursors
         self.open_cursors = []
 
@@ -531,6 +533,38 @@ class DBManager():
         """
         return self._run_query(self._generate_view_names_query())
 
+    def crossref_filter(self, new_db, subset_name, selection_type="-"):
+        """Selects ligands found or not found in the given subset in both current db and new_db. Stores as temp view
+        Args:
+            new_db (string): file name for database to attach
+            subset_name (string): name of subset to cross-reference
+            selection_type (string): "+" or "-" indicating if ligand names should ("+") or should not "-" be in both databases
+        """
+
+        new_db_name = new_db.split(".")[0]
+
+        self._attach_db(new_db, new_db_name)
+
+        if selection_type == "-":
+            select_str = "NOT IN"
+        elif selection_type == "+":
+            select_str = "IN"
+        else:
+            raise DatabaseError(f"Unrecognized selection type {selection_type}")
+
+        view_query = self._generate_selective_view_query(subset_name, select_str, new_db_name)
+
+        viewname = "temp_" + str(self.tempview_suffix)
+
+        self._create_view(viewname, query)
+        self.current_view_name = viewname
+
+        self.tempview_suffix += 1
+
+        self._detach_db(new_db_name)
+
+        return viewname
+
     # # # # # # # # # # # # # # # # #
     # # # Child-specific methods # # #
     # # # # # # # # # # # # # # # # #
@@ -675,6 +709,21 @@ class DBManager():
             requested_data (string): String containing SQL-formatted query or table name
             table (bool): Flag indicating if requested_data is table name or not
         """
+        raise NotImplementedError
+
+    def fetch_view(self, viewname):
+        """returns SQLite cursor of all fields in viewname"""
+        raise NotImplementedError
+
+    def save_temp_subset(self, subset_name):
+        """Resaves temp subset stored in self.current_view_name as new permenant subset
+        Args:
+            subset_name (string): name of subset to save last temp subset as
+        """
+        raise NotImplementedError
+
+    def close_db_crossref(self):
+        """ Removes all temp views and closes database """
         raise NotImplementedError
 
     def _create_connection(self):
@@ -1022,6 +1071,29 @@ class DBManager():
         """
         raise NotImplementedError
 
+    def _attach_db(self, new_db, new_db_name):
+        """Attaches new database file to current database
+        Args:
+            new_db (string): file name for database to attach
+        """
+        raise NotImplementedError
+
+    def _detach_db(self, new_db_name):
+        """Detaches new database file from current database
+        Args:
+            new_db_name (string): db name for database to detach
+        """
+        raise NotImplementedError
+
+    def _generate_selective_view_query(self, subset_name, select_str, new_db_name):
+        """Generates string to select ligands found/not found in the given subset in both current db and new_db
+        Args:
+            new_db (string): name for attached database
+            subset_name (string): name of subset to cross-reference
+            selection_type (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+        """
+        raise NotImplementedError
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
@@ -1335,7 +1407,7 @@ class DBManagerSQLite(DBManager):
             cur.close()
             return row_count
         except sqlite3.OperationalError as e:
-            raise DatabaseQueryError("Error occured while fetching number of receptor rows containing PDBQT blob") from e
+            raise DatabaseQueryError("Error occurred while fetching number of receptor rows containing PDBQT blob") from e
 
     def fetch_dataframe_from_db(self, requested_data, table=False):
         """Returns dataframe of table or query given as requested_data
@@ -1348,6 +1420,32 @@ class DBManagerSQLite(DBManager):
             return pd.read_sql_query("SELECT * FROM {0}".format(requested_data), self.conn)
         else:
             return pd.read_sql_query(requested_data, self.conn)
+
+    def fetch_view(self, viewname):
+        """returns SQLite cursor of all fields in viewname"""
+        return self._run_query(f"SELECT * FROM {viewname}")
+
+    def save_temp_subset(self, subset_name):
+        """Resaves temp subset stored in self.current_view_name as new permenant subset
+        Args:
+            subset_name (string): name of subset to save last temp subset as
+        """
+        self._create_view(subset_name, "SELECT * FROM {0}".format(self.current_view_name))
+
+    def close_db_crossref(self):
+        """ Removes all temp views and closes database """
+        try:
+            viewnames = self._fetch_view_names()
+            cur = self.conn.cursor()
+            for name in viewnames:
+                if name.startswith("temp_"):
+                    cur.execute(f"DROP VIEW {name}")
+
+            self.conn.commit()
+            cur.close()
+            self.close_connection()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError("Error while closing database") from e
 
     # # # # # # # # # # # # # # # # #
     # # # # #Private methods # # # # #
@@ -2138,3 +2236,42 @@ class DBManagerSQLite(DBManager):
         """Generate string to return names of views in database
         """
         return "SELECT name FROM sqlite_schema WHERE type = 'view'"
+
+    def _attach_db(self, new_db, new_db_name):
+        """Attaches new database file to current database
+        Args:
+            new_db (string): file name for database to attach
+        """
+        attach_str = f"ATTACH DATABASE {new_db} AS {new_db_name}"
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(attach_str)
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(f"Error occurred while attaching {new_db}") from e
+
+    def _detach_db(self, new_db_name):
+        """Detaches new database file from current database
+        Args:
+            new_db_name (string): db name for database to detach
+        """
+        detach_str = f"DETACH DATABASE {new_db_name}"
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(detach_str)
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(f"Error occurred while detaching {new_db_name}") from e
+
+    def _generate_selective_view_query(self, subset_name, select_str, new_db_name):
+        """Generates string to select ligands found/not found in the given subset in both current db and new_db
+        Args:
+            new_db (string): name for attached database
+            subset_name (string): name of subset to cross-reference
+            selection_type (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+        """
+        return "SELECT * FROM {0} WHERE LigName {1} (SELECT LigName FROM {2}.{0}".format(subset_name, select_str, new_db_name)

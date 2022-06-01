@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
     # set logging level
     no_print = out_opts["no_print"]
-    debug = True
+    debug = False
     if debug:
         level = logging.DEBUG
     elif not no_print:
