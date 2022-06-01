@@ -45,8 +45,7 @@ class VSManager():
                  db_opts,
                  rman_opts,
                  filters,
-                 out_opts,
-                 filter_fname=None):
+                 out_opts):
         """Initialize VSManager object. Will create DBManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
@@ -59,12 +58,9 @@ class VSManager():
             filters (dictionary): Dictionary containing user-specified filters
             out_opts (dictionary): Specified output options including data
                 fields to output, export_poses_path, log file name
-            filter_fname (None/string, optional): Name of file
-                containing filters provided by user. None by default.
         """
         self.filters = filters
         self.out_opts = out_opts
-        self.filter_file = filter_fname
         self.rman_opts = rman_opts
         self.db_opts = db_opts
 
@@ -89,7 +85,7 @@ class VSManager():
             target=self.rman_opts["target"])
 
         try:
-            self.output_manager = Outputter(self, self.out_opts['log'])
+            self.output_manager = Outputter(self.out_opts['log'], self.out_opts["export_poses_path"])
         except OutputError as e:
             raise VirtualScreeningError("Error occured while creating output manager") from e
 
@@ -159,9 +155,11 @@ class VSManager():
                 self.output_manager.write_filters_to_log(self.filters, combination)
                 self.output_manager.write_results_subset_to_log(result_subset_name)
                 self.output_manager.log_num_passing_ligands(number_passing_ligands)
-                self.write_log(self.filtered_results)
+                self.output_manager.write_log(self.filtered_results)
             except DatabaseError as e:
                 raise VirtualScreeningError("Database error occurred while filtering") from e
+            except OutputError as e:
+                raise VirtualScreeningError("Logging error occurred after filtering") from e
             except Exception as e:
                 raise VirtualScreeningError("Error occurred while filtering") from e
 
@@ -172,9 +170,11 @@ class VSManager():
         try:
             new_data = self.dbman.fetch_data_for_passing_results(
                 self.out_opts['outfields'])
-            self.write_log(new_data)
+            self.output_manager.write_log(new_data)
         except DatabaseError as e:
             raise VirtualScreeningError("Database error occurred while fetching data for subset") from e
+        except OutputError as e:
+            raise VirtualScreeningError("Error occurred while writing log") from e
         except Exception as e:
             raise VirtualScreeningError("Error occurred while fetching data for subset") from e
 
@@ -208,24 +208,6 @@ class VSManager():
             raise VirtualScreeningError("Database error occurred while fetching data for plot") from e
         except Exception as e:
             raise VirtualScreeningError("Error occurred during plotting") from e
-
-    def write_log(self, lines):
-        """Writes lines from results cursor into log file
-
-        Args:
-            lines (DB cursor): Iterable cursor with tuples of data for
-                writing into log
-        """
-        try:
-            for line in lines:
-                logging.info(line)
-                self.output_manager.write_log_line(
-                    str(line).replace("(", "").replace(
-                        ")",
-                        ""))  # strip parens from line, which is natively a tuple
-            self.output_manager.write_log_line("***************\n")
-        except OutputError as e:
-            raise VirtualScreeningError("Error occurred during log writing") from e
 
     def prepare_results_filter_list(self, included_interactions):
         """takes filters dictionary from option parser.
@@ -469,21 +451,16 @@ class Outputter():
 
     """
 
-    def __init__(self, vsman, log_file):
+    def __init__(self, log_file, export_sdf_path=""):
         """Initialize Outputter object and create log file
 
         Args:
-            vsman (VSManager): VSManager object that created outputter
             log_file (string): name for log file
+            export_sdf_path (string): path for exporting sdf files
         """
 
         self.log = log_file
-        self.vsman = vsman
-
-        if self.vsman.filter_file is not None:
-            self.fig_base_name = self.vsman.filter_file.split(".")[0]
-        else:
-            self.fig_base_name = "all_ligands"
+        self.export_sdf_path = export_sdf_path
 
         self._create_log_file()
 
@@ -554,7 +531,25 @@ class Outputter():
         except Exception as e:
             raise OutputError("Error while saving figure") from e
 
-    def write_log_line(self, line):
+    def write_log(self, lines):
+        """Writes lines from results iterable into log file
+
+        Args:
+            lines (iterable): Iterable with tuples of data for
+                writing into log
+        """
+        try:
+            for line in lines:
+                logging.info(line)
+                self._write_log_line(
+                    str(line).replace("(", "").replace(
+                        ")",
+                        ""))  # strip parens from line, which is natively a tuple
+            self._write_log_line("***************\n")
+        except Exception as e:
+            raise OutputError("Error occurred during log writing") from e
+
+    def _write_log_line(self, line):
         """write a single row to the log file
 
         Args:
@@ -609,7 +604,7 @@ class Outputter():
             properties (dict): dictionary of list of properties to add to mol before writing
         """
         try:
-            filename = self.vsman.out_opts["export_poses_path"] + ligname + ".sdf"
+            filename = self.export_sdf_path + ligname + ".sdf"
             mol = RDKitMolCreate.export_combined_rdkit_mol(mol, flexres_mols, saved_coords, h_parents)
             # convert properties to strings as needed
             for k, v in properties.items():
