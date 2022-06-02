@@ -19,17 +19,12 @@ Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 at [Scripps Research](https://www.scripps.edu/).
 
 ## README Outline
-[Installation](https://github.com/forlilab/Ringtail#installation)
-
-[Definitions](https://github.com/forlilab/Ringtail#definitions)
-
-[Scripts](https://github.com/forlilab/Ringtail#scripts)
-
-[rt_process_vs.py Documentation](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation)
-
-[rt_selectivity.py Documentation](https://github.com/forlilab/Ringtail#rt_selectivitypy-documentation)
-
-[Python tutorials](https://github.com/forlilab/Ringtail#brief-python-tutorials)
+- [Installation](https://github.com/forlilab/Ringtail#installation)
+- [Definitions](https://github.com/forlilab/Ringtail#definitions)
+- [Scripts](https://github.com/forlilab/Ringtail#scripts)
+- [rt_process_vs.py Documentation](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation)
+- [rt_selectivity.py Documentation](https://github.com/forlilab/Ringtail#rt_selectivitypy-documentation)
+- [Python tutorials](https://github.com/forlilab/Ringtail#brief-python-tutorials)
 
 ## Installation
 It is recommended that you create a new Conda environment for installing Ringtail. Ringtail requires the following:
