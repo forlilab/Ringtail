@@ -66,19 +66,19 @@ The Ringtail package includes two command line oriented scripts: `rt_process_vs.
 ## rt_process_vs.py usage examples
 #### Access help message for rt_process_vs.py
 ```
-run_ringtail.py --help
+rt_process_vs.py --help
 ```
-#### Access help message for run_ringtail.py write mode
+#### Access help message for rt_process_vs.py write mode
 ```
-run_ringtail.py write --help
+rt_process_vs.py write --help
 ```
-#### Access help message for run_ringtail.py read mode
+#### Access help message for rt_process_vs.py read mode
 ```
-run_ringtail.py read --help
+rt_process_vs.py read --help
 ```
 #### Create database named example.db from all input options
 ```
-run_ringtail.py write --file lig1.dlg lig2.dlg --file_path path1/ path2 --file_list filelist1.txt filelist2.txt --output_db example.db"
+rt_process_vs.py write --file lig1.dlg lig2.dlg --file_path path1/ path2 --file_list filelist1.txt filelist2.txt --output_db example.db"
 
 ```
 Example file list
@@ -89,8 +89,8 @@ rec1.pdbqt
 ```
 #### Write and filter using a config file
 ```
-run_ringtail.py -c config_w.json write
-run_ringtail.py -c config_r.json read
+rt_process_vs.py -c config_w.json write
+rt_process_vs.py -c config_r.json read
 ```
 config_w.json:
 
@@ -111,31 +111,31 @@ config_r.json:
 
 #### Export results from a previous filtering as a CSV
 ```
-run_ringtail.py write --file_path Files/
-run_ringtail.py read --input_db output.db --epercentile 0.1 --subset_name filter1
-run_ringtail.py read --input_db output.db --export_table_csv filter1
+rt_process_vs.py write --file_path Files/
+rt_process_vs.py read --input_db output.db --epercentile 0.1 --subset_name filter1
+rt_process_vs.py read --input_db output.db --export_table_csv filter1
 ```
 #### Create scatterplot highlighting ligands passing filters
 ```
-run_ringtail.py write --file_path Files/
-run_ringtail.py read --input_db output.db --epercentile 0.1 --subset_name filter1
-run_ringtail.py read --input_db output.db --subset_name filter1 --plot
+rt_process_vs.py write --file_path Files/
+rt_process_vs.py read --input_db output.db --epercentile 0.1 --subset_name filter1
+rt_process_vs.py read --input_db output.db --subset_name filter1 --plot
 ```
 `all_ligands_scatter.png`
 
 ![all_ligands_scatter](https://user-images.githubusercontent.com/41704502/171295726-7315f929-edfa-49a0-b984-dacadf1a4327.png)
 
 ## Usage Details
-The script for writing a database and filtering is `run_ringtail.py`. __This is intended to be used for a set of DLGs/Vina PDBQTs pertaining to a single target. This may include multiple ligand libraries as long as the target is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ One receptor PDBQT may also be included if using with DLGs. 
+The script for writing a database and filtering is `rt_process_vs.py`. __This is intended to be used for a set of DLGs/Vina PDBQTs pertaining to a single target. This may include multiple ligand libraries as long as the target is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ One receptor PDBQT may also be included if using with DLGs. 
 
-The run_ringtail.py script has two modes: `write` and `read`. The desired mode must be specified in the command line before any other options are given. The `write` mode is used to create a database for a virtual screening from ADGPU DLGs or Vina PDBQTs. After this initial run, a database is created and may be read directly by run_ringtail.py in `read` mode for subsequent filtering operations.
+The rt_process_vs.py script has two modes: `write` and `read`. The desired mode must be specified in the command line before any other options are given. The `write` mode is used to create a database for a virtual screening from ADGPU DLGs or Vina PDBQTs. After this initial run, a database is created and may be read directly by rt_process_vs.py in `read` mode for subsequent filtering operations.
 
 #### Write Mode
-Upon calling run_ringtail.py in `write` mode for the first time, the user must specify where the program can find files to write to the newly-created database. This is done using the
+Upon calling rt_process_vs.py in `write` mode for the first time, the user must specify where the program can find files to write to the newly-created database. This is done using the
 `--file`, `--file_path`, and/or `--file_list` options. Any combination of these options can be used, and multiple arguments for each are accepted. Compressed `.gz` files
 are also accepted.
 
-When searching for result files in the directory specified with `--file_path`, run_ringtail.py will search for files with the pattern `*.dlg*` by default. This may be changed with the
+When searching for result files in the directory specified with `--file_path`, rt_process_vs.py will search for files with the pattern `*.dlg*` by default. This may be changed with the
 `--pattern` option. Note also that, by default, Ringtail will only search the directory provided in `--file_path` and not subdirectories. Subdirectory searching
 is enabled with the `--recursive` flag.
 
@@ -164,7 +164,7 @@ No filtering is performed if no filters are given. If both `--eworst` and `--epe
 When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--subset_name` option. Other data for poses in a view may be accessed later using the `--new_data_from_subset` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<subset_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
 
 ##### Other available outputs
-The primary outputs from run_ringtail are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
+The primary outputs from rt_process_vs are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
 The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the subset given with `--subset_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
 
@@ -204,11 +204,11 @@ There are a few quick checks the user can make to ensure that the data has been 
 ## Potential pitfalls
 When importing DLG files into a database with Ringtail, the files must have interaction analysis already performed. This is specified with `-C 1` when running [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU).
 
-Any PDBQT files specified through any of the input options will be read by `run_ringtail.py` as receptor files, even if the files actually represent ligands. Therefore, ligand PDBQT files should not be present in any directories given with `--file_path`.
+Any PDBQT files specified through any of the input options will be read by `rt_process_vs.py` as receptor files, even if the files actually represent ligands. Therefore, ligand PDBQT files should not be present in any directories given with `--file_path`.
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. If this occurs and you start running into unclear errors related to the SQLite3 package, it is recommended to delete the existing database and re-write it from scratch.
 
-## run_ringtail.py supported arguments
+## rt_process_vs.py supported arguments
 
 | Argument          || Description                                           | Default value   | Vina-compatible |
 |:------------------------|:-----|:-------------------------------------------------|:----------------|----:|
