@@ -14,7 +14,7 @@ from .exceptions import FileParsingError, WriteToDatabaseError
 
 
 class DockingFileReader(multiprocessing.Process):
-    """ this class is the individual worker for processing dlgs"""
+    """this class is the individual worker for processing dlgs"""
 
     def __init__(self, queueIn, queueOut, pipe_conn, dbman, mode, numclusters, target):
         # set mode for which file parser to use
@@ -38,8 +38,8 @@ class DockingFileReader(multiprocessing.Process):
 
     def find_best_cluster_poses(self, ligand_dict):
         """takes input ligand dictionary, reads run pose clusters,
-            adds "cluster_best_run" entry with the top scoring
-            run for each cluster"""
+        adds "cluster_best_run" entry with the top scoring
+        run for each cluster"""
         top_poses = []
         cluster_dict = ligand_dict["clusters"]
         for cluster in cluster_dict:
@@ -75,8 +75,16 @@ class DockingFileReader(multiprocessing.Process):
                 # future: NG parser, etc
 
                 # check receptor name from file against that which we expect
-                if parsed_file_dict["receptor"] != self.target and self.target is not None and self.mode != "vina":
-                    raise FileParsingError("Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(parsed_file_dict["receptor"], next_task, self.target))
+                if (
+                    parsed_file_dict["receptor"] != self.target
+                    and self.target is not None
+                    and self.mode != "vina"
+                ):
+                    raise FileParsingError(
+                        "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
+                            parsed_file_dict["receptor"], next_task, self.target
+                        )
+                    )
                 parsed_file_dict = self.find_best_cluster_poses(parsed_file_dict)
                 file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
                 # put the result in the out queue
@@ -91,7 +99,9 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, maxProcesses, pipe_conn, chunksize, db_obj, num_files, mode="dlg"):
+    def __init__(
+        self, queue, maxProcesses, pipe_conn, chunksize, db_obj, num_files, mode="dlg"
+    ):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are
@@ -133,8 +143,9 @@ class Writer(multiprocessing.Process):
                 if next_task is None:
                     # if a poison pill is found, it means one of the workers quit
                     self.maxProcesses -= 1
-                    logging.info("Closing process. Remaining open processes:",
-                          self.maxProcesses)
+                    logging.info(
+                        "Closing process. Remaining open processes:", self.maxProcesses
+                    )
                 else:
                     # if not a poison pill, process the task item
 
@@ -145,12 +156,14 @@ class Writer(multiprocessing.Process):
                     # process next file
                     self.process_file(next_task)
                     # print info about files and time remaining
-                    sys.stdout.write('\r')
+                    sys.stdout.write("\r")
                     sys.stdout.write(
-                        "{n} files remaining to process. Estimated time remaining: {est_time:.2f} minutes. Last chunk took {write_time:.2f} seconds to write."
-                        .format(n=self.num_files_remaining,
-                                est_time=self.est_time_remaining,
-                                write_time=self.last_write_time))
+                        "{n} files remaining to process. Estimated time remaining: {est_time:.2f} minutes. Last chunk took {write_time:.2f} seconds to write.".format(
+                            n=self.num_files_remaining,
+                            est_time=self.est_time_remaining,
+                            write_time=self.last_write_time,
+                        )
+                    )
                     sys.stdout.flush()
                     self.num_files_remaining -= 1
 
@@ -165,15 +178,18 @@ class Writer(multiprocessing.Process):
                     break
         except Exception:
             tb = traceback.format_exc()
-            self.pipe.send((WriteToDatabaseError("Error occured while writing database"), tb))
+            self.pipe.send(
+                (WriteToDatabaseError("Error occured while writing database"), tb)
+            )
         finally:
             return
 
     def write_to_db(self):
         time1 = time.perf_counter()
         # insert result, ligand, and receptor data
-        self.db.insert_results(filter(
-            None, self.results_array))  # filter out stray Nones
+        self.db.insert_results(
+            filter(None, self.results_array)
+        )  # filter out stray Nones
         self.db.insert_ligands(filter(None, self.ligands_array))
         # if this is the first insert or we have multiple receptors, insert the receptor array
         if self.first_insert and self.mode != "vina":
@@ -187,8 +203,11 @@ class Writer(multiprocessing.Process):
         # calulate time for processing/writing previous chunk
         self.num_files_written += self.chunksize
         total_runtime = time.perf_counter() - self.time0
-        self.est_time_remaining = (total_runtime / self.num_files_written) * (
-            self.total_num_files - self.num_files_written) / 60  # converted to minutes
+        self.est_time_remaining = (
+            (total_runtime / self.num_files_written)
+            * (self.total_num_files - self.num_files_written)
+            / 60
+        )  # converted to minutes
         self.last_write_time = time.perf_counter() - time1
 
         # reset all data-holders for next chunk

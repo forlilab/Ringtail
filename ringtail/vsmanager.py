@@ -11,7 +11,11 @@ import warnings
 from meeko import RDKitMolCreate
 from ringtail import DBManagerSQLite
 from ringtail import ResultsManager
-from .exceptions import DatabaseConnectionError, DatabaseTableCreationError, DatabaseError
+from .exceptions import (
+    DatabaseConnectionError,
+    DatabaseTableCreationError,
+    DatabaseError,
+)
 from .exceptions import VirtualScreeningError, ResultsProcessingError, OutputError
 from rdkit import Chem
 from rdkit.Chem import SDWriter
@@ -19,7 +23,7 @@ import itertools
 import logging
 
 
-class VSManager():
+class VSManager:
     """Manager for coordinating different actions on virtual screening
     i.e. adding results to db, filtering, output options
 
@@ -41,11 +45,7 @@ class VSManager():
             files for insertion into database
     """
 
-    def __init__(self,
-                 db_opts,
-                 rman_opts,
-                 filters,
-                 out_opts):
+    def __init__(self, db_opts, rman_opts, filters, out_opts):
         """Initialize VSManager object. Will create DBManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
@@ -69,25 +69,34 @@ class VSManager():
             self.dbman = DBManagerSQLite(self.db_opts)
         except DatabaseConnectionError as e:
             raise VirtualScreeningError(
-                "Error encountered while connecting to database. Please ensure that given database file name is correct.") from e
+                "Error encountered while connecting to database. Please ensure that given database file name is correct."
+            ) from e
         except DatabaseTableCreationError as e:
             raise VirtualScreeningError(
-                "Error encountered while creating database tables. If database already exists, use --add_results or --overwrite.") from e
+                "Error encountered while creating database tables. If database already exists, use --add_results or --overwrite."
+            ) from e
         except DatabaseError as e:
-            raise VirtualScreeningError("Error occurred while initializing database.") from e
+            raise VirtualScreeningError(
+                "Error occurred while initializing database."
+            ) from e
 
         self.results_man = ResultsManager(
-            mode=self.rman_opts['mode'],
+            mode=self.rman_opts["mode"],
             dbman=self.dbman,
-            chunk_size=self.rman_opts['chunk_size'],
-            filelist=self.rman_opts['filelist'],
-            numclusters=self.rman_opts['num_clusters'],
-            target=self.rman_opts["target"])
+            chunk_size=self.rman_opts["chunk_size"],
+            filelist=self.rman_opts["filelist"],
+            numclusters=self.rman_opts["num_clusters"],
+            target=self.rman_opts["target"],
+        )
 
         try:
-            self.output_manager = Outputter(self.out_opts['log'], self.out_opts["export_poses_path"])
+            self.output_manager = Outputter(
+                self.out_opts["log"], self.out_opts["export_poses_path"]
+            )
         except OutputError as e:
-            raise VirtualScreeningError("Error occured while creating output manager") from e
+            raise VirtualScreeningError(
+                "Error occured while creating output manager"
+            ) from e
 
         # if requested, write database or add results to an existing one
         if self.dbman.write_db_flag or self.db_opts["add_results"]:
@@ -120,10 +129,16 @@ class VSManager():
             try:
                 filled_receptor_rows = self.dbman.get_number_filled_receptor_rows()
                 if filled_receptor_rows != 0:
-                    raise VirtualScreeningError("Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(filled_receptor_rows))
+                    raise VirtualScreeningError(
+                        "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
+                            filled_receptor_rows
+                        )
+                    )
                 self.dbman.add_receptor_object_to_row(rec, rec_name)
             except DatabaseError as e:
-                raise VirtualScreeningError("Error occurred while adding receptor to database") from e
+                raise VirtualScreeningError(
+                    "Error occurred while adding receptor to database"
+                ) from e
 
     def filter(self):
         """
@@ -133,14 +148,16 @@ class VSManager():
 
         logging.info("Filtering results")
         # get possible permutations of interaction with max_miss excluded
-        interaction_combs = self._generate_interaction_combinations(self.filters["max_miss"])
+        interaction_combs = self._generate_interaction_combinations(
+            self.filters["max_miss"]
+        )
 
         for ic_idx, combination in enumerate(interaction_combs):
             # prepare list of filter values and keys for DBManager
             results_filters_list = self.prepare_results_filter_list(combination)
 
             # make sure we have ligand filter list
-            if not self.filters['filter_ligands_flag']:
+            if not self.filters["filter_ligands_flag"]:
                 self.filters["ligand_filters"] = []
             # set DBMan's internal ic_counter to reflect current ic_idx
             if len(interaction_combs) > 1:
@@ -148,8 +165,10 @@ class VSManager():
             # ask DBManager to fetch results
             try:
                 self.filtered_results = self.dbman.filter_results(
-                    results_filters_list, self.filters["ligand_filters"],
-                    self.out_opts['outfields'])
+                    results_filters_list,
+                    self.filters["ligand_filters"],
+                    self.out_opts["outfields"],
+                )
                 number_passing_ligands = self.dbman.get_number_passing_ligands()
                 result_subset_name = self.dbman.get_current_view_name()
                 self.output_manager.write_filters_to_log(self.filters, combination)
@@ -157,9 +176,13 @@ class VSManager():
                 self.output_manager.log_num_passing_ligands(number_passing_ligands)
                 self.output_manager.write_log(self.filtered_results)
             except DatabaseError as e:
-                raise VirtualScreeningError("Database error occurred while filtering") from e
+                raise VirtualScreeningError(
+                    "Database error occurred while filtering"
+                ) from e
             except OutputError as e:
-                raise VirtualScreeningError("Logging error occurred after filtering") from e
+                raise VirtualScreeningError(
+                    "Logging error occurred after filtering"
+                ) from e
             except Exception as e:
                 raise VirtualScreeningError("Error occurred while filtering") from e
 
@@ -169,14 +192,19 @@ class VSManager():
         """
         try:
             new_data = self.dbman.fetch_data_for_passing_results(
-                self.out_opts['outfields'])
+                self.out_opts["outfields"]
+            )
             self.output_manager.write_log(new_data)
         except DatabaseError as e:
-            raise VirtualScreeningError("Database error occurred while fetching data for subset") from e
+            raise VirtualScreeningError(
+                "Database error occurred while fetching data for subset"
+            ) from e
         except OutputError as e:
             raise VirtualScreeningError("Error occurred while writing log") from e
         except Exception as e:
-            raise VirtualScreeningError("Error occurred while fetching data for subset") from e
+            raise VirtualScreeningError(
+                "Error occurred while fetching data for subset"
+            ) from e
 
     def plot(self):
         """
@@ -205,7 +233,9 @@ class VSManager():
                     )  # energy (line[0]) on x axis, le (line[1]) on y axis
             self.output_manager.save_scatterplot()
         except DatabaseError as e:
-            raise VirtualScreeningError("Database error occurred while fetching data for plot") from e
+            raise VirtualScreeningError(
+                "Database error occurred while fetching data for plot"
+            ) from e
         except Exception as e:
             raise VirtualScreeningError("Error occurred during plotting") from e
 
@@ -221,17 +251,21 @@ class VSManager():
 
         # get property filters
         properties_keys = [
-            'eworst', 'ebest', 'leworst', 'lebest', 'energy_percentile',
-            'le_percentile'
+            "eworst",
+            "ebest",
+            "leworst",
+            "lebest",
+            "energy_percentile",
+            "le_percentile",
         ]
 
-        property_filters = self.filters['properties']
+        property_filters = self.filters["properties"]
         for key in properties_keys:
             if property_filters[key] is not None:
                 filters_list.append((key, property_filters[key]))
 
         # interaction filters
-        interaction_filters = self.filters['interactions']
+        interaction_filters = self.filters["interactions"]
         for key in interaction_filters:
             if interaction_filters[key] is not None:
                 kept_interactions = []
@@ -244,8 +278,7 @@ class VSManager():
         # get interaction count filters
         interact_count_filters = self.filters["interactions_count"]
         for count in interact_count_filters:
-            filters_list.append(
-                count)  # already a tuple, don't need to reformat
+            filters_list.append(count)  # already a tuple, don't need to reformat
 
         # add react_any flag
         filters_list.append(("react_any", self.filters["react_any"]))
@@ -265,11 +298,10 @@ class VSManager():
                 )
                 return
             passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
-            for (ligname, smiles, atom_indices,
-                 h_parent_line) in passing_molecule_info:
+            for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
                 logging.info("Writing " + ligname.split(".")[0] + ".sdf")
                 # create rdkit ligand molecule and flexible residue container
-                if smiles == '':
+                if smiles == "":
                     warnings.warn(f"No SMILES found for {ligname}. Cannot create SDF.")
                     continue
                 mol = Chem.MolFromSmiles(smiles)
@@ -279,31 +311,51 @@ class VSManager():
 
                 # fetch coordinates for passing poses and add to
                 # rdkit ligand mol, add flexible residues
-                properties = {"Binding energies": [],
-                              "Ligand effiencies": [],
-                              "Interactions": []}
-                passing_properties = self.dbman.fetch_passing_pose_properties(
-                    ligname)
-                mol, flexres_mols, saved_coords, properties = self._add_poses(atom_indices, passing_properties,
-                                                                              mol, flexres_mols, saved_coords, properties)
+                properties = {
+                    "Binding energies": [],
+                    "Ligand effiencies": [],
+                    "Interactions": [],
+                }
+                passing_properties = self.dbman.fetch_passing_pose_properties(ligname)
+                mol, flexres_mols, saved_coords, properties = self._add_poses(
+                    atom_indices,
+                    passing_properties,
+                    mol,
+                    flexres_mols,
+                    saved_coords,
+                    properties,
+                )
 
                 # fetch coordinates for non-passing poses
                 # and add to ligand mol, flexible residue mols
                 if write_nonpassing:
                     nonpassing_properties = self.dbman.fetch_nonpassing_pose_properties(
-                        ligname)
-                    mol, flexres_mols, saved_coords, properties = self._add_poses(atom_indices, nonpassing_properties,
-                                                                                  mol, flexres_mols, saved_coords, properties)
+                        ligname
+                    )
+                    mol, flexres_mols, saved_coords, properties = self._add_poses(
+                        atom_indices,
+                        nonpassing_properties,
+                        mol,
+                        flexres_mols,
+                        saved_coords,
+                        properties,
+                    )
 
                 # write out molecule
                 # h_parents = self._format_h_parents(h_parent_line)
                 h_parents = [int(idx) for idx in self._db_string_to_list(h_parent_line)]
-                self.output_manager.write_out_mol(ligname, mol, flexres_mols, saved_coords, h_parents, properties)
+                self.output_manager.write_out_mol(
+                    ligname, mol, flexres_mols, saved_coords, h_parents, properties
+                )
 
         except DatabaseError as e:
-            raise VirtualScreeningError("Error occurred while fetching database information for SDF output") from e
+            raise VirtualScreeningError(
+                "Error occurred while fetching database information for SDF output"
+            ) from e
         except OutputError as e:
-            raise VirtualScreeningError(f"Error occured while writing {ligname} to an SDF") from e
+            raise VirtualScreeningError(
+                f"Error occured while writing {ligname} to an SDF"
+            ) from e
         except Exception as e:
             raise VirtualScreeningError("Error occurred during SDF output") from e
 
@@ -319,13 +371,16 @@ class VSManager():
             df = self.dbman.fetch_dataframe_from_db(requested_data, table=table)
             df.to_csv(csv_name)
         except DatabaseError as e:
-            raise VirtualScreeningError(f"Error occured while getting data for exporting CSV of {requested_data}") from e
+            raise VirtualScreeningError(
+                f"Error occured while getting data for exporting CSV of {requested_data}"
+            ) from e
         except Exception as e:
-            raise VirtualScreeningError(f"Error occured while exporting CSV of {requested_data}") from e
+            raise VirtualScreeningError(
+                f"Error occured while exporting CSV of {requested_data}"
+            ) from e
 
     def close_database(self):
-        """Tell database we are done and it can close the connection
-        """
+        """Tell database we are done and it can close the connection"""
         self.dbman.close_connection()
 
     def _clean_db_string(self, input_str):
@@ -338,11 +393,15 @@ class VSManager():
         Returns:
             String: cleaned string
         """
-        return input_str.replace("[", "").replace("]", "").replace(
-            "'", "").replace('"',
-                             '').replace("\n",
-                                         "").replace("\\n",
-                                                     "").replace(" \n", "")
+        return (
+            input_str.replace("[", "")
+            .replace("]", "")
+            .replace("'", "")
+            .replace('"', "")
+            .replace("\n", "")
+            .replace("\\n", "")
+            .replace(" \n", "")
+        )
 
     def _db_string_to_list(self, input_str):
         """Convert string form of list from database to list
@@ -360,14 +419,20 @@ class VSManager():
             flexres_lines (TYPE): Description
         """
 
-        return "\n".join([
-            line.lstrip(" ") for line in list(
-                filter(None, [self._clean_db_string(line) for line in pdbqt_lines]))
-        ])
+        return "\n".join(
+            [
+                line.lstrip(" ")
+                for line in list(
+                    filter(None, [self._clean_db_string(line) for line in pdbqt_lines])
+                )
+            ]
+        )
 
-    def _add_poses(self, atom_indices, poses, mol, flexres_mols, saved_coords, properties):
+    def _add_poses(
+        self, atom_indices, poses, mol, flexres_mols, saved_coords, properties
+    ):
         """Add poses from given cursor to rdkit mols for ligand and flexible residues
-        
+
         Args:
             atom_indices (List): List of ints indicating mapping of coordinate indices to smiles indices
             poses (iterable): iterable containing ligand_pose, flexres_pose, flexres_names
@@ -377,14 +442,23 @@ class VSManager():
             properties (dict): Dictionary of lists of properties, with each element corresponding to that conformer in the rdkit mol
 
         """
-        for Pose_ID, energies_binding, leff, ligand_pose, flexres_pose, flexres_names in poses:
+        for (
+            Pose_ID,
+            energies_binding,
+            leff,
+            ligand_pose,
+            flexres_pose,
+            flexres_names,
+        ) in poses:
             # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
             pose_bitvector = self.dbman.fetch_interaction_bitvector(Pose_ID)
             interaction_indices = []
             interactions_list = []
             for idx, bit in enumerate(pose_bitvector):
                 if bit == 1:
-                    interaction_indices.append(idx + 1)  # adjust for indexing starting at 1
+                    interaction_indices.append(
+                        idx + 1
+                    )  # adjust for indexing starting at 1
             for int_idx in interaction_indices:
                 interaction_info = self.dbman.fetch_interaction_info_by_index(int_idx)
                 interaction = interaction_info[0] + "-" + ":".join(interaction_info[1:])
@@ -397,12 +471,18 @@ class VSManager():
             # get pose coordinate info
             ligand_pose = self._db_string_to_list(ligand_pose)
             flexres_pose = self._db_string_to_list(flexres_pose)
-            flexres_names = [name for idx, name in enumerate(self._db_string_to_list(flexres_names))]
+            flexres_names = [
+                name for idx, name in enumerate(self._db_string_to_list(flexres_names))
+            ]
             flexres_pdbqts = [self._generate_pdbqt_block(res) for res in flexres_pose]
-            mol, flexres_mols = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices,
-                                                               flexres_mols=flexres_mols,
-                                                               flexres_poses=flexres_pdbqts,
-                                                               flexres_names=flexres_names)
+            mol, flexres_mols = RDKitMolCreate.add_pose_to_mol(
+                mol,
+                ligand_pose,
+                atom_indices,
+                flexres_mols=flexres_mols,
+                flexres_poses=flexres_pdbqts,
+                flexres_names=flexres_names,
+            )
             saved_coords.append(ligand_pose)
         return mol, flexres_mols, saved_coords, properties
 
@@ -420,21 +500,31 @@ class VSManager():
 
         # warn if max_miss greater than number of interactions
         if max_miss > len(all_interactions):
-            warnings.warn("Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters")
+            warnings.warn(
+                "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
+            )
             max_miss = len(all_interactions)
 
         # BASE CASE:
         if max_miss == 0:
             return [tuple(all_interactions)]
         else:
-            combinations = list(itertools.combinations(all_interactions, len(all_interactions) - max_miss))
-            return combinations + self._generate_interaction_combinations(max_miss=max_miss - 1)
+            combinations = list(
+                itertools.combinations(
+                    all_interactions, len(all_interactions) - max_miss
+                )
+            )
+            return combinations + self._generate_interaction_combinations(
+                max_miss=max_miss - 1
+            )
+
 
 # # # # # # # # # # # # # #
 # # # Output class # # #
 # # # # # # # # # # # # # #
 
-class Outputter():
+
+class Outputter:
     """Class for creating outputs
 
     Attributes:
@@ -486,16 +576,18 @@ class Outputter():
             # start with a square Figure
             fig = plt.figure()
 
-            gs = fig.add_gridspec(2,
-                                  2,
-                                  width_ratios=(7, 2),
-                                  height_ratios=(2, 7),
-                                  left=0.1,
-                                  right=0.9,
-                                  bottom=0.1,
-                                  top=0.9,
-                                  wspace=0.05,
-                                  hspace=0.05)
+            gs = fig.add_gridspec(
+                2,
+                2,
+                width_ratios=(7, 2),
+                height_ratios=(2, 7),
+                left=0.1,
+                right=0.9,
+                bottom=0.1,
+                top=0.9,
+                wspace=0.05,
+                hspace=0.05,
+            )
 
             self.ax = fig.add_subplot(gs[1, 0])
             ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax)
@@ -505,8 +597,7 @@ class Outputter():
         except Exception as e:
             raise OutputError("Error occurred while initializing plot") from e
 
-        self.scatter_hist(energies, leffs, bin_counts, self.ax, ax_histx,
-                          ax_histy)
+        self.scatter_hist(energies, leffs, bin_counts, self.ax, ax_histx, ax_histy)
 
     def plot_single_point(self, x, y, color="black"):
         """Add point to scatter plot with given x and y coordinates and color.
@@ -542,9 +633,8 @@ class Outputter():
             for line in lines:
                 logging.info(line)
                 self._write_log_line(
-                    str(line).replace("(", "").replace(
-                        ")",
-                        ""))  # strip parens from line, which is natively a tuple
+                    str(line).replace("(", "").replace(")", "")
+                )  # strip parens from line, which is natively a tuple
             self._write_log_line("***************\n")
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
@@ -572,8 +662,11 @@ class Outputter():
         try:
             with open(self.log, "a") as f:
                 f.write("\n")
-                f.write("Number passing ligands: {num} \n".format(
-                    num=str(number_passing_ligands)))
+                f.write(
+                    "Number passing ligands: {num} \n".format(
+                        num=str(number_passing_ligands)
+                    )
+                )
                 f.write("---------------\n")
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
@@ -591,7 +684,9 @@ class Outputter():
         except Exception as e:
             raise OutputError("Error writing subset name to log") from e
 
-    def write_out_mol(self, ligname, mol, flexres_mols, saved_coords, h_parents, properties):
+    def write_out_mol(
+        self, ligname, mol, flexres_mols, saved_coords, h_parents, properties
+    ):
         """writes out given mol as sdf
 
         Args:
@@ -605,7 +700,9 @@ class Outputter():
         """
         try:
             filename = self.export_sdf_path + ligname + ".sdf"
-            mol = RDKitMolCreate.export_combined_rdkit_mol(mol, flexres_mols, saved_coords, h_parents)
+            mol = RDKitMolCreate.export_combined_rdkit_mol(
+                mol, flexres_mols, saved_coords, h_parents
+            )
             # convert properties to strings as needed
             for k, v in properties.items():
                 if isinstance(v, list):
@@ -626,7 +723,7 @@ class Outputter():
         Initializes log file
         """
         try:
-            with open(self.log, 'w') as f:
+            with open(self.log, "w") as f:
                 f.write("Filtered poses:\n")
                 f.write("***************\n")
         except Exception as e:
@@ -664,7 +761,7 @@ class Outputter():
             ybins = np.arange(yminlim, ymaxlim + ybinwidth, ybinwidth)
 
             ax_histx.hist(x, bins=xbins)
-            ax_histy.hist(y, bins=ybins, orientation='horizontal')
+            ax_histy.hist(y, bins=ybins, orientation="horizontal")
         except Exception as e:
             raise OutputError("Error occurred while adding all data to plot") from e
 
@@ -675,24 +772,24 @@ class Outputter():
             filters_dict (dict): dictionary of filtering options
         """
         try:
-            buff = ['##### PROPERTIES']
+            buff = ["##### PROPERTIES"]
             for k, v in filters_dict["properties"].items():
                 if v is not None:
                     v = "%2.3f" % v
                 else:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
-            if filters_dict['filter_ligands_flag']:
+            if filters_dict["filter_ligands_flag"]:
                 buff.append("#### LIGAND FILTERS")
                 for k, v in filters_dict["ligand_filters"].items():
                     if v is not None:
                         if isinstance(v, list):
-                            v = ", ".join([f for f in v if f != ''])
+                            v = ", ".join([f for f in v if f != ""])
                     else:
                         v = " [ none ]"
                     buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### INTERACTIONS")
-            labels = ['~', '']
+            labels = ["~", ""]
             for _type, info in filters_dict["interactions"].items():
                 kept_interactions = []
                 if len(info) == 0:
@@ -703,7 +800,9 @@ class Outputter():
                         continue
                     else:
                         kept_interactions.append(interact)
-                res_str = ", ".join(['(%s)%s' % (labels[int(x[1])], x[0]) for x in kept_interactions])
+                res_str = ", ".join(
+                    ["(%s)%s" % (labels[int(x[1])], x[0]) for x in kept_interactions]
+                )
                 l_str = "#  % 7s : %s" % (_type, res_str)
                 buff.append(l_str)
 

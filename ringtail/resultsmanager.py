@@ -8,28 +8,33 @@ from ringtail import MPManager
 from .exceptions import MultiprocessingError, ResultsProcessingError
 
 
-class ResultsManager():
-
-    def __init__(self,
-                 mode='dlg',
-                 dbman=None,
-                 filelist=None,
-                 chunk_size=1000,
-                 numclusters=3,
-                 target=None):
+class ResultsManager:
+    def __init__(
+        self,
+        mode="dlg",
+        dbman=None,
+        filelist=None,
+        chunk_size=1000,
+        numclusters=3,
+        target=None,
+    ):
         self.dbman = dbman
         self.filelist = filelist
         self.num_result_files = len(filelist)
-        self.parser = MPManager(filelist=self.filelist,
-                                db_obj=self.dbman,
-                                chunksize=chunk_size,
-                                mode=mode,
-                                numclusters=numclusters,
-                                target=target)
+        self.parser = MPManager(
+            filelist=self.filelist,
+            db_obj=self.dbman,
+            chunksize=chunk_size,
+            mode=mode,
+            numclusters=numclusters,
+            target=target,
+        )
 
     def process_results(self):
         try:
             # start MP process
             self.parser.process_files()
         except MultiprocessingError as e:
-            raise ResultsProcessingError("Error occurred while processing results") from e
+            raise ResultsProcessingError(
+                "Error occurred while processing results"
+            ) from e
