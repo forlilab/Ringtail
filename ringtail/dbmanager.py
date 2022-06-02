@@ -67,7 +67,7 @@ class DBManager:
     """
 
     def __init__(
-        self,
+        self, db_file: str,
         opts={
             "write_db_flag": False,
             "add_results": False,
@@ -87,7 +87,7 @@ class DBManager:
         Args:
             opts (dict): Dictionary of database options
         """
-        self.db_file = opts["sqlFile"]
+        self.db_file = db_file
         self.opts = opts
         self.order_results = self.opts["order_results"]
         self.log_distinct_ligands = self.opts["log_distinct_ligands"]
@@ -202,7 +202,7 @@ class DBManager:
         # close db itself
         self._close_connection()
 
-    def _find_cluster_top_pose_runs(self, ligand_dict):
+    def _find_cluster_top_pose_runs(self, ligand_dict: dict) -> list:
         """returns list of the run numbers for the top run in the
         top self.num_clusters clusters
 
@@ -458,7 +458,7 @@ class DBManager:
                 tolerated_runs.append(run)
         return tolerated_runs
 
-    def format_rows_from_dict(self, ligand_dict):
+    def format_rows_from_dict(self, ligand_dict: dict) -> tuple:
         """takes file dictionary from the file parser, formats into rows for
             the database insertion
 
@@ -555,7 +555,7 @@ class DBManager:
 
         self.view_suffix = suffix
 
-    def filter_results(self, results_filters_list, ligand_filters_list, output_fields):
+    def filter_results(self, results_filters_list: list, ligand_filters_list: list, output_fields: list) -> iter:
         """Generate and execute database queries from given filters.
 
         Args:
@@ -591,7 +591,7 @@ class DBManager:
         # get number of passing ligands
         return filtered_results
 
-    def fetch_data_for_passing_results(self, outfields):
+    def fetch_data_for_passing_results(self, outfields: list) -> iter:
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.passing_results_view_name
 
         Args:
@@ -604,7 +604,7 @@ class DBManager:
         """Returns DB curor with the names of all view in DB"""
         return self._run_query(self._generate_view_names_query())
 
-    def crossref_filter(self, new_db, subset_name, selection_type="-"):
+    def crossref_filter(self, new_db: str, subset_name: str, selection_type="-") -> str:
         """Selects ligands found or not found in the given subset in both current db and new_db. Stores as temp view
         Args:
             new_db (string): file name for database to attach
@@ -774,7 +774,7 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def fetch_dataframe_from_db(self, requested_data, table=False):
+    def fetch_dataframe_from_db(self, requested_data: str, table=True) -> pd.DataFrame:
         """Returns dataframe of table or query given as requested_data
 
         Args:
@@ -1501,7 +1501,7 @@ class DBManagerSQLite(DBManager):
                 "Error occurred while fetching number of receptor rows containing PDBQT blob"
             ) from e
 
-    def fetch_dataframe_from_db(self, requested_data, table=False):
+    def fetch_dataframe_from_db(self, requested_data: str, table=True) -> pd.DataFrame:
         """Returns dataframe of table or query given as requested_data
 
         Args:
@@ -1515,7 +1515,7 @@ class DBManagerSQLite(DBManager):
         else:
             return pd.read_sql_query(requested_data, self.conn)
 
-    def fetch_view(self, viewname):
+    def fetch_view(self, viewname: str) -> sqlite3.Cursor:
         """returns SQLite cursor of all fields in viewname"""
         return self._run_query(f"SELECT * FROM {viewname}")
 

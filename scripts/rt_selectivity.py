@@ -9,7 +9,6 @@ import json
 import sys
 from ringtail import DBManagerSQLite
 from ringtail import Outputter
-from ringtail import DatabaseError, OutputError
 import logging
 import traceback
 

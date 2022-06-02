@@ -860,19 +860,20 @@ class CLOptionParser:
             "add_results": parsed_opts.add_results,
             "conflict_opt": conflict_handling,
             "mode": parsed_opts.mode,
+            "dbFile": None
         }
 
         self.file_sources = file_sources
         self.input_db = parsed_opts.input_db
         if parsed_opts.input_db is not None:
-            sqlFile = parsed_opts.input_db
-            if not os.path.exists(sqlFile):
+            dbFile = parsed_opts.input_db
+            if not os.path.exists(dbFile):
                 raise OptionError("WARNING: input database does not exist!")
             db_opts["write_db_flag"] = False
         else:
-            sqlFile = parsed_opts.output_db
+            dbFile = parsed_opts.output_db
             db_opts["write_db_flag"] = True
-        db_opts["sqlFile"] = sqlFile
+        db_opts["dbFile"] = dbFile
 
         # make attributes for parsed opts
         self.db_opts = db_opts
