@@ -60,7 +60,7 @@ The Ringtail package includes two command line oriented scripts: `rt_process_vs.
 
 [rt_process_vs.py](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation) serves as the primary script for the package and is used to both write docking files to a SQLite database and to perform filtering and export tasks on a database. It is designed to handle docking output files associated with a single virtual screening in a single database.
 
-`rt_selectivity.py` is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
+[rt_selectivity.py](https://github.com/forlilab/Ringtail#rt_selectivitypy-documentation) is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
 
 ## rt_process_vs.py Documentation
 ### Usage examples
@@ -256,3 +256,32 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--max_miss         |-mm| Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  | No|
 
 ## rt_selectivity.py Documentation
+### Usage examples
+#### Access help message for rt_selectivity.py
+```
+rt_selectivity.py --help
+```
+#### Select ligands found in "passing_results" subsets of vs1 but not vs2 or vs3
+```
+rt_selectivity.py --positive_selection vs1.db --negative_selection vs2.db vs3.db
+```
+#### Select ligands found in "passing_results" subsets of vs1 and vs2 but not vs3 or vs4
+```
+rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db
+```
+#### Select ligands found in "passing_results" subsets of every vs except vs4
+```
+rt_selectivity.py --positive_selection vs1.db vs2.db vs3.db --negative_selection vs4.db
+```
+#### Select ligands found in "filter1" subsets of vs1 but not vs2
+```
+rt_selectivity.py --positive_selection vs1.db --negative_selection vs2.db --subset_name filter1
+```
+#### Save subset of ligands found in "filter1" subsets of vs1 and vs2 but not vs3 or vs4 as "selective_subset" in vs1.db
+```
+rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --save_subset selective_subset
+```
+#### Export subset of ligands found in "filter1" subsets of vs1 and vs2 but not vs3 or vs4 as CSV
+```
+rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --export_csv
+```
