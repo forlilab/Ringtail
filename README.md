@@ -255,6 +255,8 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--react_any        |-ra| Filter for poses with reaction with any residue       | FALSE     | No|
 |--max_miss         |-mm| Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  | No|
 
+---
+
 ## rt_selectivity.py Documentation
 ### Usage examples
 #### Access help message for rt_selectivity.py
