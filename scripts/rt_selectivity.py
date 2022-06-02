@@ -4,11 +4,15 @@
 #
 
 import time
+import argparse
+import json
+import sys
 from ringtail import DBManagerSQLite
 from ringtail import Outputter
 from ringtail import DatabaseError, OutputError
 import logging
 import traceback
+
 
 def cmdline_parser(defaults={}):
 
@@ -19,13 +23,14 @@ def cmdline_parser(defaults={}):
     conf_parser.add_argument(
         '-c',
         '--config',
-        help='specify a JSON-format file containing the option definitions. NOTE: options defined here will be overridden by command line options!'
+        help=
+        'specify a JSON-format file containing the option definitions. NOTE: options defined here will be overridden by command line options!'
     )
     confargs, remaining_argv = conf_parser.parse_known_args()
 
     defaults = {
-        "positive": None,
-        "negative": None,
+        "positive_selection": None,
+        "negative_selection": None,
         "subset_name": 'passing_results',
         "log": "selective_log.txt",
         "save_subset": None,
@@ -43,7 +48,8 @@ def cmdline_parser(defaults={}):
 
     parser = argparse.ArgumentParser(
         usage="Please see GitHub for full usage details.",
-        description="Script for filtering unique passing ligands across multiple virtual screenings. Takes databases created and filtered with run_ringtail.py.",
+        description=
+        "Script for filtering unique passing ligands across multiple virtual screenings. Takes databases created and filtered with run_ringtail.py.",
         epilog="""
 
         REQUIRED PACKAGES
@@ -63,18 +69,60 @@ def cmdline_parser(defaults={}):
         """,
         exit_on_error=False)
 
-    parser.add_argument("--positive_selection", '-p', help="Database for which ligands MUST be included in subset", nargs='+', type=str, metavar="[DATABASE_FILE].db", required=True)
-    parser.add_argument("--negative_selection", '-n', help="Database for which ligands MUST NOT be included in subset", nargs='+', type=str, metavar="[DATABASE_FILE].db", action='store')
-    parser.add_argument("--subset_name", '-sn', help="Name of filter subset that ligands should be compared accross. Must be present in all databases", type=str, metavar="STRING", action='store')
-    parser.add_argument("--log", '-l', help="Name for log file of passing ligands and data", type=str, metavar="[LOG FILE].txt", action='store')
-    parser.add_argument("--save_subset", '-s', help="Name for subset of passing cross-reference ligands to be saved as in first database given with --positive_selection", type=str, metavar="STRING", action='store')
-    parser.add_argument("--export_csv", '-x', help="Save final cross-referenced subset as csv. Saved as [save_subset].csv or 'crossref.csv' if --save_subset not used.", action='store_true')
-    parser.add_argument("--verbose", '-v', help="Verbose output while running", action='store_true')
+    parser.add_argument(
+        "--positive_selection",
+        '-p',
+        help="Database for which ligands MUST be included in subset",
+        nargs='+',
+        type=str,
+        metavar="[DATABASE_FILE].db",
+        required=True)
+    parser.add_argument(
+        "--negative_selection",
+        '-n',
+        help="Database for which ligands MUST NOT be included in subset",
+        nargs='+',
+        type=str,
+        metavar="[DATABASE_FILE].db",
+        action='store')
+    parser.add_argument(
+        "--subset_name",
+        '-sn',
+        help=
+        "Name of filter subset that ligands should be compared accross. Must be present in all databases",
+        type=str,
+        metavar="STRING",
+        action='store')
+    parser.add_argument("--log",
+                        '-l',
+                        help="Name for log file of passing ligands and data",
+                        type=str,
+                        metavar="[LOG FILE].txt",
+                        action='store')
+    parser.add_argument(
+        "--save_subset",
+        '-s',
+        help=
+        "Name for subset of passing cross-reference ligands to be saved as in first database given with --positive_selection",
+        type=str,
+        metavar="STRING",
+        action='store')
+    parser.add_argument(
+        "--export_csv",
+        '-x',
+        help=
+        "Save final cross-referenced subset as csv. Saved as [save_subset].csv or 'crossref.csv' if --save_subset not used.",
+        action='store_true')
+    parser.add_argument("--verbose",
+                        '-v',
+                        help="Verbose output while running",
+                        action='store_true')
 
     parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
 
     return args
+
 
 if __name__ == '__main__':
     time0 = time.perf_counter()
@@ -92,17 +140,18 @@ if __name__ == '__main__':
             level = logging.WARNING
         logging.basicConfig(level=level)
 
-        db_opts = {"write_db_flag": False,
-                   "add_results": False,
-                   'num_clusters': None,
-                   "order_results": None,
-                   "log_distinct_ligands": None,
-                   "interaction_tolerance": None,
-                   "results_view_name": args.subset_name,
-                   "store_all_poses": None,
-                   "overwrite": None,
-                   "conflict_opt": None,
-                   "mode": None
+        db_opts = {
+            "write_db_flag": False,
+            "add_results": False,
+            'num_clusters': None,
+            "order_results": None,
+            "log_distinct_ligands": None,
+            "interaction_tolerance": None,
+            "results_view_name": args.subset_name,
+            "store_all_poses": None,
+            "overwrite": None,
+            "conflict_opt": None,
+            "mode": None
         }
 
         positive_dbs = args.positive_selection
@@ -119,11 +168,15 @@ if __name__ == '__main__':
 
         for db in positive_dbs:
             logging.info(f"cross-referencing {db}")
-            previous_subsetname = dbman.crossref_filter(db, previous_subsetname, selection_type="+")
+            previous_subsetname = dbman.crossref_filter(db,
+                                                        previous_subsetname,
+                                                        selection_type="+")
 
         for db in negative_dbs:
             logging.info(f"cross-referencing {db}")
-            previous_subsetname = dbman.crossref_filter(db, previous_subsetname,selection_type="-")
+            previous_subsetname = dbman.crossref_filter(db,
+                                                        previous_subsetname,
+                                                        selection_type="-")
 
         logging.info("Writing log")
         output_manager = Outputter(args.log)
@@ -151,12 +204,3 @@ if __name__ == '__main__':
         sys.exit(1)
 
     dbman.close_db_crossref()
-
-
-
-
-
-
-
-
-
