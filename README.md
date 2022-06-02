@@ -18,6 +18,14 @@ Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
 
+## README Outline
+[Installation](https://github.com/forlilab/Ringtail#installation)
+[Definitions](https://github.com/forlilab/Ringtail#definitions)
+[Scripts](https://github.com/forlilab/Ringtail#scripts)
+[rt_process_vs.py Documentation](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation)
+[rt_selectivity.py Documentation](https://github.com/forlilab/Ringtail#rt_selectivitypy-documentation)
+[Python tutorials](https://github.com/forlilab/Ringtail#brief-python-tutorials)
+
 ## Installation
 It is recommended that you create a new Conda environment for installing Ringtail. Ringtail requires the following:
 - RDKit
@@ -298,3 +306,29 @@ rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db
 |--log |-l| Name for log file| selective_log.txt |
 |--save_subset| -s| Save the final selective subset as a view with given name in the first database specified with --positive_selection. | no default|
 |--export_csv| -x| Save final selective subset as csv. Saved as [save_subset].csv or 'crossref.csv' if --save_subset not used.| FALSE|
+
+---
+## Brief python tutorials
+#### Convert database tables to pandas dataframes
+```
+from ringtail import DBManagerSQLite
+
+# make database manager with connection to SQLite file vs.db
+dbman = DBManagerSQLite("vs.db")
+
+# fetch entire Results table as pandas dataframe
+results_df = dbman.fetch_dataframe_from_db("Results")
+
+# fetch entire Ligands table as pandas dataframe
+ligands_df = dbman.fetch_dataframe_from_db("Ligands")
+
+# fetch entire Receptors table as pandas dataframe
+rec_df = dbman.fetch_dataframe_from_db("Receptors")
+
+# fetch entire Interaction Indices table as pandas dataframe
+interaction_idx_df = dbman.fetch_dataframe_from_db("Interaction_indices")
+
+# fetch entire Interaction bitvectors table as pandas dataframe
+interaction_bv_df = dbman.fetch_dataframe_from_db("Interaction_bitvectors")
+
+```

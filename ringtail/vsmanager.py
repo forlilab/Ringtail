@@ -66,7 +66,7 @@ class VSManager:
 
     def __enter__(self):
         try:
-            self.dbman = DBManagerSQLite(self.db_opts)
+            self.dbman = DBManagerSQLite(self.db_opts["dbFile"], self.db_opts)
         except DatabaseConnectionError as e:
             raise VirtualScreeningError(
                 "Error encountered while connecting to database. Please ensure that given database file name is correct."
