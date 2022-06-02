@@ -12,15 +12,14 @@ from .mpreaderwriter import Writer
 from .exceptions import MultiprocessingError
 
 
-class MPManager():
-
+class MPManager:
     def __init__(self, filelist, mode, db_obj, chunksize, numclusters, target):
         # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg", "vina"]
         if mode not in self.implemented_modes:
             raise NotImplementedError(
-                "Requested file parsing mode {0} not yet implemented".format(
-                    mode))
+                "Requested file parsing mode {0} not yet implemented".format(mode)
+            )
         self.mode = mode
         self.filelist = filelist
         self.db = db_obj
@@ -39,15 +38,29 @@ class MPManager():
         p_conn, c_conn = multiprocessing.Pipe(False)
         for i in range(self.max_proc):
             # one worker is started for each processor to be used
-            s = DockingFileReader(self.queueIn, self.queueOut, c_conn, self.db,
-                                  self.mode, self.numclusters, self.target)
+            s = DockingFileReader(
+                self.queueIn,
+                self.queueOut,
+                c_conn,
+                self.db,
+                self.mode,
+                self.numclusters,
+                self.target,
+            )
             # this method calls .run() internally
             s.start()
             workers.append(s)
 
         # start the writer to process the data from the workers
-        w = Writer(self.queueOut, self.max_proc, c_conn, self.chunksize, self.db,
-                   self.num_files, self.mode)
+        w = Writer(
+            self.queueOut,
+            self.max_proc,
+            c_conn,
+            self.chunksize,
+            self.db,
+            self.num_files,
+            self.mode,
+        )
 
         w.start()
         workers.append(w)

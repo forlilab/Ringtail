@@ -12,7 +12,7 @@ from ringtail import VirtualScreeningError, OptionError
 import logging
 import traceback
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     time0 = time.perf_counter()
     # parse command line options and filters file (if given)
@@ -26,17 +26,21 @@ if __name__ == '__main__':
 
     # save target name
     if len(cl_opts.rec_files_pool) != 0:
-        receptor = cl_opts.rec_files_pool[0].split(".")[0].split("/")[-1]  # remove file extension and path
+        receptor = (
+            cl_opts.rec_files_pool[0].split(".")[0].split("/")[-1]
+        )  # remove file extension and path
     else:
         receptor = None
 
     # prepare option dictionaries for VSManager
     dbman_opts = cl_opts.db_opts
-    rman_opts = {'chunk_size': 1,
-                 'filelist': cl_opts.lig_files_pool,
-                 'mode': cl_opts.mode,
-                 'num_clusters': dbman_opts["num_clusters"],
-                 'target': receptor}
+    rman_opts = {
+        "chunk_size": 1,
+        "filelist": cl_opts.lig_files_pool,
+        "mode": cl_opts.mode,
+        "num_clusters": dbman_opts["num_clusters"],
+        "target": receptor,
+    }
     filters = cl_opts.filters
     out_opts = cl_opts.out_opts
 
@@ -53,14 +57,15 @@ if __name__ == '__main__':
 
     # create manager object for virtual screening. Will make database if needed
     try:
-        with VSManager(db_opts=dbman_opts,
-                       rman_opts=rman_opts,
-                       filters=filters,
-                       out_opts=out_opts) as vsman:
+        with VSManager(
+            db_opts=dbman_opts, rman_opts=rman_opts, filters=filters, out_opts=out_opts
+        ) as vsman:
 
             # Add receptors to database if requested
             if cl_opts.save_receptor:
-                receptor_list = ReceptorManager.make_receptor_blobs(cl_opts.rec_files_pool)
+                receptor_list = ReceptorManager.make_receptor_blobs(
+                    cl_opts.rec_files_pool
+                )
                 vsman.add_receptors_to_db(receptor_list)
 
             time1 = time.perf_counter()
@@ -84,7 +89,11 @@ if __name__ == '__main__':
 
                 # write out requested CSVs
                 if out_opts["export_table"] is not None:
-                    vsman.export_csv(out_opts["export_table"], out_opts["export_table"] + ".csv", table=True)
+                    vsman.export_csv(
+                        out_opts["export_table"],
+                        out_opts["export_table"] + ".csv",
+                        table=True,
+                    )
                 if out_opts["export_query"] is not None:
                     vsman.export_csv(out_opts["export_query"], "query.csv")
 
@@ -96,5 +105,11 @@ if __name__ == '__main__':
 
     # print performance times
     time2 = time.perf_counter()
-    logging.info("Time to initialize/write database: " + str(round(time1 - time0, 2)) + " seconds")
-    logging.info("Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds ")
+    logging.info(
+        "Time to initialize/write database: "
+        + str(round(time1 - time0, 2))
+        + " seconds"
+    )
+    logging.info(
+        "Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds "
+    )

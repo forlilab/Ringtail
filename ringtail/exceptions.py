@@ -4,6 +4,7 @@
 # Ringtail custom exceptions
 #
 
+
 class DatabaseError(Exception):
     pass
 
