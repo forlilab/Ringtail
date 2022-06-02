@@ -58,7 +58,7 @@ pip install --editable .
 ## Scripts
 The Ringtail package includes two command line oriented scripts: `rt_process_vs.py` and `rt_selectivity.py`.
 
-[`rt_process_vs.py`](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation) serves as the primary script for the package and is used to both write docking files to a SQLite database and to perform filtering and export tasks on a database. It is designed to handle docking output files associated with a single virtual screening in a single database.
+[rt_process_vs.py](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation) serves as the primary script for the package and is used to both write docking files to a SQLite database and to perform filtering and export tasks on a database. It is designed to handle docking output files associated with a single virtual screening in a single database.
 
 `rt_selectivity.py` is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
 
@@ -254,3 +254,5 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--hb_count         |-hc| Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | No|
 |--react_any        |-ra| Filter for poses with reaction with any residue       | FALSE     | No|
 |--max_miss         |-mm| Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  | No|
+
+## rt_selectivity.py Documentation
