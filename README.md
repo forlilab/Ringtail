@@ -317,18 +317,18 @@ from ringtail import DBManagerSQLite
 dbman = DBManagerSQLite("vs.db")
 
 # fetch entire Results table as pandas dataframe
-results_df = dbman.fetch_dataframe_from_db("Results")
+results_df = dbman.to_dataframe("Results")
 
 # fetch entire Ligands table as pandas dataframe
-ligands_df = dbman.fetch_dataframe_from_db("Ligands")
+ligands_df = dbman.to_dataframe("Ligands")
 
 # fetch entire Receptors table as pandas dataframe
-rec_df = dbman.fetch_dataframe_from_db("Receptors")
+rec_df = dbman.to_dataframe"Receptors")
 
 # fetch entire Interaction Indices table as pandas dataframe
-interaction_idx_df = dbman.fetch_dataframe_from_db("Interaction_indices")
+interaction_idx_df = dbman.to_dataframe("Interaction_indices")
 
 # fetch entire Interaction bitvectors table as pandas dataframe
-interaction_bv_df = dbman.fetch_dataframe_from_db("Interaction_bitvectors")
+interaction_bv_df = dbman.to_dataframe("Interaction_bitvectors")
 
 ```

@@ -774,7 +774,7 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def fetch_dataframe_from_db(self, requested_data: str, table=True) -> pd.DataFrame:
+    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
         """Returns dataframe of table or query given as requested_data
 
         Args:
@@ -1501,7 +1501,7 @@ class DBManagerSQLite(DBManager):
                 "Error occurred while fetching number of receptor rows containing PDBQT blob"
             ) from e
 
-    def fetch_dataframe_from_db(self, requested_data: str, table=True) -> pd.DataFrame:
+    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
         """Returns dataframe of table or query given as requested_data
 
         Args:

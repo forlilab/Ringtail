@@ -368,7 +368,7 @@ class VSManager:
             table (bool): flag indicating is requested data is a table name
         """
         try:
-            df = self.dbman.fetch_dataframe_from_db(requested_data, table=table)
+            df = self.dbman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
         except DatabaseError as e:
             raise VirtualScreeningError(
