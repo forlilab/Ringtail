@@ -121,6 +121,10 @@ def cmdline_parser(defaults={}):
     parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
 
+    # check that name was given with save_subset
+    if args.save_subset == "":
+        raise IOError("--save_subset option used but no subset name given. Must specify subset name as string.")
+
     return args
 
 
@@ -203,4 +207,5 @@ if __name__ == '__main__':
         logging.critical(e)
         sys.exit(1)
 
-    dbman.close_db_crossref()
+    finally:
+        dbman.close_db_crossref()

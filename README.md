@@ -285,3 +285,14 @@ rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db
 ```
 rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --export_csv
 ```
+### rt_selectivity.py supported arguments
+
+| Argument          || Description                                           | Default value   |
+|:------------------------|:-----|:-------------------------------------------------|----:|
+|--config           | -c| Configuration JSON file to specify new default options. Overridded by command line | no default <tr><td colspan="4"></td></tr>
+|--positive_selection|-p| Database files for which to select the intersection of ligands in subset_name for all databases specified with this option.| no default|
+|--negative_selection|-n| Database files for which to exclude any ligands found in subset_name of any of the databases specified with this option. | no default|
+|--subset_name |-sn| Name of subset to select ligands within. Must be present in all databases given.| passing_results|
+|--log |-l| Name for log file| selective_log.txt |
+|--save_subset| -s| Save the final selective subset as a view with given name in the first database specified with --positive_selection. | no default|
+|--export_csv| -x| Save final selective subset as csv. Saved as [save_subset].csv or 'crossref.csv' if --save_subset not used.| FALSE|
