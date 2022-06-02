@@ -62,8 +62,8 @@ The Ringtail package includes two command line oriented scripts: `rt_process_vs.
 
 `rt_selectivity.py` is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
 
-
-## rt_process_vs.py usage examples
+## rt_process_vs.py Documentation
+### Usage examples
 #### Access help message for rt_process_vs.py
 ```
 rt_process_vs.py --help
@@ -78,7 +78,7 @@ rt_process_vs.py read --help
 ```
 #### Create database named example.db from all input options
 ```
-rt_process_vs.py write --file lig1.dlg lig2.dlg --file_path path1/ path2 --file_list filelist1.txt filelist2.txt --output_db example.db"
+rt_process_vs.py write --file lig1.dlg lig2.dlg --file_path path1/ path2 --file_list filelist1.txt filelist2.txt --output_db example.db
 
 ```
 Example file list
@@ -125,7 +125,7 @@ rt_process_vs.py read --input_db output.db --subset_name filter1 --plot
 
 ![all_ligands_scatter](https://user-images.githubusercontent.com/41704502/171295726-7315f929-edfa-49a0-b984-dacadf1a4327.png)
 
-## Usage Details
+### Usage Details
 The script for writing a database and filtering is `rt_process_vs.py`. __This is intended to be used for a set of DLGs/Vina PDBQTs pertaining to a single target. This may include multiple ligand libraries as long as the target is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ One receptor PDBQT may also be included if using with DLGs. 
 
 The rt_process_vs.py script has two modes: `write` and `read`. The desired mode must be specified in the command line before any other options are given. The `write` mode is used to create a database for a virtual screening from ADGPU DLGs or Vina PDBQTs. After this initial run, a database is created and may be read directly by rt_process_vs.py in `read` mode for subsequent filtering operations.
@@ -173,7 +173,7 @@ Using the `--export_sdf_path` option allows the user to specify a directory to s
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_subset_csv`, which takes a string for the name of a table or result subset in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
 The second option is `--export_query_csv`. This takes a string of a properly-formatted SQL query to run on the database, returning the results of that query as `query.csv`. This option allows the user full, unobstructed access to all data in the database.
 
-## Interaction filter formatting and options
+### Interaction filter formatting and options
 
 **Interaction filtering is not available for databases created with Vina PDBQTs.**
 
@@ -181,7 +181,7 @@ The `--vdw`, `--hb`, and `--react_res` interaction filters must be specified in 
 
 The `--max_miss` option allows the user to separately filter each combination of the given interaction filters excluding up to `max_miss` interactions. This gives ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination of interaction filters will be written separately in the log file. This option cannot be used with `--plot` or `--export_poses_path`.
 
-## Exploring the database in the Command Line
+### Exploring the database in the Command Line
 View the data contained within the database using a terminal, we recommend using the [VisiData tool](https://www.visidata.org/). In addition to command line visualization, this tool has a number of other feature, including ploting. Upon opening the database with `vd`, the terminal should look like this:
 
 ![Screenshot from 2022-05-18 14-57-22](https://user-images.githubusercontent.com/41704502/169162632-3a71d338-faa1-4109-8f04-40a96ee6d24e.png)
@@ -192,7 +192,7 @@ Using `vd` is particularly helpful to examine possible interactions of interest,
 
 To exit, return to the screen shown in the image above by pressing `q`, then press `q` to exit.
 
-## Data integrity sanity checks
+### Data integrity sanity checks
 There are a few quick checks the user can make to ensure that the data has been properly written from the DLGs to the database. Discrepancies may indicate an error occurred while writting the database or the DLG format did not that which Ringtail expected.
 - The number of rows in the `Ligands` table should match the number of input ligand files
 - The number of rows in the `Results` and `Interaction_bitvectors` tables should match (DLGs only)
@@ -201,14 +201,14 @@ There are a few quick checks the user can make to ensure that the data has been 
 - No ligand should have more than `max_poses` rows in the `Results` table (unless storing results from multiple virtual screenings in the same database; DLGs only).
 - If reading from Vina PDBQTs/using storing all poses, the number of rows in the Results table should match the `number of ligands` * `number of output poses`.
 
-## Potential pitfalls
+### Potential pitfalls
 When importing DLG files into a database with Ringtail, the files must have interaction analysis already performed. This is specified with `-C 1` when running [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU).
 
 Any PDBQT files specified through any of the input options will be read by `rt_process_vs.py` as receptor files, even if the files actually represent ligands. Therefore, ligand PDBQT files should not be present in any directories given with `--file_path`.
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. If this occurs and you start running into unclear errors related to the SQLite3 package, it is recommended to delete the existing database and re-write it from scratch.
 
-## rt_process_vs.py supported arguments
+### rt_process_vs.py supported arguments
 
 | Argument          || Description                                           | Default value   | Vina-compatible |
 |:------------------------|:-----|:-------------------------------------------------|:----------------|----:|
