@@ -55,9 +55,16 @@ pip install --editable .
 - __Ringtail__: 
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
+## Scripts
+The Ringtail package includes two command line oriented scripts: `rt_process_vs.py` and `rt_selectivity.py`.
 
-## Usage examples
-#### Access help message for run_ringtail.py
+`rt_process_vs.py` serves as the primary script for the package and is used to both write docking files to a SQLite database and to perform filtering and export tasks on a database. It is designed to handle docking output files associated with a single virtual screening in a single database.
+
+`rt_selectivity.py` is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
+
+
+## rt_process_vs.py usage examples
+#### Access help message for rt_process_vs.py
 ```
 run_ringtail.py --help
 ```
