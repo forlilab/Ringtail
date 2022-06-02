@@ -556,7 +556,7 @@ class DBManager():
 
         viewname = "temp_" + str(self.tempview_suffix)
 
-        self._create_view(viewname, query)
+        self._create_view(viewname, view_query)
         self.current_view_name = viewname
 
         self.tempview_suffix += 1
