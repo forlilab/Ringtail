@@ -60,6 +60,7 @@ pip install --editable .
 - __Cluster__: Each DLG contains a number of independent runs, usually 20-50. These independent poses are then clustered by RMSD, giving groups of similar poses called clusters.
 - __Pose__: The predicted ligand shape and position for single run of a single ligand in a single receptor.
 - __Binding score/ binding energy__: The predicited binding energy from AutoDock.
+- __Subset__: The set of ligands or ligand poses from a virtual screening passing a given set of filters. Stored within a virtual screening database as a view.
 - __Ringtail__: 
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
