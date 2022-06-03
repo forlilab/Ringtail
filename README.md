@@ -267,9 +267,10 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 
 ## rt_selectivity.py Documentation
 The `rt_selectivity.py` script is designed to be used with databases already made and filtered with the `rt_process_vs.py` script. The script is used to select ligands which are shared between a given filter subset of some virtual screenings (positive selection) or exclusive to some screenings and not others (negative selectivity). The basic process of preparing to use this script and the concept behind it is thus:
+
 Let us assume that kinase1 is our target of interest. It has related proteins kinase1a and kinase1b. protein2 is an unrelated protein.
 1. Create a database for each virtual screening on each target (kinase1.db, kinase1a.db, kinase1b.db, protein2.db)
-2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues), but the subset_name must be the same within each virtual screening database (default passing_results).
+2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues), but the **subset_name must be the same within each virtual screening database (default passing_results).**
 3. Use `rt_selectivity.py` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from `rt_process_vs.py`.
 ```
 rt_selectivity.py --positive_selection kinase1.db --negative_selection kinase1a.db kinase1b.db
