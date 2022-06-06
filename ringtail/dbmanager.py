@@ -1176,13 +1176,13 @@ class DBManagerSQLite(DBManager):
 
     """
 
-    def __init__(self, opts={}):
+    def __init__(self, db_file, opts={}):
         """Initialize superclass and subclass-specific instance variables
 
         Args:
             opts (dict, optional): Dictionary of database options
         """
-        super().__init__(opts)
+        super().__init__(db_file, opts)
 
         self.energy_filter_sqlite_call_dict = {
             "eworst": "energies_binding < {value}",

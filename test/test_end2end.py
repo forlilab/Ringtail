@@ -13,7 +13,7 @@ class TestInputs:
     def test_multiple_files1(self):
         os.system("rm output.db")
         os.system(
-            "python ../scripts/run_ringtail.py write --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz"
+            "python ../scripts/rt_process_vs.py write --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz"
         )
 
         conn = sqlite3.connect("output.db")
@@ -30,7 +30,7 @@ class TestInputs:
 
     def test_multiple_files2(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz"
+            "python ../scripts/rt_process_vs.py write --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz --file test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz"
         )
 
         conn = sqlite3.connect("output.db")
@@ -47,7 +47,7 @@ class TestInputs:
 
     def test_multiple_paths1(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_path test_data/TEST_0000003-results --file_path test_data/TEST_0000005-results"
+            "python ../scripts/rt_process_vs.py write --file_path test_data/TEST_0000003-results --file_path test_data/TEST_0000005-results"
         )
 
         conn = sqlite3.connect("output.db")
@@ -64,7 +64,7 @@ class TestInputs:
 
     def test_multiple_paths2(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_path test_data/TEST_0000003-results test_data/TEST_0000005-results"
+            "python ../scripts/rt_process_vs.py write --file_path test_data/TEST_0000003-results test_data/TEST_0000005-results"
         )
 
         conn = sqlite3.connect("output.db")
@@ -81,7 +81,7 @@ class TestInputs:
 
     def test_filelist1(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --file_list filelist2.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file_list filelist2.txt"
         )
 
         conn = sqlite3.connect("output.db")
@@ -98,7 +98,7 @@ class TestInputs:
 
     def test_filelist2(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt filelist2.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt filelist2.txt"
         )
 
         conn = sqlite3.connect("output.db")
@@ -131,7 +131,7 @@ class TestInputs:
         )
 
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist3.txt --file test_data/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz --file_path test_data/TEST_0000003-results"
+            "python ../scripts/rt_process_vs.py write --file_list filelist3.txt --file test_data/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz test_data/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz --file_path test_data/TEST_0000003-results"
         )
 
         conn = sqlite3.connect("output.db")
@@ -163,10 +163,10 @@ class TestInputs:
 
     def test_add_results(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_path test_data/TEST_0000005-results"
+            "python ../scripts/rt_process_vs.py write --file_path test_data/TEST_0000005-results"
         )
         os.system(
-            "python ../scripts/run_ringtail.py write --input_db output.db --file_path test_data/TEST_0000003-results --add_results"
+            "python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/TEST_0000003-results --add_results"
         )
 
         conn = sqlite3.connect("output.db")
@@ -183,10 +183,10 @@ class TestInputs:
 
     def test_conflict_handling(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_path test_data/TEST_0000005-results"
+            "python ../scripts/rt_process_vs.py write --file_path test_data/TEST_0000005-results"
         )
         os.system(
-            "python ../scripts/run_ringtail.py write --input_db output.db --file_path test_data/TEST_0000005-results --add_results --conflict_handling ignore"
+            "python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/TEST_0000005-results --add_results --conflict_handling ignore"
         )
 
         conn = sqlite3.connect("output.db")
@@ -203,10 +203,10 @@ class TestInputs:
 
     def test_conflict_handling_rpl(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_path test_data/TEST_0000005-results"
+            "python ../scripts/rt_process_vs.py write --file_path test_data/TEST_0000005-results"
         )
         os.system(
-            "python ../scripts/run_ringtail.py write --input_db output.db --file_path test_data/TEST_0000005-results --add_results --conflict_handling replace"
+            "python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/TEST_0000005-results --add_results --conflict_handling replace"
         )
 
         conn = sqlite3.connect("output.db")
@@ -223,7 +223,7 @@ class TestInputs:
 
     def test_save_rec_file(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt --save_receptor"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -241,7 +241,7 @@ class TestInputs:
 
     def test_save_rec_filepath(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --file_path test_data/rec --save_receptor"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file_path test_data/rec --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -259,7 +259,7 @@ class TestInputs:
 
     def test_save_rec_filelist(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist4.txt --save_receptor"
+            "python ../scripts/rt_process_vs.py write --file_list filelist4.txt --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -277,7 +277,7 @@ class TestInputs:
 
     def test_save_rec_file_gz(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt.gz --save_receptor"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt.gz --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -295,7 +295,7 @@ class TestInputs:
 
     def test_save_rec_filepath_gz(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --file_path test_data/rec_gz --save_receptor"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file_path test_data/rec_gz --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -313,7 +313,7 @@ class TestInputs:
 
     def test_save_rec_filelist_gz(self):
         os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist5.txt --save_receptor"
+            "python ../scripts/rt_process_vs.py write --file_list filelist5.txt --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -334,10 +334,10 @@ class TestOutputs:
 
     def test_export_subset_csv(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --export_subset_csv Ligands"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --export_subset_csv Ligands"
         )
 
         os.system("rm output.db")
@@ -346,11 +346,11 @@ class TestOutputs:
 
     def test_export_query_csv(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
 
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --export_query_csv 'SELECT * FROM Results'"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --export_query_csv 'SELECT * FROM Results'"
         )
 
         os.system("rm output.db")
@@ -359,7 +359,7 @@ class TestOutputs:
 
     def test_interaction_tolerance(self):
         status_notol = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt")
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt")
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -375,7 +375,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status_tol = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --interaction_tolerance"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --interaction_tolerance"
         )
 
         conn = sqlite3.connect("output.db")
@@ -392,7 +392,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status_tol2 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --interaction_tolerance 2.0"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --interaction_tolerance 2.0"
         )
 
         conn = sqlite3.connect("output.db")
@@ -417,7 +417,7 @@ class TestOutputs:
 
     def test_max_poses(self):
         status3 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt")
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt")
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Results")
@@ -429,7 +429,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --max_poses 1"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --max_poses 1"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -445,7 +445,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status5 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --max_poses 5"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --max_poses 5"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -465,7 +465,7 @@ class TestOutputs:
 
     def test_store_all(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt --store_all_poses"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --store_all_poses"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -488,10 +488,10 @@ class TestFilters():
 
     def test_eworst(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --eworst -15"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --eworst -15"
         )
 
         os.system("rm output.db")
@@ -500,10 +500,10 @@ class TestFilters():
 
     def test_ebest(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --ebest -15"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --ebest -15"
         )
 
         os.system("rm output.db")
@@ -512,10 +512,10 @@ class TestFilters():
 
     def test_leworst(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --leworst -0.4"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --leworst -0.4"
         )
 
         os.system("rm output.db")
@@ -524,10 +524,10 @@ class TestFilters():
 
     def test_lebest(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --leworst -0.4"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --leworst -0.4"
         )
 
         os.system("rm output.db")
@@ -536,10 +536,10 @@ class TestFilters():
 
     def test_epercentile(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --energy_percentile 0.1"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --energy_percentile 0.1"
         )
 
         os.system("rm output.db")
@@ -548,10 +548,10 @@ class TestFilters():
 
     def test_lepercentile(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --le_percentile 0.1"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --le_percentile 0.1"
         )
 
         os.system("rm output.db")
@@ -560,10 +560,10 @@ class TestFilters():
 
     def test_epercentile_eworst(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --energy_percentile 0.1 --eworst -14"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --energy_percentile 0.1 --eworst -14"
         )
 
         os.system("rm output.db")
@@ -572,10 +572,10 @@ class TestFilters():
 
     def test_lepercentile_leworst(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --le_percentile 0.1 --leworst -0.4"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --le_percentile 0.1 --leworst -0.4"
         )
 
         os.system("rm output.db")
@@ -584,10 +584,10 @@ class TestFilters():
 
     def test_name(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input output.db --name OB3Z3759440327_RX1--4xfx_mon_prep--tyr169"
+            "python ../scripts/rt_process_vs.py read --input output.db --name OB3Z3759440327_RX1--4xfx_mon_prep--tyr169"
         )
 
         os.system("rm output.db")
@@ -596,10 +596,10 @@ class TestFilters():
 
     def test_substruct(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --substructure CO"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --substructure CO"
         )
 
         os.system("rm output.db")
@@ -608,10 +608,10 @@ class TestFilters():
 
     def test_substruct_join_or(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --substructure CO C=C --substructure_join OR"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --substructure CO C=C --substructure_join OR"
         )
 
         os.system("rm output.db")
@@ -620,10 +620,10 @@ class TestFilters():
 
     def test_substruct_join_and(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --substructure CO C=C --substructure_join AND"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --substructure CO C=C --substructure_join AND"
         )
 
         os.system("rm output.db")
@@ -632,10 +632,10 @@ class TestFilters():
 
     def test_hbcount(self):
         status1 = os.system(
-            "python ../scripts/run_ringtail.py write --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --hb_count 5"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --hb_count 5"
         )
 
 
@@ -643,161 +643,161 @@ class TestFilters():
 
     def test_react_any(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --react_any"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --react_any"
         )
 
         assert status == 0
 
     def test_react1(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db  --reactive_res A:TYR:169:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db  --reactive_res A:TYR:169:"
         )
 
         assert status == 0
 
     def test_react2(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db  --reactive_res :TYR:169:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db  --reactive_res :TYR:169:"
         )
 
         assert status == 0
 
     def test_react3(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --reactive_res :TYR::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --reactive_res :TYR::"
         )
 
         assert status == 0
 
     def test_react4(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --reactive_res A:TYR::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --reactive_res A:TYR::"
         )
 
         assert status == 0
 
     def test_react5(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --reactive_res A::169:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --reactive_res A::169:"
         )
 
         assert status == 0
 
     def test_react6(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --reactive_res A:::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --reactive_res A:::"
         )
 
         assert status == 0
 
     def test_react7(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --reactive_res ::169:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --reactive_res ::169:"
         )
 
         assert status == 0
 
     def test_hb1(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -hb A:MET:214:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -hb A:MET:214:"
         )
 
         assert status == 0
 
     def test_hb2(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -hb :MET:214:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -hb :MET:214:"
         )
 
         assert status == 0
 
     def test_hb3(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -hb :MET::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -hb :MET::"
         )
 
         assert status == 0
 
     def test_hb4(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -hb A:MET::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -hb A:MET::"
         )
 
         assert status == 0
 
     def test_hb5(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -hb A::214:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -hb A::214:"
         )
 
         assert status == 0
 
     def test_hb6(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -hb A:::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -hb A:::"
         )
 
         assert status == 0
 
     def test_hb7(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -hb ::214:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -hb ::214:"
         )
 
         assert status == 0
 
     def test_vdw1(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -vdw A:PRO:207:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -vdw A:PRO:207:"
         )
 
         assert status == 0
 
     def test_vdw2(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -vdw :PRO:207:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -vdw :PRO:207:"
         )
 
         assert status == 0
 
     def test_vdw3(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -vdw :PRO::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -vdw :PRO::"
         )
 
         assert status == 0
 
     def test_vdw4(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -vdw A:PRO::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -vdw A:PRO::"
         )
 
         assert status == 0
 
     def test_vdw5(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -vdw A::207:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -vdw A::207:"
         )
 
         assert status == 0
 
     def test_vdw6(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -vdw A:::"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -vdw A:::"
         )
 
         assert status == 0
 
     def test_vdw7(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db -vdw ::207:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db -vdw ::207:"
         )
 
         assert status == 0
 
     def test_all_filters(self):
         status = os.system(
-            "python ../scripts/run_ringtail.py read --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --energy_percentile 99 --le_percentile 99 --name OB3Z3759440327_RX1--4xfx_mon_prep--tyr169,OB3Z3759440327_RX1--4xfx_mon_prep--tyr169 --substructure CO C=C --substructure_join AND --hb_count 5 --react_any -hb A:MET:214: -vdw A:PRO:207: --reactive_res A:TYR:169:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --energy_percentile 99 --le_percentile 99 --name OB3Z3759440327_RX1--4xfx_mon_prep--tyr169,OB3Z3759440327_RX1--4xfx_mon_prep--tyr169 --substructure CO C=C --substructure_join AND --hb_count 5 --react_any -hb A:MET:214: -vdw A:PRO:207: --reactive_res A:TYR:169:"
         )
 
         assert status == 0

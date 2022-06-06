@@ -1,2 +1,24 @@
 Filtered poses:
 ***************
+##### PROPERTIES
+#   eworst : -15.000
+#    ebest : -16.000
+#  leworst : -0.400
+#   lebest : -0.500
+#  energy_percentile :  [ none ]
+#  le_percentile :  [ none ]
+#### LIGAND FILTERS
+#        N : OB3Z3759440327_RX1--4xfx_mon_prep--tyr169,OB3Z3759440327_RX1--4xfx_mon_prep--tyr169
+#        S : CO, C=C
+#        F : AND
+#### INTERACTIONS
+#        V : ()A:PRO:207:
+#        H : ()A:MET:214:
+#        R : ()A:TYR:169:
+
+Result subset name: passing_results
+
+Number passing ligands: 0 
+---------------
+***************
+

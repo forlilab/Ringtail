@@ -59,7 +59,7 @@ class DockingFileReader(multiprocessing.Process):
             while True:
                 # retrieve from the queue in the next task to be done
                 next_task = self.queueIn.get()
-                logging.debug("Next Task: " + str(next_task))
+                # logging.debug("Next Task: " + str(next_task))
                 # if a poison pill is received, this worker's job is done, quit
                 if next_task is None:
                     # before leaving, pass the poison pill back in the queue
@@ -144,7 +144,7 @@ class Writer(multiprocessing.Process):
                     # if a poison pill is found, it means one of the workers quit
                     self.maxProcesses -= 1
                     logging.info(
-                        "Closing process. Remaining open processes:", self.maxProcesses
+                        "Closing process. Remaining open processes: " + str(self.maxProcesses)
                     )
                 else:
                     # if not a poison pill, process the task item
