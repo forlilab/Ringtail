@@ -807,7 +807,7 @@ class Outputter:
                 buff.append(l_str)
 
             for line in buff:
-                self.write_log_line(line)
+                self._write_log_line(line)
 
         except Exception as e:
             raise OutputError("Error occurred while writing filters to log") from e

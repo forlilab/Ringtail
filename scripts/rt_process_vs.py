@@ -15,6 +15,12 @@ import traceback
 if __name__ == "__main__":
 
     time0 = time.perf_counter()
+    debug = True
+    if debug:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    logging.basicConfig(level=level, stream=sys.stdout, filemode="w", format="%(message)s")
     # parse command line options and filters file (if given)
     try:
         cl_opts = CLOptionParser()
@@ -45,15 +51,14 @@ if __name__ == "__main__":
     out_opts = cl_opts.out_opts
 
     # set logging level
+    levels = {10: "debug", 20: "info", 30: "error"}
     no_print = out_opts["no_print"]
-    debug = False
-    if debug:
-        level = logging.DEBUG
-    elif not no_print:
+    if no_print is False and debug is False:
         level = logging.INFO
-    else:
+    elif debug is False:
         level = logging.WARNING
-    logging.basicConfig(level=level)
+    logging.getLogger().setLevel(level)
+    logging.info(f"Logging level set to {levels[level]}")
 
     # create manager object for virtual screening. Will make database if needed
     try:
