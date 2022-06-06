@@ -60,6 +60,7 @@ pip install --editable .
 - __Cluster__: Each DLG contains a number of independent runs, usually 20-50. These independent poses are then clustered by RMSD, giving groups of similar poses called clusters.
 - __Pose__: The predicted ligand shape and position for single run of a single ligand in a single receptor.
 - __Binding score/ binding energy__: The predicited binding energy from AutoDock.
+- __Subset__: The set of ligands or ligand poses from a virtual screening passing a given set of filters. Stored within a virtual screening database as a view.
 - __Ringtail__: 
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
@@ -266,6 +267,20 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 ---
 
 ## rt_selectivity.py Documentation
+The `rt_selectivity.py` script is designed to be used with databases already made and filtered with the `rt_process_vs.py` script. The script is used to select ligands which are shared between a given filter subset of some virtual screenings (positive selection) or exclusive to some screenings and not others (negative selectivity). The basic process of preparing to use this script and the concept behind it is thus:
+
+Let us assume that kinase1 is our target of interest. It has related proteins kinase1a and kinase1b. protein2 is an unrelated protein.
+1. Create a database for each virtual screening on each target (kinase1.db, kinase1a.db, kinase1b.db, protein2.db)
+2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues), but the **subset_name must be the same within each virtual screening database (default passing_results).**
+3. Use `rt_selectivity.py` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from `rt_process_vs.py`.
+```
+rt_selectivity.py --positive_selection kinase1.db --negative_selection kinase1a.db kinase1b.db
+```
+4. Other usage examples and output options given below. For example, one can also select for potential dual-target ligands with
+```
+rt_selectivity.py --positive_selection kinase1.db protein2.db --negative_selection kinase1a.db kinase1b.db
+```
+
 ### Usage examples
 #### Access help message for rt_selectivity.py
 ```
