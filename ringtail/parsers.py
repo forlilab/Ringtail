@@ -56,6 +56,7 @@ def parse_single_dlg(fname, mode="standard"):
     pose_coordinates = []
     flexible_residues = []
     flexible_res_coords = []
+    smile_string = ""
 
     # Define empty center list for backwards compatibility with DLGs without grid centers
     center = [None, None, None]
@@ -93,7 +94,7 @@ def parse_single_dlg(fname, mode="standard"):
                     for coord in line.split(":")[1].split(",")
                 ]
             # store smile string
-            if "REMARK SMILES" in line and "IDX" not in line:
+            if "REMARK SMILES" in line and "IDX" not in line and smile_string == "":
                 smile_string = line.split("REMARK SMILES")[-1]
             # store flexible residue identities
             if "INPUT-FLEXRES-PDBQT: BEGIN_RES" in line:
@@ -436,6 +437,9 @@ def parse_vina_pdbqt(fname):
     interactions = []
     count_atoms = True
     num_heavy_atoms = 0
+    smile_string = ""
+    smile_idx_map = []
+    ligand_h_parents = []
 
     with open_fn(fname, "rb") as fp:
         for line in fp.readlines():
@@ -457,6 +461,12 @@ def parse_vina_pdbqt(fname):
                     if count_atoms and line[13] != "H":
                         num_heavy_atoms += 1
                     pose_coordinates[-1].append([line[30:38], line[38:46], line[46:54]])
+                if line.startswith("REMARK SMILES IDX") and smile_idx_map == []:
+                    smile_idx_map = line.split()[3:]
+                elif line.startswith("REMARK SMILES") and smile_string == "":
+                    smile_string = line.split()[2]
+                if line.startswith("REMARK H PARENT") and ligand_h_parents == []:
+                    ligand_h_parents = line.split()[3:]
                 if line == "ENDMDL" and count_atoms:
                     count_atoms = False
             except ValueError:
@@ -473,12 +483,12 @@ def parse_vina_pdbqt(fname):
         "grid_dim": "",
         "grid_spacing": "",
         "ligand_input_pdbqt": "",
-        "ligand_index_map": "",
-        "ligand_h_parents": "",
+        "ligand_index_map": smile_idx_map,
+        "ligand_h_parents": ligand_h_parents,
         "pose_coordinates": pose_coordinates,  # list
         "flexible_res_coordinates": "",
         "flexible_residues": "",
-        "ligand_smile_string": "",
+        "ligand_smile_string": smile_string,
         "clusters": {},
         "cluster_rmsds": [],
         "cluster_sizes": {},
