@@ -353,7 +353,7 @@ def cmdline_parser(defaults={}):
     )
     output_group.add_argument(
         "-sdf",
-        "--export_SDF_path",
+        "--export_sdf_path",
         help="specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.",
         action="store",
         type=str,

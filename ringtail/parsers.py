@@ -401,7 +401,7 @@ def parse_single_dlg(fname, mode="standard"):
         "interactions": interactions,
         "num_interactions": pose_interact_count,
         "num_hb": pose_hb_counts,
-        "sorted_runs": [x + 1 for x in sorted_idx],
+        "sorted_runs": [int(x + 1) for x in sorted_idx],
         "pose_about": pose_about,
         "pose_translations": pose_trans,
         "pose_quarternions": pose_quarternions,
@@ -453,7 +453,7 @@ def parse_vina_pdbqt(fname):
                     internal_energy.append(float(line.split()[2]))
                 if line.startswith("REMARK UNBOUND:"):
                     unbound_energy.append(float(line.split()[2]))
-                if line.startswith("HETATM"):
+                if line.startswith("HETATM") or line.startswith("ATOM"):
                     if count_atoms and line[13] != "H":
                         num_heavy_atoms += 1
                     pose_coordinates[-1].append([line[30:38], line[38:46], line[46:54]])
