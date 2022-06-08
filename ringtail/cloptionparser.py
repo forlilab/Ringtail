@@ -425,7 +425,7 @@ def cmdline_parser(defaults={}):
     )
 
     ligand_group = read_parser.add_argument_group(
-        "Ligand Filters", "Specify ligand substructure or name filter(s)"
+        "Ligand Filters", "Specify ligand name filter(s)"
     )
     ligand_group.add_argument(
         "-n",
@@ -436,23 +436,24 @@ def cmdline_parser(defaults={}):
         metavar="STRING",
         nargs="+",
     )
-    ligand_group.add_argument(
-        "-st",
-        "--substructure",
-        help="specify SMILES substring(s) to search for.",
-        action="store",
-        type=str,
-        metavar="STRING",
-        nargs="+",
-    )
-    ligand_group.add_argument(
-        "-sj",
-        "--substructure_join",
-        help="specify whether to join substructures filters with AND or OR.",
-        action="store",
-        type=str,
-        metavar="STRING",
-    )
+    # SUBSTRUCTURE SEARCH: To be implemented in future version via RDKit
+    # ligand_group.add_argument(
+    #    "-st",
+    #    "--substructure",
+    #    help="specify SMILES substring(s) to search for.",
+    #    action="store",
+    #    type=str,
+    #    metavar="STRING",
+    #    nargs="+",
+    # )
+    # ligand_group.add_argument(
+    #    "-sj",
+    #    "--substructure_join",
+    #    help="specify whether to join substructures filters with AND or OR.",
+    #    action="store",
+    #    type=str,
+    #    metavar="STRING",
+    # )
 
     interaction_group = read_parser.add_argument_group(
         "Interaction Filters",
