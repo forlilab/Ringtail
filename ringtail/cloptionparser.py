@@ -615,16 +615,6 @@ class CLOptionParser:
                     "Used incompatible --save_receptor flag with Vina mode. Setting --save_receptor to False"
                 )
                 parsed_opts.save_receptor = False
-            if parsed_opts.export_sdf_path is not None:
-                warnings.warn(
-                    "Cannot use --export_sdf_path with Vina mode. Setting export_sdf_path to None."
-                )
-                parsed_opts.export_sdf_path = None
-            if parsed_opts.substructure is not None:
-                warnings.warn(
-                    "Cannot use --substructure filter with Vina mode. Removing filter."
-                )
-                parsed_opts.substructure = None
             if parsed_opts.react_any:
                 warnings.warn(
                     "Cannot use interaction filters with Vina mode. Removing react_any filter."
