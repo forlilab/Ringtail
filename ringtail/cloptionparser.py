@@ -841,10 +841,8 @@ class CLOptionParser:
         }
 
         db_opts = {
-            "num_clusters": parsed_opts.max_poses,
             "order_results": parsed_opts.order_results,
             "log_distinct_ligands": parsed_opts.all_poses,
-            "interaction_tolerance": parsed_opts.interaction_tolerance,
             "results_view_name": parsed_opts.subset_name,
             "store_all_poses": parsed_opts.store_all_poses,
             "overwrite": parsed_opts.overwrite,
@@ -852,6 +850,12 @@ class CLOptionParser:
             "conflict_opt": conflict_handling,
             "mode": parsed_opts.mode,
             "dbFile": None
+        }
+
+        rman_opts = {
+            "store_all_poses": parsed_opts.store_all_poses,
+            "num_clusters": parsed_opts.max_poses,
+            "interaction_tolerance": parsed_opts.interaction_tolerance,
         }
 
         self.file_sources = file_sources
@@ -870,6 +874,7 @@ class CLOptionParser:
         self.db_opts = db_opts
         self.filters = filters
         self.out_opts = out_opts
+        self.rman_opts = rman_opts
 
     def _process_sources(self):
         """process the options for input files (parse dictionary)"""

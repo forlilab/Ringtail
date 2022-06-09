@@ -40,11 +40,14 @@ if __name__ == "__main__":
 
     # prepare option dictionaries for VSManager
     dbman_opts = cl_opts.db_opts
+    rman_opts = cl_opts.rman_opts
     rman_opts = {
         "chunk_size": 1,
         "filelist": cl_opts.lig_files_pool,
         "mode": cl_opts.mode,
-        "num_clusters": dbman_opts["num_clusters"],
+        "num_clusters": rman_opts["num_clusters"],
+        "interaction_tolerance": rman_opts["interaction_tolerance"],
+        "store_all_poses": rman_opts["store_all_poses"],
         "target": receptor,
     }
     filters = cl_opts.filters

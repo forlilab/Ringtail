@@ -86,6 +86,8 @@ class VSManager:
             chunk_size=self.rman_opts["chunk_size"],
             filelist=self.rman_opts["filelist"],
             numclusters=self.rman_opts["num_clusters"],
+            interaction_tolerance_cutoff=self.rman_opts["interaction_tolerance"],
+            store_all_poses=self.rman_opts["store_all_poses"],
             target=self.rman_opts["target"],
         )
 

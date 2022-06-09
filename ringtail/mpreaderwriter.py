@@ -16,11 +16,14 @@ from .exceptions import FileParsingError, WriteToDatabaseError
 class DockingFileReader(multiprocessing.Process):
     """this class is the individual worker for processing dlgs"""
 
-    def __init__(self, queueIn, queueOut, pipe_conn, dbman, mode, numclusters, target):
+    def __init__(self, queueIn, queueOut, pipe_conn, dbman, mode, numclusters, interaction_tolerance_cutoff, store_all_poses, target):
         # set mode for which file parser to use
         self.mode = mode
         # set number of clusters to write
         self.num_clusters = numclusters
+        self.store_all_poses_flag = store_all_poses
+        # set interaction_tolerance cutoff
+        self.interaction_tolerance_cutoff = interaction_tolerance_cutoff
         # set dbmanager
         self.dbman = dbman
         # set target name to check against
@@ -36,7 +39,7 @@ class DockingFileReader(multiprocessing.Process):
 
         self.exception = None
 
-    def find_best_cluster_poses(self, ligand_dict):
+    def _find_best_cluster_poses(self, ligand_dict):
         """takes input ligand dictionary, reads run pose clusters,
         adds "cluster_best_run" entry with the top scoring
         run for each cluster"""
@@ -85,7 +88,17 @@ class DockingFileReader(multiprocessing.Process):
                             parsed_file_dict["receptor"], next_task, self.target
                         )
                     )
-                parsed_file_dict = self.find_best_cluster_poses(parsed_file_dict)
+                parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
+                # find run numbers for poses we want to save
+                if not self.store_all_poses_flag:
+                    parsed_file_dict["poses_to_save"] = self._find_cluster_top_pose_runs(parsed_file_dict)
+                else:
+                    parsed_file_dict["poses_to_save"] = parsed_file_dict["sorted_runs"]
+                # find poses we want to save tolerated interactions for
+                if self.interaction_tolerance_cutoff is not None:
+                    parsed_file_dict["tolerated_interaction_runs"] = self._find_tolerated_interactions(parsed_file_dict)
+                else:
+                    parsed_file_dict["tolerated_interaction_runs"] = []
                 file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
                 # put the result in the out queue
                 self.queueOut.put(file_packet)
@@ -94,6 +107,50 @@ class DockingFileReader(multiprocessing.Process):
             self.pipe.send((FileParsingError("Error while parsing file"), tb))
         finally:
             return
+
+    def _find_cluster_top_pose_runs(self, ligand_dict: dict) -> list:
+        """returns list of the run numbers for the top run in the
+        top self.num_clusters clusters
+
+        Args:
+            ligand_dict (Dictionary): Dictionary of ligand data from parser
+
+        Returns:
+            List: List of run numbers to save, which are the top runs from
+            the first self.num_clusters clusters
+        """
+        try:
+            # will only select top n clusters. Default 3
+            cluster_top_pose_runs = ligand_dict["cluster_top_poses"][
+                : self.num_clusters
+            ]
+        except IndexError:
+            # catch indexerror if not enough clusters for given ligand
+            cluster_top_pose_runs = ligand_dict["cluster_top_poses"]
+
+        return cluster_top_pose_runs
+
+    def _find_tolerated_interactions(self, ligand_dict):
+        """take ligand dict and finds which poses we should save the
+        interactions for as tolerated interactions for the top pose
+        of the cluster. These runs are within the
+        <self.interaction_tolerance_cutoff> angstroms RMSD of the top pose
+        for a given cluster. All data for the cluster's top pose is saved.
+
+        Args:
+            ligand_dict (Dictionary): Dictionary of ligand data from parser
+
+        Returns:
+            List: List of run numbers of tolerated runs
+        """
+        tolerated_runs = []
+        for idx, run in enumerate(ligand_dict["sorted_runs"]):
+            if (
+                float(ligand_dict["cluster_rmsds"][idx])
+                <= self.interaction_tolerance_cutoff
+            ):
+                tolerated_runs.append(run)
+        return tolerated_runs
 
 
 class Writer(multiprocessing.Process):

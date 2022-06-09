@@ -13,7 +13,7 @@ from .exceptions import MultiprocessingError
 
 
 class MPManager:
-    def __init__(self, filelist, mode, db_obj, chunksize, numclusters, target):
+    def __init__(self, filelist, mode, db_obj, chunksize, numclusters, interaction_tolerance_cutoff, store_all_poses, target):
         # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg", "vina"]
         if mode not in self.implemented_modes:
@@ -25,6 +25,8 @@ class MPManager:
         self.db = db_obj
         self.chunksize = chunksize
         self.numclusters = numclusters
+        self.store_all_poses = store_all_poses
+        self.interaction_tolerance_cutoff = interaction_tolerance_cutoff
         self.target = target
         self.num_files = len(self.filelist)
 
@@ -45,6 +47,8 @@ class MPManager:
                 self.db,
                 self.mode,
                 self.numclusters,
+                self.interaction_tolerance_cutoff,
+                self.store_all_poses,
                 self.target,
             )
             # this method calls .run() internally
