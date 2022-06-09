@@ -16,6 +16,8 @@ class ResultsManager:
         filelist=None,
         chunk_size=1000,
         numclusters=3,
+        interaction_tolerance_cutoff=None,
+        store_all_poses=False,
         target=None,
     ):
         self.dbman = dbman
@@ -27,6 +29,8 @@ class ResultsManager:
             chunksize=chunk_size,
             mode=mode,
             numclusters=numclusters,
+            interaction_tolerance_cutoff=interaction_tolerance_cutoff,
+            store_all_poses=store_all_poses,
             target=target,
         )
 

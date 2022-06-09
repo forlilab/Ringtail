@@ -121,13 +121,13 @@ def parse_single_dlg(fname, mode="standard"):
                         line = line.replace("ATOM", "HETATM")
                     input_pdbqt.append(" ".join(line.split()[1:]))
                 if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
-                    index_map += (
+                    index_map = (
                         line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
                         .rstrip("\n")
                         .split()
                     )
                 if line.startswith("INPUT-LIGAND-PDBQT: REMARK H PARENT"):
-                    h_parents += (
+                    h_parents = (
                         line.lstrip("INPUT-LIGAND-PDBQT: REMARK H PARENT")
                         .rstrip("\n")
                         .split()
@@ -187,7 +187,7 @@ def parse_single_dlg(fname, mode="standard"):
                 heavy_at_count_complete = True
                 if mode == "input":
                     break
-            elif (line[0 : len(STD_KW)] == STD_KW) and inside_pose:
+            elif (line[:len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
                 poses[-1].append(line)
@@ -434,12 +434,14 @@ def parse_vina_pdbqt(fname):
     intermolecular_energy = []
     internal_energy = []
     unbound_energy = []
-    interactions = []
     count_atoms = True
     num_heavy_atoms = 0
     smile_string = ""
     smile_idx_map = []
     ligand_h_parents = []
+    flexible_res_coords = []
+    inside_res = False
+    flexible_residues = []
 
     with open_fn(fname, "rb") as fp:
         for line in fp.readlines():
@@ -447,7 +449,6 @@ def parse_vina_pdbqt(fname):
             try:
                 if line.startswith("MODEL"):
                     pose_coordinates.append([])
-                    interactions.append({})
                     sorted_runs.append(line.split()[1])
                 if line.startswith("REMARK VINA RESULT:"):
                     scores.append(float(line.split()[3]))
@@ -458,17 +459,42 @@ def parse_vina_pdbqt(fname):
                 if line.startswith("REMARK UNBOUND:"):
                     unbound_energy.append(float(line.split()[2]))
                 if line.startswith("HETATM") or line.startswith("ATOM"):
-                    if count_atoms and line[13] != "H":
-                        num_heavy_atoms += 1
+                    if inside_res:
+                        flexible_res_coords[-1][-1].append(line)
+                    else:
+                        pose_coordinates[-1].append(
+                            [line[30:38], line[38:46], line[46:54]]
+                        )
+                        if count_atoms and line[13] != "H":
+                            num_heavy_atoms += 1
                     pose_coordinates[-1].append([line[30:38], line[38:46], line[46:54]])
                 if line.startswith("REMARK SMILES IDX") and smile_idx_map == []:
-                    smile_idx_map = line.split()[3:]
+                    smile_idx_map = (
+                        line.lstrip("REMARK SMILES IDX")
+                        .rstrip("\n")
+                        .split())
                 elif line.startswith("REMARK SMILES") and smile_string == "":
                     smile_string = line.split()[2]
                 if line.startswith("REMARK H PARENT") and ligand_h_parents == []:
-                    ligand_h_parents = line.split()[3:]
+                    ligand_h_parents = (
+                        line.lstrip("REMARK H PARENT")
+                        .rstrip("\n")
+                        .split()
+                    )
                 if line == "ENDMDL" and count_atoms:
                     count_atoms = False
+                # make new flexible residue list if in the coordinates for a flexible residue
+                if "BEGIN_RES" in line:
+                    flexible_res_coords[-1].append([])
+                    inside_res = True
+                if "END_RES" in line:
+                    inside_res = False
+                # store flexible residue identities
+                if "INPUT-FLEXRES-PDBQT: BEGIN_RES" in line:
+                    split_line = line.split()
+                    flexible_residues.append(
+                        split_line[2] + ":" + split_line[3] + split_line[4]
+                    )  # RES:<chain><resnum>
             except ValueError:
                 raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, fname))
 
@@ -486,8 +512,8 @@ def parse_vina_pdbqt(fname):
         "ligand_index_map": smile_idx_map,
         "ligand_h_parents": ligand_h_parents,
         "pose_coordinates": pose_coordinates,  # list
-        "flexible_res_coordinates": "",
-        "flexible_residues": "",
+        "flexible_res_coordinates": flexible_res_coords,
+        "flexible_residues": flexible_residues,
         "ligand_smile_string": smile_string,
         "clusters": {},
         "cluster_rmsds": [],
@@ -505,7 +531,7 @@ def parse_vina_pdbqt(fname):
         "internal_energy": internal_energy,  # list
         "torsional_energy": [],
         "unbound_energy": unbound_energy,  # list
-        "interactions": interactions,  # list of dictionaries
+        "interactions": [],  # list of dictionaries
         "num_interactions": [],
         "num_hb": [],
         "sorted_runs": sorted_runs,

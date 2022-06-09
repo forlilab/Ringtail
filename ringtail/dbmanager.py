@@ -34,8 +34,6 @@ class DBManager:
         interaction_data_kws (list): List of keywords for different
             pieces of interaction data
         interaction_filter_types (set): Set for types of interaction filters
-        interaction_tolerance_cutoff (float): RMSD cutoff for interactions
-            to be added to the top pose for stored clusters
         interactions_initialized_flag (boolean): Flag indicating if
             interaction tables have been created
         ligand_data_keys (list): List of keywords used to look up ligand
@@ -44,8 +42,6 @@ class DBManager:
             pose for given ligand will be stored
         next_unique_interaction_idx (int): Index for the next unique
             interaction to be added to interaction_index table
-        num_clusters (int): Number of ligand clusters that top pose
-            should be stored for.
         open_cursors (list): Storage for any DB cursors which are opened
             and not closed by the function that opened them. Will be closed by
             close_connection method.
@@ -57,9 +53,6 @@ class DBManager:
         passing_results_view_name (string): Name for the view of passing
             results to be created after filtering
         stateVar_keys (list): List of strings for the different state variables
-        store_all_poses_flag (boolean): Flag indicating that all poses should
-            be stored, not just the top pose from top N clusters
-            where N=self.num_clusters
         unique_interactions (dict): Dictionary for storing unique interactions
             to be written in interaction_index table
         write_db_flag (boolean): Flag indicating that DBMan will be
@@ -71,12 +64,9 @@ class DBManager:
         opts={
             "write_db_flag": False,
             "add_results": False,
-            "num_clusters": 3,
             "order_results": None,
             "log_distinct_ligands": None,
-            "interaction_tolerance": None,
             "results_view_name": "passing_results",
-            "store_all_poses": None,
             "overwrite": None,
             "conflict_opt": None,
             "mode": "ADGPU",
@@ -92,13 +82,9 @@ class DBManager:
         self.order_results = self.opts["order_results"]
         self.log_distinct_ligands = self.opts["log_distinct_ligands"]
         self.write_db_flag = self.opts["write_db_flag"]
-        self.num_clusters = self.opts["num_clusters"]
-        self.interaction_tolerance_cutoff = self.opts["interaction_tolerance"]
         self.passing_results_view_name = self.opts["results_view_name"]
-        self.store_all_poses_flag = self.opts["store_all_poses"]
         self.overwrite_flag = self.opts["overwrite"]
         self.conflict_opt = self.opts["conflict_opt"]
-        self.mode = self.opts["mode"]
         # initialize dictionary processing kw lists
         self.interaction_data_kws = [
             "type",
@@ -202,28 +188,6 @@ class DBManager:
         # close db itself
         self._close_connection()
 
-    def _find_cluster_top_pose_runs(self, ligand_dict: dict) -> list:
-        """returns list of the run numbers for the top run in the
-        top self.num_clusters clusters
-
-        Args:
-            ligand_dict (Dictionary): Dictionary of ligand data from parser
-
-        Returns:
-            List: List of run numbers to save, which are the top runs from
-            the first self.num_clusters clusters
-        """
-        try:
-            # will only select top n clusters. Default 3
-            cluster_top_pose_runs = ligand_dict["cluster_top_poses"][
-                : self.num_clusters
-            ]
-        except IndexError:
-            # catch indexerror if not enough clusters for given ligand
-            cluster_top_pose_runs = ligand_dict["cluster_top_poses"]
-
-        return cluster_top_pose_runs
-
     def _generate_results_row(self, ligand_dict, pose_rank, run_number):
         """generate list of lists of ligand values to be
             inserted into sqlite database
@@ -293,7 +257,7 @@ class DBManager:
             else:
                 ligand_data_list.append(ligand_dict[key][pose_rank])
 
-        if self.mode != "vina":
+        if ligand_dict["interactions"] != []:
             # add interaction count
             ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0])
             # count number H bonds, add to ligand data list
@@ -338,13 +302,10 @@ class DBManager:
         # add coordinates
         # convert to string for storage as VARCHAR
         ligand_data_list.append(json.dumps(ligand_dict["pose_coordinates"][pose_rank]))
-        if self.mode != "vina":
-            ligand_data_list.append(json.dumps(ligand_dict["flexible_residues"]))
-            ligand_data_list.append(
-                json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank])
-            )
-        else:
-            ligand_data_list.extend([None, None])
+        ligand_data_list.append(json.dumps(ligand_dict["flexible_residues"]))
+        ligand_data_list.append(
+            json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank])
+        )
 
         return ligand_data_list
 
@@ -379,9 +340,6 @@ class DBManager:
         Args:
             ligand_dict (Dictionary): Dictionary of ligand data from parser
         """
-
-        if self.mode == "vina":
-            return [None, None, None, None, None]
 
         rec_name = ligand_dict["receptor"]
         box_dim = json.dumps(ligand_dict["grid_dim"])
@@ -436,28 +394,6 @@ class DBManager:
                         )
                     self.next_unique_interaction_idx += 1
 
-    def _find_tolerated_interactions(self, ligand_dict):
-        """take ligand dict and finds which poses we should save the
-        interactions for as tolerated interactions for the top pose
-        of the cluster. These runs are within the
-        <self.interaction_tolerance_cutoff> angstroms RMSD of the top pose
-        for a given cluster. All data for the cluster's top pose is saved.
-
-        Args:
-            ligand_dict (Dictionary): Dictionary of ligand data from parser
-
-        Returns:
-            List: List of run numbers of tolerated runs
-        """
-        tolerated_runs = []
-        for idx, run in enumerate(ligand_dict["sorted_runs"]):
-            if (
-                float(ligand_dict["cluster_rmsds"][idx])
-                <= self.interaction_tolerance_cutoff
-            ):
-                tolerated_runs.append(run)
-        return tolerated_runs
-
     def format_rows_from_dict(self, ligand_dict: dict) -> tuple:
         """takes file dictionary from the file parser, formats into rows for
             the database insertion
@@ -476,60 +412,51 @@ class DBManager:
         interaction_dictionaries = []
         interaction_tuples = []
 
-        # find run numbers for poses we want to save
-        if not self.store_all_poses_flag:
-            poses_to_save = self._find_cluster_top_pose_runs(ligand_dict)
-        else:
-            poses_to_save = ligand_dict["sorted_runs"]
-
-        # find poses we want to save tolerated interactions for
-        if self.interaction_tolerance_cutoff is not None:
-            tolerated_interaction_runs = self._find_tolerated_interactions(ligand_dict)
-        else:
-            tolerated_interaction_runs = []
-
         # do the actual result formating
         for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
             # save everything if this is a cluster top pose
-            if run_number in poses_to_save:
+            if run_number in ligand_dict["poses_to_save"]:
                 # don't save interaction data from previous cluster for first cluster
-                if result_rows != [] and self.mode != "vina":
+                if result_rows != [] and ligand_dict["interactions"] != []:
                     pose_interactions = self._generate_interaction_tuples(
                         interaction_dictionaries
                     )
                     # generate tuples across all dictionaries for last cluster
                     interaction_tuples.append(pose_interactions)
                     # update previous entry if tolerated interactions added
+                    # TODO number things
                     if (
-                        self.interaction_tolerance_cutoff is not None
+                        ligand_dict["tolerated_interaction_runs"] != []
                         and result_rows != []
                     ):
+                        # update number of interactions
                         result_rows[-1][17] = len(pose_interactions) + int(
                             result_rows[-1][17]
-                        )  # update number of interactions
+                        )
+                        # update number of hydrogen bonds
                         result_rows[-1][18] = sum(
                             1
                             for interaction in pose_interactions
                             if interaction[0] == "H"
                         ) + int(
                             result_rows[-1][18]
-                        )  # update number of hydrogen bonds
+                        )
                     interaction_dictionaries = []  # clear the list for the new cluster
                 result_rows.append(
                     self._generate_results_row(ligand_dict, idx, run_number)
                 )
                 interaction_dictionaries.append(ligand_dict["interactions"][idx])
-            elif run_number in tolerated_interaction_runs:
+            elif run_number in ligand_dict["tolerated_interaction_runs"]:
                 # adds to list started by best-scoring pose in cluster
                 interaction_dictionaries.append(ligand_dict["interactions"][idx])
 
-        if self.mode != "vina":
+        if ligand_dict["interactions"] != []:
             pose_interactions = self._generate_interaction_tuples(
                 interaction_dictionaries
             )  # will generate tuples across all dictionaries for last cluster
             interaction_tuples.append(pose_interactions)
             # only update if we added interactions
-            if self.interaction_tolerance_cutoff is not None:
+            if ligand_dict["tolerated_interaction_runs"] != []:
                 result_rows[-1][17] = len(pose_interactions) + int(
                     result_rows[-1][17]
                 )  # update number of interactions
