@@ -45,10 +45,13 @@ if __name__ == "__main__":
         "chunk_size": 1,
         "filelist": cl_opts.lig_files_pool,
         "mode": cl_opts.mode,
-        "num_clusters": rman_opts["num_clusters"],
+        "max_poses": rman_opts["max_poses"],
         "interaction_tolerance": rman_opts["interaction_tolerance"],
         "store_all_poses": rman_opts["store_all_poses"],
         "target": receptor,
+        "receptor_file": rman_opts["receptor_name"],
+        "add_interactions": rman_opts["add_interactions"],
+        "interaction_cutoffs": rman_opts["interaction_cutoffs"],
     }
     filters = cl_opts.filters
     out_opts = cl_opts.out_opts

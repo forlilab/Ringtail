@@ -73,6 +73,7 @@ def parse_single_dlg(fname, mode="standard"):
         input_pdbqt = []
         index_map = []
         h_parents = []
+        ligand_atomtypes = []
         for line in fp.readlines():
             line = line.decode("utf-8")
             # store ligand file name
@@ -120,6 +121,9 @@ def parse_single_dlg(fname, mode="standard"):
                     if " UNK " in line:  # replace ligand atoms ATOM flag with HETATM
                         line = line.replace("ATOM", "HETATM")
                     input_pdbqt.append(" ".join(line.split()[1:]))
+                    # save ligand atomtypes
+                    if line.startswith("INPUT-LIGAND-PDBQT"):
+                        ligand_atomtypes.append(line[-2:])
                 if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                     index_map = (
                         line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
@@ -408,6 +412,7 @@ def parse_single_dlg(fname, mode="standard"):
         "pose_quarternions": pose_quarternions,
         "pose_dihedrals": pose_dihedrals,
         "fname": fname,
+        "ligand_atomtypes": ligand_atomtypes,
     }
 
 
@@ -434,7 +439,6 @@ def parse_vina_pdbqt(fname):
     intermolecular_energy = []
     internal_energy = []
     unbound_energy = []
-    count_atoms = True
     num_heavy_atoms = 0
     smile_string = ""
     smile_idx_map = []
@@ -442,6 +446,8 @@ def parse_vina_pdbqt(fname):
     flexible_res_coords = []
     inside_res = False
     flexible_residues = []
+    ligand_atomtypes = []
+    first_model = True
 
     with open_fn(fname, "rb") as fp:
         for line in fp.readlines():
@@ -465,9 +471,10 @@ def parse_vina_pdbqt(fname):
                         pose_coordinates[-1].append(
                             [line[30:38], line[38:46], line[46:54]]
                         )
-                        if count_atoms and line[13] != "H":
-                            num_heavy_atoms += 1
-                    pose_coordinates[-1].append([line[30:38], line[38:46], line[46:54]])
+                        if first_model:
+                            ligand_atomtypes.append(line[-2:])
+                            if line[13] != "H":
+                                num_heavy_atoms += 1
                 if line.startswith("REMARK SMILES IDX") and smile_idx_map == []:
                     smile_idx_map = (
                         line.lstrip("REMARK SMILES IDX")
@@ -481,8 +488,8 @@ def parse_vina_pdbqt(fname):
                         .rstrip("\n")
                         .split()
                     )
-                if line == "ENDMDL" and count_atoms:
-                    count_atoms = False
+                if line == "ENDMDL" and first_model:
+                    first_model = False
                 # make new flexible residue list if in the coordinates for a flexible residue
                 if "BEGIN_RES" in line:
                     flexible_res_coords[-1].append([])
@@ -540,6 +547,7 @@ def parse_vina_pdbqt(fname):
         "pose_quarternions": [],
         "pose_dihedrals": [],
         "fname": fname,
+        "ligand_atomtypes": ligand_atomtypes,
     }
 
 
