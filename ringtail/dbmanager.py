@@ -7,6 +7,7 @@
 import sqlite3
 import json
 import pandas as pd
+import warnings
 
 try:
     import cPickle as pickle
@@ -109,12 +110,7 @@ class DBManager:
             "torsional_energy",
             "unbound_energy",
         ]
-        """self.ligand_interaction_keys = ["type",
-        "chain",
-        "residue",
-        "resid",
-        "recname",
-        "recid"]"""
+
         self.stateVar_keys = ["pose_about", "pose_translations", "pose_quarternions"]
 
         self.unique_interactions = {}
@@ -202,41 +198,41 @@ class DBManager:
         Returns:
             List: List of pose data to be inserted into Results table.
             In same order as expected in _insert_results:
-            LigName,
-            ligand_smile,
-            receptor,
-            pose_rank,
-            run_number,
-            cluster_rmsd,
-            reference_rmsd,
-            energies_binding,
-            leff,
-            deltas,
-            energies_inter,
-            energies_vdw,
-            energies_electro,
-            energies_flexLig,
-            energies_flexLR,
-            energies_intra,
-            energies_torsional,
-            unbound_energy,
-            nr_interactions,
-            num_hb,
-            cluster_size,
-            about_x,
-            about_y,
-            about_z,
-            trans_x,
-            trans_y,
-            trans_z,
-            axisangle_x,
-            axisangle_y,
-            axisangle_z,
-            axisangle_w,
-            dihedrals,
-            ligand_coordinates,
-            flexible_residues,
-            flexible_res_coordinates
+            LigName, [0]
+            ligand_smile, [1]
+            receptor, [2]
+            pose_rank, [3]
+            run_number, [4]
+            cluster_rmsd, [5]
+            reference_rmsd, [6]
+            energies_binding, [7]
+            leff, [8]
+            deltas, [9]
+            energies_inter, [10]
+            energies_vdw, [11]
+            energies_electro, [12]
+            energies_flexLig, [13]
+            energies_flexLR, [14]
+            energies_intra, [15]
+            energies_torsional, [16]
+            unbound_energy, [17]
+            nr_interactions, [18]
+            num_hb, [19]
+            cluster_size, [20]
+            about_x, [21]
+            about_y, [22]
+            about_z, [23]
+            trans_x, [24]
+            trans_y, [25]
+            trans_z, [26]
+            axisangle_x, [27]
+            axisangle_y, [28]
+            axisangle_z, [29]
+            axisangle_w, [30]
+            dihedrals, [31]
+            ligand_coordinates, [32]
+            flexible_residues, [33]
+            flexible_res_coordinates [34]
         """
 
         # # # # # # get pose-specific data
@@ -419,64 +415,33 @@ class DBManager:
         result_rows = []
         interaction_dictionaries = []
         interaction_tuples = []
+        saved_pose_idx = 0  # save index of last saved pose
+        cluster_saved_pose_map = {}  # save mapping of cluster number to saved_pose_idx
 
         # do the actual result formating
+        # For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
+        # We also save a mapping of the its cluster number to the index in interaction_dictionaries
+        # Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
+        # Finally, we calculate the interaction tuple lists for each pose
         for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
+            cluster = ligand_dict["cluster_list"][idx]
             # save everything if this is a cluster top pose
             if run_number in ligand_dict["poses_to_save"]:
-                # don't save interaction data from previous cluster for first cluster
-                if result_rows != [] and ligand_dict["interactions"] != []:
-                    pose_interactions = self._generate_interaction_tuples(
-                        interaction_dictionaries
-                    )
-                    # generate tuples across all dictionaries for last cluster
-                    interaction_tuples.append(pose_interactions)
-                    """# update previous entry if tolerated interactions added
-                    if (
-                        ligand_dict["tolerated_interaction_runs"] != []
-                        and result_rows != []
-                    ):
-                        # update number of interactions
-                        result_rows[-1][17] = len(pose_interactions) + int(
-                            result_rows[-1][17]
-                        )
-                        # update number of hydrogen bonds
-                        result_rows[-1][18] = sum(
-                            1
-                            for interaction in pose_interactions
-                            if interaction[0] == "H"
-                        ) + int(
-                            result_rows[-1][18]
-                        )"""
-                    interaction_dictionaries = []  # clear the list for the new cluster
                 result_rows.append(
                     self._generate_results_row(ligand_dict, idx, run_number)
                 )
-                interaction_dictionaries.append(ligand_dict["interactions"][idx])
+                cluster_saved_pose_map[cluster] = saved_pose_idx
+                saved_pose_idx += 1
+                interaction_dictionaries.append([ligand_dict["interactions"][idx]])
             elif run_number in ligand_dict["tolerated_interaction_runs"]:
                 # adds to list started by best-scoring pose in cluster
-                interaction_dictionaries.append(ligand_dict["interactions"][idx])
+                if cluster not in cluster_saved_pose_map:
+                    continue
+                interaction_dictionaries[cluster_saved_pose_map[cluster]].append(ligand_dict["interactions"][idx])
 
-        if ligand_dict["interactions"] != []:
-            pose_interactions = self._generate_interaction_tuples(
-                interaction_dictionaries
-            )  # will generate tuples across all dictionaries for last cluster
-            interaction_tuples.append(pose_interactions)
-            # only update if we added interactions
-            if ligand_dict["tolerated_interaction_runs"] != []:
-                result_rows[-1][17] = len(pose_interactions) + int(
-                    result_rows[-1][17]
-                )  # update number of interactions
-                result_rows[-1][18] = sum(
-                    1 for interaction in pose_interactions if interaction[0] == "H"
-                ) + int(
-                    result_rows[-1][18]
-                )  # count and update number of hydrogen bonds
+        for idx, pose_interactions in enumerate(interaction_dictionaries):
+            interaction_tuples.append(self._generate_interaction_tuples(pose_interactions))
 
-        for pose in result_rows:
-            #print(pose)
-            #print(len(pose))
-            print(pose[17])
         return (
             result_rows,
             self._generate_ligand_row(ligand_dict),
@@ -884,6 +849,22 @@ class DBManager:
         ...
         Interaction_n
 
+        """
+        raise NotImplementedError
+
+    def _create_bookmark_table(self):
+        """Create table of bookmark names and their queries. Columns are:
+        Bookmark_name
+        Query
+        """
+        raise NotImplementedError
+
+    def _insert_bookmark_info(self, name: str, query: str):
+        """Insert bookmark info into bookmark table
+
+        Args:
+            name (str): name for bookmark
+            query (str): query used to generate bookmark
         """
         raise NotImplementedError
 
@@ -1536,6 +1517,7 @@ class DBManagerSQLite(DBManager):
         self._create_ligands_table()
         self._create_receptors_table()
         self._create_interaction_index_table()
+        self._create_bookmark_table()
 
     def _fetch_existing_tables(self):
         """Returns list of all tables in database"""
@@ -1848,6 +1830,33 @@ class DBManagerSQLite(DBManager):
                 "Error while creating interaction bitvector table. If database already exists, use --overwrite to drop existing tables"
             ) from e
 
+    def _create_bookmark_table(self):
+        """Create table of bookmark names and their queries. Columns are:
+        Bookmark_name
+        Query
+        """
+        sql_str = """CREATE TABLE Bookmarks (
+        Bookmark_name       VARCHAR[],
+        Query               VARCHAR[])"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(sql_str)
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
+                "Error while creating bookmark table. If database already exists, use --overwrite to drop existing tables"
+            ) from e
+
+    def _insert_bookmark_info(self, name: str, query: str):
+        """Insert bookmark info into bookmark table
+
+        Args:
+            name (str): name for bookmark
+            query (str): query used to generate bookmark
+        """
+        
+
     def _insert_unique_interactions(self, unique_interactions):
         """Inserts interaction data for unique interactions
             into Interaction_index table
@@ -2047,7 +2056,7 @@ class DBManagerSQLite(DBManager):
 
             # catch if interaction not found in results
             if interaction_filter_indices == []:
-                Warning.warn(
+                warnings.warn(
                     "Interaction {i} not found in results, excluded from filtering".format(
                         i=":".join(interaction)
                     )
