@@ -96,7 +96,7 @@ class DockingFileReader(multiprocessing.Process):
                         )
                     )
                 # find the run number for the best pose in each cluster for adgpu
-                if self.mode == "adgpu":
+                if self.mode == "dlg":
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 # find run numbers for poses we want to save
                 parsed_file_dict["poses_to_save"] = self._find_poses_to_save(parsed_file_dict)
@@ -135,7 +135,7 @@ class DockingFileReader(multiprocessing.Process):
         """
         if self.store_all_poses_flag:
             poses_to_save = ligand_dict["sorted_runs"]
-        elif self.mode == "adgpu":
+        elif self.mode == "dlg":
             # will only select top n clusters. Default 3
             poses_to_save = ligand_dict["cluster_top_poses"][
                 : self.max_poses
