@@ -13,21 +13,34 @@ from .exceptions import MultiprocessingError
 
 
 class MPManager:
-    def __init__(self, filelist, mode, db_obj, chunksize, numclusters, interaction_tolerance_cutoff, store_all_poses, target):
+    def __init__(self, filelist, db_obj, opts={
+            "mode": "dlg",
+            "chunk_size": 1,
+            "max_poses": 3,
+            "interaction_tolerance": None,
+            "store_all_poses": False,
+            "target": None,
+            "add_interactions": False,
+            "interaction_cutoffs": [3.7, 4.0],
+            "receptor_file": None}):
         # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg", "vina"]
-        if mode not in self.implemented_modes:
+        if opts["mode"] not in self.implemented_modes:
             raise NotImplementedError(
-                "Requested file parsing mode {0} not yet implemented".format(mode)
+                "Requested file parsing mode {0} not yet implemented".format(opts["mode"])
             )
-        self.mode = mode
+        self.mode = opts["mode"]
         self.filelist = filelist
         self.db = db_obj
-        self.chunksize = chunksize
-        self.numclusters = numclusters
-        self.store_all_poses = store_all_poses
-        self.interaction_tolerance_cutoff = interaction_tolerance_cutoff
-        self.target = target
+        self.chunksize = opts["chunk_size"]
+        self.max_poses = opts["max_poses"]
+        self.store_all_poses = opts["store_all_poses"]
+        self.interaction_tolerance = opts["interaction_tolerance"]
+        self.target = opts["target"]
+        self.add_interactions = opts["add_interactions"]
+        self.interaction_cutoffs = opts["interaction_cutoffs"]
+        self.receptor_file = opts["receptor_file"]
+
         self.num_files = len(self.filelist)
 
         self.max_proc = multiprocessing.cpu_count()
@@ -46,10 +59,13 @@ class MPManager:
                 c_conn,
                 self.db,
                 self.mode,
-                self.numclusters,
-                self.interaction_tolerance_cutoff,
+                self.max_poses,
+                self.interaction_tolerance,
                 self.store_all_poses,
                 self.target,
+                self.add_interactions,
+                self.interaction_cutoffs,
+                self.receptor_file,
             )
             # this method calls .run() internally
             s.start()

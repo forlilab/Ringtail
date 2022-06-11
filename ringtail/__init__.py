@@ -12,6 +12,7 @@ from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .vsmanager import VSManager, Outputter
+from .interactions import InteractionFinder
 from .exceptions import (
     DatabaseError,
     DatabaseInsertionError,
@@ -38,6 +39,7 @@ __all__ = [
     "ResultsManager",
     "VSManager",
     "Outputter",
+    "InteractionFinder"
     "DatabaseError",
     "DatabaseInsertionError",
     "DatabaseConnectionError",

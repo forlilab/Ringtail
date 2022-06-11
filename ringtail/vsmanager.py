@@ -81,14 +81,8 @@ class VSManager:
             ) from e
 
         self.results_man = ResultsManager(
-            mode=self.rman_opts["mode"],
-            dbman=self.dbman,
-            chunk_size=self.rman_opts["chunk_size"],
-            filelist=self.rman_opts["filelist"],
-            numclusters=self.rman_opts["num_clusters"],
-            interaction_tolerance_cutoff=self.rman_opts["interaction_tolerance"],
-            store_all_poses=self.rman_opts["store_all_poses"],
-            target=self.rman_opts["target"],
+            opts=self.rman_opts,
+            dbman=self.dbman
         )
 
         try:

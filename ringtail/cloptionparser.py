@@ -70,6 +70,9 @@ def cmdline_parser(defaults={}):
         "hb_count": None,
         "react_any": None,
         "max_miss": 0,
+        "add_interactions": None,
+        "interaction_cutoffs": "3.7,4.0",
+        "receptor_name": None,
     }
 
     config = json.loads(
@@ -232,12 +235,34 @@ def cmdline_parser(defaults={}):
     write_parser.add_argument(
         "-it",
         "--interaction_tolerance",
-        help="Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired",
+        help="Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired. Only compatible with ADGPU mode",
         action="store",
         type=float,
         metavar="FLOAT",
         const=0.8,
         nargs="?",
+    )
+    write_parser.add_argument(
+        "-ai",
+        "--add_interactions",
+        help="Find interactions between ligand poses and receptor and save to database. Requires receptor PDBQT to be given with input files (all modes) and --receptor_name to be specified with Vina mode. SIGNIFICANTLY INCREASES DATBASE WRITE TIME.",
+        action="store_true"
+    )
+    write_parser.add_argument(
+        "-ic",
+        "--interaction_cutoffs",
+        help="Use with --add_interactions, specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. These are the default cutoffs.",
+        action="store",
+        type=str,
+        metavar="[HB CUTOFF],[VDW CUTOFF]"
+    )
+    write_parser.add_argument(
+        "-rn",
+        "--receptor_name",
+        help="Use with Vina mode. Give name for receptor PDBQT.",
+        action="store",
+        type=str,
+        metavar="STRING"
     )
 
     read_parser = subparsers.add_parser(
@@ -603,6 +628,9 @@ class CLOptionParser:
         # make sure mode is allowed
         allowed_modes = {"dlg", "vina"}
         self.mode = parsed_opts.mode.lower()
+        # set receptor name, add_interactions if given
+        self.rec_name = parsed_opts.receptor_name
+        self.add_interactions = parsed_opts.add_interactions
         if self.mode not in allowed_modes:
             raise OptionError(
                 "Given mode {0} not allowed. Please be sure that requested mode is 'vina' or 'dlg'".format(
@@ -636,6 +664,10 @@ class CLOptionParser:
                     "Cannot use interaction filters with Vina mode. Removing hb_count filter."
                 )
                 parsed_opts.hb_count = None
+            if parsed_opts.add_interactions and parsed_opts.receptor_name is None:
+                raise OptionError("Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_name.")
+            if parsed_opts.add_interactions and not os.path.exists(parsed_opts.receptor_name):
+                raise OptionError("Error: Given receptor name does not exist!")
             # set pattern to .pdbqt
             parsed_opts.pattern = "*.pdbqt*"
             # set store all poses, since vina does not cluster poses
@@ -849,13 +881,16 @@ class CLOptionParser:
             "add_results": parsed_opts.add_results,
             "conflict_opt": conflict_handling,
             "mode": parsed_opts.mode,
-            "dbFile": None
+            "dbFile": None,
         }
 
         rman_opts = {
             "store_all_poses": parsed_opts.store_all_poses,
-            "num_clusters": parsed_opts.max_poses,
+            "max_poses": parsed_opts.max_poses,
             "interaction_tolerance": parsed_opts.interaction_tolerance,
+            "add_interactions": parsed_opts.add_interactions,
+            "interaction_cutoffs": [float(val) for val in parsed_opts.interaction_cutoffs.split(",")],
+            "receptor_name": parsed_opts.receptor_name,
         }
 
         self.file_sources = file_sources
@@ -917,15 +952,25 @@ class CLOptionParser:
                         filelist, self.pattern.replace("*", ""), find_rec
                     )
 
+        # check options for add_interactions, move vina receptor pdbqt
+        if self.add_interactions:
+            if self.mode == "vina":
+                self.lig_files_pool.remove(self.receptor_name)
+                self.rec_files_pool.append(self.receptor_name)
+
         if len(self.lig_files_pool) > 0 or len(self.rec_files_pool) > 0:
             logging.info("-Found %d ligand files." % len(self.lig_files_pool))
             if self.save_receptor:
                 logging.info("-Found %d receptor files." % len(self.rec_files_pool))
 
-        # raise error if --save_receptor and none found
+        # raise error if --save_receptor or --add_interactions and none found
         if self.save_receptor and len(self.rec_files_pool) == 0:
             raise OptionError(
                 "--save_receptor flag specified but no receptor PDBQT found. Please check location of receptor file and file source options"
+            )
+        if self.add_interactions and len(self.rec_files_pool) == 0:
+            raise OptionError(
+                "--add_interactions flag specified but no receptor PDBQT found. Please check location of receptor file and file source options"
             )
 
     def scan_dir(self, path, pattern, recursive=False):

@@ -268,36 +268,44 @@ class DBManager:
             ligand_data_list.append(
                 ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
             )
-
-            # add statevars
-            for key in self.stateVar_keys:
-                stateVar_data = ligand_dict[key][pose_rank]
-                for dim in stateVar_data:
-                    ligand_data_list.append(dim)
-            pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
-            dihedral_string = ""
-            for dihedral in pose_dihedrals:
-                dihedral_string = dihedral_string + json.dumps(dihedral) + ", "
-            ligand_data_list.append(dihedral_string)
         else:
             ligand_data_list.extend(
                 [
                     None,
                     None,
                     None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
                 ]
             )
+        # add statevars
+        for key in self.stateVar_keys:
+            stateVar_data = ligand_dict[key][pose_rank]
+            if stateVar_data != []:
+                for dim in stateVar_data:
+                    ligand_data_list.append(dim)
+            else:
+                if key == "pose_about" or key == "pose_translations":
+                    ligand_data_list.extend(
+                        [
+                            None,
+                            None,
+                            None,
+                        ]
+                    )
+                if key == "pose_quarternions":
+                    ligand_data_list.extend(
+                        [
+                            None,
+                            None,
+                            None,
+                            None,
+                        ]
+                    )
+        dihedral_string = ""
+        if ligand_dict["pose_dihedrals"] != []:
+            pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
+            for dihedral in pose_dihedrals:
+                dihedral_string = dihedral_string + json.dumps(dihedral) + ", "
+        ligand_data_list.append(dihedral_string)
 
         # add coordinates
         # convert to string for storage as VARCHAR
@@ -423,8 +431,7 @@ class DBManager:
                     )
                     # generate tuples across all dictionaries for last cluster
                     interaction_tuples.append(pose_interactions)
-                    # update previous entry if tolerated interactions added
-                    # TODO number things
+                    """# update previous entry if tolerated interactions added
                     if (
                         ligand_dict["tolerated_interaction_runs"] != []
                         and result_rows != []
@@ -440,7 +447,7 @@ class DBManager:
                             if interaction[0] == "H"
                         ) + int(
                             result_rows[-1][18]
-                        )
+                        )"""
                     interaction_dictionaries = []  # clear the list for the new cluster
                 result_rows.append(
                     self._generate_results_row(ligand_dict, idx, run_number)
@@ -466,6 +473,10 @@ class DBManager:
                     result_rows[-1][18]
                 )  # count and update number of hydrogen bonds
 
+        for pose in result_rows:
+            #print(pose)
+            #print(len(pose))
+            print(pose[17])
         return (
             result_rows,
             self._generate_ligand_row(ligand_dict),
