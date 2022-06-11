@@ -8,6 +8,7 @@ import sqlite3
 import json
 import pandas as pd
 import warnings
+import logging
 
 try:
     import cPickle as pickle
@@ -478,7 +479,7 @@ class DBManager:
         filter_results_str = self._generate_result_filtering_query(
             results_filters_list, ligand_filters_list, output_fields
         )
-        print(filter_results_str)
+        logging.info(filter_results_str)
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.passing_results_view_name
         if self.view_suffix is not None:
             self.current_view_name = (
@@ -489,6 +490,7 @@ class DBManager:
         self._create_view(
             self.current_view_name, filter_results_str
         )  # make sure we keep Pose_ID in view
+        self._insert_bookmark_info(self.current_view_name, filter_results_str)
         # perform filtering
         filtered_results = self._run_query(filter_results_str)
         # get number of passing ligands
@@ -1446,6 +1448,7 @@ class DBManagerSQLite(DBManager):
         self._create_view(
             subset_name, "SELECT * FROM {0}".format(self.current_view_name)
         )
+        self._insert_bookmark_info(subset_name, "SELECT * FROM {0}".format(self.current_view_name))
 
     def close_db_crossref(self):
         """Removes all temp views and closes database"""
@@ -1855,7 +1858,21 @@ class DBManagerSQLite(DBManager):
             name (str): name for bookmark
             query (str): query used to generate bookmark
         """
-        
+        sql_insert = """INSERT INTO Bookmarks (
+        Bookmark_name,
+        Query
+        ) VALUES (?,?)"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.executemany(sql_insert, [name, query])
+            self.conn.commit()
+            cur.close()
+
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(
+                "Error while inserting Bookmark info into Bookmark table"
+            ) from e
 
     def _insert_unique_interactions(self, unique_interactions):
         """Inserts interaction data for unique interactions
