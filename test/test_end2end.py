@@ -406,7 +406,7 @@ class TestOutputs:
         cur.close()
         conn.close()
 
-        #os.system("rm output.db")
+        os.system("rm output.db")
 
         assert status_notol == 0
         assert status_tol == 0
