@@ -1,2 +1,28 @@
 Filtered poses:
 ***************
+##### PROPERTIES
+#   eworst :  [ none ]
+#    ebest :  [ none ]
+#  leworst :  [ none ]
+#   lebest :  [ none ]
+#  energy_percentile :  [ none ]
+#  le_percentile :  [ none ]
+#### INTERACTIONS
+#        V :  [ none ]
+#        H :  [ none ]
+#        R :  [ none ]
+
+Result subset name: passing_results
+
+Number passing ligands: 3 
+---------------
+'OB3Z3759457587_RX1--4xfx_mon_prep--tyr169', -11.12
+'OB3Z3759457587_RX1--4xfx_mon_prep--tyr169', -10.98
+'OB3Z3759457587_RX1--4xfx_mon_prep--tyr169', -10.74
+'OB3Z3759440327_RX1--4xfx_mon_prep--tyr169', -12.96
+'OB3Z3759440327_RX1--4xfx_mon_prep--tyr169', -11.09
+'OB3Z3759450716_RX1--4xfx_mon_prep--tyr169', -11.72
+'OB3Z3759450716_RX1--4xfx_mon_prep--tyr169', -11.26
+'OB3Z3759450716_RX1--4xfx_mon_prep--tyr169', -11.24
+***************
+

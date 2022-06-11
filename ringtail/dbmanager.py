@@ -1865,7 +1865,7 @@ class DBManagerSQLite(DBManager):
 
         try:
             cur = self.conn.cursor()
-            cur.executemany(sql_insert, [name, query])
+            cur.execute(sql_insert, [name, query])
             self.conn.commit()
             cur.close()
 
