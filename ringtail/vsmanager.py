@@ -130,7 +130,7 @@ class VSManager:
                             filled_receptor_rows
                         )
                     )
-                self.dbman.add_receptor_object_to_row(rec, rec_name)
+                self.dbman.add_receptor_object_to_row(rec)
             except DatabaseError as e:
                 raise VirtualScreeningError(
                     "Error occurred while adding receptor to database"
