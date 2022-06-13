@@ -87,7 +87,7 @@ if __name__ == "__main__":
                     vsman.filter()
 
                 # Write log with new data for previous filtering results
-                if out_opts["data_from_subset"] and not cl_opts.filter:
+                if out_opts["data_from_bookmark"] and not cl_opts.filter:
                     vsman.get_previous_filter_data()
 
                 # plot if requested

@@ -16,7 +16,7 @@ Filtered poses:
 #        H : ()A:MET:214:
 #        R : ()A:TYR:169:
 
-Result subset name: passing_results
+Result bookmark name: passing_results
 
 Number passing ligands: 0 
 ---------------
