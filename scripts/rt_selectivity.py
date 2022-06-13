@@ -76,7 +76,6 @@ def cmdline_parser(defaults={}):
         nargs="+",
         type=str,
         metavar="[DATABASE_FILE].db",
-        required=True,
     )
     parser.add_argument(
         "--negative_selection",
@@ -139,8 +138,18 @@ if __name__ == "__main__":
     try:
         args = cmdline_parser()
 
+        # make sure we have a positive db and at least one other database
+        if args.positive_selection is None:
+            raise IOError("No positive selection database found. Must specify an included database.")
+        else:
+            db_count = len(args.positive_selection)
+            if args.negative_selection is not None:
+                db_count += len(args.negative_selection)
+            if db_count < 2:
+                raise IOError("Must specify at least two databases for selectivity.")
+
         # set logging level
-        debug = False
+        debug = True
         if debug:
             level = logging.DEBUG
         elif args.verbose:
@@ -159,25 +168,28 @@ if __name__ == "__main__":
 
         logging.info("Starting cross-reference process")
 
-        dbman = DBManagerSQLite()
+        dbman = DBManagerSQLite(ref_db)
 
+        last_db = None
         for db in positive_dbs:
             logging.info(f"cross-referencing {db}")
-            previous_subsetname = dbman.crossref_filter(
-                db, previous_subsetname, selection_type="+"
+            previous_subsetname, number_passing_ligands = dbman.crossref_filter(
+                db, previous_subsetname, selection_type="+", old_db=last_db
             )
+            last_db = db
 
-        for db in negative_dbs:
-            logging.info(f"cross-referencing {db}")
-            previous_subsetname = dbman.crossref_filter(
-                db, previous_subsetname, selection_type="-"
-            )
+        if negative_dbs is not None:
+            for db in negative_dbs:
+                logging.info(f"cross-referencing {db}")
+                previous_subsetname, number_passing_ligands = dbman.crossref_filter(
+                    db, previous_subsetname, selection_type="-", old_db=last_db
+                )
+                last_db = db
 
         logging.info("Writing log")
         output_manager = Outputter(args.log)
         if args.save_subset is not None:
             output_manager.write_results_subset_to_log(args.save_subset)
-        number_passing_ligands = dbman.get_number_passing_ligands()
         output_manager.log_num_passing_ligands(number_passing_ligands)
         final_subset = dbman.fetch_view(previous_subsetname)
         output_manager.write_log(final_subset)
@@ -199,4 +211,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     finally:
-        dbman.close_db_crossref()
+        try:
+            dbman.close_connection()
+        except NameError:
+            pass

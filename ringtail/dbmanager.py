@@ -72,6 +72,7 @@ class DBManager:
             "overwrite": None,
             "conflict_opt": None,
             "mode": "ADGPU",
+            "order_results": None,
         },
     ):
         """Initialize instance variables common to all DBMan subclasses
@@ -178,8 +179,10 @@ class DBManager:
             name[0] for name in self._fetch_view_names().fetchall()
         ]
 
-    def close_connection(self):
+    def close_connection(self, attached_db=None):
         """close connection to database"""
+        if attached_db is not None:
+            self._detach_db(attached_db)
         # close any open cursors
         self._close_open_cursors()
         # close db itself
@@ -513,13 +516,16 @@ class DBManager:
         """Returns DB curor with the names of all view in DB"""
         return self._run_query(self._generate_view_names_query())
 
-    def crossref_filter(self, new_db: str, bookmark_name: str, selection_type="-") -> str:
+    def crossref_filter(self, new_db: str, bookmark_name: str, selection_type="-", old_db=None) -> tuple:
         """Selects ligands found or not found in the given bookmark in both current db and new_db. Stores as temp view
         Args:
             new_db (string): file name for database to attach
             bookmark_name (string): name of bookmark to cross-reference
             selection_type (string): "+" or "-" indicating if ligand names should ("+") or should not "-" be in both databases
         """
+
+        if old_db is not None:
+            self._detach_db(old_db)
 
         new_db_name = new_db.split(".")[0]
 
@@ -538,14 +544,14 @@ class DBManager:
 
         viewname = "temp_" + str(self.tempview_suffix)
 
-        self._create_view(viewname, view_query)
+        self._create_view(viewname, view_query, temp=True)
         self.current_view_name = viewname
+
+        num_passing = self.get_number_passing_ligands()
 
         self.tempview_suffix += 1
 
-        self._detach_db(new_db_name)
-
-        return viewname
+        return viewname, num_passing
 
     # # # # # # # # # # # # # # # # #
     # # # Child-specific methods # # #
@@ -703,10 +709,6 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def close_db_crossref(self):
-        """Removes all temp views and closes database"""
-        raise NotImplementedError
-
     def _create_connection(self):
         """Creates database connection to self.db_file
 
@@ -716,7 +718,7 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def _close_connection(self):
+    def _close_connection(self, attached_db=None):
         """Closes connection to database"""
         raise NotImplementedError
 
@@ -760,13 +762,14 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def _create_view(self, name, query):
+    def _create_view(self, name, query, temp=False):
         """takes name and selection query,
             creates view of query stored as name.
-
+        
         Args:
             name (string): Name for view which will be created
             query (string): DB-formated query which will be used to create view
+            temp (bool, optional): Flag if view should be temporary
         """
         raise NotImplementedError
 
@@ -1101,7 +1104,17 @@ class DBManagerSQLite(DBManager):
 
     """
 
-    def __init__(self, db_file, opts={}):
+    def __init__(self, db_file, opts={
+        "write_db_flag": False,
+        "add_results": False,
+        "order_results": None,
+        "log_distinct_ligands": None,
+        "results_view_name": "passing_results",
+        "overwrite": None,
+        "conflict_opt": None,
+        "mode": "ADGPU",
+        "order_results": None,
+    }):
         """Initialize superclass and subclass-specific instance variables
 
         Args:
@@ -1452,21 +1465,6 @@ class DBManagerSQLite(DBManager):
         )
         self._insert_bookmark_info(bookmark_name, "SELECT * FROM {0}".format(self.current_view_name))
 
-    def close_db_crossref(self):
-        """Removes all temp views and closes database"""
-        try:
-            viewnames = self._fetch_view_names()
-            cur = self.conn.cursor()
-            for name in viewnames:
-                if name.startswith("temp_"):
-                    cur.execute(f"DROP VIEW {name}")
-
-            self.conn.commit()
-            cur.close()
-            self.close_connection()
-        except sqlite3.OperationalError as e:
-            raise DatabaseError("Error while closing database") from e
-
     # # # # # # # # # # # # # # # # #
     # # # # #Private methods # # # # #
     # # # # # # # # # # # # # # # # #
@@ -1598,20 +1596,25 @@ class DBManagerSQLite(DBManager):
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
 
-    def _create_view(self, name, query):
+    def _create_view(self, name, query, temp=False):
         """takes name and selection query,
             creates view of query stored as name.
 
         Args:
             name (string): Name for view which will be created
             query (string): SQLite-formated query used to create view
+            temp (bool, optional): Flag if view should be temporary
         """
         cur = self.conn.cursor()
         query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
         # drop old view if there is one
         try:
+            if temp:
+                temp_flag = "TEMP "
+            else:
+                temp_flag = ""
             cur.execute("DROP VIEW IF EXISTS {name}".format(name=name))
-            cur.execute("CREATE VIEW {name} AS {query}".format(name=name, query=query))
+            cur.execute("CREATE {temp_flag}VIEW {name} AS {query}".format(name=name, query=query, temp_flag=temp_flag))
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseViewCreationError(
@@ -2214,11 +2217,12 @@ class DBManagerSQLite(DBManager):
                     )
                     sql_ligand_string += substruct_sql_str
 
-        print(sql_ligand_string)
         if sql_ligand_string.endswith("AND "):
             sql_ligand_string = sql_ligand_string.rstrip("AND ")
         if sql_ligand_string.endswith("OR "):
             sql_ligand_string = sql_ligand_string.rstrip("OR ")
+
+        logging.info(sql_ligand_string)
 
         return sql_ligand_string
 
@@ -2380,7 +2384,7 @@ class DBManagerSQLite(DBManager):
         Args:
             new_db (string): file name for database to attach
         """
-        attach_str = f"ATTACH DATABASE {new_db} AS {new_db_name}"
+        attach_str = f"ATTACH DATABASE '{new_db}' AS {new_db_name}"
 
         try:
             cur = self.conn.cursor()
@@ -2413,7 +2417,7 @@ class DBManagerSQLite(DBManager):
             selection_type (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
         """
         return (
-            "SELECT * FROM {0} WHERE LigName {1} (SELECT LigName FROM {2}.{0}".format(
+            "SELECT * FROM {0} WHERE LigName {1} (SELECT LigName FROM {2}.{0})".format(
                 bookmark_name, select_str, new_db_name
             )
         )
