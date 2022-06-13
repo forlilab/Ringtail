@@ -166,9 +166,9 @@ class VSManager:
                     self.out_opts["outfields"],
                 )
                 number_passing_ligands = self.dbman.get_number_passing_ligands()
-                result_subset_name = self.dbman.get_current_view_name()
+                result_bookmark_name = self.dbman.get_current_view_name()
                 self.output_manager.write_filters_to_log(self.filters, combination)
-                self.output_manager.write_results_subset_to_log(result_subset_name)
+                self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
                 self.output_manager.log_num_passing_ligands(number_passing_ligands)
                 self.output_manager.write_log(self.filtered_results)
             except DatabaseError as e:
@@ -193,13 +193,13 @@ class VSManager:
             self.output_manager.write_log(new_data)
         except DatabaseError as e:
             raise VirtualScreeningError(
-                "Database error occurred while fetching data for subset"
+                "Database error occurred while fetching data for bookmark"
             ) from e
         except OutputError as e:
             raise VirtualScreeningError("Error occurred while writing log") from e
         except Exception as e:
             raise VirtualScreeningError(
-                "Error occurred while fetching data for subset"
+                "Error occurred while fetching data for bookmark"
             ) from e
 
     def plot(self):
@@ -667,18 +667,18 @@ class Outputter:
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
 
-    def write_results_subset_to_log(self, subset_name):
-        """Write the name of the result subset into log
+    def write_results_bookmark_to_log(self, bookmark_name):
+        """Write the name of the result bookmark into log
 
         Args:
-            subset_name (string): name of current results' subset in db
+            bookmark_name (string): name of current results' bookmark in db
         """
         try:
             with open(self.log, "a") as f:
                 f.write("\n")
-                f.write(f"Result subset name: {subset_name}\n")
+                f.write(f"Result bookmark name: {bookmark_name}\n")
         except Exception as e:
-            raise OutputError("Error writing subset name to log") from e
+            raise OutputError("Error writing bookmark name to log") from e
 
     def write_out_mol(
         self, ligname, mol, flexres_mols, saved_coords, h_parents, properties

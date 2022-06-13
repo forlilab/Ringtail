@@ -513,11 +513,11 @@ class DBManager:
         """Returns DB curor with the names of all view in DB"""
         return self._run_query(self._generate_view_names_query())
 
-    def crossref_filter(self, new_db: str, subset_name: str, selection_type="-") -> str:
-        """Selects ligands found or not found in the given subset in both current db and new_db. Stores as temp view
+    def crossref_filter(self, new_db: str, bookmark_name: str, selection_type="-") -> str:
+        """Selects ligands found or not found in the given bookmark in both current db and new_db. Stores as temp view
         Args:
             new_db (string): file name for database to attach
-            subset_name (string): name of subset to cross-reference
+            bookmark_name (string): name of bookmark to cross-reference
             selection_type (string): "+" or "-" indicating if ligand names should ("+") or should not "-" be in both databases
         """
 
@@ -533,7 +533,7 @@ class DBManager:
             raise DatabaseError(f"Unrecognized selection type {selection_type}")
 
         view_query = self._generate_selective_view_query(
-            subset_name, select_str, new_db_name
+            bookmark_name, select_str, new_db_name
         )
 
         viewname = "temp_" + str(self.tempview_suffix)
@@ -696,10 +696,10 @@ class DBManager:
         """returns SQLite cursor of all fields in viewname"""
         raise NotImplementedError
 
-    def save_temp_subset(self, subset_name):
-        """Resaves temp subset stored in self.current_view_name as new permenant subset
+    def save_temp_bookmark(self, bookmark_name):
+        """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
         Args:
-            subset_name (string): name of subset to save last temp subset as
+            bookmark_name (string): name of bookmark to save last temp bookmark as
         """
         raise NotImplementedError
 
@@ -1078,11 +1078,11 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def _generate_selective_view_query(self, subset_name, select_str, new_db_name):
-        """Generates string to select ligands found/not found in the given subset in both current db and new_db
+    def _generate_selective_view_query(self, bookmark_name, select_str, new_db_name):
+        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
         Args:
             new_db (string): name for attached database
-            subset_name (string): name of subset to cross-reference
+            bookmark_name (string): name of bookmark to cross-reference
             selection_type (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
         """
         raise NotImplementedError
@@ -1442,15 +1442,15 @@ class DBManagerSQLite(DBManager):
         """returns SQLite cursor of all fields in viewname"""
         return self._run_query(f"SELECT * FROM {viewname}")
 
-    def save_temp_subset(self, subset_name):
-        """Resaves temp subset stored in self.current_view_name as new permenant subset
+    def save_temp_bookmark(self, bookmark_name):
+        """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
         Args:
-            subset_name (string): name of subset to save last temp subset as
+            bookmark_name (string): name of bookmark to save last temp bookmark as
         """
         self._create_view(
-            subset_name, "SELECT * FROM {0}".format(self.current_view_name)
+            bookmark_name, "SELECT * FROM {0}".format(self.current_view_name)
         )
-        self._insert_bookmark_info(subset_name, "SELECT * FROM {0}".format(self.current_view_name))
+        self._insert_bookmark_info(bookmark_name, "SELECT * FROM {0}".format(self.current_view_name))
 
     def close_db_crossref(self):
         """Removes all temp views and closes database"""
@@ -2405,15 +2405,15 @@ class DBManagerSQLite(DBManager):
         except sqlite3.OperationalError as e:
             raise DatabaseError(f"Error occurred while detaching {new_db_name}") from e
 
-    def _generate_selective_view_query(self, subset_name, select_str, new_db_name):
-        """Generates string to select ligands found/not found in the given subset in both current db and new_db
+    def _generate_selective_view_query(self, bookmark_name, select_str, new_db_name):
+        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
         Args:
             new_db (string): name for attached database
-            subset_name (string): name of subset to cross-reference
+            bookmark_name (string): name of bookmark to cross-reference
             selection_type (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
         """
         return (
             "SELECT * FROM {0} WHERE LigName {1} (SELECT LigName FROM {2}.{0}".format(
-                subset_name, select_str, new_db_name
+                bookmark_name, select_str, new_db_name
             )
         )

@@ -31,7 +31,7 @@ def cmdline_parser(defaults={}):
 
     defaults = {
         "input_db": None,
-        "subset_name": "passing_results",
+        "bookmark_name": "passing_results",
         "verbose": None,
         "file": None,
         "file_path": None,
@@ -50,10 +50,10 @@ def cmdline_parser(defaults={}):
         "out_fields": "e",
         "order_results": None,
         "all_poses": None,
-        "export_subset_csv": None,
+        "export_bookmark_csv": None,
         "export_query_csv": None,
         "export_sdf_path": None,
-        "new_data_from_subset": None,
+        "new_data_from_bookmark": None,
         "plot": None,
         "eworst": None,
         "ebest": None,
@@ -123,7 +123,7 @@ def cmdline_parser(defaults={}):
     )
     write_parser.add_argument(
         "-s",
-        "--subset_name",
+        "--bookmark_name",
         help="Specify name for db view of passing results to create (write mode) or export from (read mode)",
         action="store",
         type=str,
@@ -278,7 +278,7 @@ def cmdline_parser(defaults={}):
     )
     read_parser.add_argument(
         "-s",
-        "--subset_name",
+        "--bookmark_name",
         help="Specify name for db view of passing results to create (write mode) or export from (read mode)",
         action="store",
         type=str,
@@ -362,11 +362,11 @@ def cmdline_parser(defaults={}):
     )
     output_group.add_argument(
         "-xs",
-        "--export_subset_csv",
-        help="Create csv of the subset given with subset_name. Output as <subset_name>.csv. Can also export full database tables",
+        "--export_bookmark_csv",
+        help="Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables",
         action="store",
         type=str,
-        metavar="SUBSET_NAME",
+        metavar="BOOKMARK_NAME",
     )
     output_group.add_argument(
         "-xq",
@@ -386,8 +386,8 @@ def cmdline_parser(defaults={}):
     )
     output_group.add_argument(
         "-nd",
-        "--new_data_from_subset",
-        help="Write log of --out_fields data for subset specified by --subset_name. Must use without any filters.",
+        "--new_data_from_bookmark",
+        help="Write log of --out_fields data for bookmark specified by --bookmark_name. Must use without any filters.",
         action="store_true",
     )
     output_group.add_argument(
@@ -703,11 +703,11 @@ class CLOptionParser:
             if parsed_opts.max_miss > 0:
                 if parsed_opts.plot:
                     raise OptionError(
-                        "Cannot use --plot with --max_miss > 0. Can plot for desired subset with --subset_name."
+                        "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
                     )
                 if parsed_opts.export_sdf_path is not None:
                     raise OptionError(
-                        "Cannot use --export_sdf_path with --max_miss > 0. Can export poses for desired subset --subset_name"
+                        "Cannot use --export_sdf_path with --max_miss > 0. Can export poses for desired bookmark --bookmark_name"
                     )
             parsed_opts.out_fields = parsed_opts.out_fields.split(",")
             for outfield in parsed_opts.out_fields:
@@ -851,15 +851,15 @@ class CLOptionParser:
             "plot": parsed_opts.plot,
             "outfields": parsed_opts.out_fields,
             "no_print": not parsed_opts.verbose,
-            "export_table": parsed_opts.export_subset_csv,
+            "export_table": parsed_opts.export_bookmark_csv,
             "export_query": parsed_opts.export_query_csv,
-            "data_from_subset": parsed_opts.new_data_from_subset,
+            "data_from_bookmark": parsed_opts.new_data_from_bookmark,
         }
 
         db_opts = {
             "order_results": parsed_opts.order_results,
             "log_distinct_ligands": parsed_opts.all_poses,
-            "results_view_name": parsed_opts.subset_name,
+            "results_view_name": parsed_opts.bookmark_name,
             "store_all_poses": parsed_opts.store_all_poses,
             "overwrite": parsed_opts.overwrite,
             "add_results": parsed_opts.add_results,

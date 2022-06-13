@@ -332,12 +332,12 @@ class TestInputs:
 
 class TestOutputs:
 
-    def test_export_subset_csv(self):
+    def test_export_bookmark_csv(self):
         status1 = os.system(
             "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/rt_process_vs.py read --input_db output.db --export_subset_csv Ligands"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --export_bookmark_csv Ligands"
         )
 
         os.system("rm output.db")
