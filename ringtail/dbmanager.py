@@ -275,11 +275,7 @@ class DBManager:
             )
         # add statevars
         for key in self.stateVar_keys:
-            stateVar_data = ligand_dict[key][pose_rank]
-            if stateVar_data != []:
-                for dim in stateVar_data:
-                    ligand_data_list.append(dim)
-            else:
+            if ligand_dict[key] == []:
                 if key == "pose_about" or key == "pose_translations":
                     ligand_data_list.extend(
                         [
@@ -297,6 +293,11 @@ class DBManager:
                             None,
                         ]
                     )
+                continue
+            stateVar_data = ligand_dict[key][pose_rank]
+            if stateVar_data != []:
+                for dim in stateVar_data:
+                    ligand_data_list.append(dim)
         dihedral_string = ""
         if ligand_dict["pose_dihedrals"] != []:
             pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
@@ -349,7 +350,9 @@ class DBManager:
         rec_name = ligand_dict["receptor"]
         box_dim = json.dumps(ligand_dict["grid_dim"])
         box_center = json.dumps(ligand_dict["grid_center"])
-        grid_spacing = float(ligand_dict["grid_spacing"])
+        grid_spacing = ligand_dict["grid_spacing"]
+        if grid_spacing != '':
+            grid_spacing = float(grid_spacing)
         flexible_residues = json.dumps(ligand_dict["flexible_residues"])
 
         return [rec_name, box_dim, box_center, grid_spacing, flexible_residues]
@@ -433,7 +436,8 @@ class DBManager:
                 )
                 cluster_saved_pose_map[cluster] = saved_pose_idx
                 saved_pose_idx += 1
-                interaction_dictionaries.append([ligand_dict["interactions"][idx]])
+                if ligand_dict["interactions"] != []:
+                    interaction_dictionaries.append([ligand_dict["interactions"][idx]])
             elif run_number in ligand_dict["tolerated_interaction_runs"]:
                 # adds to list started by best-scoring pose in cluster
                 if cluster not in cluster_saved_pose_map:
@@ -1245,17 +1249,15 @@ class DBManagerSQLite(DBManager):
             self._generate_interaction_bitvectors(interactions_list)
         )
 
-    def add_receptor_object_to_row(self, receptor, rec_name):
-        """Takes object of Receptor class, updates the column in Receptor table for the row with rec_name to contain receptor BLOB
+    def add_receptor_object_to_row(self, receptor):
+        """Takes object of Receptor class, updates the column in Receptor table
 
         Args:
             receptor (bytes): bytes receptor object to be inserted into DB
             rec_name (string): Name of receptor. Used to insert into correct row of DB
         """
 
-        sql_update = """UPDATE Receptors SET receptor_object = ? WHERE RecName LIKE '{0}'""".format(
-            rec_name
-        )
+        sql_update = """UPDATE Receptors SET receptor_object = ? WHERE Receptor_ID == 1"""
 
         try:
             cur = self.conn.cursor()

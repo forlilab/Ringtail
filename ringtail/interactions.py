@@ -27,12 +27,12 @@ class InteractionFinder:
         """
 
         def append_rec_atom_info(rec_at):
-            # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
-            recid_list.append(rec_at[0])
-            recname_list.append(rec_at[1])
-            residue_list.append(rec_at[2])
-            resid_list.append(rec_at[3])
-            chain_list.append(rec_at[4])
+            # rec_at is array of format (atom_id, ?, atom_name, resid, resname, chain, xyz, q, t)
+            recid_list.append(str(rec_at[0]))
+            recname_list.append(str(rec_at[2]))
+            residue_list.append(rec_at[4])
+            resid_list.append(str(rec_at[3]))
+            chain_list.append(rec_at[5])
 
         type_list = []
         recid_list = []

@@ -639,35 +639,18 @@ class CLOptionParser:
             )
         if self.mode == "vina":
             # Guard against non-compatible options being called in Vina mode
-            if parsed_opts.save_receptor:
-                warnings.warn(
-                    "Used incompatible --save_receptor flag with Vina mode. Setting --save_receptor to False"
-                )
-                parsed_opts.save_receptor = False
             if parsed_opts.react_any:
                 warnings.warn(
-                    "Cannot use interaction filters with Vina mode. Removing react_any filter."
+                    "Cannot use reaction filters with Vina mode. Removing react_any filter."
                 )
                 parsed_opts.react_any = False
             if parsed_opts.interaction_tolerance is not None:
                 warnings.warn(
-                    "Cannot use interaction filters with Vina mode. Removing interaction_tolerance."
+                    "Cannot use interaction tolerance with Vina mode. Removing interaction_tolerance."
                 )
                 parsed_opts.interaction_tolerance = None
-            if parsed_opts.max_miss != 0:
-                warnings.warn(
-                    "Cannot use interaction filters with Vina mode. Removing max_miss filter."
-                )
-                parsed_opts.max_miss = 0
-            if parsed_opts.hb_count is not None:
-                warnings.warn(
-                    "Cannot use interaction filters with Vina mode. Removing hb_count filter."
-                )
-                parsed_opts.hb_count = None
             if parsed_opts.add_interactions and parsed_opts.receptor_name is None:
                 raise OptionError("Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_name.")
-            if parsed_opts.add_interactions and not os.path.exists(parsed_opts.receptor_name):
-                raise OptionError("Error: Given receptor name does not exist!")
             # set pattern to .pdbqt
             parsed_opts.pattern = "*.pdbqt*"
             # set store all poses, since vina does not cluster poses
@@ -675,6 +658,7 @@ class CLOptionParser:
 
         self.pattern = parsed_opts.pattern
         self.save_receptor = parsed_opts.save_receptor
+        self.receptor_name = parsed_opts.receptor_name
 
         # check options for write mode
         self.rr_mode = parsed_opts.rr_mode
@@ -939,7 +923,7 @@ class CLOptionParser:
                     # scan for receptor pdbqts
                     if self.save_receptor and self.mode != "vina":
                         self.scan_dir(
-                            path, "*.pdbqt*", sources["file_path"]["recursive"]
+                            path, "*.pdbqt*", sources["file_path"]["recursive"], ligands=False
                         )
         # update the files pool with the files specified in the files list
         find_rec = True
@@ -955,8 +939,12 @@ class CLOptionParser:
         # check options for add_interactions, move vina receptor pdbqt
         if self.add_interactions:
             if self.mode == "vina":
-                self.lig_files_pool.remove(self.receptor_name)
-                self.rec_files_pool.append(self.receptor_name)
+                for file in self.lig_files_pool:
+                    if file.endswith(self.receptor_name):
+                        self.lig_files_pool.remove(file)
+                        self.rec_files_pool.append(file)
+            if len(self.rec_files_pool) == 0:
+                raise OptionError("Error: Given receptor name not found!")
 
         if len(self.lig_files_pool) > 0 or len(self.rec_files_pool) > 0:
             logging.info("-Found %d ligand files." % len(self.lig_files_pool))
@@ -973,7 +961,10 @@ class CLOptionParser:
                 "--add_interactions flag specified but no receptor PDBQT found. Please check location of receptor file and file source options"
             )
 
-    def scan_dir(self, path, pattern, recursive=False):
+        if self.rec_files_pool != [] and self.rec_files_pool[0] != self.receptor_name:
+            self.rman_opts["receptor_name"] = self.rec_files_pool[0]
+
+    def scan_dir(self, path, pattern, recursive=False, ligands=True):
         """scan for valid output files in a directory
         the pattern is used to glob files
         optionally, a recursive search is performed
@@ -992,9 +983,9 @@ class CLOptionParser:
                 )
         else:
             files = glob(os.path.join(path, pattern))
-        if "dlg" in pattern:
+        if ligands:
             self.lig_files_pool.extend(files)
-        elif "pdbqt" in pattern:
+        else:
             self.rec_files_pool.extend(files)
 
     def scan_file_list(self, filename, pattern=".dlg", find_rec=True):
@@ -1009,7 +1000,7 @@ class CLOptionParser:
                 if os.path.isfile(line):
                     if line.endswith(pattern) or line.endswith(pattern + ".gz"):
                         lig_accepted.append(line)
-                    if find_rec:
+                    if find_rec and self.mode != "vina":
                         if line.endswith(".pdbqt") or line.endswith(".pdbqt.gz"):
                             rec_accepted.append(line)
                 else:

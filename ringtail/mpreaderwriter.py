@@ -107,7 +107,7 @@ class DockingFileReader(multiprocessing.Process):
                     if parsed_file_dict["interactions"] == []:
                         for pose in parsed_file_dict["pose_coordinates"]:
                             parsed_file_dict["interactions"].append(self.interaction_finder.find_pose_interactions(parsed_file_dict["ligand_atomtypes"], pose))
-                            parsed_file_dict["num_interactions"].append(int(parsed_file_dict["interactions"][-1]["count"]))
+                            parsed_file_dict["num_interactions"].append(int(parsed_file_dict["interactions"][-1]["count"][0]))
                             parsed_file_dict["num_hb"].append(len([1 for i in parsed_file_dict["interactions"][-1]["type"] if i == "H"]))
                 # find poses we want to save tolerated interactions for
                 if self.interaction_tolerance is not None:
@@ -265,12 +265,12 @@ class Writer(multiprocessing.Process):
         )  # filter out stray Nones
         self.db.insert_ligands(filter(None, self.ligands_array))
         # if this is the first insert or we have multiple receptors, insert the receptor array
-        if self.first_insert and self.mode != "vina":
+        if self.first_insert and filter(None, self.receptor_array) != []:
             self.db.insert_receptors(filter(None, self.receptor_array))
             self.first_insert = False
 
         # perform operations for inserting iteraction data
-        if self.mode != "vina":
+        if self.interactions_list != []:
             self.db.insert_interactions(self.interactions_list)
 
         # calulate time for processing/writing previous chunk

@@ -448,13 +448,24 @@ def parse_vina_pdbqt(fname):
     flexible_residues = []
     ligand_atomtypes = []
     first_model = True
+    cluster = 1  # treat every pose in vina like new cluster
+    cluster_list = []
+    clusters = {}
+    cluster_sizes = {}
+    cluster_rmsds = []
 
     with open_fn(fname, "rb") as fp:
         for line in fp.readlines():
             line = line.decode("utf-8")
             try:
                 if line.startswith("MODEL"):
+                    cluster_list.append(cluster)
+                    clusters[cluster] = [cluster]
+                    cluster_sizes[cluster] = 1
+                    cluster_rmsds.append(0.0)
+                    cluster += 1
                     pose_coordinates.append([])
+                    flexible_res_coords.append([])
                     sorted_runs.append(line.split()[1])
                 if line.startswith("REMARK VINA RESULT:"):
                     scores.append(float(line.split()[3]))
@@ -472,7 +483,7 @@ def parse_vina_pdbqt(fname):
                             [line[30:38], line[38:46], line[46:54]]
                         )
                         if first_model:
-                            ligand_atomtypes.append(line[-2:])
+                            ligand_atomtypes.append(line.split()[-1])
                             if line[13] != "H":
                                 num_heavy_atoms += 1
                 if line.startswith("REMARK SMILES IDX") and smile_idx_map == []:
@@ -488,7 +499,7 @@ def parse_vina_pdbqt(fname):
                         .rstrip("\n")
                         .split()
                     )
-                if line == "ENDMDL" and first_model:
+                if line.startswith("ENDMDL") and first_model:
                     first_model = False
                 # make new flexible residue list if in the coordinates for a flexible residue
                 if "BEGIN_RES" in line:
@@ -497,10 +508,10 @@ def parse_vina_pdbqt(fname):
                 if "END_RES" in line:
                     inside_res = False
                 # store flexible residue identities
-                if "INPUT-FLEXRES-PDBQT: BEGIN_RES" in line:
+                if "BEGIN_RES" in line and first_model:
                     split_line = line.split()
                     flexible_residues.append(
-                        split_line[2] + ":" + split_line[3] + split_line[4]
+                        split_line[1] + ":" + split_line[2] + split_line[3]
                     )  # RES:<chain><resnum>
             except ValueError:
                 raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, fname))
@@ -522,10 +533,10 @@ def parse_vina_pdbqt(fname):
         "flexible_res_coordinates": flexible_res_coords,
         "flexible_residues": flexible_residues,
         "ligand_smile_string": smile_string,
-        "clusters": {},
-        "cluster_rmsds": [],
-        "cluster_sizes": {},
-        "cluster_list": [],
+        "clusters": clusters,
+        "cluster_rmsds": cluster_rmsds,
+        "cluster_sizes": cluster_sizes,
+        "cluster_list": cluster_list,
         "ref_rmsds": [],
         "scores": scores,  # list
         "leff": leff,  # list
