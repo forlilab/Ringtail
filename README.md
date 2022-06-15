@@ -254,9 +254,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--lebest           |-leb| Best ligand efficiency value accepted                 | no default  ||
 |--energy_percentile      |-pe| Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  ||
 |--le_percentile   |-ple| Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default |  <tr><td colspan="5">LIGAND FILTERS</td></tr>
-|--name             |-n| Search for specific ligand name. Joined by "OR" with substructure search and multiple names. Multiple filters should be separated by commas | no default  ||
-|--substructure     |-st| SMILES substring to search for. *Performs substring search, will not find equivalent chemical structures with different SMILES denotations.* Multiple filters should be separated by commas | no default  | No|
-|--substruct_join   |-sj| Specify whether to join separate substructure searchs with "AND" or "OR". | "OR" | No  <tr><td colspan="5">INTERACTION FILTERS</td></tr>
+|--name             |-n| Search for specific ligand name. Joined by "OR" with substructure search and multiple names. Multiple filters should be separated by commas | no default  | <tr><td colspan="5">INTERACTION FILTERS</td></tr>
 |--van_der_waals    |-vdw| Filter for van der Waals interaction with given receptor information.  | no default  | No|
 |--hydrogen_bond    |-hb| Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  | No|
 |--reactive_res     |-r| Filter for reation with residue containing specified information | no default  | No|
