@@ -60,7 +60,7 @@ pip install --editable .
 - __Cluster__: Each DLG contains a number of independent runs, usually 20-50. These independent poses are then clustered by RMSD, giving groups of similar poses called clusters.
 - __Pose__: The predicted ligand shape and position for single run of a single ligand in a single receptor.
 - __Binding score/ binding energy__: The predicited binding energy from AutoDock.
-- __Subset__: The set of ligands or ligand poses from a virtual screening passing a given set of filters. Stored within a virtual screening database as a view.
+- __Bookmark__: The set of ligands or ligand poses from a virtual screening passing a given set of filters. Stored within a virtual screening database as a view.
 - __Ringtail__: 
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
@@ -121,14 +121,14 @@ config_r.json:
 #### Export results from a previous filtering as a CSV
 ```
 rt_process_vs.py write --file_path Files/
-rt_process_vs.py read --input_db output.db --epercentile 0.1 --subset_name filter1
+rt_process_vs.py read --input_db output.db --epercentile 0.1 --bookmark_name filter1
 rt_process_vs.py read --input_db output.db --export_table_csv filter1
 ```
 #### Create scatterplot highlighting ligands passing filters
 ```
 rt_process_vs.py write --file_path Files/
-rt_process_vs.py read --input_db output.db --epercentile 0.1 --subset_name filter1
-rt_process_vs.py read --input_db output.db --subset_name filter1 --plot
+rt_process_vs.py read --input_db output.db --epercentile 0.1 --bookmark_name filter1
+rt_process_vs.py read --input_db output.db --bookmark_name filter1 --plot
 ```
 `all_ligands_scatter.png`
 
@@ -170,16 +170,16 @@ By default, only the information for the top-scoring binding pose will be writte
 
 No filtering is performed if no filters are given. If both `--eworst` and `--epercentile` are used together, the `--eworst` cutoff alone is used. The same is true of `--leworst` and `--leffpercentile`.
 
-When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--subset_name` option. Other data for poses in a view may be accessed later using the `--new_data_from_subset` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<subset_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
+When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--bookmark_name` option. Other data for poses in a view may be accessed later using the `--new_data_from_bookmark` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<bookmark_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
 
 ##### Other available outputs
 The primary outputs from rt_process_vs are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
-The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the subset given with `--subset_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
+The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with `--bookmark_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
 
-Using the `--export_sdf_path` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the subset given with `--subset_name`. The SDF will contain poses passing the filter/in the subset ordered by increasing binding energy. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
+Using the `--export_sdf_path` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the bookmark given with `--bookmark_name`. The SDF will contain poses passing the filter/in the bookmark ordered by increasing binding energy. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
 
-If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_subset_csv`, which takes a string for the name of a table or result subset in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
+If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_bookmark_csv`, which takes a string for the name of a table or result bookmark in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
 The second option is `--export_query_csv`. This takes a string of a properly-formatted SQL query to run on the database, returning the results of that query as `query.csv`. This option allows the user full, unobstructed access to all data in the database.
 
 ### Interaction filter formatting and options
@@ -223,7 +223,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |:------------------------|:-----|:-------------------------------------------------|:----------------|----:|
 |--config           | -c| Configuration JSON file to specify new default options. Overridded by command line | no default       |<tr><td colspan="5"></td></tr>
 |--input_db         | -i| Database file to use instead of creating new database | no default       ||
-|--subset_name      |-s| Name for subset view in database                      | passing_results  ||
+|--bookmark_name      |-s| Name for bookmark view in database                      | passing_results  ||
 |--mode          |-m| specify AutoDock program used to generate results. Available options are "ADGPU" and "Vina". Vina mode will automatically change --pattern to \*.pdbqt   | ADGPU         ||
 |--verbose          |-v| Flag indicating that passing results should be printed to STDOUT | FALSE        | <tr><td colspan="5">**Write Mode**</td></tr>
 |--file             |-f| DLG/Vina PDBQT/receptor file(s) to be read into database                  | no default       ||
@@ -243,10 +243,10 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--out_fields       |-of| Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
 |--order_results    |-ord| String for field by which the passing results should be ordered in log file. | no default ||
 |--all_poses        |-ap| Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||
-|--export_subset_csv |-xs| Name of database result subset or table to be exported as CSV. Output as <table_name>.csv | no default      ||
+|--export_bookmark_csv |-xs| Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv | no default      ||
 |--export_query_csv |-xq| Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      ||
 |--export_sdf_path|-sdf| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       |No|
-|--new_data_from_subset |-nd| Flag that out_fields data should be written to log for results in given --subset_name. Requires no filters. | FALSE       ||
+|--new_data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
 |--plot             |-p| Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>
 |--eworst           |-e| Worst energy value accepted (kcal/mol)                | no_default  ||
 |--ebest            |-eb| Best energy value accepted (kcal/mol)                 | no default  ||
@@ -265,11 +265,11 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 ---
 
 ## rt_selectivity.py Documentation
-The `rt_selectivity.py` script is designed to be used with databases already made and filtered with the `rt_process_vs.py` script. The script is used to select ligands which are shared between a given filter subset of some virtual screenings (positive selection) or exclusive to some screenings and not others (negative selectivity). The basic process of preparing to use this script and the concept behind it is thus:
+The `rt_selectivity.py` script is designed to be used with databases already made and filtered with the `rt_process_vs.py` script. The script is used to select ligands which are shared between a given filter bookmark of some virtual screenings (positive selection) or exclusive to some screenings and not others (negative selectivity). The basic process of preparing to use this script and the concept behind it is thus:
 
 Let us assume that kinase1 is our target of interest. It has related proteins kinase1a and kinase1b. protein2 is an unrelated protein.
 1. Create a database for each virtual screening on each target (kinase1.db, kinase1a.db, kinase1b.db, protein2.db)
-2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues), but the **subset_name must be the same within each virtual screening database (default passing_results).**
+2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues), but the **bookmark_name must be the same within each virtual screening database (default passing_results).**
 3. Use `rt_selectivity.py` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from `rt_process_vs.py`.
 ```
 rt_selectivity.py --positive_selection kinase1.db --negative_selection kinase1a.db kinase1b.db
@@ -284,27 +284,27 @@ rt_selectivity.py --positive_selection kinase1.db protein2.db --negative_selecti
 ```
 rt_selectivity.py --help
 ```
-#### Select ligands found in "passing_results" subsets of vs1 but not vs2 or vs3
+#### Select ligands found in "passing_results" bookmarks of vs1 but not vs2 or vs3
 ```
 rt_selectivity.py --positive_selection vs1.db --negative_selection vs2.db vs3.db
 ```
-#### Select ligands found in "passing_results" subsets of vs1 and vs2 but not vs3 or vs4
+#### Select ligands found in "passing_results" bookmarks of vs1 and vs2 but not vs3 or vs4
 ```
 rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db
 ```
-#### Select ligands found in "passing_results" subsets of every vs except vs4
+#### Select ligands found in "passing_results" bookmarks of every vs except vs4
 ```
 rt_selectivity.py --positive_selection vs1.db vs2.db vs3.db --negative_selection vs4.db
 ```
-#### Select ligands found in "filter1" subsets of vs1 but not vs2
+#### Select ligands found in "filter1" bookmarks of vs1 but not vs2
 ```
-rt_selectivity.py --positive_selection vs1.db --negative_selection vs2.db --subset_name filter1
+rt_selectivity.py --positive_selection vs1.db --negative_selection vs2.db --bookmark_name filter1
 ```
-#### Save subset of ligands found in "filter1" subsets of vs1 and vs2 but not vs3 or vs4 as "selective_subset" in vs1.db
+#### Save bookmark of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as "selective_bookmark" in vs1.db
 ```
-rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --save_subset selective_subset
+rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --save_bookmark selective_bookmark
 ```
-#### Export subset of ligands found in "filter1" subsets of vs1 and vs2 but not vs3 or vs4 as CSV
+#### Export bookmark set of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as CSV
 ```
 rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --export_csv
 ```
@@ -313,12 +313,12 @@ rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db
 | Argument          || Description                                           | Default value   |
 |:------------------------|:-----|:-------------------------------------------------|----:|
 |--config           | -c| Configuration JSON file to specify new default options. Overridded by command line | no default <tr><td colspan="4"></td></tr>
-|--positive_selection|-p| Database files for which to select the intersection of ligands in subset_name for all databases specified with this option.| no default|
-|--negative_selection|-n| Database files for which to exclude any ligands found in subset_name of any of the databases specified with this option. | no default|
-|--subset_name |-sn| Name of subset to select ligands within. Must be present in all databases given.| passing_results|
+|--positive_selection|-p| Database files for which to select the intersection of ligands in bookmark_name for all databases specified with this option.| no default|
+|--negative_selection|-n| Database files for which to exclude any ligands found in bookmark_name of any of the databases specified with this option. | no default|
+|--bookmark_name |-sn| Name of bookmark to select ligands within. Must be present in all databases given.| passing_results|
 |--log |-l| Name for log file| selective_log.txt |
-|--save_subset| -s| Save the final selective subset as a view with given name in the first database specified with --positive_selection. | no default|
-|--export_csv| -x| Save final selective subset as csv. Saved as [save_subset].csv or 'crossref.csv' if --save_subset not used.| FALSE|
+|--save_bookmark| -s| Save the final selective bookmark as a view with given name in the first database specified with --positive_selection. | no default|
+|--export_csv| -x| Save final selective bookmark as csv. Saved as [save_bookmark].csv or 'crossref.csv' if --save_bookmark not used.| FALSE|
 
 ---
 ## Brief python tutorials
