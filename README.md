@@ -23,7 +23,7 @@ at [Scripps Research](https://www.scripps.edu/).
 - [Definitions](https://github.com/forlilab/Ringtail#definitions)
 - [Scripts](https://github.com/forlilab/Ringtail#scripts)
 - [rt_process_vs.py Documentation](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation)
-- [rt_selectivity.py Documentation](https://github.com/forlilab/Ringtail#rt_selectivitypy-documentation)
+- [rt_compare.py Documentation](https://github.com/forlilab/Ringtail#rt_comparepy-documentation)
 - [Python tutorials](https://github.com/forlilab/Ringtail#brief-python-tutorials)
 
 ## Installation
@@ -65,11 +65,11 @@ pip install --editable .
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
 ## Scripts
-The Ringtail package includes two command line oriented scripts: `rt_process_vs.py` and `rt_selectivity.py`.
+The Ringtail package includes two command line oriented scripts: `rt_process_vs.py` and `rt_compare.py`.
 
 [rt_process_vs.py](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation) serves as the primary script for the package and is used to both write docking files to a SQLite database and to perform filtering and export tasks on a database. It is designed to handle docking output files associated with a single virtual screening in a single database.
 
-[rt_selectivity.py](https://github.com/forlilab/Ringtail#rt_selectivitypy-documentation) is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
+[rt_compare.py](https://github.com/forlilab/Ringtail#rt_comparepy-documentation) is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
 
 ## rt_process_vs.py Documentation
 ### Usage examples
@@ -264,51 +264,51 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 
 ---
 
-## rt_selectivity.py Documentation
-The `rt_selectivity.py` script is designed to be used with databases already made and filtered with the `rt_process_vs.py` script. The script is used to select ligands which are shared between a given filter bookmark of some virtual screenings (positive selection) or exclusive to some screenings and not others (negative selectivity). The basic process of preparing to use this script and the concept behind it is thus:
+## rt_compare.py Documentation
+The `rt_compare.py` script is designed to be used with databases already made and filtered with the `rt_process_vs.py` script. The script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (wanted) or exclusive to some screenings and not others (unwanted). The basic process of preparing to use this script and the concept behind it is thus:
 
 Let us assume that kinase1 is our target of interest. It has related proteins kinase1a and kinase1b. protein2 is an unrelated protein.
 1. Create a database for each virtual screening on each target (kinase1.db, kinase1a.db, kinase1b.db, protein2.db)
-2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues), but the **bookmark_name must be the same within each virtual screening database (default passing_results).**
-3. Use `rt_selectivity.py` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from `rt_process_vs.py`.
+2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues). The bookmark within each database may be given as a single string (same bookmark name in every database) or multiple bookmark names (one per database) with the `--bookmark_name` option. The default name is `passing_results`.
+3. Use `rt_compare.py` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from `rt_process_vs.py`.
 ```
-rt_selectivity.py --positive_selection kinase1.db --negative_selection kinase1a.db kinase1b.db
+rt_compare.py --positive_selection kinase1.db --negative_selection kinase1a.db kinase1b.db
 ```
 4. Other usage examples and output options given below. For example, one can also select for potential dual-target ligands with
 ```
-rt_selectivity.py --positive_selection kinase1.db protein2.db --negative_selection kinase1a.db kinase1b.db
+rt_compare.py --positive_selection kinase1.db protein2.db --negative_selection kinase1a.db kinase1b.db
 ```
 
 ### Usage examples
-#### Access help message for rt_selectivity.py
+#### Access help message for rt_compare.py
 ```
-rt_selectivity.py --help
+rt_compare.py --help
 ```
 #### Select ligands found in "passing_results" bookmarks of vs1 but not vs2 or vs3
 ```
-rt_selectivity.py --positive_selection vs1.db --negative_selection vs2.db vs3.db
+rt_compare.py --positive_selection vs1.db --negative_selection vs2.db vs3.db
 ```
 #### Select ligands found in "passing_results" bookmarks of vs1 and vs2 but not vs3 or vs4
 ```
-rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db
+rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db
 ```
 #### Select ligands found in "passing_results" bookmarks of every vs except vs4
 ```
-rt_selectivity.py --positive_selection vs1.db vs2.db vs3.db --negative_selection vs4.db
+rt_compare.py --positive_selection vs1.db vs2.db vs3.db --negative_selection vs4.db
 ```
 #### Select ligands found in "filter1" bookmarks of vs1 but not vs2
 ```
-rt_selectivity.py --positive_selection vs1.db --negative_selection vs2.db --bookmark_name filter1
+rt_compare.py --positive_selection vs1.db --negative_selection vs2.db --bookmark_name filter1
 ```
 #### Save bookmark of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as "selective_bookmark" in vs1.db
 ```
-rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --save_bookmark selective_bookmark
+rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --save_bookmark selective_bookmark
 ```
 #### Export bookmark set of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as CSV
 ```
-rt_selectivity.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --export_csv
+rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --export_csv
 ```
-### rt_selectivity.py supported arguments
+### rt_compare.py supported arguments
 
 | Argument          || Description                                           | Default value   |
 |:------------------------|:-----|:-------------------------------------------------|----:|
