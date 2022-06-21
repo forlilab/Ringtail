@@ -80,10 +80,7 @@ class VSManager:
                 "Error occurred while initializing database."
             ) from e
 
-        self.results_man = ResultsManager(
-            opts=self.rman_opts,
-            dbman=self.dbman
-        )
+        self.results_man = ResultsManager(opts=self.rman_opts, dbman=self.dbman)
 
         try:
             self.output_manager = Outputter(

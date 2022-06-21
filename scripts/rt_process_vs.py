@@ -20,7 +20,9 @@ if __name__ == "__main__":
         level = logging.DEBUG
     else:
         level = logging.INFO
-    logging.basicConfig(level=level, stream=sys.stdout, filemode="w", format="%(message)s")
+    logging.basicConfig(
+        level=level, stream=sys.stdout, filemode="w", format="%(message)s"
+    )
     # parse command line options and filters file (if given)
     try:
         cl_opts = CLOptionParser()

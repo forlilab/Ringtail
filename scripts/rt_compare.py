@@ -142,7 +142,9 @@ if __name__ == "__main__":
 
         # make sure we have a positive db and at least one other database
         if args.wanted is None:
-            raise IOError("No wanted database found. Must specify an included database.")
+            raise IOError(
+                "No wanted database found. Must specify an included database."
+            )
         else:
             db_count = len(args.wanted)
             if args.unwanted is not None:
@@ -158,7 +160,9 @@ if __name__ == "__main__":
             level = logging.INFO
         else:
             level = logging.WARNING
-        logging.basicConfig(level=level, stream=sys.stdout, filemode="w", format="%(message)s")
+        logging.basicConfig(
+            level=level, stream=sys.stdout, filemode="w", format="%(message)s"
+        )
 
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
@@ -175,7 +179,9 @@ if __name__ == "__main__":
             if args.unwanted is not None:
                 num_dbs += len(args.unwanted)
             if len(args.bookmark_name) != num_dbs:
-                raise OptionError("Not enough bookmark names given for the number of databases given. If specifying more than one bookmark name, must give bookmark name for every database to be compared.")
+                raise OptionError(
+                    "Not enough bookmark names given for the number of databases given. If specifying more than one bookmark name, must give bookmark name for every database to be compared."
+                )
             bookmark_list = args.bookmark_name[1:]
         else:
             for db in wanted_dbs:
@@ -192,7 +198,11 @@ if __name__ == "__main__":
         for idx, db in enumerate(wanted_dbs):
             logging.info(f"cross-referencing {db}")
             previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
-                db, previous_bookmarkname, bookmark_list[idx], selection_type="+", old_db=last_db
+                db,
+                previous_bookmarkname,
+                bookmark_list[idx],
+                selection_type="+",
+                old_db=last_db,
             )
             last_db = db
 
@@ -200,7 +210,11 @@ if __name__ == "__main__":
             for idx, db in enumerate(unwanted_dbs):
                 logging.info(f"cross-referencing {db}")
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
-                    db, previous_bookmarkname, bookmark_list[idx], selection_type="-", old_db=last_db
+                    db,
+                    previous_bookmarkname,
+                    bookmark_list[idx],
+                    selection_type="-",
+                    old_db=last_db,
                 )
                 last_db = db
 
@@ -213,7 +227,9 @@ if __name__ == "__main__":
         output_manager.write_log(final_bookmark)
 
         if args.save_bookmark is not None:
-            dbman.save_temp_bookmark(args.save_bookmark, original_bookmark_name, args.wanted, args.unwanted)
+            dbman.save_temp_bookmark(
+                args.save_bookmark, original_bookmark_name, args.wanted, args.unwanted
+            )
 
         if args.export_csv:
             if args.save_bookmark is not None:

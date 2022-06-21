@@ -9,7 +9,6 @@ import os
 
 
 class TestInputs:
-
     def test_multiple_files1(self):
         os.system("rm output.db")
         os.system(
@@ -228,8 +227,7 @@ class TestInputs:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         count = cur.fetchone()[0]
 
         cur.close()
@@ -246,8 +244,7 @@ class TestInputs:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         count = cur.fetchone()[0]
 
         cur.close()
@@ -264,8 +261,7 @@ class TestInputs:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         count = cur.fetchone()[0]
 
         cur.close()
@@ -282,8 +278,7 @@ class TestInputs:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         count = cur.fetchone()[0]
 
         cur.close()
@@ -300,8 +295,7 @@ class TestInputs:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         count = cur.fetchone()[0]
 
         cur.close()
@@ -318,8 +312,7 @@ class TestInputs:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         count = cur.fetchone()[0]
 
         cur.close()
@@ -331,7 +324,6 @@ class TestInputs:
 
 
 class TestOutputs:
-
     def test_export_bookmark_csv(self):
         status1 = os.system(
             "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
@@ -359,15 +351,15 @@ class TestOutputs:
 
     def test_interaction_tolerance(self):
         status_notol = os.system(
-            "python ../scripts/rt_process_vs.py write --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz")
+            "python ../scripts/rt_process_vs.py write --file test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz"
+        )
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         cur.execute(
             "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE 'OB3Z3759450716_RX1--4xfx_mon_prep--tyr169' AND run_number = 4)"
         )
-        count_notol = sum(
-            [1 for interaction in cur.fetchone() if interaction == 1])
+        count_notol = sum([1 for interaction in cur.fetchone() if interaction == 1])
 
         cur.close()
         conn.close()
@@ -383,8 +375,7 @@ class TestOutputs:
         cur.execute(
             "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE 'OB3Z3759450716_RX1--4xfx_mon_prep--tyr169' AND run_number = 4)"
         )
-        count_tol = sum(
-            [1 for interaction in cur.fetchone() if interaction == 1])
+        count_tol = sum([1 for interaction in cur.fetchone() if interaction == 1])
 
         cur.close()
         conn.close()
@@ -400,8 +391,7 @@ class TestOutputs:
         cur.execute(
             "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE 'OB3Z3759450716_RX1--4xfx_mon_prep--tyr169' AND run_number = 4)"
         )
-        count_tol2 = sum(
-            [1 for interaction in cur.fetchone() if interaction == 1])
+        count_tol2 = sum([1 for interaction in cur.fetchone() if interaction == 1])
 
         cur.close()
         conn.close()
@@ -412,11 +402,16 @@ class TestOutputs:
         assert status_tol == 0
         assert status_tol2 == 0
         print(count_notol, count_tol, count_tol2)
-        assert count_notol != count_tol or count_tol2 != count_tol or count_tol2 != count_notol
+        assert (
+            count_notol != count_tol
+            or count_tol2 != count_tol
+            or count_tol2 != count_notol
+        )
 
     def test_max_poses(self):
         status3 = os.system(
-            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt")
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
+        )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Results")
@@ -483,8 +478,7 @@ class TestOutputs:
         assert count == ligcount * 50
 
 
-class TestFilters():
-
+class TestFilters:
     def test_eworst(self):
         status1 = os.system(
             "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
