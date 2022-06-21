@@ -176,6 +176,7 @@ if __name__ == "__main__":
         bookmark_list = []
         if len(args.bookmark_name) > 1:
             num_dbs = len(args.wanted)
+            num_wanted_dbs = num_dbs - 1
             if args.unwanted is not None:
                 num_dbs += len(args.unwanted)
             if len(args.bookmark_name) != num_dbs:
@@ -212,7 +213,7 @@ if __name__ == "__main__":
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                     db,
                     previous_bookmarkname,
-                    bookmark_list[idx],
+                    bookmark_list[idx + num_wanted_dbs],
                     selection_type="-",
                     old_db=last_db,
                 )
