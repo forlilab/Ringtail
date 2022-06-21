@@ -1844,7 +1844,7 @@ class DBManagerSQLite(DBManager):
         Query
         """
         sql_str = """CREATE TABLE Bookmarks (
-        Bookmark_name       VARCHAR[],
+        Bookmark_name       VARCHAR[] PRIMARY KEY,
         Query               VARCHAR[])"""
 
         try:
@@ -1863,7 +1863,7 @@ class DBManagerSQLite(DBManager):
             name (str): name for bookmark
             query (str): query used to generate bookmark
         """
-        sql_insert = """INSERT INTO Bookmarks (
+        sql_insert = """INSERT OR REPLACE INTO Bookmarks (
         Bookmark_name,
         Query
         ) VALUES (?,?)"""
