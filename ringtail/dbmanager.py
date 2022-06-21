@@ -1085,10 +1085,12 @@ class DBManager:
 
     def _generate_selective_view_query(self, bookmark1_name, bookmark2_name, select_str, new_db_name):
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
+
         Args:
-            new_db (string): name for attached database
-            bookmark_name (string): name of bookmark to cross-reference
-            selection_type (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+            bookmark1_name (string): name of bookmark to cross-reference for main db
+            bookmark2_name (string): name of bookmark to cross-reference for attached db
+            select_str (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+            new_db_name (str): name of attached db
         """
         raise NotImplementedError
 
@@ -2423,10 +2425,12 @@ class DBManagerSQLite(DBManager):
 
     def _generate_selective_view_query(self, bookmark1_name, bookmark2_name, select_str, new_db_name):
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
+
         Args:
-            new_db (string): name for attached database
-            bookmark_name (string): name of bookmark to cross-reference
-            selection_type (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+            bookmark1_name (string): name of bookmark to cross-reference for main db
+            bookmark2_name (string): name of bookmark to cross-reference for attached db
+            select_str (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+            new_db_name (str): name of attached db
         """
         return (
             "SELECT * FROM {0} WHERE LigName {1} (SELECT LigName FROM {2}.{3})".format(
