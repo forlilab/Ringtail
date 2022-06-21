@@ -30,9 +30,9 @@ def cmdline_parser(defaults={}):
     defaults = {
         "positive_selection": None,
         "negative_selection": None,
-        "subset_name": "passing_results",
+        "bookmark_name": ["passing_results"],
         "log": "selective_log.txt",
-        "save_subset": None,
+        "save_bookmark": None,
         "export_csv": None,
     }
 
@@ -70,29 +70,30 @@ def cmdline_parser(defaults={}):
     )
 
     parser.add_argument(
-        "--positive_selection",
-        "-p",
-        help="Database for which ligands MUST be included in subset",
+        "--wanted",
+        "-w",
+        help="Database for which ligands MUST be included in bookmark",
         nargs="+",
         type=str,
         metavar="[DATABASE_FILE].db",
     )
     parser.add_argument(
-        "--negative_selection",
+        "--unwanted",
         "-n",
-        help="Database for which ligands MUST NOT be included in subset",
+        help="Database for which ligands MUST NOT be included in bookmark",
         nargs="+",
         type=str,
         metavar="[DATABASE_FILE].db",
         action="store",
     )
     parser.add_argument(
-        "--subset_name",
+        "--bookmark_name",
         "-sn",
-        help="Name of filter subset that ligands should be compared accross. Must be present in all databases",
+        help="Name of filter bookmark that ligands should be compared accross. Must be present in all databases",
         type=str,
         metavar="STRING",
         action="store",
+        nargs="+",
     )
     parser.add_argument(
         "--log",
@@ -103,9 +104,9 @@ def cmdline_parser(defaults={}):
         action="store",
     )
     parser.add_argument(
-        "--save_subset",
+        "--save_bookmark",
         "-s",
-        help="Name for subset of passing cross-reference ligands to be saved as in first database given with --positive_selection",
+        help="Name for bookmark of passing cross-reference ligands to be saved as in first database given with --wanted",
         type=str,
         metavar="STRING",
         action="store",
@@ -113,7 +114,7 @@ def cmdline_parser(defaults={}):
     parser.add_argument(
         "--export_csv",
         "-x",
-        help="Save final cross-referenced subset as csv. Saved as [save_subset].csv or 'crossref.csv' if --save_subset not used.",
+        help="Save final cross-referenced bookmark as csv. Saved as [save_bookmark].csv or 'crossref.csv' if --save_bookmark not used.",
         action="store_true",
     )
     parser.add_argument(
@@ -123,10 +124,10 @@ def cmdline_parser(defaults={}):
     parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
 
-    # check that name was given with save_subset
-    if args.save_subset == "":
+    # check that name was given with save_bookmark
+    if args.save_bookmark == "":
         raise IOError(
-            "--save_subset option used but no subset name given. Must specify subset name as string."
+            "--save_bookmark option used but no bookmark name given. Must specify bookmark name as string."
         )
 
     return args
@@ -139,14 +140,14 @@ if __name__ == "__main__":
         args = cmdline_parser()
 
         # make sure we have a positive db and at least one other database
-        if args.positive_selection is None:
-            raise IOError("No positive selection database found. Must specify an included database.")
+        if args.wanted is None:
+            raise IOError("No wanted database found. Must specify an included database.")
         else:
-            db_count = len(args.positive_selection)
-            if args.negative_selection is not None:
-                db_count += len(args.negative_selection)
+            db_count = len(args.wanted)
+            if args.unwanted is not None:
+                db_count += len(args.unwanted)
             if db_count < 2:
-                raise IOError("Must specify at least two databases for selectivity.")
+                raise IOError("Must specify at least two databases for comparison.")
 
         # set logging level
         debug = True
@@ -158,51 +159,62 @@ if __name__ == "__main__":
             level = logging.WARNING
         logging.basicConfig(level=level)
 
-        positive_dbs = args.positive_selection
-        negative_dbs = args.negative_selection
+        wanted_dbs = args.wanted
+        unwanted_dbs = args.unwanted
 
-        ref_db = positive_dbs[0]
-        positive_dbs = positive_dbs[1:]
+        ref_db = wanted_dbs[0]
+        wanted_dbs = wanted_dbs[1:]
 
-        previous_subsetname = args.subset_name
+        previous_bookmarkname = args.bookmark_name[0]
+        original_bookmark_name = args.bookmark_name[0]
+        # make list of bookmark names for compared databases
+        bookmark_list = []
+        if len(args.bookmark_name) > 1:
+            bookmark_list = args.bookmark_name[1:]
+        else:
+            for db in wanted_dbs:
+                bookmark_list.append(original_bookmark_name)
+            if unwanted_dbs is not None:
+                for db in unwanted_dbs:
+                    bookmark_list.append(original_bookmark_name)
 
         logging.info("Starting cross-reference process")
 
         dbman = DBManagerSQLite(ref_db)
 
         last_db = None
-        for db in positive_dbs:
+        for idx, db in enumerate(wanted_dbs):
             logging.info(f"cross-referencing {db}")
-            previous_subsetname, number_passing_ligands = dbman.crossref_filter(
-                db, previous_subsetname, selection_type="+", old_db=last_db
+            previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
+                db, previous_bookmarkname, bookmark_list[idx], selection_type="+", old_db=last_db
             )
             last_db = db
 
-        if negative_dbs is not None:
-            for db in negative_dbs:
+        if unwanted_dbs is not None:
+            for idx, db in enumerate(unwanted_dbs):
                 logging.info(f"cross-referencing {db}")
-                previous_subsetname, number_passing_ligands = dbman.crossref_filter(
-                    db, previous_subsetname, selection_type="-", old_db=last_db
+                previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
+                    db, previous_bookmarkname, bookmark_list[idx], selection_type="-", old_db=last_db
                 )
                 last_db = db
 
         logging.info("Writing log")
         output_manager = Outputter(args.log)
-        if args.save_subset is not None:
-            output_manager.write_results_subset_to_log(args.save_subset)
+        if args.save_bookmark is not None:
+            output_manager.write_results_bookmark_to_log(args.save_bookmark)
         output_manager.log_num_passing_ligands(number_passing_ligands)
-        final_subset = dbman.fetch_view(previous_subsetname)
-        output_manager.write_log(final_subset)
+        final_bookmark = dbman.fetch_view(previous_bookmarkname)
+        output_manager.write_log(final_bookmark)
 
-        if args.save_subset is not None:
-            dbman.save_temp_subset(args.save_subset)
+        if args.save_bookmark is not None:
+            dbman.save_temp_bookmark(args.save_bookmark, original_bookmark_name, args.wanted, args.unwanted)
 
         if args.export_csv:
-            if args.save_subset is not None:
-                csv_name = args.save_subset + ".csv"
+            if args.save_bookmark is not None:
+                csv_name = args.save_bookmark + ".csv"
             else:
                 csv_name = "crossref.csv"
-            output_manager.export_csv(previous_subsetname, csv_name, True)
+            output_manager.export_csv(previous_bookmarkname, csv_name, True)
 
     except Exception as e:
         tb = traceback.format_exc()

@@ -516,7 +516,7 @@ class DBManager:
         """Returns DB curor with the names of all view in DB"""
         return self._run_query(self._generate_view_names_query())
 
-    def crossref_filter(self, new_db: str, bookmark_name: str, selection_type="-", old_db=None) -> tuple:
+    def crossref_filter(self, new_db: str, bookmark1_name: str, bookmark2_name: str, selection_type="-", old_db=None) -> tuple:
         """Selects ligands found or not found in the given bookmark in both current db and new_db. Stores as temp view
         Args:
             new_db (string): file name for database to attach
@@ -539,7 +539,7 @@ class DBManager:
             raise DatabaseError(f"Unrecognized selection type {selection_type}")
 
         view_query = self._generate_selective_view_query(
-            bookmark_name, select_str, new_db_name
+            bookmark1_name, bookmark2_name, select_str, new_db_name
         )
 
         viewname = "temp_" + str(self.tempview_suffix)
@@ -702,10 +702,12 @@ class DBManager:
         """returns SQLite cursor of all fields in viewname"""
         raise NotImplementedError
 
-    def save_temp_bookmark(self, bookmark_name):
+    def save_temp_bookmark(self, bookmark_name, original_bookmark_name):
         """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
+
         Args:
             bookmark_name (string): name of bookmark to save last temp bookmark as
+            orginal_bookmark_name (string): Name of original bookmark to pull data from
         """
         raise NotImplementedError
 
@@ -1081,7 +1083,7 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def _generate_selective_view_query(self, bookmark_name, select_str, new_db_name):
+    def _generate_selective_view_query(self, bookmark1_name, bookmark2_name, select_str, new_db_name):
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
         Args:
             new_db (string): name for attached database
@@ -1455,15 +1457,23 @@ class DBManagerSQLite(DBManager):
         """returns SQLite cursor of all fields in viewname"""
         return self._run_query(f"SELECT * FROM {viewname}")
 
-    def save_temp_bookmark(self, bookmark_name):
+    def save_temp_bookmark(self, bookmark_name, original_bookmark_name, wanted_list, unwanted_list=[]):
         """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
+
         Args:
             bookmark_name (string): name of bookmark to save last temp bookmark as
+            original_bookmark_name (TYPE): Description
+            wanted_list (list): List of wanted database names
+            unwanted_list (list, optional): List of unwanted database names
         """
         self._create_view(
-            bookmark_name, "SELECT * FROM {0}".format(self.current_view_name)
+            bookmark_name, "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {0})".format(original_bookmark_name, self.current_view_name), add_poseID=False
         )
-        self._insert_bookmark_info(bookmark_name, "SELECT * FROM {0}".format(self.current_view_name))
+        compare_bookmark_str = "Comparision. Wanted: "
+        compare_bookmark_str += ", ".join(wanted_list)
+        if unwanted_list is not None:
+            compare_bookmark_str += ". Unwanted: " + ", ".join(unwanted_list)
+        self._insert_bookmark_info(bookmark_name, compare_bookmark_str)
 
     # # # # # # # # # # # # # # # # #
     # # # # #Private methods # # # # #
@@ -1596,7 +1606,7 @@ class DBManagerSQLite(DBManager):
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
 
-    def _create_view(self, name, query, temp=False):
+    def _create_view(self, name, query, temp=False, add_poseID=True):
         """takes name and selection query,
             creates view of query stored as name.
 
@@ -1604,9 +1614,11 @@ class DBManagerSQLite(DBManager):
             name (string): Name for view which will be created
             query (string): SQLite-formated query used to create view
             temp (bool, optional): Flag if view should be temporary
+            add_poseID (bool, optional): Add Pose_ID column to view
         """
         cur = self.conn.cursor()
-        query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
+        if add_poseID:
+            query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
         # drop old view if there is one
         try:
             if temp:
@@ -2409,7 +2421,7 @@ class DBManagerSQLite(DBManager):
         except sqlite3.OperationalError as e:
             raise DatabaseError(f"Error occurred while detaching {new_db_name}") from e
 
-    def _generate_selective_view_query(self, bookmark_name, select_str, new_db_name):
+    def _generate_selective_view_query(self, bookmark1_name, bookmark2_name, select_str, new_db_name):
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
         Args:
             new_db (string): name for attached database
@@ -2417,7 +2429,7 @@ class DBManagerSQLite(DBManager):
             selection_type (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
         """
         return (
-            "SELECT * FROM {0} WHERE LigName {1} (SELECT LigName FROM {2}.{0})".format(
-                bookmark_name, select_str, new_db_name
+            "SELECT * FROM {0} WHERE LigName {1} (SELECT LigName FROM {2}.{3})".format(
+                bookmark1_name, select_str, new_db_name, bookmark2_name
             )
         )

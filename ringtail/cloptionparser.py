@@ -646,13 +646,18 @@ class CLOptionParser:
                 parsed_opts.react_any = False
             if parsed_opts.interaction_tolerance is not None:
                 warnings.warn(
-                    "Cannot use interaction tolerance with Vina mode. Removing interaction_tolerance."
+                    "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
                 )
                 parsed_opts.interaction_tolerance = None
             if parsed_opts.add_interactions and parsed_opts.receptor_name is None:
                 raise OptionError("Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_name.")
             # set pattern to .pdbqt
             parsed_opts.pattern = "*.pdbqt*"
+
+        # guard against unsing interaction tolerance with storing all poses
+        if parsed_opts.interaction_tolerance is not None and parsed_opts.store_all_poses:
+            warnings.warn("Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance.")
+            parsed_opts.interaction_tolerance = False
 
         self.pattern = parsed_opts.pattern
         self.save_receptor = parsed_opts.save_receptor
