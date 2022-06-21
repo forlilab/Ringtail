@@ -269,7 +269,7 @@ The `rt_compare.py` script is designed to be used with databases already made an
 
 Let us assume that kinase1 is our target of interest. It has related proteins kinase1a and kinase1b. protein2 is an unrelated protein.
 1. Create a database for each virtual screening on each target (kinase1.db, kinase1a.db, kinase1b.db, protein2.db)
-2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues). The bookmark within each database may be given as a single string (same bookmark name in every database) or multiple bookmark names (one per database) with the `--bookmark_name` option. The default name is `passing_results`.
+2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues). The bookmark within each database may be given as a single string (same bookmark name in every database) or multiple bookmark names (one per database) with the `--bookmark_name` option. If specifying multiple names, the order should match the order of databases pro The default name is `passing_results`.
 3. Use `rt_compare.py` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from `rt_process_vs.py`.
 ```
 rt_compare.py --positive_selection kinase1.db --negative_selection kinase1a.db kinase1b.db
@@ -313,8 +313,8 @@ rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4
 | Argument          || Description                                           | Default value   |
 |:------------------------|:-----|:-------------------------------------------------|----:|
 |--config           | -c| Configuration JSON file to specify new default options. Overridded by command line | no default <tr><td colspan="4"></td></tr>
-|--positive_selection|-p| Database files for which to select the intersection of ligands in bookmark_name for all databases specified with this option.| no default|
-|--negative_selection|-n| Database files for which to exclude any ligands found in bookmark_name of any of the databases specified with this option. | no default|
+|--wanted |-w| Database files for which to include the intersection of ligands in bookmark_name(s) for all databases specified with this option.| no default|
+|--unwanted |-n| Database files for which to exclude any ligands found in bookmark_name of any of the databases specified with this option. | no default|
 |--bookmark_name |-sn| Name of bookmark to select ligands within. Must be present in all databases given.| passing_results|
 |--log |-l| Name for log file| selective_log.txt |
 |--save_bookmark| -s| Save the final selective bookmark as a view with given name in the first database specified with --positive_selection. | no default|
