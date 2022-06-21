@@ -9,6 +9,7 @@ import json
 import sys
 from ringtail import DBManagerSQLite
 from ringtail import Outputter
+from ringtail import OptionError
 import logging
 import traceback
 
@@ -157,7 +158,7 @@ if __name__ == "__main__":
             level = logging.INFO
         else:
             level = logging.WARNING
-        logging.basicConfig(level=level)
+        logging.basicConfig(level=level, stream=sys.stdout, filemode="w", format="%(message)s")
 
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
@@ -170,6 +171,11 @@ if __name__ == "__main__":
         # make list of bookmark names for compared databases
         bookmark_list = []
         if len(args.bookmark_name) > 1:
+            num_dbs = len(args.wanted)
+            if args.unwanted is not None:
+                num_dbs += len(args.unwanted)
+            if len(args.bookmark_name) != num_dbs:
+                raise OptionError("Not enough bookmark names given for the number of databases given. If specifying more than one bookmark name, must give bookmark name for every database to be compared.")
             bookmark_list = args.bookmark_name[1:]
         else:
             for db in wanted_dbs:
