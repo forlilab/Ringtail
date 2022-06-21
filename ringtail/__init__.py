@@ -39,8 +39,7 @@ __all__ = [
     "ResultsManager",
     "VSManager",
     "Outputter",
-    "InteractionFinder"
-    "DatabaseError",
+    "InteractionFinder" "DatabaseError",
     "DatabaseInsertionError",
     "DatabaseConnectionError",
     "DatabaseTableCreationError",

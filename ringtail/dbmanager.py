@@ -62,7 +62,8 @@ class DBManager:
     """
 
     def __init__(
-        self, db_file: str,
+        self,
+        db_file: str,
         opts={
             "write_db_flag": False,
             "add_results": False,
@@ -354,7 +355,7 @@ class DBManager:
         box_dim = json.dumps(ligand_dict["grid_dim"])
         box_center = json.dumps(ligand_dict["grid_center"])
         grid_spacing = ligand_dict["grid_spacing"]
-        if grid_spacing != '':
+        if grid_spacing != "":
             grid_spacing = float(grid_spacing)
         flexible_residues = json.dumps(ligand_dict["flexible_residues"])
 
@@ -445,10 +446,14 @@ class DBManager:
                 # adds to list started by best-scoring pose in cluster
                 if cluster not in cluster_saved_pose_map:
                     continue
-                interaction_dictionaries[cluster_saved_pose_map[cluster]].append(ligand_dict["interactions"][idx])
+                interaction_dictionaries[cluster_saved_pose_map[cluster]].append(
+                    ligand_dict["interactions"][idx]
+                )
 
         for idx, pose_interactions in enumerate(interaction_dictionaries):
-            interaction_tuples.append(self._generate_interaction_tuples(pose_interactions))
+            interaction_tuples.append(
+                self._generate_interaction_tuples(pose_interactions)
+            )
 
         return (
             result_rows,
@@ -466,7 +471,9 @@ class DBManager:
 
         self.view_suffix = suffix
 
-    def filter_results(self, results_filters_list: list, ligand_filters_list: list, output_fields: list) -> iter:
+    def filter_results(
+        self, results_filters_list: list, ligand_filters_list: list, output_fields: list
+    ) -> iter:
         """Generate and execute database queries from given filters.
 
         Args:
@@ -516,7 +523,14 @@ class DBManager:
         """Returns DB curor with the names of all view in DB"""
         return self._run_query(self._generate_view_names_query())
 
-    def crossref_filter(self, new_db: str, bookmark1_name: str, bookmark2_name: str, selection_type="-", old_db=None) -> tuple:
+    def crossref_filter(
+        self,
+        new_db: str,
+        bookmark1_name: str,
+        bookmark2_name: str,
+        selection_type="-",
+        old_db=None,
+    ) -> tuple:
         """Selects ligands found or not found in the given bookmark in both current db and new_db. Stores as temp view
         Args:
             new_db (string): file name for database to attach
@@ -767,7 +781,7 @@ class DBManager:
     def _create_view(self, name, query, temp=False):
         """takes name and selection query,
             creates view of query stored as name.
-        
+
         Args:
             name (string): Name for view which will be created
             query (string): DB-formated query which will be used to create view
@@ -1083,7 +1097,9 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def _generate_selective_view_query(self, bookmark1_name, bookmark2_name, select_str, new_db_name):
+    def _generate_selective_view_query(
+        self, bookmark1_name, bookmark2_name, select_str, new_db_name
+    ):
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
 
         Args:
@@ -1108,17 +1124,21 @@ class DBManagerSQLite(DBManager):
 
     """
 
-    def __init__(self, db_file, opts={
-        "write_db_flag": False,
-        "add_results": False,
-        "order_results": None,
-        "log_distinct_ligands": None,
-        "results_view_name": "passing_results",
-        "overwrite": None,
-        "conflict_opt": None,
-        "mode": "ADGPU",
-        "order_results": None,
-    }):
+    def __init__(
+        self,
+        db_file,
+        opts={
+            "write_db_flag": False,
+            "add_results": False,
+            "order_results": None,
+            "log_distinct_ligands": None,
+            "results_view_name": "passing_results",
+            "overwrite": None,
+            "conflict_opt": None,
+            "mode": "ADGPU",
+            "order_results": None,
+        },
+    ):
         """Initialize superclass and subclass-specific instance variables
 
         Args:
@@ -1274,7 +1294,9 @@ class DBManagerSQLite(DBManager):
             rec_name (string): Name of receptor. Used to insert into correct row of DB
         """
 
-        sql_update = """UPDATE Receptors SET receptor_object = ? WHERE Receptor_ID == 1"""
+        sql_update = (
+            """UPDATE Receptors SET receptor_object = ? WHERE Receptor_ID == 1"""
+        )
 
         try:
             cur = self.conn.cursor()
@@ -1459,7 +1481,9 @@ class DBManagerSQLite(DBManager):
         """returns SQLite cursor of all fields in viewname"""
         return self._run_query(f"SELECT * FROM {viewname}")
 
-    def save_temp_bookmark(self, bookmark_name, original_bookmark_name, wanted_list, unwanted_list=[]):
+    def save_temp_bookmark(
+        self, bookmark_name, original_bookmark_name, wanted_list, unwanted_list=[]
+    ):
         """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
 
         Args:
@@ -1469,7 +1493,11 @@ class DBManagerSQLite(DBManager):
             unwanted_list (list, optional): List of unwanted database names
         """
         self._create_view(
-            bookmark_name, "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {0})".format(original_bookmark_name, self.current_view_name), add_poseID=False
+            bookmark_name,
+            "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {0})".format(
+                original_bookmark_name, self.current_view_name
+            ),
+            add_poseID=False,
         )
         compare_bookmark_str = "Comparision. Wanted: "
         compare_bookmark_str += ", ".join(wanted_list)
@@ -1628,7 +1656,11 @@ class DBManagerSQLite(DBManager):
             else:
                 temp_flag = ""
             cur.execute("DROP VIEW IF EXISTS {name}".format(name=name))
-            cur.execute("CREATE {temp_flag}VIEW {name} AS {query}".format(name=name, query=query, temp_flag=temp_flag))
+            cur.execute(
+                "CREATE {temp_flag}VIEW {name} AS {query}".format(
+                    name=name, query=query, temp_flag=temp_flag
+                )
+            )
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseViewCreationError(
@@ -2423,7 +2455,9 @@ class DBManagerSQLite(DBManager):
         except sqlite3.OperationalError as e:
             raise DatabaseError(f"Error occurred while detaching {new_db_name}") from e
 
-    def _generate_selective_view_query(self, bookmark1_name, bookmark2_name, select_str, new_db_name):
+    def _generate_selective_view_query(
+        self, bookmark1_name, bookmark2_name, select_str, new_db_name
+    ):
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
 
         Args:

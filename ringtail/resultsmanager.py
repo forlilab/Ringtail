@@ -23,7 +23,7 @@ class ResultsManager:
             "interaction_cutoffs": [3.7, 4.0],
             "receptor_file": None,
         },
-        dbman=None
+        dbman=None,
     ):
         self.dbman = dbman
         self.filelist = opts["filelist"]

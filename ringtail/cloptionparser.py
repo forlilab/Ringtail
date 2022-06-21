@@ -246,7 +246,7 @@ def cmdline_parser(defaults={}):
         "-ai",
         "--add_interactions",
         help="Find interactions between ligand poses and receptor and save to database. Requires receptor PDBQT to be given with input files (all modes) and --receptor_name to be specified with Vina mode. SIGNIFICANTLY INCREASES DATBASE WRITE TIME.",
-        action="store_true"
+        action="store_true",
     )
     write_parser.add_argument(
         "-ic",
@@ -254,7 +254,7 @@ def cmdline_parser(defaults={}):
         help="Use with --add_interactions, specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. These are the default cutoffs.",
         action="store",
         type=str,
-        metavar="[HB CUTOFF],[VDW CUTOFF]"
+        metavar="[HB CUTOFF],[VDW CUTOFF]",
     )
     write_parser.add_argument(
         "-rn",
@@ -262,7 +262,7 @@ def cmdline_parser(defaults={}):
         help="Use with Vina mode. Give name for receptor PDBQT.",
         action="store",
         type=str,
-        metavar="STRING"
+        metavar="STRING",
     )
 
     read_parser = subparsers.add_parser(
@@ -650,18 +650,30 @@ class CLOptionParser:
                 )
                 parsed_opts.interaction_tolerance = None
             if parsed_opts.add_interactions and parsed_opts.receptor_name is None:
-                raise OptionError("Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_name.")
+                raise OptionError(
+                    "Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_name."
+                )
             # set pattern to .pdbqt
             parsed_opts.pattern = "*.pdbqt*"
 
         # guard against unsing interaction tolerance with storing all poses
-        if parsed_opts.interaction_tolerance is not None and parsed_opts.store_all_poses:
-            warnings.warn("Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance.")
+        if (
+            parsed_opts.interaction_tolerance is not None
+            and parsed_opts.store_all_poses
+        ):
+            warnings.warn(
+                "Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance."
+            )
             parsed_opts.interaction_tolerance = False
 
         # guard against unsing percentile filter with all_poses
-        if parsed_opts.all_poses and (parsed_opts.energy_percentile is not None or parsed_opts.le_percentile is not None):
-            warnings.warn("Cannot return all passing poses with percentile filter. Will only log best pose.")
+        if parsed_opts.all_poses and (
+            parsed_opts.energy_percentile is not None
+            or parsed_opts.le_percentile is not None
+        ):
+            warnings.warn(
+                "Cannot return all passing poses with percentile filter. Will only log best pose."
+            )
             parsed_opts.all_poses = False
 
         self.pattern = parsed_opts.pattern
@@ -881,7 +893,9 @@ class CLOptionParser:
             "max_poses": parsed_opts.max_poses,
             "interaction_tolerance": parsed_opts.interaction_tolerance,
             "add_interactions": parsed_opts.add_interactions,
-            "interaction_cutoffs": [float(val) for val in parsed_opts.interaction_cutoffs.split(",")],
+            "interaction_cutoffs": [
+                float(val) for val in parsed_opts.interaction_cutoffs.split(",")
+            ],
             "receptor_name": parsed_opts.receptor_name,
         }
 
@@ -931,7 +945,10 @@ class CLOptionParser:
                     # scan for receptor pdbqts
                     if self.save_receptor and self.mode != "vina":
                         self.scan_dir(
-                            path, "*.pdbqt*", sources["file_path"]["recursive"], ligands=False
+                            path,
+                            "*.pdbqt*",
+                            sources["file_path"]["recursive"],
+                            ligands=False,
                         )
         # update the files pool with the files specified in the files list
         find_rec = True

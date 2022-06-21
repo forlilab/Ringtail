@@ -17,7 +17,21 @@ from .interactions import InteractionFinder
 class DockingFileReader(multiprocessing.Process):
     """this class is the individual worker for processing dlgs"""
 
-    def __init__(self, queueIn, queueOut, pipe_conn, dbman, mode, max_poses, interaction_tolerance, store_all_poses, target, add_interactions, interaction_cutoffs, receptor_file):
+    def __init__(
+        self,
+        queueIn,
+        queueOut,
+        pipe_conn,
+        dbman,
+        mode,
+        max_poses,
+        interaction_tolerance,
+        store_all_poses,
+        target,
+        add_interactions,
+        interaction_cutoffs,
+        receptor_file,
+    ):
         # set mode for which file parser to use
         self.mode = mode
         # set number of clusters to write
@@ -99,19 +113,39 @@ class DockingFileReader(multiprocessing.Process):
                 if self.mode == "dlg":
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 # find run numbers for poses we want to save
-                parsed_file_dict["poses_to_save"] = self._find_poses_to_save(parsed_file_dict)
+                parsed_file_dict["poses_to_save"] = self._find_poses_to_save(
+                    parsed_file_dict
+                )
                 # Calculate interactions if requested
                 if self.add_interactions:
                     if self.interaction_finder is None:
                         self.interaction_finder = InteractionFinder(self.receptor_file)
                     if parsed_file_dict["interactions"] == []:
                         for pose in parsed_file_dict["pose_coordinates"]:
-                            parsed_file_dict["interactions"].append(self.interaction_finder.find_pose_interactions(parsed_file_dict["ligand_atomtypes"], pose))
-                            parsed_file_dict["num_interactions"].append(int(parsed_file_dict["interactions"][-1]["count"][0]))
-                            parsed_file_dict["num_hb"].append(len([1 for i in parsed_file_dict["interactions"][-1]["type"] if i == "H"]))
+                            parsed_file_dict["interactions"].append(
+                                self.interaction_finder.find_pose_interactions(
+                                    parsed_file_dict["ligand_atomtypes"], pose
+                                )
+                            )
+                            parsed_file_dict["num_interactions"].append(
+                                int(parsed_file_dict["interactions"][-1]["count"][0])
+                            )
+                            parsed_file_dict["num_hb"].append(
+                                len(
+                                    [
+                                        1
+                                        for i in parsed_file_dict["interactions"][-1][
+                                            "type"
+                                        ]
+                                        if i == "H"
+                                    ]
+                                )
+                            )
                 # find poses we want to save tolerated interactions for
                 if self.interaction_tolerance is not None:
-                    parsed_file_dict["tolerated_interaction_runs"] = self._find_tolerated_interactions(parsed_file_dict)
+                    parsed_file_dict[
+                        "tolerated_interaction_runs"
+                    ] = self._find_tolerated_interactions(parsed_file_dict)
                 else:
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
@@ -137,12 +171,10 @@ class DockingFileReader(multiprocessing.Process):
             poses_to_save = ligand_dict["sorted_runs"]
         elif self.mode == "dlg":
             # will only select top n clusters. Default 3
-            poses_to_save = ligand_dict["cluster_top_poses"][
-                : self.max_poses
-            ]
+            poses_to_save = ligand_dict["cluster_top_poses"][: self.max_poses]
         # if not adgpu, save top n poses
         else:
-            poses_to_save = ligand_dict["sorted_runs"][:self.max_poses]
+            poses_to_save = ligand_dict["sorted_runs"][: self.max_poses]
 
         return poses_to_save
 
@@ -161,10 +193,7 @@ class DockingFileReader(multiprocessing.Process):
         """
         tolerated_runs = []
         for idx, run in enumerate(ligand_dict["sorted_runs"]):
-            if (
-                float(ligand_dict["cluster_rmsds"][idx])
-                <= self.interaction_tolerance
-            ):
+            if float(ligand_dict["cluster_rmsds"][idx]) <= self.interaction_tolerance:
                 tolerated_runs.append(run)
         return tolerated_runs
 
@@ -217,7 +246,8 @@ class Writer(multiprocessing.Process):
                     # if a poison pill is found, it means one of the workers quit
                     self.maxProcesses -= 1
                     logging.info(
-                        "Closing process. Remaining open processes: " + str(self.maxProcesses)
+                        "Closing process. Remaining open processes: "
+                        + str(self.maxProcesses)
                     )
                 else:
                     # if not a poison pill, process the task item

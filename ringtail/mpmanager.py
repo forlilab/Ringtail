@@ -13,7 +13,11 @@ from .exceptions import MultiprocessingError
 
 
 class MPManager:
-    def __init__(self, filelist, db_obj, opts={
+    def __init__(
+        self,
+        filelist,
+        db_obj,
+        opts={
             "mode": "dlg",
             "chunk_size": 1,
             "max_poses": 3,
@@ -22,12 +26,16 @@ class MPManager:
             "target": None,
             "add_interactions": False,
             "interaction_cutoffs": [3.7, 4.0],
-            "receptor_file": None}):
+            "receptor_file": None,
+        },
+    ):
         # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg", "vina"]
         if opts["mode"] not in self.implemented_modes:
             raise NotImplementedError(
-                "Requested file parsing mode {0} not yet implemented".format(opts["mode"])
+                "Requested file parsing mode {0} not yet implemented".format(
+                    opts["mode"]
+                )
             )
         self.mode = opts["mode"]
         self.filelist = filelist

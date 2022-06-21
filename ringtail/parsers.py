@@ -191,7 +191,7 @@ def parse_single_dlg(fname, mode="standard"):
                 heavy_at_count_complete = True
                 if mode == "input":
                     break
-            elif (line[:len(STD_KW)] == STD_KW) and inside_pose:
+            elif (line[: len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
                 poses[-1].append(line)
@@ -488,16 +488,13 @@ def parse_vina_pdbqt(fname):
                                 num_heavy_atoms += 1
                 if line.startswith("REMARK SMILES IDX") and smile_idx_map == []:
                     smile_idx_map = (
-                        line.lstrip("REMARK SMILES IDX")
-                        .rstrip("\n")
-                        .split())
+                        line.lstrip("REMARK SMILES IDX").rstrip("\n").split()
+                    )
                 elif line.startswith("REMARK SMILES") and smile_string == "":
                     smile_string = line.split()[2]
                 if line.startswith("REMARK H PARENT") and ligand_h_parents == []:
                     ligand_h_parents = (
-                        line.lstrip("REMARK H PARENT")
-                        .rstrip("\n")
-                        .split()
+                        line.lstrip("REMARK H PARENT").rstrip("\n").split()
                     )
                 if line.startswith("ENDMDL") and first_model:
                     first_model = False
