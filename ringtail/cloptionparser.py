@@ -659,6 +659,11 @@ class CLOptionParser:
             warnings.warn("Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance.")
             parsed_opts.interaction_tolerance = False
 
+        # guard against unsing percentile filter with all_poses
+        if parsed_opts.all_poses and (parsed_opts.energy_percentile is not None or parsed_opts.le_percentile is not None):
+            warnings.warn("Cannot return all passing poses with percentile filter. Will only log best pose.")
+            parsed_opts.all_poses = False
+
         self.pattern = parsed_opts.pattern
         self.save_receptor = parsed_opts.save_receptor
         self.receptor_name = parsed_opts.receptor_name
