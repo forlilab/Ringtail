@@ -653,8 +653,6 @@ class CLOptionParser:
                 raise OptionError("Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_name.")
             # set pattern to .pdbqt
             parsed_opts.pattern = "*.pdbqt*"
-            # set store all poses, since vina does not cluster poses
-            parsed_opts.store_all_poses = True
 
         self.pattern = parsed_opts.pattern
         self.save_receptor = parsed_opts.save_receptor
