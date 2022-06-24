@@ -269,7 +269,7 @@ The `rt_compare.py` script is designed to be used with databases already made an
 
 Let us assume that kinase1 is our target of interest. It has related proteins kinase1a and kinase1b. protein2 is an unrelated protein.
 1. Create a database for each virtual screening on each target (kinase1.db, kinase1a.db, kinase1b.db, protein2.db)
-2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues). The bookmark within each database may be given as a single string (same bookmark name in every database) or multiple bookmark names (one per database) with the `--bookmark_name` option. If specifying multiple names, the order should match the order of databases pro The default name is `passing_results`.
+2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues). The bookmark within each database may be given as a single string (same bookmark name in every database) or multiple bookmark names (one per database) with the `--bookmark_name` option. If specifying multiple names, the order should match the order that the databases were provided in, beginning with wanted, then unwanted databases. The default name is `passing_results`.
 3. Use `rt_compare.py` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from `rt_process_vs.py`.
 ```
 rt_compare.py --positive_selection kinase1.db --negative_selection kinase1a.db kinase1b.db
