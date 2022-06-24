@@ -30,7 +30,6 @@ setup(
     long_description_content_type="text/markdown",
     packages=find_packages(),
     scripts=["scripts/rt_process_vs.py", "scripts/rt_compare.py"],
-    package_data={"ringtail": ["data/*"]},
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,
     zip_safe=False,
