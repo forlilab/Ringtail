@@ -25,7 +25,7 @@ setup(
     author="Forli Lab",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/Ringtail",
-    description="Package for creating database from virtual screening DLGs and performing filtering on results.",
+    description="Package for creating database from virtual screening files and performing filtering on results.",
     long_description=open(os.path.join(base_dir, "README.md")).read(),
     long_description_content_type="text/markdown",
     packages=find_packages(),
@@ -33,7 +33,7 @@ setup(
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,
     zip_safe=False,
-    install_requires=["numpy>=1.18"],
-    python_requires=">=3.8.*",
+    install_requires=["numpy>=1.22"],
+    python_requires=">=3.10.*",
     license="GPL-v3",
 )
