@@ -4,7 +4,7 @@
 # Ringtail multiprocessing workers
 #
 
-import multiprocessing
+import platform
 import time
 import sys
 import logging
@@ -12,6 +12,11 @@ import traceback
 from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .exceptions import FileParsingError, WriteToDatabaseError
 from .interactions import InteractionFinder
+os_string = platform.system()
+if os_string == 'Darwin':  # mac
+    import multiprocess as multiprocessing
+else:
+    import multiprocessing
 
 
 class DockingFileReader(multiprocessing.Process):

@@ -4,12 +4,17 @@
 # Ringtail multiprocessing manager
 #
 
-import multiprocessing
+import platform
 from time import sleep
 import logging
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .exceptions import MultiprocessingError
+os_string = platform.system()
+if os_string == 'Darwin':  # mac
+    import multiprocess as multiprocessing
+else:
+    import multiprocessing
 
 
 class MPManager:

@@ -15,7 +15,7 @@ import traceback
 if __name__ == "__main__":
 
     time0 = time.perf_counter()
-    debug = False
+    debug = True
     if debug:
         level = logging.DEBUG
     else:
