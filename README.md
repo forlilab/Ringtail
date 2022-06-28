@@ -31,6 +31,7 @@ It is recommended that you create a new Conda environment for installing Ringtai
 - RDKit
 - SciPy
 - [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
+- Multiprocess (MacOS only)
 
 Installation is outlined below:
 ```
@@ -54,6 +55,11 @@ If you wish to make the code for either Meeko or Ringtail editable without re-ru
 ```
 pip install --editable .
 ```
+Finally, if attempting to run on MacOS, the user must also install the `multiprocess` package:
+```
+$ pip install multiprocess
+```
+
 ## Definitions
 - __DLG__: Docking Log File, output from AutoDock-GPU.
 - __PDBQT__: Modified PDB format, used for receptors (input to AutoDock-GPU and Vina) and output ligand poses from AutoDock-Vina.
