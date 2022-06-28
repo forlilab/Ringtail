@@ -399,7 +399,7 @@ class DBManager:
                     self.unique_interactions[
                         interaction_tuple
                     ] = self.next_unique_interaction_idx
-                    if self.interactions_initialized_flag:
+                    if self.interactions_initialized_flag or self.opts["add_results"]:
                         self._insert_one_interaction(interaction_tuple)
                         self._make_new_interaction_column(
                             self.next_unique_interaction_idx
@@ -1266,6 +1266,11 @@ class DBManagerSQLite(DBManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting receptor.") from e
 
+    def _fetch_existing_interactions(self):
+        query = """SELECT interaction_id, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid from Interaction_indices"""
+        return self._run_query(query)
+
+
     def insert_interactions(self, interactions_list):
         """Takes list of interactions, inserts into database
 
@@ -1273,6 +1278,16 @@ class DBManagerSQLite(DBManager):
             interactions_list (list): List of tuples for interactions in form
             ("type", "chain", "residue", "resid", "recname", "recid")
         """
+        # populate unique interactions from existing database
+        if self.opts["add_results"]:
+            existing_unique_interactions = self._fetch_existing_interactions()
+            for interaction in existing_unique_interactions:
+                self.unique_interactions[
+                        interaction[1:]
+                    ] = interaction[0]
+
+            self.next_unique_interaction_idx = interaction[0] + 1  # sets next index for next unique interaction
+
         self._add_unique_interactions(interactions_list)
 
         # check if we need to initialize the interaction bv table and
@@ -1531,7 +1546,7 @@ class DBManagerSQLite(DBManager):
 
     def _close_connection(self):
         """Closes connection to database"""
-        print("Closing database")
+        logging.info("Closing database")
         self.conn.close()
 
     def _close_open_cursors(self):
