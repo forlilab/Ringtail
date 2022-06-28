@@ -33,7 +33,7 @@ setup(
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,
     zip_safe=False,
-    install_requires=["numpy>=1.22"],
-    python_requires=">=3.10.*",
+    install_requires=["numpy>=1.21"],
+    python_requires=">=3.9.*",
     license="GPL-v3",
 )
