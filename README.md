@@ -162,8 +162,10 @@ One receptor PDBQT, corresponding to that in the DLGs, may be saved to the datab
 
 By default, the newly-created database will be named `output.db`. This name may be changed with the `--output_db` option.
 
-By default (for DLGs), Ringtail will store the best-scored (lowest energy) binding pose from the first 3 pose clusters in the DLG. The number of clusters stored may be
-changed with the `--max_poses` option. The `--store_all_poses` flag may also be used to override `--max_poses` and store every pose from every DLG. All poses from a Vina PDBQT are saved to the database.
+By default (for DLGs), Ringtail will store the best-scored (lowest energy) binding pose from the first 3 pose clusters in the DLG. For Vina, Ringtail will store the 3 best poses. The number of clusters/poses stored may be
+changed with the `--max_poses` option. The `--store_all_poses` flag may also be used to override `--max_poses` and store every pose from every file.
+
+ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it may be added by Ringtail with the `--add_interactions` option. Distance cutoffs for the interactions are specified with the `--interaction_cutoffs` option. Adding interactions requires that the receptor PDBQT be provided as an input by the user. When writing the database from Vina PDBQTs, the receptor name MUST be provided with the `--receptor_name` option. 
 
 The `--interaction_tolerance` option also allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. When used as a flag, the `interaction_tolerance` default is 0.8 angstroms. The user may also specify their own cutoff.
 
@@ -190,7 +192,7 @@ The second option is `--export_query_csv`. This takes a string of a properly-for
 
 ### Interaction filter formatting and options
 
-**Interaction filtering is not available for databases created with Vina PDBQTs.**
+**Interaction filtering requires interactions to be present in database.**
 
 The `--vdw`, `--hb`, and `--react_res` interaction filters must be specified in the order `CHAIN:RES:NUM:ATOM_NAME`. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. `--vdw`) may be specified with a single option tag (`--vdw=B:THR:276:,B:HIS:226:`) or separate tags (`--vdw=B:THR:276: --vdw=B:HIS:226:`).
 
@@ -225,7 +227,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 
 ### rt_process_vs.py supported arguments
 
-| Argument          || Description                                           | Default value   | Vina-compatible |
+| Argument          || Description                                           | Default value   | Requires interactions |
 |:------------------------|:-----|:-------------------------------------------------|:----------------|----:|
 |--config           | -c| Configuration JSON file to specify new default options. Overridded by command line | no default       |<tr><td colspan="5"></td></tr>
 |--input_db         | -i| Database file to use instead of creating new database | no default       ||
@@ -242,16 +244,19 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--save_receptor    |-sr| Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   |No |
 |--output_db        |-o| Name for output database                              | output.db        ||
 |--overwrite        |-ov| Flag to overwrite existing log and database           | FALSE       ||
-|--max_poses        |-mp| Number of cluster for which to store top-scoring pose in database| 3     |No|
-|--store_all_poses  |-sa| Flag to indicate that all poses should be stored in database| FALSE      |No|
-|--interaction_tolerance|-it| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  | No <tr><td colspan="5">**Read Mode**</td></tr>
+|--max_poses        |-mp| Number of cluster for which to store top-scoring pose in database| 3     ||
+|--store_all_poses  |-sa| Flag to indicate that all poses should be stored in database| FALSE      ||
+|--interaction_tolerance|-it| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  | Yes |
+|--add_interactions  |-ai| Find interactions between ligands and receptor. Requires receptor PDBQT to be written. | FALSE      ||
+|--interaction_cutoffs  |-ic| Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. | 3.7,4.0     ||
+|--receptor_name |-rn| Use with Vina mode. Give name for receptor PDBQT. | FALSE      |<tr><td colspan="5">**Read Mode**</td></tr>
 |--log              |-l| Name for log of filtered results                      | output_log.txt   ||
 |--out_fields       |-of| Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
 |--order_results    |-ord| String for field by which the passing results should be ordered in log file. | no default ||
 |--all_poses        |-ap| Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||
 |--export_bookmark_csv |-xs| Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv | no default      ||
 |--export_query_csv |-xq| Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      ||
-|--export_sdf_path|-sdf| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       |No|
+|--export_sdf_path|-sdf| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       ||
 |--new_data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
 |--plot             |-p| Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>
 |--eworst           |-e| Worst energy value accepted (kcal/mol)                | no_default  ||
@@ -260,13 +265,13 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--lebest           |-leb| Best ligand efficiency value accepted                 | no default  ||
 |--energy_percentile      |-pe| Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  ||
 |--le_percentile   |-ple| Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default |  <tr><td colspan="5">LIGAND FILTERS</td></tr>
-|--name             |-n| Search for specific ligand name. Joined by "OR" with substructure search and multiple names. Multiple filters should be separated by commas | no default  | <tr><td colspan="5">INTERACTION FILTERS</td></tr>
-|--van_der_waals    |-vdw| Filter for van der Waals interaction with given receptor information.  | no default  | No|
-|--hydrogen_bond    |-hb| Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  | No|
-|--reactive_res     |-r| Filter for reation with residue containing specified information | no default  | No|
-|--hb_count         |-hc| Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | No|
-|--react_any        |-ra| Filter for poses with reaction with any residue       | FALSE     | No|
-|--max_miss         |-mm| Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  | No|
+|--name             |-n| Search for specific ligand name. Multiple names joined by "OR". Multiple filters should be separated by commas | no default  | <tr><td colspan="5">INTERACTION FILTERS</td></tr>
+|--van_der_waals    |-vdw| Filter for van der Waals interaction with given receptor information.  | no default  | Yes|
+|--hydrogen_bond    |-hb| Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  | Yes|
+|--reactive_res     |-r| Filter for reation with residue containing specified information | no default  |Yes |
+|--hb_count         |-hc| Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | Yes|
+|--react_any        |-ra| Filter for poses with reaction with any residue       | FALSE     | Yes|
+|--max_miss         |-mm| Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  | Yes|
 
 ---
 
