@@ -9,13 +9,10 @@ import gzip
 import numpy as np
 
 
-def parse_single_dlg(fname, mode="standard"):
+def parse_single_dlg(fname):
     """parse an ADGPU DLG file uncompressed or gzipped"""
     STD_END = "DOCKED: ENDMDL"
     STD_KW = "DOCKED: "
-    if mode == "input":
-        STD_END = "FINAL DOCKED STATE:"
-        STD_KW = "INPUT-LIGAND-PDBQT: "
 
     INPUT_KW = "INPUT LIGAND PDBQT FILE"
     INPUT_END = "FINAL DOCKED STATE"
@@ -33,7 +30,6 @@ def parse_single_dlg(fname, mode="standard"):
         open_fn = open
 
     # intialize containers for pose data
-    poses = []
     interactions = []
     scores = []
     intermolecular_energy = []
@@ -68,7 +64,6 @@ def parse_single_dlg(fname, mode="standard"):
         inside_pose = False
         inside_input = False
         inside_res = False
-        analysis_flag = False
         smile_string = ""
         input_pdbqt = []
         index_map = []
@@ -161,16 +156,14 @@ def parse_single_dlg(fname, mode="standard"):
             if "DOCKED: END_RES" in line:
                 inside_res = False
 
+            if "FINAL DOCKED STATE" in line:
+                # first time inside a pose block
+                inside_pose = True
+                interactions.append({})
+                pose_coordinates.append([])
+                flexible_res_coords.append([])
             # store pose anaylsis
             elif line[0:9] == "ANALYSIS:":
-                analysis_flag = True
-                if inside_pose is False:
-                    # first time inside a pose block
-                    inside_pose = True
-                    interactions.append({})
-                    poses.append([])
-                    pose_coordinates.append([])
-                    flexible_res_coords.append([])
                 # storing interactions
                 line = line.split("ANALYSIS:")[1]
                 kw, info = line.split(None, 1)
@@ -189,16 +182,12 @@ def parse_single_dlg(fname, mode="standard"):
             elif STD_END in line:
                 inside_pose = False
                 heavy_at_count_complete = True
-                if mode == "input":
-                    break
             elif (line[: len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
-                poses[-1].append(line)
                 # store pose coordinates
-                if "ATOM" in line:
+                if "ATOM" in line or "HETATM" in line:
                     if inside_res:
-
                         flexible_res_coords[-1][-1].append(line)
                     else:
                         pose_coordinates[-1].append(
@@ -328,34 +317,37 @@ def parse_single_dlg(fname, mode="standard"):
 
     sorted_idx = np.argsort(scores)
     # sort poses, scores, and interactions
-    # TODO: make this into a helper function
-    poses = [poses[i] for i in sorted_idx]
-    pose_coordinates = [pose_coordinates[i] for i in sorted_idx]
-    flexible_res_coords = [flexible_res_coords[i] for i in sorted_idx]
-    scores = [scores[i] for i in sorted_idx]
-    interactions = [interactions[i] for i in sorted_idx]
-    intermolecular_energy = [intermolecular_energy[i] for i in sorted_idx]
-    vdw_hb_desolv = [vdw_hb_desolv[i] for i in sorted_idx]
-    electrostatic = [electrostatic[i] for i in sorted_idx]
-    flex_ligand = [flex_ligand[i] for i in sorted_idx]
-    flexLigand_flexReceptor = [flexLigand_flexReceptor[i] for i in sorted_idx]
-    internal_energy = [internal_energy[i] for i in sorted_idx]
-    torsion = [torsion[i] for i in sorted_idx]
-    unbound_energy = [unbound_energy[i] for i in sorted_idx]
-    pose_about = [pose_about[i] for i in sorted_idx]
-    pose_trans = [pose_trans[i] for i in sorted_idx]
-    pose_quarternions = [pose_quarternions[i] for i in sorted_idx]
-    pose_dihedrals = [pose_dihedrals[i] for i in sorted_idx]
-    cluster_rmsds = [cluster_rmsds[i] for i in sorted_idx]
-    ref_rmsds = [ref_rmsds[i] for i in sorted_idx]
-    pose_interact_count = [pose_interact_count[i] for i in sorted_idx]
-    pose_hb_counts = [pose_hb_counts[i] for i in sorted_idx]
-    cluster_list = [cluster_list[i] for i in sorted_idx]
+
+    def sort_list_by_sorted_idx(input_list):
+        """Sort given input list to match order of sorted indices list"""
+        if input_list == []:
+            return input_list
+        return [input_list[i] for i in sorted_idx]
+
+    pose_coordinates = sort_list_by_sorted_idx(pose_coordinates)
+    flexible_res_coords = sort_list_by_sorted_idx(flexible_res_coords)
+    scores = sort_list_by_sorted_idx(scores)
+    interactions = sort_list_by_sorted_idx(interactions)
+    intermolecular_energy = sort_list_by_sorted_idx(intermolecular_energy)
+    vdw_hb_desolv = sort_list_by_sorted_idx(vdw_hb_desolv)
+    electrostatic = sort_list_by_sorted_idx(electrostatic)
+    flex_ligand = sort_list_by_sorted_idx(flex_ligand)
+    flexLigand_flexReceptor = sort_list_by_sorted_idx(flexLigand_flexReceptor)
+    internal_energy = sort_list_by_sorted_idx(internal_energy)
+    torsion = sort_list_by_sorted_idx(torsion)
+    unbound_energy = sort_list_by_sorted_idx(unbound_energy)
+    pose_about = sort_list_by_sorted_idx(pose_about)
+    pose_trans = sort_list_by_sorted_idx(pose_trans)
+    pose_quarternions = sort_list_by_sorted_idx(pose_quarternions)
+    pose_dihedrals = sort_list_by_sorted_idx(pose_dihedrals)
+    cluster_rmsds = sort_list_by_sorted_idx(cluster_rmsds)
+    ref_rmsds = sort_list_by_sorted_idx(ref_rmsds)
+    pose_interact_count = sort_list_by_sorted_idx(pose_interact_count)
+    pose_hb_counts = sort_list_by_sorted_idx(pose_hb_counts)
+    cluster_list = sort_list_by_sorted_idx(cluster_list)
 
     if (
-        len(poses) == 0
-        or len(scores) == 0
-        or len(interactions) == 0
+        len(scores) == 0
         or len(intermolecular_energy) == 0
         or len(vdw_hb_desolv) == 0
         or len(electrostatic) == 0
@@ -363,12 +355,6 @@ def parse_single_dlg(fname, mode="standard"):
         or len(torsion) == 0
         or len(unbound_energy) == 0
     ):
-        if not analysis_flag:
-            raise RuntimeError(
-                "No interaction analysis data in {0}. Rerun AD with interaction analysis".format(
-                    fname
-                )
-            )
         raise ValueError("Incomplete data in " + fname)
     # calculate ligand efficiency and deltas from the best pose
     leff = [x / heavy_at_count for x in scores]
