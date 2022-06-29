@@ -219,9 +219,7 @@ There are a few quick checks the user can make to ensure that the data has been 
 - If reading from Vina PDBQTs/using storing all poses, the number of rows in the Results table should match the `number of ligands` * `number of output poses`.
 
 ### Potential pitfalls
-When importing DLG files into a database with Ringtail, the files must have interaction analysis already performed. This is specified with `-C 1` when running [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU).
-
-Any PDBQT files specified through any of the input options will be read by `rt_process_vs.py` as receptor files, even if the files actually represent ligands. Therefore, ligand PDBQT files should not be present in any directories given with `--file_path`.
+Any PDBQT files specified through any of the input options in ADGPU mode will be read by `rt_process_vs.py` as receptor files, even if the files actually represent ligands. Therefore, ligand PDBQT files should not be present in any directories given with `--file_path`.
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. If this occurs and you start running into unclear errors related to the SQLite3 package, it is recommended to delete the existing database and re-write it from scratch.
 
@@ -241,7 +239,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--recursive        |-r| Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      ||
 |--add_results      |-a| Add new DLG files to existing database given with --input_db  | FALSE       ||
 |--duplicate_handling|-dh| Specify how dulicate results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*| None |
-|--save_receptor    |-sr| Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   |No |
+|--save_receptor    |-sr| Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   ||
 |--output_db        |-o| Name for output database                              | output.db        ||
 |--overwrite        |-ov| Flag to overwrite existing log and database           | FALSE       ||
 |--max_poses        |-mp| Number of cluster for which to store top-scoring pose in database| 3     ||
@@ -249,7 +247,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--interaction_tolerance|-it| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  | Yes |
 |--add_interactions  |-ai| Find interactions between ligands and receptor. Requires receptor PDBQT to be written. | FALSE      ||
 |--interaction_cutoffs  |-ic| Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. | 3.7,4.0     ||
-|--receptor_name |-rn| Use with Vina mode. Give name for receptor PDBQT. | FALSE      |<tr><td colspan="5">**Read Mode**</td></tr>
+|--receptor_name |-rn| Use with Vina mode. Give name for receptor PDBQT. | None      |<tr><td colspan="5">**Read Mode**</td></tr>
 |--log              |-l| Name for log of filtered results                      | output_log.txt   ||
 |--out_fields       |-of| Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
 |--order_results    |-ord| String for field by which the passing results should be ordered in log file. | no default ||
