@@ -580,7 +580,7 @@ class CLOptionParser:
         if len(self.lig_files_pool) == 0 and (
             self.db_opts["write_db_flag"] or self.db_opts["add_results"]
         ):
-            raise OptionError("No ligand files found. Please check file source.")
+            raise OptionError("No ligand files found. Please check file source and mode.")
         if len(self.rec_files_pool) > 1:
             raise OptionError(
                 "Found more than 1 receptor PDBQTs. Please check input files and only include receptor associated with DLGs"

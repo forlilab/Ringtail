@@ -53,6 +53,8 @@ def parse_single_dlg(fname):
     flexible_residues = []
     flexible_res_coords = []
     smile_string = ""
+    index_map = ""
+    h_parents = ""
 
     # Define empty center list for backwards compatibility with DLGs without grid centers
     center = [None, None, None]
@@ -120,13 +122,13 @@ def parse_single_dlg(fname):
                     if line.startswith("INPUT-LIGAND-PDBQT"):
                         ligand_atomtypes.append(line[-2:])
                 if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
-                    index_map = (
+                    index_map += (
                         line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
                         .rstrip("\n")
                         .split()
                     )
                 if line.startswith("INPUT-LIGAND-PDBQT: REMARK H PARENT"):
-                    h_parents = (
+                    h_parents += (
                         line.lstrip("INPUT-LIGAND-PDBQT: REMARK H PARENT")
                         .rstrip("\n")
                         .split()
@@ -427,8 +429,6 @@ def parse_vina_pdbqt(fname):
     unbound_energy = []
     num_heavy_atoms = 0
     smile_string = ""
-    smile_idx_map = []
-    ligand_h_parents = []
     flexible_res_coords = []
     inside_res = False
     flexible_residues = []
@@ -439,6 +439,8 @@ def parse_vina_pdbqt(fname):
     clusters = {}
     cluster_sizes = {}
     cluster_rmsds = []
+    smile_idx_map = []
+    ligand_h_parents = []
 
     with open_fn(fname, "rb") as fp:
         for line in fp.readlines():
@@ -472,14 +474,14 @@ def parse_vina_pdbqt(fname):
                             ligand_atomtypes.append(line.split()[-1])
                             if line[13] != "H":
                                 num_heavy_atoms += 1
-                if line.startswith("REMARK SMILES IDX") and smile_idx_map == []:
-                    smile_idx_map = (
+                if line.startswith("REMARK SMILES IDX") and first_model:
+                    smile_idx_map += (
                         line.lstrip("REMARK SMILES IDX").rstrip("\n").split()
                     )
-                elif line.startswith("REMARK SMILES") and smile_string == "":
+                elif line.startswith("REMARK SMILES") and first_model:
                     smile_string = line.split()[2]
-                if line.startswith("REMARK H PARENT") and ligand_h_parents == []:
-                    ligand_h_parents = (
+                if line.startswith("REMARK H PARENT") and first_model:
+                    ligand_h_parents += (
                         line.lstrip("REMARK H PARENT").rstrip("\n").split()
                     )
                 if line.startswith("ENDMDL") and first_model:

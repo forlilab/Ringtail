@@ -753,7 +753,7 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def _fetch_existing_tables(self):
+    def _fetch_existing_table_names(self):
         """Returns list of all tables in database"""
         raise NotImplementedError
 
@@ -1434,7 +1434,12 @@ class DBManagerSQLite(DBManager):
 
         Returns:
             tuple: tuple representing interaction bitvector
+            None: if no interactions in database
         """
+        # catch if database does not have interactions
+        table_names = self._fetch_existing_table_names()
+        if "Interaction_bitvectors" not in table_names:
+            return None
 
         query = "SELECT * FROM Interaction_bitvectors WHERE Pose_ID = {0}".format(
             pose_id
@@ -1579,7 +1584,7 @@ class DBManagerSQLite(DBManager):
         self._create_interaction_index_table()
         self._create_bookmark_table()
 
-    def _fetch_existing_tables(self):
+    def _fetch_existing_table_names(self):
         """Returns list of all tables in database"""
 
         try:
@@ -1598,7 +1603,7 @@ class DBManagerSQLite(DBManager):
 
         # fetch existing tables
         cur = self.conn.cursor()
-        tables = self._fetch_existing_tables()
+        tables = self._fetch_existing_table_names()
 
         # drop tables
         for table in tables:
