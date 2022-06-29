@@ -258,7 +258,7 @@ class DBManager:
             else:
                 ligand_data_list.append(ligand_dict[key][pose_rank])
 
-        if ligand_dict["interactions"] != []:
+        if ligand_dict["interactions"] != [] and any(ligand_dict["interactions"][pose_rank]):  # catch lack of interaction data
             # add interaction count
             ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0])
             # count number H bonds, add to ligand data list
@@ -451,6 +451,8 @@ class DBManager:
                 )
 
         for idx, pose_interactions in enumerate(interaction_dictionaries):
+            if not any(pose_interactions):  # skip any empty dictionaries
+                continue
             interaction_tuples.append(
                 self._generate_interaction_tuples(pose_interactions)
             )
