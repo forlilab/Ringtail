@@ -445,22 +445,23 @@ class VSManager:
         ) in poses:
             # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
             pose_bitvector = self.dbman.fetch_interaction_bitvector(Pose_ID)
-            interaction_indices = []
-            interactions_list = []
-            for idx, bit in enumerate(pose_bitvector):
-                if bit == 1:
-                    interaction_indices.append(
-                        idx + 1
-                    )  # adjust for indexing starting at 1
-            for int_idx in interaction_indices:
-                interaction_info = self.dbman.fetch_interaction_info_by_index(int_idx)
-                interaction = interaction_info[0] + "-" + ":".join(interaction_info[1:])
-                interactions_list.append(interaction)
-            interactions_str = ", ".join(interactions_list)
+            if pose_bitvector is not None:
+                interaction_indices = []
+                interactions_list = []
+                for idx, bit in enumerate(pose_bitvector):
+                    if bit == 1:
+                        interaction_indices.append(
+                            idx + 1
+                        )  # adjust for indexing starting at 1
+                for int_idx in interaction_indices:
+                    interaction_info = self.dbman.fetch_interaction_info_by_index(int_idx)
+                    interaction = interaction_info[0] + "-" + ":".join(interaction_info[1:])
+                    interactions_list.append(interaction)
+                interactions_str = ", ".join(interactions_list)
+                properties["Interactions"].append(interactions_str)
             # add properties to dictionary lists
             properties["Binding energies"].append(energies_binding)
             properties["Ligand effiencies"].append(leff)
-            properties["Interactions"].append(interactions_str)
             # get pose coordinate info
             ligand_pose = self._db_string_to_list(ligand_pose)
             flexres_pose = self._db_string_to_list(flexres_pose)
