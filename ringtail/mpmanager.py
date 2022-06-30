@@ -102,11 +102,10 @@ class MPManager:
         # process items in the queue
         for file in self.filelist:
             attempts = 0
-            while True:
-                if attempts > 100:
-                    self.queueIn.put(file, block=True, timeout=0.05)
-                    break
+            while attempts <= 100:
                 try:
+                    if attempts == 100:
+                        raise queue.Full
                     self.queueIn.put(file, block=True, timeout=0.05)
                     break
                 except queue.Full:
