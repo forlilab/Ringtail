@@ -51,6 +51,7 @@ def parse_single_dlg(fname):
     pose_hb_counts = []
     pose_coordinates = []
     flexible_residues = []
+    flexres_startlines = set()
     flexible_res_coords = []
     smile_string = ""
     index_map = ""
@@ -95,11 +96,13 @@ def parse_single_dlg(fname):
             if "REMARK SMILES" in line and "IDX" not in line and smile_string == "":
                 smile_string = line.split("REMARK SMILES")[-1]
             # store flexible residue identities
-            if "INPUT-FLEXRES-PDBQT: BEGIN_RES" in line:
-                split_line = line.split()
-                flexible_residues.append(
-                    split_line[2] + ":" + split_line[3] + split_line[4]
-                )  # RES:<chain><resnum>
+            if "INPUT-FLEXRES-PDBQT:" in line:
+                if "ATOM" in line or "HETATM" in line:
+                    if line[21:53] not in flexres_startlines:
+                        flexible_residues.append(
+                            line[38:41] + ":" + line[42] + line[44:47]
+                        )  # RES:<chain><resnum>
+                        flexres_startlines.add(line[21:53])  # save startline
             # store number of runs
             if "Number of runs:" in line:
                 nruns = int(line.split()[3])
@@ -152,10 +155,10 @@ def parse_single_dlg(fname):
                 ref_rmsds[int(run) - 1] = float(line.split()[5])
 
             # make new flexible residue list if in the coordinates for a flexible residue
-            if "DOCKED: BEGIN_RES" in line:
+            if line[8:40] in flexres_startlines:
                 flexible_res_coords[-1].append([])
                 inside_res = True
-            if "DOCKED: END_RES" in line:
+            if "DOCKED: ROOT" in line:
                 inside_res = False
 
             if "FINAL DOCKED STATE" in line:
@@ -165,7 +168,7 @@ def parse_single_dlg(fname):
                 pose_coordinates.append([])
                 flexible_res_coords.append([])
             # store pose anaylsis
-            elif line[0:9] == "ANALYSIS:" and inside_pose:
+            if line[0:9] == "ANALYSIS:" and inside_pose:
                 # storing interactions
                 line = line.split("ANALYSIS:")[1]
                 kw, info = line.split(None, 1)
@@ -181,10 +184,11 @@ def parse_single_dlg(fname):
                         hb_count = line.count("H")
                         pose_hb_counts.append(hb_count)
 
-            elif STD_END in line:
+            if STD_END in line:
                 inside_pose = False
+                inside_res = False
                 heavy_at_count_complete = True
-            elif (line[: len(STD_KW)] == STD_KW) and inside_pose:
+            if (line[: len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
                 # store pose coordinates
