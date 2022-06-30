@@ -98,7 +98,7 @@ def parse_single_dlg(fname):
             # store flexible residue identities
             if "INPUT-FLEXRES-PDBQT:" in line:
                 if "ATOM" in line or "HETATM" in line:
-                    if line[21:53] not in flexres_startlines:
+                    if line[38:41] + ":" + line[42] + line[44:47] not in flexible_residues:
                         flexible_residues.append(
                             line[38:41] + ":" + line[42] + line[44:47]
                         )  # RES:<chain><resnum>
