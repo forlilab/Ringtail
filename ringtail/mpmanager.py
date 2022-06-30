@@ -108,9 +108,10 @@ class MPManager:
                     break
                 try:
                     self.queueIn.put(file, block=True, timeout=0.05)
+                    break
                 except queue.Full:
                     attempts += 1
-                    sleep(2)
+                    sleep(0.01)
         # put as many poison pills in the queue as there are workers
         for i in range(self.max_proc):
             self.queueIn.put(None)
