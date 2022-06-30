@@ -165,7 +165,7 @@ def parse_single_dlg(fname):
                 pose_coordinates.append([])
                 flexible_res_coords.append([])
             # store pose anaylsis
-            elif line[0:9] == "ANALYSIS:":
+            elif line[0:9] == "ANALYSIS:" and inside_pose:
                 # storing interactions
                 line = line.split("ANALYSIS:")[1]
                 kw, info = line.split(None, 1)

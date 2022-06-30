@@ -7,6 +7,7 @@
 import platform
 from time import sleep
 import logging
+import queue
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .exceptions import MultiprocessingError
@@ -100,7 +101,16 @@ class MPManager:
 
         # process items in the queue
         for file in self.filelist:
-            self.queueIn.put(file, block=True)
+            attempts = 0
+            while True:
+                if attempts > 100:
+                    self.queueIn.put(file, block=True, timeout=0.05)
+                    break
+                try:
+                    self.queueIn.put(file, block=True, timeout=0.05)
+                except queue.Full:
+                    attempts += 1
+                    sleep(2)
         # put as many poison pills in the queue as there are workers
         for i in range(self.max_proc):
             self.queueIn.put(None)
