@@ -1437,7 +1437,7 @@ class DBManagerSQLite(DBManager):
             None: if no interactions in database
         """
         # catch if database does not have interactions
-        table_names = self._fetch_existing_table_names()
+        table_names = [table[0] for table in self._fetch_existing_table_names()]
         if "Interaction_bitvectors" not in table_names:
             return None
 
