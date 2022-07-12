@@ -80,9 +80,17 @@ class VSManager:
                 "Error occurred while initializing database."
             ) from e
 
-        self.results_man = ResultsManager(opts=self.rman_opts, dbman=self.dbman)
+        # if requested, write database or add results to an existing one
+        if self.dbman.write_db_flag or self.db_opts["add_results"]:
+            logging.info("Adding results...")
+            try:
+                self.results_man = ResultsManager(opts=self.rman_opts, dbman=self.dbman)
+                self.add_results()
+            except ResultsProcessingError as e:
+                raise VirtualScreeningError("Error occured while adding results") from e
 
-        try:
+        else:
+            try:
             self.output_manager = Outputter(
                 self.out_opts["log"], self.out_opts["export_poses_path"]
             )
@@ -90,14 +98,6 @@ class VSManager:
             raise VirtualScreeningError(
                 "Error occured while creating output manager"
             ) from e
-
-        # if requested, write database or add results to an existing one
-        if self.dbman.write_db_flag or self.db_opts["add_results"]:
-            logging.info("Adding results...")
-            try:
-                self.add_results()
-            except ResultsProcessingError as e:
-                raise VirtualScreeningError("Error occured while adding results") from e
 
         return self
 

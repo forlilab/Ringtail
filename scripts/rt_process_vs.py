@@ -51,9 +51,10 @@ if __name__ == "__main__":
         "interaction_tolerance": rman_opts["interaction_tolerance"],
         "store_all_poses": rman_opts["store_all_poses"],
         "target": receptor,
-        "receptor_file": rman_opts["receptor_name"],
+        "receptor_file": rman_opts["receptor_file"],
         "add_interactions": rman_opts["add_interactions"],
         "interaction_cutoffs": rman_opts["interaction_cutoffs"],
+        "file_sources": rman_opts["file_sources"]
     }
     filters = cl_opts.filters
     out_opts = cl_opts.out_opts

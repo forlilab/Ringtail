@@ -22,6 +22,8 @@ class ResultsManager:
             "add_interactions": False,
             "interaction_cutoffs": [3.7, 4.0],
             "receptor_file": None,
+            "file_sources": None,
+            "file_pattern": None,
         },
         dbman=None,
     ):

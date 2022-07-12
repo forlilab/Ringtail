@@ -72,7 +72,7 @@ def cmdline_parser(defaults={}):
         "max_miss": 0,
         "add_interactions": None,
         "interaction_cutoffs": "3.7,4.0",
-        "receptor_name": None,
+        "receptor_file": None,
     }
 
     config = json.loads(
@@ -245,7 +245,7 @@ def cmdline_parser(defaults={}):
     write_parser.add_argument(
         "-ai",
         "--add_interactions",
-        help="Find interactions between ligand poses and receptor and save to database. Requires receptor PDBQT to be given with input files (all modes) and --receptor_name to be specified with Vina mode. SIGNIFICANTLY INCREASES DATBASE WRITE TIME.",
+        help="Find interactions between ligand poses and receptor and save to database. Requires receptor PDBQT to be given with input files (all modes) and --receptor_file to be specified with Vina mode. SIGNIFICANTLY INCREASES DATBASE WRITE TIME.",
         action="store_true",
     )
     write_parser.add_argument(
@@ -257,9 +257,9 @@ def cmdline_parser(defaults={}):
         metavar="[HB CUTOFF],[VDW CUTOFF]",
     )
     write_parser.add_argument(
-        "-rn",
-        "--receptor_name",
-        help="Use with Vina mode. Give name for receptor PDBQT.",
+        "-rf",
+        "--receptor_file",
+        help="Use with Vina mode. Give file for receptor PDBQT.",
         action="store",
         type=str,
         metavar="STRING",
@@ -629,7 +629,7 @@ class CLOptionParser:
         allowed_modes = {"dlg", "vina"}
         self.mode = parsed_opts.mode.lower()
         # set receptor name, add_interactions if given
-        self.rec_name = parsed_opts.receptor_name
+        self.rec_name = parsed_opts.receptor_file
         self.add_interactions = parsed_opts.add_interactions
         if self.mode not in allowed_modes:
             raise OptionError(
@@ -649,9 +649,9 @@ class CLOptionParser:
                     "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
                 )
                 parsed_opts.interaction_tolerance = None
-            if parsed_opts.add_interactions and parsed_opts.receptor_name is None:
+            if parsed_opts.add_interactions and parsed_opts.receptor_file is None:
                 raise OptionError(
-                    "Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_name."
+                    "Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_file."
                 )
             # set pattern to .pdbqt
             parsed_opts.pattern = "*.pdbqt*"
@@ -678,7 +678,7 @@ class CLOptionParser:
 
         self.pattern = parsed_opts.pattern
         self.save_receptor = parsed_opts.save_receptor
-        self.receptor_name = parsed_opts.receptor_name
+        self.receptor_file = parsed_opts.receptor_file
 
         # check options for write mode
         self.rr_mode = parsed_opts.rr_mode
@@ -896,7 +896,9 @@ class CLOptionParser:
             "interaction_cutoffs": [
                 float(val) for val in parsed_opts.interaction_cutoffs.split(",")
             ],
-            "receptor_name": parsed_opts.receptor_name,
+            "receptor_file": parsed_opts.receptor_file,
+            "file_sources": file_sources,
+            "file_pattern": self.pattern,
         }
 
         self.file_sources = file_sources
@@ -918,17 +920,10 @@ class CLOptionParser:
         self.rman_opts = rman_opts
 
     def _process_sources(self):
-        """process the options for input files (parse dictionary)"""
+        """process the options for input files (parse dictionary) to find receptor file"""
         sources = self.file_sources
-        self.lig_files_pool = []
         self.rec_files_pool = []
         if sources["file"] is not None:
-            self.lig_files_pool = [
-                file
-                for file_list in sources["file"]
-                for file in file_list
-                if fnmatch.fnmatch(file, self.pattern)
-            ]
             if self.mode != "vina" and self.save_receptor:
                 self.rec_files_pool = [
                     file
@@ -940,8 +935,6 @@ class CLOptionParser:
         if sources["file_path"] is not None:
             for path_list in sources["file_path"]["path"]:
                 for path in path_list:
-                    # scan for ligand dlgs
-                    self.scan_dir(path, self.pattern, sources["file_path"]["recursive"])
                     # scan for receptor pdbqts
                     if self.save_receptor and self.mode != "vina":
                         self.scan_dir(
@@ -962,19 +955,11 @@ class CLOptionParser:
                     )
 
         # check options for add_interactions, move vina receptor pdbqt
-        if self.add_interactions:
-            if self.mode == "vina":
-                for file in self.lig_files_pool:
-                    if file.endswith(self.receptor_name):
-                        self.lig_files_pool.remove(file)
-                        self.rec_files_pool.append(file)
+        if self.add_interactions and self.mode == "vina":
+            if os.path.exists(self.receptor_file):
+                self.rec_files_pool.append(self.receptor_file)
             if len(self.rec_files_pool) == 0:
-                raise OptionError("Error: Given receptor name not found!")
-
-        if len(self.lig_files_pool) > 0 or len(self.rec_files_pool) > 0:
-            logging.info("-Found %d ligand files." % len(self.lig_files_pool))
-            if self.save_receptor:
-                logging.info("-Found %d receptor files." % len(self.rec_files_pool))
+                raise OptionError("Error: Given receptor file not found!")
 
         # raise error if --save_receptor or --add_interactions and none found
         if self.save_receptor and len(self.rec_files_pool) == 0:
@@ -986,10 +971,10 @@ class CLOptionParser:
                 "--add_interactions flag specified but no receptor PDBQT found. Please check location of receptor file and file source options"
             )
 
-        if self.rec_files_pool != [] and self.rec_files_pool[0] != self.receptor_name:
-            self.rman_opts["receptor_name"] = self.rec_files_pool[0]
+        if self.rec_files_pool != [] and self.rec_files_pool[0] != self.receptor_file:
+            self.rman_opts["receptor_file"] = self.rec_files_pool[0]
 
-    def scan_dir(self, path, pattern, recursive=False, ligands=True):
+    def scan_dir(self, path, pattern, recursive=False):
         """scan for valid output files in a directory
         the pattern is used to glob files
         optionally, a recursive search is performed
@@ -1008,14 +993,10 @@ class CLOptionParser:
                 )
         else:
             files = glob(os.path.join(path, pattern))
-        if ligands:
-            self.lig_files_pool.extend(files)
-        else:
-            self.rec_files_pool.extend(files)
+        self.rec_files_pool.extend(files)
 
     def scan_file_list(self, filename, pattern=".dlg", find_rec=True):
         """read file names from file list"""
-        lig_accepted = []
         rec_accepted = []
         c = 0
         with open(filename, "r") as fp:
@@ -1023,14 +1004,12 @@ class CLOptionParser:
                 line = line.strip()
                 c += 1
                 if os.path.isfile(line):
-                    if line.endswith(pattern) or line.endswith(pattern + ".gz"):
-                        lig_accepted.append(line)
                     if find_rec and self.mode != "vina":
                         if line.endswith(".pdbqt") or line.endswith(".pdbqt.gz"):
                             rec_accepted.append(line)
                 else:
                     warnings.warn("Warning! file |%s| does not exist" % line)
-        if len(lig_accepted) + len(rec_accepted) == 0:
+        if len(rec_accepted) == 0:
             raise OptionError(
                 "*ERROR* No valid files were found when reading from |%s|" % filename
             )
@@ -1038,5 +1017,4 @@ class CLOptionParser:
             "# [ %5.3f%% files in list accepted (%d) ]"
             % ((len(lig_accepted) + len(rec_accepted)) / c * 100, c)
         )
-        self.lig_files_pool.extend(lig_accepted)
         self.rec_files_pool.extend(rec_accepted)
