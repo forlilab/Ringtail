@@ -7,11 +7,13 @@ import time
 import argparse
 import json
 import sys
+import os
 from ringtail import DBManagerSQLite
 from ringtail import Outputter
 from ringtail import OptionError
 import logging
 import traceback
+import warnings
 
 
 def cmdline_parser(defaults={}):
@@ -167,6 +169,10 @@ if __name__ == "__main__":
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
 
+        # check that ref database exists
+        if not os.path.exists(wanted_dbs[0]):
+            logging.critical("Wanted database {0} not found!".format(wanted_dbs[0]))
+
         ref_db = wanted_dbs[0]
         wanted_dbs = wanted_dbs[1:]
 
@@ -198,6 +204,8 @@ if __name__ == "__main__":
         last_db = None
         for idx, db in enumerate(wanted_dbs):
             logging.info(f"cross-referencing {db}")
+            if not os.path.exists(db):
+                logging.critical("Wanted database {0} not found!".format(db))
             previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                 db,
                 previous_bookmarkname,
@@ -210,6 +218,8 @@ if __name__ == "__main__":
         if unwanted_dbs is not None:
             for idx, db in enumerate(unwanted_dbs):
                 logging.info(f"cross-referencing {db}")
+                if not os.path.exists(db):
+                    logging.critical("Unwanted database {0} not found!".format(db))
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                     db,
                     previous_bookmarkname,
