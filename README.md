@@ -158,14 +158,14 @@ To add new files to an existing database, the `--add_results` flag can be used i
 
 To overwrite an existing database, use the `--overwrite` flag.
 
-One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database and is only enabled for use with DLGs. Ringtail will throw an exception if this flag is given but no receptor is found, if the name of the receptor in any DLG does not match the receptor file, or if this flag is used with a database that already has a receptor. `--save_receptor` can be used to add a receptor to an existing database given with `--input_db`. `--save_receptor` may not be used with the `--add_results` option and will not be able to be used with a database created from Vina PDBQTs.
+One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database and is only enabled for use with DLGs. The user must specify the path to the receptor file with the `--receptor_file` option. Ringtail will also throw an exception if this flag is given but no receptor is found, if the name of the receptor in any DLG does not match the receptor file, or if this flag is used with a database that already has a receptor. `--save_receptor` can be used to add a receptor to an existing database given with `--input_db`. `--save_receptor` may not be used with the `--add_results` option.
 
 By default, the newly-created database will be named `output.db`. This name may be changed with the `--output_db` option.
 
 By default (for DLGs), Ringtail will store the best-scored (lowest energy) binding pose from the first 3 pose clusters in the DLG. For Vina, Ringtail will store the 3 best poses. The number of clusters/poses stored may be
 changed with the `--max_poses` option. The `--store_all_poses` flag may also be used to override `--max_poses` and store every pose from every file.
 
-ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it may be added by Ringtail with the `--add_interactions` option. **This adds a signifcant increase to the total database write time.** Distance cutoffs for the interactions are specified with the `--interaction_cutoffs` option. Adding interactions requires that the receptor PDBQT be provided as an input by the user. When writing the database from Vina PDBQTs, the receptor name MUST be provided with the `--receptor_name` option. 
+ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it may be added by Ringtail with the `--add_interactions` option. **This adds a signifcant increase to the total database write time.** Distance cutoffs for the interactions are specified with the `--interaction_cutoffs` option. Adding interactions requires that the receptor PDBQT be provided as an input by the user with the `--receptor_file` option.
 
 The `--interaction_tolerance` option also allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. When used as a flag, the `interaction_tolerance` default is 0.8 angstroms. The user may also specify their own cutoff.
 
@@ -239,7 +239,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--recursive        |-r| Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      ||
 |--add_results      |-a| Add new DLG files to existing database given with --input_db  | FALSE       ||
 |--duplicate_handling|-dh| Specify how dulicate results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*| None |
-|--save_receptor    |-sr| Flag to specify that receptor file should be imported to database. Receptor file must also be in a location specified with --file, --file_path, or --file_list| FALSE   ||
+|--save_receptor    |-sr| Flag to specify that receptor file should be imported to database. Receptor file must also be specified with --receptor_file| FALSE   ||
 |--output_db        |-o| Name for output database                              | output.db        ||
 |--overwrite        |-ov| Flag to overwrite existing log and database           | FALSE       ||
 |--max_poses        |-mp| Number of cluster for which to store top-scoring pose in database| 3     ||
@@ -247,7 +247,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--interaction_tolerance|-it| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  | Yes |
 |--add_interactions  |-ai| Find interactions between ligands and receptor. Requires receptor PDBQT to be written. | FALSE      ||
 |--interaction_cutoffs  |-ic| Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. | 3.7,4.0     ||
-|--receptor_name |-rn| Use with Vina mode. Give name for receptor PDBQT. | None      |<tr><td colspan="5">**Read Mode**</td></tr>
+|--receptor_file |-rn| Use with --save_receptor or --add_interactions. Give name for receptor PDBQT. | None      |<tr><td colspan="5">**Read Mode**</td></tr>
 |--log              |-l| Name for log of filtered results                      | output_log.txt   ||
 |--out_fields       |-of| Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
 |--order_results    |-ord| String for field by which the passing results should be ordered in log file. | no default ||
