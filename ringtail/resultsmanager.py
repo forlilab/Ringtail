@@ -13,7 +13,6 @@ class ResultsManager:
         self,
         opts={
             "mode": "dlg",
-            "filelist": None,
             "chunk_size": 1,
             "max_poses": 3,
             "interaction_tolerance": None,
@@ -28,9 +27,7 @@ class ResultsManager:
         dbman=None,
     ):
         self.dbman = dbman
-        self.filelist = opts["filelist"]
         self.parser = MPManager(
-            filelist=self.filelist,
             db_obj=self.dbman,
             opts=opts,
         )

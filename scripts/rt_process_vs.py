@@ -32,21 +32,17 @@ if __name__ == "__main__":
         logging.critical(e)
         sys.exit(1)
 
-    # save target name
-    if len(cl_opts.rec_files_pool) != 0:
-        receptor = (
-            cl_opts.rec_files_pool[0].split(".")[0].split("/")[-1]
-        )  # remove file extension and path
-    else:
-        receptor = None
-
     # prepare option dictionaries for VSManager
     dbman_opts = cl_opts.db_opts
     rman_opts = cl_opts.rman_opts
+    # save target name
+    if rman_opts["receptor_file"] is not None:
+            receptor = rman_opts["receptor_file"].split(".")[0].split("/")[-1]  # remove file extension and path
+    else:
+        receptor = None
     rman_opts = {
         "chunk_size": 1,
-        "filelist": cl_opts.lig_files_pool,
-        "mode": cl_opts.mode,
+        "mode": rman_opts["mode"],
         "max_poses": rman_opts["max_poses"],
         "interaction_tolerance": rman_opts["interaction_tolerance"],
         "store_all_poses": rman_opts["store_all_poses"],
@@ -54,7 +50,8 @@ if __name__ == "__main__":
         "receptor_file": rman_opts["receptor_file"],
         "add_interactions": rman_opts["add_interactions"],
         "interaction_cutoffs": rman_opts["interaction_cutoffs"],
-        "file_sources": rman_opts["file_sources"]
+        "file_sources": rman_opts["file_sources"],
+        "file_pattern": rman_opts["file_pattern"],
     }
     filters = cl_opts.filters
     out_opts = cl_opts.out_opts
@@ -78,7 +75,7 @@ if __name__ == "__main__":
             # Add receptors to database if requested
             if cl_opts.save_receptor:
                 receptor_list = ReceptorManager.make_receptor_blobs(
-                    cl_opts.rec_files_pool
+                    [rman_opts["receptor_file"]]
                 )
                 vsman.add_receptors_to_db(receptor_list)
 

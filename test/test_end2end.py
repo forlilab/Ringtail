@@ -180,12 +180,12 @@ class TestInputs:
 
         assert count == 19999
 
-    def test_conflict_handling(self):
+    def test_duplicate_handling(self):
         os.system(
             "python ../scripts/rt_process_vs.py write --file_path test_data/TEST_0000005-results"
         )
         os.system(
-            "python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/TEST_0000005-results --add_results --conflict_handling ignore"
+            "python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/TEST_0000005-results --add_results --duplicate_handling ignore"
         )
 
         conn = sqlite3.connect("output.db")
@@ -200,12 +200,12 @@ class TestInputs:
 
         assert count == 9999
 
-    def test_conflict_handling_rpl(self):
+    def test_duplicate_handling_rpl(self):
         os.system(
             "python ../scripts/rt_process_vs.py write --file_path test_data/TEST_0000005-results"
         )
         os.system(
-            "python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/TEST_0000005-results --add_results --conflict_handling replace"
+            "python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/TEST_0000005-results --add_results --duplicate_handling replace"
         )
 
         conn = sqlite3.connect("output.db")
@@ -222,41 +222,7 @@ class TestInputs:
 
     def test_save_rec_file(self):
         os.system(
-            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt --save_receptor"
-        )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
-        count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
-        assert count == 1
-
-    def test_save_rec_filepath(self):
-        os.system(
-            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file_path test_data/rec --save_receptor"
-        )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
-        count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
-        assert count == 1
-
-    def test_save_rec_filelist(self):
-        os.system(
-            "python ../scripts/rt_process_vs.py write --file_list filelist4.txt --save_receptor"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --receptor_file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -273,7 +239,7 @@ class TestInputs:
 
     def test_save_rec_file_gz(self):
         os.system(
-            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt.gz --save_receptor"
+            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --receptor_file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt.gz --save_receptor"
         )
 
         conn = sqlite3.connect("output.db")
@@ -287,41 +253,6 @@ class TestInputs:
         os.system("rm output.db")
 
         assert count == 1
-
-    def test_save_rec_filepath_gz(self):
-        os.system(
-            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt --file_path test_data/rec_gz --save_receptor"
-        )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
-        count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
-        assert count == 1
-
-    def test_save_rec_filelist_gz(self):
-        os.system(
-            "python ../scripts/rt_process_vs.py write --file_list filelist5.txt --save_receptor"
-        )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
-        count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
-        assert count == 1
-
 
 class TestOutputs:
     def test_export_bookmark_csv(self):

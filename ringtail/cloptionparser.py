@@ -562,32 +562,25 @@ class CLOptionParser:
         ]
 
         self._initialize_parser()
-        if self.rr_mode == "write":
-            self._process_sources()
 
-        # confirm that files were found, else throw error
+        # confirm that receptor file was found if needed, else throw error
         # if only receptor files found and --save_receptor, assume we just want to
         # add receptor and not modify the rest of the db, so turn off write_db_flag
-        if (
-            len(self.lig_files_pool) == 0
-            and len(self.rec_files_pool) != 0
-            and self.save_receptor
-        ):
-            self.db_opts["write_db_flag"] = False
-            # raise error if not input db not given
-            if self.input_db is None:
-                raise OptionError("No input database given for saving receptor(s)")
-        if len(self.lig_files_pool) == 0 and (
-            self.db_opts["write_db_flag"] or self.db_opts["add_results"]
-        ):
-            raise OptionError("No ligand files found. Please check file source and mode.")
-        if len(self.rec_files_pool) > 1:
+        if self.save_receptor:
+            #self.db_opts["write_db_flag"] = False
+            #if self.input_db is None:
+            #    raise OptionError("No input database given for saving receptor(s)")
+            if self.db_opts["add_results"]:
+                raise OptionError(
+                    "Cannot use --add_results with --save_receptor. Please remove the --save_receptor flag"
+                )
+            if self.receptor_file is None:
+                raise OptionError("Must provide path for receptor PDBQT file is using --save_receptor")
+
+        # raise error if --save_receptor or --add_interactions and receptor not found
+        if (self.save_receptor or self.add_interactions) and not os.path.exists(self.receptor_file):
             raise OptionError(
-                "Found more than 1 receptor PDBQTs. Please check input files and only include receptor associated with DLGs"
-            )
-        if self.db_opts["add_results"] and self.save_receptor:
-            raise OptionError(
-                "Cannot use --add_results with --save_receptor. Please remove the --save_receptor flag"
+                "--save_receptor or --add_interaction flag specified but no receptor PDBQT found. Please check location of receptor file and --receptor_file option"
             )
 
     def _initialize_parser(self):
@@ -620,7 +613,6 @@ class CLOptionParser:
         self.filter = False  # set flag indicating if any filters given
         conflict_handling = None
         file_sources = None
-        self.lig_files_pool = []
         self.rec_files_pool = []
         filters = {}
         db_opts = {}
@@ -884,11 +876,12 @@ class CLOptionParser:
             "overwrite": parsed_opts.overwrite,
             "add_results": parsed_opts.add_results,
             "conflict_opt": conflict_handling,
-            "mode": parsed_opts.mode,
+            "mode": self.mode,
             "dbFile": None,
         }
 
         rman_opts = {
+            "mode": self.mode,
             "store_all_poses": parsed_opts.store_all_poses,
             "max_poses": parsed_opts.max_poses,
             "interaction_tolerance": parsed_opts.interaction_tolerance,
@@ -918,103 +911,3 @@ class CLOptionParser:
         self.filters = filters
         self.out_opts = out_opts
         self.rman_opts = rman_opts
-
-    def _process_sources(self):
-        """process the options for input files (parse dictionary) to find receptor file"""
-        sources = self.file_sources
-        self.rec_files_pool = []
-        if sources["file"] is not None:
-            if self.mode != "vina" and self.save_receptor:
-                self.rec_files_pool = [
-                    file
-                    for file_list in sources["file"]
-                    for file in file_list
-                    if fnmatch.fnmatch(file, "*.pdbqt*")
-                ]
-        # update the files pool with the all the files found in the path
-        if sources["file_path"] is not None:
-            for path_list in sources["file_path"]["path"]:
-                for path in path_list:
-                    # scan for receptor pdbqts
-                    if self.save_receptor and self.mode != "vina":
-                        self.scan_dir(
-                            path,
-                            "*.pdbqt*",
-                            sources["file_path"]["recursive"],
-                            ligands=False,
-                        )
-        # update the files pool with the files specified in the files list
-        find_rec = True
-        if self.mode == "vina":
-            find_rec = False
-        if sources["file_list"] is not None:
-            for filelist_list in sources["file_list"]:
-                for filelist in filelist_list:
-                    self.scan_file_list(
-                        filelist, self.pattern.replace("*", ""), find_rec
-                    )
-
-        # check options for add_interactions, move vina receptor pdbqt
-        if self.add_interactions and self.mode == "vina":
-            if os.path.exists(self.receptor_file):
-                self.rec_files_pool.append(self.receptor_file)
-            if len(self.rec_files_pool) == 0:
-                raise OptionError("Error: Given receptor file not found!")
-
-        # raise error if --save_receptor or --add_interactions and none found
-        if self.save_receptor and len(self.rec_files_pool) == 0:
-            raise OptionError(
-                "--save_receptor flag specified but no receptor PDBQT found. Please check location of receptor file and file source options"
-            )
-        if self.add_interactions and len(self.rec_files_pool) == 0:
-            raise OptionError(
-                "--add_interactions flag specified but no receptor PDBQT found. Please check location of receptor file and file source options"
-            )
-
-        if self.rec_files_pool != [] and self.rec_files_pool[0] != self.receptor_file:
-            self.rman_opts["receptor_file"] = self.rec_files_pool[0]
-
-    def scan_dir(self, path, pattern, recursive=False):
-        """scan for valid output files in a directory
-        the pattern is used to glob files
-        optionally, a recursive search is performed
-        """
-        logging.info(
-            "-Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern)
-        )
-        files = []
-        if recursive:
-            path = os.path.normpath(path)
-            path = os.path.expanduser(path)
-            for dirpath, dirnames, filenames in os.walk(path):
-                files.extend(
-                    os.path.join(dirpath, f)
-                    for f in fnmatch.filter(filenames, "*" + pattern)
-                )
-        else:
-            files = glob(os.path.join(path, pattern))
-        self.rec_files_pool.extend(files)
-
-    def scan_file_list(self, filename, pattern=".dlg", find_rec=True):
-        """read file names from file list"""
-        rec_accepted = []
-        c = 0
-        with open(filename, "r") as fp:
-            for line in fp.readlines():
-                line = line.strip()
-                c += 1
-                if os.path.isfile(line):
-                    if find_rec and self.mode != "vina":
-                        if line.endswith(".pdbqt") or line.endswith(".pdbqt.gz"):
-                            rec_accepted.append(line)
-                else:
-                    warnings.warn("Warning! file |%s| does not exist" % line)
-        if len(rec_accepted) == 0:
-            raise OptionError(
-                "*ERROR* No valid files were found when reading from |%s|" % filename
-            )
-        logging.info(
-            "# [ %5.3f%% files in list accepted (%d) ]"
-            % ((len(lig_accepted) + len(rec_accepted)) / c * 100, c)
-        )
-        self.rec_files_pool.extend(rec_accepted)

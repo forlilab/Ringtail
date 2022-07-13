@@ -207,12 +207,13 @@ class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
     def __init__(
-        self, queue, maxProcesses, pipe_conn, chunksize, db_obj, num_files, mode="dlg"
+        self, queue, maxProcesses, pipe_conn, chunksize, db_obj, mode="dlg"
     ):
         multiprocessing.Process.__init__(self)
         self.queue = queue
-        # this class knows about how many multi-processing workers there are
+        # this class knows about how many multi-processing workers there are and where the pipe to the parent is
         self.maxProcesses = maxProcesses
+        self.pipe = pipe_conn
         # assign pointer to db object, set chunksize
         self.mode = mode
         self.db = db_obj
@@ -225,15 +226,9 @@ class Writer(multiprocessing.Process):
         # progress tracking instance variables
         self.first_insert = True
         self.counter = 0
-        self.num_files_remaining = num_files
-        self.total_num_files = num_files
         self.num_files_written = 0
         self.time0 = time.perf_counter()
-        # based on estimated 3 seconds per 1000 files, converted to minutes
-        self.est_time_remaining = 3 * num_files / (1000 * 60)
         self.last_write_time = 0
-
-        self.pipe = pipe_conn
 
     def run(self):
         # method overload from parent class
@@ -260,20 +255,18 @@ class Writer(multiprocessing.Process):
                     # after every n (chunksize) files, write to db
                     if self.counter >= self.chunksize:
                         self.write_to_db()
+                        # print info about files and time remaining
+                        sys.stdout.write("\r")
+                        sys.stdout.write(
+                            "{0} files written to database. Writing {1:.0f} files/minute.".format(
+                                self.num_files_written,
+                                self.num_files_written * 60 / self.total_runtime
+                            )
+                        )
+                        sys.stdout.flush()
 
                     # process next file
                     self.process_file(next_task)
-                    # print info about files and time remaining
-                    sys.stdout.write("\r")
-                    sys.stdout.write(
-                        "{n} files remaining to process. Estimated time remaining: {est_time:.2f} minutes. Last chunk took {write_time:.2f} seconds to write.".format(
-                            n=self.num_files_remaining,
-                            est_time=self.est_time_remaining,
-                            write_time=self.last_write_time,
-                        )
-                    )
-                    sys.stdout.flush()
-                    self.num_files_remaining -= 1
 
                 if self.maxProcesses == 0:
                     # received as many poison pills as workers
@@ -308,23 +301,15 @@ class Writer(multiprocessing.Process):
         if self.interactions_list != []:
             self.db.insert_interactions(self.interactions_list)
 
-        # calulate time for processing/writing previous chunk
+        # calulate time for processing/writing speed
         self.num_files_written += self.chunksize
-        total_runtime = time.perf_counter() - self.time0
-        self.est_time_remaining = (
-            (total_runtime / self.num_files_written)
-            * (self.total_num_files - self.num_files_written)
-            / 60
-        )  # converted to minutes
-        self.last_write_time = time.perf_counter() - time1
+        self.total_runtime = time.perf_counter() - self.time0
 
         # reset all data-holders for next chunk
         self.results_array = []
         self.ligands_array = []
         self.interactions_list = []
         self.counter = 0
-
-        return self.est_time_remaining
 
     def process_file(self, file_packet):
         results_rows, ligand_row, interaction_rows, receptor_row = file_packet
