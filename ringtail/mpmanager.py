@@ -8,6 +8,9 @@ import platform
 from time import sleep
 import logging
 import queue
+import fnmatch
+import os
+import warnings
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .exceptions import MultiprocessingError
@@ -21,7 +24,6 @@ else:
 class MPManager:
     def __init__(
         self,
-        filelist,
         db_obj,
         opts={
             "mode": "dlg",
@@ -46,7 +48,6 @@ class MPManager:
                 )
             )
         self.mode = opts["mode"]
-        self.filelist = filelist
         self.db = db_obj
         self.chunksize = opts["chunk_size"]
         self.max_poses = opts["max_poses"]
@@ -58,8 +59,7 @@ class MPManager:
         self.receptor_file = opts["receptor_file"]
         self.file_sources = opts["file_sources"]
         self.file_pattern = opts["file_pattern"]
-
-        self.num_files = len(self.filelist)
+        self.num_files = 0
 
         self.max_proc = multiprocessing.cpu_count()
         self.queueIn = multiprocessing.Queue(maxsize=self.max_proc)
@@ -68,8 +68,8 @@ class MPManager:
     def process_files(self):
         # start the workers in background
         self.workers = []
-        self.p_conn, self.c_conn = multiprocessing.Pipe(False)
-        for i in range(self.max_proc - 1):
+        self.p_conn, self.c_conn = multiprocessing.Pipe(True)
+        for i in range(self.max_proc):
             # one worker is started for each processor to be used
             s = DockingFileReader(
                 self.queueIn,
@@ -96,7 +96,6 @@ class MPManager:
             self.c_conn,
             self.chunksize,
             self.db,
-            self.num_files,
             self.mode,
         )
 
@@ -116,6 +115,8 @@ class MPManager:
 
         w.join()
 
+        logging.info("Wrote {0} files to database".format(self.num_files))
+
     def _process_sources(self):
         # add individual files
         if self.file_sources["file"] is not None:
@@ -128,14 +129,14 @@ class MPManager:
             for path_list in self.file_sources["file_path"]["path"]:
                 for path in path_list:
                     # scan for ligand dlgs
-                    for files in scan_dir(path, pattern, recursive=True):
+                    for files in self._scan_dir(path, self.file_pattern, recursive=True):
                         for f in files:
                             self._add_to_queue(f)
 
         if self.file_sources["file_list"] is not None:
             for filelist_list in self.file_sources["file_list"]:
                 for filelist in filelist_list:
-                    self.scan_file_list(
+                    self._scan_file_list(
                         filelist, self.file_pattern.replace("*", ""))
 
     def _add_to_queue(self, file):
@@ -145,6 +146,7 @@ class MPManager:
                 if attempts == 100:
                     raise queue.Full
                 self.queueIn.put(file, block=True, timeout=0.05)
+                self.num_files += 1
                 self._check_for_worker_exceptions()
                 break
             except queue.Full:
@@ -160,7 +162,7 @@ class MPManager:
             logging.debug(tb)
             raise MultiprocessingError("Error occurred during file parsing!")
 
-    def scan_dir(self, path, pattern, recursive=False):
+    def _scan_dir(self, path, pattern, recursive=False):
         """scan for valid output files in a directory
         the pattern is used to glob files
         optionally, a recursive search is performed
@@ -179,7 +181,7 @@ class MPManager:
         else:
             yield glob(os.path.join(path, pattern))   # <----
 
-    def scan_file_list(self, filename, pattern=".dlg"):
+    def _scan_file_list(self, filename, pattern=".dlg"):
         """read file names from file list"""
         lig_accepted = []
         c = 0
@@ -193,17 +195,13 @@ class MPManager:
                 else:
                     warnings.warn("Warning! file |%s| does not exist" % line)
         if len(lig_accepted) == 0:
-            raise OptionError(
+            raise MultiprocessingError(
                 "*ERROR* No valid files were found when reading from |%s|" % filename
             )
         logging.info(
             "# [ %5.3f%% files in list accepted (%d) ]"
-            % ((len(lig_accepted) + len(rec_accepted)) / c * 100, c)
-        )
+            % ((len(lig_accepted) / c * 100, c)
+        ))
 
         for file in lig_accepted:
             self._add_to_queue(file)
-
-
-
-

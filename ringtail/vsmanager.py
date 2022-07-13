@@ -91,13 +91,13 @@ class VSManager:
 
         else:
             try:
-            self.output_manager = Outputter(
-                self.out_opts["log"], self.out_opts["export_poses_path"]
-            )
-        except OutputError as e:
-            raise VirtualScreeningError(
-                "Error occured while creating output manager"
-            ) from e
+                self.output_manager = Outputter(
+                    self.out_opts["log"], self.out_opts["export_poses_path"]
+                )
+            except OutputError as e:
+                raise VirtualScreeningError(
+                    "Error occured while creating output manager"
+                ) from e
 
         return self
 
