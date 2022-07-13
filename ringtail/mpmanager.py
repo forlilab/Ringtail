@@ -140,6 +140,8 @@ class MPManager:
                         filelist, self.file_pattern.replace("*", ""))
 
     def _add_to_queue(self, file):
+        if file == self.receptor_file:
+            return
         attempts = 0
         while attempts <= 100:
             try:
