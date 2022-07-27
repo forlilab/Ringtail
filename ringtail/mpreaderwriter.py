@@ -258,9 +258,10 @@ class Writer(multiprocessing.Process):
                         # print info about files and time remaining
                         sys.stdout.write("\r")
                         sys.stdout.write(
-                            "{0} files written to database. Writing {1:.0f} files/minute.".format(
+                            "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
                                 self.num_files_written,
-                                self.num_files_written * 60 / self.total_runtime
+                                self.num_files_written * 60 / self.total_runtime,
+                                self.total_runtime
                             )
                         )
                         sys.stdout.flush()
@@ -286,7 +287,6 @@ class Writer(multiprocessing.Process):
             return
 
     def write_to_db(self):
-        time1 = time.perf_counter()
         # insert result, ligand, and receptor data
         self.db.insert_results(
             filter(None, self.results_array)
