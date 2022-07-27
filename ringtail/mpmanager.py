@@ -69,6 +69,7 @@ class MPManager:
         # start the workers in background
         self.workers = []
         self.p_conn, self.c_conn = multiprocessing.Pipe(True)
+        logging.info("Starting {0} file readers".format(self.max_proc))
         for i in range(self.max_proc):
             # one worker is started for each processor to be used
             s = DockingFileReader(
@@ -143,9 +144,9 @@ class MPManager:
         if file == self.receptor_file:
             return
         attempts = 0
-        while attempts <= 100:
+        while attempts <= 1000:
             try:
-                if attempts == 100:
+                if attempts == 1000:
                     raise queue.Full
                 self.queueIn.put(file, block=True, timeout=0.05)
                 self.num_files += 1
@@ -153,7 +154,7 @@ class MPManager:
                 break
             except queue.Full:
                 attempts += 1
-                sleep(0.01)
+                sleep(0.001)
 
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
