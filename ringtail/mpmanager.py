@@ -10,6 +10,7 @@ import logging
 import queue
 import fnmatch
 import os
+import glob
 import warnings
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
@@ -62,7 +63,7 @@ class MPManager:
         self.num_files = 0
 
         self.max_proc = multiprocessing.cpu_count()
-        self.queueIn = multiprocessing.Queue(maxsize=self.max_proc)
+        self.queueIn = multiprocessing.Queue(maxsize=2 * self.max_proc)
         self.queueOut = multiprocessing.Queue()
 
     def process_files(self):
@@ -144,17 +145,17 @@ class MPManager:
         if file == self.receptor_file:
             return
         attempts = 0
-        while attempts <= 1000:
+        while attempts <= 10000000:
             try:
-                if attempts == 1000:
+                if attempts == 10000000:
                     raise queue.Full
-                self.queueIn.put(file, block=True, timeout=0.05)
+                self.queueIn.put(file, block=True, timeout=0.5)
                 self.num_files += 1
                 self._check_for_worker_exceptions()
                 break
             except queue.Full:
                 attempts += 1
-                sleep(0.001)
+                # sleep(0.00001)
 
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
