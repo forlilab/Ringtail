@@ -13,7 +13,6 @@ from ringtail import Outputter
 from ringtail import OptionError
 import logging
 import traceback
-import warnings
 
 
 def cmdline_parser(defaults={}):
@@ -51,7 +50,7 @@ def cmdline_parser(defaults={}):
 
     parser = argparse.ArgumentParser(
         usage="Please see GitHub for full usage details.",
-        description="Script for filtering unique passing ligands across multiple virtual screenings. Takes databases created and filtered with run_ringtail.py.",
+        description="Script for filtering unique passing ligands across multiple virtual screenings. Takes databases created and filtered with rt_process_vs.py.",
         epilog="""
 
         REQUIRED PACKAGES
@@ -249,10 +248,13 @@ if __name__ == "__main__":
                 csv_name = "crossref.csv"
             output_manager.export_csv(previous_bookmarkname, csv_name, True)
 
+        logging.info("Time to cross-reference: {0:.0f} seconds".format(time.perf_counter() - time0))
+
     except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
         logging.critical(e)
+        logging.error("Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct'.")
         sys.exit(1)
 
     finally:
