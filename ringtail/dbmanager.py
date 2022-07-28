@@ -586,6 +586,7 @@ class DBManager:
             raise DatabaseError(f"Unrecognized selection type {selection_type}")
 
         temp_name = "temp_" + str(self.temptable_suffix)
+        self._create_temp_table(temp_name)
         temp_insert_query = self._generate_selective_insert_query(
             bookmark1_name, bookmark2_name, select_str, new_db_name, temp_name
         )
@@ -1309,16 +1310,25 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def _generate_selective_view_query(
-        self, bookmark1_name, bookmark2_name, select_str, new_db_name
+    def _create_temp_table(self, table_name):
+        """create temporary table with given name
+
+        Args:
+            table_name (string): name for temp table
+        """
+        raise NotImplementedError
+
+    def _generate_selective_insert_query(
+        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
     ):
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
-        
+
         Args:
             bookmark1_name (string): name of bookmark to cross-reference for main db
             bookmark2_name (string): name of bookmark to cross-reference for attached db
             select_str (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
             new_db_name (str): name of attached db
+            temp_table (str): name of temporary table to store passing results in
         """
         raise NotImplementedError
 
@@ -1758,21 +1768,22 @@ class DBManagerSQLite(DBManager):
         """
         return self._run_query(f"SELECT * FROM {viewname}")
 
-    def save_temp_bookmark(
-        self, bookmark_name, original_bookmark_name, wanted_list, unwanted_list=[]
+    def save_temp_table(
+        self, bookmark_name, original_bookmark_name, wanted_list, unwanted_list=[], temp_table_name
     ):
         """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
         
         Args:
             bookmark_name (string): name of bookmark to save last temp bookmark as
-            original_bookmark_name (TYPE): Description
+            original_bookmark_name (str): name of original bookmark
             wanted_list (list): List of wanted database names
             unwanted_list (list, optional): List of unwanted database names
+            temp_table_name (TYPE): Description
         """
         self._create_view(
             bookmark_name,
             "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {0})".format(
-                original_bookmark_name, self.current_view_name
+                original_bookmark_name, temp_table_name
             ),
             add_poseID=False,
         )
@@ -2822,7 +2833,7 @@ class DBManagerSQLite(DBManager):
             table_name (string): name for temp table
         """
 
-        create_table_str = f"CREATE TEMP TABLE {table_name}(LigName PRIMARY KEY)"
+        create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID PRIMARY KEY, LigName)"
         try:
             cur = self.conn.cursor()
             cur.execute(create_table_str)
@@ -2844,7 +2855,7 @@ class DBManagerSQLite(DBManager):
             temp_table (str): name of temporary table to store passing results in
         """
         return (
-            "INSERT INTO {0} SELECT LigName FROM {1} WHERE LigName {2} (SELECT LigName FROM {3}.{4})".format(
+            "INSERT INTO {0} SELECT Pose_ID, LigName FROM {1} WHERE LigName {2} (SELECT LigName FROM {3}.{4})".format(
                 temp_table, bookmark1_name, select_str, new_db_name, bookmark2_name
             )
         )

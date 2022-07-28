@@ -237,8 +237,8 @@ if __name__ == "__main__":
         output_manager.write_log(final_bookmark)
 
         if args.save_bookmark is not None:
-            dbman.save_temp_bookmark(
-                args.save_bookmark, original_bookmark_name, args.wanted, args.unwanted
+            dbman.save_temp_table(
+                args.save_bookmark, original_bookmark_name, args.wanted, args.unwanted, previous_bookmarkname
             )
 
         if args.export_csv:
