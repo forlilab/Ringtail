@@ -37,7 +37,7 @@ if __name__ == "__main__":
     rman_opts = cl_opts.rman_opts
     # save target name
     if rman_opts["receptor_file"] is not None:
-            receptor = rman_opts["receptor_file"].split(".")[0].split("/")[-1]  # remove file extension and path
+        receptor = rman_opts["receptor_file"].split(".")[0].split("/")[-1]  # remove file extension and path
     else:
         receptor = None
     rman_opts = {
