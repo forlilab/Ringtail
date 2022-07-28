@@ -587,7 +587,7 @@ class DBManager:
 
         temp_name = "temp_" + str(self.temptable_suffix)
         temp_insert_query = self._generate_selective_insert_query(
-            temp_name, bookmark1_name, bookmark2_name, select_str, new_db_name
+            bookmark1_name, bookmark2_name, select_str, new_db_name, temp_name
         )
 
         self._run_query(temp_insert_query)
