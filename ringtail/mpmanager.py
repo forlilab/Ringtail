@@ -148,14 +148,13 @@ class MPManager:
         while attempts <= 10000000:
             try:
                 if attempts == 10000000:
-                    raise queue.Full
+                    raise MultiprocessingError("Cannot add more filenames to queue!")
                 self.queueIn.put(file, block=True, timeout=0.5)
                 self.num_files += 1
                 self._check_for_worker_exceptions()
                 break
             except queue.Full:
                 attempts += 1
-                # sleep(0.00001)
 
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
