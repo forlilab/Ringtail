@@ -155,7 +155,7 @@ if __name__ == "__main__":
                 raise IOError("Must specify at least two databases for comparison.")
 
         # set logging level
-        debug = False
+        debug = True
         if debug:
             level = logging.DEBUG
         elif args.verbose:
