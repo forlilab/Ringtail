@@ -591,7 +591,7 @@ class DBManager:
             bookmark1_name, bookmark2_name, select_str, new_db_name, temp_name
         )
 
-        self._run_query(temp_insert_query)
+        self._insert_into_temp_table(temp_insert_query)
 
         num_passing = self.get_number_passing_ligands(temp_name)
 
@@ -2859,3 +2859,12 @@ class DBManagerSQLite(DBManager):
                 temp_table, bookmark1_name, select_str, new_db_name, bookmark2_name
             )
         )
+
+    def _insert_into_temp_table(self, query):
+        try:
+            cur = self.conn.cursor()
+            cur.execute(query)
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(f"Error while inserting into temporary table") from e
