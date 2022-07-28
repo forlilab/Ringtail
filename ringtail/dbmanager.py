@@ -1769,7 +1769,7 @@ class DBManagerSQLite(DBManager):
         return self._run_query(f"SELECT * FROM {viewname}")
 
     def save_temp_table(
-        self, bookmark_name, original_bookmark_name, wanted_list, unwanted_list=[], temp_table_name
+        self, temp_table_name, bookmark_name, original_bookmark_name, wanted_list, unwanted_list=[]
     ):
         """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
         
