@@ -30,10 +30,10 @@ class DBManager:
     this class defines the API of each
     DBManager class (including sub-classess)
     which will implement their own functions to return the data requested
-    
+
     Attributes:
-        conflict_opt (TYPE): Description
-        current_view_name (TYPE): Description
+        conflict_opt (str): string indicating how conficting entries should be handled
+        current_view_name (str): name of current results view
         db_file (string): Name of file containing database
         field_to_column_name (dictionary): Dictionary for
             converting command-line field options into DB column names
@@ -62,7 +62,7 @@ class DBManager:
         temptable_suffix (int): suffix number for temp table
         unique_interactions (dict): Dictionary for storing unique interactions
             to be written in interaction_index table
-        view_suffix (TYPE): Description
+        view_suffix (str): suffix to add to end of view. Used with max_miss
         write_db_flag (boolean): Flag indicating that DBMan will be
             writing new data to DB
     """
@@ -85,7 +85,7 @@ class DBManager:
         """Initialize instance variables common to all DBMan subclasses
         
         Args:
-            db_file (str): Description
+            db_file (str): string for file name of DB
             opts (dict): Dictionary of database options
         """
         self.db_file = db_file
@@ -142,7 +142,6 @@ class DBManager:
             "rank": "pose_rank",
             "run": "run_number",
             "hb": "num_hb",
-            # "receptor": "receptor"
         }
         self.interaction_filter_types = {"V", "H", "R"}
 
@@ -168,6 +167,7 @@ class DBManager:
         """
 
         # checks if we have filtered by looking for view name in list of view names
+        self._create_indices()
         if self.check_passing_view_exists():
             return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
         else:
@@ -185,7 +185,7 @@ class DBManager:
         """Return if self.passing_results_view_name in database
         
         Returns:
-            TYPE: Description
+            Bool: indicates if self.passing_results_view_name exists
         """
         return self.passing_results_view_name in [
             name[0] for name in self._fetch_view_names().fetchall()
@@ -195,10 +195,12 @@ class DBManager:
         """close connection to database
         
         Args:
-            attached_db (None, optional): Description
+            attached_db (str, optional): name of attached DB (not including file extension)
         """
         if attached_db is not None:
             self._detach_db(attached_db)
+        # drop indices created when filtering
+        self._remove_indices()
         # close any open cursors
         self._close_open_cursors()
         # close db itself
@@ -364,9 +366,6 @@ class DBManager:
         
         Args:
             ligand_dict (Dictionary): Dictionary of ligand data from parser
-        
-        Returns:
-            TYPE: Description
         """
 
         rec_name = ligand_dict["receptor"]
@@ -486,9 +485,6 @@ class DBManager:
         """Sets internal view_suffix variable
         
         Args:
-            suffix (TYPE): Description
-        
-        Deleted Parameters:
             suffix(str): suffix to attached to view-related queries or creation
         """
 
@@ -524,6 +520,7 @@ class DBManager:
             )
         else:
             self.current_view_name = self.passing_results_view_name
+        self._create_indices()
         self._create_view(
             self.current_view_name, filter_results_str
         )  # make sure we keep Pose_ID in view
@@ -535,13 +532,13 @@ class DBManager:
 
     def fetch_data_for_passing_results(self, outfields: list) -> iter:
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.passing_results_view_name
-        
+
         Args:
             outfields (list): List of fields (columns) to be
                 included in log
         
         Returns:
-            iter: Description
+            sqlite cursor: cursor of data from passing data
         """
         return self._run_query(self._generate_results_data_query(outfields))
 
@@ -549,7 +546,7 @@ class DBManager:
         """Returns DB curor with the names of all view in DB
         
         Returns:
-            TYPE: Description
+            sqlite cursor: cursor of view names
         """
         return self._run_query(self._generate_view_names_query())
 
@@ -568,7 +565,7 @@ class DBManager:
             bookmark1_name (str): string for name of first bookmark/temp table to compare
             bookmark2_name (str): string for name of second bookmark to compare
             selection_type (string): "+" or "-" indicating if ligand names should ("+") or should not "-" be in both databases
-            old_db (None, optional): Description
+            old_db (str, optional): file name for previous database
         """
 
         if old_db is not None:
@@ -610,9 +607,6 @@ class DBManager:
             results_array (list): list of lists
                 containing formatted result rows
         
-        Raises:
-            NotImplementedError: Description
-        
         """
         raise NotImplementedError
 
@@ -623,9 +617,6 @@ class DBManager:
             ligand_array (list): List of lists
                 containing formatted ligand rows
         
-        Raises:
-            NotImplementedError: Description
-        
         """
         raise NotImplementedError
 
@@ -635,9 +626,6 @@ class DBManager:
         Args:
             receptor_array (list): List of lists
                 containing formatted ligand rows
-        
-        Raises:
-            NotImplementedError: Description
         """
         raise NotImplementedError
 
@@ -649,9 +637,6 @@ class DBManager:
             interactions_list (list): List of tuples for interactions
                 in form
                 ("type", "chain", "residue", "resid", "recname", "recid")
-        
-        Raises:
-            NotImplementedError: Description
         """
         raise NotImplementedError
 
@@ -896,6 +881,15 @@ class DBManager:
         Raises:
             NotImplementedError: Description
         """
+        raise NotImplementedError
+
+    def _create_indices(self):
+        """Create indices for columns in self.index_columns
+        """
+        raise NotImplementedError
+
+    def _remove_indices(self):
+        """Removes idx_filter_cols and idx_ligname"""
         raise NotImplementedError
 
     def _create_view(self, name, query, temp=False):
@@ -1332,6 +1326,14 @@ class DBManager:
         """
         raise NotImplementedError
 
+    def _insert_into_temp_table(self, query):
+        """Execute insertion into temporary table
+
+        Args:
+            query (str): Insertion command
+        """
+        raise NotImplementedError
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -1343,9 +1345,9 @@ class DBManagerSQLite(DBManager):
         conn (SQLite connection): Connection to database
         energy_filter_sqlite_call_dict (dictionary): Dictionary for
             translating filter options
-        interactions_initialized_flag (bool): Description
-        next_unique_interaction_idx (TYPE): Description
-        open_cursors (list): Description
+        interactions_initialized_flag (bool): flag indicating if interaction tables intitialized
+        next_unique_interaction_idx (int): idx for next interaction to be inserted into Interaction_indices table
+        open_cursors (list): list of cursors that were not closed by the function that created them
     
     """
 
@@ -1367,7 +1369,7 @@ class DBManagerSQLite(DBManager):
         """Initialize superclass and subclass-specific instance variables
         
         Args:
-            db_file (TYPE): Description
+            db_file (str): database file name
             opts (dict, optional): Dictionary of database options
         """
         super().__init__(db_file, opts)
@@ -1379,6 +1381,15 @@ class DBManagerSQLite(DBManager):
             "lebest": "leff > {value}",
             "energy_percentile": "energy_percentile_rank < {value}",
             "le_percentile": "leff_percentile_rank < {value}",
+        }
+
+        self.energy_filter_col_name = {
+            "eworst": "energies_binding",
+            "ebest": "energies_binding",
+            "leworst": "leff",
+            "lebest": "leff",
+            "energy_percentile": "energy_percentile_rank",
+            "le_percentile": "leff_percentile_rank",
         }
 
     # # # # # # # # # # # # # # # # #
@@ -1502,10 +1513,10 @@ class DBManagerSQLite(DBManager):
             raise DatabaseInsertionError("Error while inserting receptor.") from e
 
     def _fetch_existing_interactions(self):
-        """Summary
+        """return cursor of interactions in Interaction_indices table
         
         Returns:
-            TYPE: Description
+            sqlite cursor: cursor of 
         """
         query = """SELECT interaction_id, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid from Interaction_indices"""
         return self._run_query(query)
@@ -1574,9 +1585,6 @@ class DBManagerSQLite(DBManager):
         
         Args:
             rec_name (string): Name of receptor to return object for
-        
-        Returns:
-            TYPE: Description
         """
 
         cursor = self._run_query(
@@ -1643,6 +1651,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains LigName, ligand_smile,
                 atom_index_map, hydrogen_parents
         """
+        self._create_indices()
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.passing_results_view_name
         )
@@ -1748,7 +1757,7 @@ class DBManagerSQLite(DBManager):
             table (bool): Flag indicating if requested_data is table name or not
         
         Returns:
-            pd.DataFrame: Description
+            pd.DataFrame: dataframe of requested data
         """
         if table:
             return pd.read_sql_query(
@@ -1761,10 +1770,10 @@ class DBManagerSQLite(DBManager):
         """returns SQLite cursor of all fields in viewname
         
         Args:
-            viewname (str): Description
+            viewname (str): name of view to retrieve
         
         Returns:
-            sqlite3.Cursor: Description
+            sqlite3.Cursor: cursor of requested view
         """
         return self._run_query(f"SELECT * FROM {viewname}")
 
@@ -1778,7 +1787,7 @@ class DBManagerSQLite(DBManager):
             original_bookmark_name (str): name of original bookmark
             wanted_list (list): List of wanted database names
             unwanted_list (list, optional): List of unwanted database names
-            temp_table_name (TYPE): Description
+            temp_table_name (str): name of temporary table
         """
         self._create_view(
             bookmark_name,
@@ -1839,9 +1848,6 @@ class DBManagerSQLite(DBManager):
         """Create connection to db. Then, check if db needs to be written.
         If so, (if self.overwrite_flag drop existing tables and )
         initialize the tables
-        
-        Returns:
-            TYPE: Description
         """
         self.conn = self._create_connection()
 
@@ -1861,7 +1867,7 @@ class DBManagerSQLite(DBManager):
         """Returns list of all tables in database
         
         Returns:
-            TYPE: Description
+            list: list of table names
         
         Raises:
             DatabaseQueryError: Description
@@ -1943,6 +1949,31 @@ class DBManagerSQLite(DBManager):
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
+
+    def _create_indices(self):
+        """Create indices for columns in self.index_columns
+        """
+        try:
+            cur = self.conn.cursor()
+            logging.debug("Creating filter columns index")
+            index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(", ".join(self.index_columns))
+            cur.execute(index_str)
+            logging.debug("Creating LigName index")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)")
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError("Error occurred while indexing") from e
+
+    def _remove_indices(self):
+        """Removes idx_filter_cols and idx_ligname"""
+        try:
+            cur = self.conn.cursor()
+            cur.execute("DROP INDEX IF EXISTS idx_filter_cols")
+            cur.execute("DROP INDEX IF EXISTS idx_ligname")
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseError("Error while dropping indices") from e
 
     def _create_view(self, name, query, temp=False, add_poseID=True):
         """takes name and selection query,
@@ -2408,6 +2439,7 @@ class DBManagerSQLite(DBManager):
 
         # parse requested output fields and convert to column names in database
 
+        self.index_columns = []
         outfield_string = "LigName, " + ", ".join(
             [self.field_to_column_name[field] for field in output_fields]
         )
@@ -2431,13 +2463,15 @@ class DBManagerSQLite(DBManager):
                         value=filter_value
                     )
                 )
+                self.index_columns.append(self.energy_filter_col_name[filter_key])
 
             # write hb count filter(s)
             if filter_key == "hb_count":
+                self.index_columns.append("num_hb")
                 if filter_value > 0:
                     queries.append("num_hb > {value}".format(value=filter_value))
                 else:
-                    queries.append("num_hb < {value}".format(value=-1 * filter_value))
+                    queries.append("num_hb <= {value}".format(value=-1 * filter_value))
 
             # reformat interaction filters as list
             if filter_key in self.interaction_filter_types:
@@ -2620,7 +2654,7 @@ class DBManagerSQLite(DBManager):
             output_fields (List): List of result column data for output
         
         Returns:
-            TYPE: Description
+            str: string to select data from passing results view
         """
         outfield_string = "LigName, " + ", ".join(
             [self.field_to_column_name[field] for field in output_fields]
@@ -2784,9 +2818,6 @@ class DBManagerSQLite(DBManager):
 
     def _generate_view_names_query(self):
         """Generate string to return names of views in database
-        
-        Returns:
-            TYPE: Description
         """
         return "SELECT name FROM sqlite_schema WHERE type = 'view'"
 
@@ -2795,7 +2826,7 @@ class DBManagerSQLite(DBManager):
         
         Args:
             new_db (string): file name for database to attach
-            new_db_name (TYPE): Description
+            new_db_name (str): name of new database
         
         Raises:
             DatabaseError: Description
@@ -2861,6 +2892,11 @@ class DBManagerSQLite(DBManager):
         )
 
     def _insert_into_temp_table(self, query):
+        """Execute insertion into temporary table
+
+        Args:
+            query (str): Insertion command
+        """
         try:
             cur = self.conn.cursor()
             cur.execute(query)
