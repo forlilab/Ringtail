@@ -182,7 +182,6 @@ if __name__ == "__main__":
         bookmark_list = []
         if len(args.bookmark_name) > 1:
             num_dbs = len(args.wanted)
-            num_wanted_dbs = num_dbs - 1
             if args.unwanted is not None:
                 num_dbs += len(args.unwanted)
             if len(args.bookmark_name) != num_dbs:
@@ -202,6 +201,7 @@ if __name__ == "__main__":
         dbman = DBManagerSQLite(ref_db)
 
         last_db = None
+        num_wanted_dbs = len(wanted_dbs)
         for idx, db in enumerate(wanted_dbs):
             logging.info(f"cross-referencing {db}")
             if not os.path.exists(db):
