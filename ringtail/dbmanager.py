@@ -541,9 +541,9 @@ class DBManager:
         """
 
         if old_db is not None:
-            self._detach_db(old_db)
+            self._detach_db(old_db.split(".")[0])  # remove file extension
 
-        new_db_name = new_db.split(".")[0]
+        new_db_name = new_db.split(".")[0]  # remove file extension
 
         self._attach_db(new_db, new_db_name)
 
