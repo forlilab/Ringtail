@@ -254,7 +254,7 @@ if __name__ == "__main__":
         tb = traceback.format_exc()
         logging.debug(tb)
         logging.critical(e)
-        logging.error("Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct'.")
+        logging.error("Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct.")
         sys.exit(1)
 
     finally:
