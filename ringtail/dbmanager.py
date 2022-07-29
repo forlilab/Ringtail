@@ -79,7 +79,6 @@ class DBManager:
             "overwrite": None,
             "conflict_opt": None,
             "mode": "ADGPU",
-            "order_results": None,
         },
     ):
         """Initialize instance variables common to all DBMan subclasses
@@ -1608,10 +1607,12 @@ class DBManagerSQLite(DBManager):
         rec_pickle = str(cursor.fetchone())
         return pickle.loads(rec_pickle)
 
-    def clone(self):
+    def clone(self, backup_name=None: str):
         """Creates a copy of the db
         """
-        bck = sqlite3.connect(self.db_file + ".bk")
+        if backup_name is None:
+            backup_name = self.db_file + ".bk"
+        bck = sqlite3.connect(backup_name)
         with bck:
             self.conn.backup(bck, pages=1)
         bck.close()

@@ -353,7 +353,7 @@ class VSManager:
         except Exception as e:
             raise VirtualScreeningError("Error occurred during SDF output") from e
 
-    def export_csv(self, requested_data, csv_name, table=False):
+    def export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV
 
         Args:
@@ -372,6 +372,18 @@ class VSManager:
             raise VirtualScreeningError(
                 f"Error occured while exporting CSV of {requested_data}"
             ) from e
+
+    def export_bookmark_db(self, bookmark_db_name: str):
+        """Export database containing data from bookmark
+        
+        Args:
+            bookmark_db_name (TYPE): Description
+        """
+        self.dbman.clone(bookmark_db_name)
+        # connect to cloned database
+        db_clone = DBManagerSQLite(bookmark_db_name, self.db_opts)
+        db_clone.prune()
+        db_clone.close_connection()
 
     def close_database(self):
         """Tell database we are done and it can close the connection"""
