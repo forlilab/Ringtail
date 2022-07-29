@@ -844,6 +844,8 @@ class CLOptionParser:
                     continue
                 interactions_count.append((pool, c))
                 self.filter = True
+            if parsed_opts.react_any is not None:
+                self.filter = True
             # make dictionary for ligand filters
             ligand_filters_kw = [("name", "N"), ("substructure", "S")]
             ligand_filters = {}
