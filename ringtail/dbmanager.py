@@ -522,7 +522,7 @@ class DBManager:
         else:
             self.current_view_name = self.passing_results_view_name
         self._create_indices()
-        view_query = filter_results_str.replace(filter_results_str.split(" FROM ")[0], "SELECT * FROM ")
+        view_query = filter_results_str.replace(filter_results_str.split(" FROM ")[0], "SELECT *")
         self._create_view(
             self.current_view_name, view_query
         )  # make sure we keep Pose_ID in view
@@ -1957,6 +1957,8 @@ class DBManagerSQLite(DBManager):
         """Create indices for columns in self.index_columns
         """
         try:
+            if self.index_columns == []:
+                return
             cur = self.conn.cursor()
             logging.debug("Creating filter columns index")
             index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(", ".join(self.index_columns))
@@ -2462,12 +2464,13 @@ class DBManagerSQLite(DBManager):
                     filtering_window = "({percentile_window})".format(
                         percentile_window=self._generate_percentile_rank_window()
                     )
+                else:
+                    self.index_columns.append(self.energy_filter_col_name[filter_key])
                 queries.append(
                     self.energy_filter_sqlite_call_dict[filter_key].format(
                         value=filter_value
                     )
                 )
-                self.index_columns.append(self.energy_filter_col_name[filter_key])
 
             # write hb count filter(s)
             if filter_key == "hb_count":
