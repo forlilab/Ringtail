@@ -1955,17 +1955,29 @@ class DBManagerSQLite(DBManager):
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
 
-    def _create_indices(self):
+    def _create_indices(self, index_view=False):
         """Create indices for columns in self.index_columns
+        
+        Args:
+            index_view (bool, optional): Indicates that index should only be created on poses in the view specified by self.filtering_window
+        
+        Raises:
+            DatabaseError: Description
         """
         try:
             cur = self.conn.cursor()
             logging.debug("Creating LigName index")
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_ligname ON {0}(LigName)".format(self.filtering_window))
+            if index_view:
+                ligname_idx_str = "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName) WHERE Pose_ID IN (SELECT Pose_ID FROM {0}".format(self.filtering_window)
+                index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0}) WHERE Pose_ID IN (SELECT Pose_ID FROM {1}""".format(", ".join(self.index_columns), self.filtering_window)
+            else:
+                ligname_idx_str = "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)"
+                index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(", ".join(self.index_columns))
+
+            cur.execute(ligname_idx_str)
             if self.index_columns != []:
                 logging.debug("Creating filter columns index")
-                index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON {0}({1})""".format(self.filtering_window, ", ".join(self.index_columns))
-            cur.execute(index_str)
+                cur.execute(index_str)
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
