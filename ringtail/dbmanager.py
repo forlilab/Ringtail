@@ -170,7 +170,7 @@ class DBManager:
         """
 
         # checks if we have filtered by looking for view name in list of view names
-        self._create_indices(index_view=True, viewname=self.passing_results_view_name)
+        self._create_indices()
         if self.check_passing_view_exists():
             return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
         else:
@@ -523,7 +523,7 @@ class DBManager:
             )
         else:
             self.current_view_name = self.passing_results_view_name
-        self._create_indices(index_lignames=False, index_view=filter_bookmark)
+        self._create_indices(index_lignames=False)
         view_query = filter_results_str.replace(filter_results_str.split(" FROM ")[0], "SELECT *")
         self._create_view(
             self.current_view_name, view_query
@@ -888,8 +888,14 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def _create_indices(self):
+    def _create_indices(self, index_lignames=True):
         """Create indices for columns in self.index_columns
+        
+        Args:
+            index_lignames (bool, optional): flag indicating that index should be created over ligand names
+        
+        Raises:
+            DatabaseError: Description
         """
         raise NotImplementedError
 
@@ -1656,7 +1662,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains LigName, ligand_smile,
                 atom_index_map, hydrogen_parents
         """
-        self._create_indices(index_view=True, viewname=self.passing_results_view_name)
+        self._create_indices()
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.passing_results_view_name
         )
@@ -1955,27 +1961,19 @@ class DBManagerSQLite(DBManager):
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
 
-    def _create_indices(self, index_lignames=True, index_view=False, viewname=None):
+    def _create_indices(self, index_lignames=True):
         """Create indices for columns in self.index_columns
         
         Args:
             index_lignames (bool, optional): flag indicating that index should be created over ligand names
-            index_view (bool, optional): Indicates that index should only be created on poses in the view specified by self.filtering_window
-            viewname (string, optional): Name for view to be indexed over. If None, will be set to self.filtering_window
         
         Raises:
             DatabaseError: Description
         """
         try:
             cur = self.conn.cursor()
-            if index_view:
-                if viewname is None:
-                    viewname = self.filtering_window
-                ligname_idx_str = "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName) WHERE Pose_ID IN (SELECT Pose_ID FROM {0}".format(self.filtering_window)
-                index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0}) WHERE Pose_ID IN (SELECT Pose_ID FROM {1})""".format(", ".join(self.index_columns), viewname)
-            else:
-                ligname_idx_str = "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)"
-                index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(", ".join(self.index_columns))
+            ligname_idx_str = "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)"
+            index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(", ".join(self.index_columns))
 
             if index_lignames:
                 logging.debug("Creating LigName index")
