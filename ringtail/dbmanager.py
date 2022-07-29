@@ -150,6 +150,8 @@ class DBManager:
 
         self.temptable_suffix = 0
 
+        self.filtering_window = "Results"
+
         # keep track of any open cursors
         self.open_cursors = []
 
@@ -1957,14 +1959,13 @@ class DBManagerSQLite(DBManager):
         """Create indices for columns in self.index_columns
         """
         try:
-            if self.index_columns == []:
-                return
             cur = self.conn.cursor()
-            logging.debug("Creating filter columns index")
-            index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(", ".join(self.index_columns))
-            cur.execute(index_str)
             logging.debug("Creating LigName index")
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_ligname ON {0}(LigName)".format(self.filtering_window))
+            if self.index_columns != []:
+                logging.debug("Creating filter columns index")
+                index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON {0}({1})""".format(self.filtering_window, ", ".join(self.index_columns))
+            cur.execute(index_str)
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
@@ -2446,10 +2447,8 @@ class DBManagerSQLite(DBManager):
             [self.field_to_column_name[field] for field in output_fields]
         )
 
-        if filter_bookmark:
-            filtering_window = self.passing_results_view_name
-        else:
-            filtering_window = "Results"
+        if filter_bookmark is not None:
+            self.filtering_window = filter_bookmark
 
         # write energy filters and compile list of interactions to search for
         queries = []
@@ -2461,7 +2460,7 @@ class DBManagerSQLite(DBManager):
                     # convert from percent to decimal
                     filter_value = str(float(filter_value) / 100)
                     # reset filtering window to include percentile_ranks
-                    filtering_window = "({percentile_window})".format(
+                    self.filtering_window = "({percentile_window})".format(
                         percentile_window=self._generate_percentile_rank_window()
                     )
                 else:
@@ -2543,7 +2542,7 @@ class DBManagerSQLite(DBManager):
 
         # initialize query string
         sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(
-            out_columns=outfield_string, window=filtering_window
+            out_columns=outfield_string, window=self.filtering_window
         )
         sql_string += " AND ".join(queries)
 

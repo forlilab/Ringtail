@@ -395,8 +395,9 @@ def cmdline_parser(defaults={}):
     output_group.add_argument(
         "-fb",
         "--filter_bookmark",
-        help="Perform filtering over bookmark specified with --bookmark_name.",
-        action="store_true",
+        help="Perform filtering over specified bookmark.",
+        action="store",
+        type=str,
     )
     output_group.add_argument(
         "-p",
@@ -778,6 +779,13 @@ class CLOptionParser:
                     "Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst."
                 )
                 properties["le_percentile"] = None
+            if (
+                properties["energy_percentile"] is not None
+                or properties["le_percentile"] is not None
+            ) and parsed_opts.filter_bookmark:
+                raise OptionError(
+                    "Cannot use --energy_percentile or --le_percentile with --filter_bookmark."
+                )
             # interaction filters (residues)
             interactions = {}
             res_interactions_kw = [
