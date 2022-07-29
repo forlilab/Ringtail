@@ -54,6 +54,7 @@ def cmdline_parser(defaults={}):
         "export_query_csv": None,
         "export_sdf_path": None,
         "new_data_from_bookmark": None,
+        "filter_bookmark": None,
         "plot": None,
         "eworst": None,
         "ebest": None,
@@ -87,14 +88,14 @@ def cmdline_parser(defaults={}):
 
     parser = argparse.ArgumentParser(
         usage="Please see GitHub for full usage details.",
-        description="Package for creating database from AutoDock virtual screening results and performing filtering on results.",
+        description="Package for creating database from virtual screening results and performing filtering on results.",
         epilog="""
 
         REQUIRED PACKAGES
                 Requires RDkit, SciPy, Meeko.\n
 
         AUTHOR
-                Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n
+                Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, Diogo Santos-Martins, PhD, and Matthew Holcomb, PhD.\n
 
         REPORTING BUGS
                 Please report bugs to:
@@ -279,7 +280,7 @@ def cmdline_parser(defaults={}):
     read_parser.add_argument(
         "-s",
         "--bookmark_name",
-        help="Specify name for db view of passing results to create (write mode) or export from (read mode)",
+        help="Specify name for db view of passing results to create or export from",
         action="store",
         type=str,
         metavar="STRING",
@@ -325,7 +326,8 @@ def cmdline_parser(defaults={}):
             '"ligand_smile" , '
             '"rank" (rank of ligand pose), '
             '"run" (run number for ligand pose), '
-            '"hb" (hydrogen bonds); '
+            '"hb" (hydrogen bonds), '
+            '"receptor" (receptor name); '
             "Fields are "
             "printed in the order in which they are provided. Ligand name will always be returned and should not be specified"
         ),
@@ -388,6 +390,12 @@ def cmdline_parser(defaults={}):
         "-nd",
         "--new_data_from_bookmark",
         help="Write log of --out_fields data for bookmark specified by --bookmark_name. Must use without any filters.",
+        action="store_true",
+    )
+    output_group.add_argument(
+        "-fb",
+        "--filter_bookmark",
+        help="Perform filtering over bookmark specified with --bookmark_name.",
         action="store_true",
     )
     output_group.add_argument(
@@ -866,6 +874,7 @@ class CLOptionParser:
             "export_table": parsed_opts.export_bookmark_csv,
             "export_query": parsed_opts.export_query_csv,
             "data_from_bookmark": parsed_opts.new_data_from_bookmark,
+            "filter_bookmark": parsed_opts.filter_bookmark,
         }
 
         db_opts = {
