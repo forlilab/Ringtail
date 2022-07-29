@@ -142,19 +142,22 @@ class MPManager:
                         filelist, self.file_pattern.replace("*", ""))
 
     def _add_to_queue(self, file):
+        max_attempts = 750
+        timeout = 0.5 # seconds
         if file == self.receptor_file:
             return
         attempts = 0
-        while attempts <= 10000000:
+        while True:
+            if attempts >= max_attempts:
+                raise MultiprocessingError("Something is blocking the progressing of file reading. Exiting program.") from queue.Full
             try:
-                if attempts == 10000000:
-                    raise MultiprocessingError("Cannot add more filenames to queue!")
-                self.queueIn.put(file, block=True, timeout=0.5)
+                self.queueIn.put(file, block=True, timeout=timeout)
                 self.num_files += 1
                 self._check_for_worker_exceptions()
                 break
             except queue.Full:
                 attempts += 1
+                self._check_for_worker_exceptions()
 
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
