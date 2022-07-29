@@ -1968,17 +1968,17 @@ class DBManagerSQLite(DBManager):
         """
         try:
             cur = self.conn.cursor()
-            logging.debug("Creating LigName index")
             if index_view:
                 if viewname is None:
                     viewname = self.filtering_window
                 ligname_idx_str = "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName) WHERE Pose_ID IN (SELECT Pose_ID FROM {0}".format(self.filtering_window)
-                index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0}) WHERE Pose_ID IN (SELECT Pose_ID FROM {1}""".format(", ".join(self.index_columns), viewname)
+                index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0}) WHERE Pose_ID IN (SELECT Pose_ID FROM {1})""".format(", ".join(self.index_columns), viewname)
             else:
                 ligname_idx_str = "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)"
                 index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(", ".join(self.index_columns))
 
             if index_lignames:
+                logging.debug("Creating LigName index")
                 cur.execute(ligname_idx_str)
             if self.index_columns != []:
                 logging.debug("Creating filter columns index")
