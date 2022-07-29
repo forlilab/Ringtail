@@ -142,6 +142,7 @@ class DBManager:
             "rank": "pose_rank",
             "run": "run_number",
             "hb": "num_hb",
+            "receptor": "receptor",
         }
         self.interaction_filter_types = {"V", "H", "R"}
 
@@ -491,7 +492,7 @@ class DBManager:
         self.view_suffix = suffix
 
     def filter_results(
-        self, results_filters_list: list, ligand_filters_list: list, output_fields: list
+        self, results_filters_list: list, ligand_filters_list: list, output_fields: list, filter_bookmark=False
     ) -> iter:
         """Generate and execute database queries from given filters.
         
@@ -504,13 +505,13 @@ class DBManager:
                 indicating passing value
             output_fields (list): List of fields (columns) to be
                 included in log
-        
-        No Longer Returned:
+
+        Returns:
             SQLite Cursor: Cursor of passing results
         """
         # create view of passing results
         filter_results_str = self._generate_result_filtering_query(
-            results_filters_list, ligand_filters_list, output_fields
+            results_filters_list, ligand_filters_list, output_fields, filter_bookmark
         )
         logging.info(filter_results_str)
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.passing_results_view_name
@@ -521,11 +522,13 @@ class DBManager:
         else:
             self.current_view_name = self.passing_results_view_name
         self._create_indices()
+        view_query = filter_results_str.replace(filter_results_str.split(" FROM ")[0], "SELECT * FROM ")
         self._create_view(
-            self.current_view_name, filter_results_str
+            self.current_view_name, view_query
         )  # make sure we keep Pose_ID in view
         self._insert_bookmark_info(self.current_view_name, filter_results_str)
         # perform filtering
+        logging.debug("Running filtering query")
         filtered_results = self._run_query(filter_results_str)
         # get number of passing ligands
         return filtered_results
@@ -1975,7 +1978,7 @@ class DBManagerSQLite(DBManager):
         except sqlite3.OperationalError as e:
             raise DatabaseError("Error while dropping indices") from e
 
-    def _create_view(self, name, query, temp=False, add_poseID=True):
+    def _create_view(self, name, query, temp=False, add_poseID=False):
         """takes name and selection query,
             creates view of query stored as name.
         
@@ -2419,7 +2422,7 @@ class DBManagerSQLite(DBManager):
         )
 
     def _generate_result_filtering_query(
-        self, results_filters_list, ligand_filters_list, output_fields
+        self, results_filters_list, ligand_filters_list, output_fields, filter_bookmark=False
     ):
         """takes lists of filters, writes sql filtering string
         
@@ -2428,13 +2431,10 @@ class DBManagerSQLite(DBManager):
                 (filter column/key, filtering cutoff)
             ligand_filters_list (list): list of filters on ligand information
             output_fields (list): List of result column data for output
+            filter_bookmark (bool, optional): flag to indicate that self.passing_results_view_name should be filtering window
         
-        No Longer Returned:
+        Returns:
             String: SQLite-formatted string for filtering query
-        
-        No Longer Raises:
-            KeyError: Raises KeyError if user requests
-                result ordering by invalid or multiple options
         """
 
         # parse requested output fields and convert to column names in database
@@ -2443,7 +2443,11 @@ class DBManagerSQLite(DBManager):
         outfield_string = "LigName, " + ", ".join(
             [self.field_to_column_name[field] for field in output_fields]
         )
-        filtering_window = "Results"
+
+        if filter_bookmark:
+            filtering_window = self.passing_results_view_name
+        else:
+            filtering_window = "Results"
 
         # write energy filters and compile list of interactions to search for
         queries = []

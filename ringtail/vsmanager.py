@@ -161,6 +161,7 @@ class VSManager:
                     results_filters_list,
                     self.filters["ligand_filters"],
                     self.out_opts["outfields"],
+                    self.out_opts["filter_bookmark"]
                 )
                 number_passing_ligands = self.dbman.get_number_passing_ligands()
                 result_bookmark_name = self.dbman.get_current_view_name()

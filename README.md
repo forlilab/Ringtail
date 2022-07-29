@@ -173,12 +173,14 @@ The `--interaction_tolerance` option also allows the user to give more leeway fo
 In `read` mode, an existing database is read in and used to filter or export results.
 
 When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is `output_log.txt` and by default will include the ligand name and binding energy of every pose passing filtering criteria. The log name
-may be changed with the `--log` option and the information written to the log can be specified with `--out_fields`. The full list of available output fields may be seen by using the `--help`` option with `read` mode (see example above).
+may be changed with the `--log` option and the information written to the log can be specified with `--out_fields`. The full list of available output fields may be seen by using the `--help` option with `read` mode (see example above).
 By default, only the information for the top-scoring binding pose will be written to the log. If desired, each individual passing pose can be written by using the `--all_poses` flag. The passing results may also be ordered in the log file using the `--order_results` option.
 
 No filtering is performed if no filters are given. If both `--eworst` and `--epercentile` are used together, the `--eworst` cutoff alone is used. The same is true of `--leworst` and `--leffpercentile`.
 
 When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--bookmark_name` option. Other data for poses in a view may be accessed later using the `--new_data_from_bookmark` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<bookmark_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
+
+Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database entries. To speed up subsequent filtering runs, one may filter from a previous bookmark (specified with `--bookmark_name`) with the `--filter_bookmark` flag. 
 
 ##### Other available outputs
 The primary outputs from rt_process_vs are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
@@ -256,6 +258,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--export_query_csv |-xq| Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      ||
 |--export_sdf_path|-sdf| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       ||
 |--new_data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
+|--filter_bookmark |-fb| Flag that the bookmark specified with --bookmark_name should be filtered, not whole Results table. | FALSE       ||
 |--plot             |-p| Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>
 |--eworst           |-e| Worst energy value accepted (kcal/mol)                | no_default  ||
 |--ebest            |-eb| Best energy value accepted (kcal/mol)                 | no default  ||
