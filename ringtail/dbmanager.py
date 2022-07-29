@@ -152,6 +152,8 @@ class DBManager:
 
         self.filtering_window = "Results"
 
+        self.index_columns = []
+
         # keep track of any open cursors
         self.open_cursors = []
 
@@ -2457,7 +2459,6 @@ class DBManagerSQLite(DBManager):
 
         # parse requested output fields and convert to column names in database
 
-        self.index_columns = []
         outfield_string = "LigName, " + ", ".join(
             [self.field_to_column_name[field] for field in output_fields]
         )
