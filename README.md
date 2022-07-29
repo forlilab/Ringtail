@@ -180,7 +180,7 @@ No filtering is performed if no filters are given. If both `--eworst` and `--epe
 
 When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--bookmark_name` option. Other data for poses in a view may be accessed later using the `--new_data_from_bookmark` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<bookmark_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
 
-Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database entries. To speed up subsequent filtering runs, one may filter over a previous bookmark specified with the `--filter_bookmark` option. 
+Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database entries. One may also filter over a previous bookmark specified with the `--filter_bookmark` option. If using this option, the bookmarks specified by `--filter_bookmark` and `--bookmark_name` must be different.
 
 ##### Other available outputs
 The primary outputs from rt_process_vs are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
@@ -223,7 +223,7 @@ There are a few quick checks the user can make to ensure that the data has been 
 ### Potential pitfalls
 Any PDBQT files specified through any of the input options in ADGPU mode will be read by `rt_process_vs.py` as receptor files, even if the files actually represent ligands. Therefore, ligand PDBQT files should not be present in any directories given with `--file_path`.
 
-Occassionally, errors may occur during database reading/writing that corrupt the database. If this occurs and you start running into unclear errors related to the SQLite3 package, it is recommended to delete the existing database and re-write it from scratch.
+Occassionally, errors may occur during database reading/writing that corrupt the database. This may result in the database becoming locked. If this occurs it is recommended to delete the existing database and re-write it from scratch.
 
 ### rt_process_vs.py supported arguments
 
