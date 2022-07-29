@@ -749,6 +749,9 @@ class CLOptionParser:
                     )
 
             # # # filters
+            if parsed_opts.filter_bookmark == parsed_opts.bookmark_name:
+                logging.error(f"Specified filter_bookmark and bookmark_name are the same: {parsed_opts.bookmark_name}")
+                raise OptionError("--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name")
             # property filters
             properties = {
                 "eworst": None,
@@ -782,7 +785,7 @@ class CLOptionParser:
             if (
                 properties["energy_percentile"] is not None
                 or properties["le_percentile"] is not None
-            ) and parsed_opts.filter_bookmark:
+            ) and parsed_opts.filter_bookmark is not None:
                 raise OptionError(
                     "Cannot use --energy_percentile or --le_percentile with --filter_bookmark."
                 )
