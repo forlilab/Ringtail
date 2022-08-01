@@ -21,6 +21,7 @@ from rdkit import Chem
 from rdkit.Chem import SDWriter
 import itertools
 import logging
+import os
 
 
 class VSManager:
@@ -377,13 +378,17 @@ class VSManager:
         """Export database containing data from bookmark
         
         Args:
-            bookmark_db_name (TYPE): Description
+            bookmark_db_name (str): name for bookmark_db
         """
+        logging.info("Exporting bookmark database")
+        if os.path.exists(bookmark_db_name):
+            warnings.warn("Requested export DB name already exists. Please rename or remove existing database. New database not exported.")
+            return
         self.dbman.clone(bookmark_db_name)
         # connect to cloned database
         db_clone = DBManagerSQLite(bookmark_db_name, self.db_opts)
         db_clone.prune()
-        db_clone.close_connection()
+        db_clone.close_connection(vacuum=True)
 
     def close_database(self):
         """Tell database we are done and it can close the connection"""
