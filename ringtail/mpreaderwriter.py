@@ -158,7 +158,7 @@ class DockingFileReader(multiprocessing.Process):
                 self.queueOut.put(file_packet)
         except Exception:
             tb = traceback.format_exc()
-            self.pipe.send((FileParsingError("Error while parsing file"), tb))
+            self.pipe.send((FileParsingError("Error while parsing file"), tb, next_task))
         finally:
             return
 

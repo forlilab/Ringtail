@@ -162,9 +162,10 @@ class MPManager:
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
             logging.debug("Caught error in multiprocessing")
-            error, tb = self.p_conn.recv()
+            error, tb, file_name = self.p_conn.recv()
             for s in self.workers:
                 s.kill()
+            logging.debug(f"Error encountered while parsing {file_name}")
             logging.debug(tb)
             raise MultiprocessingError("Error occurred during file parsing!")
 
