@@ -192,6 +192,8 @@ Using the `--export_sdf_path` option allows the user to specify a directory to s
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_bookmark_csv`, which takes a string for the name of a table or result bookmark in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
 The second option is `--export_query_csv`. This takes a string of a properly-formatted SQL query to run on the database, returning the results of that query as `query.csv`. This option allows the user full, unobstructed access to all data in the database.
 
+A bookmark may also be exported as a separate SQLite dabase with the `--export_bookmark_db` flag. Note that other bookmarks should be remade in the newly exported database before using e.g. for exporting SDF files.
+
 ### Interaction filter formatting and options
 
 **Interaction filtering requires interactions to be present in database.**
@@ -257,6 +259,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--export_bookmark_csv |-xs| Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv | no default      ||
 |--export_query_csv |-xq| Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      ||
 |--export_sdf_path|-sdf| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       ||
+|--export_bookmark_db |-xdb| Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db| FALSE      ||
 |--new_data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
 |--filter_bookmark |-fb| Filter over specified bookmark, not whole Results table. | FALSE       ||
 |--plot             |-p| Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>

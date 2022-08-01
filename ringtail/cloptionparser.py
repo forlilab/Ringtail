@@ -893,7 +893,7 @@ class CLOptionParser:
             "no_print": not parsed_opts.verbose,
             "export_table": parsed_opts.export_bookmark_csv,
             "export_query": parsed_opts.export_query_csv,
-            "export_bookmark_db": parsed_opts.export_bookmark_db
+            "export_bookmark_db": parsed_opts.export_bookmark_db,
             "data_from_bookmark": parsed_opts.new_data_from_bookmark,
             "filter_bookmark": parsed_opts.filter_bookmark,
         }
