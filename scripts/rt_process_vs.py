@@ -107,6 +107,9 @@ if __name__ == "__main__":
                     )
                 if out_opts["export_query"] is not None:
                     vsman.export_csv(out_opts["export_query"], "query.csv")
+                if out_opts["export_bookmark_db"] is not None:
+                    bookmark_db_name = dbman_opts["dbFile"].rstrip(".db") + "_" + dbman_opts["results_view_name"] + ".db"
+                    vsman.export_bookmark_db(bookmark_db_name)
 
     except VirtualScreeningError as e:
         tb = traceback.format_exc()
