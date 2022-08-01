@@ -56,6 +56,7 @@ def parse_single_dlg(fname):
     smile_string = ""
     index_map = ""
     h_parents = ""
+    interaction_count_zero = False
 
     # Define empty center list for backwards compatibility with DLGs without grid centers
     center = [None, None, None]
@@ -180,6 +181,8 @@ def parse_single_dlg(fname):
                 if "COUNT" in line:
                     interact_count = int(line.split()[1])
                     pose_interact_count.append(str(interact_count))
+                    if interact_count == 0:
+                        pose_hb_counts.append("0")
                 else:
                     if "TYPE" in line:
                         hb_count = line.count("H")
