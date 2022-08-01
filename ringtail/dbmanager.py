@@ -79,7 +79,6 @@ class DBManager:
             "overwrite": None,
             "conflict_opt": None,
             "mode": "ADGPU",
-            "order_results": None,
         },
     ):
         """Initialize instance variables common to all DBMan subclasses
@@ -196,11 +195,12 @@ class DBManager:
             name[0] for name in self._fetch_view_names().fetchall()
         ]
 
-    def close_connection(self, attached_db=None):
+    def close_connection(self, attached_db=None, vacuum=False):
         """close connection to database
         
         Args:
             attached_db (str, optional): name of attached DB (not including file extension)
+            vacuum (bool, optional): indicates that database should be vacuumed before closing
         """
         if attached_db is not None:
             self._detach_db(attached_db)
@@ -208,6 +208,9 @@ class DBManager:
         self._remove_indices()
         # close any open cursors
         self._close_open_cursors()
+        # vacuum database
+        if vacuum:
+            self._vacuum()
         # close db itself
         self._close_connection()
 
@@ -1347,6 +1350,9 @@ class DBManager:
         """
         raise NotImplementedError
 
+    def _vacuum(self):
+        raise NotImplementedError
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -1608,10 +1614,12 @@ class DBManagerSQLite(DBManager):
         rec_pickle = str(cursor.fetchone())
         return pickle.loads(rec_pickle)
 
-    def clone(self):
+    def clone(self, backup_name=None):
         """Creates a copy of the db
         """
-        bck = sqlite3.connect(self.db_file + ".bk")
+        if backup_name is None:
+            backup_name = self.db_file + ".bk"
+        bck = sqlite3.connect(backup_name)
         with bck:
             self.conn.backup(bck, pages=1)
         bck.close()
@@ -1664,7 +1672,7 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains LigName, ligand_smile,
                 atom_index_map, hydrogen_parents
         """
-        self._create_indices()
+        #self._create_indices()
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.passing_results_view_name
         )
@@ -2786,7 +2794,7 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.execute(
-                "DELETE FROM Results WHERE Pose_ID NOT IN {view}".format(
+                "DELETE FROM Results WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
                     view=self.passing_results_view_name
                 )
             )
@@ -2806,7 +2814,7 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.execute(
-                "DELETE FROM Ligands WHERE LigName NOT IN {view}".format(
+                "DELETE FROM Ligands WHERE LigName NOT IN (SELECT Pose_ID FROM {view})".format(
                     view=self.passing_results_view_name
                 )
             )
@@ -2827,7 +2835,7 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.execute(
-                "DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN {view}".format(
+                "DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
                     view=self.passing_results_view_name
                 )
             )
@@ -2926,3 +2934,12 @@ class DBManagerSQLite(DBManager):
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while inserting into temporary table") from e
+
+    def _vacuum(self):
+        try:
+            cur = self.conn.cursor()
+            cur.execute("VACUUM")
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(f"Error while vacuuming DB") from e

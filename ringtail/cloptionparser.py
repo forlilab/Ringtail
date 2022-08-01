@@ -53,6 +53,7 @@ def cmdline_parser(defaults={}):
         "export_bookmark_csv": None,
         "export_query_csv": None,
         "export_sdf_path": None,
+        "export_bookmark_db": None,
         "new_data_from_bookmark": None,
         "filter_bookmark": None,
         "plot": None,
@@ -385,6 +386,12 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="DIRECTORY_NAME",
+    )
+    output_group.add_argument(
+        "-xdb",
+        "--export_bookmark_db",
+        help="Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db",
+        action="store_true",
     )
     output_group.add_argument(
         "-nd",
@@ -886,6 +893,7 @@ class CLOptionParser:
             "no_print": not parsed_opts.verbose,
             "export_table": parsed_opts.export_bookmark_csv,
             "export_query": parsed_opts.export_query_csv,
+            "export_bookmark_db": parsed_opts.export_bookmark_db,
             "data_from_bookmark": parsed_opts.new_data_from_bookmark,
             "filter_bookmark": parsed_opts.filter_bookmark,
         }
