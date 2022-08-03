@@ -162,7 +162,7 @@ class VSManager:
                     results_filters_list,
                     self.filters["ligand_filters"],
                     self.out_opts["outfields"],
-                    self.out_opts["filter_bookmark"]
+                    self.out_opts["filter_bookmark"],
                 )
                 number_passing_ligands = self.dbman.get_number_passing_ligands()
                 result_bookmark_name = self.dbman.get_current_view_name()
@@ -376,13 +376,15 @@ class VSManager:
 
     def export_bookmark_db(self, bookmark_db_name: str):
         """Export database containing data from bookmark
-        
+
         Args:
             bookmark_db_name (str): name for bookmark_db
         """
         logging.info("Exporting bookmark database")
         if os.path.exists(bookmark_db_name):
-            warnings.warn("Requested export DB name already exists. Please rename or remove existing database. New database not exported.")
+            warnings.warn(
+                "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
+            )
             return
         self.dbman.clone(bookmark_db_name)
         # connect to cloned database
@@ -472,8 +474,12 @@ class VSManager:
                             idx + 1
                         )  # adjust for indexing starting at 1
                 for int_idx in interaction_indices:
-                    interaction_info = self.dbman.fetch_interaction_info_by_index(int_idx)
-                    interaction = interaction_info[0] + "-" + ":".join(interaction_info[1:])
+                    interaction_info = self.dbman.fetch_interaction_info_by_index(
+                        int_idx
+                    )
+                    interaction = (
+                        interaction_info[0] + "-" + ":".join(interaction_info[1:])
+                    )
                     interactions_list.append(interaction)
                 interactions_str = ", ".join(interactions_list)
                 properties["Interactions"].append(interactions_str)

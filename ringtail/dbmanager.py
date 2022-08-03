@@ -82,7 +82,7 @@ class DBManager:
         },
     ):
         """Initialize instance variables common to all DBMan subclasses
-        
+
         Args:
             db_file (str): string for file name of DB
             opts (dict): Dictionary of database options
@@ -165,7 +165,7 @@ class DBManager:
     def get_plot_data(self):
         """this function is expected to return an ascii plot
         representation of the results
-        
+
         Returns:
             Tuple: cursors as [<all data cursor>, <passing data cursor>]
         """
@@ -187,7 +187,7 @@ class DBManager:
 
     def check_passing_view_exists(self):
         """Return if self.passing_results_view_name in database
-        
+
         Returns:
             Bool: indicates if self.passing_results_view_name exists
         """
@@ -197,7 +197,7 @@ class DBManager:
 
     def close_connection(self, attached_db=None, vacuum=False):
         """close connection to database
-        
+
         Args:
             attached_db (str, optional): name of attached DB (not including file extension)
             vacuum (bool, optional): indicates that database should be vacuumed before closing
@@ -217,14 +217,14 @@ class DBManager:
     def _generate_results_row(self, ligand_dict, pose_rank, run_number):
         """generate list of lists of ligand values to be
             inserted into sqlite database
-        
+
         Args:
             ligand_dict (Dictionary): Dictionary of ligand data from parser
             pose_rank (int): Rank of pose to generate row for
                 all runs for the given ligand
             run_number (int): Run number of pose to generate row for
                 all runs for the given ligand
-        
+
         Returns:
             List: List of pose data to be inserted into Results table.
             In same order as expected in _insert_results:
@@ -283,7 +283,9 @@ class DBManager:
             else:
                 ligand_data_list.append(ligand_dict[key][pose_rank])
 
-        if ligand_dict["interactions"] != [] and any(ligand_dict["interactions"][pose_rank]):  # catch lack of interaction data
+        if ligand_dict["interactions"] != [] and any(
+            ligand_dict["interactions"][pose_rank]
+        ):  # catch lack of interaction data
             # add interaction count
             ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0])
             # count number H bonds, add to ligand data list
@@ -346,10 +348,10 @@ class DBManager:
 
     def _generate_ligand_row(self, ligand_dict):
         """writes row to be inserted into ligand table
-        
+
         Args:
             ligand_dict (Dictionary): Dictionary of ligand data from parser
-        
+
         Returns:
             List: List of data to be written as row in ligand table. Format:
             [ligand_name, ligand_smile, ligand_index_map,
@@ -371,7 +373,7 @@ class DBManager:
 
     def _generate_receptor_row(self, ligand_dict):
         """Writes row to be inserted into receptor table
-        
+
         Args:
             ligand_dict (Dictionary): Dictionary of ligand data from parser
         """
@@ -389,11 +391,11 @@ class DBManager:
     def _generate_interaction_tuples(self, interaction_dictionaries):
         """takes dictionary of file results, formats as
         list of tuples for interactions
-        
+
         Args:
             interaction_dictionaries (List): List of pose interaction
             dictionaries from parser
-        
+
         Returns:
             List: List of tuples of interaction data
         """
@@ -410,9 +412,9 @@ class DBManager:
     def _add_unique_interactions(self, interactions_list):
         """takes list of interaction tuple lists. Examines
         self.unique_interactions, add interactions if not already inserted.
-        
+
         self.unique_interactions {(interaction tuple): unique_interaction_idx}
-        
+
         Args:
             interactions_list (List): List of interaction tuples
             for insertion into database
@@ -434,10 +436,10 @@ class DBManager:
     def format_rows_from_dict(self, ligand_dict: dict) -> tuple:
         """takes file dictionary from the file parser, formats into rows for
             the database insertion
-        
+
         Args:
             ligand_dict (dict): Dictionary containing data from the fileparser
-        
+
         Returns:
             tuple: Tuple of lists ([result_row_1, result_row_2,...],
                             ligand_row,
@@ -491,7 +493,7 @@ class DBManager:
 
     def set_view_suffix(self, suffix):
         """Sets internal view_suffix variable
-        
+
         Args:
             suffix(str): suffix to attached to view-related queries or creation
         """
@@ -499,10 +501,14 @@ class DBManager:
         self.view_suffix = suffix
 
     def filter_results(
-        self, results_filters_list: list, ligand_filters_list: list, output_fields: list, filter_bookmark=False
+        self,
+        results_filters_list: list,
+        ligand_filters_list: list,
+        output_fields: list,
+        filter_bookmark=False,
     ) -> iter:
         """Generate and execute database queries from given filters.
-        
+
         Args:
             results_filters_list (list): list of tuples with first element
                 indicating column to filter and second element
@@ -529,7 +535,9 @@ class DBManager:
         else:
             self.current_view_name = self.passing_results_view_name
         self._create_indices(index_lignames=False)
-        view_query = filter_results_str.replace(filter_results_str.split(" FROM ")[0], "SELECT *")
+        view_query = filter_results_str.replace(
+            filter_results_str.split(" FROM ")[0], "SELECT *"
+        )
         self._create_view(
             self.current_view_name, view_query
         )  # make sure we keep Pose_ID in view
@@ -546,7 +554,7 @@ class DBManager:
         Args:
             outfields (list): List of fields (columns) to be
                 included in log
-        
+
         Returns:
             sqlite cursor: cursor of data from passing data
         """
@@ -554,7 +562,7 @@ class DBManager:
 
     def _fetch_view_names(self):
         """Returns DB curor with the names of all view in DB
-        
+
         Returns:
             sqlite cursor: cursor of view names
         """
@@ -612,27 +620,27 @@ class DBManager:
 
     def insert_results(self, results_array):
         """takes array of database rows to insert, adds data to results table
-        
+
         Args:
             results_array (list): list of lists
                 containing formatted result rows
-        
+
         """
         raise NotImplementedError
 
     def insert_ligands(self, ligand_array):
         """Takes array of ligand rows, inserts into Ligands table.
-        
+
         Args:
             ligand_array (list): List of lists
                 containing formatted ligand rows
-        
+
         """
         raise NotImplementedError
 
     def insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
-        
+
         Args:
             receptor_array (list): List of lists
                 containing formatted ligand rows
@@ -642,7 +650,7 @@ class DBManager:
     def insert_interactions(self, interactions_list):
         """generic function for inserting interactions from given
             interaction list into DB
-        
+
         Args:
             interactions_list (list): List of tuples for interactions
                 in form
@@ -652,11 +660,11 @@ class DBManager:
 
     def add_receptor_object_to_row(self, receptor, rec_name):
         """Takes object of Receptor class, updates the column in Receptor table for the row with rec_name
-        
+
         Args:
             receptor (Receptor): Receptor object to be inserted into DB
             rec_name (string): Name of receptor. Used to insert into correct row of DB
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -664,10 +672,10 @@ class DBManager:
 
     def fetch_receptor_object_by_name(self, rec_name):
         """Returns Receptor object from database for given rec_name
-        
+
         Args:
             rec_name (string): Name of receptor to return object for
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -675,10 +683,10 @@ class DBManager:
 
     def get_results(self):
         """Gets all fields for filtered results
-        
+
         No Longer Returned:
             DB cursor: Cursor with all fields and rows in passing results view
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -686,7 +694,7 @@ class DBManager:
 
     def clone(self):
         """Creates a copy of the db
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -694,10 +702,10 @@ class DBManager:
 
     def get_number_passing_ligands(self):
         """Returns count of ligands that passed filtering criteria
-        
+
         No Longer Returned:
             Int: Number of passing ligands
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -705,11 +713,11 @@ class DBManager:
 
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
-        
+
         No Longer Returned:
             DB cursor: contains
                 LigName, ligand_smile, atom_index_map, hydrogen_parents
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -717,14 +725,14 @@ class DBManager:
 
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
-        
+
         Args:
             ligname (string): name of ligand to return coordinates for
-        
+
         No Longer Returned:
             DB cursor: contains
                 Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -732,14 +740,14 @@ class DBManager:
 
     def fetch_nonpassing_pose_properties(self, ligname):
         """fetch coordinates for poses of ligname which did not pass the filter
-        
+
         Args:
             ligname (string): name of ligand to fetch coordinates for
-        
+
         No Longer Returned:
             DB cursor: contains
                 Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -747,13 +755,13 @@ class DBManager:
 
     def fetch_interaction_bitvector(self, pose_id):
         """Returns tuple containing interaction bitvector line for given pose_id
-        
+
         Args:
             pose_id (int): pose id to fetch interaction bitvector for
-        
+
         No Longer Returned:
             tuple: tuple representing interaction bitvector
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -761,13 +769,13 @@ class DBManager:
 
     def fetch_interaction_info_by_index(self, interaction_idx):
         """Returns tuple containing interaction info for given interaction_idx
-        
+
         Args:
             interaction_idx (int): interaction index to fetch info for
-        
+
         No Longer Returned:
             tuple: tuple of info for requested interaction
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -775,11 +783,11 @@ class DBManager:
 
     def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
         """Returns dataframe of table or query given as requested_data
-        
+
         Args:
             requested_data (str): String containing SQL-formatted query or table name
             table (bool): Flag indicating if requested_data is table name or not
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -787,10 +795,10 @@ class DBManager:
 
     def fetch_view(self, viewname):
         """returns SQLite cursor of all fields in viewname
-        
+
         Args:
             viewname (TYPE): Description
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -798,14 +806,14 @@ class DBManager:
 
     def save_temp_bookmark(self, bookmark_name, original_bookmark_name):
         """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
-        
+
         Args:
             bookmark_name (string): name of bookmark to save last temp bookmark as
             original_bookmark_name (TYPE): Description
-        
+
         Deleted Parameters:
             orginal_bookmark_name (string): Name of original bookmark to pull data from
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -813,22 +821,22 @@ class DBManager:
 
     def _create_connection(self):
         """Creates database connection to self.db_file
-        
+
         No Longer Returned:
             DB connection: Connection object to self.db_file
-        
+
         Raises:
             NotImplementedError: Description
-        
+
         """
         raise NotImplementedError
 
     def _close_connection(self, attached_db=None):
         """Closes connection to database
-        
+
         Args:
             attached_db (None, optional): Description
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -837,7 +845,7 @@ class DBManager:
     def _close_open_cursors(self):
         """closes any cursors stored in self.open_cursors.
         Resets self.open_cursors to empty list
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -847,7 +855,7 @@ class DBManager:
         """Create connection to db. Then, check if db needs to be written.
         If so, (if self.overwrite_flag drop existing tables and )
         initialize the tables
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -855,7 +863,7 @@ class DBManager:
 
     def _fetch_existing_table_names(self):
         """Returns list of all tables in database
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -864,7 +872,7 @@ class DBManager:
     def _drop_existing_tables(self):
         """drop any existing tables. Will only be called
         if self.overwrite_flag is true
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -873,7 +881,7 @@ class DBManager:
     def _drop_existing_views(self):
         """drop any existing views. Will only be called
         if self.overwrite_flag is true
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -881,13 +889,13 @@ class DBManager:
 
     def _run_query(self, query):
         """Executes provided SQLite query. Returns cursor for results
-        
+
         Args:
             query (string): Formated SQLite query as string
-        
+
         No Longer Returned:
             DB cursor: Contains results of query
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -895,10 +903,10 @@ class DBManager:
 
     def _create_indices(self, index_lignames=True):
         """Create indices for columns in self.index_columns
-        
+
         Args:
             index_lignames (bool, optional): flag indicating that index should be created over ligand names
-        
+
         Raises:
             DatabaseError: Description
         """
@@ -911,12 +919,12 @@ class DBManager:
     def _create_view(self, name, query, temp=False):
         """takes name and selection query,
             creates view of query stored as name.
-        
+
         Args:
             name (string): Name for view which will be created
             query (string): DB-formated query which will be used to create view
             temp (bool, optional): Flag if view should be temporary
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -960,7 +968,7 @@ class DBManager:
         ligand_coordinates         VARCHAR[],
         flexible_residues   VARCHAR[],
         flexible_res_coordinates   VARCHAR[]
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -973,10 +981,10 @@ class DBManager:
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
         input_pdbqt         VARCHAR[]
-        
+
         Raises:
             NotImplementedError: Description
-        
+
         """
         raise NotImplementedError
 
@@ -989,7 +997,7 @@ class DBManager:
         grid_spacing        INT[],
         flexible_residues   VARCHAR[],
         receptor_object     BLOB
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1004,10 +1012,10 @@ class DBManager:
         rec_resid           VARCHAR[],
         rec_atom            VARCHAR[],
         rec_atomid          VARCHAR[]
-        
+
         Raises:
             NotImplementedError: Description
-        
+
         """
         raise NotImplementedError
 
@@ -1018,10 +1026,10 @@ class DBManager:
         Interaction_2
         ...
         Interaction_n
-        
+
         Raises:
             NotImplementedError: Description
-        
+
         """
         raise NotImplementedError
 
@@ -1029,7 +1037,7 @@ class DBManager:
         """Create table of bookmark names and their queries. Columns are:
         Bookmark_name
         Query
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1037,11 +1045,11 @@ class DBManager:
 
     def _insert_bookmark_info(self, name: str, query: str):
         """Insert bookmark info into bookmark table
-        
+
         Args:
             name (str): name for bookmark
             query (str): query used to generate bookmark
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1050,11 +1058,11 @@ class DBManager:
     def _insert_unique_interactions(self, unique_interactions):
         """Inserts interaction data for unique interactions
             into Interaction_index table
-        
+
         Args:
             unique_interactions (list): List of tuples of
                 interactions to be inserted
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1063,24 +1071,24 @@ class DBManager:
     def _insert_one_interaction(self, interaction):
         """Insert interaction data for a single new interaction
             into the interaction indices table
-        
+
         Args:
             interaction (tuple): Tuple of interaction data
             (interaction_type, rec_chain, rec_resname,
             rec_resid, rec_atom, rec_atomid)
-        
+
         Raises:
             NotImplementedError: Description
-        
+
         """
         raise NotImplementedError
 
     def _make_new_interaction_column(self, column_number):
         """Add column for new interaction to interaction bitvector table
-        
+
         Args:
             column_number (int): Index for new interaction
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1088,11 +1096,11 @@ class DBManager:
 
     def _fetch_all_plot_data(self):
         """Fetches cursor for best energies and leff for all ligands
-        
+
         No Longer Returned:
             DB Cursor: Cursor containing energies_binding,
                 leff for the first pose for each ligand
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1101,10 +1109,10 @@ class DBManager:
     def _generate_plot_all_results_query(self):
         """Make DB-formatted query string to get energies_binding,
             leff of first pose for each ligand
-        
+
         No Longer Returned:
             String: DB-formatted query string
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1113,11 +1121,11 @@ class DBManager:
     def _fetch_passing_plot_data(self):
         """Fetches cursor for best energies and leffs for ligands
             passing filtering
-        
+
         No Longer Returned:
             SQLite cursor: Cursor containing energies_binding,
                 leff for the first pose for passing ligands
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1126,10 +1134,10 @@ class DBManager:
     def _generate_plot_passing_results_query(self):
         """Make DB-formatted query string to get energies_binding,
             leff of first pose for passing ligands
-        
+
         No Longer Returned:
             String: DB-formatted query string
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1139,16 +1147,16 @@ class DBManager:
         self, results_filters_list, ligand_filters_list, output_fields
     ):
         """takes lists of filters, writes sql filtering string
-        
+
         Args:
             results_filters_list (list): list of tuples where
                 (filter column/key, filtering cutoff)
             ligand_filters_list (list): list of filters on ligand information
             output_fields (list): List of result column data to for output
-        
+
         No Longer Returned:
             String: DB-formatted string for filtering query
-        
+
         No Longer Raises:
             KeyError: Raises KeyError if user requests result ordering by
                 invalid or multiple options
@@ -1158,16 +1166,16 @@ class DBManager:
     def _generate_interaction_index_filtering_query(self, interaction_list):
         """takes list of interaction info for a given ligand, looks up
             corresponding interaction index
-        
+
         Args:
             interaction_list (List): List containing interaction info
             in format
             [<interaction_type>, <rec_chain>, <rec_resname>,
             <rec_resid>, <rec_atom>]
-        
+
         No Longer Returned:
             String: DB-formated query on Interaction_indices table
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1176,13 +1184,13 @@ class DBManager:
     def _generate_interaction_filtering_query(self, interaction_index_list):
         """takes list of interaction indices and searches for ligand ids which
             have those interactions
-        
+
         Args:
             interaction_index_list (list): List of interaction indices
-        
+
         No Longer Returned:
             String: DB-formatted query
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1190,13 +1198,13 @@ class DBManager:
 
     def _generate_ligand_filtering_query(self, ligand_filters):
         """write string to select from ligand table
-        
+
         Args:
             ligand_filters (list): List of filters on ligand table
-        
+
         No Longer Returned:
             String: DB-formatted query
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1205,10 +1213,10 @@ class DBManager:
     def _generate_results_data_query(self, output_fields):
         """Generates SQLite-formatted query string to select outfields data
             for ligands in self.passing_results_view_name
-        
+
         Args:
             output_fields (List): List of result column data for output
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1216,14 +1224,14 @@ class DBManager:
 
     def _generate_interaction_bitvectors(self, interactions_list):
         """takes string of interactions and makes bitvector
-        
+
         Args:
             interactions_list (list): list of list of tuples. Inner lists
             contain interaction tuples for the saved poses for a single ligand
-        
+
         No Longer Returned:
             List: List of bitvectors for saved poses
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1231,11 +1239,11 @@ class DBManager:
 
     def _insert_interaction_bitvectors(self, bitvectors):
         """Insert bitvectors of interaction data into database
-        
+
         Args:
             bitvectors (List): List of lists With inner list representing
                 interaction bitvector for a pose
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1243,11 +1251,11 @@ class DBManager:
 
     def _generate_percentile_rank_window(self):
         """makes window with percentile ranks for percentile filtering
-        
+
         No Longer Returned:
             String: DB-formatted string for creating percent ranks on energies
                 binding and leff
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1255,7 +1263,7 @@ class DBManager:
 
     def _generate_percentile_query(self, percentile, column="energies_binding"):
         """Make query for percentile by calculating energy or leff cutoff
-        
+
         Args:
             percentile (float): cutoff percentile
             column (str, optional): string indicating if cutoff should be for energies_binding or leff
@@ -1264,10 +1272,10 @@ class DBManager:
 
     def _fetch_results_column_names(self):
         """Fetches list of string for column names in results table
-        
+
         No Longer Returned:
             List: List of strings of results table column names
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1275,7 +1283,7 @@ class DBManager:
 
     def _delete_from_results(self):
         """Remove rows from results table if they did not pass filtering
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1283,7 +1291,7 @@ class DBManager:
 
     def _delete_from_ligands(self):
         """Remove rows from ligands table if they did not pass filtering
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1292,7 +1300,7 @@ class DBManager:
     def _delete_from_interactions(self):
         """Remove rows from interactions bitvector table
         if they did not pass filtering
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1300,7 +1308,7 @@ class DBManager:
 
     def _generate_view_names_query(self):
         """Generate string to return names of views in database
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1308,11 +1316,11 @@ class DBManager:
 
     def _attach_db(self, new_db, new_db_name):
         """Attaches new database file to current database
-        
+
         Args:
             new_db (string): file name for database to attach
             new_db_name (TYPE): Description
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1320,10 +1328,10 @@ class DBManager:
 
     def _detach_db(self, new_db_name):
         """Detaches new database file from current database
-        
+
         Args:
             new_db_name (string): db name for database to detach
-        
+
         Raises:
             NotImplementedError: Description
         """
@@ -1368,7 +1376,7 @@ class DBManager:
 
 class DBManagerSQLite(DBManager):
     """SQLite-specific DBManager subclass
-    
+
     Attributes:
         conn (SQLite connection): Connection to database
         energy_filter_sqlite_call_dict (dictionary): Dictionary for
@@ -1376,7 +1384,7 @@ class DBManagerSQLite(DBManager):
         interactions_initialized_flag (bool): flag indicating if interaction tables intitialized
         next_unique_interaction_idx (int): idx for next interaction to be inserted into Interaction_indices table
         open_cursors (list): list of cursors that were not closed by the function that created them
-    
+
     """
 
     def __init__(
@@ -1395,7 +1403,7 @@ class DBManagerSQLite(DBManager):
         },
     ):
         """Initialize superclass and subclass-specific instance variables
-        
+
         Args:
             db_file (str): database file name
             opts (dict, optional): Dictionary of database options
@@ -1423,14 +1431,14 @@ class DBManagerSQLite(DBManager):
     # # # # # # # # # # # # # # # # #
     def insert_results(self, results_array):
         """takes array of database rows to insert, adds data to results table
-        
+
         Args:
             results_array (numpy array): numpy array of arrays containing
                 formatted result rows
-        
+
         Raises:
             DatabaseInsertionError: Description
-        
+
         """
 
         sql_insert = """INSERT INTO Results (
@@ -1483,14 +1491,14 @@ class DBManagerSQLite(DBManager):
 
     def insert_ligands(self, ligand_array):
         """Takes array of ligand rows, inserts into Ligands table.
-        
+
         Args:
             ligand_array (numpy array): Numpy array of arrays
                 containing formatted ligand rows
-        
+
         Raises:
             DatabaseInsertionError: Description
-        
+
         """
         sql_insert = """INSERT INTO Ligands (
         LigName,
@@ -1512,11 +1520,11 @@ class DBManagerSQLite(DBManager):
 
     def insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
-        
+
         Args:
             receptor_array (list): List of lists
                 containing formatted ligand rows
-        
+
         Raises:
             DatabaseInsertionError: Description
         """
@@ -1540,17 +1548,16 @@ class DBManagerSQLite(DBManager):
 
     def _fetch_existing_interactions(self):
         """return cursor of interactions in Interaction_indices table
-        
+
         Returns:
-            sqlite cursor: cursor of 
+            sqlite cursor: cursor of
         """
         query = """SELECT interaction_id, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid from Interaction_indices"""
         return self._run_query(query)
 
-
     def insert_interactions(self, interactions_list):
         """Takes list of interactions, inserts into database
-        
+
         Args:
             interactions_list (list): List of tuples for interactions in form
             ("type", "chain", "residue", "resid", "recname", "recid")
@@ -1559,11 +1566,11 @@ class DBManagerSQLite(DBManager):
         if self.opts["add_results"]:
             existing_unique_interactions = self._fetch_existing_interactions()
             for interaction in existing_unique_interactions:
-                self.unique_interactions[
-                        interaction[1:]
-                    ] = interaction[0]
+                self.unique_interactions[interaction[1:]] = interaction[0]
 
-            self.next_unique_interaction_idx = interaction[0] + 1  # sets next index for next unique interaction
+            self.next_unique_interaction_idx = (
+                interaction[0] + 1
+            )  # sets next index for next unique interaction
 
         self._add_unique_interactions(interactions_list)
 
@@ -1580,13 +1587,13 @@ class DBManagerSQLite(DBManager):
 
     def add_receptor_object_to_row(self, receptor):
         """Takes object of Receptor class, updates the column in Receptor table
-        
+
         Args:
             receptor (bytes): bytes receptor object to be inserted into DB
-        
+
         Deleted Parameters:
             rec_name (string): Name of receptor. Used to insert into correct row of DB
-        
+
         Raises:
             DatabaseInsertionError: Description
         """
@@ -1608,7 +1615,7 @@ class DBManagerSQLite(DBManager):
 
     def fetch_receptor_object_by_name(self, rec_name):
         """Returns Receptor object from database for given rec_name
-        
+
         Args:
             rec_name (string): Name of receptor to return object for
         """
@@ -1622,8 +1629,7 @@ class DBManagerSQLite(DBManager):
         return pickle.loads(rec_pickle)
 
     def clone(self, backup_name=None):
-        """Creates a copy of the db
-        """
+        """Creates a copy of the db"""
         if backup_name is None:
             backup_name = self.db_file + ".bk"
         bck = sqlite3.connect(backup_name)
@@ -1633,7 +1639,7 @@ class DBManagerSQLite(DBManager):
 
     def get_results(self):
         """Gets all fields for filtered results
-        
+
         Returns:
             SQLite cursor: Cursor with all fields
                 and rows in passing results view
@@ -1648,10 +1654,10 @@ class DBManagerSQLite(DBManager):
     def get_number_passing_ligands(self, bookmark_name=None):
         """Returns count of the number of ligands that
             passed filtering criteria
-        
+
         Returns:
             Int: Number of passing ligands
-        
+
         Raises:
             DatabaseQueryError: Description
         """
@@ -1674,12 +1680,12 @@ class DBManagerSQLite(DBManager):
 
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
-        
+
         Returns:
             SQLite cursor: contains LigName, ligand_smile,
                 atom_index_map, hydrogen_parents
         """
-        #self._create_indices()
+        # self._create_indices()
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.passing_results_view_name
         )
@@ -1687,10 +1693,10 @@ class DBManagerSQLite(DBManager):
 
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
-        
+
         Args:
             ligname (string): name of ligand to fetch coordinates for
-        
+
         Returns:
             SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
@@ -1702,10 +1708,10 @@ class DBManagerSQLite(DBManager):
 
     def fetch_nonpassing_pose_properties(self, ligname):
         """fetch coordinates for poses of ligname which did not pass the filter
-        
+
         Args:
             ligname (string): name of ligand to fetch coordinates for
-        
+
         Returns:
             SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
@@ -1717,10 +1723,10 @@ class DBManagerSQLite(DBManager):
 
     def fetch_interaction_bitvector(self, pose_id):
         """Returns tuple containing interaction bitvector line for given pose_id
-        
+
         Args:
             pose_id (int): pose id to fetch interaction bitvector for
-        
+
         Returns:
             tuple: tuple representing interaction bitvector
             None: if no interactions in database
@@ -1737,10 +1743,10 @@ class DBManagerSQLite(DBManager):
 
     def fetch_interaction_info_by_index(self, interaction_idx):
         """Returns tuple containing interaction info for given interaction_idx
-        
+
         Args:
             interaction_idx (int): interaction index to fetch info for
-        
+
         Returns:
             tuple: tuple of info for requested interaction
         """
@@ -1751,7 +1757,7 @@ class DBManagerSQLite(DBManager):
 
     def get_current_view_name(self):
         """returns current view name
-        
+
         Returns:
             string: name of last passing results view used by database
         """
@@ -1759,10 +1765,10 @@ class DBManagerSQLite(DBManager):
 
     def get_number_filled_receptor_rows(self):
         """returns number of rows in Receptors table where receptor_object already has blob
-        
+
         Returns:
             int: number of rows in receptors table
-        
+
         Raises:
             DatabaseQueryError: Description
         """
@@ -1779,11 +1785,11 @@ class DBManagerSQLite(DBManager):
 
     def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
         """Returns dataframe of table or query given as requested_data
-        
+
         Args:
             requested_data (str): String containing SQL-formatted query or table name
             table (bool): Flag indicating if requested_data is table name or not
-        
+
         Returns:
             pd.DataFrame: dataframe of requested data
         """
@@ -1796,20 +1802,25 @@ class DBManagerSQLite(DBManager):
 
     def fetch_view(self, viewname: str) -> sqlite3.Cursor:
         """returns SQLite cursor of all fields in viewname
-        
+
         Args:
             viewname (str): name of view to retrieve
-        
+
         Returns:
             sqlite3.Cursor: cursor of requested view
         """
         return self._run_query(f"SELECT * FROM {viewname}")
 
     def save_temp_table(
-        self, temp_table_name, bookmark_name, original_bookmark_name, wanted_list, unwanted_list=[]
+        self,
+        temp_table_name,
+        bookmark_name,
+        original_bookmark_name,
+        wanted_list,
+        unwanted_list=[],
     ):
         """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
-        
+
         Args:
             bookmark_name (string): name of bookmark to save last temp bookmark as
             original_bookmark_name (str): name of original bookmark
@@ -1836,13 +1847,13 @@ class DBManagerSQLite(DBManager):
 
     def _create_connection(self):
         """Creates database connection to self.db_file
-        
+
         Returns:
             SQLite connection: Connection object to self.db_file
-        
+
         Raises:
             DatabaseConnectionError: Description
-        
+
         """
         con = None
         try:
@@ -1858,8 +1869,7 @@ class DBManagerSQLite(DBManager):
         return con
 
     def _close_connection(self):
-        """Closes connection to database
-        """
+        """Closes connection to database"""
         logging.info("Closing database")
         self.conn.close()
 
@@ -1893,10 +1903,10 @@ class DBManagerSQLite(DBManager):
 
     def _fetch_existing_table_names(self):
         """Returns list of all tables in database
-        
+
         Returns:
             list: list of table names
-        
+
         Raises:
             DatabaseQueryError: Description
         """
@@ -1913,7 +1923,7 @@ class DBManagerSQLite(DBManager):
     def _drop_existing_tables(self):
         """drop any existing tables.
         Will only be called if self.overwrite_flag is true
-        
+
         Raises:
             DatabaseError: Description
         """
@@ -1980,17 +1990,23 @@ class DBManagerSQLite(DBManager):
 
     def _create_indices(self, index_lignames=True):
         """Create indices for columns in self.index_columns
-        
+
         Args:
             index_lignames (bool, optional): flag indicating that index should be created over ligand names
-        
+
         Raises:
             DatabaseError: Description
         """
         try:
             cur = self.conn.cursor()
-            ligname_idx_str = "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)"
-            index_str = """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(", ".join(self.index_columns))
+            ligname_idx_str = (
+                "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)"
+            )
+            index_str = (
+                """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(
+                    ", ".join(self.index_columns)
+                )
+            )
 
             if index_lignames:
                 logging.debug("Creating LigName index")
@@ -2016,13 +2032,13 @@ class DBManagerSQLite(DBManager):
     def _create_view(self, name, query, temp=False, add_poseID=False):
         """takes name and selection query,
             creates view of query stored as name.
-        
+
         Args:
             name (string): Name for view which will be created
             query (string): SQLite-formated query used to create view
             temp (bool, optional): Flag if view should be temporary
             add_poseID (bool, optional): Add Pose_ID column to view
-        
+
         Raises:
             DatabaseViewCreationError: Description
         """
@@ -2085,7 +2101,7 @@ class DBManagerSQLite(DBManager):
         ligand_coordinates         VARCHAR[],
         flexible_residues   VARCHAR[],
         flexible_res_coordinates   VARCHAR[]
-        
+
         Raises:
             DatabaseTableCreationError: Description
         """
@@ -2159,7 +2175,7 @@ class DBManagerSQLite(DBManager):
         grid_spacing        INT[],
         flexible_residues   VARCHAR[],
         receptor_object     BLOB
-        
+
         Raises:
             DatabaseTableCreationError: Description
         """
@@ -2189,10 +2205,10 @@ class DBManagerSQLite(DBManager):
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
         input_pdbqt         VARCHAR[]
-        
+
         Raises:
             DatabaseTableCreationError: Description
-        
+
         """
         ligand_table = """CREATE TABLE Ligands (
             LigName             VARCHAR NOT NULL PRIMARY KEY ON CONFLICT IGNORE,
@@ -2219,10 +2235,10 @@ class DBManagerSQLite(DBManager):
         rec_resid           VARCHAR[],
         rec_atom            VARCHAR[],
         rec_atomid          VARCHAR[]
-        
+
         Raises:
             DatabaseTableCreationError: Description
-        
+
         """
         interaction_index_table = """CREATE TABLE Interaction_indices (
             interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2249,10 +2265,10 @@ class DBManagerSQLite(DBManager):
         Interaction_2
         ...
         Interaction_n
-        
+
         Raises:
             DatabaseTableCreationError: Description
-        
+
         """
         interact_columns_str = (
             " INTEGER,\n".join(
@@ -2283,7 +2299,7 @@ class DBManagerSQLite(DBManager):
         """Create table of bookmark names and their queries. Columns are:
         Bookmark_name
         Query
-        
+
         Raises:
             DatabaseTableCreationError: Description
         """
@@ -2302,11 +2318,11 @@ class DBManagerSQLite(DBManager):
 
     def _insert_bookmark_info(self, name: str, query: str):
         """Insert bookmark info into bookmark table
-        
+
         Args:
             name (str): name for bookmark
             query (str): query used to generate bookmark
-        
+
         Raises:
             DatabaseInsertionError: Description
         """
@@ -2329,11 +2345,11 @@ class DBManagerSQLite(DBManager):
     def _insert_unique_interactions(self, unique_interactions):
         """Inserts interaction data for unique interactions
             into Interaction_index table
-        
+
         Args:
             unique_interactions (list): List of tuples of interactions
                 to be inserted
-        
+
         Raises:
             DatabaseInsertionError: Description
         """
@@ -2360,15 +2376,15 @@ class DBManagerSQLite(DBManager):
     def _insert_one_interaction(self, interaction):
         """Insert interaction data for a single new interaction
             into the interaction indices table
-        
+
         Args:
             interaction (tuple): Tuple of interaction data
                 (interaction_type, rec_chain, rec_resname,
                 rec_resid, rec_atom, rec_atomid)
-        
+
         Raises:
             DatabaseInsertionError: Description
-        
+
         """
         sql_insert = """INSERT INTO Interaction_indices (
         interaction_type,
@@ -2394,10 +2410,10 @@ class DBManagerSQLite(DBManager):
 
     def _make_new_interaction_column(self, column_number):
         """Add column for new interaction to interaction bitvector table
-        
+
         Args:
             column_number (int): Index for new interaction
-        
+
         Raises:
             DatabaseError: Description
         """
@@ -2419,7 +2435,7 @@ class DBManagerSQLite(DBManager):
 
     def _fetch_all_plot_data(self):
         """Fetches cursor for best energies and leff for all ligands
-        
+
         Returns:
             SQLite Cursor: Cursor containing energies_binding,
                 leff for the first pose for each ligand
@@ -2429,7 +2445,7 @@ class DBManagerSQLite(DBManager):
     def _generate_plot_all_results_query(self):
         """Make SQLite-formatted query string to get energies_binding,
             leff of first pose of all ligands
-        
+
         Returns:
             String: SQLite-formatted query string
         """
@@ -2438,7 +2454,7 @@ class DBManagerSQLite(DBManager):
     def _fetch_passing_plot_data(self):
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
-        
+
         Returns:
             SQLite cursor: Cursor containing energies_binding,
                 leff for the first pose for passing ligands
@@ -2448,7 +2464,7 @@ class DBManagerSQLite(DBManager):
     def _generate_plot_passing_results_query(self):
         """Make SQLite-formatted query string to get energies_binding,
             leff of first pose for passing ligands
-        
+
         Returns:
             String: SQLite-formatted query string
         """
@@ -2457,17 +2473,21 @@ class DBManagerSQLite(DBManager):
         )
 
     def _generate_result_filtering_query(
-        self, results_filters_list, ligand_filters_list, output_fields, filter_bookmark=False
+        self,
+        results_filters_list,
+        ligand_filters_list,
+        output_fields,
+        filter_bookmark=False,
     ):
         """takes lists of filters, writes sql filtering string
-        
+
         Args:
             results_filters_list (list): list of tuples where
                 (filter column/key, filtering cutoff)
             ligand_filters_list (list): list of filters on ligand information
             output_fields (list): List of result column data for output
             filter_bookmark (bool, optional): flag to indicate that self.passing_results_view_name should be filtering window
-        
+
         Returns:
             String: SQLite-formatted string for filtering query
         """
@@ -2491,7 +2511,11 @@ class DBManagerSQLite(DBManager):
                 if filter_key == "energy_percentile" or filter_key == "le_percentile":
                     # convert from percent to decimal
                     filter_value = float(filter_value) / 100
-                    queries.append(self._generate_percentile_query(filter_value, self.energy_filter_col_name[filter_key]))
+                    queries.append(
+                        self._generate_percentile_query(
+                            filter_value, self.energy_filter_col_name[filter_key]
+                        )
+                    )
                 else:
                     queries.append(
                         self.energy_filter_sqlite_call_dict[filter_key].format(
@@ -2595,12 +2619,12 @@ class DBManagerSQLite(DBManager):
     def _generate_interaction_index_filtering_query(self, interaction_list):
         """takes list of interaction info for a given ligand,
             looks up corresponding interaction index
-        
+
         Args:
             interaction_list (List): List containing interaction info
                 in format [<interaction_type>, <rec_chain>, <rec_resname>,
                 <rec_resid>, <rec_atom>]
-        
+
         Returns:
             String: SQLite-formated query on Interaction_indices table
         """
@@ -2629,10 +2653,10 @@ class DBManagerSQLite(DBManager):
     def _generate_interaction_filtering_query(self, interaction_index_list):
         """takes list of interaction indices and searches for ligand ids
             which have those interactions
-        
+
         Args:
             interaction_index_list (list): List of interaction indices
-        
+
         Returns:
             String: SQLite-formatted query
         """
@@ -2646,10 +2670,10 @@ class DBManagerSQLite(DBManager):
 
     def _generate_ligand_filtering_query(self, ligand_filters):
         """write string to select from ligand table
-        
+
         Args:
             ligand_filters (list): List of filters on ligand table
-        
+
         Returns:
             String: SQLite-formatted query
         """
@@ -2683,10 +2707,10 @@ class DBManagerSQLite(DBManager):
 
     def _generate_results_data_query(self, output_fields):
         """Generates SQLite-formatted query string to select outfields data for ligands in self.passing_results_view_name
-        
+
         Args:
             output_fields (List): List of result column data for output
-        
+
         Returns:
             str: string to select data from passing results view
         """
@@ -2704,12 +2728,12 @@ class DBManagerSQLite(DBManager):
 
     def _generate_interaction_bitvectors(self, interactions_list):
         """takes string of interactions and makes bitvector
-        
+
         Args:
             interactions_list (list): list of list of tuples.
                 Inner lists contain interaction tuples for
                 saved poses for a single ligand
-        
+
         Returns:
             List: List of bitvectors for saved poses
         """
@@ -2727,11 +2751,11 @@ class DBManagerSQLite(DBManager):
 
     def _insert_interaction_bitvectors(self, bitvectors):
         """Insert bitvectors of interaction data into database
-        
+
         Args:
             bitvectors (List): List of lists With inner list representing
                 interaction bitvector for a pose
-        
+
         Raises:
             DatabaseInsertionError: Description
         """
@@ -2760,7 +2784,7 @@ class DBManagerSQLite(DBManager):
 
     def _generate_percentile_rank_window(self):
         """makes window with percentile ranks for percentile filtering
-        
+
         Returns:
             String: SQLite-formatted string for creating
                 percent ranks on energies_binding and leff
@@ -2772,7 +2796,7 @@ class DBManagerSQLite(DBManager):
 
     def _generate_percentile_query(self, percentile, column="energies_binding"):
         """Make query for percentile by calculating energy or leff cutoff
-        
+
         Args:
             percentile (float): cutoff percentile
             column (str, optional): string indicating if cutoff should be for energies_binding or leff
@@ -2786,7 +2810,9 @@ class DBManagerSQLite(DBManager):
             n_passing = int(percentile * n_ligands)
             # find energy cutoff
             counter = 0
-            for i in cur.execute(f"SELECT {column} FROM Results GROUP BY LigName ORDER BY {column}"):
+            for i in cur.execute(
+                f"SELECT {column} FROM Results GROUP BY LigName ORDER BY {column}"
+            ):
                 if counter == n_passing:
                     cutoff = i[0]
                     break
@@ -2796,13 +2822,12 @@ class DBManagerSQLite(DBManager):
         except sqlite3.OperationalError as e:
             raise DatabaseError("Error while generating percentile query") from e
 
-
     def _fetch_results_column_names(self):
         """Fetches list of string for column names in results table
-        
+
         Returns:
             List: List of strings of results table column names
-        
+
         Raises:
             DatabaseError: Description
         """
@@ -2818,7 +2843,7 @@ class DBManagerSQLite(DBManager):
 
     def _delete_from_results(self):
         """Remove rows from results table if they did not pass filtering
-        
+
         Raises:
             DatabaseError: Description
         """
@@ -2838,7 +2863,7 @@ class DBManagerSQLite(DBManager):
 
     def _delete_from_ligands(self):
         """Remove rows from ligands table if they did not pass filtering
-        
+
         Raises:
             DatabaseError: Description
         """
@@ -2859,7 +2884,7 @@ class DBManagerSQLite(DBManager):
     def _delete_from_interactions(self):
         """Remove rows from interactions bitvector table
         if they did not pass filtering
-        
+
         Raises:
             DatabaseError: Description
         """
@@ -2878,17 +2903,16 @@ class DBManagerSQLite(DBManager):
             ) from e
 
     def _generate_view_names_query(self):
-        """Generate string to return names of views in database
-        """
+        """Generate string to return names of views in database"""
         return "SELECT name FROM sqlite_schema WHERE type = 'view'"
 
     def _attach_db(self, new_db, new_db_name):
         """Attaches new database file to current database
-        
+
         Args:
             new_db (string): file name for database to attach
             new_db_name (str): name of new database
-        
+
         Raises:
             DatabaseError: Description
         """
@@ -2925,14 +2949,18 @@ class DBManagerSQLite(DBManager):
             table_name (string): name for temp table
         """
 
-        create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID PRIMARY KEY, LigName)"
+        create_table_str = (
+            f"CREATE TEMP TABLE {table_name}(Pose_ID PRIMARY KEY, LigName)"
+        )
         try:
             cur = self.conn.cursor()
             cur.execute(create_table_str)
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(f"Error while creating temporary table {table_name}") from e
+            raise DatabaseTableCreationError(
+                f"Error while creating temporary table {table_name}"
+            ) from e
 
     def _generate_selective_insert_query(
         self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
@@ -2946,10 +2974,8 @@ class DBManagerSQLite(DBManager):
             new_db_name (str): name of attached db
             temp_table (str): name of temporary table to store passing results in
         """
-        return (
-            "INSERT INTO {0} SELECT Pose_ID, LigName FROM {1} WHERE LigName {2} (SELECT LigName FROM {3}.{4})".format(
-                temp_table, bookmark1_name, select_str, new_db_name, bookmark2_name
-            )
+        return "INSERT INTO {0} SELECT Pose_ID, LigName FROM {1} WHERE LigName {2} (SELECT LigName FROM {3}.{4})".format(
+            temp_table, bookmark1_name, select_str, new_db_name, bookmark2_name
         )
 
     def _insert_into_temp_table(self, query):
@@ -2964,7 +2990,9 @@ class DBManagerSQLite(DBManager):
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(f"Error while inserting into temporary table") from e
+            raise DatabaseInsertionError(
+                f"Error while inserting into temporary table"
+            ) from e
 
     def _vacuum(self):
         try:

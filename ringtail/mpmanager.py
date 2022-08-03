@@ -15,8 +15,9 @@ import warnings
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .exceptions import MultiprocessingError
+
 os_string = platform.system()
-if os_string == 'Darwin':  # mac
+if os_string == "Darwin":  # mac
     import multiprocess as multiprocessing
 else:
     import multiprocessing
@@ -131,25 +132,28 @@ class MPManager:
             for path_list in self.file_sources["file_path"]["path"]:
                 for path in path_list:
                     # scan for ligand dlgs
-                    for files in self._scan_dir(path, self.file_pattern, recursive=True):
+                    for files in self._scan_dir(
+                        path, self.file_pattern, recursive=True
+                    ):
                         for f in files:
                             self._add_to_queue(f)
 
         if self.file_sources["file_list"] is not None:
             for filelist_list in self.file_sources["file_list"]:
                 for filelist in filelist_list:
-                    self._scan_file_list(
-                        filelist, self.file_pattern.replace("*", ""))
+                    self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
 
     def _add_to_queue(self, file):
         max_attempts = 750
-        timeout = 0.5 # seconds
+        timeout = 0.5  # seconds
         if file == self.receptor_file:
             return
         attempts = 0
         while True:
             if attempts >= max_attempts:
-                raise MultiprocessingError("Something is blocking the progressing of file reading. Exiting program.") from queue.Full
+                raise MultiprocessingError(
+                    "Something is blocking the progressing of file reading. Exiting program."
+                ) from queue.Full
             try:
                 self.queueIn.put(file, block=True, timeout=timeout)
                 self.num_files += 1
@@ -181,12 +185,12 @@ class MPManager:
             path = os.path.normpath(path)
             path = os.path.expanduser(path)
             for dirpath, dirnames, filenames in os.walk(path):
-                yield (    # <----
+                yield (  # <----
                     os.path.join(dirpath, f)
                     for f in fnmatch.filter(filenames, "*" + pattern)
                 )
         else:
-            yield glob(os.path.join(path, pattern))   # <----
+            yield glob(os.path.join(path, pattern))  # <----
 
     def _scan_file_list(self, filename, pattern=".dlg"):
         """read file names from file list"""
@@ -207,8 +211,8 @@ class MPManager:
             )
         logging.info(
             "# [ %5.3f%% files in list accepted (%d) ]"
-            % ((len(lig_accepted) / c * 100, c)
-        ))
+            % ((len(lig_accepted) / c * 100, c))
+        )
 
         for file in lig_accepted:
             self._add_to_queue(file)
