@@ -37,7 +37,9 @@ if __name__ == "__main__":
     rman_opts = cl_opts.rman_opts
     # save target name
     if rman_opts["receptor_file"] is not None:
-        receptor = rman_opts["receptor_file"].split(".")[0].split("/")[-1]  # remove file extension and path
+        receptor = (
+            rman_opts["receptor_file"].split(".")[0].split("/")[-1]
+        )  # remove file extension and path
     else:
         receptor = None
     rman_opts = {
@@ -108,7 +110,12 @@ if __name__ == "__main__":
                 if out_opts["export_query"] is not None:
                     vsman.export_csv(out_opts["export_query"], "query.csv")
                 if out_opts["export_bookmark_db"] is not None:
-                    bookmark_db_name = dbman_opts["dbFile"].rstrip(".db") + "_" + dbman_opts["results_view_name"] + ".db"
+                    bookmark_db_name = (
+                        dbman_opts["dbFile"].rstrip(".db")
+                        + "_"
+                        + dbman_opts["results_view_name"]
+                        + ".db"
+                    )
                     vsman.export_bookmark_db(bookmark_db_name)
 
     except VirtualScreeningError as e:

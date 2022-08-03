@@ -12,8 +12,9 @@ import traceback
 from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .exceptions import FileParsingError, WriteToDatabaseError
 from .interactions import InteractionFinder
+
 os_string = platform.system()
-if os_string == 'Darwin':  # mac
+if os_string == "Darwin":  # mac
     import multiprocess as multiprocessing
 else:
     import multiprocessing
@@ -158,7 +159,9 @@ class DockingFileReader(multiprocessing.Process):
                 self.queueOut.put(file_packet)
         except Exception:
             tb = traceback.format_exc()
-            self.pipe.send((FileParsingError("Error while parsing file"), tb, next_task))
+            self.pipe.send(
+                (FileParsingError("Error while parsing file"), tb, next_task)
+            )
         finally:
             return
 
@@ -206,9 +209,7 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(
-        self, queue, maxProcesses, pipe_conn, chunksize, db_obj, mode="dlg"
-    ):
+    def __init__(self, queue, maxProcesses, pipe_conn, chunksize, db_obj, mode="dlg"):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
@@ -261,7 +262,7 @@ class Writer(multiprocessing.Process):
                             "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
                                 self.num_files_written,
                                 self.num_files_written * 60 / self.total_runtime,
-                                self.total_runtime
+                                self.total_runtime,
                             )
                         )
                         sys.stdout.flush()

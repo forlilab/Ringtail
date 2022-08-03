@@ -583,18 +583,22 @@ class CLOptionParser:
         # if only receptor files found and --save_receptor, assume we just want to
         # add receptor and not modify the rest of the db, so turn off write_db_flag
         if self.save_receptor:
-            #self.db_opts["write_db_flag"] = False
-            #if self.input_db is None:
+            # self.db_opts["write_db_flag"] = False
+            # if self.input_db is None:
             #    raise OptionError("No input database given for saving receptor(s)")
             if self.db_opts["add_results"]:
                 raise OptionError(
                     "Cannot use --add_results with --save_receptor. Please remove the --save_receptor flag"
                 )
             if self.receptor_file is None:
-                raise OptionError("Must provide path for receptor PDBQT file is using --save_receptor")
+                raise OptionError(
+                    "Must provide path for receptor PDBQT file is using --save_receptor"
+                )
 
         # raise error if --save_receptor or --add_interactions and receptor not found
-        if (self.save_receptor or self.add_interactions) and not os.path.exists(self.receptor_file):
+        if (self.save_receptor or self.add_interactions) and not os.path.exists(
+            self.receptor_file
+        ):
             raise OptionError(
                 "--save_receptor or --add_interaction flag specified but no receptor PDBQT found. Please check location of receptor file and --receptor_file option"
             )
@@ -757,8 +761,12 @@ class CLOptionParser:
 
             # # # filters
             if parsed_opts.filter_bookmark == parsed_opts.bookmark_name:
-                logging.error(f"Specified filter_bookmark and bookmark_name are the same: {parsed_opts.bookmark_name}")
-                raise OptionError("--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name")
+                logging.error(
+                    f"Specified filter_bookmark and bookmark_name are the same: {parsed_opts.bookmark_name}"
+                )
+                raise OptionError(
+                    "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
+                )
             # property filters
             properties = {
                 "eworst": None,

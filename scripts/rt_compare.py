@@ -238,7 +238,11 @@ if __name__ == "__main__":
 
         if args.save_bookmark is not None:
             dbman.save_temp_table(
-                previous_bookmarkname, args.save_bookmark, original_bookmark_name, args.wanted, args.unwanted
+                previous_bookmarkname,
+                args.save_bookmark,
+                original_bookmark_name,
+                args.wanted,
+                args.unwanted,
             )
 
         if args.export_csv:
@@ -248,13 +252,19 @@ if __name__ == "__main__":
                 csv_name = "crossref.csv"
             output_manager.export_csv(previous_bookmarkname, csv_name, True)
 
-        logging.info("Time to cross-reference: {0:.0f} seconds".format(time.perf_counter() - time0))
+        logging.info(
+            "Time to cross-reference: {0:.0f} seconds".format(
+                time.perf_counter() - time0
+            )
+        )
 
     except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
         logging.critical(e)
-        logging.error("Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct.")
+        logging.error(
+            "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
+        )
         sys.exit(1)
 
     finally:

@@ -255,11 +255,11 @@ class TestInputs:
         assert count == 1
 
     def test_save_rec_file_existing_db(self):
-        os.system(
-            "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
-        )
+        os.system("python ../scripts/rt_process_vs.py write --file_list filelist1.txt")
 
-        os.system("python ../scripts/rt_process_vs.py write --input_db output.db --receptor_file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt --save_receptor")
+        os.system(
+            "python ../scripts/rt_process_vs.py write --input_db output.db --receptor_file test_data/4xfx_mon_prep--tyr169_rigid.pdbqt --save_receptor"
+        )
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -272,6 +272,7 @@ class TestInputs:
         os.system("rm output.db")
 
         assert count == 1
+
 
 class TestOutputs:
     def test_export_bookmark_csv(self):
