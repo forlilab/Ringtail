@@ -56,7 +56,6 @@ def parse_single_dlg(fname):
     smile_string = ""
     index_map = ""
     h_parents = ""
-    interaction_count_zero = False
 
     # Define empty center list for backwards compatibility with DLGs without grid centers
     center = [None, None, None]

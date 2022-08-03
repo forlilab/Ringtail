@@ -1253,6 +1253,15 @@ class DBManager:
         """
         raise NotImplementedError
 
+    def _generate_percentile_query(self, percentile, column="energies_binding"):
+        """Make query for percentile by calculating energy or leff cutoff
+        
+        Args:
+            percentile (float): cutoff percentile
+            column (str, optional): string indicating if cutoff should be for energies_binding or leff
+        """
+        raise NotImplementedError
+
     def _fetch_results_column_names(self):
         """Fetches list of string for column names in results table
         
@@ -1398,8 +1407,6 @@ class DBManagerSQLite(DBManager):
             "ebest": "energies_binding > {value}",
             "leworst": "leff < {value}",
             "lebest": "leff > {value}",
-            "energy_percentile": "energy_percentile_rank < {value}",
-            "le_percentile": "leff_percentile_rank < {value}",
         }
 
         self.energy_filter_col_name = {
@@ -1407,8 +1414,8 @@ class DBManagerSQLite(DBManager):
             "ebest": "energies_binding",
             "leworst": "leff",
             "lebest": "leff",
-            "energy_percentile": "energy_percentile_rank",
-            "le_percentile": "leff_percentile_rank",
+            "energy_percentile": "energies_binding",
+            "le_percentile": "leff",
         }
 
     # # # # # # # # # # # # # # # # #
@@ -2480,20 +2487,17 @@ class DBManagerSQLite(DBManager):
 
         for filter_key, filter_value in results_filters_list:
             if filter_key in self.energy_filter_sqlite_call_dict:
+                self.index_columns.append(self.energy_filter_col_name[filter_key])
                 if filter_key == "energy_percentile" or filter_key == "le_percentile":
                     # convert from percent to decimal
-                    filter_value = str(float(filter_value) / 100)
-                    # reset filtering window to include percentile_ranks
-                    self.filtering_window = "({percentile_window})".format(
-                        percentile_window=self._generate_percentile_rank_window()
-                    )
+                    filter_value = float(filter_value) / 100
+                    queries.append(self._generate_percentile_query(filter_value, self.energy_filter_col_name[filter_key]))
                 else:
-                    self.index_columns.append(self.energy_filter_col_name[filter_key])
-                queries.append(
-                    self.energy_filter_sqlite_call_dict[filter_key].format(
-                        value=filter_value
+                    queries.append(
+                        self.energy_filter_sqlite_call_dict[filter_key].format(
+                            value=filter_value
+                        )
                     )
-                )
 
             # write hb count filter(s)
             if filter_key == "hb_count":
@@ -2765,6 +2769,25 @@ class DBManagerSQLite(DBManager):
         return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY energies_binding) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results Group BY LigName".format(
             columns=column_names
         )
+
+    def _generate_percentile_query(self, percentile, column="energies_binding"):
+        """Make query for percentile by calculating energy or leff cutoff
+        
+        Args:
+            percentile (float): cutoff percentile
+            column (str, optional): string indicating if cutoff should be for energies_binding or leff
+        """
+        # get total number of ligands
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(LigName) FROM Ligands")
+            n_ligands = int(cur.fetchone()[0])
+            n_passing = percentile * n_ligands
+            # find energy cutoff
+            best_energies = cur.execute("SELECT energies_binding FROM Results GROUP BY LigName ORDER BY energies_binding")
+            energy_cutoff = best_energies[n_passing - 1][0]
+            return f"{column} < {energy_cutoff}"
+
 
     def _fetch_results_column_names(self):
         """Fetches list of string for column names in results table
