@@ -2486,7 +2486,7 @@ class DBManagerSQLite(DBManager):
         interaction_filters = []
 
         for filter_key, filter_value in results_filters_list:
-            if filter_key in self.energy_filter_sqlite_call_dict:
+            if filter_key in self.energy_filter_col_name:
                 self.index_columns.append(self.energy_filter_col_name[filter_key])
                 if filter_key == "energy_percentile" or filter_key == "le_percentile":
                     # convert from percent to decimal
@@ -2779,14 +2779,22 @@ class DBManagerSQLite(DBManager):
         """
         # get total number of ligands
         try:
+            logging.debug(f"Generating percentile filter query for {column}")
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(LigName) FROM Ligands")
             n_ligands = int(cur.fetchone()[0])
-            n_passing = percentile * n_ligands
+            n_passing = int(percentile * n_ligands)
             # find energy cutoff
-            best_energies = cur.execute("SELECT energies_binding FROM Results GROUP BY LigName ORDER BY energies_binding")
-            energy_cutoff = best_energies[n_passing - 1][0]
-            return f"{column} < {energy_cutoff}"
+            counter = 0
+            for i in cur.execute(f"SELECT {column} FROM Results GROUP BY LigName ORDER BY {column}"):
+                if counter == n_passing:
+                    cutoff = i[0]
+                    break
+                counter += 1
+            logging.debug(f"{column} percentile cutoff is {cutoff}")
+            return f"{column} < {cutoff}"
+        except sqlite3.OperationalError as e:
+            raise DatabaseError("Error while generating percentile query") from e
 
 
     def _fetch_results_column_names(self):
