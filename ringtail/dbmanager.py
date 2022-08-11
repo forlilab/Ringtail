@@ -1646,6 +1646,8 @@ class DBManagerSQLite(DBManager):
         try:
             bookmark_info = self._run_query("SELECT * from Bookmarks")
             for bookmark_name, query in bookmark_info:
+                if "Comparision. Wanted:" in query:  # cannot remake comparison bookmark
+                    continue
                 self._create_view(bookmark_name, query)
         except sqlite3.OperationalError as e:
             raise DatabaseError("Error while remaking views") from e
