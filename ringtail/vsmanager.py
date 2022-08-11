@@ -390,6 +390,7 @@ class VSManager:
         # connect to cloned database
         db_clone = DBManagerSQLite(bookmark_db_name, self.db_opts)
         db_clone.prune()
+        db_clone.remake_bookmarks()
         db_clone.close_connection(vacuum=True)
 
     def close_database(self):
