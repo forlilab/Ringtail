@@ -700,6 +700,10 @@ class DBManager:
         """
         raise NotImplementedError
 
+    def remake_bookmarks(self):
+        """Reads all views from Bookmarks table and remakes them"""
+        raise NotImplementedError
+
     def get_number_passing_ligands(self):
         """Returns count of ligands that passed filtering criteria
 
@@ -1636,6 +1640,15 @@ class DBManagerSQLite(DBManager):
         with bck:
             self.conn.backup(bck, pages=1)
         bck.close()
+
+    def remake_bookmarks(self):
+        """Reads all views from Bookmarks table and remakes them"""
+        try:
+            bookmark_info = self._run_query("SELECT * from Bookmarks")
+            for bookmark_name, query in bookmark_info:
+                self._create_view(bookmark_name, query)
+        except sqlite3.OperationalError as e:
+            raise DatabaseError("Error while remaking views") from e
 
     def get_results(self):
         """Gets all fields for filtered results
