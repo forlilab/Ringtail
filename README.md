@@ -31,7 +31,7 @@ It is recommended that you create a new Conda environment for installing Ringtai
 - RDKit
 - SciPy
 - [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
-- Multiprocess (MacOS only)
+- [Multiprocess](https://pypi.org/project/multiprocess/) (MacOS only)
 
 Installation is outlined below:
 ```
