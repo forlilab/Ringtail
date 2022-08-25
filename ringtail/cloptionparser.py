@@ -576,6 +576,19 @@ class CLOptionParser:
             "hb",
             "source_file",
         ]
+        self.order_options = {
+            "e",
+            "le",
+            "delta",
+            "ref_rmsd",
+            "e_inter",
+            "e_vdw",
+            "e_elec",
+            "e_intra",
+            "n_interact",
+            "rank",
+            "run",
+            "hb",}
 
         self._initialize_parser()
 
@@ -745,10 +758,13 @@ class CLOptionParser:
             for outfield in parsed_opts.out_fields:
                 if outfield not in self.outfield_options:
                     raise OptionError(
-                        "WARNING: {out_f} is not a valid output option. Please see --help or documentation".format(
+                        "WARNING: {out_f} is not a valid output option. Please see --help".format(
                             out_f=outfield
                         )
                     )
+            if parsed_opts.order_results is not None:
+                if parsed_opts.order_results not in self.order_options:
+                    raise OptionError("Requested ording option that is not available. Please see --help for available options.")
             # parse output options
             # Make sure that export_sdf_path has trailing /, is directory
             if parsed_opts.export_sdf_path is not None:

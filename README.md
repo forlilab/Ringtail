@@ -342,21 +342,21 @@ rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4
 from ringtail import DBManagerSQLite
 
 # make database manager with connection to SQLite file vs.db
-dbman = DBManagerSQLite("vs.db")
+with DBManagerSQLite("vs.db") as dbman:
 
-# fetch entire Results table as pandas dataframe
-results_df = dbman.to_dataframe("Results")
+    # fetch entire Results table as pandas dataframe
+    results_df = dbman.to_dataframe("Results")
 
-# fetch entire Ligands table as pandas dataframe
-ligands_df = dbman.to_dataframe("Ligands")
+    # fetch entire Ligands table as pandas dataframe
+    ligands_df = dbman.to_dataframe("Ligands")
 
-# fetch entire Receptors table as pandas dataframe
-rec_df = dbman.to_dataframe"Receptors")
+    # fetch entire Receptors table as pandas dataframe
+    rec_df = dbman.to_dataframe"Receptors")
 
-# fetch entire Interaction Indices table as pandas dataframe
-interaction_idx_df = dbman.to_dataframe("Interaction_indices")
+    # fetch entire Interaction Indices table as pandas dataframe
+    interaction_idx_df = dbman.to_dataframe("Interaction_indices")
 
-# fetch entire Interaction bitvectors table as pandas dataframe
-interaction_bv_df = dbman.to_dataframe("Interaction_bitvectors")
+    # fetch entire Interaction bitvectors table as pandas dataframe
+    interaction_bv_df = dbman.to_dataframe("Interaction_bitvectors")
 
 ```
