@@ -60,7 +60,7 @@ Finally, if attempting to run on MacOS, the user must also install the `multipro
 $ pip install multiprocess
 ```
 #### Test installation
-If you would like to test your installation of Ringtail, a set of automated tests are packaged with the source code. To begin, you must install pytest in the Ringtail conda environment:
+If you would like to test your installation of Ringtail, a set of automated tests are included with the source code. To begin, you must install pytest in the Ringtail conda environment:
 ```
 $ pip install -U pytest
 ```
