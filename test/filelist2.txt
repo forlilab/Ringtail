@@ -1,2 +1,2 @@
-test_data/TEST_0000003-results/OB3Z3759444505_1_RX1--4xfx_mon_prep--tyr169.dlg.gz
-test_data/TEST_0000001-results/OB3Z3759305928_RX1--4xfx_mon_prep--tyr169.dlg.gz
+test_data/group1/272275.dlg.gz
+test_data/group3/80807.dlg.gz

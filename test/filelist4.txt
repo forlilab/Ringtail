@@ -1,4 +1,0 @@
-test_data/TEST_0000003-results/OB3Z3759450716_RX1--4xfx_mon_prep--tyr169.dlg.gz
-test_data/TEST_0000003-results/OB3Z3759440327_RX1--4xfx_mon_prep--tyr169.dlg.gz
-test_data/TEST_0000003-results/OB3Z3759457587_RX1--4xfx_mon_prep--tyr169.dlg.gz
-test_data/4xfx_mon_prep--tyr169_rigid.pdbqt
