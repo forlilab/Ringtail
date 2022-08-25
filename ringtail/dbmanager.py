@@ -158,6 +158,12 @@ class DBManager:
 
         self._initialize_db()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close_connection()
+
     # # # # # # # # # # # # # # # # # # #
     # # # Common DBManager methods # # #
     # # # # # # # # # # # # # # # # # # #
@@ -1700,7 +1706,6 @@ class DBManagerSQLite(DBManager):
             SQLite cursor: contains LigName, ligand_smile,
                 atom_index_map, hydrogen_parents
         """
-        # self._create_indices()
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.passing_results_view_name
         )
@@ -2891,7 +2896,7 @@ class DBManagerSQLite(DBManager):
         try:
             cur = self.conn.cursor()
             cur.execute(
-                "DELETE FROM Ligands WHERE LigName NOT IN (SELECT Pose_ID FROM {view})".format(
+                "DELETE FROM Ligands WHERE LigName NOT IN (SELECT LigName from Results WHERE Pose_ID IN (SELECT Pose_ID FROM {view}))".format(
                     view=self.passing_results_view_name
                 )
             )
