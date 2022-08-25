@@ -171,7 +171,7 @@ class MPManager:
                 s.kill()
             logging.debug(f"Error encountered while parsing {file_name}")
             logging.debug(tb)
-            raise MultiprocessingError("Error occurred during file parsing!")
+            raise MultiprocessingError(f"Error occurred during file parsing on file {file_name}!")
 
     def _scan_dir(self, path, pattern, recursive=False):
         """scan for valid output files in a directory

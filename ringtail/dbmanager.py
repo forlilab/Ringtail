@@ -2572,11 +2572,14 @@ class DBManagerSQLite(DBManager):
 
             # catch if interaction not found in results
             if interaction_filter_indices == []:
-                warnings.warn(
-                    "Interaction {i} not found in results, excluded from filtering".format(
-                        i=":".join(interaction)
+                if interaction == ["R", "", "", "", "", True]:
+                    warnings.warn("Given --react_any filter, no reactive interactions found. Excluded from filtering.")
+                else:
+                    warnings.warn(
+                        "Interaction {i} not found in results, excluded from filtering".format(
+                            i=":".join(interaction[:4])
+                        )
                     )
-                )
                 continue
             # determine include/exclude string
             if interaction[-1] is True:
@@ -2608,6 +2611,9 @@ class DBManagerSQLite(DBManager):
             )
 
         # initialize query string
+        # raise error if query string is empty
+        if queries == []:
+            raise DatabaseQueryError("Query string is empty. Please check filter options and ensure requested interactions are present.")
         sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(
             out_columns=outfield_string, window=self.filtering_window
         )
