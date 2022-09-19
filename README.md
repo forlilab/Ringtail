@@ -31,18 +31,19 @@ It is recommended that you create a new Conda environment for installing Ringtai
 - RDKit
 - SciPy
 - [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
-- Multiprocess (MacOS only)
+- [Multiprocess](https://pypi.org/project/multiprocess/) (MacOS only)
 
 Installation is outlined below:
 ```
-conda create -n ringtail
-conda activate ringtail
-conda install -c conda-forge rdkit scipy
+$ conda create -n ringtail
+$ conda activate ringtail
+$ conda install -c conda-forge rdkit scipy
 ```
 Now, navigate to the desired directory for installing Meeko and do the following:
 ```
 $ git clone git@github.com:forlilab/Meeko.git
 $ cd Meeko
+$ git checkout flexres_smarts
 $ pip install .
 ```
 After this, navigate to the desired directory for installing Ringtail and do the following:
@@ -53,12 +54,22 @@ $ pip install .
 ```
 If you wish to make the code for either Meeko or Ringtail editable without re-running `pip install .`, instead use
 ```
-pip install --editable .
+$ pip install --editable .
 ```
 Finally, if attempting to run on MacOS, the user must also install the `multiprocess` package:
 ```
 $ pip install multiprocess
 ```
+#### Test installation
+If you would like to test your installation of Ringtail, a set of automated tests are included with the source code. To begin, you must install pytest in the Ringtail conda environment:
+```
+$ pip install -U pytest
+```
+Next, navigate to the `test` directory within the cloned Ringtail directory and run pytest by simply calling
+```
+$ pytest
+```
+The compounds used for the testing dataset were taken from the [NCI Diversity Set V](https://wiki.nci.nih.gov/display/NCIDTPdata/Compound+Sets). The receptor used was [PDB: 4J8M](https://www.rcsb.org/structure/4J8M).
 
 ## Definitions
 - __DLG__: Docking Log File, output from AutoDock-GPU.
