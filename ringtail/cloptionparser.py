@@ -707,6 +707,8 @@ class CLOptionParser:
 
         # check options for write mode
         self.rr_mode = parsed_opts.rr_mode
+        if self.rr_mode is None:
+            raise OptionError("No mode specified for rt_process_vs.py. Please specify mode (write/read).")
         if self.rr_mode == "write":
             # check that required input options are provided
             file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
