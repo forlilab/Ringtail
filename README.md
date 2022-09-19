@@ -43,6 +43,7 @@ Now, navigate to the desired directory for installing Meeko and do the following
 ```
 $ git clone git@github.com:forlilab/Meeko.git
 $ cd Meeko
+$ git checkout flexres_smarts
 $ pip install .
 ```
 After this, navigate to the desired directory for installing Ringtail and do the following:
