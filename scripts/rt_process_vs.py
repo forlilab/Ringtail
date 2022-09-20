@@ -26,7 +26,7 @@ if __name__ == "__main__":
     # parse command line options and filters file (if given)
     try:
         cl_opts = CLOptionParser()
-    except OptionError as e:
+    except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
         logging.critical(e)
@@ -118,10 +118,10 @@ if __name__ == "__main__":
                     )
                     vsman.export_bookmark_db(bookmark_db_name)
 
-    except VirtualScreeningError as e:
+    except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
-        logging.critical(e)
+        logging.critical("ERROR: " + str(e))
         sys.exit(1)
 
     # print performance times

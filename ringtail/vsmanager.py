@@ -66,39 +66,18 @@ class VSManager:
         self.db_opts = db_opts
 
     def __enter__(self):
-        try:
-            self.dbman = DBManagerSQLite(self.db_opts["dbFile"], self.db_opts)
-        except DatabaseConnectionError as e:
-            raise VirtualScreeningError(
-                "Error encountered while connecting to database. Please ensure that given database file name is correct."
-            ) from e
-        except DatabaseTableCreationError as e:
-            raise VirtualScreeningError(
-                "Error encountered while creating database tables. If database already exists, use --add_results or --overwrite."
-            ) from e
-        except DatabaseError as e:
-            raise VirtualScreeningError(
-                "Error occurred while initializing database."
-            ) from e
+        self.dbman = DBManagerSQLite(self.db_opts["dbFile"], self.db_opts)
 
         # if requested, write database or add results to an existing one
         if self.dbman.write_db_flag or self.db_opts["add_results"]:
             logging.info("Adding results...")
-            try:
-                self.results_man = ResultsManager(opts=self.rman_opts, dbman=self.dbman)
-                self.add_results()
-            except ResultsProcessingError as e:
-                raise VirtualScreeningError("Error occured while adding results") from e
+            self.results_man = ResultsManager(opts=self.rman_opts, dbman=self.dbman)
+            self.add_results()
 
         else:
-            try:
-                self.output_manager = Outputter(
-                    self.out_opts["log"], self.out_opts["export_poses_path"]
-                )
-            except OutputError as e:
-                raise VirtualScreeningError(
-                    "Error occured while creating output manager"
-                ) from e
+            self.output_manager = Outputter(
+                self.out_opts["log"], self.out_opts["export_poses_path"]
+            )
 
         return self
 
@@ -129,10 +108,8 @@ class VSManager:
                         )
                     )
                 self.dbman.add_receptor_object_to_row(rec)
-            except DatabaseError as e:
-                raise VirtualScreeningError(
-                    "Error occurred while adding receptor to database"
-                ) from e
+            except Exception as e:
+                raise e
 
     def filter(self):
         """
@@ -171,15 +148,17 @@ class VSManager:
                 self.output_manager.log_num_passing_ligands(number_passing_ligands)
                 self.output_manager.write_log(self.filtered_results)
             except DatabaseError as e:
-                raise VirtualScreeningError(
+                logging.exception(
                     "Database error occurred while filtering"
-                ) from e
+                )
+                raise e
             except OutputError as e:
-                raise VirtualScreeningError(
+                logging.exception(
                     "Logging error occurred after filtering"
-                ) from e
+                )
+                raise e
             except Exception as e:
-                raise VirtualScreeningError("Error occurred while filtering") from e
+                raise e
 
     def get_previous_filter_data(self):
         """Get data requested in self.out_opts['outfields'] from the
@@ -191,15 +170,15 @@ class VSManager:
             )
             self.output_manager.write_log(new_data)
         except DatabaseError as e:
-            raise VirtualScreeningError(
+            logging.exception(
                 "Database error occurred while fetching data for bookmark"
-            ) from e
+            )
+            raise e
         except OutputError as e:
-            raise VirtualScreeningError("Error occurred while writing log") from e
+            logging.exception("Error occurred while writing log")
+            raise e
         except Exception as e:
-            raise VirtualScreeningError(
-                "Error occurred while fetching data for bookmark"
-            ) from e
+            raise e
 
     def plot(self):
         """
@@ -228,11 +207,13 @@ class VSManager:
                     )  # energy (line[0]) on x axis, le (line[1]) on y axis
             self.output_manager.save_scatterplot()
         except DatabaseError as e:
-            raise VirtualScreeningError(
+            logging.exception(
                 "Database error occurred while fetching data for plot"
-            ) from e
+            )
+            raise e
         except Exception as e:
-            raise VirtualScreeningError("Error occurred during plotting") from e
+            logging.exception("Error occurred during plotting")
+            raise e
 
     def prepare_results_filter_list(self, included_interactions):
         """takes filters dictionary from option parser.
@@ -344,15 +325,18 @@ class VSManager:
                 )
 
         except DatabaseError as e:
-            raise VirtualScreeningError(
+            logging.exception(
                 "Error occurred while fetching database information for SDF output"
-            ) from e
+            )
+            raise e
         except OutputError as e:
-            raise VirtualScreeningError(
+            logging.exception(
                 f"Error occured while writing {ligname} to an SDF"
-            ) from e
+            )
+            raise e
         except Exception as e:
-            raise VirtualScreeningError("Error occurred during SDF output") from e
+            logging.exception("Error occurred during SDF output")
+            raise e
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV
@@ -366,13 +350,15 @@ class VSManager:
             df = self.dbman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
         except DatabaseError as e:
-            raise VirtualScreeningError(
+            logging.exception(
                 f"Error occured while getting data for exporting CSV of {requested_data}"
-            ) from e
+            )
+            raise e
         except Exception as e:
-            raise VirtualScreeningError(
+            logging.exception(
                 f"Error occured while exporting CSV of {requested_data}"
-            ) from e
+            )
+            raise e
 
     def export_bookmark_db(self, bookmark_db_name: str):
         """Export database containing data from bookmark
