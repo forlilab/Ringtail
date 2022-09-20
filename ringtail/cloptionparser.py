@@ -552,6 +552,8 @@ def cmdline_parser(defaults={}):
     read_parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
 
+    self.parser = parser
+
     return args
 
 
@@ -620,11 +622,15 @@ class CLOptionParser:
         # create parser
         try:
             parsed_opts = cmdline_parser()
+            self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
+            self.parser.print_help()
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
-        self.process_options(parsed_opts)
+        except OptionError as e:
+            self.parser.print_help()
+            raise e
 
     def read_filter_file(self, fname):
         """parse the filter file to define filters"""
