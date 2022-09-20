@@ -119,6 +119,13 @@ $ rt_process_vs.py read --input_db all_groups.db --filter_bookmark ep5 --van_der
 
 We are now ready to export these molecules for visual inspection in your favorite molecular graphics program. We will create a new directory `ep5_vdwV279_sdfs` and store the exported molecule files there.
 
+```
+$ mkdir ep5_vdwV279_sdfs
+$ rt_process_vs.py read --input_db all_groups.db --bookmark_name ep5_vdwV279 --export_sdf_path ep5_vdwV279_sdfs
+```
+
+Now we have our filter molecules as SDF files ready for visual inspection!
+
 # Extended documentation
 
 ## Scripts
