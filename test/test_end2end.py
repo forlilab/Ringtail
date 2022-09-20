@@ -280,7 +280,7 @@ class TestOutputs:
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         cur.execute(
-            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE 'mols/127458' AND run_number = 13)"
+            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
         )
         count_notol = sum([1 for interaction in cur.fetchone() if interaction == 1])
 
@@ -296,7 +296,7 @@ class TestOutputs:
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         cur.execute(
-            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE 'mols/127458' AND run_number = 13)"
+            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
         )
         count_tol = sum([1 for interaction in cur.fetchone() if interaction == 1])
 
@@ -312,7 +312,7 @@ class TestOutputs:
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         cur.execute(
-            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE 'mols/127458' AND run_number = 13)"
+            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
         )
         count_tol2 = sum([1 for interaction in cur.fetchone() if interaction == 1])
 
