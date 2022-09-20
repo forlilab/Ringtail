@@ -33,10 +33,5 @@ class ResultsManager:
         )
 
     def process_results(self):
-        try:
-            # start MP process
-            self.parser.process_files()
-        except MultiprocessingError as e:
-            raise ResultsProcessingError(
-                "Error occurred while processing results"
-            ) from e
+        # start MP process
+        self.parser.process_files()
