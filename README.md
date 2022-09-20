@@ -81,6 +81,46 @@ The compounds used for the testing dataset were taken from the [NCI Diversity Se
 - __Ringtail__: 
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
+## Getting Started
+
+Ringtail offers a wealth of database creation and filtering options. They are detailed at length below. This section will provide a quick overview of the basic usage of Ringtail from the command line. We will you the provided test data to create a database with default storage options and perform basic filtering of it.
+
+Let us begin in the Ringtail directory. First, we must navigate to the test data directory:
+```
+$ cd test/test_data/
+```
+Now, let us create a database containing the results from only group 1:
+```
+$ rt_process_vs.py write --file_path group1
+```
+By default, the database we have created is called `output.db`. Let us change its name to `group1.db` and make a second database named `all_groups.db` containing all three groups:
+```
+$ mv output.db group1.db
+$ rt_process_vs.py write --file_path . --recursive --output_db all_groups.db
+```
+The `--recursive` option tells Ringtail to scan the directories specified with `--file_path` for subdirectories containing output files (in this case, DLGs). This allowed all three group directories to be added to the database with a single --file_path option.
+
+Now that we have created the databases, we can filter them to pull out compounds of interest. Let us start with a basic binding energy cutoff of -6 kcal/mol:
+```
+$ rt_process_vs.py read --input_db all_groups.db --eworst -6
+```
+
+This produces an output log `output_log.txt` with the names of ligands passing the filter, as well as their binding energies. Let's now rename this file to `eworst-6_log.txt` and do another round of filtering, this time with an energy percentile filter of 5 percent (top 5% of coumpounds by binding energy). Each round of filtering is also stored in the database as a SQLite view, which we refer to as a "bookmark". We will also save this round of filtering with the bookmark name "ep5".
+
+```
+$ mv output_log.txt eworst-6_log.txt
+$ rt_process_vs.py read --input_db all_groups.db --energy_percentile 5 --log ep5_log.txt --bookmark_name ep5
+```
+Now, let us further refine the set of molecules we just filtered. Let us now use an interaction filter for van der Waals interactions with V279 on the receptor:
+
+```
+$ rt_process_vs.py read --input_db all_groups.db --filter_bookmark ep5 --van_der_waals A:VAL:279: --log ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
+```
+
+We are now ready to export these molecules for visual inspection in your favorite molecular graphics program. We will create a new directory `ep5_vdwV279_sdfs` and store the exported molecule files there.
+
+# Extended documentation
+
 ## Scripts
 The Ringtail package includes two command line oriented scripts: `rt_process_vs.py` and `rt_compare.py`.
 
