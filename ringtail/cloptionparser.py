@@ -834,13 +834,6 @@ class CLOptionParser:
                 res_list = getattr(parsed_opts, opt)
                 if res_list is None:
                     continue
-                elif self.mode == "vina":
-                    warnings.warn(
-                        "Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(
-                            opt
-                        )
-                    )
-                    continue
                 found_res = []
                 for res in res_list:
                     if "," in res:
@@ -864,19 +857,13 @@ class CLOptionParser:
                         res = res[1:]
                         wanted = False
                     interactions[_type].append((res, wanted))
+                    self.filter = True
             # count interactions
             interactions_count = []
             count_kw = [("hb_count", ("hb_count")), ("react_count", ("R"))]
             for kw, pool in count_kw:
                 c = getattr(parsed_opts, kw, None)
                 if c is None:
-                    continue
-                if self.mode == "vina":
-                    warnings.warn(
-                        "Given {0} interaction filter. Cannot filter interactions in Vina mode. Ignoring filter.".format(
-                            opt
-                        )
-                    )
                     continue
                 interactions_count.append((pool, c))
                 self.filter = True
