@@ -552,9 +552,7 @@ def cmdline_parser(defaults={}):
     read_parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
 
-    self.parser = parser
-
-    return args
+    return args, parser
 
 
 class CLOptionParser:
@@ -621,7 +619,7 @@ class CLOptionParser:
     def _initialize_parser(self):
         # create parser
         try:
-            parsed_opts = cmdline_parser()
+            parsed_opts, self.parser = cmdline_parser()
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
             self.parser.print_help()
