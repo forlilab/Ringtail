@@ -497,6 +497,24 @@ class DBManager:
             self._generate_receptor_row(ligand_dict),
         )
 
+    def insert_data(self, results_array, ligands_array, receptor_array, interaction_array, insert_receptor=False):
+        """Summary
+        
+        Args:
+            results_array (iterable): data to insert into results table
+            ligands_array (iterable): data to insert into ligands table
+            receptor_array (iterable): data to insert into receptors table
+            interaction_array (iterable): data to be inserted into the interaction tables
+            insert_receptor (bool, optional): flag indicating that receptor info should inserted
+        """
+        self.insert_results(results_array)
+        self.insert_ligands(ligands_array)
+        if insert_receptor and receptor_array != []:
+            self.insert_receptors(receptor_array)
+        if interaction_array != []:
+            self.insert_interactions(interaction_array)
+
+
     def set_view_suffix(self, suffix):
         """Sets internal view_suffix variable
 

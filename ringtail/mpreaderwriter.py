@@ -282,25 +282,21 @@ class Writer(multiprocessing.Process):
         except Exception:
             tb = traceback.format_exc()
             self.pipe.send(
-                (WriteToDatabaseError("Error occured while writing database"), tb)
+                (WriteToDatabaseError("Error occured while writing database"), tb, "Database")
             )
         finally:
             return
 
     def write_to_db(self):
         # insert result, ligand, and receptor data
-        self.db.insert_results(
-            filter(None, self.results_array)
-        )  # filter out stray Nones
-        self.db.insert_ligands(filter(None, self.ligands_array))
-        # if this is the first insert or we have multiple receptors, insert the receptor array
-        if self.first_insert and filter(None, self.receptor_array) != []:
-            self.db.insert_receptors(filter(None, self.receptor_array))
+        self.db.insert_data(
+            filter(None, self.results_array),
+            filter(None, self.ligands_array),
+            filter(None, self.receptor_array),
+            self.interactions_list,
+            self.first_insert)  # filter out stray Nones
+        if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
-
-        # perform operations for inserting iteraction data
-        if self.interactions_list != []:
-            self.db.insert_interactions(self.interactions_list)
 
         # calulate time for processing/writing speed
         self.num_files_written += self.chunksize
