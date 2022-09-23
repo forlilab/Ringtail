@@ -15,17 +15,14 @@ import traceback
 if __name__ == "__main__":
 
     time0 = time.perf_counter()
-    debug = True
-    if debug:
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
+    level = logging.INFO
     logging.basicConfig(
         level=level, stream=sys.stdout, filemode="w", format="%(message)s"
     )
     # parse command line options and filters file (if given)
     try:
         cl_opts = CLOptionParser()
+        debug = cl_opts.debug
     except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
@@ -59,11 +56,13 @@ if __name__ == "__main__":
     out_opts = cl_opts.out_opts
 
     # set logging level
-    levels = {10: "debug", 20: "info", 30: "error"}
+    levels = {10: "debug", 20: "info", 30: "warning"}
     no_print = out_opts["no_print"]
-    if no_print is False and debug is False:
+    if debug:
+        level = logging.DEBUG
+    elif no_print is False:
         level = logging.INFO
-    elif debug is False:
+    else:
         level = logging.WARNING
     logging.getLogger().setLevel(level)
     logging.info(f"Logging level set to {levels[level]}")
