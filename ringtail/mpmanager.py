@@ -15,6 +15,7 @@ import warnings
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .exceptions import MultiprocessingError
+import traceback
 
 os_string = platform.system()
 if os_string == "Darwin":  # mac
@@ -106,7 +107,11 @@ class MPManager:
         self.workers.append(w)
 
         # process items in the queue
-        self._process_sources()
+        try:
+            self._process_sources()
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._kill_all_workers("file sources", tb)
         # put as many poison pills in the queue as there are workers
         for i in range(self.max_proc):
             self.queueIn.put(None)
@@ -167,11 +172,14 @@ class MPManager:
         if self.p_conn.poll():
             logging.debug("Caught error in multiprocessing")
             error, tb, file_name = self.p_conn.recv()
-            for s in self.workers:
+            self._kill_all_workers(filename, tb)
+    
+    def _kill_all_workers(self, filename, tb):
+        for s in self.workers:
                 s.kill()
-            logging.debug(f"Error encountered while parsing {file_name}")
-            logging.debug(tb)
-            raise MultiprocessingError(f"Error occurred during file parsing on file {file_name}!")
+        logging.debug(f"Error encountered while parsing {filename}")
+        logging.debug(tb)
+        raise MultiprocessingError(f"Error occurred while parsing {filename}!")
 
     def _scan_dir(self, path, pattern, recursive=False):
         """scan for valid output files in a directory

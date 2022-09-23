@@ -26,7 +26,7 @@ if __name__ == "__main__":
     except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
-        logging.critical(e)
+        logging.critical("ERROR: " + str(e))
         sys.exit(1)
 
     # prepare option dictionaries for VSManager
@@ -133,3 +133,4 @@ if __name__ == "__main__":
     logging.info(
         "Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds "
     )
+    logging.info(cl_opts.parser.epilog)
