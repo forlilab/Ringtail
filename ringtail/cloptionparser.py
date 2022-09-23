@@ -33,8 +33,10 @@ def cmdline_parser(defaults={}):
         "input_db": None,
         "bookmark_name": "passing_results",
         "verbose": None,
+        "debug": None,
         "file": None,
         "file_path": None,
+        "file_list": None,
         "mode": "dlg",
         "pattern": "*.dlg*",
         "recursive": None,
@@ -88,7 +90,7 @@ def cmdline_parser(defaults={}):
             config.update(c)
 
     parser = argparse.ArgumentParser(
-        usage="Please see GitHub for full usage details.",
+        usage="Script to process virtual screening data by writing/filtering/exporting from database. To start, please specify 'write' to create database or 'read' to filter/fetch data from existing database. In 'write' mode, provide docking files for writing to database with --file, --file_list, and/or --file_path. In 'read' mode, provide input database with --input_db. Please see GitHub for full usage details.",
         description="Package for creating database from virtual screening results and performing filtering on results.",
         epilog="""
 
@@ -143,6 +145,12 @@ def cmdline_parser(defaults={}):
         "-v",
         "--verbose",
         help="Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.",
+        action="store_true",
+    )
+    write_parser.add_argument(
+        "-d",
+        "--debug",
+        help="Print additional error information to STDOUT.",
         action="store_true",
     )
     write_parser.add_argument(
@@ -298,6 +306,12 @@ def cmdline_parser(defaults={}):
         "-v",
         "--verbose",
         help="Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.",
+        action="store_true",
+    )
+    read_parser.add_argument(
+        "-d",
+        "--debug",
+        help="Print additional error information to STDOUT.",
         action="store_true",
     )
 
@@ -552,7 +566,7 @@ def cmdline_parser(defaults={}):
     read_parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
 
-    return args, parser
+    return args, parser, conf_parser
 
 
 class CLOptionParser:
@@ -619,7 +633,7 @@ class CLOptionParser:
     def _initialize_parser(self):
         # create parser
         try:
-            parsed_opts, self.parser = cmdline_parser()
+            parsed_opts, self.parser, self.conf_parser = cmdline_parser()
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
             self.parser.print_help()
@@ -647,6 +661,9 @@ class CLOptionParser:
 
     def process_options(self, parsed_opts):
         """convert command line options to the dict of filters"""
+        self.debug = parsed_opts.debug
+        if self.debug:
+            logging.getLogger().setLevel(logging.DEBUG)
         self.filter = False  # set flag indicating if any filters given
         conflict_handling = None
         file_sources = None
@@ -712,6 +729,7 @@ class CLOptionParser:
         # check options for write mode
         self.rr_mode = parsed_opts.rr_mode
         if self.rr_mode is None:
+            self.conf_parser.print_help()
             raise OptionError("No mode specified for rt_process_vs.py. Please specify mode (write/read).")
         if self.rr_mode == "write":
             # check that required input options are provided
