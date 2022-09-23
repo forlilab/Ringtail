@@ -107,7 +107,7 @@ def cmdline_parser(defaults={}):
         COPYRIGHT
                 Copyright (C) 2022 Stefano Forli Laboratory, Center for Computational Structural Biology,
                              The Scripps Research Institute.
-                GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+                GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html> \n
         """,
         exit_on_error=False,
     )
@@ -566,7 +566,7 @@ def cmdline_parser(defaults={}):
     read_parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
 
-    return args, parser, conf_parser
+    return args, parser, conf_parser, write_parser, read_parser
 
 
 class CLOptionParser:
@@ -633,15 +633,22 @@ class CLOptionParser:
     def _initialize_parser(self):
         # create parser
         try:
-            parsed_opts, self.parser, self.conf_parser = cmdline_parser()
+            parsed_opts, self.parser, self.conf_parser, self.write_parser, self.read_parser = cmdline_parser()
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
             self.parser.print_help()
+            logging.error("\n")
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
         except OptionError as e:
-            self.parser.print_help()
+            if self.rr_mode == "write":
+                self.write_parser.print_help()
+            elif self.rr_mode == "read":
+                self.read_parser.print_help()
+            else:
+                self.parser.print_help()
+            logging.error("\n")
             raise e
 
     def read_filter_file(self, fname):
@@ -751,11 +758,11 @@ class CLOptionParser:
                 and (parsed_opts.input_db is None)
             ):
                 raise OptionError(
-                    "*ERROR* at least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
+                    "At least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
                 )
             if parsed_opts.add_results and parsed_opts.input_db is None:
                 raise OptionError(
-                    "ERRROR! Must specify --input_db if adding results to an existing database"
+                    "Must specify --input_db if adding results to an existing database"
                 )
             # confirm that conflict_handling is an allowed option
             conflict_options = {"IGNORE", "REPLACE"}
@@ -767,6 +774,8 @@ class CLOptionParser:
                     )
                     conflict_handling = None
         else:
+            if parsed_opts.input_db is None:
+                raise OptionError("No input database specified in read mode. Please specify database with --input_db")
             if parsed_opts.max_miss < 0:
                 raise OptionError("--max_miss must be greater than or equal to 0")
             if parsed_opts.max_miss > 0:
@@ -868,7 +877,7 @@ class CLOptionParser:
                     if not res.count(":") == 3:
                         raise OptionError(
                             (
-                                "*ERROR* [%s]: to specify a residue use "
+                                "[%s]: to specify a residue use "
                                 "the format CHAIN:RES:NUM:ATOM_NAME. Any item can be omitted, "
                                 "as long as the number of semicolons is always 3 "
                                 "(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)"
