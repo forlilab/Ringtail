@@ -13,6 +13,7 @@ import fnmatch
 import warnings
 import logging
 from .exceptions import OptionError
+import __main__
 
 
 def cmdline_parser(defaults={}):
@@ -24,9 +25,7 @@ def cmdline_parser(defaults={}):
     )
     conf_parser.add_argument(
         "-c",
-        "--config",
-        help="specify a JSON-format file containing the option definitions. NOTE: options defined here will be overridden by command line options!",
-    )
+        "--config")
     confargs, remaining_argv = conf_parser.parse_known_args()
 
     defaults = {
@@ -79,9 +78,7 @@ def cmdline_parser(defaults={}):
         "receptor_file": None,
     }
 
-    config = json.loads(
-        json.dumps(defaults)
-    )  # using dict -> str -> dict as a safe copy method
+    config = defaults.copy()
 
     if confargs.config is not None:
         logging.info("Reading options from config file")
@@ -90,8 +87,10 @@ def cmdline_parser(defaults={}):
             config.update(c)
 
     parser = argparse.ArgumentParser(
-        usage="Script to process virtual screening data by writing/filtering/exporting from database. To start, please specify 'write' to create database or 'read' to filter/fetch data from existing database. In 'write' mode, provide docking files for writing to database with --file, --file_list, and/or --file_path. In 'read' mode, provide input database with --input_db. Please see GitHub for full usage details.",
-        description="Package for creating database from virtual screening results and performing filtering on results.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="""rt_process_vs.py [-c CONFIG] write|read OPTS  \n
+                 Script to process virtual screening data by writing/filtering/exporting from database. In 'write' mode, provide docking files for writing to database with --file, --file_list, and/or --file_path. In 'read' mode, provide input database with --input_db. Please see GitHub for full usage details.""",
+        description="Package for creating, managing, and filtering databases of virtual screening results.",
         epilog="""
 
         REQUIRED PACKAGES
@@ -105,7 +104,7 @@ def cmdline_parser(defaults={}):
                 AutoDock mailing list   http://autodock.scripps.edu/mailing_list\n
 
         COPYRIGHT
-                Copyright (C) 2022 Stefano Forli Laboratory, Center for Computational Structural Biology,
+                Copyright (C) 2022 Forli Lab, Center for Computational Structural Biology,
                              The Scripps Research Institute.
                 GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html> \n
         """,
@@ -113,10 +112,10 @@ def cmdline_parser(defaults={}):
     )
 
     subparsers = parser.add_subparsers(
-        help="Specify if should write to or read from database", dest="rr_mode"
+        help="Specify if should write to or read from database. To show options of each mode use the in-line help, e.g.: %s read -h" % os.path.basename(__main__.__file__), dest="rr_mode"
     )
 
-    write_parser = subparsers.add_parser("write", help="Write new files to database")
+    write_parser = subparsers.add_parser("write")
     write_parser.add_argument(
         "-i",
         "--input_db",
@@ -275,9 +274,7 @@ def cmdline_parser(defaults={}):
         metavar="STRING",
     )
 
-    read_parser = subparsers.add_parser(
-        "read", help="Read input database, filters and/or outputs data"
-    )
+    read_parser = subparsers.add_parser("read")
     read_parser.add_argument(
         "-i",
         "--input_db",
@@ -736,7 +733,6 @@ class CLOptionParser:
         # check options for write mode
         self.rr_mode = parsed_opts.rr_mode
         if self.rr_mode is None:
-            self.conf_parser.print_help()
             raise OptionError("No mode specified for rt_process_vs.py. Please specify mode (write/read).")
         if self.rr_mode == "write":
             # check that required input options are provided
