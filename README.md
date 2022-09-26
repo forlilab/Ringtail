@@ -130,7 +130,7 @@ Now we have our filter molecules as SDF files ready for visual inspection!
 # Extended documentation
 
 ## Scripts
-The Ringtail package includes two command line oriented scripts: `rt_process_vs.py` and `rt_compare.py`.
+The Ringtail package includes two command line oriented scripts: `rt_process_vs.py` and `rt_compare.py`. Both may be run with options specified in the command line, or using option specified in a JSON-formatted file given with `--config`. Command line options override any conflicting options in the config file.
 
 [rt_process_vs.py](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation) serves as the primary script for the package and is used to both write docking files to a SQLite database and to perform filtering and export tasks on a database. It is designed to handle docking output files associated with a single virtual screening in a single database.
 
