@@ -294,7 +294,8 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--input_db         | -i| Database file to use instead of creating new database | no default       ||
 |--bookmark_name      |-s| Name for bookmark view in database                      | passing_results  ||
 |--mode          |-m| specify AutoDock program used to generate results. Available options are "ADGPU" and "Vina". Vina mode will automatically change --pattern to \*.pdbqt   | ADGPU         ||
-|--verbose          |-v| Flag indicating that passing results should be printed to STDOUT | FALSE        | <tr><td colspan="5">**Write Mode**</td></tr>
+|--verbose          |-v| Flag indicating that passing results should be printed to STDOUT. Will also include information about runtime progress. | FALSE        ||
+|--debug            |-d| Flag indicating that additional debugging information (e.g. error traceback) should be printed to STDOUT. | FALSE |<tr><td colspan="5">**Write Mode**</td></tr>
 |--file             |-f| DLG/Vina PDBQT/receptor file(s) to be read into database                  | no default       ||
 |--file_path        |-fp| Path(s) to files to read into database            | no default       ||
 |--file_list        |-fl| File(s) with list of files to read into database  | no default       ||
