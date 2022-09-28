@@ -98,6 +98,9 @@ class RingtailCore:
 
     @classmethod
     def get_defaults(cls, terse=False):
+        core_opts = {"save_receptor": False,
+                     "filter": False}
+
         out_opts = {'log': 'output_log.txt',
                     'overwrite': None,
                     'export_sdf_path': None,
@@ -134,6 +137,7 @@ class RingtailCore:
         if terse:
             for group, opt in defaults.items():
                 defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
+        defaults["core_opts"] = {"values": core_opts, "ignore": []}
         defaults["out_opts"] = {"values": out_opts, "ignore": []}
         defaults["filters"] = {"values": filters, "ignore": []}
 

@@ -53,7 +53,7 @@ if __name__ == "__main__":
         ) as rt_core:
 
             # Add receptors to database if requested
-            # TODO change this
+            # TODO move this
             if cl_opts.save_receptor:
                 receptor_list = ReceptorManager.make_receptor_blobs(
                     [rman_opts["receptor_file"]]
