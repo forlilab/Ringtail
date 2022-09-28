@@ -11,7 +11,7 @@ from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
-from .vsmanager import VSManager, Outputter
+from .ringtailcore import RingtailCore, Outputter
 from .interactions import InteractionFinder
 from .exceptions import (
     DatabaseError,
@@ -21,7 +21,7 @@ from .exceptions import (
 )
 from .exceptions import DatabaseQueryError, DatabaseViewCreationError
 from .exceptions import OptionError
-from .exceptions import VirtualScreeningError
+from .exceptions import RTCoreError
 from .exceptions import FileParsingError, WriteToDatabaseError, MultiprocessingError
 from .exceptions import ResultsProcessingError
 from .exceptions import OutputError
@@ -37,7 +37,7 @@ __all__ = [
     "parse_vina_pdbqt",
     "ReceptorManager",
     "ResultsManager",
-    "VSManager",
+    "RingtailCore",
     "Outputter",
     "InteractionFinder",
     "DatabaseError",
@@ -46,7 +46,7 @@ __all__ = [
     "DatabaseTableCreationError",
     "DatabaseQueryError",
     "OptionError",
-    "VirtualScreeningError",
+    "RTCoreError",
     "FileParsingError",
     "WriteToDatabaseError",
     "MultiprocessingError",

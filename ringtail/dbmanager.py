@@ -44,8 +44,7 @@ class DBManager:
             interaction tables have been created
         ligand_data_keys (list): List of keywords used to look up ligand
             data in ligand dictionaries from parser
-        log_distinct_ligands (boolean): Flag dictating, if true, only top
-            pose for given ligand will be stored
+        output_all_poses (boolean): Flag dictating, if true, all poses from passing ligands will be logged instead of just top one
         next_unique_interaction_idx (int): Index for the next unique
             interaction to be added to interaction_index table
         open_cursors (list): Storage for any DB cursors which are opened
@@ -69,32 +68,35 @@ class DBManager:
 
     def __init__(
         self,
-        db_file: str,
-        opts={
-            "write_db_flag": False,
-            "add_results": False,
-            "order_results": None,
-            "log_distinct_ligands": None,
-            "results_view_name": "passing_results",
-            "overwrite": None,
-            "conflict_opt": None,
-            "mode": "ADGPU",
-        },
+        db_file="output.db",
+        write_db_flag=False,
+        add_results=False,
+        order_results=None,
+        output_all_poses=None,
+        results_view_name="passing_results",
+        overwrite=None,
+        conflict_opt=None,
+        mode="ADGPU",
+        _stop_at_defaults=False
     ):
         """Initialize instance variables common to all DBMan subclasses
 
         Args:
             db_file (str): string for file name of DB
-            opts (dict): Dictionary of database options
+            db_opts (dict): Dictionary of database options
         """
+        self.write_db_flag = write_db_flag
+        self.add_results = add_results
+        self.order_results = order_results
+        self.output_all_poses= output_all_poses
+        self.results_view_name = results_view_name
+        self.overwrite = overwrite
+        self.conflict_opt = conflict_opt
+        self.mode = mode
         self.db_file = db_file
-        self.opts = opts
-        self.order_results = self.opts["order_results"]
-        self.log_distinct_ligands = self.opts["log_distinct_ligands"]
-        self.write_db_flag = self.opts["write_db_flag"]
-        self.passing_results_view_name = self.opts["results_view_name"]
-        self.overwrite_flag = self.opts["overwrite"]
-        self.conflict_opt = self.opts["conflict_opt"]
+        if _stop_at_defaults:
+            return
+
         # initialize dictionary processing kw lists
         self.interaction_data_kws = [
             "type",
@@ -158,6 +160,10 @@ class DBManager:
 
         self._initialize_db()
 
+    @classmethod
+    def get_defaults(cls):
+        return cls(None, _stop_at_defaults=True).__dict__
+
     def __enter__(self):
         return self
 
@@ -192,12 +198,12 @@ class DBManager:
         self._delete_from_interactions()
 
     def check_passing_view_exists(self):
-        """Return if self.passing_results_view_name in database
+        """Return if self.results_view_name in database
 
         Returns:
-            Bool: indicates if self.passing_results_view_name exists
+            Bool: indicates if self.results_view_name exists
         """
-        return self.passing_results_view_name in [
+        return self.results_view_name in [
             name[0] for name in self._fetch_view_names().fetchall()
         ]
 
@@ -432,7 +438,7 @@ class DBManager:
                     self.unique_interactions[
                         interaction_tuple
                     ] = self.next_unique_interaction_idx
-                    if self.interactions_initialized_flag or self.opts["add_results"]:
+                    if self.interactions_initialized_flag or self.add_results:
                         self._insert_one_interaction(interaction_tuple)
                         self._make_new_interaction_column(
                             self.next_unique_interaction_idx
@@ -551,13 +557,13 @@ class DBManager:
             results_filters_list, ligand_filters_list, output_fields, filter_bookmark
         )
         logging.info(filter_results_str)
-        # if max_miss is not 0, we want to give each passing view a new name by changing the self.passing_results_view_name
+        # if max_miss is not 0, we want to give each passing view a new name by changing the self.results_view_name
         if self.view_suffix is not None:
             self.current_view_name = (
-                self.passing_results_view_name + "_" + self.view_suffix
+                self.results_view_name + "_" + self.view_suffix
             )
         else:
-            self.current_view_name = self.passing_results_view_name
+            self.current_view_name = self.results_view_name
         self._create_indices(index_lignames=False)
         view_query = filter_results_str.replace(
             filter_results_str.split(" FROM ")[0], "SELECT *"
@@ -573,7 +579,7 @@ class DBManager:
         return filtered_results
 
     def fetch_data_for_passing_results(self, outfields: list) -> iter:
-        """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.passing_results_view_name
+        """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.results_view_name
 
         Args:
             outfields (list): List of fields (columns) to be
@@ -881,7 +887,7 @@ class DBManager:
 
     def _initialize_db(self):
         """Create connection to db. Then, check if db needs to be written.
-        If so, (if self.overwrite_flag drop existing tables and )
+        If so, (if self.overwrite drop existing tables and )
         initialize the tables
 
         Raises:
@@ -899,7 +905,7 @@ class DBManager:
 
     def _drop_existing_tables(self):
         """drop any existing tables. Will only be called
-        if self.overwrite_flag is true
+        if self.overwrite is true
 
         Raises:
             NotImplementedError: Description
@@ -908,7 +914,7 @@ class DBManager:
 
     def _drop_existing_views(self):
         """drop any existing views. Will only be called
-        if self.overwrite_flag is true
+        if self.overwrite is true
 
         Raises:
             NotImplementedError: Description
@@ -1240,7 +1246,7 @@ class DBManager:
 
     def _generate_results_data_query(self, output_fields):
         """Generates SQLite-formatted query string to select outfields data
-            for ligands in self.passing_results_view_name
+            for ligands in self.results_view_name
 
         Args:
             output_fields (List): List of result column data for output
@@ -1418,17 +1424,14 @@ class DBManagerSQLite(DBManager):
     def __init__(
         self,
         db_file,
-        opts={
-            "write_db_flag": False,
-            "add_results": False,
-            "order_results": None,
-            "log_distinct_ligands": None,
-            "results_view_name": "passing_results",
-            "overwrite": None,
-            "conflict_opt": None,
-            "mode": "ADGPU",
-            "order_results": None,
-        },
+        write_db_flag=False,
+        add_results=False,
+        order_results=None,
+        output_all_poses=None,
+        results_view_name="passing_results",
+        overwrite=None,
+        conflict_opt=None,
+        mode="ADGPU",
     ):
         """Initialize superclass and subclass-specific instance variables
 
@@ -1436,7 +1439,8 @@ class DBManagerSQLite(DBManager):
             db_file (str): database file name
             opts (dict, optional): Dictionary of database options
         """
-        super().__init__(db_file, opts)
+
+        super().__init__(db_file, write_db_flag, add_results, order_results, output_all_poses, results_view_name, overwrite, conflict_opt, mode)
 
         self.energy_filter_sqlite_call_dict = {
             "eworst": "energies_binding < {value}",
@@ -1457,6 +1461,7 @@ class DBManagerSQLite(DBManager):
     # # # # # # # # # # # # # # # # #
     # # # # #Public methods # # # # #
     # # # # # # # # # # # # # # # # #
+
     def insert_results(self, results_array):
         """takes array of database rows to insert, adds data to results table
 
@@ -1591,7 +1596,7 @@ class DBManagerSQLite(DBManager):
             ("type", "chain", "residue", "resid", "recname", "recid")
         """
         # populate unique interactions from existing database
-        if self.opts["add_results"]:
+        if self.add_results:
             existing_unique_interactions = self._fetch_existing_interactions()
             for interaction in existing_unique_interactions:
                 self.unique_interactions[interaction[1:]] = interaction[0]
@@ -1604,7 +1609,7 @@ class DBManagerSQLite(DBManager):
 
         # check if we need to initialize the interaction bv table and
         # insert first set of interaction
-        if not self.interactions_initialized_flag and not self.opts["add_results"]:
+        if not self.interactions_initialized_flag and not self.add_results:
             self._create_interaction_bv_table()
             self._insert_unique_interactions(list(self.unique_interactions.keys()))
             self.interactions_initialized_flag = True
@@ -1686,7 +1691,7 @@ class DBManagerSQLite(DBManager):
         # check if we have previously filtered and saved view
         return self._run_query(
             "SELECT * FROM {passing_view}".format(
-                passing_view=self.passing_results_view_name
+                passing_view=self.results_view_name
             )
         )
 
@@ -1725,7 +1730,7 @@ class DBManagerSQLite(DBManager):
                 atom_index_map, hydrogen_parents
         """
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
-            results_view=self.passing_results_view_name
+            results_view=self.results_view_name
         )
         return self._run_query(query)
 
@@ -1740,7 +1745,7 @@ class DBManagerSQLite(DBManager):
                 flexible_res_coordinates, flexible_residues
         """
         query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
-            results_view=self.passing_results_view_name, ligand=ligname
+            results_view=self.results_view_name, ligand=ligname
         )
         return self._run_query(query)
 
@@ -1755,7 +1760,7 @@ class DBManagerSQLite(DBManager):
                 flexible_res_coordinates, flexible_residues
         """
         query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
-            ligand=ligname, results_view=self.passing_results_view_name
+            ligand=ligname, results_view=self.results_view_name
         )
         return self._run_query(query)
 
@@ -1922,15 +1927,15 @@ class DBManagerSQLite(DBManager):
 
     def _initialize_db(self):
         """Create connection to db. Then, check if db needs to be written.
-        If so, (if self.overwrite_flag drop existing tables and )
+        If so, (if self.overwrite drop existing tables and )
         initialize the tables
         """
         self.conn = self._create_connection()
 
-        if not self.write_db_flag:
+        if not self.write_db_flag or self.add_results:
             return
         # if we want to overwrite old db, drop existing tables
-        if self.overwrite_flag:
+        if self.overwrite:
             self._drop_existing_tables()
         # create tables in db
         self._create_results_table()
@@ -1960,7 +1965,7 @@ class DBManagerSQLite(DBManager):
 
     def _drop_existing_tables(self):
         """drop any existing tables.
-        Will only be called if self.overwrite_flag is true
+        Will only be called if self.overwrite is true
 
         Raises:
             DatabaseError: Description
@@ -1985,7 +1990,7 @@ class DBManagerSQLite(DBManager):
 
     def _drop_existing_views(self):
         """Drop any existing views
-        Will only be called if self.overwrite_flag is true
+        Will only be called if self.overwrite is true
 
         Raises:
             DatabaseError: Description
@@ -2507,7 +2512,7 @@ class DBManagerSQLite(DBManager):
             String: SQLite-formatted query string
         """
         return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
-            results_view=self.passing_results_view_name
+            results_view=self.results_view_name
         )
 
     def _generate_result_filtering_query(
@@ -2524,7 +2529,7 @@ class DBManagerSQLite(DBManager):
                 (filter column/key, filtering cutoff)
             ligand_filters_list (list): list of filters on ligand information
             output_fields (list): List of result column data for output
-            filter_bookmark (bool, optional): flag to indicate that self.passing_results_view_name should be filtering window
+            filter_bookmark (bool, optional): flag to indicate that self.results_view_name should be filtering window
 
         Returns:
             String: SQLite-formatted string for filtering query
@@ -2644,7 +2649,7 @@ class DBManagerSQLite(DBManager):
 
         # adding if we only want to keep
         # one pose per ligand (will keep first entry)
-        if self.log_distinct_ligands:
+        if self.output_all_poses:
             sql_string += " GROUP BY LigName"
 
         # add how to order results
@@ -2750,7 +2755,7 @@ class DBManagerSQLite(DBManager):
         return sql_ligand_string
 
     def _generate_results_data_query(self, output_fields):
-        """Generates SQLite-formatted query string to select outfields data for ligands in self.passing_results_view_name
+        """Generates SQLite-formatted query string to select outfields data for ligands in self.results_view_name
 
         Args:
             output_fields (List): List of result column data for output
@@ -2766,7 +2771,7 @@ class DBManagerSQLite(DBManager):
             "SELECT "
             + outfield_string
             + " FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {0})".format(
-                self.passing_results_view_name
+                self.results_view_name
             )
         )
 
@@ -2895,14 +2900,14 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Results WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
-                    view=self.passing_results_view_name
+                    view=self.results_view_name
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseError(
-                f"Error occured while pruning Results not in {self.passing_results_view_name}"
+                f"Error occured while pruning Results not in {self.results_view_name}"
             ) from e
 
     def _delete_from_ligands(self):
@@ -2915,14 +2920,14 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Ligands WHERE LigName NOT IN (SELECT LigName from Results WHERE Pose_ID IN (SELECT Pose_ID FROM {view}))".format(
-                    view=self.passing_results_view_name
+                    view=self.results_view_name
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseError(
-                f"Error occured while pruning Ligands not in {self.passing_results_view_name}"
+                f"Error occured while pruning Ligands not in {self.results_view_name}"
             ) from e
 
     def _delete_from_interactions(self):
@@ -2936,14 +2941,14 @@ class DBManagerSQLite(DBManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
-                    view=self.passing_results_view_name
+                    view=self.results_view_name
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseError(
-                f"Error occured while pruning Interaction_bitvectors not in {self.passing_results_view_name}"
+                f"Error occured while pruning Interaction_bitvectors not in {self.results_view_name}"
             ) from e
 
     def _generate_view_names_query(self):

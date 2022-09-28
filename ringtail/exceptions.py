@@ -29,7 +29,7 @@ class DatabaseViewCreationError(DatabaseError):
     pass
 
 
-class VirtualScreeningError(Exception):
+class RTCoreError(Exception):
     pass
 
 

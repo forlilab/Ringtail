@@ -9,14 +9,14 @@ import numpy as np
 import json
 import warnings
 from meeko import RDKitMolCreate
-from ringtail import DBManagerSQLite
-from ringtail import ResultsManager
+from .dbmanager import DBManager, DBManagerSQLite
+from .resultsmanager import ResultsManager
 from .exceptions import (
     DatabaseConnectionError,
     DatabaseTableCreationError,
     DatabaseError,
 )
-from .exceptions import VirtualScreeningError, ResultsProcessingError, OutputError
+from .exceptions import RTCoreError, ResultsProcessingError, OutputError
 from rdkit import Chem
 from rdkit.Chem import SDWriter
 import itertools
@@ -24,8 +24,8 @@ import logging
 import os
 
 
-class VSManager:
-    """Manager for coordinating different actions on virtual screening
+class RingtailCore:
+    """Core class for coordinating different actions on virtual screening
     i.e. adding results to db, filtering, output options
 
     Attributes:
@@ -38,7 +38,7 @@ class VSManager:
         no_print_flag (boolean): Flag specifying whether passing results
             should be printed to terminal
         out_opts (dictionary): Specified output options including data fields
-            to output, export_poses_path, log file name
+            to output, export_sdf_path, log file name
         output_manager (Outputter object): Manager for output tasks of
             log-writting, plotting, ligand SDF writing
         results_filters_list (List): List of tuples of filter option and value
@@ -46,8 +46,19 @@ class VSManager:
             files for insertion into database
     """
 
+    __default_options = {
+            "db_opts": {
+                "values": DBManager.get_defaults(),
+                "ignore": []
+            },
+            "rman_opts": {
+                "values": ResultsManager.get_defaults(),
+                "ignore": []
+            }
+        }
+
     def __init__(self, db_opts, rman_opts, filters, out_opts):
-        """Initialize VSManager object. Will create DBManager object to serve
+        """Initialize RingtailCore object. Will create DBManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
         Will create Outputter object to assist in creating output files.
@@ -58,25 +69,88 @@ class VSManager:
                 results manager
             filters (dictionary): Dictionary containing user-specified filters
             out_opts (dictionary): Specified output options including data
-                fields to output, export_poses_path, log file name
+                fields to output, export_sdf_path, log file name
         """
-        self.filters = filters
-        self.out_opts = out_opts
-        self.rman_opts = rman_opts
-        self.db_opts = db_opts
+        defaults = self.get_defaults()
+
+        db_types = {'sqlite': DBManagerSQLite,}
+        db_type = db_opts.pop("db_type")
+  
+        if db_opts is not None:
+            self.db_opts = db_opts
+        else:
+            self.db_opts = defaults["db_opts"]["values"]
+        if rman_opts is not None:
+            self.rman_opts = rman_opts
+        else:
+            self.rman_opts = defaults["rman_opts"]["values"]
+        if filters is not None:
+            self.filters = filters
+        else:
+            self.filters = defaults["filters"]["values"]
+        if out_opts is not None:
+            self.out_opts = out_opts
+        else:
+            self.out_opts = defaults["out_opts"][values]
+
+        self.dbman = db_types[db_type](**self.db_opts)
+        self.rman_opts["dbman"] = self.dbman
+
+    @classmethod
+    def get_defaults(cls, terse=False):
+        out_opts = {'log': 'output_log.txt',
+                    'overwrite': None,
+                    'export_sdf_path': None,
+                    'plot': None,
+                    'outfields': 'e',
+                    'no_print': True,
+                    'export_bookmark_csv': None,
+                    'export_query_csv': None,
+                    'export_bookmark_db': None,
+                    'data_from_bookmark': None,
+                    'filter_bookmark': None}
+
+        filters = {'properties': {
+                       'eworst': None,
+                       'ebest': None,
+                       'leworst': None,
+                       'lebest': None,
+                       'energy_percentile': None,
+                       'le_percentile': None},
+                   'interactions': {
+                       'V': [],
+                       'H': [],
+                       'R': []},
+                   'interactions_count': [],
+                   'ligand_filters': {
+                       'N': [],
+                       'S': [],
+                       'F': 'OR'},
+                   'filter_ligands_flag': False,
+                   'max_miss': 0,
+                   'react_any': None}
+
+        defaults = cls.__default_options.copy()
+        if terse:
+            for group, opt in defaults.items():
+                defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
+        defaults["out_opts"] = {"values": out_opts, "ignore": []}
+        defaults["filters"] = {"values": filters, "ignore": []}
+
+        return defaults
 
     def __enter__(self):
-        self.dbman = DBManagerSQLite(self.db_opts["dbFile"], self.db_opts)
+        # self.dbman = DBManagerSQLite(self.db_opts["dbFile"], self.db_opts)
 
         # if requested, write database or add results to an existing one
-        if self.dbman.write_db_flag or self.db_opts["add_results"]:
+        if self.db_opts["write_db_flag"] or self.db_opts["add_results"]:
             logging.info("Adding results...")
-            self.results_man = ResultsManager(opts=self.rman_opts, dbman=self.dbman)
+            self.results_man = ResultsManager(**self.rman_opts)
             self.add_results()
 
         else:
             self.output_manager = Outputter(
-                self.out_opts["log"], self.out_opts["export_poses_path"]
+                self.out_opts["log"], self.out_opts["export_sdf_path"]
             )
 
         return self
@@ -545,7 +619,7 @@ class Outputter:
 
     """
 
-    def __init__(self, log_file, export_sdf_path=""):
+    def __init__(self, log_file="output_log.txt", export_sdf_path=""):
         """Initialize Outputter object and create log file
 
         Args:

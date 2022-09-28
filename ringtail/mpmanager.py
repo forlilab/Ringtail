@@ -27,41 +27,44 @@ else:
 class MPManager:
     def __init__(
         self,
-        db_obj,
-        opts={
-            "mode": "dlg",
-            "chunk_size": 1,
-            "max_poses": 3,
-            "interaction_tolerance": None,
-            "store_all_poses": False,
-            "target": None,
-            "add_interactions": False,
-            "interaction_cutoffs": [3.7, 4.0],
-            "receptor_file": None,
-            "file_sources": None,
-            "file_pattern": None,
-        },
+        dbman,
+        mode="dlg",
+        chunk_size=1,
+        max_poses=3,
+        interaction_tolerance=None,
+        store_all_poses=False,
+        target=None,
+        add_interactions=False,
+        interaction_cutoffs=[3.7, 4.0],
+        receptor_file=None,
+        file_sources={'file': [[]],
+                      'file_path': {
+                          'path': [[]],
+                          'pattern': '*.dlg*',
+                          'recursive': None},
+                      'file_list': [[]]},
+        file_pattern="*.dlg*",
     ):
+
         # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg", "vina"]
-        if opts["mode"] not in self.implemented_modes:
+        if mode not in self.implemented_modes:
             raise NotImplementedError(
-                "Requested file parsing mode {0} not yet implemented".format(
-                    opts["mode"]
-                )
+                f"Requested file parsing mode {mode} not yet implemented"
             )
-        self.mode = opts["mode"]
-        self.db = db_obj
-        self.chunksize = opts["chunk_size"]
-        self.max_poses = opts["max_poses"]
-        self.store_all_poses = opts["store_all_poses"]
-        self.interaction_tolerance = opts["interaction_tolerance"]
-        self.target = opts["target"]
-        self.add_interactions = opts["add_interactions"]
-        self.interaction_cutoffs = opts["interaction_cutoffs"]
-        self.receptor_file = opts["receptor_file"]
-        self.file_sources = opts["file_sources"]
-        self.file_pattern = opts["file_pattern"]
+        self.mode = mode
+        self.chunk_size = chunk_size
+        self.max_poses = max_poses
+        self.store_all_poses = store_all_poses
+        self.interaction_tolerance = interaction_tolerance
+        self.target = target
+        self.add_interactions = add_interactions
+        self.interaction_cutoffs = interaction_cutoffs
+        self.receptor_file = receptor_file
+        self.file_sources = file_sources
+        self.file_pattern = file_pattern
+
+        self.db = dbman
         self.num_files = 0
 
         self.max_proc = multiprocessing.cpu_count()
@@ -98,7 +101,7 @@ class MPManager:
             self.queueOut,
             self.max_proc,
             self.c_conn,
-            self.chunksize,
+            self.chunk_size,
             self.db,
             self.mode,
         )
@@ -127,13 +130,12 @@ class MPManager:
 
     def _process_sources(self):
         # add individual files
-        if self.file_sources["file"] is not None:
+        if self.file_sources["file"] != [[]]:
             for file_list in self.file_sources["file"]:
                 for file in file_list:
                     if fnmatch.fnmatch(file, self.file_pattern):
                         self._add_to_queue(file)
-
-        if self.file_sources["file_path"] is not None:
+        if self.file_sources["file_path"]["path"] != [[]]:
             for path_list in self.file_sources["file_path"]["path"]:
                 for path in path_list:
                     # scan for ligand dlgs
@@ -143,7 +145,7 @@ class MPManager:
                         for f in files:
                             self._add_to_queue(f)
 
-        if self.file_sources["file_list"] is not None:
+        if self.file_sources["file_list"] != [[]]:
             for filelist_list in self.file_sources["file_list"]:
                 for filelist in filelist_list:
                     self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
@@ -171,7 +173,7 @@ class MPManager:
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
             logging.debug("Caught error in multiprocessing")
-            error, tb, file_name = self.p_conn.recv()
+            error, tb, filename = self.p_conn.recv()
             self._kill_all_workers(filename, tb)
     
     def _kill_all_workers(self, filename, tb):

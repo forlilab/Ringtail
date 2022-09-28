@@ -14,7 +14,7 @@ import warnings
 import logging
 from .exceptions import OptionError
 import __main__
-
+from .ringtailcore import RingtailCore
 
 def cmdline_parser(defaults={}):
 
@@ -28,57 +28,79 @@ def cmdline_parser(defaults={}):
         "--config")
     confargs, remaining_argv = conf_parser.parse_known_args()
 
-    defaults = {
-        "input_db": None,
-        "bookmark_name": "passing_results",
-        "verbose": None,
-        "debug": None,
-        "file": None,
-        "file_path": None,
-        "file_list": None,
-        "mode": "dlg",
-        "pattern": "*.dlg*",
-        "recursive": None,
-        "add_results": None,
-        "duplicate_handling": None,
-        "save_receptor": None,
-        "output_db": "output.db",
-        "overwrite": None,
-        "max_poses": 3,
-        "store_all_poses": None,
-        "interaction_tolerance": None,
-        "log": "output_log.txt",
-        "out_fields": "e",
-        "order_results": None,
-        "all_poses": None,
-        "export_bookmark_csv": None,
-        "export_query_csv": None,
-        "export_sdf_path": None,
-        "export_bookmark_db": None,
-        "new_data_from_bookmark": None,
-        "filter_bookmark": None,
-        "plot": None,
-        "eworst": None,
-        "ebest": None,
-        "leworst": None,
-        "lebest": None,
-        "energy_percentile": None,
-        "le_percentile": None,
-        "name": None,
-        "substructure": None,
-        "substructure_join": "OR",
-        "van_der_waals": None,
-        "hydrogen_bond": None,
-        "reactive_res": None,
-        "hb_count": None,
-        "react_any": None,
-        "max_miss": 0,
-        "add_interactions": None,
-        "interaction_cutoffs": "3.7,4.0",
-        "receptor_file": None,
+    defaults = RingtailCore.get_defaults()
+    """defaults = {
+            'write_db_flag': False,
+            'add_results': False,
+            'order_results': None,
+            'output_all_poses': None,
+            'results_view_name': 'passing_results',
+            'overwrite': None,
+            'conflict_opt': None,
+            'mode': 'dlg',
+            'parser_manager': 'multiprocessing',
+            'chunk_size': 1,
+            'max_poses': 3,
+            'store_all_poses': False,
+            'interaction_tolerance': None,
+            'target': None,
+            'add_interactions': False,
+            'interaction_cutoffs': [3.7, 4.0],
+            'receptor_file': None,
+            'file_sources': {
+                'file': [[]],
+                'file_path': {'path': [[]], 'pattern': '*.dlg*', 'recursive': None},
+                'file_list': [[]]},
+            'file_pattern': '*.dlg*',
+            'log': 'output_log.txt',
+            'export_sdf_path': None,
+            'plot': None,
+            'outfields': 'e',
+            'no_print': True, # fix noprint
+            'export_bookmark_csv': None,
+            'export_query_csv': None,
+            'export_bookmark_db': None,
+            'data_from_bookmark': None,
+            'filter_bookmark': None,
+            'eworst': None,
+            'ebest': None,
+            'leworst': None,
+            'lebest': None,
+            'energy_percentile': None,
+            'le_percentile': None, 
+            'van_der_waals': [],
+            'hydrogen_bond': [],
+            'reactive_res': [],
+            'interactions_count': [],
+            'name': [],
+            'substructure': [],
+            'substructure_join': 'OR',
+            'filter_ligands_flag': False,
+            'max_miss': 0,
+            'react_any': None
+    }"""
+    config = {}
+    for section in defaults:
+        for k, v in defaults[section]["values"].items():
+            config[k] = v
+    # separate filters into separate arguments
+    filter_keys = ["properties", "interactions", "ligand_filters"]
+    replace_filter_keys = {
+        "V": "van_der_waals",
+        "H": "hydrogen_bond",
+        "R": "reactive_res",
+        "N": "name",
+        "S": "substructure",
+        "F": "substructure_join"
     }
 
-    config = defaults.copy()
+    for fk in filter_keys:
+        filterdict = config.pop(fk)
+        for k, v in filterdict.items():
+            if k in replace_filter_keys:
+                config[replace_filter_keys[k]] = v
+            else:
+                config[k] = v
 
     if confargs.config is not None:
         logging.info("Reading options from config file")
@@ -92,11 +114,7 @@ def cmdline_parser(defaults={}):
                  Script to process virtual screening data by writing/filtering/exporting from database. In 'write' mode, provide docking files for writing to database with --file, --file_list, and/or --file_path. In 'read' mode, provide input database with --input_db. Please see GitHub for full usage details.""",
         description="Package for creating, managing, and filtering databases of virtual screening results.",
         epilog="""
-
-        REQUIRED PACKAGES
-                Requires RDkit, SciPy, Meeko.\n
-
-        AUTHOR
+        AUTHORS
                 Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, Diogo Santos-Martins, PhD, and Matthew Holcomb, PhD.\n
 
         REPORTING BUGS
@@ -186,6 +204,7 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="PATTERN",
+        dest="file_pattern"
     )
     write_parser.add_argument(
         "-r",
@@ -220,6 +239,7 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[FILE_NAME].DB",
+        default="output.db"
     )
     write_parser.add_argument(
         "-ov",
@@ -290,6 +310,7 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="STRING",
+        dest="results_view_name"
     )
     read_parser.add_argument(
         "-m",
@@ -323,9 +344,9 @@ def cmdline_parser(defaults={}):
     )
     output_group.add_argument(
         "-of",
-        "--out_fields",
+        "--outfields",
         help=(
-            'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--out_fields=e,le,hb"; by default, energies_binding (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
+            'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, energies_binding (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
             '"e" (energies_binding), '
             '"le" (ligand efficiency), '
             '"delta" (delta energy from best pose), '
@@ -369,10 +390,10 @@ def cmdline_parser(defaults={}):
         metavar="STRING",
     )
     output_group.add_argument(
-        "-ap",
-        "--all_poses",
+        "-oap",
+        "--output_all_poses",
         help="By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.",
-        action="store_false",
+        action="store_true",
     )
     output_group.add_argument(
         "-xs",
@@ -406,8 +427,8 @@ def cmdline_parser(defaults={}):
     )
     output_group.add_argument(
         "-nd",
-        "--new_data_from_bookmark",
-        help="Write log of --out_fields data for bookmark specified by --bookmark_name. Must use without any filters.",
+        "--data_from_bookmark",
+        help="Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.",
         action="store_true",
     )
     output_group.add_argument(
@@ -704,7 +725,7 @@ class CLOptionParser:
                     "Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_file."
                 )
             # set pattern to .pdbqt
-            parsed_opts.pattern = "*.pdbqt*"
+            parsed_opts.file_pattern = "*.pdbqt*"
 
         # guard against unsing interaction tolerance with storing all poses
         if (
@@ -717,16 +738,16 @@ class CLOptionParser:
             parsed_opts.interaction_tolerance = False
 
         # guard against unsing percentile filter with all_poses
-        if parsed_opts.all_poses and (
+        if parsed_opts.output_all_poses and (
             parsed_opts.energy_percentile is not None
             or parsed_opts.le_percentile is not None
         ):
             warnings.warn(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
-            parsed_opts.all_poses = False
+            parsed_opts.output_all_poses = False
 
-        self.pattern = parsed_opts.pattern
+        self.pattern = parsed_opts.file_pattern
         self.save_receptor = parsed_opts.save_receptor
         self.receptor_file = parsed_opts.receptor_file
 
@@ -737,20 +758,26 @@ class CLOptionParser:
         if self.rr_mode == "write":
             # check that required input options are provided
             file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
-            file_sources["file"] = parsed_opts.file
+            if parsed_opts.file is None:
+                file_sources["file"] = [[]]
+            else:
+                file_sources["file"] = parsed_opts.file
             if parsed_opts.file_path is not None:
                 file_sources["file_path"] = {
                     "path": parsed_opts.file_path,
-                    "pattern": parsed_opts.pattern,
+                    "pattern": parsed_opts.file_pattern,
                     "recursive": parsed_opts.recursive,
                 }
             else:
-                file_sources["file_path"] = None
-            file_sources["file_list"] = parsed_opts.file_list
+                file_sources["file_path"] = {'path': [[]], 'pattern': '*.dlg*', 'recursive': None}
+            if parsed_opts.file_list is None:
+                file_sources["file_list"] = [[]]
+            else:
+                file_sources["file_list"] = parsed_opts.file_list
             if (
-                (file_sources["file"] is None)
-                and (file_sources["file_path"] is None)
-                and (file_sources["file_list"] is None)
+                (file_sources["file"] == [[]])
+                and (file_sources["file_path"] == [[]])
+                and (file_sources["file_list"] == [[]])
                 and (parsed_opts.input_db is None)
             ):
                 raise OptionError(
@@ -783,8 +810,8 @@ class CLOptionParser:
                     raise OptionError(
                         "Cannot use --export_sdf_path with --max_miss > 0. Can export poses for desired bookmark --bookmark_name"
                     )
-            parsed_opts.out_fields = parsed_opts.out_fields.split(",")
-            for outfield in parsed_opts.out_fields:
+            parsed_opts.outfields = parsed_opts.outfields.split(",")
+            for outfield in parsed_opts.outfields:
                 if outfield not in self.outfield_options:
                     raise OptionError(
                         "WARNING: {out_f} is not a valid output option. Please see --help".format(
@@ -805,9 +832,9 @@ class CLOptionParser:
                     )
 
             # # # filters
-            if parsed_opts.filter_bookmark == parsed_opts.bookmark_name:
+            if parsed_opts.filter_bookmark == parsed_opts.results_view_name:
                 logging.error(
-                    f"Specified filter_bookmark and bookmark_name are the same: {parsed_opts.bookmark_name}"
+                    f"Specified filter_bookmark and bookmark_name are the same: {parsed_opts.results_view_name}"
                 )
                 raise OptionError(
                     "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
@@ -927,42 +954,53 @@ class CLOptionParser:
         out_opts = {
             "log": parsed_opts.log,
             "overwrite": parsed_opts.overwrite,
-            "export_poses_path": parsed_opts.export_sdf_path,
+            "export_sdf_path": parsed_opts.export_sdf_path,
             "plot": parsed_opts.plot,
-            "outfields": parsed_opts.out_fields,
+            "outfields": parsed_opts.outfields,
             "no_print": not parsed_opts.verbose,
-            "export_table": parsed_opts.export_bookmark_csv,
-            "export_query": parsed_opts.export_query_csv,
+            "export_bookmark_csv": parsed_opts.export_bookmark_csv,
+            "export_query_csv": parsed_opts.export_query_csv,
             "export_bookmark_db": parsed_opts.export_bookmark_db,
-            "data_from_bookmark": parsed_opts.new_data_from_bookmark,
+            "data_from_bookmark": parsed_opts.data_from_bookmark,
             "filter_bookmark": parsed_opts.filter_bookmark,
         }
 
         db_opts = {
             "order_results": parsed_opts.order_results,
-            "log_distinct_ligands": parsed_opts.all_poses,
-            "results_view_name": parsed_opts.bookmark_name,
-            "store_all_poses": parsed_opts.store_all_poses,
+            "output_all_poses": parsed_opts.output_all_poses,
+            "results_view_name": parsed_opts.results_view_name,
             "overwrite": parsed_opts.overwrite,
             "add_results": parsed_opts.add_results,
             "conflict_opt": conflict_handling,
             "mode": self.mode,
-            "dbFile": None,
+            "db_type": "sqlite"
         }
 
+        if isinstance(parsed_opts.interaction_tolerance, str):
+            parsed_opts.interaction_tolerance = [
+                float(val) for val in parsed_opts.interaction_cutoffs.split(",") if isinstance(o, t)
+            ]
         rman_opts = {
+            "chunk_size": 1,
             "mode": self.mode,
             "store_all_poses": parsed_opts.store_all_poses,
             "max_poses": parsed_opts.max_poses,
             "interaction_tolerance": parsed_opts.interaction_tolerance,
             "add_interactions": parsed_opts.add_interactions,
-            "interaction_cutoffs": [
-                float(val) for val in parsed_opts.interaction_cutoffs.split(",")
-            ],
+            "interaction_cutoffs": parsed_opts.interaction_cutoffs,
             "receptor_file": parsed_opts.receptor_file,
             "file_sources": file_sources,
             "file_pattern": self.pattern,
+            "parser_manager": "multiprocessing"
         }
+        # save target name
+        if rman_opts["receptor_file"] is not None:
+            receptor = (
+                rman_opts["receptor_file"].split(".")[0].split("/")[-1]
+            )  # remove file extension and path
+        else:
+            receptor = None
+        rman_opts["target"] = receptor
 
         self.file_sources = file_sources
         self.input_db = parsed_opts.input_db
@@ -970,11 +1008,14 @@ class CLOptionParser:
             dbFile = parsed_opts.input_db
             if not os.path.exists(dbFile):
                 raise OptionError("WARNING: input database does not exist!")
-            db_opts["write_db_flag"] = False
         else:
             dbFile = parsed_opts.output_db
+        db_opts["db_file"] = dbFile
+
+        if self.rr_mode == "write":
             db_opts["write_db_flag"] = True
-        db_opts["dbFile"] = dbFile
+        else:
+            db_opts["write_db_flag"] = False
 
         # make attributes for parsed opts
         self.db_opts = db_opts
