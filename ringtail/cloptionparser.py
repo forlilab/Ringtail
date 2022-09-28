@@ -77,7 +77,9 @@ def cmdline_parser(defaults={}):
             'substructure_join': 'OR',
             'filter_ligands_flag': False,
             'max_miss': 0,
-            'react_any': None
+            'react_any': None,
+            'save_receptor': False,
+            'filter': False,
     }"""
     config = {}
     for section in defaults:
@@ -628,9 +630,6 @@ class CLOptionParser:
         # if only receptor files found and --save_receptor, assume we just want to
         # add receptor and not modify the rest of the db, so turn off write_db_flag
         if self.save_receptor:
-            # self.db_opts["write_db_flag"] = False
-            # if self.input_db is None:
-            #    raise OptionError("No input database given for saving receptor(s)")
             if self.db_opts["add_results"]:
                 raise OptionError(
                     "Cannot use --add_results with --save_receptor. Please remove the --save_receptor flag"
@@ -993,6 +992,8 @@ class CLOptionParser:
             "file_pattern": self.pattern,
             "parser_manager": "multiprocessing"
         }
+        core_opts = {"save_receptor": parsed_opts.save_receptor,
+                     "filter": self.filter}
         # save target name
         if rman_opts["receptor_file"] is not None:
             receptor = (
@@ -1015,6 +1016,10 @@ class CLOptionParser:
         if self.rr_mode == "write":
             db_opts["write_db_flag"] = True
         else:
+            db_opts["write_db_flag"] = False
+
+        # turn off write_db_flag if we are only adding the receptor to an existing db
+        if parsed_opts.save_receptor and parsed_opts.input_db is not None and parsed_opts.file is None and parsed_opts.file_list is None and parsed_opts.file_path is None:
             db_opts["write_db_flag"] = False
 
         # make attributes for parsed opts
