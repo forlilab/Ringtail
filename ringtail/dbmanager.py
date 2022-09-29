@@ -62,14 +62,11 @@ class DBManager:
         unique_interactions (dict): Dictionary for storing unique interactions
             to be written in interaction_index table
         view_suffix (str): suffix to add to end of view. Used with max_miss
-        write_db_flag (boolean): Flag indicating that DBMan will be
-            writing new data to DB
     """
 
     def __init__(
         self,
         db_file="output.db",
-        write_db_flag=False,
         add_results=False,
         order_results=None,
         output_all_poses=None,
@@ -77,6 +74,7 @@ class DBManager:
         overwrite=None,
         conflict_opt=None,
         mode="ADGPU",
+        db_type=None,
         _stop_at_defaults=False
     ):
         """Initialize instance variables common to all DBMan subclasses
@@ -85,7 +83,6 @@ class DBManager:
             db_file (str): string for file name of DB
             db_opts (dict): Dictionary of database options
         """
-        self.write_db_flag = write_db_flag
         self.add_results = add_results
         self.order_results = order_results
         self.output_all_poses= output_all_poses
@@ -94,6 +91,7 @@ class DBManager:
         self.conflict_opt = conflict_opt
         self.mode = mode
         self.db_file = db_file
+        self.db_type = db_type
         if _stop_at_defaults:
             return
 
@@ -162,7 +160,7 @@ class DBManager:
 
     @classmethod
     def get_defaults(cls):
-        return cls(None, _stop_at_defaults=True).__dict__
+        return cls(_stop_at_defaults=True).__dict__
 
     def __enter__(self):
         return self
@@ -1424,7 +1422,6 @@ class DBManagerSQLite(DBManager):
     def __init__(
         self,
         db_file,
-        write_db_flag=False,
         add_results=False,
         order_results=None,
         output_all_poses=None,
@@ -1440,7 +1437,7 @@ class DBManagerSQLite(DBManager):
             opts (dict, optional): Dictionary of database options
         """
 
-        super().__init__(db_file, write_db_flag, add_results, order_results, output_all_poses, results_view_name, overwrite, conflict_opt, mode)
+        super().__init__(db_file, add_results, order_results, output_all_poses, results_view_name, overwrite, conflict_opt, mode)
 
         self.energy_filter_sqlite_call_dict = {
             "eworst": "energies_binding < {value}",
@@ -1932,8 +1929,6 @@ class DBManagerSQLite(DBManager):
         """
         self.conn = self._create_connection()
 
-        if not self.write_db_flag or self.add_results:
-            return
         # if we want to overwrite old db, drop existing tables
         if self.overwrite:
             self._drop_existing_tables()
@@ -2157,7 +2152,7 @@ class DBManagerSQLite(DBManager):
                 self.conflict_opt
             )
 
-        sql_results_table = """CREATE TABLE Results (
+        sql_results_table = """CREATE TABLE IF NOT EXISTS Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
             ligand_smile        VARCHAR[],
@@ -2222,7 +2217,7 @@ class DBManagerSQLite(DBManager):
         Raises:
             DatabaseTableCreationError: Description
         """
-        receptors_table = """CREATE TABLE Receptors (
+        receptors_table = """CREATE TABLE IF NOT EXISTS Receptors (
             Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
             RecName             VARCHAR,
             box_dim             VARCHAR[],
@@ -2253,7 +2248,7 @@ class DBManagerSQLite(DBManager):
             DatabaseTableCreationError: Description
 
         """
-        ligand_table = """CREATE TABLE Ligands (
+        ligand_table = """CREATE TABLE IF NOT EXISTS Ligands (
             LigName             VARCHAR NOT NULL PRIMARY KEY ON CONFLICT IGNORE,
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
@@ -2283,7 +2278,7 @@ class DBManagerSQLite(DBManager):
             DatabaseTableCreationError: Description
 
         """
-        interaction_index_table = """CREATE TABLE Interaction_indices (
+        interaction_index_table = """CREATE TABLE IF NOT EXISTS Interaction_indices (
             interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
             interaction_type    VARCHAR[],
             rec_chain           VARCHAR[],
@@ -2323,7 +2318,7 @@ class DBManagerSQLite(DBManager):
             + " INTEGER"
         )
 
-        bv_table = """CREATE TABLE Interaction_bitvectors (
+        bv_table = """CREATE TABLE IF NOT EXISTS Interaction_bitvectors (
         Pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
         {columns})""".format(
             columns=interact_columns_str
@@ -2346,7 +2341,7 @@ class DBManagerSQLite(DBManager):
         Raises:
             DatabaseTableCreationError: Description
         """
-        sql_str = """CREATE TABLE Bookmarks (
+        sql_str = """CREATE TABLE IF NOT EXISTS Bookmarks (
         Bookmark_name       VARCHAR[] PRIMARY KEY,
         Query               VARCHAR[])"""
 
