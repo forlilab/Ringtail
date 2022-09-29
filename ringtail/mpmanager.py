@@ -44,6 +44,7 @@ class MPManager:
                           'recursive': None},
                       'file_list': [[]]},
         file_pattern="*.dlg*",
+        max_proc=None,
     ):
 
         # confirm that requested parser mode is implemented
@@ -67,7 +68,9 @@ class MPManager:
         self.db = dbman
         self.num_files = 0
 
-        self.max_proc = multiprocessing.cpu_count()
+        if max_proc is None:
+            max_proc = multiprocessing.cpu_count()
+        self.max_proc = max_proc
         self.queueIn = multiprocessing.Queue(maxsize=2 * self.max_proc)
         self.queueOut = multiprocessing.Queue()
 

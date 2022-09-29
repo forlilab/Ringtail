@@ -1939,7 +1939,7 @@ class DBManagerSQLite(DBManager):
 
         # check that we want to overwrite or add results if storage already exists
         if not self.overwrite and not self.append_results:
-            self.check_storage_empty()
+            self._check_storage_empty()
         # if we want to overwrite old db, drop existing tables
         if self.overwrite:
             self._drop_existing_tables()

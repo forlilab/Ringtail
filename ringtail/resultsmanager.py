@@ -29,9 +29,9 @@ class ResultsManager:
                           'recursive': None},
                       'file_list': [[]]},
         file_pattern="*.dlg*",
+        max_proc=None
         _stop_at_defaults=False
     ):
-        parser_managers = {'multiprocessing': MPManager,}
         
         self.parser_manager = parser_manager
         self.mode = mode
@@ -45,10 +45,12 @@ class ResultsManager:
         self.receptor_file = receptor_file
         self.file_sources = file_sources
         self.file_pattern = file_pattern
+        self.max_proc = max_proc
         if _stop_at_defaults:
             return
 
         self.dbman = dbman
+        parser_managers = {'multiprocessing': MPManager,}
         parser_opts = {}
         for k,v in self.__dict__.items():
             if k == "parser_manager":

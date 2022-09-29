@@ -51,6 +51,7 @@ def cmdline_parser(defaults={}):
                 'file_path': {'path': [[]], 'pattern': '*.dlg*', 'recursive': None},
                 'file_list': [[]]},
             'file_pattern': '*.dlg*',
+            'max_proc': None,
             'log': 'output_log.txt',
             'export_sdf_path': None,
             'plot': None,
@@ -293,6 +294,13 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="STRING",
+    )
+    write_parser.add_argument(
+        "-mpr",
+        "--max_proc",
+        help="Maximum number of processes to create during parallel file parsing. Defaults to number of CPU processors.",
+        action="store",
+        type=int,
     )
 
     read_parser = subparsers.add_parser("read")
@@ -989,7 +997,8 @@ class CLOptionParser:
             "receptor_file": parsed_opts.receptor_file,
             "file_sources": file_sources,
             "file_pattern": self.pattern,
-            "parser_manager": "multiprocessing"
+            "parser_manager": "multiprocessing",
+            "max_proc": parsed_opts.max_proc
         }
 
         # save target name
