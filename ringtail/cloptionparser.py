@@ -30,7 +30,6 @@ def cmdline_parser(defaults={}):
 
     defaults = RingtailCore.get_defaults()
     """defaults = {
-            'write_db_flag': False,
             'add_results': False,
             'order_results': None,
             'output_all_poses': None,
@@ -56,7 +55,7 @@ def cmdline_parser(defaults={}):
             'export_sdf_path': None,
             'plot': None,
             'outfields': 'e',
-            'no_print': True, # fix noprint
+            'no_print': True,
             'export_bookmark_csv': None,
             'export_query_csv': None,
             'export_bookmark_db': None,
@@ -628,7 +627,7 @@ class CLOptionParser:
 
         # confirm that receptor file was found if needed, else throw error
         # if only receptor files found and --save_receptor, assume we just want to
-        # add receptor and not modify the rest of the db, so turn off write_db_flag
+        # add receptor and not modify the rest of the db
         if self.save_receptor:
             if self.db_opts["add_results"]:
                 raise OptionError(
@@ -992,8 +991,7 @@ class CLOptionParser:
             "file_pattern": self.pattern,
             "parser_manager": "multiprocessing"
         }
-        core_opts = {"save_receptor": parsed_opts.save_receptor,
-                     "filter": self.filter}
+
         # save target name
         if rman_opts["receptor_file"] is not None:
             receptor = (
@@ -1012,15 +1010,6 @@ class CLOptionParser:
         else:
             dbFile = parsed_opts.output_db
         db_opts["db_file"] = dbFile
-
-        if self.rr_mode == "write":
-            db_opts["write_db_flag"] = True
-        else:
-            db_opts["write_db_flag"] = False
-
-        # turn off write_db_flag if we are only adding the receptor to an existing db
-        if parsed_opts.save_receptor and parsed_opts.input_db is not None and parsed_opts.file is None and parsed_opts.file_list is None and parsed_opts.file_path is None:
-            db_opts["write_db_flag"] = False
 
         # make attributes for parsed opts
         self.db_opts = db_opts
