@@ -52,6 +52,9 @@ if __name__ == "__main__":
             db_opts=dbman_opts, rman_opts=rman_opts, filters=filters, out_opts=out_opts
         ) as rt_core:
 
+            if cl_opts.rr_mode == "write":
+                rt_core.add_results()
+
             # Add receptors to database if requested
             # TODO move this
             if cl_opts.save_receptor:
