@@ -8,8 +8,8 @@ import argparse
 import json
 import sys
 import os
-from ringtail import DBManagerSQLite
-from ringtail import Outputter
+from ringtail import StorageManagerSQLite
+from ringtail import OutputManager
 from ringtail import OptionError
 import logging
 import traceback
@@ -197,7 +197,7 @@ if __name__ == "__main__":
 
         logging.info("Starting cross-reference process")
 
-        dbman = DBManagerSQLite(ref_db)
+        dbman = StorageManagerSQLite(ref_db)
 
         last_db = None
         num_wanted_dbs = len(wanted_dbs)
@@ -229,7 +229,7 @@ if __name__ == "__main__":
                 last_db = db
 
         logging.info("Writing log")
-        output_manager = Outputter(args.log)
+        output_manager = OutputManager(args.log)
         if args.save_bookmark is not None:
             output_manager.write_results_bookmark_to_log(args.save_bookmark)
         output_manager.log_num_passing_ligands(number_passing_ligands)

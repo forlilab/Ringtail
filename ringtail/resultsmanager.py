@@ -11,7 +11,7 @@ from .exceptions import ResultsProcessingError
 class ResultsManager:
     def __init__(
         self,
-        dbman,
+        storageman,
         parser_manager = "multiprocessing",
         mode="dlg",
         chunk_size=1,
@@ -49,7 +49,7 @@ class ResultsManager:
         if _stop_at_defaults:
             return
 
-        self.dbman = dbman
+        self.storageman = storageman
         parser_managers = {'multiprocessing': MPManager,}
         parser_opts = {}
         for k,v in self.__dict__.items():

@@ -27,7 +27,7 @@ else:
 class MPManager:
     def __init__(
         self,
-        dbman,
+        storageman,
         mode="dlg",
         chunk_size=1,
         max_poses=3,
@@ -65,7 +65,7 @@ class MPManager:
         self.file_sources = file_sources
         self.file_pattern = file_pattern
 
-        self.db = dbman
+        self.storageman = storageman
         self.num_files = 0
 
         if max_proc is None:
@@ -85,7 +85,7 @@ class MPManager:
                 self.queueIn,
                 self.queueOut,
                 self.c_conn,
-                self.db,
+                self.storageman,
                 self.mode,
                 self.max_poses,
                 self.interaction_tolerance,
@@ -105,7 +105,7 @@ class MPManager:
             self.max_proc,
             self.c_conn,
             self.chunk_size,
-            self.db,
+            self.storageman,
             self.mode,
         )
 

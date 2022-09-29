@@ -28,7 +28,7 @@ class DockingFileReader(multiprocessing.Process):
         queueIn,
         queueOut,
         pipe_conn,
-        dbman,
+        storageman,
         mode,
         max_poses,
         interaction_tolerance,
@@ -49,8 +49,8 @@ class DockingFileReader(multiprocessing.Process):
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
         self.receptor_file = receptor_file
-        # set dbmanager
-        self.dbman = dbman
+        # set storagemanager
+        self.storageman = storageman
         # set target name to check against
         self.target = target
         # initialize the parent class to inherit all multiprocessing methods
@@ -154,9 +154,8 @@ class DockingFileReader(multiprocessing.Process):
                     ] = self._find_tolerated_interactions(parsed_file_dict)
                 else:
                     parsed_file_dict["tolerated_interaction_runs"] = []
-                file_packet = self.dbman.format_rows_from_dict(parsed_file_dict)
                 # put the result in the out queue
-                self.queueOut.put(file_packet)
+                self.queueOut.put(parsed_file_dict)
         except Exception:
             tb = traceback.format_exc()
             self.pipe.send(
@@ -209,21 +208,18 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, maxProcesses, pipe_conn, chunksize, db_obj, mode="dlg"):
+    def __init__(self, queue, maxProcesses, pipe_conn, chunksize, storageman, mode="dlg"):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
         self.maxProcesses = maxProcesses
         self.pipe = pipe_conn
-        # assign pointer to db object, set chunksize
+        # assign pointer to storage object, set chunksize
         self.mode = mode
-        self.db = db_obj
+        self.storageman = storageman
         self.chunksize = chunksize
-        # initialize data arrays
-        self.results_array = []
-        self.ligands_array = []
-        self.interactions_list = []
-        self.receptor_array = []
+        # initialize data array (stack of dictionaries)
+        self.data_array = []
         # progress tracking instance variables
         self.first_insert = True
         self.counter = 0
@@ -253,9 +249,9 @@ class Writer(multiprocessing.Process):
                 else:
                     # if not a poison pill, process the task item
 
-                    # after every n (chunksize) files, write to db
+                    # after every n (chunksize) files, write to storage
                     if self.counter >= self.chunksize:
-                        self.write_to_db()
+                        self.write_to_storage()
                         # print info about files and time remaining
                         sys.stdout.write("\r")
                         sys.stdout.write(
@@ -273,8 +269,8 @@ class Writer(multiprocessing.Process):
                 if self.maxProcesses == 0:
                     # received as many poison pills as workers
                     logging.info("Performing final database write")
-                    # perform final db write
-                    self.write_to_db()
+                    # perform final storage write
+                    self.write_to_storage()
                     # no workers left, no job to do
                     logging.info("File processing completed")
                     self.close()
@@ -287,13 +283,10 @@ class Writer(multiprocessing.Process):
         finally:
             return
 
-    def write_to_db(self):
+    def write_to_storage(self):
         # insert result, ligand, and receptor data
-        self.db.insert_data(
-            filter(None, self.results_array),
-            filter(None, self.ligands_array),
-            filter(None, self.receptor_array),
-            self.interactions_list,
+        self.storage.insert_data(
+            filter(None, self.data_array),
             self.first_insert)  # filter out stray Nones
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
@@ -302,18 +295,10 @@ class Writer(multiprocessing.Process):
         self.num_files_written += self.chunksize
         self.total_runtime = time.perf_counter() - self.time0
 
-        # reset all data-holders for next chunk
-        self.results_array = []
-        self.ligands_array = []
-        self.interactions_list = []
+        # reset data holder for next chunk
+        self.data_array = []
         self.counter = 0
 
-    def process_file(self, file_packet):
-        results_rows, ligand_row, interaction_rows, receptor_row = file_packet
-        for pose in results_rows:
-            self.results_array.append(pose)
-        for pose in interaction_rows:
-            self.interactions_list.append(pose)
-        self.ligands_array.append(ligand_row)
-        self.receptor_array.append(receptor_row)
+    def process_file(self, file_dict):
+        self.data_array.append(file_dict)
         self.counter += 1

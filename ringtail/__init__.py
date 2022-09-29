@@ -5,7 +5,7 @@
 #
 
 from .cloptionparser import CLOptionParser
-from .dbmanager import DBManager, DBManagerSQLite
+from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import parse_single_dlg, parse_vina_pdbqt
@@ -14,7 +14,7 @@ from .resultsmanager import ResultsManager
 from .ringtailcore import RingtailCore, OutputManager
 from .interactions import InteractionFinder
 from .exceptions import (
-    DatabaseError,
+    StorageError,
     DatabaseInsertionError,
     DatabaseConnectionError,
     DatabaseTableCreationError,
@@ -28,8 +28,8 @@ from .exceptions import OutputError
 
 __all__ = [
     "CLOptionParser",
-    "DBManager",
-    "DBManagerSQLite",
+    "StorageManager",
+    "StorageManagerSQLite",
     "MPManager",
     "DockingFileReader",
     "Writer",

@@ -9,7 +9,7 @@ import numpy as np
 import json
 import warnings
 from meeko import RDKitMolCreate
-from .dbmanager import DBManager, DBManagerSQLite
+from .storagemanager import StorageManager, StorageManagerSQLite
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .exceptions import (
@@ -27,13 +27,13 @@ import os
 
 class RingtailCore:
     """Core class for coordinating different actions on virtual screening
-    i.e. adding results to db, filtering, output options
+    i.e. adding results to storage, filtering, output options
 
     Attributes:
-        dbman (DBManager): Interface module with database
+        storageman (storageManager): Interface module with database
         eworst (float): The worst scoring energy filter value requested by user
         filter_file (string): Name of file containing filters provided by user
-        filtered_results (DB cursor object): Cursor object
+        filtered_results (storage cursor object): Cursor object
             containing results passing requested filters (iterable)
         filters (dictionary): Dictionary containing user-specified filters
         no_print_flag (boolean): Flag specifying whether passing results
@@ -48,8 +48,8 @@ class RingtailCore:
     """
 
     __default_options = {
-            "db_opts": {
-                "values": DBManager.get_defaults(),
+            "storage_opts": {
+                "values": StorageManager.get_defaults(),
                 "ignore": []
             },
             "rman_opts": {
@@ -59,13 +59,13 @@ class RingtailCore:
         }
 
     def __init__(self, **opts):
-        """Initialize RingtailCore object. Will create DBManager object to serve
+        """Initialize RingtailCore object. Will create storageManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
         Will create OutputManager object to assist in creating output files.
 
         Args:
-            db_opts (dictionary): dictionary of options required by DBManager
+            storage_opts (dictionary): dictionary of options required by storageManager
             rman_opts (dictionary): dictionary of options required by
                 results manager
             filters (dictionary): Dictionary containing user-specified filters
@@ -79,19 +79,19 @@ class RingtailCore:
             if k in defaults.keys():
                 defaults[k] = v
 
-        self.db_opts = defaults["db_opts"]["values"]
+        self.storage_opts = defaults["storage_opts"]["values"]
         self.rman_opts = defaults["rman_opts"]["values"]
         self.filters = defaults["filters"]["values"]
         self.out_opts = defaults["out_opts"]["values"]
 
-        db_types = {'sqlite': DBManagerSQLite,}
-        db_type = self.db_opts.pop("db_type")
-        # confirm db_type is not None
-        if db_type is None:
-            raise RTCoreError("db_type not defined and must be defined at runtime.")
+        storage_types = {'sqlite': StorageManagerSQLite,}
+        storage_type = self.storage_opts.pop("storage_type")
+        # confirm storage_type is not None
+        if storage_type is None:
+            raise RTCoreError("storage_type not defined and must be defined at runtime.")
 
-        self.dbman = db_types[db_type](**self.db_opts)
-        self.rman_opts["dbman"] = self.dbman
+        self.storageman = _types[storage_type](**self.storage_opts)
+        self.rman_opts["storageman"] = self.storageman
         self.output_manager = None
 
     @classmethod
@@ -165,20 +165,20 @@ class RingtailCore:
             # NOTE: in current implementation, only one receptor allowed per database
             # Check that any receptor row is incomplete (needs receptor blob) before inserting
             try:
-                filled_receptor_rows = self.dbman.check_receptors_saved()
+                filled_receptor_rows = self.storageman.check_receptors_saved()
                 if filled_receptor_rows != 0:
                     raise RTCoreError(
                         "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
                             filled_receptor_rows
                         )
                     )
-                self.dbman.save_receptor(rec)
+                self.storageman.save_receptor(rec)
             except Exception as e:
                 raise e
 
     def filter(self):
         """
-        Prepare list of filters, then hand it off to DBManager to
+        Prepare list of filters, then hand it off to storageManager to
             perform filtering. Create log of passing results.
         """
 
@@ -190,25 +190,25 @@ class RingtailCore:
         )
 
         for ic_idx, combination in enumerate(interaction_combs):
-            # prepare list of filter values and keys for DBManager
+            # prepare list of filter values and keys for storageManager
             results_filters_list = self.prepare_results_filter_list(combination)
 
             # make sure we have ligand filter list
             if not self.filters["filter_ligands_flag"]:
                 self.filters["ligand_filters"] = []
-            # set DBMan's internal ic_counter to reflect current ic_idx
+            # set storageMan's internal ic_counter to reflect current ic_idx
             if len(interaction_combs) > 1:
-                self.dbman.set_view_suffix(str(ic_idx))
-            # ask DBManager to fetch results
+                self.storageman.set_view_suffix(str(ic_idx))
+            # ask storageManager to fetch results
             try:
-                self.filtered_results = self.dbman.filter_results(
+                self.filtered_results = self.storageman.filter_results(
                     results_filters_list,
                     self.filters["ligand_filters"],
                     self.out_opts["outfields"],
                     self.out_opts["filter_bookmark"],
                 )
-                number_passing_ligands = self.dbman.get_number_passing_ligands()
-                result_bookmark_name = self.dbman.get_current_view_name()
+                number_passing_ligands = self.storageman.get_number_passing_ligands()
+                result_bookmark_name = self.storageman.get_current_view_name()
                 self.output_manager.write_filters_to_log(self.filters, combination)
                 self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
                 self.output_manager.log_num_passing_ligands(number_passing_ligands)
@@ -232,7 +232,7 @@ class RingtailCore:
         """
         try:
             self._prepare_output_manager()
-            new_data = self.dbman.fetch_data_for_passing_results(
+            new_data = self.storageman.fetch_data_for_passing_results(
                 self.out_opts["outfields"]
             )
             self.output_manager.write_log(new_data)
@@ -250,13 +250,13 @@ class RingtailCore:
     def plot(self):
         """
         Get data needed for creating Ligand Efficiency vs
-        Energy scatter plot from DBManager. Call OutputManager to create plot.
+        Energy scatter plot from storageManager. Call OutputManager to create plot.
         """
         try:
             logging.info("Creating plot of results")
             self._prepare_output_manager()
-            # get data from DBMan
-            all_data, passing_data = self.dbman.get_plot_data()
+            # get data from storageMan
+            all_data, passing_data = self.storageman.get_plot_data()
             all_plot_data_binned = dict()
             # bin the all_ligands data by 1000ths to make plotting faster
             for line in all_data:
@@ -337,12 +337,12 @@ class RingtailCore:
         """
         try:
             self._prepare_output_manager()
-            if not self.dbman.check_passing_view_exists():
+            if not self.storageman.check_passing_view_exists():
                 warnings.warn(
                     "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
                 )
                 return
-            passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
+            passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
                 logging.info("Writing " + ligname.split(".")[0] + ".sdf")
                 # create rdkit ligand molecule and flexible residue container
@@ -350,7 +350,7 @@ class RingtailCore:
                     warnings.warn(f"No SMILES found for {ligname}. Cannot create SDF.")
                     continue
                 mol = Chem.MolFromSmiles(smiles)
-                atom_indices = self._db_string_to_list(atom_indices)
+                atom_indices = self._storage_string_to_list(atom_indices)
                 flexres_mols = {}
                 saved_coords = []
 
@@ -361,7 +361,7 @@ class RingtailCore:
                     "Ligand effiencies": [],
                     "Interactions": [],
                 }
-                passing_properties = self.dbman.fetch_passing_pose_properties(ligname)
+                passing_properties = self.storageman.fetch_passing_pose_properties(ligname)
                 mol, flexres_mols, saved_coords, properties = self._add_poses(
                     atom_indices,
                     passing_properties,
@@ -374,7 +374,7 @@ class RingtailCore:
                 # fetch coordinates for non-passing poses
                 # and add to ligand mol, flexible residue mols
                 if write_nonpassing:
-                    nonpassing_properties = self.dbman.fetch_nonpassing_pose_properties(
+                    nonpassing_properties = self.storageman.fetch_nonpassing_pose_properties(
                         ligname
                     )
                     mol, flexres_mols, saved_coords, properties = self._add_poses(
@@ -388,7 +388,7 @@ class RingtailCore:
 
                 # write out molecule
                 # h_parents = self._format_h_parents(h_parent_line)
-                h_parents = [int(idx) for idx in self._db_string_to_list(h_parent_line)]
+                h_parents = [int(idx) for idx in self._storage_string_to_list(h_parent_line)]
                 self.output_manager.write_out_mol(
                     ligname, mol, flexres_mols, saved_coords, h_parents, properties
                 )
@@ -416,7 +416,7 @@ class RingtailCore:
             table (bool): flag indicating is requested data is a table name
         """
         try:
-            df = self.dbman.to_dataframe(requested_data, table=table)
+            df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
         except DatabaseError as e:
             logging.exception(
@@ -441,18 +441,18 @@ class RingtailCore:
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
-        self.dbman.clone(bookmark_db_name)
+        self.storageman.clone(bookmark_db_name)
         # connect to cloned database
-        db_clone = DBManagerSQLite(bookmark_db_name, self.db_opts)
+        db_clone = StorageManagerSQLite(bookmark_db_name, self.storage_opts)
         db_clone.prune()
         db_clone.close_connection(vacuum=True)
 
     def close_database(self):
         """Tell database we are done and it can close the connection"""
-        self.dbman.close_connection()
+        self.storageman.close_connection()
 
-    def _clean_db_string(self, input_str):
-        """take a db string representing a list,
+    def _clean_storage_string(self, input_str):
+        """take a storage string representing a list,
         strips unwanted characters
 
         Args:
@@ -475,7 +475,7 @@ class RingtailCore:
         if self.output_manager is None:
             self.output_manager = OutputManager(self.out_opts["log"], self.out_opts["export_sdf_path"])
 
-    def _db_string_to_list(self, input_str):
+    def _storage_string_to_list(self, input_str):
         """Convert string form of list from database to list
 
         Args:
@@ -495,7 +495,7 @@ class RingtailCore:
             [
                 line.lstrip(" ")
                 for line in list(
-                    filter(None, [self._clean_db_string(line) for line in pdbqt_lines])
+                    filter(None, [self._clean_storage_string(line) for line in pdbqt_lines])
                 )
             ]
         )
@@ -523,7 +523,7 @@ class RingtailCore:
             flexres_names,
         ) in poses:
             # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
-            pose_bitvector = self.dbman.fetch_interaction_bitvector(Pose_ID)
+            pose_bitvector = self.storageman.fetch_interaction_bitvector(Pose_ID)
             if pose_bitvector is not None:
                 interaction_indices = []
                 interactions_list = []
@@ -533,7 +533,7 @@ class RingtailCore:
                             idx + 1
                         )  # adjust for indexing starting at 1
                 for int_idx in interaction_indices:
-                    interaction_info = self.dbman.fetch_interaction_info_by_index(
+                    interaction_info = self.storageman.fetch_interaction_info_by_index(
                         int_idx
                     )
                     interaction = (
@@ -546,10 +546,10 @@ class RingtailCore:
             properties["Binding energies"].append(energies_binding)
             properties["Ligand effiencies"].append(leff)
             # get pose coordinate info
-            ligand_pose = self._db_string_to_list(ligand_pose)
-            flexres_pose = self._db_string_to_list(flexres_pose)
+            ligand_pose = self._storage_string_to_list(ligand_pose)
+            flexres_pose = self._storage_string_to_list(flexres_pose)
             flexres_names = [
-                name for idx, name in enumerate(self._db_string_to_list(flexres_names))
+                name for idx, name in enumerate(self._storage_string_to_list(flexres_names))
             ]
             flexres_pdbqts = [self._generate_pdbqt_block(res) for res in flexres_pose]
             mol, flexres_mols = RDKitMolCreate.add_pose_to_mol(
