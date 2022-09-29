@@ -30,7 +30,7 @@ def cmdline_parser(defaults={}):
 
     defaults = RingtailCore.get_defaults()
     """defaults = {
-            'add_results': False,
+            'append_results': False,
             'order_results': None,
             'output_all_poses': None,
             'results_view_name': 'passing_results',
@@ -215,7 +215,7 @@ def cmdline_parser(defaults={}):
     )
     write_parser.add_argument(
         "-a",
-        "--add_results",
+        "--append_results",
         help="Add new results to an existing database, specified by --input_db",
         action="store_true",
     )
@@ -629,9 +629,9 @@ class CLOptionParser:
         # if only receptor files found and --save_receptor, assume we just want to
         # add receptor and not modify the rest of the db
         if self.save_receptor:
-            if self.db_opts["add_results"]:
+            if self.db_opts["append_results"]:
                 raise OptionError(
-                    "Cannot use --add_results with --save_receptor. Please remove the --save_receptor flag"
+                    "Cannot use --append_results with --save_receptor. Please remove the --save_receptor flag"
                 )
             if self.receptor_file is None:
                 raise OptionError(
@@ -781,7 +781,7 @@ class CLOptionParser:
                 raise OptionError(
                     "At least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
                 )
-            if parsed_opts.add_results and parsed_opts.input_db is None:
+            if parsed_opts.append_results and parsed_opts.input_db is None:
                 raise OptionError(
                     "Must specify --input_db if adding results to an existing database"
                 )
@@ -968,7 +968,7 @@ class CLOptionParser:
             "output_all_poses": parsed_opts.output_all_poses,
             "results_view_name": parsed_opts.results_view_name,
             "overwrite": parsed_opts.overwrite,
-            "add_results": parsed_opts.add_results,
+            "append_results": parsed_opts.append_results,
             "conflict_opt": conflict_handling,
             "mode": self.mode,
             "db_type": "sqlite"

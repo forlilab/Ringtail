@@ -40,7 +40,7 @@ class RingtailCore:
             should be printed to terminal
         out_opts (dictionary): Specified output options including data fields
             to output, export_sdf_path, log file name
-        output_manager (Outputter object): Manager for output tasks of
+        output_manager (OutputManager object): Manager for output tasks of
             log-writting, plotting, ligand SDF writing
         results_filters_list (List): List of tuples of filter option and value
         results_man (ResultsManager object): Manager for processing result
@@ -58,11 +58,11 @@ class RingtailCore:
             }
         }
 
-    def __init__(self, db_opts, rman_opts, filters, out_opts):
+    def __init__(self, **opts):
         """Initialize RingtailCore object. Will create DBManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
-        Will create Outputter object to assist in creating output files.
+        Will create OutputManager object to assist in creating output files.
 
         Args:
             db_opts (dictionary): dictionary of options required by DBManager
@@ -74,33 +74,28 @@ class RingtailCore:
         """
         defaults = self.get_defaults()
 
+        # unpack given opts dictionaries
+        for k, v in opts.items():
+            if k in defaults.keys():
+                defaults[k] = v
+
+        self.db_opts = defaults["db_opts"]["values"]
+        self.rman_opts = defaults["rman_opts"]["values"]
+        self.filters = defaults["filters"]["values"]
+        self.out_opts = defaults["out_opts"]["values"]
+
         db_types = {'sqlite': DBManagerSQLite,}
-        db_type = db_opts.pop("db_type")
-  
-        if db_opts is not None:
-            self.db_opts = db_opts
-        else:
-            self.db_opts = defaults["db_opts"]["values"]
-        if rman_opts is not None:
-            self.rman_opts = rman_opts
-        else:
-            self.rman_opts = defaults["rman_opts"]["values"]
-        if filters is not None:
-            self.filters = filters
-        else:
-            self.filters = defaults["filters"]["values"]
-        if out_opts is not None:
-            self.out_opts = out_opts
-        else:
-            self.out_opts = defaults["out_opts"][values]
+        db_type = self.db_opts.pop("db_type")
+        # confirm db_type is not None
+        if db_type is None:
+            raise RTCoreError("db_type not defined and must be defined at runtime.")
 
         self.dbman = db_types[db_type](**self.db_opts)
         self.rman_opts["dbman"] = self.dbman
+        self.output_manager = None
 
     @classmethod
     def get_defaults(cls, terse=False):
-        core_opts = {"save_receptor": False,
-                     "filter": False}
 
         out_opts = {'log': 'output_log.txt',
                     'overwrite': None,
@@ -138,26 +133,12 @@ class RingtailCore:
         if terse:
             for group, opt in defaults.items():
                 defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
-        defaults["core_opts"] = {"values": core_opts, "ignore": []}
         defaults["out_opts"] = {"values": out_opts, "ignore": []}
         defaults["filters"] = {"values": filters, "ignore": []}
 
         return defaults
 
     def __enter__(self):
-        # self.dbman = DBManagerSQLite(self.db_opts["dbFile"], self.db_opts)
-
-        # if requested, write database or add results to an existing one
-        if self.db_opts["write_db_flag"] or self.db_opts["add_results"]:
-            logging.info("Adding results...")
-            self.results_man = ResultsManager(**self.rman_opts)
-            self.add_results()
-
-        else:
-            self.output_manager = Outputter(
-                self.out_opts["log"], self.out_opts["export_sdf_path"]
-            )
-
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -202,6 +183,7 @@ class RingtailCore:
         """
 
         logging.info("Filtering results")
+        self._prepare_output_manager()
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(
             self.filters["max_miss"]
@@ -249,6 +231,7 @@ class RingtailCore:
         results view of a previous filtering
         """
         try:
+            self._prepare_output_manager()
             new_data = self.dbman.fetch_data_for_passing_results(
                 self.out_opts["outfields"]
             )
@@ -267,10 +250,11 @@ class RingtailCore:
     def plot(self):
         """
         Get data needed for creating Ligand Efficiency vs
-        Energy scatter plot from DBManager. Call Outputter to create plot.
+        Energy scatter plot from DBManager. Call OutputManager to create plot.
         """
         try:
             logging.info("Creating plot of results")
+            self._prepare_output_manager()
             # get data from DBMan
             all_data, passing_data = self.dbman.get_plot_data()
             all_plot_data_binned = dict()
@@ -352,9 +336,10 @@ class RingtailCore:
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
         """
         try:
+            self._prepare_output_manager()
             if not self.dbman.check_passing_view_exists():
                 warnings.warn(
-                    "Passing results view does not exist in database. Cannot write passing molecule SDFs"
+                    "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
                 )
                 return
             passing_molecule_info = self.dbman.fetch_passing_ligand_output_info()
@@ -486,6 +471,10 @@ class RingtailCore:
             .replace(" \n", "")
         )
 
+    def _prepare_output_manager(self):
+        if self.output_manager is None:
+            self.output_manager = OutputManager(self.out_opts["log"], self.out_opts["export_sdf_path"])
+
     def _db_string_to_list(self, input_str):
         """Convert string form of list from database to list
 
@@ -612,7 +601,7 @@ class RingtailCore:
 # # # # # # # # # # # # # #
 
 
-class Outputter:
+class OutputManager:
     """Class for creating outputs
 
     Attributes:
@@ -625,12 +614,12 @@ class Outputter:
         flex_residue_smiles (Dictionary): Contains smiles used to create
             RDKit objects for flexible residues
         log (string): name for log file
-        vsman (VSManager): VSManager object that created outputter
+        vsman (VSManager): VSManager object that created output_manager
 
     """
 
     def __init__(self, log_file="output_log.txt", export_sdf_path=""):
-        """Initialize Outputter object and create log file
+        """Initialize OutputManager object and create log file
 
         Args:
             log_file (string): name for log file

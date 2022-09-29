@@ -67,7 +67,7 @@ class DBManager:
     def __init__(
         self,
         db_file="output.db",
-        add_results=False,
+        append_results=False,
         order_results=None,
         output_all_poses=None,
         results_view_name="passing_results",
@@ -83,7 +83,7 @@ class DBManager:
             db_file (str): string for file name of DB
             db_opts (dict): Dictionary of database options
         """
-        self.add_results = add_results
+        self.append_results = append_results
         self.order_results = order_results
         self.output_all_poses= output_all_poses
         self.results_view_name = results_view_name
@@ -436,7 +436,7 @@ class DBManager:
                     self.unique_interactions[
                         interaction_tuple
                     ] = self.next_unique_interaction_idx
-                    if self.interactions_initialized_flag or self.add_results:
+                    if self.interactions_initialized_flag or self.append_results:
                         self._insert_one_interaction(interaction_tuple)
                         self._make_new_interaction_column(
                             self.next_unique_interaction_idx
@@ -1422,7 +1422,7 @@ class DBManagerSQLite(DBManager):
     def __init__(
         self,
         db_file,
-        add_results=False,
+        append_results=False,
         order_results=None,
         output_all_poses=None,
         results_view_name="passing_results",
@@ -1437,7 +1437,7 @@ class DBManagerSQLite(DBManager):
             opts (dict, optional): Dictionary of database options
         """
 
-        super().__init__(db_file, add_results, order_results, output_all_poses, results_view_name, overwrite, conflict_opt, mode)
+        super().__init__(db_file, append_results, order_results, output_all_poses, results_view_name, overwrite, conflict_opt, mode)
 
         self.energy_filter_sqlite_call_dict = {
             "eworst": "energies_binding < {value}",
@@ -1593,7 +1593,7 @@ class DBManagerSQLite(DBManager):
             ("type", "chain", "residue", "resid", "recname", "recid")
         """
         # populate unique interactions from existing database
-        if self.add_results:
+        if self.append_results:
             existing_unique_interactions = self._fetch_existing_interactions()
             for interaction in existing_unique_interactions:
                 self.unique_interactions[interaction[1:]] = interaction[0]
@@ -1606,7 +1606,7 @@ class DBManagerSQLite(DBManager):
 
         # check if we need to initialize the interaction bv table and
         # insert first set of interaction
-        if not self.interactions_initialized_flag and not self.add_results:
+        if not self.interactions_initialized_flag and not self.append_results:
             self._create_interaction_bv_table()
             self._insert_unique_interactions(list(self.unique_interactions.keys()))
             self.interactions_initialized_flag = True
