@@ -7,6 +7,7 @@
 #
 
 import sqlite3
+import os
 import json
 import pandas as pd
 import warnings
@@ -1402,6 +1403,13 @@ class DBManager:
     def _vacuum(self):
         raise NotImplementedError
 
+    def _check_storage_empty(self):
+        """Check that storage is empty before proceeding.
+        
+        Raises:
+            DatabaseError: Description
+        """
+        raise NotImplementedError
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -1929,6 +1937,9 @@ class DBManagerSQLite(DBManager):
         """
         self.conn = self._create_connection()
 
+        # check that we want to overwrite or add results if storage already exists
+        if not self.overwrite and not self.append_results:
+            self.check_storage_empty()
         # if we want to overwrite old db, drop existing tables
         if self.overwrite:
             self._drop_existing_tables()
@@ -3046,3 +3057,12 @@ class DBManagerSQLite(DBManager):
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while vacuuming DB") from e
+
+    def _check_storage_empty(self):
+        """Check that storage is empty before proceeding.
+        
+        Raises:
+            DatabaseError: Description
+        """
+        if os.path.exists(self.db_file):
+            raise DatabaseError("Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database.")
