@@ -11,7 +11,7 @@ from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
-from .ringtailcore import RingtailCore, Outputter
+from .ringtailcore import RingtailCore, OutputManager
 from .interactions import InteractionFinder
 from .exceptions import (
     DatabaseError,
@@ -38,7 +38,7 @@ __all__ = [
     "ReceptorManager",
     "ResultsManager",
     "RingtailCore",
-    "Outputter",
+    "OutputManager",
     "InteractionFinder",
     "DatabaseError",
     "DatabaseInsertionError",
