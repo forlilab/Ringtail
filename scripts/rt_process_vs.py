@@ -7,7 +7,6 @@ import sys
 import time
 from ringtail import CLOptionParser
 from ringtail import RingtailCore
-from ringtail import ReceptorManager
 import logging
 import traceback
 
@@ -49,7 +48,7 @@ if __name__ == "__main__":
     # create manager object for virtual screening. Will make database if needed
     try:
         with RingtailCore(
-            db_opts=dbman_opts, rman_opts=rman_opts, filters=filters, out_opts=out_opts
+            db_opts={"values": dbman_opts}, rman_opts={"values": rman_opts}, filters={"values": filters}, out_opts={"values": out_opts}
         ) as rt_core:
 
             if cl_opts.rr_mode == "write":
