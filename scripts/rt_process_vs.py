@@ -28,7 +28,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # prepare option dictionaries for RingtailCore
-    dbman_opts = cl_opts.db_opts
+    storage_opts = cl_opts.storage_opts
     rman_opts = cl_opts.rman_opts
     filters = cl_opts.filters
     out_opts = cl_opts.out_opts
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # create manager object for virtual screening. Will make database if needed
     try:
         with RingtailCore(
-            db_opts={"values": dbman_opts}, rman_opts={"values": rman_opts}, filters={"values": filters}, out_opts={"values": out_opts}
+            storage_opts={"values": storage_opts}, rman_opts={"values": rman_opts}, filters={"values": filters}, out_opts={"values": out_opts}
         ) as rt_core:
 
             if cl_opts.rr_mode == "write":
@@ -88,13 +88,13 @@ if __name__ == "__main__":
                 if out_opts["export_query_csv"] is not None:
                     rt_core.export_csv(out_opts["export_query_csv"], "query.csv")
                 if out_opts["export_bookmark_db"] is not None:
-                    bookmark_db_name = (
-                        dbman_opts["dbFile"].rstrip(".db")
+                    bookmark_name = (
+                        storage_opts["dbFile"].rstrip(".db")
                         + "_"
-                        + dbman_opts["results_view_name"]
+                        + storage_opts["results_view_name"]
                         + ".db"
                     )
-                    rt_core.export_bookmark_db(bookmark_db_name)
+                    rt_core.export_bookmark_db(bookmark_name)
 
     except Exception as e:
         tb = traceback.format_exc()

@@ -5,7 +5,7 @@
 #
 
 
-class DatabaseError(Exception):
+class StorageError(Exception):
     pass
 
 

@@ -637,7 +637,7 @@ class CLOptionParser:
         # if only receptor files found and --save_receptor, assume we just want to
         # add receptor and not modify the rest of the db
         if self.save_receptor:
-            if self.db_opts["append_results"]:
+            if self.storage_opts["append_results"]:
                 raise OptionError(
                     "Cannot use --append_results with --save_receptor. Please remove the --save_receptor flag"
                 )
@@ -700,7 +700,7 @@ class CLOptionParser:
         file_sources = None
         self.rec_files_pool = []
         filters = {}
-        db_opts = {}
+        storage_opts = {}
         out_opts = {}
         # make sure mode is allowed
         allowed_modes = {"dlg", "vina"}
@@ -971,7 +971,7 @@ class CLOptionParser:
             "filter_bookmark": parsed_opts.filter_bookmark,
         }
 
-        db_opts = {
+        storage_opts = {
             "order_results": parsed_opts.order_results,
             "output_all_poses": parsed_opts.output_all_poses,
             "results_view_name": parsed_opts.results_view_name,
@@ -979,7 +979,7 @@ class CLOptionParser:
             "append_results": parsed_opts.append_results,
             "conflict_opt": conflict_handling,
             "mode": self.mode,
-            "db_type": "sqlite"
+            "storage_type": "sqlite"
         }
 
         if isinstance(parsed_opts.interaction_tolerance, str):
@@ -1018,10 +1018,10 @@ class CLOptionParser:
                 raise OptionError("WARNING: input database does not exist!")
         else:
             dbFile = parsed_opts.output_db
-        db_opts["db_file"] = dbFile
+        storage_opts["db_file"] = dbFile
 
         # make attributes for parsed opts
-        self.db_opts = db_opts
+        self.storage_opts = storage_opts
         self.filters = filters
         self.out_opts = out_opts
         self.rman_opts = rman_opts
