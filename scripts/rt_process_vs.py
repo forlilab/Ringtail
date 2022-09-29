@@ -58,10 +58,7 @@ if __name__ == "__main__":
             # Add receptors to database if requested
             # TODO move this
             if cl_opts.save_receptor:
-                receptor_list = ReceptorManager.make_receptor_blobs(
-                    [rman_opts["receptor_file"]]
-                )
-                rt_core.add_receptors_to_db(receptor_list)
+                rt_core.save_receptors(rman_opts["receptor_file"])
 
             time1 = time.perf_counter()
 

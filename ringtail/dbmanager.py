@@ -686,7 +686,7 @@ class DBManager:
         """
         raise NotImplementedError
 
-    def add_receptor_object_to_row(self, receptor, rec_name):
+    def save_receptor(self, receptor, rec_name):
         """Takes object of Receptor class, updates the column in Receptor table for the row with rec_name
 
         Args:
@@ -1615,7 +1615,7 @@ class DBManagerSQLite(DBManager):
             self._generate_interaction_bitvectors(interactions_list)
         )
 
-    def add_receptor_object_to_row(self, receptor):
+    def save_receptor(self, receptor):
         """Takes object of Receptor class, updates the column in Receptor table
 
         Args:
@@ -1803,7 +1803,7 @@ class DBManagerSQLite(DBManager):
         """
         return self.current_view_name
 
-    def get_number_filled_receptor_rows(self):
+    def check_receptors_saved(self):
         """returns number of rows in Receptors table where receptor_object already has blob
 
         Returns:

@@ -11,6 +11,7 @@ import warnings
 from meeko import RDKitMolCreate
 from .dbmanager import DBManager, DBManagerSQLite
 from .resultsmanager import ResultsManager
+from .receptormanager import ReceptorManager
 from .exceptions import (
     DatabaseConnectionError,
     DatabaseTableCreationError,
@@ -166,26 +167,31 @@ class RingtailCore:
         """
         Call results manager to process result files and add to database
         """
+        logging.info("Adding results...")
+        self.results_man = ResultsManager(**self.rman_opts)
         self.results_man.process_results()
 
-    def add_receptors_to_db(self, receptors):
+    def save_receptors(self, receptor_file):
         """Add receptor to database
 
         Args:
             receptors (list): list of receptor blobs to add to database
         """
-        for rec, rec_name in receptors:
+        receptor_list = ReceptorManager.make_receptor_blobs(
+                    [rman_opts["receptor_file"]]
+                )
+        for rec, rec_name in receptor_list:
             # NOTE: in current implementation, only one receptor allowed per database
             # Check that any receptor row is incomplete (needs receptor blob) before inserting
             try:
-                filled_receptor_rows = self.dbman.get_number_filled_receptor_rows()
+                filled_receptor_rows = self.dbman.check_receptors_saved()
                 if filled_receptor_rows != 0:
-                    raise VirtualScreeningError(
+                    raise RTCoreError(
                         "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
                             filled_receptor_rows
                         )
                     )
-                self.dbman.add_receptor_object_to_row(rec)
+                self.dbman.save_receptor(rec)
             except Exception as e:
                 raise e
 
