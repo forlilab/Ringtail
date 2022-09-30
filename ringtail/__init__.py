@@ -22,7 +22,7 @@ from .exceptions import (
 from .exceptions import DatabaseQueryError, DatabaseViewCreationError
 from .exceptions import OptionError
 from .exceptions import RTCoreError
-from .exceptions import FileParsingError, WriteToDatabaseError, MultiprocessingError
+from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError
 from .exceptions import ResultsProcessingError
 from .exceptions import OutputError
 
@@ -40,7 +40,7 @@ __all__ = [
     "RingtailCore",
     "OutputManager",
     "InteractionFinder",
-    "DatabaseError",
+    "StorageError",
     "DatabaseInsertionError",
     "DatabaseConnectionError",
     "DatabaseTableCreationError",
@@ -48,7 +48,7 @@ __all__ = [
     "OptionError",
     "RTCoreError",
     "FileParsingError",
-    "WriteToDatabaseError",
+    "WriteToStorageError",
     "MultiprocessingError",
     "ResultsProcessingError",
     "DatabaseViewCreationError",

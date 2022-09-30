@@ -6,30 +6,32 @@
 
 from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
+from .storagemanager import StorageManager
+import typing
 
 
 class ResultsManager:
     def __init__(
         self,
-        storageman,
-        parser_manager = "multiprocessing",
-        mode="dlg",
-        chunk_size=1,
-        max_poses=3,
-        interaction_tolerance=None,
-        store_all_poses=False,
-        target=None,
-        add_interactions=False,
-        interaction_cutoffs=[3.7, 4.0],
-        receptor_file=None,
-        file_sources={'file': [[]],
+        storageman: StorageManager,
+        parser_manager: str="multiprocessing",
+        mode: str="dlg",
+        chunk_size: int=1,
+        max_poses: int=3,
+        interaction_tolerance: float=None,
+        store_all_poses: bool=False,
+        target: str=None,
+        add_interactions: bool=False,
+        interaction_cutoffs: list=[3.7, 4.0],
+        receptor_file: str=None,
+        file_sources: dict={'file': [[]],
                       'file_path': {
                           'path': [[]],
                           'pattern': '*.dlg*',
                           'recursive': None},
                       'file_list': [[]]},
-        file_pattern="*.dlg*",
-        max_proc=None
+        file_pattern: str="*.dlg*",
+        max_proc: int=None,
         _stop_at_defaults=False
     ):
         
@@ -68,3 +70,7 @@ class ResultsManager:
     @classmethod
     def get_defaults(cls):
         return cls(None, _stop_at_defaults=True).__dict__
+
+    @classmethod
+    def get_default_types(cls):
+        return typing.get_type_hints(cls.__init__)

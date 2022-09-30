@@ -753,15 +753,15 @@ class CLOptionParser:
             )
             parsed_opts.output_all_poses = False
 
-        self.pattern = parsed_opts.file_pattern
-        self.save_receptor = parsed_opts.save_receptor
-        self.receptor_file = parsed_opts.receptor_file
-
         # check options for write mode
         self.rr_mode = parsed_opts.rr_mode
+        self.pattern = parsed_opts.file_pattern
+            
         if self.rr_mode is None:
             raise OptionError("No mode specified for rt_process_vs.py. Please specify mode (write/read).")
         if self.rr_mode == "write":
+            self.save_receptor = parsed_opts.save_receptor
+            self.receptor_file = parsed_opts.receptor_file
             # check that required input options are provided
             file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
             if parsed_opts.file is None:
@@ -803,6 +803,8 @@ class CLOptionParser:
                     )
                     conflict_handling = None
         else:
+            self.save_receptor = False
+            self.receptor_file = None
             if parsed_opts.input_db is None:
                 raise OptionError("No input database specified in read mode. Please specify database with --input_db")
             if parsed_opts.max_miss < 0:
@@ -816,8 +818,8 @@ class CLOptionParser:
                     raise OptionError(
                         "Cannot use --export_sdf_path with --max_miss > 0. Can export poses for desired bookmark --bookmark_name"
                     )
-            parsed_opts.outfields = parsed_opts.outfields.split(",")
-            for outfield in parsed_opts.outfields:
+            outfields_list = parsed_opts.outfields.split(",")
+            for outfield in outfields_list:
                 if outfield not in self.outfield_options:
                     raise OptionError(
                         "WARNING: {out_f} is not a valid output option. Please see --help".format(
