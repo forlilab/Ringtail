@@ -15,7 +15,7 @@ from .receptormanager import ReceptorManager
 from .exceptions import (
     DatabaseConnectionError,
     DatabaseTableCreationError,
-    DatabaseError,
+    StorageError,
 )
 from .exceptions import RTCoreError, ResultsProcessingError, OutputError
 from rdkit import Chem
@@ -23,6 +23,7 @@ from rdkit.Chem import SDWriter
 import itertools
 import logging
 import os
+import typing
 
 
 class RingtailCore:
@@ -148,6 +149,9 @@ class RingtailCore:
         """
         Call results manager to process result files and add to database
         """
+        # check that we want to overwrite or add results if storage already exists
+        if not self.storage_opts["overwrite"] and not self.storage_opts["append_results"]:
+            self.storageman.check_storage_empty()
         logging.info("Adding results...")
         self.results_man = ResultsManager(**self.rman_opts)
         self.results_man.process_results()
@@ -159,7 +163,7 @@ class RingtailCore:
             receptors (list): list of receptor blobs to add to database
         """
         receptor_list = ReceptorManager.make_receptor_blobs(
-                    [rman_opts["receptor_file"]]
+                    [receptor_file]
                 )
         for rec, rec_name in receptor_list:
             # NOTE: in current implementation, only one receptor allowed per database

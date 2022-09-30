@@ -10,7 +10,7 @@ import sys
 import logging
 import traceback
 from .parsers import parse_single_dlg, parse_vina_pdbqt
-from .exceptions import FileParsingError, WriteToDatabaseError
+from .exceptions import FileParsingError, WriteToStorageError
 from .interactions import InteractionFinder
 
 os_string = platform.system()
@@ -278,16 +278,12 @@ class Writer(multiprocessing.Process):
         except Exception:
             tb = traceback.format_exc()
             self.pipe.send(
-                (WriteToDatabaseError("Error occured while writing database"), tb, "Database")
+                (WriteToStorageError("Error occured while writing database"), tb, "Database")
             )
-        finally:
-            return
 
     def write_to_storage(self):
         # insert result, ligand, and receptor data
-        self.storage.insert_data(
-            filter(None, self.data_array),
-            self.first_insert)  # filter out stray Nones
+        self.storageman.insert_data(self.data_array, self.first_insert)
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
 

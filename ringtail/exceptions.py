@@ -9,23 +9,23 @@ class StorageError(Exception):
     pass
 
 
-class DatabaseInsertionError(DatabaseError):
+class DatabaseInsertionError(StorageError):
     pass
 
 
-class DatabaseConnectionError(DatabaseError):
+class DatabaseConnectionError(StorageError):
     pass
 
 
-class DatabaseTableCreationError(DatabaseError):
+class DatabaseTableCreationError(StorageError):
     pass
 
 
-class DatabaseQueryError(DatabaseError):
+class DatabaseQueryError(StorageError):
     pass
 
 
-class DatabaseViewCreationError(DatabaseError):
+class DatabaseViewCreationError(StorageError):
     pass
 
 
@@ -41,7 +41,7 @@ class FileParsingError(Exception):
     pass
 
 
-class WriteToDatabaseError(Exception):
+class WriteToStorageError(Exception):
     pass
 
 
