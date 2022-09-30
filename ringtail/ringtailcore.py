@@ -48,17 +48,6 @@ class RingtailCore:
             files for insertion into database
     """
 
-    __default_options = {
-            "storage_opts": {
-                "values": StorageManager.get_defaults(),
-                "ignore": []
-            },
-            "rman_opts": {
-                "values": ResultsManager.get_defaults(),
-                "ignore": []
-            }
-        }
-
     def __init__(self, **opts):
         """Initialize RingtailCore object. Will create storageManager object to serve
         as interface with database (currently implemented in SQLite).
@@ -79,24 +68,52 @@ class RingtailCore:
         for k, v in opts.items():
             if k in defaults.keys():
                 defaults[k] = v
+                # test types to make sure that everything is correct
+                for kw, val in v["values"].items():
+                    # for filters, unpack properties separately
+                    if kw == "properties":
+                        for prop, propval in val.items():
+                            if not isinstance(propval, v["types"][kw][prop]) and propval is not None:
+                                raise RTCoreError(f"Given opt keyword {prop} in {kw} is type {type(propval)}; expected {v['types'][kw][prop]}.")
+                    else:
+                        if not isinstance(val, v["types"][kw]) and val is not None:
+                            raise RTCoreError(f"Given opt keyword {kw} in {k} is type {type(val)}; expected {v['types'][kw]}.")
 
         self.storage_opts = defaults["storage_opts"]["values"]
         self.rman_opts = defaults["rman_opts"]["values"]
         self.filters = defaults["filters"]["values"]
         self.out_opts = defaults["out_opts"]["values"]
 
-        storage_types = {'sqlite': StorageManagerSQLite,}
         storage_type = self.storage_opts.pop("storage_type")
         # confirm storage_type is not None
         if storage_type is None:
             raise RTCoreError("storage_type not defined and must be defined at runtime.")
 
-        self.storageman = _types[storage_type](**self.storage_opts)
+        storage_types = {'sqlite': StorageManagerSQLite,}
+        self.storageman = storage_types[storage_type](**self.storage_opts)
         self.rman_opts["storageman"] = self.storageman
         self.output_manager = None
 
     @classmethod
-    def get_defaults(cls, terse=False):
+    def get_defaults(cls, storage_type="sqlite", terse=False):
+
+        cls.__default_options = {
+            "storage_opts": {
+                "values": StorageManager.get_defaults(storage_type),
+                "ignore": [],
+                "types": StorageManager.get_default_types(storage_type)
+            },
+            "rman_opts": {
+                "values": ResultsManager.get_defaults(),
+                "ignore": [],
+                "types": ResultsManager.get_default_types()
+            }
+        }
+
+        # add storage type default
+        cls.__default_options["storage_opts"]["values"]["storage_type"] = storage_type
+        cls.__default_options["storage_opts"]["types"]["storage_type"] = str
+
 
         out_opts = {'log': 'output_log.txt',
                     'overwrite': None,
@@ -109,6 +126,18 @@ class RingtailCore:
                     'export_bookmark_db': None,
                     'data_from_bookmark': None,
                     'filter_bookmark': None}
+
+        out_types = {'log': str,
+                    'overwrite': bool,
+                    'export_sdf_path': str,
+                    'plot': bool,
+                    'outfields': str,
+                    'no_print': bool,
+                    'export_bookmark_csv': str,
+                    'export_query_csv': str,
+                    'export_bookmark_db': str,
+                    'data_from_bookmark': str,
+                    'filter_bookmark': str}
 
         filters = {'properties': {
                        'eworst': None,
@@ -130,12 +159,26 @@ class RingtailCore:
                    'max_miss': 0,
                    'react_any': None}
 
+        filter_types = {'properties': {
+                       'eworst': float,
+                       'ebest': float,
+                       'leworst': float,
+                       'lebest': float,
+                       'energy_percentile': float,
+                       'le_percentile': float},
+                   'interactions': dict,
+                   'interactions_count': list,
+                   'ligand_filters': dict,
+                   'filter_ligands_flag': bool,
+                   'max_miss': int,
+                   'react_any': bool}
+
         defaults = cls.__default_options.copy()
         if terse:
             for group, opt in defaults.items():
                 defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
-        defaults["out_opts"] = {"values": out_opts, "ignore": []}
-        defaults["filters"] = {"values": filters, "ignore": []}
+        defaults["out_opts"] = {"values": out_opts, "ignore": [], "types": out_types}
+        defaults["filters"] = {"values": filters, "ignore": [], "types": filter_types}
 
         return defaults
 
