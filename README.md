@@ -397,12 +397,24 @@ rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4
 
 ---
 ## Brief python tutorials
+#### Make sqlite database from current directory
+```
+from ringtail import RingtailCore
+
+opts = RingtailCore.get_defaults()
+opts["storage_opts"]["values"]["storage_type"] = "sqlite"
+opts["rman_opts"]["values"]["file_sources"]["file_path"]["path"] = [["."]]
+opts["rman_opts"]["values"]["file_sources"]["file_path"]["recursive"] = True
+
+with RingtailCore(**opts) as rt_core:
+    rt_core.add_results()
+```
 #### Convert database tables to pandas dataframes
 ```
 from ringtail import DBManagerSQLite
 
 # make database manager with connection to SQLite file vs.db
-with DBManagerSQLite("vs.db") as dbman:
+with StorageManagerSQLite("vs.db") as dbman:
 
     # fetch entire Results table as pandas dataframe
     results_df = dbman.to_dataframe("Results")
