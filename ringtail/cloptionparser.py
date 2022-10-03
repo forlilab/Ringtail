@@ -961,7 +961,6 @@ class CLOptionParser:
 
         out_opts = {
             "log": parsed_opts.log,
-            "overwrite": parsed_opts.overwrite,
             "export_sdf_path": parsed_opts.export_sdf_path,
             "plot": parsed_opts.plot,
             "outfields": parsed_opts.outfields,
