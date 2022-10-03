@@ -7,6 +7,7 @@
 import os
 import gzip
 import numpy as np
+from .exceptions import FileParsingError
 
 
 def parse_single_dlg(fname):
@@ -64,6 +65,7 @@ def parse_single_dlg(fname):
     heavy_at_count = 0
     heavy_at_count_complete = False
     with open_fn(fname, "rb") as fp:
+        inside_header = True
         inside_pose = False
         inside_input = False
         inside_res = False
@@ -74,93 +76,74 @@ def parse_single_dlg(fname):
         ligand_atomtypes = []
         for line in fp.readlines():
             line = line.decode("utf-8")
-            # store ligand file name
-            if line[0:11] == "Ligand file":
-                ligname = line.split(":", 1)[1].strip().split(".")[0]
-            # store receptor name and grid parameters
-            if line[:13] == "Receptor name":
-                receptor = line.split()[2]
-            if line[:21] == "Number of grid points":
-                npts = [
-                    pts.rstrip("\n").replace(" ", "")
-                    for pts in line.split(":")[1].split(",")
-                ]
-            if line[:12] == "Grid spacing":
-                spacing = line.split()[2].rstrip("A")  # remove A unit from string
-            if line[:11] == "Grid center":
-                center = [
-                    coord.rstrip("\n").replace(" ", "")
-                    for coord in line.split(":")[1].split(",")
-                ]
-            # store smile string
-            if "REMARK SMILES" in line and "IDX" not in line and smile_string == "":
-                smile_string = line.split("REMARK SMILES")[-1]
-            # store flexible residue identities
-            if "INPUT-FLEXRES-PDBQT:" in line:
-                if "ATOM" in line or "HETATM" in line:
-                    if line[38:41] + ":" + line[42] + line[44:47] in flexible_residues:
-                        continue
-                    flexible_residues.append(
-                        line[38:41] + ":" + line[42] + line[44:47]
-                    )  # RES:<chain><resnum>
-                    flexres_startlines.add(line[21:53])  # save startline
-            # store number of runs
-            if "Number of runs:" in line:
-                nruns = int(line.split()[3])
-                cluster_list = list(range(nruns))
-                cluster_rmsds = list(range(nruns))
-                ref_rmsds = list(range(nruns))
-            # store input pdbqt lines
-            if INPUT_KW in line:
-                inside_input = True
-            if INPUT_END in line:
-                inside_input = False
-            if inside_input is True:
-                if line.startswith("INPUT-LIGAND-PDBQT") or line.startswith(
-                    "INPUT-FLEXRES-PDBQT"
-                ):
-                    if " UNK " in line:  # replace ligand atoms ATOM flag with HETATM
-                        line = line.replace("ATOM", "HETATM")
-                    input_pdbqt.append(" ".join(line.split()[1:]))
-                    # save ligand atomtypes
-                    if line.startswith("INPUT-LIGAND-PDBQT"):
-                        ligand_atomtypes.append(line[-2:])
-                if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
-                    index_map += (
-                        line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
-                        .rstrip("\n")
-                        .split()
-                    )
-                if line.startswith("INPUT-LIGAND-PDBQT: REMARK H PARENT"):
-                    h_parents += (
-                        line.lstrip("INPUT-LIGAND-PDBQT: REMARK H PARENT")
-                        .rstrip("\n")
-                        .split()
-                    )
-
-            # store poses in each cluster in dictionary as list of ordered runs
-            if "RANKING" in line:
-                cluster_num = line.split()[0]
-                run = line.split()[2]
-                cluster_list[int(run) - 1] = cluster_num
-                if cluster_num in clusters:
-                    clusters[cluster_num].append(int(run))
-                    cluster_sizes[cluster_num] += 1
-                else:
-                    clusters[cluster_num] = [int(run)]
-                    cluster_sizes[cluster_num] = 1
-
-                cluster_rmsds[int(run) - 1] = float(
-                    line.split()[4]
-                )  # will be stored in order of runs
-                ref_rmsds[int(run) - 1] = float(line.split()[5])
-
-            # make new flexible residue list if in the coordinates for a flexible residue
-            if line[8:40] in flexres_startlines:
-                flexible_res_coords[-1].append([])
-                inside_res = True
-            if "DOCKED: ROOT" in line:
-                inside_res = False
+            if inside_header:
+                # store ligand file name
+                if line[0:11] == "Ligand file":
+                    ligname = line.split(":", 1)[1].strip().split(".")[0]
+                # store receptor name and grid parameters
+                elif line[:13] == "Receptor name":
+                    receptor = line.split()[2]
+                elif line[:21] == "Number of grid points":
+                    npts = [
+                        pts.rstrip("\n").replace(" ", "")
+                        for pts in line.split(":")[1].split(",")
+                    ]
+                elif line[:12] == "Grid spacing":
+                    spacing = line.split()[2].rstrip("A")  # remove A unit from string
+                elif line[:11] == "Grid center":
+                    center = [
+                        coord.rstrip("\n").replace(" ", "")
+                        for coord in line.split(":")[1].split(",")
+                    ]
+                # store smile string
+                elif "REMARK SMILES" in line and "IDX" not in line and smile_string == "":
+                    smile_string = line.split("REMARK SMILES")[-1]
+                # store flexible residue identities
+                elif "INPUT-FLEXRES-PDBQT:" in line:
+                    if "ATOM" in line or "HETATM" in line:
+                        if line[38:41] + ":" + line[42] + line[44:47] in flexible_residues:
+                            continue
+                        flexible_residues.append(
+                            line[38:41] + ":" + line[42] + line[44:47]
+                        )  # RES:<chain><resnum>
+                        flexres_startlines.add(line[21:53])  # save startline
+                # store number of runs
+                elif "Number of runs:" in line:
+                    nruns = int(line.split()[3])
+                    cluster_list = list(range(nruns))
+                    cluster_rmsds = list(range(nruns))
+                    ref_rmsds = list(range(nruns))
+                # store input pdbqt lines
+                elif INPUT_KW in line:
+                    inside_input = True
+                elif INPUT_END in line:
+                    inside_input = False
+                elif inside_input is True:
+                    if line.startswith("INPUT-LIGAND-PDBQT") or line.startswith(
+                        "INPUT-FLEXRES-PDBQT"
+                    ):
+                        if " UNK " in line:  # replace ligand atoms ATOM flag with HETATM
+                            line = line.replace("ATOM", "HETATM")
+                        input_pdbqt.append(" ".join(line.split()[1:]))
+                        # save ligand atomtypes
+                        if line.startswith("INPUT-LIGAND-PDBQT") and ("ATOM" in line or "HETATM" in line):
+                            ligand_atomtypes.append(line.split()[-1])
+                    if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
+                        index_map += (
+                            line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
+                            .rstrip("\n")
+                            .split()
+                        )
+                    if line.startswith("INPUT-LIGAND-PDBQT: REMARK H PARENT"):
+                        h_parents += (
+                            line.lstrip("INPUT-LIGAND-PDBQT: REMARK H PARENT")
+                            .rstrip("\n")
+                            .split()
+                        )
+                if "FINAL DOCKED STATE" in line:
+                    inside_header = False
+                if inside_header:
+                    continue
 
             if "FINAL DOCKED STATE" in line:
                 # first time inside a pose block
@@ -169,7 +152,7 @@ def parse_single_dlg(fname):
                 pose_coordinates.append([])
                 flexible_res_coords.append([])
             # store pose anaylsis
-            if line[0:9] == "ANALYSIS:" and inside_pose:
+            elif line[0:9] == "ANALYSIS:":
                 # storing interactions
                 line = line.split("ANALYSIS:")[1]
                 kw, info = line.split(None, 1)
@@ -187,11 +170,17 @@ def parse_single_dlg(fname):
                         hb_count = line.count("H")
                         pose_hb_counts.append(hb_count)
 
-            if STD_END in line:
+            # make new flexible residue list if in the coordinates for a flexible residue
+            elif line[8:40] in flexres_startlines:
+                flexible_res_coords[-1].append([])
+                inside_res = True
+            elif STD_END in line:
                 inside_pose = False
                 inside_res = False
                 heavy_at_count_complete = True
-            if (line[: len(STD_KW)] == STD_KW) and inside_pose:
+            elif "DOCKED: ROOT" in line:
+                    inside_res = False
+            elif (line[: len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
                 # store pose coordinates
@@ -203,7 +192,7 @@ def parse_single_dlg(fname):
                             [line[30:38], line[38:46], line[46:54]]
                         )
                 # store pose data
-                if "Estimated Free Energy of Binding" in line:
+                elif "Estimated Free Energy of Binding" in line:
                     try:
                         e = float(line.split()[7])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -214,7 +203,7 @@ def parse_single_dlg(fname):
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
                     scores.append(e)
-                if "Final Intermolecular Energy" in line:
+                elif "Final Intermolecular Energy" in line:
                     try:
                         e = float(line.split()[6])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -225,7 +214,7 @@ def parse_single_dlg(fname):
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
                     intermolecular_energy.append(e)
-                if "vdW + Hbond + desolv Energy" in line:
+                elif "vdW + Hbond + desolv Energy" in line:
                     try:
                         e = float(line.split()[8])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -236,7 +225,7 @@ def parse_single_dlg(fname):
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
                     vdw_hb_desolv.append(e)
-                if "Electrostatic Energy" in line:
+                elif "Electrostatic Energy" in line:
                     try:
                         e = float(line.split()[4])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -247,7 +236,7 @@ def parse_single_dlg(fname):
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
                     electrostatic.append(e)
-                if "Moving Ligand-Fixed Receptor" in line:
+                elif "Moving Ligand-Fixed Receptor" in line:
                     try:
                         e = float(line.split()[5])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -258,7 +247,7 @@ def parse_single_dlg(fname):
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
                     flex_ligand.append(e)
-                if "Moving Ligand-Moving Receptor" in line:
+                elif "Moving Ligand-Moving Receptor" in line:
                     try:
                         e = float(line.split()[5])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -269,7 +258,7 @@ def parse_single_dlg(fname):
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
                     flexLigand_flexReceptor.append(e)
-                if "Final Total Internal Energy" in line:
+                elif "Final Total Internal Energy" in line:
                     try:
                         e = float(line.split()[7])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -280,7 +269,7 @@ def parse_single_dlg(fname):
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
                     internal_energy.append(e)
-                if "Torsional Free Energy" in line:
+                elif "Torsional Free Energy" in line:
                     try:
                         e = float(line.split()[6])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -291,7 +280,7 @@ def parse_single_dlg(fname):
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
                     torsion.append(e)
-                if "Unbound System's Energy" in line:
+                elif "Unbound System's Energy" in line:
                     try:
                         e = float(line.split()[6])
                     except ValueError:  # catch off-by-one error if number is next to =
@@ -303,26 +292,45 @@ def parse_single_dlg(fname):
                             )
                     unbound_energy.append(e)
                 # store state variables
-                if "NEWDPF about" in line:
+                elif "NEWDPF about" in line:
                     ind_pose_abt = [float(i) for i in line.split()[3:]]
                     pose_about.append(ind_pose_abt)
-                if "NEWDPF tran0" in line:
+                elif "NEWDPF tran0" in line:
                     translations = [float(i) for i in line.split()[3:]]
                     pose_trans.append(translations)
-                if "NEWDPF axisangle0" in line:
+                elif "NEWDPF axisangle0" in line:
                     quaternion = [float(i) for i in line.split()[3:]]
                     pose_quarternions.append(quaternion)
-                if "NEWDPF dihe0" in line:
+                elif "NEWDPF dihe0" in line:
                     dihedrals = [float(i) for i in line.split()[3:]]
                     pose_dihedrals.append(dihedrals)
 
                 # update heavy atom count
                 if heavy_at_count_complete:
                     continue
-                if line[0:4] == "ATOM" or line[0:6] == "HETATM":
+                elif line[0:4] == "ATOM" or line[0:6] == "HETATM":
                     # count heavy atoms
                     if not line[-2] == "HD":
                         heavy_at_count += 1
+
+                continue
+
+            # store poses in each cluster in dictionary as list of ordered runs
+            elif "RANKING" in line:
+                cluster_num = line.split()[0]
+                run = line.split()[2]
+                cluster_list[int(run) - 1] = cluster_num
+                if cluster_num in clusters:
+                    clusters[cluster_num].append(int(run))
+                    cluster_sizes[cluster_num] += 1
+                else:
+                    clusters[cluster_num] = [int(run)]
+                    cluster_sizes[cluster_num] = 1
+
+                cluster_rmsds[int(run) - 1] = float(
+                    line.split()[4]
+                )  # will be stored in order of runs
+                ref_rmsds[int(run) - 1] = float(line.split()[5])
 
     sorted_idx = np.argsort(scores)
     # sort poses, scores, and interactions
@@ -364,7 +372,7 @@ def parse_single_dlg(fname):
         or len(torsion) == 0
         or len(unbound_energy) == 0
     ):
-        raise ValueError("Incomplete data in " + fname)
+        raise FileParsingError("Incomplete data in " + fname)   
     # calculate ligand efficiency and deltas from the best pose
     leff = [x / heavy_at_count for x in scores]
     delta = [x - scores[0] for x in scores]
