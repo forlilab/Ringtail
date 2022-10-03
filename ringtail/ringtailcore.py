@@ -116,7 +116,6 @@ class RingtailCore:
 
 
         out_opts = {'log': 'output_log.txt',
-                    'overwrite': None,
                     'export_sdf_path': None,
                     'plot': None,
                     'outfields': 'e',
@@ -128,7 +127,6 @@ class RingtailCore:
                     'filter_bookmark': None}
 
         out_types = {'log': str,
-                    'overwrite': bool,
                     'export_sdf_path': str,
                     'plot': bool,
                     'outfields': str,
