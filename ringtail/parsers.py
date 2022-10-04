@@ -193,7 +193,7 @@ def parse_single_dlg(fname):
                 # store pose coordinates
                 if "ATOM" in line or "HETATM" in line:
                     if inside_res:
-                        flexible_res_coords[-1][-1].append(line[30:38], line[38:46], line[46:54])
+                        flexible_res_coords[-1][-1].append([line[30:38], line[38:46], line[46:54]])
                     else:
                         pose_coordinates[-1].append(
                             [line[30:38], line[38:46], line[46:54]]
