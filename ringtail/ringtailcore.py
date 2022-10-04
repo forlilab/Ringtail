@@ -400,16 +400,18 @@ class RingtailCore:
                 atom_indices = self._storage_string_to_list(atom_indices)
                 flexible_residues = self._storage_string_to_list(flexible_residues)
                 flexres_atomnames = self._storage_string_to_list(flexres_atomnames)
+                ligand_saved_coords = []
+                flexres_saved_coords = []
                 # make flexible residue molecules
-                for res, res_at in zip(flexible_residues, flexres_atomnames):
+                for res, res_ats in zip(flexible_residues, flexres_atomnames):
+                    flexres_saved_coords.append([])
                     resname = res[:3]
-                    res_smiles, res_index_map, res_h_parents = RDKitMolCreate.guess_flexres_smiles(resname, res_at)
+                    res_ats = [at.strip() for at in res_ats]  # strip out whitespace around atom names
+                    res_smiles, res_index_map, res_h_parents = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
                     if res_smiles is None:  # catch error in guessing smiles
                         raise OutputError(f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes")
                     flexres_mols.append(Chem.MolFromSmiles(res_smiles))
                     flexres_info.append((res_smiles, res_index_map, res_h_parents))
-                ligand_saved_coords = []
-                flexres_saved_coords = []
 
                 # fetch coordinates for passing poses and add to
                 # rdkit ligand mol, add flexible residues
@@ -423,9 +425,10 @@ class RingtailCore:
                     atom_indices,
                     passing_properties,
                     mol,
-                    flexres_info,
                     flexres_mols,
+                    flexres_info,
                     ligand_saved_coords,
+                    flexres_saved_coords,
                     properties,
                 )
 
@@ -439,9 +442,10 @@ class RingtailCore:
                     atom_indices,
                     passing_properties,
                     mol,
-                    flexres_info,
                     flexres_mols,
+                    flexres_info,
                     ligand_saved_coords,
+                    flexres_saved_coords,
                     properties,
                     )
 
@@ -449,13 +453,13 @@ class RingtailCore:
                 lig_h_parents = [int(idx) for idx in self._storage_string_to_list(h_parent_line)]
                 mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
                 flexres_hparents = []
-                for idx, res in flexres_mols:
-                    flexres_hparents = [int(idx) for idx in self._storage_string_to_list(flexres_info[idx][2])]
+                for idx, res in enumerate(flexres_mols):
+                    flexres_hparents = flexres_info[idx][2]
                     flexres_mols[idx] = RDKitMolCreate.add_hydrogens(res, flexres_saved_coords[idx], flexres_hparents)
 
                 # write out mol
                 self.output_manager.write_out_mol(
-                    ligname, mol, flexres_mols, saved_coords, properties
+                    ligname, mol, flexres_mols, properties
                 )
 
         except StorageError as e:
@@ -619,13 +623,11 @@ class RingtailCore:
                 ligand_pose,
                 atom_indices
             )
-            save_flexres = []
-            for fr_idx, fr_mol in flexres_mols:
-                flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(fr_mol, flexres_pose, flexres_info[fr_idx][1])
-                save_flexres.append(flexres_pose)
+            for fr_idx, fr_mol in enumerate(flexres_mols):
+                flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(fr_mol, flexres_pose[fr_idx], flexres_info[fr_idx][1])
+                flexres_saved_coords[fr_idx].append(flexres_pose[fr_idx])
             ligand_saved_coords.append(ligand_pose)
-            flexres_saved_coords.append(save_flexres)
-        return mol, flexres_mols, saved_coords, flexres_saved_coords, properties
+        return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
 
     def _generate_interaction_combinations(self, max_miss=0):
         """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
@@ -839,8 +841,9 @@ class OutputManager:
         """
         try:
             filename = self.export_sdf_path + ligname + ".sdf"
-            mol_flexres_list = [mol].append(flexres_mols)
-            mol = RDKitMolCreate.combined_rdkit_mols(mol_flexres_list)
+            mol_flexres_list = [mol]
+            mol_flexres_list += flexres_mols
+            mol = RDKitMolCreate.combine_rdkit_mols(mol_flexres_list)
             # convert properties to strings as needed
             for k, v in properties.items():
                 if isinstance(v, list):

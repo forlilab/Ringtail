@@ -102,7 +102,7 @@ def parse_single_dlg(fname):
                 # store flexible residue identities and atomtyps
                 if "INPUT-FLEXRES-PDBQT:" in line:
                     if "ATOM" in line or "HETATM" in line:
-                        flexres_atomnames[-1].append(line[34:37])
+                        flexres_atomnames[-1].append(line[33:37])
                         if line[38:41] + ":" + line[42] + line[44:47] in flexible_residues:
                             continue
                         flexible_residues.append(
@@ -174,7 +174,7 @@ def parse_single_dlg(fname):
                         pose_hb_counts.append(hb_count)
 
             # make new flexible residue list if in the coordinates for a flexible residue
-            elif line[8:40] in flexres_startlines:
+            if line[8:40] in flexres_startlines:
                 flexible_res_coords[-1].append([])
                 inside_res = True
             elif STD_END in line:
@@ -183,7 +183,7 @@ def parse_single_dlg(fname):
                 heavy_at_count_complete = True
             elif "DOCKED: ROOT" in line:
                     inside_res = False
-            elif (line[: len(STD_KW)] == STD_KW) and inside_pose:
+            if (line[: len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
                 # store pose coordinates
