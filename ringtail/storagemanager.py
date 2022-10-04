@@ -347,14 +347,14 @@ class StorageManager:
         Returns:
             List: List of data to be written as row in ligand table. Format:
             [ligand_name, ligand_smile, ligand_index_map,
-            ligand_h_parents, flexible_residues, flexres_atomtypes input_pdbqt]
+            ligand_h_parents, flexible_residues, flexres_atomnames input_pdbqt]
         """
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
         ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
         ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
         flexible_residues = json.dumps(ligand_dict["flexible_residues"])
-        flexres_atomtypes = json.dumps(ligand_dict["flexres_atomtypes"])
+        flexres_atomnames = json.dumps(ligand_dict["flexres_atomnames"])
         input_pdbqt = json.dumps(ligand_dict["ligand_input_pdbqt"])
 
         return [
@@ -363,7 +363,7 @@ class StorageManager:
             ligand_index_map,
             ligand_h_parents,
             flexible_residues,
-            flexres_atomtypes,
+            flexres_atomnames,
             input_pdbqt,
         ]
 
@@ -725,7 +725,7 @@ class StorageManager:
 
         No Longer Returned:
             DB cursor: contains
-                LigName, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomtypes
+                LigName, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames
 
         Raises:
             NotImplementedError: Description
@@ -990,7 +990,7 @@ class StorageManager:
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
         flexible_residues   VARCHAR[],
-        flexres_atomtypes   VARCHAR[],
+        flexres_atomnames   VARCHAR[],
         input_pdbqt         VARCHAR[]
 
         Raises:
@@ -1563,7 +1563,7 @@ class StorageManagerSQLite(StorageManager):
         atom_index_map,
         hydrogen_parents,
         flexible_residues,
-        flexres_atomtypes,
+        flexres_atomnames,
         input_pdbqt
         ) VALUES
         (?,?,?,?,?,?,?)"""
@@ -1753,9 +1753,9 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             SQLite cursor: contains LigName, ligand_smile,
-                atom_index_map, hydrogen_parents, flexible_residues, flexres_atomtypes
+                atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames
         """
-        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomtypes FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
+        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.results_view_name
         )
         return self._run_query(query)
@@ -2075,10 +2075,10 @@ class StorageManagerSQLite(StorageManager):
             )
 
             if index_lignames:
-                logging.debug("Creating LigName index")
+                logging.debug("Creating LigName index...")
                 cur.execute(ligname_idx_str)
             if self.index_columns != []:
-                logging.debug("Creating filter columns index")
+                logging.debug("Creating filter columns index...")
                 cur.execute(index_str)
             self.conn.commit()
             cur.close()
@@ -2111,6 +2111,7 @@ class StorageManagerSQLite(StorageManager):
         cur = self.conn.cursor()
         if add_poseID:
             query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
+        logging.info("Creating bookmark...")
         # drop old view if there is one
         try:
             if temp:
@@ -2123,6 +2124,9 @@ class StorageManagerSQLite(StorageManager):
                     name=name, query=query, temp_flag=temp_flag
                 )
             )
+            logging.debug("CREATE {temp_flag}VIEW {name} AS {query}".format(
+                    name=name, query=query, temp_flag=temp_flag
+                ))
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseViewCreationError(
@@ -2271,7 +2275,7 @@ class StorageManagerSQLite(StorageManager):
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
         flexible_residues   VARCHAR[],
-        flexres_atomtypes   VARCHAR[],
+        flexres_atomnames   VARCHAR[],
         input_pdbqt         VARCHAR[]
 
         Raises:
@@ -2284,7 +2288,7 @@ class StorageManagerSQLite(StorageManager):
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
             flexible_residues   VARCHAR[],
-            flexres_atomtypes   VARCHAR[],
+            flexres_atomnames   VARCHAR[],
             input_pdbqt         VARCHAR[])"""
 
         try:
