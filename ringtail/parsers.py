@@ -99,15 +99,19 @@ def parse_single_dlg(fname):
                 # store smile string
                 elif "REMARK SMILES" in line and "IDX" not in line and smile_string == "":
                     smile_string = line.split("REMARK SMILES")[-1]
-                # store flexible residue identities
-                elif "INPUT-FLEXRES-PDBQT:" in line:
+                # store flexible residue identities and atomtyps
+                if "INPUT-FLEXRES-PDBQT:" in line:
                     if "ATOM" in line or "HETATM" in line:
+                        flexres_atomtypes[-1].append(line.split()[-1])
                         if line[38:41] + ":" + line[42] + line[44:47] in flexible_residues:
                             continue
                         flexible_residues.append(
                             line[38:41] + ":" + line[42] + line[44:47]
                         )  # RES:<chain><resnum>
                         flexres_startlines.add(line[21:53])  # save startline
+                    # add new list for new flexres
+                    elif "INPUT-FLEXRES-PDBQT: ROOT" in line:
+                        flexres_atomtypes.append([])
                 # store number of runs
                 elif "Number of runs:" in line:
                     nruns = int(line.split()[3])
@@ -119,22 +123,14 @@ def parse_single_dlg(fname):
                     inside_input = True
                 elif INPUT_END in line:
                     inside_input = False
-                elif inside_input is True:
-                    if line.startswith("INPUT-LIGAND-PDBQT") or line.startswith(
-                        "INPUT-FLEXRES-PDBQT"
-                    ):
+                if inside_input is True:
+                    if line.startswith("INPUT-LIGAND-PDBQT"):
                         if " UNK " in line:  # replace ligand atoms ATOM flag with HETATM
                             line = line.replace("ATOM", "HETATM")
                         input_pdbqt.append(" ".join(line.split()[1:]))
                         # save ligand atomtypes
                         if line.startswith("INPUT-LIGAND-PDBQT") and ("ATOM" in line or "HETATM" in line):
                             ligand_atomtypes.append(line.split()[-1])
-                        # add new list for new flexres
-                        elif line.startswith("INPUT-FLEXRES-PDBQT: ROOT"):
-                            flexres_atomtypes.append([])
-                        # save flexres atomtypes
-                        elif line.startswith("INPUT-FLEXRES-PDBQT") and ("ATOM" in line or "HETATM" in line):
-                            flexres_atomtypes[-1].append(line.split()[-1])
                     if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                         index_map += (
                             line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
