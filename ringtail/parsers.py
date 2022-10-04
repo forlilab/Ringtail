@@ -74,7 +74,7 @@ def parse_single_dlg(fname):
         index_map = []
         h_parents = []
         ligand_atomtypes = []
-        flexres_atomtypes = []
+        flexres_atomnames = []
         for line in fp.readlines():
             line = line.decode("utf-8")
             if inside_header:
@@ -102,7 +102,7 @@ def parse_single_dlg(fname):
                 # store flexible residue identities and atomtyps
                 if "INPUT-FLEXRES-PDBQT:" in line:
                     if "ATOM" in line or "HETATM" in line:
-                        flexres_atomtypes[-1].append(line.split()[-1])
+                        flexres_atomnames[-1].append(line[34:37])
                         if line[38:41] + ":" + line[42] + line[44:47] in flexible_residues:
                             continue
                         flexible_residues.append(
@@ -111,7 +111,7 @@ def parse_single_dlg(fname):
                         flexres_startlines.add(line[21:53])  # save startline
                     # add new list for new flexres
                     elif "INPUT-FLEXRES-PDBQT: ROOT" in line:
-                        flexres_atomtypes.append([])
+                        flexres_atomnames.append([])
                 # store number of runs
                 elif "Number of runs:" in line:
                     nruns = int(line.split()[3])
@@ -419,7 +419,7 @@ def parse_single_dlg(fname):
         "pose_dihedrals": pose_dihedrals,
         "fname": fname,
         "ligand_atomtypes": ligand_atomtypes,
-        "flexres_atomtypes": flexres_atomtypes,
+        "flexres_atomnames": flexres_atomnames,
     }
 
 

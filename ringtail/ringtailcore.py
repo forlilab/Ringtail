@@ -227,7 +227,7 @@ class RingtailCore:
             perform filtering. Create log of passing results.
         """
 
-        logging.info("Filtering results")
+        logging.info("Filtering results...")
         self._prepare_output_manager()
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(
@@ -258,7 +258,7 @@ class RingtailCore:
                 self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
                 self.output_manager.log_num_passing_ligands(number_passing_ligands)
                 self.output_manager.write_log(self.filtered_results)
-            except DatabaseError as e:
+            except StorageError as e:
                 logging.exception(
                     "Database error occurred while filtering"
                 )
@@ -281,7 +281,7 @@ class RingtailCore:
                 self.out_opts["outfields"]
             )
             self.output_manager.write_log(new_data)
-        except DatabaseError as e:
+        except StorageError as e:
             logging.exception(
                 "Database error occurred while fetching data for bookmark"
             )
@@ -319,7 +319,7 @@ class RingtailCore:
                         line[0], line[1], "red"
                     )  # energy (line[0]) on x axis, le (line[1]) on y axis
             self.output_manager.save_scatterplot()
-        except DatabaseError as e:
+        except StorageError as e:
             logging.exception(
                 "Database error occurred while fetching data for plot"
             )
@@ -388,7 +388,7 @@ class RingtailCore:
                 )
                 return
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
-            for (ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomtypes) in passing_molecule_info:
+            for (ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames) in passing_molecule_info:
                 logging.info("Writing " + ligname.split(".")[0] + ".sdf")
                 # create rdkit ligand molecule and flexible residue container
                 if smiles == "":
@@ -398,12 +398,14 @@ class RingtailCore:
                 flexres_mols = []
                 flexres_info = []
                 atom_indices = self._storage_string_to_list(atom_indices)
+                flexible_residues = self._storage_string_to_list(flexible_residues)
+                flexres_atomnames = self._storage_string_to_list(flexres_atomnames)
                 # make flexible residue molecules
-                for res, res_at in zip(flexible_residues, flexres_atomtypes):
+                for res, res_at in zip(flexible_residues, flexres_atomnames):
                     resname = res[:3]
-                    res_smiles, res_index_map, res_h_parents = RDKitMolCreate.guess_flexres_smiles(resname, self._clean_storage_string(res_at))
+                    res_smiles, res_index_map, res_h_parents = RDKitMolCreate.guess_flexres_smiles(resname, res_at)
                     if res_smiles is None:  # catch error in guessing smiles
-                        raise OutputError(f"Error while creating Mol for flexible residue {res}")
+                        raise OutputError(f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes")
                     flexres_mols.append(Chem.MolFromSmiles(res_smiles))
                     flexres_info.append((res_smiles, res_index_map, res_h_parents))
                 ligand_saved_coords = []
@@ -456,7 +458,7 @@ class RingtailCore:
                     ligname, mol, flexres_mols, saved_coords, properties
                 )
 
-        except DatabaseError as e:
+        except StorageError as e:
             logging.exception(
                 "Error occurred while fetching database information for SDF output"
             )
@@ -481,7 +483,7 @@ class RingtailCore:
         try:
             df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
-        except DatabaseError as e:
+        except StorageError as e:
             logging.exception(
                 f"Error occured while getting data for exporting CSV of {requested_data}"
             )
