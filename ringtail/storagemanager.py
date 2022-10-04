@@ -255,8 +255,7 @@ class StorageManager:
             axisangle_w, [30]
             dihedrals, [31]
             ligand_coordinates, [32]
-            flexible_residues, [33]
-            flexible_res_coordinates [34]
+            flexible_res_coordinates [33]
         """
 
         # # # # # # get pose-specific data
@@ -333,7 +332,6 @@ class StorageManager:
         # add coordinates
         # convert to string for storage as VARCHAR
         ligand_data_list.append(json.dumps(ligand_dict["pose_coordinates"][pose_rank]))
-        ligand_data_list.append(json.dumps(ligand_dict["flexible_residues"]))
         ligand_data_list.append(
             json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank])
         )
@@ -349,12 +347,14 @@ class StorageManager:
         Returns:
             List: List of data to be written as row in ligand table. Format:
             [ligand_name, ligand_smile, ligand_index_map,
-            ligand_h_parents, input_pdbqt]
+            ligand_h_parents, flexible_residues, flexres_atomtypes input_pdbqt]
         """
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
         ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
         ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
+        flexible_residues = json.dumps(ligand_dict["flexible_residues"])
+        flexres_atomtypes = json.dumps(ligand_dict["flexres_atomtypes"])
         input_pdbqt = json.dumps(ligand_dict["ligand_input_pdbqt"])
 
         return [
@@ -362,6 +362,8 @@ class StorageManager:
             ligand_smile,
             ligand_index_map,
             ligand_h_parents,
+            flexible_residues,
+            flexres_atomtypes,
             input_pdbqt,
         ]
 
@@ -723,7 +725,7 @@ class StorageManager:
 
         No Longer Returned:
             DB cursor: contains
-                LigName, ligand_smile, atom_index_map, hydrogen_parents
+                LigName, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomtypes
 
         Raises:
             NotImplementedError: Description
@@ -987,6 +989,8 @@ class StorageManager:
         ligand_smile        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
+        flexible_residues   VARCHAR[],
+        flexres_atomtypes   VARCHAR[],
         input_pdbqt         VARCHAR[]
 
         Raises:
@@ -1559,9 +1563,11 @@ class StorageManagerSQLite(StorageManager):
         ligand_smile,
         atom_index_map,
         hydrogen_parents,
+        flexible_residues,
+        flexres_atomtypes,
         input_pdbqt
         ) VALUES
-        (?,?,?,?,?)"""
+        (?,?,?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -1748,9 +1754,9 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             SQLite cursor: contains LigName, ligand_smile,
-                atom_index_map, hydrogen_parents
+                atom_index_map, hydrogen_parents, flexible_residues, flexres_atomtypes
         """
-        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
+        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomtypes FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.results_view_name
         )
         return self._run_query(query)
@@ -1765,7 +1771,7 @@ class StorageManagerSQLite(StorageManager):
             SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
+        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
             results_view=self.results_view_name, ligand=ligname
         )
         return self._run_query(query)
@@ -2265,6 +2271,8 @@ class StorageManagerSQLite(StorageManager):
         ligand_smile        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
+        flexible_residues   VARCHAR[],
+        flexres_atomtypes   VARCHAR[],
         input_pdbqt         VARCHAR[]
 
         Raises:
@@ -2276,6 +2284,8 @@ class StorageManagerSQLite(StorageManager):
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
+            flexible_residues   VARCHAR[],
+            flexres_atomtypes   VARCHAR[],
             input_pdbqt         VARCHAR[])"""
 
         try:

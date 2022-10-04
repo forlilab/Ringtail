@@ -74,6 +74,7 @@ def parse_single_dlg(fname):
         index_map = []
         h_parents = []
         ligand_atomtypes = []
+        flexres_atomtypes = []
         for line in fp.readlines():
             line = line.decode("utf-8")
             if inside_header:
@@ -128,6 +129,12 @@ def parse_single_dlg(fname):
                         # save ligand atomtypes
                         if line.startswith("INPUT-LIGAND-PDBQT") and ("ATOM" in line or "HETATM" in line):
                             ligand_atomtypes.append(line.split()[-1])
+                        # add new list for new flexres
+                        elif line.startswith("INPUT-FLEXRES-PDBQT: ROOT"):
+                            flexres_atomtypes.append([])
+                        # save flexres atomtypes
+                        elif line.startswith("INPUT-FLEXRES-PDBQT") and ("ATOM" in line or "HETATM" in line):
+                            flexres_atomtypes[-1].append(line.split()[-1])
                     if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                         index_map += (
                             line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
@@ -186,7 +193,7 @@ def parse_single_dlg(fname):
                 # store pose coordinates
                 if "ATOM" in line or "HETATM" in line:
                     if inside_res:
-                        flexible_res_coords[-1][-1].append(line)
+                        flexible_res_coords[-1][-1].append(line[30:38], line[38:46], line[46:54])
                     else:
                         pose_coordinates[-1].append(
                             [line[30:38], line[38:46], line[46:54]]
@@ -416,6 +423,7 @@ def parse_single_dlg(fname):
         "pose_dihedrals": pose_dihedrals,
         "fname": fname,
         "ligand_atomtypes": ligand_atomtypes,
+        "flexres_atomtypes": flexres_atomtypes,
     }
 
 
