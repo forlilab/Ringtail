@@ -2219,7 +2219,6 @@ class StorageManagerSQLite(StorageManager):
             axisangle_w         FLOAT(4),
             dihedrals           VARCHAR[],
             ligand_coordinates         VARCHAR[],
-            flexible_residues   VARCHAR[],
             flexible_res_coordinates   VARCHAR[]
             {0}
         );
