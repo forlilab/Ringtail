@@ -208,11 +208,11 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, maxProcesses, pipe_conn, chunksize, storageman, mode="dlg"):
+    def __init__(self, queue, num_readers, pipe_conn, chunksize, storageman, mode="dlg"):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
-        self.maxProcesses = maxProcesses
+        self.num_readers = num_readers
         self.pipe = pipe_conn
         # assign pointer to storage object, set chunksize
         self.mode = mode
@@ -241,10 +241,10 @@ class Writer(multiprocessing.Process):
                 next_task = self.queue.get()
                 if next_task is None:
                     # if a poison pill is found, it means one of the workers quit
-                    self.maxProcesses -= 1
+                    self.num_readers -= 1
                     logging.info(
                         "Closing process. Remaining open processes: "
-                        + str(self.maxProcesses)
+                        + str(self.num_readers)
                     )
                 else:
                     # if not a poison pill, process the task item
@@ -266,7 +266,7 @@ class Writer(multiprocessing.Process):
                     # process next file
                     self.process_file(next_task)
 
-                if self.maxProcesses == 0:
+                if self.num_readers == 0:
                     # received as many poison pills as workers
                     logging.info("Performing final database write")
                     # perform final storage write
