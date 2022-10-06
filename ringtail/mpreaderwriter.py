@@ -9,6 +9,7 @@ import time
 import sys
 import logging
 import traceback
+import queue
 from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .exceptions import FileParsingError, WriteToStorageError
 from .interactions import InteractionFinder
@@ -155,7 +156,7 @@ class DockingFileReader(multiprocessing.Process):
                 else:
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 # put the result in the out queue
-                self.queueOut.put(parsed_file_dict)
+                self._add_to_queue(parsed_file_dict)
         except Exception:
             tb = traceback.format_exc()
             self.pipe.send(
@@ -163,6 +164,22 @@ class DockingFileReader(multiprocessing.Process):
             )
         finally:
             return
+
+    def _add_to_queue(self, obj):
+        max_attempts = 750
+        timeout = 0.5  # seconds
+        attempts = 0
+        while True:
+            if attempts >= max_attempts:
+                raise MultiprocessingError(
+                    "Something is blocking the progressing of file writing. Exiting program."
+                ) from queue.Full
+            try:
+                self.queueOut.put(obj, block=True, timeout=timeout)
+                break
+            except queue.Full:
+                logging.debug(f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
+                attempts += 1
 
     def _find_poses_to_save(self, ligand_dict: dict) -> list:
         """returns list of the run numbers for the top run in the

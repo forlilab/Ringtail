@@ -72,7 +72,7 @@ class MPManager:
             max_proc = multiprocessing.cpu_count()
         self.num_readers = max_proc - 1
         self.queueIn = multiprocessing.Queue(maxsize=2 * max_proc)
-        self.queueOut = multiprocessing.Queue()
+        self.queueOut = multiprocessing.Queue(maxsize=2 * max_proc)
 
     def process_files(self):
         # start the workers in background
