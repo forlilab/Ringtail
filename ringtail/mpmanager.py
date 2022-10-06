@@ -70,16 +70,16 @@ class MPManager:
 
         if max_proc is None:
             max_proc = multiprocessing.cpu_count()
-        self.max_proc = max_proc
-        self.queueIn = multiprocessing.Queue(maxsize=2 * self.max_proc)
+        self.num_readers = max_proc - 1
+        self.queueIn = multiprocessing.Queue(maxsize=2 * max_proc)
         self.queueOut = multiprocessing.Queue()
 
     def process_files(self):
         # start the workers in background
         self.workers = []
         self.p_conn, self.c_conn = multiprocessing.Pipe(True)
-        logging.info("Starting {0} file readers".format(self.max_proc))
-        for i in range(self.max_proc):
+        logging.info("Starting {0} file readers".format(self.num_readers))
+        for i in range(self.num_readers):
             # one worker is started for each processor to be used
             s = DockingFileReader(
                 self.queueIn,
@@ -102,7 +102,7 @@ class MPManager:
         # start the writer to process the data from the workers
         w = Writer(
             self.queueOut,
-            self.max_proc,
+            self.num_readers,
             self.c_conn,
             self.chunk_size,
             self.storageman,
@@ -119,7 +119,7 @@ class MPManager:
             tb = traceback.format_exc()
             self._kill_all_workers("file sources", tb)
         # put as many poison pills in the queue as there are workers
-        for i in range(self.max_proc):
+        for i in range(self.num_readers):
             self.queueIn.put(None)
 
         # check for exceptions
