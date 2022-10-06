@@ -178,7 +178,7 @@ class DockingFileReader(multiprocessing.Process):
                 self.queueOut.put(obj, block=True, timeout=timeout)
                 break
             except queue.Full:
-                logging.debug(f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
+                # logging.debug(f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
                 attempts += 1
 
     def _find_poses_to_save(self, ligand_dict: dict) -> list:

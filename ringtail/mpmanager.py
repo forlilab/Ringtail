@@ -170,7 +170,7 @@ class MPManager:
                 self._check_for_worker_exceptions()
                 break
             except queue.Full:
-                logging.debug(f"Queue full: queueIn.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
+                # logging.debug(f"Queue full: queueIn.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
                 attempts += 1
                 self._check_for_worker_exceptions()
 
