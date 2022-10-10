@@ -306,7 +306,7 @@ class Writer(multiprocessing.Process):
 
     def write_to_storage(self):
         # insert result, ligand, and receptor data
-        self.storageman.insert_data(results_array, ligands_array, interaction_array, receptor_array, self.first_insert)
+        self.storageman.insert_data(self.results_array, self.ligands_array, self.interactions_list, self.receptor_array, self.first_insert)
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
 
@@ -321,7 +321,7 @@ class Writer(multiprocessing.Process):
         self.receptor_array = []
         self.counter = 0
 
-    def process_file(self, file_dict):
+    def process_file(self, file_packet):
         results_rows, ligand_row, interaction_rows, receptor_row = file_packet
         for pose in results_rows:
             self.results_array.append(pose)

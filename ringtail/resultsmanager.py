@@ -6,7 +6,7 @@
 
 from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
-from .storagemanager import StorageManager
+from .storagemanager import StorageManager, StorageManagerSQLite
 import typing
 
 
@@ -14,7 +14,7 @@ class ResultsManager:
     def __init__(
         self,
         storageman: StorageManager,
-        storageman_class: str="StorageManagerSQLite",
+        storageman_class: StorageManager=StorageManagerSQLite,
         parser_manager: str="multiprocessing",
         mode: str="dlg",
         chunk_size: int=1,

@@ -12,6 +12,7 @@ import fnmatch
 import os
 import glob
 import warnings
+from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .exceptions import MultiprocessingError
@@ -28,7 +29,7 @@ class MPManager:
     def __init__(
         self,
         storageman,
-        storageman_class="StorageManagerSQLite",
+        storageman_class=StorageManagerSQLite,
         mode="dlg",
         chunk_size=1,
         max_poses=3,
