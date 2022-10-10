@@ -665,7 +665,7 @@ class CLOptionParser:
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
-        except OptionError as e:
+        except Exception as e:
             if self.rr_mode == "write":
                 self.write_parser.print_help()
             elif self.rr_mode == "read":

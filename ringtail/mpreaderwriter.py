@@ -30,6 +30,7 @@ class DockingFileReader(multiprocessing.Process):
         queueOut,
         pipe_conn,
         storageman,
+        storageman_class,
         mode,
         max_poses,
         interaction_tolerance,
@@ -50,8 +51,9 @@ class DockingFileReader(multiprocessing.Process):
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
         self.receptor_file = receptor_file
-        # set storagemanager
+        # set storagemanager and class
         self.storageman = storageman
+        self.storageman_class = storageman_class
         # set target name to check against
         self.target = target
         # initialize the parent class to inherit all multiprocessing methods
@@ -156,7 +158,8 @@ class DockingFileReader(multiprocessing.Process):
                 else:
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 # put the result in the out queue
-                self._add_to_queue(parsed_file_dict)
+                data_packet = self.storageman_class.format_for_storage(parsed_file_dict)
+                self._add_to_queueout(data_packet)
         except Exception:
             tb = traceback.format_exc()
             self.pipe.send(
@@ -165,7 +168,7 @@ class DockingFileReader(multiprocessing.Process):
         finally:
             return
 
-    def _add_to_queue(self, obj):
+    def _add_to_queueout(self, obj):
         max_attempts = 750
         timeout = 0.5  # seconds
         attempts = 0
@@ -236,7 +239,10 @@ class Writer(multiprocessing.Process):
         self.storageman = storageman
         self.chunksize = chunksize
         # initialize data array (stack of dictionaries)
-        self.data_array = []
+        self.results_array = []
+        self.ligands_array = []
+        self.interactions_list = []
+        self.receptor_array = []
         # progress tracking instance variables
         self.first_insert = True
         self.counter = 0
@@ -300,7 +306,7 @@ class Writer(multiprocessing.Process):
 
     def write_to_storage(self):
         # insert result, ligand, and receptor data
-        self.storageman.insert_data(self.data_array, self.first_insert)
+        self.storageman.insert_data(results_array, ligands_array, interaction_array, receptor_array, self.first_insert)
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
 
@@ -309,9 +315,19 @@ class Writer(multiprocessing.Process):
         self.total_runtime = time.perf_counter() - self.time0
 
         # reset data holder for next chunk
-        self.data_array = []
+        self.results_array = []
+        self.ligands_array = []
+        self.interactions_list = []
+        self.receptor_array = []
         self.counter = 0
 
     def process_file(self, file_dict):
-        self.data_array.append(file_dict)
+        results_rows, ligand_row, interaction_rows, receptor_row = file_packet
+        for pose in results_rows:
+            self.results_array.append(pose)
+        for pose in interaction_rows:
+            self.interactions_list.append(pose)
+        self.ligands_array.append(ligand_row)
+        self.receptor_array.append(receptor_row)
+
         self.counter += 1

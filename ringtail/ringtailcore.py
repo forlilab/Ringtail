@@ -92,6 +92,7 @@ class RingtailCore:
         storage_types = {'sqlite': StorageManagerSQLite,}
         self.storageman = storage_types[storage_type](**self.storage_opts)
         self.rman_opts["storageman"] = self.storageman
+        self.rman_opts["storageman_class"] = storage_types[storage_type]
         self.output_manager = None
 
     @classmethod
