@@ -28,6 +28,7 @@ class MPManager:
     def __init__(
         self,
         storageman,
+        storageman_class="StorageManagerSQLite",
         mode="dlg",
         chunk_size=1,
         max_poses=3,
@@ -66,6 +67,7 @@ class MPManager:
         self.file_pattern = file_pattern
 
         self.storageman = storageman
+        self.storageman_class = storageman_class
         self.num_files = 0
 
         if max_proc is None:
@@ -86,6 +88,7 @@ class MPManager:
                 self.queueOut,
                 self.c_conn,
                 self.storageman,
+                self.storageman_class,
                 self.mode,
                 self.max_poses,
                 self.interaction_tolerance,

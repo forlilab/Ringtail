@@ -14,6 +14,7 @@ class ResultsManager:
     def __init__(
         self,
         storageman: StorageManager,
+        storageman_class: str="StorageManagerSQLite",
         parser_manager: str="multiprocessing",
         mode: str="dlg",
         chunk_size: int=1,
