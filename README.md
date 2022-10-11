@@ -423,7 +423,7 @@ with StorageManagerSQLite("vs.db") as dbman:
     ligands_df = dbman.to_dataframe("Ligands")
 
     # fetch entire Receptors table as pandas dataframe
-    rec_df = dbman.to_dataframe"Receptors")
+    rec_df = dbman.to_dataframe("Receptors")
 
     # fetch entire Interaction Indices table as pandas dataframe
     interaction_idx_df = dbman.to_dataframe("Interaction_indices")
