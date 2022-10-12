@@ -588,6 +588,11 @@ def cmdline_parser(defaults={}):
         metavar="INTEGER",
     )
 
+    # catch if running with no options
+    if len(sys.argv) == 1:
+        parser.print_help()
+        raise OptionError("Script called with no commandline options. Aborting.")
+
     parser.set_defaults(**config)
     write_parser.set_defaults(**config)
     read_parser.set_defaults(**config)
@@ -666,14 +671,14 @@ class CLOptionParser:
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
         except Exception as e:
-            if self.rr_mode == "write":
-                self.write_parser.print_help()
-            elif self.rr_mode == "read":
-                self.read_parser.print_help()
-            else:
-                self.parser.print_help()
-            logging.error("\n")
-            raise e
+            try:
+                if self.rr_mode == "write":
+                    self.write_parser.print_help()
+                elif self.rr_mode == "read":
+                    self.read_parser.print_help()
+            finally:
+                logging.error("\n")
+                raise e
 
     def read_filter_file(self, fname):
         """parse the filter file to define filters"""
