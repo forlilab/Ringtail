@@ -451,7 +451,8 @@ def parse_vina_pdbqt(fname):
     flexible_res_coords = []
     inside_res = False
     flexible_residues = []
-    ligand_atomtypes = []
+    ligand_atomnames = []
+    flexres_atomnames = []
     first_model = True
     cluster = 1  # treat every pose in vina like new cluster
     cluster_list = []
@@ -485,12 +486,14 @@ def parse_vina_pdbqt(fname):
                 if line.startswith("HETATM") or line.startswith("ATOM"):
                     if inside_res:
                         flexible_res_coords[-1][-1].append(line)
+                        if first_model:
+                            flexres_atomnames[-1].append(line.split()[-1])
                     else:
                         pose_coordinates[-1].append(
                             [line[30:38], line[38:46], line[46:54]]
                         )
                         if first_model:
-                            ligand_atomtypes.append(line.split()[-1])
+                            ligand_atomnames.append(line.split()[-1])
                             if line[13] != "H":
                                 num_heavy_atoms += 1
                 if line.startswith("REMARK SMILES IDX") and first_model:
@@ -508,6 +511,8 @@ def parse_vina_pdbqt(fname):
                 # make new flexible residue list if in the coordinates for a flexible residue
                 if "BEGIN_RES" in line:
                     flexible_res_coords[-1].append([])
+                    if first_model:
+                        flexres_atomnames.append([])
                     inside_res = True
                 if "END_RES" in line:
                     inside_res = False
@@ -536,6 +541,7 @@ def parse_vina_pdbqt(fname):
         "pose_coordinates": pose_coordinates,  # list
         "flexible_res_coordinates": flexible_res_coords,
         "flexible_residues": flexible_residues,
+        "flexres_atomnames": flexres_atomnames,
         "ligand_smile_string": smile_string,
         "clusters": clusters,
         "cluster_rmsds": cluster_rmsds,
@@ -562,7 +568,7 @@ def parse_vina_pdbqt(fname):
         "pose_quarternions": [],
         "pose_dihedrals": [],
         "fname": fname,
-        "ligand_atomtypes": ligand_atomtypes,
+        "ligand_atomnames": ligand_atomnames,
     }
 
 
