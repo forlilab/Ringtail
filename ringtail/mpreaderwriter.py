@@ -11,7 +11,7 @@ import logging
 import traceback
 import queue
 from .parsers import parse_single_dlg, parse_vina_pdbqt
-from .exceptions import FileParsingError, WriteToStorageError
+from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError
 from .interactions import InteractionFinder
 
 os_string = platform.system()

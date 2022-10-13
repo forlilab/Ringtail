@@ -985,7 +985,7 @@ class CLOptionParser:
 
         if isinstance(parsed_opts.interaction_tolerance, str):
             parsed_opts.interaction_tolerance = [
-                float(val) for val in parsed_opts.interaction_cutoffs.split(",") if isinstance(o, t)
+                float(val) for val in parsed_opts.interaction_cutoffs.split(",")
             ]
         rman_opts = {
             "chunk_size": 1,
