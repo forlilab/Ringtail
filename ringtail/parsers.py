@@ -127,10 +127,10 @@ def parse_single_dlg(fname):
                     if line.startswith("INPUT-LIGAND-PDBQT"):
                         if " UNK " in line:  # replace ligand atoms ATOM flag with HETATM
                             line = line.replace("ATOM", "HETATM")
-                        input_pdbqt.append(" ".join(line.split()[1:]))
+                        input_pdbqt.append(line.lstrip("INPUT-LIGAND-PDBQT"))
                         # save ligand atomtypes
                         if line.startswith("INPUT-LIGAND-PDBQT") and ("ATOM" in line or "HETATM" in line):
-                            ligand_atomtypes.append(line.split()[-1])
+                            ligand_atomtypes.append(line.strip()[-3:])
                     if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                         index_map += (
                             line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
