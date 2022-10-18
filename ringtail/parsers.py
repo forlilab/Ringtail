@@ -451,7 +451,7 @@ def parse_vina_pdbqt(fname):
     flexible_res_coords = []
     inside_res = False
     flexible_residues = []
-    ligand_atomnames = []
+    ligand_atomtypes = []
     flexres_atomnames = []
     first_model = True
     cluster = 1  # treat every pose in vina like new cluster
@@ -493,7 +493,7 @@ def parse_vina_pdbqt(fname):
                             [line[30:38], line[38:46], line[46:54]]
                         )
                         if first_model:
-                            ligand_atomnames.append(line.split()[-1])
+                            ligand_atomtypes.append(line[77:-1].strip())
                             if line[13] != "H":
                                 num_heavy_atoms += 1
                 if line.startswith("REMARK SMILES IDX") and first_model:
@@ -571,7 +571,7 @@ def parse_vina_pdbqt(fname):
         "pose_quarternions": [],
         "pose_dihedrals": [],
         "fname": fname,
-        "ligand_atomnames": ligand_atomnames,
+        "ligand_atomtypes": ligand_atomtypes,
     }
 
 
