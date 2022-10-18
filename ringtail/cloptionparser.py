@@ -175,7 +175,7 @@ def cmdline_parser(defaults={}):
     write_parser.add_argument(
         "-f",
         "--file",
-        help="ligand DLG(s) and receptor PDBQT file to save and filter. Compressed (.gz) files allowed. Only 1 receptor allowed.",
+        help="ligand docking output file to save. Compressed (.gz) files allowed. Only 1 receptor allowed.",
         action="append",
         type=str,
         metavar="FILENAME.[DLG/PDBQT][.gz]",
@@ -184,7 +184,7 @@ def cmdline_parser(defaults={}):
     write_parser.add_argument(
         "-fp",
         "--file_path",
-        help="directory(s) containing DLG and PDBQT files to save and filter. Compressed (.gz) files allowed",
+        help="directory(s) containing docking output files to save. Compressed (.gz) files allowed",
         action="append",
         type=str,
         metavar="DIRNAME",
@@ -193,7 +193,7 @@ def cmdline_parser(defaults={}):
     write_parser.add_argument(
         "-fl",
         "--file_list",
-        help="file(s) containing the list of DLG and PDBQT files to filter; relative or absolute paths are allowed. Compressed (.gz) files allowed",
+        help="file(s) containing the list of docking output files to save; relative or absolute paths are allowed. Compressed (.gz) files allowed",
         action="append",
         type=str,
         metavar="FILENAME",
