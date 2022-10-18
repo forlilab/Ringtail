@@ -30,8 +30,8 @@ def cmdline_parser(defaults={}):
     confargs, remaining_argv = conf_parser.parse_known_args()
 
     defaults = {
-        "positive_selection": None,
-        "negative_selection": None,
+        "wanted": None,
+        "unwanted": None,
         "bookmark_name": ["passing_results"],
         "log": "selective_log.txt",
         "save_bookmark": None,
