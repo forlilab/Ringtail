@@ -64,6 +64,11 @@ class RingtailCore:
         """
         defaults = self.get_defaults()
 
+        # unpack given opts dictionaries
+        for k, v in opts.items():
+            if k in defaults.keys():
+                defaults[k] = v
+
         self.storage_opts = defaults["storage_opts"]["values"]
         self.rman_opts = defaults["rman_opts"]["values"]
         self.filters = defaults["filters"]["values"]
