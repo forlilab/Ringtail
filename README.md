@@ -211,11 +211,11 @@ When searching for result files in the directory specified with `--file_path`, r
 `--pattern` option. Note also that, by default, Ringtail will only search the directory provided in `--file_path` and not subdirectories. Subdirectory searching
 is enabled with the `--recursive` flag. If you are trying to read Vina PDBQTs, specify this with `--mode vina`. This will automatically change the file search pattern to `*.pdbqt*`. If the receptor PDBQT file is present in a directory being searched, it **must** be specified with `--receptor_file`.
 
-To add new files to an existing database, the `--add_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. If one is concerned about adding duplicate results, the `--duplicate_handling` option can be used to specify how duplicate entries should be handled. However, this option makes database writing significantly slower.
+To add new files to an existing database, the `--append_results` flag can be used in conjuction with `--input_db` and `--file`, `--file_path`, and/or `--file_list` options. If one is concerned about adding duplicate results, the `--duplicate_handling` option can be used to specify how duplicate entries should be handled. However, this option makes database writing significantly slower.
 
 To overwrite an existing database, use the `--overwrite` flag.
 
-One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database. The user must specify the path to the receptor file with the `--receptor_file` option. Ringtail will also throw an exception if this flag is given but no receptor is found, if the name of the receptor in any DLG does not match the receptor file, or if this flag is used with a database that already has a receptor. `--save_receptor` can be used to add a receptor to an existing database given with `--input_db`. `--save_receptor` may not be used with the `--add_results` option.
+One receptor PDBQT, corresponding to that in the DLGs, may be saved to the database using the `--save_receptor` flag. This will store the receptor file itself in a binary format in the database. The user must specify the path to the receptor file with the `--receptor_file` option. Ringtail will also throw an exception if this flag is given but no receptor is found, if the name of the receptor in any DLG does not match the receptor file, or if this flag is used with a database that already has a receptor. `--save_receptor` can be used to add a receptor to an existing database given with `--input_db`. `--save_receptor` may not be used with the `--append_results` option.
 
 By default, the newly-created database will be named `output.db`. This name may be changed with the `--output_db` option.
 
@@ -224,23 +224,23 @@ changed with the `--max_poses` option. The `--store_all_poses` flag may also be 
 
 ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it may be added by Ringtail with the `--add_interactions` option. **This adds a signifcant increase to the total database write time.** Distance cutoffs for the interactions are specified with the `--interaction_cutoffs` option. Adding interactions requires that the receptor PDBQT be provided as an input by the user with the `--receptor_file` option.
 
-The `--interaction_tolerance` option also allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. When used as a flag, the `interaction_tolerance` default is 0.8 angstroms. The user may also specify their own cutoff.
+The `--interaction_tolerance` option also allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. When used as a flag, the `interaction_tolerance` default is 0.8 angstroms. The user may also specify their own cutoff. This option is intended for use with DLGs from AD-GPU, which clusters output poses based on RMSD.
 
 #### Read mode
-In `read` mode, an existing database is read in and used to filter or export results.
+In `read` mode, an existing database is used to filter or export results.
 
 When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is `output_log.txt` and by default will include the ligand name and binding energy of every pose passing filtering criteria. The log name
-may be changed with the `--log` option and the information written to the log can be specified with `--out_fields`. The full list of available output fields may be seen by using the `--help` option with `read` mode (see example above).
-By default, only the information for the top-scoring binding pose will be written to the log. If desired, each individual passing pose can be written by using the `--all_poses` flag. The passing results may also be ordered in the log file using the `--order_results` option.
+may be changed with the `--log` option and the information written to the log can be specified with `--outfields`. The full list of available output fields may be seen by using the `--help` option with `read` mode (see example above).
+By default, only the information for the top-scoring binding pose will be written to the log. If desired, each individual passing pose can be written by using the `--output_all_poses` flag. The passing results may also be ordered in the log file using the `--order_results` option.
 
-No filtering is performed if no filters are given. If both `--eworst` and `--epercentile` are used together, the `--eworst` cutoff alone is used. The same is true of `--leworst` and `--leffpercentile`.
+No filtering is performed if no filters are given. If both `--eworst` and `--energy_percentile` are used together, the `--eworst` cutoff alone is used. The same is true of `--leworst` and `--le_percentile`.
 
-When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--bookmark_name` option. Other data for poses in a view may be accessed later using the `--new_data_from_bookmark` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<bookmark_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
+When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--bookmark_name` option. Data for poses in a view may be accessed later using the `--new_data_from_bookmark` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<bookmark_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
 
-Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database entries. One may also filter over a previous bookmark specified with the `--filter_bookmark` option. If using this option, the bookmarks specified by `--filter_bookmark` and `--bookmark_name` must be different.
+Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database Results rows (i.e. stored poses). One may also filter over a previous bookmark specified with the `--filter_bookmark` option. If using this option, the bookmarks specified by `--filter_bookmark` and `--bookmark_name` must be different. In our experience, it is faster to export the bookmark of interest as its own database with the `--export_bookmark_db` flag and perform additional sub-selection and export tasks from there.
 
 ##### Other available outputs
-The primary outputs from rt_process_vs are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
+The primary outputs from `rt_process_vs.py` are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
 The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with `--bookmark_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
 
@@ -249,7 +249,7 @@ Using the `--export_sdf_path` option allows the user to specify a directory to s
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_bookmark_csv`, which takes a string for the name of a table or result bookmark in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
 The second option is `--export_query_csv`. This takes a string of a properly-formatted SQL query to run on the database, returning the results of that query as `query.csv`. This option allows the user full, unobstructed access to all data in the database.
 
-A bookmark may also be exported as a separate SQLite dabase with the `--export_bookmark_db` flag. Note that other bookmarks should be remade in the newly exported database before using e.g. for exporting SDF files.
+As noted above, a bookmark may also be exported as a separate SQLite dabase with the `--export_bookmark_db` flag.
 
 ### Interaction filter formatting and options
 
@@ -271,16 +271,18 @@ Using `vd` is particularly helpful to examine possible interactions of interest,
 To exit, return to the screen shown in the image above by pressing `q`, then press `q` to exit.
 
 ### Data integrity sanity checks
-There are a few quick checks the user can make to ensure that the data has been properly written from the DLGs to the database. Discrepancies may indicate an error occurred while writting the database or the DLG format did not that which Ringtail expected.
+There are a few quick checks the user can make to ensure that the data has been properly written from the input files to the database. Discrepancies may indicate an error occurred while writing the database or the input file format did not match that which Ringtail expected.
 - The number of rows in the `Ligands` table should match the number of input ligand files
-- The number of rows in the `Results` and `Interaction_bitvectors` tables should match (DLGs only)
+- The number of rows in the `Results` and `Interaction_bitvectors` tables should match
 - Number of columns in the `Interactions_bitvectors` table should match the number of rows in the `Interaction_indices` table + 1 (+2 if using `vd`)
-- The number of rows in the `Results` table should be ~`max_poses`\* `number of DLGs` and should be less than or equal to that number. Not every ligand may have up to `max_poses`, which is why the number of rows is typically smaller than `max_poses`\* `number of DLGs`. (DLGs only)
-- No ligand should have more than `max_poses` rows in the `Results` table (unless storing results from multiple virtual screenings in the same database; DLGs only).
-- If reading from Vina PDBQTs/using storing all poses, the number of rows in the Results table should match the `number of ligands` * `number of output poses`.
+- The number of rows in the `Results` table should be ~`max_poses`\* `number of files` and should be less than or equal to that number. For DLGs not every ligand may have up to `max_poses`, which is why the number of rows is typically smaller than `max_poses`\* `number of DLGs`.
+- No ligand should have more than `max_poses` rows in the `Results` table.
+- If storing all poses, the number of rows in the Results table should match the `number of ligands` * `number of output poses`.
 
 ### Potential pitfalls
 Any PDBQT files specified through any of the input options in ADGPU mode will be read by `rt_process_vs.py` as receptor files, even if the files actually represent ligands. Therefore, ligand PDBQT files should not be present in any directories given with `--file_path`.
+
+When writing from Vina PDBQTs, ensure there are no other PDBQTs (input or receptor) in directories specified with `--file_path` UNLESS the receptor PDBQT is specified with the `--receptor_file` option.
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. This may result in the database becoming locked. If this occurs it is recommended to delete the existing database and re-write it from scratch.
 
@@ -291,34 +293,35 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--config           | -c| Configuration JSON file to specify new default options. Overridded by command line | no default       |<tr><td colspan="5"></td></tr>
 |--input_db         | -i| Database file to use instead of creating new database | no default       ||
 |--bookmark_name      |-s| Name for bookmark view in database                      | passing_results  ||
-|--mode          |-m| specify AutoDock program used to generate results. Available options are "ADGPU" and "Vina". Vina mode will automatically change --pattern to \*.pdbqt   | ADGPU         ||
+|--mode          |-m| specify AutoDock program used to generate results. Available options are "dlg" and "vina". Vina mode will automatically change --pattern to \*.pdbqt   | dlg         ||
 |--verbose          |-v| Flag indicating that passing results should be printed to STDOUT. Will also include information about runtime progress. | FALSE        ||
 |--debug            |-d| Flag indicating that additional debugging information (e.g. error traceback) should be printed to STDOUT. | FALSE |<tr><td colspan="5">**Write Mode**</td></tr>
-|--file             |-f| DLG/Vina PDBQT/receptor file(s) to be read into database                  | no default       ||
+|--file             |-f| DLG/Vina PDBQT file(s) to be read into database                  | no default       ||
 |--file_path        |-fp| Path(s) to files to read into database            | no default       ||
 |--file_list        |-fl| File(s) with list of files to read into database  | no default       ||
-|--pattern          |-p| Specify pattern to search for when finding DLG files   | \*.dlg\*         ||
+|--pattern          |-p| Specify pattern to search for when finding files   | \*.dlg\* / \*.pdbqt\* (vina mode)        ||
 |--recursive        |-r| Flag to perform recursive subdirectory search on --file_path directory(s)  | FALSE      ||
-|--add_results      |-a| Add new DLG files to existing database given with --input_db  | FALSE       ||
+|--append_results      |-a| Add new docking files to existing database given with --input_db  | FALSE       ||
 |--duplicate_handling|-dh| Specify how dulicate results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*| None |
 |--save_receptor    |-sr| Flag to specify that receptor file should be imported to database. Receptor file must also be specified with --receptor_file| FALSE   ||
 |--output_db        |-o| Name for output database                              | output.db        ||
-|--overwrite        |-ov| Flag to overwrite existing log and database           | FALSE       ||
-|--max_poses        |-mp| Number of cluster for which to store top-scoring pose in database| 3     ||
+|--overwrite        |-ov| Flag to overwrite existing database           | FALSE       ||
+|--max_poses        |-mp| Number of clusters for which to store top-scoring pose (dlg) or number of poses (vina) to save in database| 3     ||
 |--store_all_poses  |-sa| Flag to indicate that all poses should be stored in database| FALSE      ||
 |--interaction_tolerance|-it| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  | Yes |
 |--add_interactions  |-ai| Find interactions between ligands and receptor. Requires receptor PDBQT to be written. | FALSE      ||
 |--interaction_cutoffs  |-ic| Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. | 3.7,4.0     ||
-|--receptor_file |-rn| Use with --save_receptor or --add_interactions. Give name for receptor PDBQT. | None      |<tr><td colspan="5">**Read Mode**</td></tr>
+|--receptor_file |-rn| Use with --save_receptor and/or --add_interactions. Give receptor PDBQT. | None      ||
+|--max_proc |-mpr| Maximum number of subprocesses to spawn during database writing. | [# available CPUs]      |<tr><td colspan="5">**Read Mode**</td></tr>
 |--log              |-l| Name for log of filtered results                      | output_log.txt   ||
-|--out_fields       |-of| Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
+|--outfields       |-of| Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
 |--order_results    |-ord| String for field by which the passing results should be ordered in log file. | no default ||
-|--all_poses        |-ap| Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||
+|--output_all_poses        |-ap| Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||
 |--export_bookmark_csv |-xs| Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv | no default      ||
 |--export_query_csv |-xq| Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] | no default      ||
 |--export_sdf_path|-sdf| Path for saving exported SDF files of ligand poses passing given filtering criteria | no default       ||
 |--export_bookmark_db |-xdb| Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db| FALSE      ||
-|--new_data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
+|--data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
 |--filter_bookmark |-fb| Filter over specified bookmark, not whole Results table. | FALSE       ||
 |--plot             |-p| Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>
 |--eworst           |-e| Worst energy value accepted (kcal/mol)                | no_default  ||
@@ -333,7 +336,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--reactive_res     |-r| Filter for reation with residue containing specified information | no default  |Yes |
 |--hb_count         |-hc| Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | Yes|
 |--react_any        |-ra| Filter for poses with reaction with any residue       | FALSE     | Yes|
-|--max_miss         |-mm| Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_poses_path. | 0  | Yes|
+|--max_miss         |-mm| Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_sdf_path. | 0  | Yes|
 
 ---
 
@@ -345,11 +348,11 @@ Let us assume that kinase1 is our target of interest. It has related proteins ki
 2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues). The bookmark within each database may be given as a single string (same bookmark name in every database) or multiple bookmark names (one per database) with the `--bookmark_name` option. If specifying multiple names, the order should match the order that the databases were provided in, beginning with wanted, then unwanted databases. The default name is `passing_results`.
 3. Use `rt_compare.py` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from `rt_process_vs.py`.
 ```
-rt_compare.py --positive_selection kinase1.db --negative_selection kinase1a.db kinase1b.db
+rt_compare.py --wanted kinase1.db --unwanted kinase1a.db kinase1b.db
 ```
 4. Other usage examples and output options given below. For example, one can also select for potential dual-target ligands with
 ```
-rt_compare.py --positive_selection kinase1.db protein2.db --negative_selection kinase1a.db kinase1b.db
+rt_compare.py --wanted kinase1.db protein2.db --unwanted kinase1a.db kinase1b.db
 ```
 
 ### Usage examples
@@ -359,27 +362,27 @@ rt_compare.py --help
 ```
 #### Select ligands found in "passing_results" bookmarks of vs1 but not vs2 or vs3
 ```
-rt_compare.py --positive_selection vs1.db --negative_selection vs2.db vs3.db
+rt_compare.py --wanted vs1.db --unwanted vs2.db vs3.db
 ```
 #### Select ligands found in "passing_results" bookmarks of vs1 and vs2 but not vs3 or vs4
 ```
-rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db
+rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db
 ```
 #### Select ligands found in "passing_results" bookmarks of every vs except vs4
 ```
-rt_compare.py --positive_selection vs1.db vs2.db vs3.db --negative_selection vs4.db
+rt_compare.py --wanted vs1.db vs2.db vs3.db --unwanted vs4.db
 ```
 #### Select ligands found in "filter1" bookmarks of vs1 but not vs2
 ```
-rt_compare.py --positive_selection vs1.db --negative_selection vs2.db --bookmark_name filter1
+rt_compare.py --wanted vs1.db --unwanted vs2.db --bookmark_name filter1
 ```
 #### Save bookmark of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as "selective_bookmark" in vs1.db
 ```
-rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --save_bookmark selective_bookmark
+rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --save_bookmark selective_bookmark
 ```
 #### Export bookmark set of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as CSV
 ```
-rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4.db --export_csv
+rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --export_csv
 ```
 ### rt_compare.py supported arguments
 
@@ -390,7 +393,7 @@ rt_compare.py --positive_selection vs1.db vs2.db --negative_selection vs3.db vs4
 |--unwanted |-n| Database files for which to exclude any ligands found in bookmark_name of any of the databases specified with this option. | no default|
 |--bookmark_name |-sn| Name of bookmark to select ligands within. Must be present in all databases given.| passing_results|
 |--log |-l| Name for log file| selective_log.txt |
-|--save_bookmark| -s| Save the final selective bookmark as a view with given name in the first database specified with --positive_selection. | no default|
+|--save_bookmark| -s| Save the final selective bookmark as a view with given name in the first database specified with --wanted. | no default|
 |--export_csv| -x| Save final selective bookmark as csv. Saved as [save_bookmark].csv or 'crossref.csv' if --save_bookmark not used.| FALSE|
 
 ---
