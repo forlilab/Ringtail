@@ -2827,7 +2827,6 @@ class StorageManagerSQLite(StorageManager):
                 pose_bitvector[interaction_idx - 1] = 1
 
             bitvectors_list.append(pose_bitvector)
-
         return bitvectors_list
 
     def _insert_interaction_bitvectors(self, bitvectors):
@@ -2840,7 +2839,6 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseInsertionError: Description
         """
-
         interaction_columns = range(len(self.unique_interactions))
         column_str = ""
         filler_str = ""
@@ -2850,9 +2848,13 @@ class StorageManagerSQLite(StorageManager):
         column_str = column_str.rstrip(", ")
         filler_str = filler_str.rstrip(",")
 
-        sql_insert = """INSERT INTO Interaction_bitvectors ({columns}) VALUES ({fillers})""".format(
-            columns=column_str, fillers=filler_str
-        )
+        # make sure we have unique interactions, otherwise insert empty rows for those poses
+        if self.unique_interactions == {}:
+            sql_insert = """INSERT INTO Interaction_bitvectors DEFAULT VALUES"""
+        else:
+            sql_insert = """INSERT INTO Interaction_bitvectors ({columns}) VALUES ({fillers})""".format(
+                columns=column_str, fillers=filler_str
+            )
 
         try:
             cur = self.conn.cursor()
