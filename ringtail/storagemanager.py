@@ -470,12 +470,24 @@ class StorageManager:
         """
         raise NotImplementedError
 
+    def fetch_flexres_info(self):
+        """fetch flexres names and atomname_lists
+
+        No Longer Returned:
+            DB cursor: contains
+                flexible_residues, flexres_atomnames
+
+        Raises:
+            NotImplementedError: Description
+        """
+        raise NotImplementedError
+
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
 
         No Longer Returned:
             DB cursor: contains
-                LigName, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames
+                LigName, ligand_smile, atom_index_map, hydrogen_parents
 
         Raises:
             NotImplementedError: Description
@@ -739,8 +751,6 @@ class StorageManager:
         ligand_smile        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
-        flexible_residues   VARCHAR[],
-        flexres_atomnames   VARCHAR[],
         input_pdbqt         VARCHAR[]
 
         Raises:
@@ -757,6 +767,7 @@ class StorageManager:
         box_center          VARCHAR[],
         grid_spacing        INT[],
         flexible_residues   VARCHAR[],
+        flexres_atomnames   VARCHAR[],
         receptor_object     BLOB
 
         Raises:
@@ -1412,14 +1423,12 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             List: List of data to be written as row in ligand table. Format:
             [ligand_name, ligand_smile, ligand_index_map,
-            ligand_h_parents, flexible_residues, flexres_atomnames input_pdbqt]
+            ligand_h_parents, input_pdbqt]
         """
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
         ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
         ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
-        flexible_residues = json.dumps(ligand_dict["flexible_residues"])
-        flexres_atomnames = json.dumps(ligand_dict["flexres_atomnames"])
         input_pdbqt = json.dumps(ligand_dict["ligand_input_pdbqt"])
 
         return [
@@ -1427,8 +1436,6 @@ class StorageManagerSQLite(StorageManager):
             ligand_smile,
             ligand_index_map,
             ligand_h_parents,
-            flexible_residues,
-            flexres_atomnames,
             input_pdbqt,
         ]
 
@@ -1447,8 +1454,9 @@ class StorageManagerSQLite(StorageManager):
         if grid_spacing != "":
             grid_spacing = float(grid_spacing)
         flexible_residues = json.dumps(ligand_dict["flexible_residues"])
+        flexres_atomnames = json.dumps(ligand_dict["flexres_atomnames"])
 
-        return [rec_name, box_dim, box_center, grid_spacing, flexible_residues]
+        return [rec_name, box_dim, box_center, grid_spacing, flexible_residues, flexres_atomnames]
 
     @classmethod
     def _generate_interaction_tuples(cls, interaction_dictionaries):
@@ -1564,11 +1572,9 @@ class StorageManagerSQLite(StorageManager):
         ligand_smile,
         atom_index_map,
         hydrogen_parents,
-        flexible_residues,
-        flexres_atomnames,
         input_pdbqt
         ) VALUES
-        (?,?,?,?,?,?,?)"""
+        (?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -1594,9 +1600,10 @@ class StorageManagerSQLite(StorageManager):
         box_dim,
         box_center,
         grid_spacing,
-        flexible_residues
+        flexible_residues,
+        flexres_atomnames
         ) VALUES
-        (?,?,?,?,?)"""
+        (?,?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -1750,14 +1757,29 @@ class StorageManagerSQLite(StorageManager):
                 "Error while getting number of passing ligands"
             ) from e
 
+    def fetch_flexres_info(self):
+        """fetch flexres names and atomname lists
+
+        Returns:
+            Tuple: (flexible_residues, flexres_atomnames)
+        """
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT flexible_residues, flexres_atomnames FROM Receptors")
+            info = cur.fetchone()
+            cur.close()
+            return info
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError("Error retrieving flexible residue info") from e  
+    
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
 
         Returns:
             SQLite cursor: contains LigName, ligand_smile,
-                atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames
+                atom_index_map, hydrogen_parents
         """
-        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
+        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents, FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.results_view_name
         )
         return self._run_query(query)
@@ -2245,6 +2267,7 @@ class StorageManagerSQLite(StorageManager):
         box_center          VARCHAR[],
         grid_spacing        INT[],
         flexible_residues   VARCHAR[],
+        flexres_atomnames   VARCHAR[],
         receptor_object     BLOB
 
         Raises:
@@ -2257,6 +2280,7 @@ class StorageManagerSQLite(StorageManager):
             box_center          VARCHAR[],
             grid_spacing        INT[],
             flexible_residues   VARCHAR[],
+            flexres_atomnames   VARCHAR[],
             receptor_object     BLOB
         )"""
 
@@ -2275,8 +2299,6 @@ class StorageManagerSQLite(StorageManager):
         ligand_smile        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
-        flexible_residues   VARCHAR[],
-        flexres_atomnames   VARCHAR[],
         input_pdbqt         VARCHAR[]
 
         Raises:
@@ -2288,8 +2310,6 @@ class StorageManagerSQLite(StorageManager):
             ligand_smile        VARCHAR[],
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
-            flexible_residues   VARCHAR[],
-            flexres_atomnames   VARCHAR[],
             input_pdbqt         VARCHAR[])"""
 
         try:

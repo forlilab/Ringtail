@@ -389,7 +389,8 @@ class RingtailCore:
                 )
                 return
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
-            for (ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames) in passing_molecule_info:
+            flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
+            for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
                 logging.info("Writing " + ligname.split(".")[0] + ".sdf")
                 # create rdkit ligand molecule and flexible residue container
                 if smiles == "":
