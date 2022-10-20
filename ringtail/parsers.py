@@ -127,10 +127,10 @@ def parse_single_dlg(fname):
                     if line.startswith("INPUT-LIGAND-PDBQT"):
                         if " UNK " in line:  # replace ligand atoms ATOM flag with HETATM
                             line = line.replace("ATOM", "HETATM")
-                        input_pdbqt.append(" ".join(line.split()[1:]))
+                        input_pdbqt.append(line.lstrip("INPUT-LIGAND-PDBQT"))
                         # save ligand atomtypes
                         if line.startswith("INPUT-LIGAND-PDBQT") and ("ATOM" in line or "HETATM" in line):
-                            ligand_atomtypes.append(line.split()[-1])
+                            ligand_atomtypes.append(line.strip()[-3:])
                     if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                         index_map += (
                             line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
@@ -451,7 +451,7 @@ def parse_vina_pdbqt(fname):
     flexible_res_coords = []
     inside_res = False
     flexible_residues = []
-    ligand_atomnames = []
+    ligand_atomtypes = []
     flexres_atomnames = []
     first_model = True
     cluster = 1  # treat every pose in vina like new cluster
@@ -487,13 +487,13 @@ def parse_vina_pdbqt(fname):
                     if inside_res:
                         flexible_res_coords[-1][-1].append(line)
                         if first_model:
-                            flexres_atomnames[-1].append(line.split()[-1])
+                            flexres_atomnames[-1].append(line[12:16].strip())
                     else:
                         pose_coordinates[-1].append(
                             [line[30:38], line[38:46], line[46:54]]
                         )
                         if first_model:
-                            ligand_atomnames.append(line.split()[-1])
+                            ligand_atomtypes.append(line[77:-1].strip())
                             if line[13] != "H":
                                 num_heavy_atoms += 1
                 if line.startswith("REMARK SMILES IDX") and first_model:
@@ -509,19 +509,22 @@ def parse_vina_pdbqt(fname):
                 if line.startswith("ENDMDL") and first_model:
                     first_model = False
                 # make new flexible residue list if in the coordinates for a flexible residue
-                if "BEGIN_RES" in line:
+                if line.startswith("BEGIN_RES"):
                     flexible_res_coords[-1].append([])
                     if first_model:
                         flexres_atomnames.append([])
                     inside_res = True
-                if "END_RES" in line:
+                if line.startswith("END_RES"):
                     inside_res = False
                 # store flexible residue identities
-                if "BEGIN_RES" in line and first_model:
-                    split_line = line.split()
-                    flexible_residues.append(
-                        split_line[1] + ":" + split_line[2] + split_line[3]
-                    )  # RES:<chain><resnum>
+                if line.startswith("BEGIN_RES") and first_model:
+                    res = line[10:13].strip()
+                    chain = line[14].strip()
+                    resnum = line[15:19].strip()
+                    res_string = "%s:%s%s" % (res, chain, resnum)
+                    if res_string not in flexres_atomnames and first_model:
+                        flexres_atomnames.append([])
+                    flexible_residues.append(res_string)
             except ValueError:
                 raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, fname))
 
@@ -568,7 +571,7 @@ def parse_vina_pdbqt(fname):
         "pose_quarternions": [],
         "pose_dihedrals": [],
         "fname": fname,
-        "ligand_atomnames": ligand_atomnames,
+        "ligand_atomtypes": ligand_atomtypes,
     }
 
 
