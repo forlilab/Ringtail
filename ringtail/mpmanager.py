@@ -136,12 +136,13 @@ class MPManager:
         logging.info("Wrote {0} files to database".format(self.num_files))
 
     def _process_sources(self):
-        # add individual files
+        # add individual file(s)
         if self.file_sources["file"] != [[]]:
             for file_list in self.file_sources["file"]:
                 for file in file_list:
                     if fnmatch.fnmatch(file, self.file_pattern) and file != self.receptor_file:
                         self._add_to_queue(file)
+        # add files from file path(s)
         if self.file_sources["file_path"]["path"] != [[]]:
             for path_list in self.file_sources["file_path"]["path"]:
                 for path in path_list:
@@ -150,9 +151,8 @@ class MPManager:
                         path, self.file_pattern, recursive=True
                     ):
                         for f in files:
-                            if self.receptor_file is not None and not f.endswith(self.receptor_file):
-                                self._add_to_queue(f)
-
+                            self._add_to_queue(f)
+        # add files from file list(s)
         if self.file_sources["file_list"] != [[]]:
             for filelist_list in self.file_sources["file_list"]:
                 for filelist in filelist_list:
@@ -161,8 +161,9 @@ class MPManager:
     def _add_to_queue(self, file):
         max_attempts = 750
         timeout = 0.5  # seconds
-        if file == self.receptor_file:
-            return
+        if self.receptor_file is not None:
+            if os.path.split(file)[-1] == os.path.split(self.receptor_file)[-1]:  # check that we don't try to add the receptor
+                return
         attempts = 0
         while True:
             if attempts >= max_attempts:
