@@ -150,7 +150,7 @@ class MPManager:
                         path, self.file_pattern, recursive=True
                     ):
                         for f in files:
-                            if not f.endswith(self.receptor_file):
+                            if self.receptor_file is not None and not f.endswith(self.receptor_file):
                                 self._add_to_queue(f)
 
         if self.file_sources["file_list"] != [[]]:
