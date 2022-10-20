@@ -140,7 +140,7 @@ class MPManager:
         if self.file_sources["file"] != [[]]:
             for file_list in self.file_sources["file"]:
                 for file in file_list:
-                    if fnmatch.fnmatch(file, self.file_pattern):
+                    if fnmatch.fnmatch(file, self.file_pattern) and file != self.receptor_file:
                         self._add_to_queue(file)
         if self.file_sources["file_path"]["path"] != [[]]:
             for path_list in self.file_sources["file_path"]["path"]:
@@ -150,7 +150,8 @@ class MPManager:
                         path, self.file_pattern, recursive=True
                     ):
                         for f in files:
-                            self._add_to_queue(f)
+                            if not f.endswith(self.receptor_file):
+                                self._add_to_queue(f)
 
         if self.file_sources["file_list"] != [[]]:
             for filelist_list in self.file_sources["file_list"]:
@@ -233,4 +234,5 @@ class MPManager:
         )
 
         for file in lig_accepted:
-            self._add_to_queue(file)
+            if file != self.receptor_file:
+                self._add_to_queue(file)

@@ -68,16 +68,6 @@ class RingtailCore:
         for k, v in opts.items():
             if k in defaults.keys():
                 defaults[k] = v
-                # test types to make sure that everything is correct
-                for kw, val in v["values"].items():
-                    # for filters, unpack properties separately
-                    if kw == "properties":
-                        for prop, propval in val.items():
-                            if not isinstance(propval, v["types"][kw][prop]) and propval is not None:
-                                raise RTCoreError(f"Given opt keyword {prop} in {kw} is type {type(propval)}; expected {v['types'][kw][prop]}.")
-                    else:
-                        if not isinstance(val, v["types"][kw]) and val is not None:
-                            raise RTCoreError(f"Given opt keyword {kw} in {k} is type {type(val)}; expected {v['types'][kw]}.")
 
         self.storage_opts = defaults["storage_opts"]["values"]
         self.rman_opts = defaults["rman_opts"]["values"]
