@@ -450,7 +450,7 @@ def cmdline_parser(defaults={}):
     output_group.add_argument(
         "-p",
         "--plot",
-        help="Makes scatterplot of LE vs Best Energy, saves as [config_file].png or out.png if no config_file given.",
+        help="Makes scatterplot of LE vs Best Energy, saves as scatter.png.",
         action="store_true",
     )
 
