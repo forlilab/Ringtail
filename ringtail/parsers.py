@@ -80,7 +80,7 @@ def parse_single_dlg(fname):
             if inside_header:
                 # store ligand file name
                 if line[0:11] == "Ligand file":
-                    ligname = line.split(":", 1)[1].strip().split(".")[0]
+                    ligname = line.split(":", 1)[1].split("/")[-1].split(".")[0].strip()  # remove path and file extension
                 # store receptor name and grid parameters
                 elif line[:13] == "Receptor name":
                     receptor = line.split()[2]
