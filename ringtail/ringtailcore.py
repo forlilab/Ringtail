@@ -366,7 +366,7 @@ class RingtailCore:
         return filters_list
 
     def write_molecule_sdfs(self, write_nonpassing=False):
-        """have output manager write sdf molecules for passing results
+        """have output manager write sdf molecules for passing results in given results bookmark
 
         Args:
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
@@ -390,8 +390,9 @@ class RingtailCore:
                 flexres_mols = []
                 flexres_info = []
                 atom_indices = self._storage_string_to_list(atom_indices)
-                flexible_residues = self._storage_string_to_list(flexible_residues)
-                flexres_atomnames = self._storage_string_to_list(flexres_atomnames)
+                if flexible_residues != []:
+                    flexible_residues = self._storage_string_to_list(flexible_residues)
+                    flexres_atomnames = self._storage_string_to_list(flexres_atomnames)
                 ligand_saved_coords = []
                 flexres_saved_coords = []
                 # make flexible residue molecules
@@ -413,7 +414,7 @@ class RingtailCore:
                     "Interactions": [],
                 }
                 passing_properties = self.storageman.fetch_passing_pose_properties(ligname)
-                mol, flexres_mols, saved_coords, flexres_saved_coords, properties = self._add_poses(
+                mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties = self._add_poses(
                     atom_indices,
                     passing_properties,
                     mol,
@@ -430,7 +431,7 @@ class RingtailCore:
                     nonpassing_properties = self.storageman.fetch_nonpassing_pose_properties(
                         ligname
                     )
-                    mol, flexres_mols, saved_coords, flexres_saved_coords, properties = self._add_poses(
+                    mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties = self._add_poses(
                     atom_indices,
                     passing_properties,
                     mol,
@@ -536,13 +537,12 @@ class RingtailCore:
         if self.output_manager is None:
             self.output_manager = OutputManager(self.out_opts["log"], self.out_opts["export_sdf_path"])
 
-    def _storage_string_to_list(self, input_str):
+    def _storage_string_to_list(self, input_str: str):
         """Convert string form of list from database to list
 
         Args:
             input_str (TYPE): Description
         """
-
         return json.loads(input_str)
 
     def _generate_pdbqt_block(self, pdbqt_lines):
