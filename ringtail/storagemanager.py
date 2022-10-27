@@ -1779,7 +1779,7 @@ class StorageManagerSQLite(StorageManager):
             SQLite cursor: contains LigName, ligand_smile,
                 atom_index_map, hydrogen_parents
         """
-        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents, FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
+        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
             results_view=self.results_view_name
         )
         return self._run_query(query)
