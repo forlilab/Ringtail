@@ -2701,7 +2701,7 @@ class StorageManagerSQLite(StorageManager):
 
         # adding if we only want to keep
         # one pose per ligand (will keep first entry)
-        if self.output_all_poses:
+        if not self.output_all_poses:
             sql_string += " GROUP BY LigName"
 
         # add how to order results
