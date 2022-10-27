@@ -2788,7 +2788,7 @@ class StorageManagerSQLite(StorageManager):
                 for name in fils:
                     if name == "":
                         continue
-                    name_sql_str = "LigName LIKE '{value}' OR ".format(value=name)
+                    name_sql_str = "LigName LIKE '%{value}%' OR ".format(value=name)
                     sql_ligand_string += name_sql_str
             if kw == "S":
                 for substruct in fils:
