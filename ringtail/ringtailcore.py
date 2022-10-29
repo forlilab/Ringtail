@@ -390,9 +390,6 @@ class RingtailCore:
                 flexres_mols = []
                 flexres_info = []
                 atom_indices = self._storage_string_to_list(atom_indices)
-                if flexible_residues != []:
-                    flexible_residues = self._storage_string_to_list(flexible_residues)
-                    flexres_atomnames = self._storage_string_to_list(flexres_atomnames)
                 ligand_saved_coords = []
                 flexres_saved_coords = []
                 # make flexible residue molecules
