@@ -89,10 +89,6 @@ class StorageManager:
 
     def __init__(self):
         """Initialize instance variables common to all StorageManager subclasses
-
-        Args:
-            db_file (str): string for file name of DB
-            db_opts (dict): Dictionary of database options
         """
 
         self.unique_interactions = {}

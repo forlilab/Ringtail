@@ -379,6 +379,9 @@ class RingtailCore:
                 return
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
+            if flexible_residues != "[]":
+                flexible_residues = json.loads(flexible_residues)
+                flexres_atomnames = json.loads(flexres_atomnames)
             for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
                 logging.info("Writing " + ligname.split(".")[0] + ".sdf")
                 # create rdkit ligand molecule and flexible residue container
@@ -388,7 +391,7 @@ class RingtailCore:
                 mol = Chem.MolFromSmiles(smiles)
                 flexres_mols = []
                 flexres_info = []
-                atom_indices = self._storage_string_to_list(atom_indices)
+                atom_indices = json.loads(atom_indices)
                 ligand_saved_coords = []
                 flexres_saved_coords = []
                 # make flexible residue molecules
@@ -439,7 +442,7 @@ class RingtailCore:
                     )
 
                 # add hydrogens to mols
-                lig_h_parents = [int(idx) for idx in self._storage_string_to_list(h_parent_line)]
+                lig_h_parents = [int(idx) for idx in json.loads(h_parent_line)]
                 mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
                 flexres_hparents = []
                 for idx, res in enumerate(flexres_mols):
@@ -533,14 +536,6 @@ class RingtailCore:
         if self.output_manager is None:
             self.output_manager = OutputManager(self.out_opts["log"], self.out_opts["export_sdf_path"])
 
-    def _storage_string_to_list(self, input_str: str):
-        """Convert string form of list from database to list
-
-        Args:
-            input_str (TYPE): Description
-        """
-        return json.loads(input_str)
-
     def _generate_pdbqt_block(self, pdbqt_lines):
         """Generate pdbqt block from given lines from a pdbqt
 
@@ -604,8 +599,8 @@ class RingtailCore:
             properties["Binding energies"].append(energies_binding)
             properties["Ligand effiencies"].append(leff)
             # get pose coordinate info
-            ligand_pose = self._storage_string_to_list(ligand_pose)
-            flexres_pose = self._storage_string_to_list(flexres_pose)
+            ligand_pose = json.loads(ligand_pose)
+            flexres_pose = json.loads(flexres_pose)
             mol = RDKitMolCreate.add_pose_to_mol(
                 mol,
                 ligand_pose,
