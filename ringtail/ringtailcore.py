@@ -4,7 +4,10 @@
 # Ringtail virtual screening manager
 #
 
+from cProfile import label
 import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib import colors
 import numpy as np
 import json
 import warnings
@@ -12,12 +15,8 @@ from meeko import RDKitMolCreate
 from .storagemanager import StorageManager, StorageManagerSQLite
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
-from .exceptions import (
-    DatabaseConnectionError,
-    DatabaseTableCreationError,
-    StorageError,
-)
-from .exceptions import RTCoreError, ResultsProcessingError, OutputError
+from .exceptions import StorageError
+from .exceptions import RTCoreError, OutputError
 from rdkit import Chem
 from rdkit.Chem import SDWriter
 import itertools
@@ -727,6 +726,7 @@ class OutputManager:
             self.ax = fig.add_subplot(gs[1, 0])
             ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax)
             ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax)
+            fig.colorbar(mappable=cm.ScalarMappable(colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts))), label="Scatterplot bin count")
             self.ax.set_xlabel("Best Binding Energy / kcal/mol")
             self.ax.set_ylabel("Best Ligand Efficiency")
         except Exception as e:
@@ -880,7 +880,7 @@ class OutputManager:
             ax_histy.tick_params(axis="y", labelleft=False)
 
             # the scatter plot:
-            ax.scatter(x, y, c=z, cmap="Blues")
+            ax.scatter(x, y, c=z, cmap="viridis")
 
             # now determine nice limits by hand:
             xbinwidth = 0.25
