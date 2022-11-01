@@ -11,7 +11,6 @@ import queue
 import fnmatch
 import os
 import glob
-import warnings
 from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
@@ -224,7 +223,7 @@ class MPManager:
                     if line.endswith(pattern) or line.endswith(pattern + ".gz"):
                         lig_accepted.append(line)
                 else:
-                    warnings.warn("Warning! file |%s| does not exist" % line)
+                    logging.warning("Warning! file |%s| does not exist" % line)
         if len(lig_accepted) == 0:
             raise MultiprocessingError(
                 "*ERROR* No valid files were found when reading from |%s|" % filename
