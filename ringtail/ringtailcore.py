@@ -10,7 +10,6 @@ from matplotlib import cm
 from matplotlib import colors
 import numpy as np
 import json
-import warnings
 from meeko import RDKitMolCreate
 from .storagemanager import StorageManager, StorageManagerSQLite
 from .resultsmanager import ResultsManager
@@ -373,7 +372,7 @@ class RingtailCore:
         try:
             self._prepare_output_manager()
             if not self.storageman.check_passing_view_exists():
-                warnings.warn(
+                logging.warning(
                     "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
                 )
                 return
@@ -386,7 +385,7 @@ class RingtailCore:
                 logging.info("Writing " + ligname.split(".")[0] + ".sdf")
                 # create rdkit ligand molecule and flexible residue container
                 if smiles == "":
-                    warnings.warn(f"No SMILES found for {ligname}. Cannot create SDF.")
+                    logging.warning(f"No SMILES found for {ligname}. Cannot create SDF.")
                     continue
                 mol = Chem.MolFromSmiles(smiles)
                 flexres_mols = []
@@ -498,7 +497,7 @@ class RingtailCore:
         """
         logging.info("Exporting bookmark database")
         if os.path.exists(bookmark_db_name):
-            warnings.warn(
+            logging.warning(
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
@@ -626,7 +625,7 @@ class RingtailCore:
 
         # warn if max_miss greater than number of interactions
         if max_miss > len(all_interactions):
-            warnings.warn(
+            logging.warning(
                 "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
             )
             max_miss = len(all_interactions)
