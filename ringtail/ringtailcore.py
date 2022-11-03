@@ -378,7 +378,7 @@ class RingtailCore:
                 return
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-            if flexible_residues != "[]":
+            if flexible_residues != []:
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
             for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
