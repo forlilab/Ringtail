@@ -485,7 +485,7 @@ def parse_vina_pdbqt(fname):
                     unbound_energy.append(float(line.split()[2]))
                 if line.startswith("HETATM") or line.startswith("ATOM"):
                     if inside_res:
-                        flexible_res_coords[-1][-1].append(line)
+                        flexible_res_coords[-1][-1].append([line[30:38], line[38:46], line[46:54]])
                         if first_model:
                             flexres_atomnames[-1].append(line[12:16].strip())
                     else:
@@ -522,8 +522,6 @@ def parse_vina_pdbqt(fname):
                     chain = line[14].strip()
                     resnum = line[15:19].strip()
                     res_string = "%s:%s%s" % (res, chain, resnum)
-                    if res_string not in flexres_atomnames and first_model:
-                        flexres_atomnames.append([])
                     flexible_residues.append(res_string)
             except ValueError:
                 raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, fname))
