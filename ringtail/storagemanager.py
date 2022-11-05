@@ -10,7 +10,6 @@ import sqlite3
 import os
 import json
 import pandas as pd
-import warnings
 import logging
 import typing
 
@@ -89,10 +88,6 @@ class StorageManager:
 
     def __init__(self):
         """Initialize instance variables common to all StorageManager subclasses
-
-        Args:
-            db_file (str): string for file name of DB
-            db_opts (dict): Dictionary of database options
         """
 
         self.unique_interactions = {}
@@ -2653,9 +2648,9 @@ class StorageManagerSQLite(StorageManager):
             # catch if interaction not found in results
             if interaction_filter_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
-                    warnings.warn("Given --react_any filter, no reactive interactions found. Excluded from filtering.")
+                    logging.warning("Given --react_any filter, no reactive interactions found. Excluded from filtering.")
                 else:
-                    warnings.warn(
+                    logging.warning(
                         "Interaction {i} not found in results, excluded from filtering".format(
                             i=":".join(interaction[:4])
                         )

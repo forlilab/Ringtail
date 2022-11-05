@@ -10,7 +10,6 @@ import json
 from glob import glob
 import os
 import fnmatch
-import warnings
 import logging
 from .exceptions import OptionError
 import __main__
@@ -722,12 +721,12 @@ class CLOptionParser:
         if self.mode == "vina":
             # Guard against non-compatible options being called in Vina mode
             if parsed_opts.react_any:
-                warnings.warn(
+                logging.warning(
                     "Cannot use reaction filters with Vina mode. Removing react_any filter."
                 )
                 parsed_opts.react_any = False
             if parsed_opts.interaction_tolerance is not None:
-                warnings.warn(
+                logging.warning(
                     "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
                 )
                 parsed_opts.interaction_tolerance = None
@@ -743,7 +742,7 @@ class CLOptionParser:
             parsed_opts.interaction_tolerance is not None
             and parsed_opts.store_all_poses
         ):
-            warnings.warn(
+            logging.warning(
                 "Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance."
             )
             parsed_opts.interaction_tolerance = False
@@ -753,7 +752,7 @@ class CLOptionParser:
             parsed_opts.energy_percentile is not None
             or parsed_opts.le_percentile is not None
         ):
-            warnings.warn(
+            logging.warning(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             parsed_opts.output_all_poses = False
@@ -803,7 +802,7 @@ class CLOptionParser:
             if parsed_opts.duplicate_handling is not None:
                 conflict_handling = parsed_opts.duplicate_handling.upper()
                 if conflict_handling not in conflict_options:
-                    warnings.warn(
+                    logging.warning(
                         f"--conflict_handing option {parsed_opts.duplicate_handling} not allowed. Reverting to default behavior."
                     )
                     conflict_handling = None
@@ -870,7 +869,7 @@ class CLOptionParser:
                 properties["eworst"] is not None
                 and properties["energy_percentile"] is not None
             ):
-                warnings.warn(
+                logging.warning(
                     "Cannot use --eworst cutoff with --energy_percentile. Overiding energy_percentile with eworst."
                 )
                 properties["energy_percentile"] = None
@@ -878,7 +877,7 @@ class CLOptionParser:
                 properties["leworst"] is not None
                 and properties["le_percentile"] is not None
             ):
-                warnings.warn(
+                logging.warning(
                     "Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst."
                 )
                 properties["le_percentile"] = None
