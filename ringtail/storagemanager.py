@@ -63,32 +63,31 @@ class StorageManager:
     # initialize dictionary processing kw lists
     stateVar_keys = ["pose_about", "pose_translations", "pose_quarternions"]
     ligand_data_keys = [
-            "cluster_rmsds",
-            "ref_rmsds",
-            "scores",
-            "leff",
-            "delta",
-            "intermolecular_energy",
-            "vdw_hb_desolv",
-            "electrostatics",
-            "flex_ligand",
-            "flexLigand_flexReceptor",
-            "internal_energy",
-            "torsional_energy",
-            "unbound_energy",
-        ]
+        "cluster_rmsds",
+        "ref_rmsds",
+        "scores",
+        "leff",
+        "delta",
+        "intermolecular_energy",
+        "vdw_hb_desolv",
+        "electrostatics",
+        "flex_ligand",
+        "flexLigand_flexReceptor",
+        "internal_energy",
+        "torsional_energy",
+        "unbound_energy",
+    ]
     interaction_data_kws = [
-            "type",
-            "chain",
-            "residue",
-            "resid",
-            "recname",
-            "recid",
-        ]
+        "type",
+        "chain",
+        "residue",
+        "resid",
+        "recname",
+        "recid",
+    ]
 
     def __init__(self):
-        """Initialize instance variables common to all StorageManager subclasses
-        """
+        """Initialize instance variables common to all StorageManager subclasses"""
 
         self.unique_interactions = {}
         self.next_unique_interaction_idx = 1
@@ -128,12 +127,16 @@ class StorageManager:
 
     @classmethod
     def get_defaults(cls, storage_type):
-        storage_types = {'sqlite': StorageManagerSQLite,}
+        storage_types = {
+            "sqlite": StorageManagerSQLite,
+        }
         return storage_types[storage_type].get_defaults()
 
     @classmethod
     def get_default_types(cls, storage_type):
-        storage_types = {'sqlite': StorageManagerSQLite,}
+        storage_types = {
+            "sqlite": StorageManagerSQLite,
+        }
         return typing.get_type_hints(storage_types[storage_type].__init__)
 
     def __enter__(self):
@@ -232,9 +235,16 @@ class StorageManager:
 
         raise NotImplementedError
 
-    def insert_data(self, results_array, ligands_array, interaction_array, receptor_array=[], insert_receptor=False):
+    def insert_data(
+        self,
+        results_array,
+        ligands_array,
+        interaction_array,
+        receptor_array=[],
+        insert_receptor=False,
+    ):
         """Summary
-        
+
         Args:
             data_dictionaries (list): list of dictionaries of data to be stored
             insert_receptor (bool, optional): flag indicating that receptor info should inserted
@@ -279,9 +289,7 @@ class StorageManager:
         logging.info(filter_results_str)
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.results_view_name
         if self.view_suffix is not None:
-            self.current_view_name = (
-                self.results_view_name + "_" + self.view_suffix
-            )
+            self.current_view_name = self.results_view_name + "_" + self.view_suffix
         else:
             self.current_view_name = self.results_view_name
         self._create_indices(index_lignames=False)
@@ -1139,11 +1147,12 @@ class StorageManager:
 
     def _check_storage_empty(self):
         """Check that storage is empty before proceeding.
-        
+
         Raises:
             StorageError: Description
         """
         raise NotImplementedError
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -1163,14 +1172,14 @@ class StorageManagerSQLite(StorageManager):
 
     def __init__(
         self,
-        db_file: str="output.db",
-        append_results: bool=False,
-        order_results: str=None,
-        output_all_poses: bool=None,
-        results_view_name: str="passing_results",
-        overwrite: bool=None,
-        conflict_opt: str=None,
-        mode: str="ADGPU",
+        db_file: str = "output.db",
+        append_results: bool = False,
+        order_results: str = None,
+        output_all_poses: bool = None,
+        results_view_name: str = "passing_results",
+        overwrite: bool = None,
+        conflict_opt: str = None,
+        mode: str = "ADGPU",
         _stop_at_defaults=False,
     ):
         """Initialize superclass and subclass-specific instance variables
@@ -1181,7 +1190,7 @@ class StorageManagerSQLite(StorageManager):
         """
         self.append_results = append_results
         self.order_results = order_results
-        self.output_all_poses= output_all_poses
+        self.output_all_poses = output_all_poses
         self.results_view_name = results_view_name
         self.overwrite = overwrite
         self.conflict_opt = conflict_opt
@@ -1451,7 +1460,14 @@ class StorageManagerSQLite(StorageManager):
         flexible_residues = json.dumps(ligand_dict["flexible_residues"])
         flexres_atomnames = json.dumps(ligand_dict["flexres_atomnames"])
 
-        return [rec_name, box_dim, box_center, grid_spacing, flexible_residues, flexres_atomnames]
+        return [
+            rec_name,
+            box_dim,
+            box_center,
+            grid_spacing,
+            flexible_residues,
+            flexres_atomnames,
+        ]
 
     @classmethod
     def _generate_interaction_tuples(cls, interaction_dictionaries):
@@ -1475,9 +1491,16 @@ class StorageManagerSQLite(StorageManager):
 
         return list(interactions)
 
-    def insert_data(self, results_array, ligands_array, interaction_array, receptor_array=[], insert_receptor=False):
+    def insert_data(
+        self,
+        results_array,
+        ligands_array,
+        interaction_array,
+        receptor_array=[],
+        insert_receptor=False,
+    ):
         """Summary
-        
+
         Args:
             results_array (list): list of data to be stored in Results table
             ligands_array (list): list of data to be stored in Ligands table
@@ -1720,9 +1743,7 @@ class StorageManagerSQLite(StorageManager):
         """
         # check if we have previously filtered and saved view
         return self._run_query(
-            "SELECT * FROM {passing_view}".format(
-                passing_view=self.results_view_name
-            )
+            "SELECT * FROM {passing_view}".format(passing_view=self.results_view_name)
         )
 
     def get_number_passing_ligands(self, bookmark_name=None):
@@ -1765,8 +1786,8 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
             return info
         except sqlite3.OperationalError as e:
-            raise DatabaseQueryError("Error retrieving flexible residue info") from e  
-    
+            raise DatabaseQueryError("Error retrieving flexible residue info") from e
+
     def fetch_passing_ligand_output_info(self):
         """fetch information required by vsmanager for writing out molecules
 
@@ -2143,9 +2164,11 @@ class StorageManagerSQLite(StorageManager):
                     name=name, query=query, temp_flag=temp_flag
                 )
             )
-            logging.debug("CREATE {temp_flag}VIEW {name} AS {query}".format(
+            logging.debug(
+                "CREATE {temp_flag}VIEW {name} AS {query}".format(
                     name=name, query=query, temp_flag=temp_flag
-                ))
+                )
+            )
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseViewCreationError(
@@ -2648,7 +2671,9 @@ class StorageManagerSQLite(StorageManager):
             # catch if interaction not found in results
             if interaction_filter_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
-                    logging.warning("Given --react_any filter, no reactive interactions found. Excluded from filtering.")
+                    logging.warning(
+                        "Given --react_any filter, no reactive interactions found. Excluded from filtering."
+                    )
                 else:
                     logging.warning(
                         "Interaction {i} not found in results, excluded from filtering".format(
@@ -2688,7 +2713,9 @@ class StorageManagerSQLite(StorageManager):
         # initialize query string
         # raise error if query string is empty
         if queries == []:
-            raise DatabaseQueryError("Query string is empty. Please check filter options and ensure requested interactions are present.")
+            raise DatabaseQueryError(
+                "Query string is empty. Please check filter options and ensure requested interactions are present."
+            )
         sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(
             out_columns=outfield_string, window=self.filtering_window
         )
@@ -3103,7 +3130,7 @@ class StorageManagerSQLite(StorageManager):
 
     def check_storage_empty(self):
         """Check that storage is empty before proceeding.
-        
+
         Raises:
             StorageError: Description
         """
@@ -3111,7 +3138,9 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(*) FROM Results")
             if cur.fetchone()[0] != 0:
-                raise StorageError("Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database.")
+                raise StorageError(
+                    "Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database."
+                )
         except Exception as e:
             raise e
         finally:

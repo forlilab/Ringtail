@@ -228,7 +228,9 @@ class DockingFileReader(multiprocessing.Process):
 class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
-    def __init__(self, queue, num_readers, pipe_conn, chunksize, storageman, mode="dlg"):
+    def __init__(
+        self, queue, num_readers, pipe_conn, chunksize, storageman, mode="dlg"
+    ):
         multiprocessing.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
@@ -301,12 +303,22 @@ class Writer(multiprocessing.Process):
         except Exception:
             tb = traceback.format_exc()
             self.pipe.send(
-                (WriteToStorageError("Error occured while writing database"), tb, "Database")
+                (
+                    WriteToStorageError("Error occured while writing database"),
+                    tb,
+                    "Database",
+                )
             )
 
     def write_to_storage(self):
         # insert result, ligand, and receptor data
-        self.storageman.insert_data(self.results_array, self.ligands_array, self.interactions_list, self.receptor_array, self.first_insert)
+        self.storageman.insert_data(
+            self.results_array,
+            self.ligands_array,
+            self.interactions_list,
+            self.receptor_array,
+            self.first_insert,
+        )
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
 

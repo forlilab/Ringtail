@@ -14,28 +14,27 @@ class ResultsManager:
     def __init__(
         self,
         storageman: StorageManager,
-        storageman_class: StorageManager=StorageManagerSQLite,
-        parser_manager: str="multiprocessing",
-        mode: str="dlg",
-        chunk_size: int=1,
-        max_poses: int=3,
-        interaction_tolerance: float=None,
-        store_all_poses: bool=False,
-        target: str=None,
-        add_interactions: bool=False,
-        interaction_cutoffs: list=[3.7, 4.0],
-        receptor_file: str=None,
-        file_sources: dict={'file': [[]],
-                      'file_path': {
-                          'path': [[]],
-                          'pattern': '*.dlg*',
-                          'recursive': None},
-                      'file_list': [[]]},
-        file_pattern: str="*.dlg*",
-        max_proc: int=None,
-        _stop_at_defaults=False
+        storageman_class: StorageManager = StorageManagerSQLite,
+        parser_manager: str = "multiprocessing",
+        mode: str = "dlg",
+        chunk_size: int = 1,
+        max_poses: int = 3,
+        interaction_tolerance: float = None,
+        store_all_poses: bool = False,
+        target: str = None,
+        add_interactions: bool = False,
+        interaction_cutoffs: list = [3.7, 4.0],
+        receptor_file: str = None,
+        file_sources: dict = {
+            "file": [[]],
+            "file_path": {"path": [[]], "pattern": "*.dlg*", "recursive": None},
+            "file_list": [[]],
+        },
+        file_pattern: str = "*.dlg*",
+        max_proc: int = None,
+        _stop_at_defaults=False,
     ):
-        
+
         self.parser_manager = parser_manager
         self.mode = mode
         self.chunk_size = chunk_size
@@ -53,9 +52,11 @@ class ResultsManager:
             return
 
         self.storageman = storageman
-        parser_managers = {'multiprocessing': MPManager,}
+        parser_managers = {
+            "multiprocessing": MPManager,
+        }
         parser_opts = {}
-        for k,v in self.__dict__.items():
+        for k, v in self.__dict__.items():
             if k == "parser_manager":
                 continue
             parser_opts[k] = v
@@ -63,8 +64,14 @@ class ResultsManager:
 
     def process_results(self):
         # check that we have file source(s)
-        if self.file_sources["file"] == [[]] and self.file_sources["file_path"]["path"] == [[]] and self.file_sources["file_list"] == [[]]:
-            raise ResultsProcessingError("No file sources given. File sources must be given for writing results to database.")
+        if (
+            self.file_sources["file"] == [[]]
+            and self.file_sources["file_path"]["path"] == [[]]
+            and self.file_sources["file_list"] == [[]]
+        ):
+            raise ResultsProcessingError(
+                "No file sources given. File sources must be given for writing results to database."
+            )
         # start MP process
         self.parser.process_files()
 

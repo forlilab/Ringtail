@@ -38,12 +38,11 @@ class MPManager:
         add_interactions=False,
         interaction_cutoffs=[3.7, 4.0],
         receptor_file=None,
-        file_sources={'file': [[]],
-                      'file_path': {
-                          'path': [[]],
-                          'pattern': '*.dlg*',
-                          'recursive': None},
-                      'file_list': [[]]},
+        file_sources={
+            "file": [[]],
+            "file_path": {"path": [[]], "pattern": "*.dlg*", "recursive": None},
+            "file_list": [[]],
+        },
         file_pattern="*.dlg*",
         max_proc=None,
     ):
@@ -139,7 +138,10 @@ class MPManager:
         if self.file_sources["file"] != [[]]:
             for file_list in self.file_sources["file"]:
                 for file in file_list:
-                    if fnmatch.fnmatch(file, self.file_pattern) and file != self.receptor_file:
+                    if (
+                        fnmatch.fnmatch(file, self.file_pattern)
+                        and file != self.receptor_file
+                    ):
                         self._add_to_queue(file)
         # add files from file path(s)
         if self.file_sources["file_path"]["path"] != [[]]:
@@ -161,7 +163,9 @@ class MPManager:
         max_attempts = 750
         timeout = 0.5  # seconds
         if self.receptor_file is not None:
-            if os.path.split(file)[-1] == os.path.split(self.receptor_file)[-1]:  # check that we don't try to add the receptor
+            if (
+                os.path.split(file)[-1] == os.path.split(self.receptor_file)[-1]
+            ):  # check that we don't try to add the receptor
                 return
         attempts = 0
         while True:
@@ -184,10 +188,10 @@ class MPManager:
             logging.debug("Caught error in multiprocessing")
             error, tb, filename = self.p_conn.recv()
             self._kill_all_workers(filename, tb)
-    
+
     def _kill_all_workers(self, filename, tb):
         for s in self.workers:
-                s.kill()
+            s.kill()
         logging.debug(f"Error encountered while parsing {filename}")
         logging.debug(tb)
         raise MultiprocessingError(f"Error occurred while parsing {filename}!")
