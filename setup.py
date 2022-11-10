@@ -35,5 +35,5 @@ setup(
     zip_safe=False,
     install_requires=["numpy>=1.21"],
     python_requires=">=3.9.*",
-    license="GPL-v3",
+    license="L-GPL-v3",
 )
