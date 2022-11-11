@@ -49,12 +49,22 @@ if __name__ == "__main__":
     try:
         defaults = RingtailCore.get_defaults()
         with RingtailCore(
-            storage_opts={"values": storage_opts, "types": defaults["storage_opts"]["types"]}, rman_opts={"values": rman_opts, "types": defaults["rman_opts"]["types"]}, filters={"values": filters, "types": defaults["filters"]["types"]}, out_opts={"values": out_opts, "types": defaults["out_opts"]["types"]}
+            storage_opts={
+                "values": storage_opts,
+                "types": defaults["storage_opts"]["types"],
+            },
+            rman_opts={"values": rman_opts, "types": defaults["rman_opts"]["types"]},
+            filters={"values": filters, "types": defaults["filters"]["types"]},
+            out_opts={"values": out_opts, "types": defaults["out_opts"]["types"]},
         ) as rt_core:
 
-            file_sources_empty = rt_core.get_defaults()["rman_opts"]["values"]["file_sources"]
+            file_sources_empty = rt_core.get_defaults()["rman_opts"]["values"][
+                "file_sources"
+            ]
 
-            if cl_opts.rr_mode == "write" and (rman_opts["file_sources"] != file_sources_empty):
+            if cl_opts.rr_mode == "write" and (
+                rman_opts["file_sources"] != file_sources_empty
+            ):
                 rt_core.add_results()
 
             # Add receptors to database if requested

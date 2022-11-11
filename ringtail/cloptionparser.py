@@ -15,6 +15,7 @@ from .exceptions import OptionError
 import __main__
 from .ringtailcore import RingtailCore
 
+
 def cmdline_parser(defaults={}):
 
     conf_parser = argparse.ArgumentParser(
@@ -22,9 +23,7 @@ def cmdline_parser(defaults={}):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False,
     )
-    conf_parser.add_argument(
-        "-c",
-        "--config")
+    conf_parser.add_argument("-c", "--config")
     confargs, remaining_argv = conf_parser.parse_known_args()
 
     defaults = RingtailCore.get_defaults()
@@ -92,7 +91,7 @@ def cmdline_parser(defaults={}):
         "R": "reactive_res",
         "N": "name",
         "S": "substructure",
-        "F": "substructure_join"
+        "F": "substructure_join",
     }
 
     for fk in filter_keys:
@@ -131,7 +130,9 @@ def cmdline_parser(defaults={}):
     )
 
     subparsers = parser.add_subparsers(
-        help="Specify if should write to or read from database. To show options of each mode use the in-line help, e.g.: %s read -h" % os.path.basename(__main__.__file__), dest="rr_mode"
+        help="Specify if should write to or read from database. To show options of each mode use the in-line help, e.g.: %s read -h"
+        % os.path.basename(__main__.__file__),
+        dest="rr_mode",
     )
 
     write_parser = subparsers.add_parser("write")
@@ -205,7 +206,7 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="PATTERN",
-        dest="file_pattern"
+        dest="file_pattern",
     )
     write_parser.add_argument(
         "-r",
@@ -240,7 +241,7 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[FILE_NAME].DB",
-        default="output.db"
+        default="output.db",
     )
     write_parser.add_argument(
         "-ov",
@@ -318,7 +319,7 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="STRING",
-        dest="results_view_name"
+        dest="results_view_name",
     )
     read_parser.add_argument(
         "-m",
@@ -633,7 +634,8 @@ class CLOptionParser:
             "n_interact",
             "rank",
             "run",
-            "hb",}
+            "hb",
+        }
 
         self._initialize_parser()
 
@@ -661,7 +663,13 @@ class CLOptionParser:
     def _initialize_parser(self):
         # create parser
         try:
-            parsed_opts, self.parser, self.conf_parser, self.write_parser, self.read_parser = cmdline_parser()
+            (
+                parsed_opts,
+                self.parser,
+                self.conf_parser,
+                self.write_parser,
+                self.read_parser,
+            ) = cmdline_parser()
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
             self.parser.print_help()
@@ -760,9 +768,11 @@ class CLOptionParser:
         # check options for write mode
         self.rr_mode = parsed_opts.rr_mode
         self.pattern = parsed_opts.file_pattern
-            
+
         if self.rr_mode is None:
-            raise OptionError("No mode specified for rt_process_vs.py. Please specify mode (write/read).")
+            raise OptionError(
+                "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
+            )
         if self.rr_mode == "write":
             self.save_receptor = parsed_opts.save_receptor
             self.receptor_file = parsed_opts.receptor_file
@@ -779,7 +789,11 @@ class CLOptionParser:
                     "recursive": parsed_opts.recursive,
                 }
             else:
-                file_sources["file_path"] = {'path': [[]], 'pattern': '*.dlg*', 'recursive': None}
+                file_sources["file_path"] = {
+                    "path": [[]],
+                    "pattern": "*.dlg*",
+                    "recursive": None,
+                }
             if parsed_opts.file_list is None:
                 file_sources["file_list"] = [[]]
             else:
@@ -810,7 +824,9 @@ class CLOptionParser:
             self.save_receptor = False
             self.receptor_file = None
             if parsed_opts.input_db is None:
-                raise OptionError("No input database specified in read mode. Please specify database with --input_db")
+                raise OptionError(
+                    "No input database specified in read mode. Please specify database with --input_db"
+                )
             if parsed_opts.max_miss < 0:
                 raise OptionError("--max_miss must be greater than or equal to 0")
             if parsed_opts.max_miss > 0:
@@ -832,7 +848,9 @@ class CLOptionParser:
                     )
             if parsed_opts.order_results is not None:
                 if parsed_opts.order_results not in self.order_options:
-                    raise OptionError("Requested ording option that is not available. Please see --help for available options.")
+                    raise OptionError(
+                        "Requested ording option that is not available. Please see --help for available options."
+                    )
             # parse output options
             # Make sure that export_sdf_path has trailing /, is directory
             if parsed_opts.export_sdf_path is not None:
@@ -984,7 +1002,7 @@ class CLOptionParser:
             "append_results": parsed_opts.append_results,
             "conflict_opt": conflict_handling,
             "mode": self.mode,
-            "storage_type": "sqlite"
+            "storage_type": "sqlite",
         }
 
         if isinstance(parsed_opts.interaction_tolerance, str):
@@ -1003,7 +1021,7 @@ class CLOptionParser:
             "file_sources": file_sources,
             "file_pattern": self.pattern,
             "parser_manager": "multiprocessing",
-            "max_proc": parsed_opts.max_proc
+            "max_proc": parsed_opts.max_proc,
         }
 
         # save target name

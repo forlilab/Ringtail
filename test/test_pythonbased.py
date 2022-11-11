@@ -39,20 +39,7 @@ class TestWriteOpts:
 
         assert ligcount == 287
         assert posecount == 645
-
-    def test_input_type_checking(self):
-        with pytest.raises(RTCoreError):
-            os.system("rm output.db")
-
-            opts = RingtailCore.get_defaults()
-            opts["storage_opts"]["values"]["storage_type"] = "sqlite"
-            opts["rman_opts"]["values"]["file_sources"]["file_path"]["path"] = [["test_data/"]]
-            opts["rman_opts"]["values"]["file_sources"]["file_path"]["recursive"] = True
-            opts["rman_opts"]["values"]["max_proc"] = "1"
-            with RingtailCore(**opts) as rt_core:
-                rt_core.add_results()
-
-    
+   
 class TestReadOpts:
     def test_all_filters_python(self):
         os.system("rm output.db")
@@ -78,5 +65,5 @@ class TestReadOpts:
         cur.close()
         conn.close()
         
-        assert bookmarkcount == 97
+        assert bookmarkcount == 65
 
