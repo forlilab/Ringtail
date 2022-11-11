@@ -80,7 +80,9 @@ def parse_single_dlg(fname):
             if inside_header:
                 # store ligand file name
                 if line[0:11] == "Ligand file":
-                    ligname = line.split(":", 1)[1].split("/")[-1].split(".")[0].strip()  # remove path and file extension
+                    ligname = (
+                        line.split(":", 1)[1].split("/")[-1].split(".")[0].strip()
+                    )  # remove path and file extension
                 # store receptor name and grid parameters
                 elif line[:13] == "Receptor name":
                     receptor = line.split()[2]
@@ -97,13 +99,18 @@ def parse_single_dlg(fname):
                         for coord in line.split(":")[1].split(",")
                     ]
                 # store smile string
-                elif "REMARK SMILES" in line and "IDX" not in line and smile_string == "":
+                elif (
+                    "REMARK SMILES" in line and "IDX" not in line and smile_string == ""
+                ):
                     smile_string = line.split("REMARK SMILES")[-1]
                 # store flexible residue identities and atomtyps
                 if "INPUT-FLEXRES-PDBQT:" in line:
                     if "ATOM" in line or "HETATM" in line:
                         flexres_atomnames[-1].append(line[33:37])
-                        if line[38:41] + ":" + line[42] + line[44:47] in flexible_residues:
+                        if (
+                            line[38:41] + ":" + line[42] + line[44:47]
+                            in flexible_residues
+                        ):
                             continue
                         flexible_residues.append(
                             line[38:41] + ":" + line[42] + line[44:47]
@@ -125,11 +132,15 @@ def parse_single_dlg(fname):
                     inside_input = False
                 if inside_input is True:
                     if line.startswith("INPUT-LIGAND-PDBQT"):
-                        if " UNK " in line:  # replace ligand atoms ATOM flag with HETATM
+                        if (
+                            " UNK " in line
+                        ):  # replace ligand atoms ATOM flag with HETATM
                             line = line.replace("ATOM", "HETATM")
                         input_pdbqt.append(line.lstrip("INPUT-LIGAND-PDBQT"))
                         # save ligand atomtypes
-                        if line.startswith("INPUT-LIGAND-PDBQT") and ("ATOM" in line or "HETATM" in line):
+                        if line.startswith("INPUT-LIGAND-PDBQT") and (
+                            "ATOM" in line or "HETATM" in line
+                        ):
                             ligand_atomtypes.append(line.strip()[-3:])
                     if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                         index_map += (
@@ -182,14 +193,16 @@ def parse_single_dlg(fname):
                 inside_res = False
                 heavy_at_count_complete = True
             elif "DOCKED: ROOT" in line:
-                    inside_res = False
+                inside_res = False
             if (line[: len(STD_KW)] == STD_KW) and inside_pose:
                 # store the pose raw data
                 line = line.split(STD_KW)[1]
                 # store pose coordinates
                 if "ATOM" in line or "HETATM" in line:
                     if inside_res:
-                        flexible_res_coords[-1][-1].append([line[30:38], line[38:46], line[46:54]])
+                        flexible_res_coords[-1][-1].append(
+                            [line[30:38], line[38:46], line[46:54]]
+                        )
                     else:
                         pose_coordinates[-1].append(
                             [line[30:38], line[38:46], line[46:54]]
@@ -375,7 +388,7 @@ def parse_single_dlg(fname):
         or len(torsion) == 0
         or len(unbound_energy) == 0
     ):
-        raise FileParsingError("Incomplete data in " + fname)   
+        raise FileParsingError("Incomplete data in " + fname)
     # calculate ligand efficiency and deltas from the best pose
     leff = [x / heavy_at_count for x in scores]
     delta = [x - scores[0] for x in scores]

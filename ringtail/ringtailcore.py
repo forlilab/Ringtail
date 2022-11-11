@@ -75,9 +75,13 @@ class RingtailCore:
         storage_type = self.storage_opts.pop("storage_type")
         # confirm storage_type is not None
         if storage_type is None:
-            raise RTCoreError("storage_type not defined and must be defined at runtime.")
+            raise RTCoreError(
+                "storage_type not defined and must be defined at runtime."
+            )
 
-        storage_types = {'sqlite': StorageManagerSQLite,}
+        storage_types = {
+            "sqlite": StorageManagerSQLite,
+        }
         self.storageman = storage_types[storage_type](**self.storage_opts)
         self.rman_opts["storageman"] = self.storageman
         self.rman_opts["storageman_class"] = storage_types[storage_type]
@@ -90,75 +94,78 @@ class RingtailCore:
             "storage_opts": {
                 "values": StorageManager.get_defaults(storage_type),
                 "ignore": [],
-                "types": StorageManager.get_default_types(storage_type)
+                "types": StorageManager.get_default_types(storage_type),
             },
             "rman_opts": {
                 "values": ResultsManager.get_defaults(),
                 "ignore": [],
-                "types": ResultsManager.get_default_types()
-            }
+                "types": ResultsManager.get_default_types(),
+            },
         }
 
         # add storage type default
         cls.__default_options["storage_opts"]["values"]["storage_type"] = storage_type
         cls.__default_options["storage_opts"]["types"]["storage_type"] = str
 
+        out_opts = {
+            "log": "output_log.txt",
+            "export_sdf_path": None,
+            "plot": None,
+            "outfields": "e",
+            "no_print": True,
+            "export_bookmark_csv": None,
+            "export_query_csv": None,
+            "export_bookmark_db": None,
+            "data_from_bookmark": None,
+            "filter_bookmark": None,
+        }
 
-        out_opts = {'log': 'output_log.txt',
-                    'export_sdf_path': None,
-                    'plot': None,
-                    'outfields': 'e',
-                    'no_print': True,
-                    'export_bookmark_csv': None,
-                    'export_query_csv': None,
-                    'export_bookmark_db': None,
-                    'data_from_bookmark': None,
-                    'filter_bookmark': None}
+        out_types = {
+            "log": str,
+            "export_sdf_path": str,
+            "plot": bool,
+            "outfields": str,
+            "no_print": bool,
+            "export_bookmark_csv": str,
+            "export_query_csv": str,
+            "export_bookmark_db": str,
+            "data_from_bookmark": str,
+            "filter_bookmark": str,
+        }
 
-        out_types = {'log': str,
-                    'export_sdf_path': str,
-                    'plot': bool,
-                    'outfields': str,
-                    'no_print': bool,
-                    'export_bookmark_csv': str,
-                    'export_query_csv': str,
-                    'export_bookmark_db': str,
-                    'data_from_bookmark': str,
-                    'filter_bookmark': str}
+        filters = {
+            "properties": {
+                "eworst": None,
+                "ebest": None,
+                "leworst": None,
+                "lebest": None,
+                "energy_percentile": None,
+                "le_percentile": None,
+            },
+            "interactions": {"V": [], "H": [], "R": []},
+            "interactions_count": [],
+            "ligand_filters": {"N": [], "S": [], "F": "OR"},
+            "filter_ligands_flag": False,
+            "max_miss": 0,
+            "react_any": None,
+        }
 
-        filters = {'properties': {
-                       'eworst': None,
-                       'ebest': None,
-                       'leworst': None,
-                       'lebest': None,
-                       'energy_percentile': None,
-                       'le_percentile': None},
-                   'interactions': {
-                       'V': [],
-                       'H': [],
-                       'R': []},
-                   'interactions_count': [],
-                   'ligand_filters': {
-                       'N': [],
-                       'S': [],
-                       'F': 'OR'},
-                   'filter_ligands_flag': False,
-                   'max_miss': 0,
-                   'react_any': None}
-
-        filter_types = {'properties': {
-                       'eworst': float,
-                       'ebest': float,
-                       'leworst': float,
-                       'lebest': float,
-                       'energy_percentile': float,
-                       'le_percentile': float},
-                   'interactions': dict,
-                   'interactions_count': list,
-                   'ligand_filters': dict,
-                   'filter_ligands_flag': bool,
-                   'max_miss': int,
-                   'react_any': bool}
+        filter_types = {
+            "properties": {
+                "eworst": float,
+                "ebest": float,
+                "leworst": float,
+                "lebest": float,
+                "energy_percentile": float,
+                "le_percentile": float,
+            },
+            "interactions": dict,
+            "interactions_count": list,
+            "ligand_filters": dict,
+            "filter_ligands_flag": bool,
+            "max_miss": int,
+            "react_any": bool,
+        }
 
         defaults = cls.__default_options.copy()
         if terse:
@@ -180,7 +187,10 @@ class RingtailCore:
         Call results manager to process result files and add to database
         """
         # check that we want to overwrite or add results if storage already exists
-        if not self.storage_opts["overwrite"] and not self.storage_opts["append_results"]:
+        if (
+            not self.storage_opts["overwrite"]
+            and not self.storage_opts["append_results"]
+        ):
             self.storageman.check_storage_empty()
         logging.info("Adding results...")
         self.results_man = ResultsManager(**self.rman_opts)
@@ -192,9 +202,7 @@ class RingtailCore:
         Args:
             receptors (list): list of receptor blobs to add to database
         """
-        receptor_list = ReceptorManager.make_receptor_blobs(
-                    [receptor_file]
-                )
+        receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
         for rec, rec_name in receptor_list:
             # NOTE: in current implementation, only one receptor allowed per database
             # Check that any receptor row is incomplete (needs receptor blob) before inserting
@@ -248,14 +256,10 @@ class RingtailCore:
                 self.output_manager.log_num_passing_ligands(number_passing_ligands)
                 self.output_manager.write_log(self.filtered_results)
             except StorageError as e:
-                logging.exception(
-                    "Database error occurred while filtering"
-                )
+                logging.exception("Database error occurred while filtering")
                 raise e
             except OutputError as e:
-                logging.exception(
-                    "Logging error occurred after filtering"
-                )
+                logging.exception("Logging error occurred after filtering")
                 raise e
             except Exception as e:
                 raise e
@@ -309,9 +313,7 @@ class RingtailCore:
                     )  # energy (line[0]) on x axis, le (line[1]) on y axis
             self.output_manager.save_scatterplot()
         except StorageError as e:
-            logging.exception(
-                "Database error occurred while fetching data for plot"
-            )
+            logging.exception("Database error occurred while fetching data for plot")
             raise e
         except Exception as e:
             logging.exception("Error occurred during plotting")
@@ -385,7 +387,9 @@ class RingtailCore:
                 logging.info("Writing " + ligname.split(".")[0] + ".sdf")
                 # create rdkit ligand molecule and flexible residue container
                 if smiles == "":
-                    logging.warning(f"No SMILES found for {ligname}. Cannot create SDF.")
+                    logging.warning(
+                        f"No SMILES found for {ligname}. Cannot create SDF."
+                    )
                     continue
                 mol = Chem.MolFromSmiles(smiles)
                 flexres_mols = []
@@ -397,10 +401,18 @@ class RingtailCore:
                 for res, res_ats in zip(flexible_residues, flexres_atomnames):
                     flexres_saved_coords.append([])
                     resname = res[:3]
-                    res_ats = [at.strip() for at in res_ats]  # strip out whitespace around atom names
-                    res_smiles, res_index_map, res_h_parents = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
+                    res_ats = [
+                        at.strip() for at in res_ats
+                    ]  # strip out whitespace around atom names
+                    (
+                        res_smiles,
+                        res_index_map,
+                        res_h_parents,
+                    ) = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
                     if res_smiles is None:  # catch error in guessing smiles
-                        raise OutputError(f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes")
+                        raise OutputError(
+                            f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes"
+                        )
                     flexres_mols.append(Chem.MolFromSmiles(res_smiles))
                     flexres_info.append((res_smiles, res_index_map, res_h_parents))
 
@@ -411,8 +423,16 @@ class RingtailCore:
                     "Ligand effiencies": [],
                     "Interactions": [],
                 }
-                passing_properties = self.storageman.fetch_passing_pose_properties(ligname)
-                mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties = self._add_poses(
+                passing_properties = self.storageman.fetch_passing_pose_properties(
+                    ligname
+                )
+                (
+                    mol,
+                    flexres_mols,
+                    ligand_saved_coords,
+                    flexres_saved_coords,
+                    properties,
+                ) = self._add_poses(
                     atom_indices,
                     passing_properties,
                     mol,
@@ -426,27 +446,37 @@ class RingtailCore:
                 # fetch coordinates for non-passing poses
                 # and add to ligand mol, flexible residue mols
                 if write_nonpassing:
-                    nonpassing_properties = self.storageman.fetch_nonpassing_pose_properties(
-                        ligname
+                    nonpassing_properties = (
+                        self.storageman.fetch_nonpassing_pose_properties(ligname)
                     )
-                    mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties = self._add_poses(
-                    atom_indices,
-                    passing_properties,
-                    mol,
-                    flexres_mols,
-                    flexres_info,
-                    ligand_saved_coords,
-                    flexres_saved_coords,
-                    properties,
+                    (
+                        mol,
+                        flexres_mols,
+                        ligand_saved_coords,
+                        flexres_saved_coords,
+                        properties,
+                    ) = self._add_poses(
+                        atom_indices,
+                        passing_properties,
+                        mol,
+                        flexres_mols,
+                        flexres_info,
+                        ligand_saved_coords,
+                        flexres_saved_coords,
+                        properties,
                     )
 
                 # add hydrogens to mols
                 lig_h_parents = [int(idx) for idx in json.loads(h_parent_line)]
-                mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
+                mol = RDKitMolCreate.add_hydrogens(
+                    mol, ligand_saved_coords, lig_h_parents
+                )
                 flexres_hparents = []
                 for idx, res in enumerate(flexres_mols):
                     flexres_hparents = flexres_info[idx][2]
-                    flexres_mols[idx] = RDKitMolCreate.add_hydrogens(res, flexres_saved_coords[idx], flexres_hparents)
+                    flexres_mols[idx] = RDKitMolCreate.add_hydrogens(
+                        res, flexres_saved_coords[idx], flexres_hparents
+                    )
 
                 # write out mol
                 self.output_manager.write_out_mol(
@@ -459,9 +489,7 @@ class RingtailCore:
             )
             raise e
         except OutputError as e:
-            logging.exception(
-                f"Error occured while writing {ligname} to an SDF"
-            )
+            logging.exception(f"Error occured while writing {ligname} to an SDF")
             raise e
         except Exception as e:
             logging.exception("Error occurred during SDF output")
@@ -484,9 +512,7 @@ class RingtailCore:
             )
             raise e
         except Exception as e:
-            logging.exception(
-                f"Error occured while exporting CSV of {requested_data}"
-            )
+            logging.exception(f"Error occured while exporting CSV of {requested_data}")
             raise e
 
     def export_bookmark_db(self, bookmark_db_name: str):
@@ -533,7 +559,9 @@ class RingtailCore:
 
     def _prepare_output_manager(self):
         if self.output_manager is None:
-            self.output_manager = OutputManager(self.out_opts["log"], self.out_opts["export_sdf_path"])
+            self.output_manager = OutputManager(
+                self.out_opts["log"], self.out_opts["export_sdf_path"]
+            )
 
     def _generate_pdbqt_block(self, pdbqt_lines):
         """Generate pdbqt block from given lines from a pdbqt
@@ -546,13 +574,23 @@ class RingtailCore:
             [
                 line.lstrip(" ")
                 for line in list(
-                    filter(None, [self._clean_storage_string(line) for line in pdbqt_lines])
+                    filter(
+                        None, [self._clean_storage_string(line) for line in pdbqt_lines]
+                    )
                 )
             ]
         )
 
     def _add_poses(
-        self, atom_indices, poses, mol, flexres_mols, flexres_info, ligand_saved_coords, flexres_saved_coords, properties
+        self,
+        atom_indices,
+        poses,
+        mol,
+        flexres_mols,
+        flexres_info,
+        ligand_saved_coords,
+        flexres_saved_coords,
+        properties,
     ):
         """Add poses from given cursor to rdkit mols for ligand and flexible residues
 
@@ -600,13 +638,11 @@ class RingtailCore:
             # get pose coordinate info
             ligand_pose = json.loads(ligand_pose)
             flexres_pose = json.loads(flexres_pose)
-            mol = RDKitMolCreate.add_pose_to_mol(
-                mol,
-                ligand_pose,
-                atom_indices
-            )
+            mol = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices)
             for fr_idx, fr_mol in enumerate(flexres_mols):
-                flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(fr_mol, flexres_pose[fr_idx], flexres_info[fr_idx][1])
+                flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(
+                    fr_mol, flexres_pose[fr_idx], flexres_info[fr_idx][1]
+                )
                 flexres_saved_coords[fr_idx].append(flexres_pose[fr_idx])
             ligand_saved_coords.append(ligand_pose)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
@@ -717,7 +753,12 @@ class OutputManager:
             self.ax = fig.add_subplot(gs[1, 0])
             ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax)
             ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax)
-            fig.colorbar(mappable=cm.ScalarMappable(colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts))), label="Scatterplot bin count")
+            fig.colorbar(
+                mappable=cm.ScalarMappable(
+                    colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts))
+                ),
+                label="Scatterplot bin count",
+            )
             self.ax.set_xlabel("Best Binding Energy / kcal/mol")
             self.ax.set_ylabel("Best Ligand Efficiency")
         except Exception as e:
@@ -810,9 +851,7 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
-    def write_out_mol(
-        self, ligname, mol, flexres_mols, properties
-    ):
+    def write_out_mol(self, ligname, mol, flexres_mols, properties):
         """writes out given mol as sdf
 
         Args:
