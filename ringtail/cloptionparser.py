@@ -125,7 +125,7 @@ def cmdline_parser(defaults={}):
         COPYRIGHT
                 Copyright (C) 2022 Forli Lab, Center for Computational Structural Biology,
                              The Scripps Research Institute.
-                GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html> \n
+                GNU L-GPL version 2.1 or later <https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html> \n
         """,
         exit_on_error=False,
     )

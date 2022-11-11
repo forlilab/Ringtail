@@ -3,6 +3,7 @@
 
 import os
 import fnmatch
+import platform
 from setuptools import setup, find_packages
 
 
@@ -19,6 +20,9 @@ def find_files(directory):
 
     return matches
 
+required_modules = ["scipy>=1.8.0", "rdkit>=2022.03.2"]
+if platform.system() == "Darwin":  # mac
+    required_modules.append("multiprocess>=0.70.13")
 
 setup(
     name="ringtail",
@@ -33,7 +37,7 @@ setup(
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,
     zip_safe=False,
-    install_requires=["numpy>=1.21"],
+    install_requires=required_modules,
     python_requires=">=3.9.*",
-    license="GPL-v3",
+    license="L-GPL-v2.1",
 )
