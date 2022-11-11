@@ -20,7 +20,7 @@ def find_files(directory):
 
     return matches
 
-required_modules = ["scipy>=1.8.0", "rdkit>=2022.03.2"]
+required_modules = ["rdkit>=2022.03.2", "scipy>=1.8.0",  "meeko>=0.4", "matplotlib", "pandas"]
 if platform.system() == "Darwin":  # mac
     required_modules.append("multiprocess>=0.70.13")
 

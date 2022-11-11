@@ -30,21 +30,15 @@ at [Scripps Research](https://www.scripps.edu/).
 It is recommended that you create a new Conda environment for installing Ringtail. Ringtail requires the following non-standard dependencies:
 - RDKit
 - SciPy
+- Matplotlib
+- Pandas
 - [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
 - [Multiprocess](https://pypi.org/project/multiprocess/) (MacOS only)
 
-Installation is outlined below:
+Installation from source code is outlined below:
 ```
 $ conda create -n ringtail
 $ conda activate ringtail
-$ conda install -c conda-forge rdkit scipy
-```
-Now, navigate to the desired directory for installing Meeko and do the following:
-```
-$ git clone git@github.com:forlilab/Meeko.git
-$ cd Meeko
-$ git checkout develop
-$ pip install .
 ```
 After this, navigate to the desired directory for installing Ringtail and do the following:
 ```
@@ -52,13 +46,11 @@ $ git clone git@github.com:forlilab/Ringtail.git
 $ cd Ringtail
 $ pip install .
 ```
-If you wish to make the code for either Meeko or Ringtail editable without having to re-run `pip install .`, instead use
+This will automatically fetch the required modules and install them into the current conda environment.
+
+If you wish to make the code for Ringtail editable without having to re-run `pip install .`, instead use
 ```
 $ pip install --editable .
-```
-Finally, if running on MacOS, the user must also install the `multiprocess` package:
-```
-$ pip install multiprocess
 ```
 #### Test installation
 If you would like to test your installation of Ringtail, a set of automated tests are included with the source code. To begin, you must install pytest in the Ringtail conda environment:
