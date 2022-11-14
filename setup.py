@@ -26,6 +26,7 @@ if platform.system() == "Darwin":  # mac
 
 setup(
     name="ringtail",
+    version='1.0.0',
     author="Forli Lab",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/Ringtail",
