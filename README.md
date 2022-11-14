@@ -44,6 +44,7 @@ After this, navigate to the desired directory for installing Ringtail and do the
 ```
 $ git clone git@github.com:forlilab/Ringtail.git
 $ cd Ringtail
+$ conda install pip
 $ pip install .
 ```
 This will automatically fetch the required modules and install them into the current conda environment.
