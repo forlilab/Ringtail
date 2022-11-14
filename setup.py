@@ -20,12 +20,13 @@ def find_files(directory):
 
     return matches
 
-required_modules = ["scipy>=1.8.0", "rdkit>=2022.03.2"]
+required_modules = ["rdkit>=2022.03.2", "scipy>=1.8.0",  "meeko>=0.4", "matplotlib", "pandas"]
 if platform.system() == "Darwin":  # mac
     required_modules.append("multiprocess>=0.70.13")
 
 setup(
     name="ringtail",
+    version='1.0.0',
     author="Forli Lab",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/Ringtail",
@@ -40,4 +41,19 @@ setup(
     install_requires=required_modules,
     python_requires=">=3.9.*",
     license="L-GPL-v2.1",
+    keywords=["virtual screening", "molecular modeling", "drug discovery", "drug design", "docking", "autodock"],
+    classifiers=[
+        'Envirnoment :: Console',
+        'Environment :: Other Environment',
+        'Intended Audience :: Education',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
+        'Natural Language :: English',
+        'Operating System :: MacOS',
+        'Operating System :: POSIX :: Linux',
+        'Programming Language :: Python :: 3.9',
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
+        'Topic :: Scientific/Engineering :: Chemistry',
+        'Topic :: Software Development :: Libraries'
+    ]
 )
