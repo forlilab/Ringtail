@@ -37,7 +37,7 @@ It is recommended that you create a new Conda environment for installing Ringtai
 
 Installation from source code is outlined below:
 ```
-$ conda create -n ringtail
+$ conda create -n ringtail python=3.10
 $ conda activate ringtail
 ```
 After this, navigate to the desired directory for installing Ringtail and do the following:
