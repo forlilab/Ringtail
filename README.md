@@ -42,6 +42,10 @@ Please note that Ringtail requires Python 3.9 or 3.10.
 $ pip install ringtail
 ```
 If using conda, `pip` installs the package in the active environment.
+Also note that if using MacOS, you may need to install Multiprocess separately:
+```bash
+$ pip install multiprocess
+```
 
 ### Installation (from source code)
 ```
