@@ -36,6 +36,8 @@ It is recommended that you create a new Conda environment for installing Ringtai
 - [Multiprocess](https://pypi.org/project/multiprocess/) (MacOS only)
 
 ### Installation (from PyPI)
+Please note that Ringtail requires Python 3.9 or 3.10.
+
 ```bash
 $ pip install ringtail
 ```
