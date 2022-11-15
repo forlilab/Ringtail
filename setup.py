@@ -43,7 +43,7 @@ setup(
     license="L-GPL-v2.1",
     keywords=["virtual screening", "molecular modeling", "drug discovery", "drug design", "docking", "autodock"],
     classifiers=[
-        'Envirnoment :: Console',
+        'Environment :: Console',
         'Environment :: Other Environment',
         'Intended Audience :: Education',
         'Intended Audience :: Science/Research',

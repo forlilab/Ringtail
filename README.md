@@ -35,7 +35,13 @@ It is recommended that you create a new Conda environment for installing Ringtai
 - [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
 - [Multiprocess](https://pypi.org/project/multiprocess/) (MacOS only)
 
-Installation from source code is outlined below:
+### Installation (from PyPI)
+```bash
+$ pip install ringtail
+```
+If using conda, `pip` installs the package in the active environment.
+
+### Installation (from source code)
 ```
 $ conda create -n ringtail
 $ conda activate ringtail
