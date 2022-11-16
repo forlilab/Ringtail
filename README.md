@@ -9,11 +9,11 @@ Package for creating SQLite database from virtual screening results, performing 
 [![License: L-GPL v2.1](https://img.shields.io/badge/License-LGPLv2.1-blue.svg)](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html)
 [![made-with-python](https://img.shields.io/badge/Made%20with-Python-1f425f.svg)](https://www.python.org/)
 
-The pre-print publication describing the design, implementation, and features of Ringtail may be found on [ChemRxiv](https://chemrxiv.org/engage/chemrxiv/article-details/6372bfc874b7b6da1efd9527).
-
 Ringtail reads collections of Docking Log File (DLG) or PDBQT results from virtual screenings performed with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina), respectively, and deposits them into
 a SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of a simple result scatterplot, export of 
 molecule SDFs, and export of CSVs of result data. Result file parsing is parallelized across the user's CPU.
+
+**The pre-print publication describing the design, implementation, and features of Ringtail may be found on [ChemRxiv](https://chemrxiv.org/engage/chemrxiv/article-details/6372bfc874b7b6da1efd9527).**
 
 Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
