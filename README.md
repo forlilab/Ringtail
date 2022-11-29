@@ -95,7 +95,7 @@ Let us begin in the Ringtail directory. First, we must navigate to the test data
 ```
 $ cd test/test_data/
 ```
-Now, let us create a database containing the results from only group 1:
+Now, let us create a database containing the results from only group 1. Note that these files are DLGs. If we were using Vina PDBQTs, we would need to add `--mode vina`.
 ```
 $ rt_process_vs.py write --file_path group1
 ```
