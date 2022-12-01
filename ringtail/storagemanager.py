@@ -752,6 +752,7 @@ class StorageManager:
         """Create table for ligands. Columns are:
         LigName             VARCHAR NOT NULL,
         ligand_smile        VARCHAR[],
+        ligand_rdmol        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
         input_pdbqt         VARCHAR[]
@@ -1588,11 +1589,17 @@ class StorageManagerSQLite(StorageManager):
         sql_insert = """INSERT INTO Ligands (
         LigName,
         ligand_smile,
+        ligand_rdmol,
         atom_index_map,
         hydrogen_parents,
         input_pdbqt
         ) VALUES
-        (?,?,?,?,?)"""
+        (?,?,mol_from_smiles(?),?,?,?)"""
+
+        ## repeat smiles in the third position of ligand array, to create rdmol
+        for ligand_entry in ligand_array:
+            smiles = ligand_entry[1]
+            ligand_entry.insert(2, smiles)
 
         try:
             cur = self.conn.cursor()
@@ -1966,6 +1973,9 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             con = sqlite3.connect(self.db_file)
+            con.enable_load_extension(True)
+            con.load_extension("chemicalite")
+            con.enable_load_extension(False) 
             cursor = con.cursor()
             cursor.execute("PRAGMA synchronous = OFF")
             cursor.execute("PRAGMA journal_mode = MEMORY")
@@ -2326,6 +2336,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_table = """CREATE TABLE IF NOT EXISTS Ligands (
             LigName             VARCHAR NOT NULL PRIMARY KEY ON CONFLICT IGNORE,
             ligand_smile        VARCHAR[],
+            ligand_rdmol        MOL,
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
             input_pdbqt         VARCHAR[])"""
@@ -2801,7 +2812,7 @@ class StorageManagerSQLite(StorageManager):
             String: SQLite-formatted query
         """
 
-        sql_ligand_string = "SELECT LigName FROM Ligands WHERE "
+        sql_ligand_string = "SELECT LigName FROM Ligands WHERE"
 
         substruct_flag = ligand_filters["F"].upper()
         for kw in ligand_filters.keys():
@@ -2810,19 +2821,18 @@ class StorageManagerSQLite(StorageManager):
                 for name in fils:
                     if name == "":
                         continue
-                    name_sql_str = "LigName LIKE '%{value}%' OR ".format(value=name)
+                    name_sql_str = " LigName LIKE '%{value}%' OR".format(value=name)
                     sql_ligand_string += name_sql_str
             if kw == "S":
-                for substruct in fils:
-                    substruct_sql_str = "ligand_smile LIKE '%{value}%' {flag} ".format(
-                        value=substruct, flag=substruct_flag
-                    )
+                for smarts in fils:
+                    substruct_sql_str = " mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}".format(
+                        smarts=smarts, logical_operator=substruct_flag)
                     sql_ligand_string += substruct_sql_str
 
-        if sql_ligand_string.endswith("AND "):
-            sql_ligand_string = sql_ligand_string.rstrip("AND ")
-        if sql_ligand_string.endswith("OR "):
-            sql_ligand_string = sql_ligand_string.rstrip("OR ")
+        if sql_ligand_string.endswith("AND"):
+            sql_ligand_string = sql_ligand_string.rstrip("AND")
+        if sql_ligand_string.endswith("OR"):
+            sql_ligand_string = sql_ligand_string.rstrip("OR")
 
         logging.info(sql_ligand_string)
 

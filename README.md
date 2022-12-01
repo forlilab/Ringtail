@@ -32,6 +32,7 @@ It is recommended that you create a new Conda environment for installing Ringtai
 - SciPy
 - Matplotlib
 - Pandas
+- chemicalite
 - [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
 - [Multiprocess](https://pypi.org/project/multiprocess/) (MacOS only)
 

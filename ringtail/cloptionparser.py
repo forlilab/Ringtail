@@ -71,8 +71,9 @@ def cmdline_parser(defaults={}):
             'reactive_res': [],
             'interactions_count': [],
             'name': [],
-            'substructure': [],
-            'substructure_join': 'OR',
+            'smarts': [],
+            'smarts_join': 'OR',
+            'smarts': None,
             'filter_ligands_flag': False,
             'max_miss': 0,
             'react_any': None,
@@ -90,8 +91,8 @@ def cmdline_parser(defaults={}):
         "H": "hydrogen_bond",
         "R": "reactive_res",
         "N": "name",
-        "S": "substructure",
-        "F": "substructure_join",
+        "S": "smarts",
+        "F": "smarts_join",
     }
 
     for fk in filter_keys:
@@ -518,24 +519,23 @@ def cmdline_parser(defaults={}):
         metavar="STRING",
         nargs="+",
     )
-    # SUBSTRUCTURE SEARCH: To be implemented in future version via RDKit
-    # ligand_group.add_argument(
-    #    "-st",
-    #    "--substructure",
-    #    help="specify SMILES substring(s) to search for.",
-    #    action="store",
-    #    type=str,
-    #    metavar="STRING",
-    #    nargs="+",
-    # )
-    # ligand_group.add_argument(
-    #    "-sj",
-    #    "--substructure_join",
-    #    help="specify whether to join substructures filters with AND or OR.",
-    #    action="store",
-    #    type=str,
-    #    metavar="STRING",
-    # )
+    ligand_group.add_argument(
+        "--smarts",
+        help="SMARTS pattern(s) for substructure matching",
+        action="store",
+        type=str,
+        metavar="STRING",
+        nargs="+",
+    )
+    ligand_group.add_argument(
+        "-sj",
+        "--smarts_join",
+        choices=["AND", "OR"],
+        help="logical operator for multiple SMARTS (default: OR)",
+        action="store",
+        type=str,
+        metavar="STRING",
+    )
 
     interaction_group = read_parser.add_argument_group(
         "Interaction Filters",
@@ -954,7 +954,7 @@ class CLOptionParser:
             if parsed_opts.react_any is not None:
                 self.filter = True
             # make dictionary for ligand filters
-            ligand_filters_kw = [("name", "N"), ("substructure", "S")]
+            ligand_filters_kw = [("name", "N"), ("smarts", "S")]
             ligand_filters = {}
             filter_ligands_flag = True
             ligand_filter_list = []
@@ -965,7 +965,7 @@ class CLOptionParser:
                     continue
                 for fil in ligand_filter_list:
                     ligand_filters[_type].append(fil)
-            ligand_filters["F"] = getattr(parsed_opts, "substructure_join")
+            ligand_filters["F"] = getattr(parsed_opts, "smarts_join")
             if ligand_filters["N"] == [] and ligand_filters["S"] == []:
                 filter_ligands_flag = False
             if filter_ligands_flag:
