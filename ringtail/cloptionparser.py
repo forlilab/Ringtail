@@ -528,6 +528,14 @@ def cmdline_parser(defaults={}):
         nargs="+",
     )
     ligand_group.add_argument(
+        "--smarts_idxyz",
+        help="SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords",
+        action="store",
+        type=str,
+        metavar="STRING",
+        nargs="+",
+    )
+    ligand_group.add_argument(
         "-sj",
         "--smarts_join",
         choices=["AND", "OR"],
@@ -954,7 +962,7 @@ class CLOptionParser:
             if parsed_opts.react_any is not None:
                 self.filter = True
             # make dictionary for ligand filters
-            ligand_filters_kw = [("name", "N"), ("smarts", "S")]
+            ligand_filters_kw = [("name", "N"), ("smarts", "S"), ("smarts_idxyz", "X")]
             ligand_filters = {}
             filter_ligands_flag = True
             ligand_filter_list = []
@@ -965,8 +973,18 @@ class CLOptionParser:
                     continue
                 for fil in ligand_filter_list:
                     ligand_filters[_type].append(fil)
+            if len(ligand_filters["X"]) % 6 != 0:
+                msg = "--smarts_idxyz needs groups of 6 values:\n"
+                msg += "  1. SMARTS\n"
+                msg += "  2. index of atom in SMARTS (0 based)\n"
+                msg += "  3. distance cutoff\n"
+                msg += "  4. X\n"
+                msg += "  5. Y\n"
+                msg += "  6. Z\n"
+                msg += "For example --smarts_idxyz \"[C][Oh]\" 1 1.5 -20. 42. -7.1"
+                raise OptionError(msg)
             ligand_filters["F"] = getattr(parsed_opts, "smarts_join")
-            if ligand_filters["N"] == [] and ligand_filters["S"] == []:
+            if ligand_filters["N"] == [] and ligand_filters["S"] == [] and ligand_filters["X"] == []:
                 filter_ligands_flag = False
             if filter_ligands_flag:
                 self.filter = True

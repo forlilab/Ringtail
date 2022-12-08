@@ -144,7 +144,7 @@ class RingtailCore:
             },
             "interactions": {"V": [], "H": [], "R": []},
             "interactions_count": [],
-            "ligand_filters": {"N": [], "S": [], "F": "OR"},
+            "ligand_filters": {"N": [], "S": [], "F": "OR", "X": []},
             "filter_ligands_flag": False,
             "max_miss": 0,
             "react_any": None,
@@ -235,9 +235,6 @@ class RingtailCore:
             # prepare list of filter values and keys for storageManager
             results_filters_list = self.prepare_results_filter_list(combination)
 
-            # make sure we have ligand filter list
-            if not self.filters["filter_ligands_flag"]:
-                self.filters["ligand_filters"] = []
             # set storageMan's internal ic_counter to reflect current ic_idx
             if len(interaction_combs) > 1:
                 self.storageman.set_view_suffix(str(ic_idx))
