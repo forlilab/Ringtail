@@ -2876,8 +2876,10 @@ class StorageManagerSQLite(StorageManager):
             if kw == "S":
                 for smarts in fils:
                     # check for hydrogens in smarts pattern
-                    if "H" in smarts or "h" in smarts:
-                        raise DatabaseQueryError(f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen.")
+                    smarts_mol = Chem.MolFromSmarts(smarts)
+                    for atom_num in smarts_mol.GetAtoms():
+                        if atom_num == 1:
+                            raise DatabaseQueryError(f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen.")
                     substruct_sql_str = " mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}".format(
                         smarts=smarts, logical_operator=logical_operator)
                     sql_ligand_string += substruct_sql_str
