@@ -52,6 +52,8 @@ coverage.xml
 cover/
 old_test_data/
 test/output.db
+test/*.csv
+test/output_log.txt
 
 # Translations
 *.mo
