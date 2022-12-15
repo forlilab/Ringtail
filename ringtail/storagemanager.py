@@ -288,62 +288,13 @@ class StorageManager:
         filter_results_str = self._generate_result_filtering_query(
             results_filters_list, ligand_filters_dict, output_fields, filter_bookmark
         )
-        logging.info(filter_results_str)
+        logging.debug(filter_results_str)
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.results_view_name
         if self.view_suffix is not None:
             self.current_view_name = self.results_view_name + "_" + self.view_suffix
         else:
             self.current_view_name = self.results_view_name
         self._create_indices(index_lignames=False)
-        if len(ligand_filters_dict["X"]):
-            nr_args_per_group = 6
-            nr_smarts = int(len(ligand_filters_dict["X"]) / nr_args_per_group)
-            # create temporary table with molecules that pass all smiles
-            tmp_lig_filters = {"F": ligand_filters_dict["F"]}
-            tmp_lig_filters["S"] = [ligand_filters_dict["X"][i * nr_args_per_group] for i in range(nr_smarts)]
-            cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
-            cmd = cmd.replace(
-                "SELECT LigName FROM Ligands",
-                "SELECT "
-                    "Results.Pose_ID, "
-                    "Ligands.LigName, "
-                    "Ligands.ligand_smile, "
-                    "Ligands.atom_index_map, "
-                    "Results.ligand_coordinates "
-                    "FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName"
-            )
-            cmd = "CREATE TABLE passed_smarts AS " + cmd
-            cur = self.conn.cursor()
-            cur.execute("DROP TABLE IF EXISTS passed_smarts")
-            cur.execute(cmd)
-            for i in range(nr_smarts):
-                cur.execute("DROP TABLE IF EXISTS passed_poses{}".format(i))
-                cur.execute("CREATE TABLE passed_poses{} (Pose_ID INTEGER PRIMARY KEY)".format(i))
-                smarts =      ligand_filters_dict["X"][i * nr_args_per_group + 0]
-                index =   int(ligand_filters_dict["X"][i * nr_args_per_group + 1])
-                sqdist =float(ligand_filters_dict["X"][i * nr_args_per_group + 2])**2
-                x =     float(ligand_filters_dict["X"][i * nr_args_per_group + 3])
-                y =     float(ligand_filters_dict["X"][i * nr_args_per_group + 4])
-                z =     float(ligand_filters_dict["X"][i * nr_args_per_group + 5])
-                poses = self._run_query("SELECT * FROM passed_smarts")
-                counter = 0
-                pose_id_list = []
-                smartsmol = Chem.MolFromSmarts(smarts)
-                for pose_id, ligname, smiles, idxmap, coords in poses:
-                    mol = Chem.MolFromSmiles(smiles)
-                    idxmap = [int(value)-1 for value in json.loads(idxmap)]
-                    idxmap = {idxmap[j*2]: idxmap[j*2+1] for j in range(int(len(idxmap)/2))}
-                    for hit in mol.GetSubstructMatches(smartsmol):
-                        xyz = [float(value) for value in json.loads(coords)[idxmap[hit[index]]]]
-                        d2 = (xyz[0] - x)**2 + (xyz[1] - y)**2 + (xyz[2] - z)**2
-                        if d2 <= sqdist:
-                            pose_id_list.append((pose_id,))
-                            break # add pose only once
-                poses.close()
-                cur.executemany("INSERT INTO passed_poses{} VALUES(?)".format(i), pose_id_list)
-                self.conn.commit()
-                filter_results_str = filter_results_str.replace("GROUP BY LigName", " AND Pose_ID IN (SELECT Pose_ID FROM passed_poses{}) GROUP BY LigName".format(i))
-            cur.close()
         view_query = filter_results_str.replace(
             filter_results_str.split(" FROM ")[0], "SELECT *"
         )
@@ -2650,7 +2601,7 @@ class StorageManagerSQLite(StorageManager):
     def _generate_result_filtering_query(
         self,
         results_filters_list,
-        ligand_filters_list,
+        ligand_filters_dict,
         output_fields,
         filter_bookmark=False,
     ):
@@ -2763,14 +2714,61 @@ class StorageManagerSQLite(StorageManager):
             )
 
         # add ligand filters
-        if ligand_filters_list["S"] != [] or ligand_filters_list["N"] != []:
+        if ligand_filters_dict["S"] != [] or ligand_filters_dict["N"] != []:
             queries.append(
                 "LigName IN ({ligand_str})".format(
                     ligand_str=self._generate_ligand_filtering_query(
-                        ligand_filters_list
+                        ligand_filters_dict
                     )
                 )
             )
+        if len(ligand_filters_dict["X"]):
+            nr_args_per_group = 6
+            nr_smarts = int(len(ligand_filters_dict["X"]) / nr_args_per_group)
+            # create temporary table with molecules that pass all smiles
+            tmp_lig_filters = {"F": ligand_filters_dict["F"]}
+            tmp_lig_filters["S"] = [ligand_filters_dict["X"][i * nr_args_per_group] for i in range(nr_smarts)]
+            cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
+            cmd = cmd.replace(
+                "SELECT LigName FROM Ligands",
+                "SELECT "
+                    "Results.Pose_ID, "
+                    "Ligands.LigName, "
+                    "Ligands.ligand_smile, "
+                    "Ligands.atom_index_map, "
+                    "Results.ligand_coordinates "
+                    "FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName"
+            )
+            cmd = "CREATE TEMP TABLE passed_smarts AS " + cmd
+            cur = self.conn.cursor()
+            cur.execute("DROP TABLE IF EXISTS passed_smarts")
+            cur.execute(cmd)
+            for i in range(nr_smarts):
+                cur.execute("DROP TABLE IF EXISTS passed_poses{}".format(i))
+                cur.execute("CREATE TEMP TABLE passed_poses{} (Pose_ID INTEGER PRIMARY KEY)".format(i))
+                smarts =      ligand_filters_dict["X"][i * nr_args_per_group + 0]
+                index =   int(ligand_filters_dict["X"][i * nr_args_per_group + 1])
+                sqdist = float(ligand_filters_dict["X"][i * nr_args_per_group + 2])**2
+                x =     float(ligand_filters_dict["X"][i * nr_args_per_group + 3])
+                y =     float(ligand_filters_dict["X"][i * nr_args_per_group + 4])
+                z =     float(ligand_filters_dict["X"][i * nr_args_per_group + 5])
+                poses = self._run_query("SELECT * FROM passed_smarts")
+                pose_id_list = []
+                smartsmol = Chem.MolFromSmarts(smarts)
+                for pose_id, ligname, smiles, idxmap, coords in poses:
+                    mol = Chem.MolFromSmiles(smiles)
+                    idxmap = [int(value)-1 for value in json.loads(idxmap)]
+                    idxmap = {idxmap[j*2]: idxmap[j*2+1] for j in range(int(len(idxmap)/2))}
+                    for hit in mol.GetSubstructMatches(smartsmol):
+                        xyz = [float(value) for value in json.loads(coords)[idxmap[hit[index]]]]
+                        d2 = (xyz[0] - x)**2 + (xyz[1] - y)**2 + (xyz[2] - z)**2
+                        if d2 <= sqdist:
+                            pose_id_list.append((pose_id,))
+                            break # add pose only once
+                cur.executemany("INSERT INTO passed_poses{} VALUES(?)".format(i), pose_id_list)
+                self.conn.commit()
+                queries.append("Pose_ID IN (SELECT Pose_ID FROM passed_poses{})".format(i))
+            cur.close()
 
         # initialize query string
         # raise error if query string is empty
@@ -2888,8 +2886,6 @@ class StorageManagerSQLite(StorageManager):
             sql_ligand_string = sql_ligand_string.rstrip("AND")
         if sql_ligand_string.endswith("OR"):
             sql_ligand_string = sql_ligand_string.rstrip("OR")
-
-        logging.info(sql_ligand_string)
 
         return sql_ligand_string
 
