@@ -247,6 +247,7 @@ class RingtailCore:
                     self.out_opts["filter_bookmark"],
                 )
                 number_passing_ligands = self.storageman.get_number_passing_ligands()
+                print("Number passing Ligands:", number_passing_ligands)
                 result_bookmark_name = self.storageman.get_current_view_name()
                 self.output_manager.write_filters_to_log(self.filters, combination)
                 self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
