@@ -74,12 +74,13 @@ if __name__ == "__main__":
             if cl_opts.save_receptor:
                 rt_core.save_receptors(rman_opts["receptor_file"])
 
+            # print summary
+            if summarize:
+                rt_core.produce_summary()
+
             time1 = time.perf_counter()
 
             if cl_opts.rr_mode == "read":
-                # print summary
-                if summarize:
-                    rt_core.produce_summary()
 
                 # perform filtering
                 if cl_opts.filter:
