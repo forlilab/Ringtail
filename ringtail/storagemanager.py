@@ -1767,6 +1767,7 @@ class StorageManagerSQLite(StorageManager):
             summary_data["num_ligands"] = cur.execute("SELECT COUNT(*) FROM Ligands").fetchone()[0]
             summary_data["num_poses"] = cur.execute("SELECT COUNT(*) FROM Results").fetchone()[0]
             summary_data["num_unique_interactions"] = cur.execute("SELECT COUNT(*) FROM Interaction_indices").fetchone()[0]
+            summary_data["num_interacting_residues"] = cur.execute("SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)").fetchone()[0]
 
             allowed_columns = self._fetch_results_column_names()
             for col in columns:

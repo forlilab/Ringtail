@@ -222,13 +222,48 @@ class RingtailCore:
         """Print summary of data in storage
         """
         summary_data = self.storageman.fetch_summary_data(columns, percentiles)
-        print("Total Stored Ligands:", summary_data.pop("num_ligands"))
-        print("Total Stored Poses:", summary_data.pop("num_poses"))
-        print("Total Unique Interactions:", summary_data.pop("num_unique_interactions"))
+        print("Total Stored Ligands          :", summary_data.pop("num_ligands"))
+        print("Total Stored Poses            :", summary_data.pop("num_poses"))
+        print("Total Unique Interactions     :", summary_data.pop("num_unique_interactions"))
+        print("Number Interacting Residues   :", summary_data.pop("num_interacting_residues"))
+
+        colon_col = 18
+        print("\nEnergy statistics:")
+        print("=======================================")
+        for col in columns:
+            if col == "energies_binding":
+                min_e = summary_data["min_energies_binding"]
+                max_e = summary_data["max_energies_binding"]
+                print(f"Energy (min)      : {min_e:.2f} kcal/mol")
+                print(f"Energy (max)      : {max_e:.2f} kcal/mol")
+            elif col == "leff":
+                min_le = summary_data["min_leff"]
+                max_le = summary_data["max_leff"]
+                print(f"LE (min)          : {min_le:.2f} kcal/mol/heavyatom")
+                print(f"LE (max)          : {max_le:.2f} kcal/mol/heavyatom")
+            else:
+                min_col = summary_data[f"min_{col}"]
+                max_col = summary_data[f"max_{col}"]
+                print(f"{col} (min) : {min_col}")
+                print(f"{col} (max) : {max_col}")
         if percentiles != [] and percentiles is not None:
             print("\nPercentiles:")
-            for k,v in summary_data.items():
-                print(f"{k} : {v:.2f} kcal/mol")
+            print("=======================================")
+
+            for col in columns:
+                for p in percentiles:
+                    if col == "energies_binding":
+                        p_string = f"Energy (top {p}% )"
+                        p_string += ' ' * (colon_col - len(p_string))
+                        print(f"{p_string}: {summary_data[f'{p}%_energies_binding']:.2f} kcal/mol")
+                    elif col == "leff":
+                        p_string = f"LE     (top {p}% )"
+                        p_string += ' ' * (colon_col - len(p_string))
+                        print(f"{p_string}: {summary_data[f'{p}%_leff']:.2f} kcal/mol/heavyatom")
+                    else:
+                        p_string = f"{col} (top {p}%)"
+                        p_string += ' ' * (colon_col - len(p_string))
+                        print(f"{p_string}: {summary_data[f'{p}%_{col}']:.2f}")
 
     def filter(self):
         """
