@@ -146,7 +146,7 @@ def cmdline_parser(defaults={}):
         metavar="DATABASE",
     )
     write_parser.add_argument(
-        "-s",
+        "-b",
         "--bookmark_name",
         help="Specify name for db view of passing results to create (write mode) or export from (read mode)",
         action="store",
@@ -314,7 +314,7 @@ def cmdline_parser(defaults={}):
         metavar="DATABASE",
     )
     read_parser.add_argument(
-        "-s",
+        "-b",
         "--bookmark_name",
         help="Specify name for db view of passing results to create or export from",
         action="store",
@@ -344,6 +344,12 @@ def cmdline_parser(defaults={}):
     )
 
     output_group = read_parser.add_argument_group("Output options")
+    output_group.add_argument(
+        "-s",
+        "--summary",
+        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max binding energy and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
+        action="store_true",
+    )
     output_group.add_argument(
         "-l",
         "--log",
@@ -1010,6 +1016,7 @@ class CLOptionParser:
             "export_bookmark_db": parsed_opts.export_bookmark_db,
             "data_from_bookmark": parsed_opts.data_from_bookmark,
             "filter_bookmark": parsed_opts.filter_bookmark,
+            "summary": parsed_opts.summary,
         }
 
         storage_opts = {

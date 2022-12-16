@@ -45,6 +45,9 @@ if __name__ == "__main__":
     logging.getLogger().setLevel(level)
     logging.info(f"Logging level set to {levels[level]}")
 
+    # get summary info flag
+    summarize = out_opts.pop("summary")
+
     # create manager object for virtual screening. Will make database if needed
     try:
         defaults = RingtailCore.get_defaults()
@@ -74,6 +77,10 @@ if __name__ == "__main__":
             time1 = time.perf_counter()
 
             if cl_opts.rr_mode == "read":
+                # print summary
+                if summarize:
+                    rt_core.produce_summary()
+
                 # perform filtering
                 if cl_opts.filter:
                     rt_core.filter()
