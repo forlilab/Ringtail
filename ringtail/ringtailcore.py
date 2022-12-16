@@ -239,16 +239,15 @@ class RingtailCore:
             elif col == "leff":
                 min_le = summary_data["min_leff"]
                 max_le = summary_data["max_leff"]
-                print(f"LE (min)          : {min_le:.2f} kcal/mol/heavyatom")
-                print(f"LE (max)          : {max_le:.2f} kcal/mol/heavyatom")
+                print(f"LE     (min)      : {min_le:.2f} kcal/mol/heavyatom")
+                print(f"LE     (max)      : {max_le:.2f} kcal/mol/heavyatom")
             else:
                 min_col = summary_data[f"min_{col}"]
                 max_col = summary_data[f"max_{col}"]
                 print(f"{col} (min) : {min_col}")
                 print(f"{col} (max) : {max_col}")
         if percentiles != [] and percentiles is not None:
-            print("\nPercentiles:")
-            print("=======================================")
+            print("----------------------------------------")
 
             for col in columns:
                 for p in percentiles:
