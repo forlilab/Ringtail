@@ -146,7 +146,7 @@ def cmdline_parser(defaults={}):
         metavar="DATABASE",
     )
     write_parser.add_argument(
-        "-b",
+        "-s",
         "--bookmark_name",
         help="Specify name for db view of passing results to create (write mode) or export from (read mode)",
         action="store",
@@ -160,6 +160,12 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[dlg] or [vina]",
+    )
+    write_parser.add_argument(
+        "-su",
+        "--summary",
+        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max binding energy and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
+        action="store_true",
     )
     write_parser.add_argument(
         "-v",
@@ -314,7 +320,7 @@ def cmdline_parser(defaults={}):
         metavar="DATABASE",
     )
     read_parser.add_argument(
-        "-b",
+        "-s",
         "--bookmark_name",
         help="Specify name for db view of passing results to create or export from",
         action="store",
@@ -331,6 +337,12 @@ def cmdline_parser(defaults={}):
         metavar="[dlg] or [vina]",
     )
     read_parser.add_argument(
+        "-su",
+        "--summary",
+        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max binding energy and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
+        action="store_true",
+    )
+    read_parser.add_argument(
         "-v",
         "--verbose",
         help="Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.",
@@ -344,12 +356,6 @@ def cmdline_parser(defaults={}):
     )
 
     output_group = read_parser.add_argument_group("Output options")
-    output_group.add_argument(
-        "-s",
-        "--summary",
-        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max binding energy and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
-        action="store_true",
-    )
     output_group.add_argument(
         "-l",
         "--log",

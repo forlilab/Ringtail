@@ -92,7 +92,26 @@ $ rt_process_vs.py write --file_path . --recursive --output_db all_groups.db
 ```
 The `--recursive` option tells Ringtail to scan the directories specified with `--file_path` for subdirectories containing output files (in this case, DLGs). This allowed all three group directories to be added to the database with a single --file_path option.
 
-Now that we have created the databases, we can filter them to pull out compounds of interest. Let us start with a basic binding energy cutoff of -6 kcal/mol:
+Now that we have created the databases, we can filter them to pull out compounds of interest. Before we do that, let's find out a little more about the data contained within the database. For this, we can use the `-s/--summary` option:
+```
+$rt_process_vs.py read --input_db all_groups.db -s
+
+Total Stored Poses: 645
+Total Unique Interactions: 183
+
+Energy statistics:
+min_energies_binding: -7.93 kcal/mol
+max_energies_binding: -2.03 kcal/mol
+1%_energies_binding: -7.43 kcal/mol
+10%_energies_binding: -6.46 kcal/mol
+min_leff: -0.62 kcal/mol
+max_leff: -0.13 kcal/mol
+1%_leff: -0.58 kcal/mol
+10%_leff: -0.47 kcal/mol
+```
+We could also have used the `--summary` option when writing the database to display this info at that time.
+
+Now, let us start filtering with a basic binding energy cutoff of -6 kcal/mol:
 ```
 $ rt_process_vs.py read --input_db all_groups.db --eworst -6
 ```
@@ -284,8 +303,9 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |:------------------------|:-----|:-------------------------------------------------|:----------------|----:|
 |--config           | -c| Configuration JSON file to specify new default options. Overridded by command line | no default       |<tr><td colspan="5"></td></tr>
 |--input_db         | -i| Database file to use instead of creating new database | no default       ||
-|--bookmark_name      |-s| Name for bookmark view in database                      | passing_results  ||
+|--bookmark_name      |-b| Name for bookmark view in database                      | passing_results  ||
 |--mode          |-m| specify AutoDock program used to generate results. Available options are "dlg" and "vina". Vina mode will automatically change --pattern to \*.pdbqt   | dlg         ||
+|--summary          |-s| Print summary information about virtual screening data to STDOUT. | FALSE        ||
 |--verbose          |-v| Flag indicating that passing results should be printed to STDOUT. Will also include information about runtime progress. | FALSE        ||
 |--debug            |-d| Flag indicating that additional debugging information (e.g. error traceback) should be printed to STDOUT. | FALSE |<tr><td colspan="5">**Write Mode**</td></tr>
 |--file             |-f| DLG/Vina PDBQT file(s) to be read into database                  | no default       ||
