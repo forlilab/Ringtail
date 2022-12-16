@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Summary
-"""
 #
 # Ringtail storage adaptors
 #
@@ -2793,7 +2791,7 @@ class StorageManagerSQLite(StorageManager):
                 cur.executemany("INSERT INTO passed_poses{} VALUES(?)".format(i), pose_id_list)
                 self.conn.commit()
                 queries.append("Pose_ID IN (SELECT Pose_ID FROM passed_poses{})".format(i))
-            cur.close()
+                cur.close()
 
         # initialize query string
         # raise error if query string is empty

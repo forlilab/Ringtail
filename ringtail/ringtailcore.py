@@ -225,9 +225,10 @@ class RingtailCore:
         print("Total Stored Ligands:", summary_data.pop("num_ligands"))
         print("Total Stored Poses:", summary_data.pop("num_poses"))
         print("Total Unique Interactions:", summary_data.pop("num_unique_interactions"))
-        print("Percentiles:")
-        for p in summary_data.items():
-            print(":".join(p))
+        if percentiles != [] and percentiles is not None:
+            print("\nPercentiles:")
+            for k,v in summary_data.items():
+                print(f"{k} : {v:.2f} kcal/mol")
 
     def filter(self):
         """
