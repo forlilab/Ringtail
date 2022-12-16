@@ -218,6 +218,17 @@ class RingtailCore:
             except Exception as e:
                 raise e
 
+    def produce_summary(self, columns=["energies_binding", "leff"], percentiles=[1, 10]) -> None:
+        """Print summary of data in storage
+        """
+        summary_data = self.storageman.fetch_summary_data(columns, percentiles)
+        print("Total Stored Ligands:", summary_data.pop("num_ligands"))
+        print("Total Stored Poses:", summary_data.pop("num_poses"))
+        print("Total Unique Interactions:", summary_data.pop("num_unique_interactions"))
+        print("Percentiles:")
+        for p in summary_data.items():
+            print(":".join(p))
+
     def filter(self):
         """
         Prepare list of filters, then hand it off to storageManager to

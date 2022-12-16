@@ -1039,12 +1039,12 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _generate_percentile_query(self, percentile, column="energies_binding"):
+    def _calc_percentile_cutoff(self, percentile, column="energies_binding"):
         """Make query for percentile by calculating energy or leff cutoff
 
         Args:
             percentile (float): cutoff percentile
-            column (str, optional): string indicating if cutoff should be for energies_binding or leff
+            column (str, optional): string indicating column for cutoff to be calculated for
         """
         raise NotImplementedError
 
@@ -1754,6 +1754,35 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(
             "SELECT * FROM {passing_view}".format(passing_view=self.results_view_name)
         )
+
+    def fetch_summary_data(self, columns=["energies_binding", "leff"], percentiles=[1,10]) -> dict:
+        """Collect summary data for database:
+            Num Ligands
+            Num stored poses
+            Num unique interactions
+            
+            min, max, percentiles for columns in columns
+        """
+        try:
+            summary_data = {}
+            cur = self.conn.cursor()
+            summary_data["num_ligands"] = cur.execute("SELECT COUNT(*) FROM Ligands").fetchone()[0]
+            summary_data["num_poses"] = cur.execute("SELECT COUNT(*) FROM Results").fetchone()[0]
+            summary_data["num_unique_interactions"] = cur.execute("SELECT COUNT(*) FROM Interaction_indices").fetchone()[0]
+
+            allowed_columns = self._fetch_results_column_names()
+            for col in columns:
+                if col not in allowed_columns:
+                    raise StorageError(f"Requested summary column {col} not found in Results table! Available columns: {allowed_columns}")
+                summary_data[f"min_{col}"] = cur.execute(f"SELECT MIN({col}) FROM Results").fetchone()[0]
+                summary_data[f"max_{col}"] = cur.execute(f"SELECT MAX({col}) FROM Results").fetchone()[0]
+                for p in percentiles:
+                    summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
+
+            return summary_data
+                
+        except sqlite3.OperationalError as e:
+            raise StorageError("Error while fetching summary data!") from e
 
     def get_number_passing_ligands(self, bookmark_name=None):
         """Returns count of the number of ligands that
@@ -2636,11 +2665,7 @@ class StorageManagerSQLite(StorageManager):
                 self.index_columns.append(self.energy_filter_col_name[filter_key])
                 if filter_key == "energy_percentile" or filter_key == "le_percentile":
                     # convert from percent to decimal
-                    filter_value = float(filter_value) / 100
-                    queries.append(
-                        self._generate_percentile_query(
-                            filter_value, self.energy_filter_col_name[filter_key]
-                        )
+                    queries.append( f"{self.energy_filter_col_name[filter_key]} < {self._calc_percentile_cutoff(filter_value, self.energy_filter_col_name[filter_key])}"
                     )
                 else:
                     queries.append(
@@ -2980,12 +3005,12 @@ class StorageManagerSQLite(StorageManager):
             columns=column_names
         )
 
-    def _generate_percentile_query(self, percentile, column="energies_binding"):
+    def _calc_percentile_cutoff(self, percentile: float, column="energies_binding"):
         """Make query for percentile by calculating energy or leff cutoff
 
         Args:
             percentile (float): cutoff percentile
-            column (str, optional): string indicating if cutoff should be for energies_binding or leff
+            column (str, optional): string indicating column for percentile to be calculated over
         """
         # get total number of ligands
         try:
@@ -2993,7 +3018,7 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(LigName) FROM Ligands")
             n_ligands = int(cur.fetchone()[0])
-            n_passing = int(percentile * n_ligands)
+            n_passing = int((percentile / 100) * n_ligands)
             # find energy cutoff
             counter = 0
             for i in cur.execute(
@@ -3004,7 +3029,7 @@ class StorageManagerSQLite(StorageManager):
                     break
                 counter += 1
             logging.debug(f"{column} percentile cutoff is {cutoff}")
-            return f"{column} < {cutoff}"
+            return cutoff
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
 
