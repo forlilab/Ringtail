@@ -2765,13 +2765,11 @@ class StorageManagerSQLite(StorageManager):
                     "Results.ligand_coordinates "
                     "FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName"
             )
-            cmd = "CREATE TABLE passed_smarts AS " + cmd
+            cmd = "CREATE TEMP TABLE passed_smarts AS " + cmd
             cur = self.conn.cursor()
             cur.execute("DROP TABLE IF EXISTS passed_smarts")
             cur.execute(cmd)
             for i in range(nr_smarts):
-                cur.execute("DROP TABLE IF EXISTS passed_poses{}".format(i))
-                cur.execute("CREATE TABLE passed_poses{} (Pose_ID INTEGER PRIMARY KEY)".format(i))
                 smarts =      ligand_filters_dict["X"][i * nr_args_per_group + 0]
                 index =   int(ligand_filters_dict["X"][i * nr_args_per_group + 1])
                 sqdist = float(ligand_filters_dict["X"][i * nr_args_per_group + 2])**2
@@ -2789,12 +2787,10 @@ class StorageManagerSQLite(StorageManager):
                         xyz = [float(value) for value in json.loads(coords)[idxmap[hit[index]]]]
                         d2 = (xyz[0] - x)**2 + (xyz[1] - y)**2 + (xyz[2] - z)**2
                         if d2 <= sqdist:
-                            pose_id_list.append((pose_id,))
+                            pose_id_list.append(str(pose_id))
                             break # add pose only once
-                cur.executemany("INSERT INTO passed_poses{} VALUES(?)".format(i), pose_id_list)
-                self.conn.commit()
-                queries.append("Pose_ID IN (SELECT Pose_ID FROM passed_poses{})".format(i))
-                cur.close()
+                queries.append("Pose_ID IN (SELECT Pose_ID FROM Results WHERE Pose_ID={0})".format(" OR Pose_ID = ".join(pose_id_list)))
+            cur.close()
 
         # initialize query string
         # raise error if query string is empty
