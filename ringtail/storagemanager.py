@@ -2751,6 +2751,8 @@ class StorageManagerSQLite(StorageManager):
             nr_smarts = int(len(ligand_filters_dict["X"]) / nr_args_per_group)
             # create temporary table with molecules that pass all smiles
             tmp_lig_filters = {"F": ligand_filters_dict["F"]}
+            if "M" in ligand_filters_dict:
+                tmp_lig_filters["M"] = ligand_filters_dict["M"]
             tmp_lig_filters["S"] = [ligand_filters_dict["X"][i * nr_args_per_group] for i in range(nr_smarts)]
             cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
             cmd = cmd.replace(
@@ -2763,13 +2765,13 @@ class StorageManagerSQLite(StorageManager):
                     "Results.ligand_coordinates "
                     "FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName"
             )
-            cmd = "CREATE TEMP TABLE passed_smarts AS " + cmd
+            cmd = "CREATE TABLE passed_smarts AS " + cmd
             cur = self.conn.cursor()
             cur.execute("DROP TABLE IF EXISTS passed_smarts")
             cur.execute(cmd)
             for i in range(nr_smarts):
                 cur.execute("DROP TABLE IF EXISTS passed_poses{}".format(i))
-                cur.execute("CREATE TEMP TABLE passed_poses{} (Pose_ID INTEGER PRIMARY KEY)".format(i))
+                cur.execute("CREATE TABLE passed_poses{} (Pose_ID INTEGER PRIMARY KEY)".format(i))
                 smarts =      ligand_filters_dict["X"][i * nr_args_per_group + 0]
                 index =   int(ligand_filters_dict["X"][i * nr_args_per_group + 1])
                 sqdist = float(ligand_filters_dict["X"][i * nr_args_per_group + 2])**2
@@ -2895,6 +2897,9 @@ class StorageManagerSQLite(StorageManager):
                         continue
                     name_sql_str = " LigName LIKE '%{value}%' OR".format(value=name)
                     sql_ligand_string += name_sql_str
+            if kw == "M":
+                maxatom_sql_str = " mol_num_atms(ligand_rdmol) <= {} {}".format(ligand_filters[kw], logical_operator)
+                sql_ligand_string += maxatom_sql_str
             if kw == "S":
                 for smarts in fils:
                     # check for hydrogens in smarts pattern

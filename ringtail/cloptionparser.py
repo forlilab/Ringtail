@@ -532,6 +532,12 @@ def cmdline_parser(defaults={}):
         nargs="+",
     )
     ligand_group.add_argument(
+        "--max_nr_atoms",
+        action="store",
+        type=int,
+        metavar="INT",
+    )
+    ligand_group.add_argument(
         "--smarts",
         help="SMARTS pattern(s) for substructure matching",
         action="store",
@@ -974,13 +980,16 @@ class CLOptionParser:
             if parsed_opts.react_any is not None:
                 self.filter = True
             # make dictionary for ligand filters
-            ligand_filters_kw = [("name", "N"), ("smarts", "S"), ("smarts_idxyz", "X")]
+            ligand_filters_kw = [("name", "N"), ("smarts", "S"), ("smarts_idxyz", "X"), ("max_nr_atoms", "M")]
             ligand_filters = {}
             filter_ligands_flag = True
             ligand_filter_list = []
             for kw, _type in ligand_filters_kw:
-                ligand_filters[_type] = []
                 ligand_filter_list = getattr(parsed_opts, kw)
+                if kw == "max_nr_atoms":
+                    ligand_filters[_type] = ligand_filter_list
+                    continue
+                ligand_filters[_type] = []
                 if ligand_filter_list is None:
                     continue
                 for fil in ligand_filter_list:
@@ -996,7 +1005,7 @@ class CLOptionParser:
                 msg += "For example --smarts_idxyz \"[C][Oh]\" 1 1.5 -20. 42. -7.1"
                 raise OptionError(msg)
             ligand_filters["F"] = getattr(parsed_opts, "smarts_join")
-            if ligand_filters["N"] == [] and ligand_filters["S"] == [] and ligand_filters["X"] == []:
+            if ligand_filters["N"] == [] and ligand_filters["S"] == [] and ligand_filters["X"] == [] and "M" not in ligand_filters:
                 filter_ligands_flag = False
             if filter_ligands_flag:
                 self.filter = True
