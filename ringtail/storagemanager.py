@@ -2789,7 +2789,7 @@ class StorageManagerSQLite(StorageManager):
                         if d2 <= sqdist:
                             pose_id_list.append(str(pose_id))
                             break # add pose only once
-                queries.append("Pose_ID IN (SELECT Pose_ID FROM Results WHERE Pose_ID={0})".format(" OR Pose_ID = ".join(pose_id_list)))
+                queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
             cur.close()
 
         # initialize query string
