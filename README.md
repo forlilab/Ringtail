@@ -438,3 +438,55 @@ with StorageManagerSQLite("vs.db") as dbman:
     interaction_bv_df = dbman.to_dataframe("Interaction_bitvectors")
 
 ```
+#### Make an ROC plot and calculate its AUC for a virtual screening with a file containing a list of known binders
+```
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import auc
+import matplotlib.pyplot as plt
+from ringtail import RingtailCore, StorageManagerSQLite
+
+# make database manager with connection to SQLite file output.db
+with StorageManagerSQLite("output.db") as dbman:
+
+    # fetch entire Results table as pandas dataframe
+    results_df = dbman.to_dataframe("Select LigName FROM Results GROUP BY LigName ORDER BY energies_binding", table=False)
+
+print(results_df)
+
+with open("binders.txt", 'r') as f:
+    binders = [l.strip() for l in f.readlines() if l != []]
+
+num_actives = len(binders)
+num_decoys = len(results_df) - num_actives
+
+roc_tpr = []
+roc_fpr = []
+tp = 0
+fp = 0
+i = 1
+for l in results_df["LigName"]:
+    print("Testing cutoff:", i)
+    i += 1
+    if l.split("--")[0].rstrip("_RX1") in binders:
+        tp += 1
+    else:
+        fp += 1
+    roc_tpr.append(tp / num_actives)
+    roc_fpr.append(fp / num_decoys)
+auc = auc(roc_fpr, roc_tpr)
+
+with open("auc.txt", 'w') as f:
+    f.write(str(auc))
+
+plt.plot(roc_fpr, roc_tpr)
+x = np.linspace(0,1)
+plt.plot(x, x, linestyle="--")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.show()
+```
+
