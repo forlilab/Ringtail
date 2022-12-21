@@ -417,7 +417,7 @@ with RingtailCore(**opts) as rt_core:
 ```
 #### Convert database tables to pandas dataframes
 ```
-from ringtail import DBManagerSQLite
+from ringtail import StorageManagerSQLite
 
 # make database manager with connection to SQLite file vs.db
 with StorageManagerSQLite("vs.db") as dbman:
