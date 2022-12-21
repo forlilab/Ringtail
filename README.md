@@ -471,7 +471,7 @@ i = 1
 for l in results_df["LigName"]:
     print("Testing cutoff:", i)
     i += 1
-    if l.split("--")[0].rstrip("_RX1") in binders:
+    if l in binders:
         tp += 1
     else:
         fp += 1
