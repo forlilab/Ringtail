@@ -458,7 +458,7 @@ with StorageManagerSQLite("output.db") as dbman:
 print(results_df)
 
 with open("binders.txt", 'r') as f:
-    binders = [l.strip() for l in f.readlines() if l != []]
+    binders = [l.strip() for l in f.readlines() if l != ""]
 
 num_actives = len(binders)
 num_decoys = len(results_df) - num_actives
