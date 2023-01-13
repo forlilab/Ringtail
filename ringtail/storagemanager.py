@@ -148,7 +148,7 @@ class StorageManager:
     # # # Common StorageManager methods # # #
     # # # # # # # # # # # # # # # # # # #
 
-    def get_plot_data(self):
+    def get_plot_data(self, only_passing=False):
         """this function is expected to return an ascii plot
         representation of the results
 
@@ -159,7 +159,10 @@ class StorageManager:
         # checks if we have filtered by looking for view name in list of view names
         self._create_indices()
         if self.check_passing_view_exists():
-            return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
+            if only_passing:
+                return [], self._fetch_passing_plot_data()
+            else:
+                return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
         else:
             return self._fetch_all_plot_data(), []
 
@@ -1837,6 +1840,16 @@ class StorageManagerSQLite(StorageManager):
         )
         return self._run_query(query)
 
+    def fetch_single_ligand_output_info(self, ligname):
+        try:
+            cur = self.conn.cursor()
+            cur.execute(f"SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName LIKE '{ligname}'")
+            info = cur.fetchone()
+            cur.close()
+            return info
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError(f"Error retrieving ligand info for {ligname}") from e
+
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
 
@@ -1862,9 +1875,22 @@ class StorageManagerSQLite(StorageManager):
             SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
+        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
             ligand=ligname, results_view=self.results_view_name
         )
+        return self._run_query(query)
+
+    def fetch_single_pose_properties(self, pose_ID:int):
+        """fetch coordinates for pose given by pose_ID
+
+        Args:
+            pose_ID (int): name of ligand to fetch coordinates for
+
+        Returns:
+            SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
+                flexible_res_coordinates, flexible_residues
+        """
+        query = f"SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
         return self._run_query(query)
 
     def fetch_interaction_bitvector(self, pose_id):
@@ -2622,7 +2648,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             String: SQLite-formatted query string
         """
-        return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
+        return "SELECT energies_binding, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
             results_view=self.results_view_name
         )
 
