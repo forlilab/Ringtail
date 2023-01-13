@@ -255,6 +255,8 @@ The primary outputs from `rt_process_vs.py` are the database itself (`write` mod
 
 The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with `--bookmark_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
 
+The `--pymol` flag also generates a scatterplot of ligand efficiency vs docking score, but only for the ligands contained in the bookmark specified with `--bookmark_name`. It also launches a PyMol session and will display the ligands in PyMol when clicked on the scatterplot. N.B.: Some users may encounter a `ConnectionRefusedError`. If this happens, try manually launching PyMol (`pymol -R`) in a separate terminal window.
+
 Using the `--export_sdf_path` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the bookmark given with `--bookmark_name`. The SDF will contain poses passing the filter/in the bookmark ordered by increasing binding energy. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
 
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_bookmark_csv`, which takes a string for the name of a table or result bookmark in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
@@ -303,9 +305,9 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |:------------------------|:-----|:-------------------------------------------------|:----------------|----:|
 |--config           | -c| Configuration JSON file to specify new default options. Overridded by command line | no default       |<tr><td colspan="5"></td></tr>
 |--input_db         | -i| Database file to use instead of creating new database | no default       ||
-|--bookmark_name      |-b| Name for bookmark view in database                      | passing_results  ||
+|--bookmark_name      |-s| Name for bookmark view in database                      | passing_results  ||
 |--mode          |-m| specify AutoDock program used to generate results. Available options are "dlg" and "vina". Vina mode will automatically change --pattern to \*.pdbqt   | dlg         ||
-|--summary          |-s| Print summary information about virtual screening data to STDOUT. | FALSE        ||
+|--summary          |-su| Print summary information about virtual screening data to STDOUT. | FALSE        ||
 |--verbose          |-v| Flag indicating that passing results should be printed to STDOUT. Will also include information about runtime progress. | FALSE        ||
 |--debug            |-d| Flag indicating that additional debugging information (e.g. error traceback) should be printed to STDOUT. | FALSE |<tr><td colspan="5">**Write Mode**</td></tr>
 |--file             |-f| DLG/Vina PDBQT file(s) to be read into database                  | no default       ||
@@ -335,7 +337,8 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--export_bookmark_db |-xdb| Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db| FALSE      ||
 |--data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
 |--filter_bookmark |-fb| Filter over specified bookmark, not whole Results table. | FALSE       ||
-|--plot             |-p| Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>
+|--plot             |-p| Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        ||
+|--pymol             |-py| Flag to launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with --bookmark_name will be ploted and displayed in PyMol when clicked on.| FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>
 |--eworst           |-e| Worst energy value accepted (kcal/mol)                | no_default  ||
 |--ebest            |-eb| Best energy value accepted (kcal/mol)                 | no default  ||
 |--leworst          |-le| Worst ligand efficiency value accepted                | no default  ||

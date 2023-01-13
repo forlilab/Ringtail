@@ -466,6 +466,12 @@ def cmdline_parser(defaults={}):
         help="Makes scatterplot of LE vs Best Energy, saves as scatter.png.",
         action="store_true",
     )
+    output_group.add_argument(
+        '-py',
+        '--pymol',
+        help="Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.",
+        action="store_true"
+    )
 
     properties_group = read_parser.add_argument_group(
         "Property Filters", "Specify energy and ligand efficiency filters"
@@ -1005,7 +1011,7 @@ class CLOptionParser:
                 msg += "For example --smarts_idxyz \"[C][Oh]\" 1 1.5 -20. 42. -7.1"
                 raise OptionError(msg)
             ligand_filters["F"] = getattr(parsed_opts, "smarts_join")
-            if ligand_filters["N"] == [] and ligand_filters["S"] == [] and ligand_filters["X"] == [] and "M" not in ligand_filters:
+            if ligand_filters["N"] == [] and ligand_filters["S"] == [] and ligand_filters["X"] == [] and ("M" not in ligand_filters or ligand_filters["M"] is None):
                 filter_ligands_flag = False
             if filter_ligands_flag:
                 self.filter = True
@@ -1032,6 +1038,7 @@ class CLOptionParser:
             "data_from_bookmark": parsed_opts.data_from_bookmark,
             "filter_bookmark": parsed_opts.filter_bookmark,
             "summary": parsed_opts.summary,
+            "pymol": parsed_opts.pymol,
         }
 
         storage_opts = {

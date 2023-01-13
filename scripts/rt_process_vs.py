@@ -48,6 +48,9 @@ if __name__ == "__main__":
     # get summary info flag
     summarize = out_opts.pop("summary")
 
+    # get pymol viewer flag
+    pymol = out_opts.pop("pymol")
+
     # create manager object for virtual screening. Will make database if needed
     try:
         defaults = RingtailCore.get_defaults()
@@ -93,6 +96,10 @@ if __name__ == "__main__":
                 # plot if requested
                 if out_opts["plot"]:
                     rt_core.plot()
+
+                # def open pymol viewer
+                if pymol:
+                    rt_core.display_pymol()
 
                 # write out molecules if requested
                 if out_opts["export_sdf_path"] is not None:
