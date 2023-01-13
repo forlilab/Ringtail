@@ -13,7 +13,7 @@ import traceback
 if __name__ == "__main__":
 
     time0 = time.perf_counter()
-    level = logging.DEBUG
+    level = logging.INFO
     logging.basicConfig(
         level=level, stream=sys.stdout, filemode="w", format="%(message)s"
     )

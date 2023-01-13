@@ -623,7 +623,7 @@ def cmdline_parser(defaults={}):
     # catch if running with no options
     if len(sys.argv) == 1:
         parser.print_help()
-        raise OptionError("Script called with no commandline options. Aborting.")
+        raise OptionError("Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details.")
 
     parser.set_defaults(**config)
     write_parser.set_defaults(**config)
