@@ -1939,7 +1939,7 @@ class StorageManagerSQLite(StorageManager):
         """
         self._create_view(
             bookmark_name,
-            "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {0})".format(
+            "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {1})".format(
                 original_bookmark_name, temp_table_name
             ),
             add_poseID=False,
