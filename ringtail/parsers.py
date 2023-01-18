@@ -141,7 +141,7 @@ def parse_single_dlg(fname):
                         if line.startswith("INPUT-LIGAND-PDBQT") and (
                             "ATOM" in line or "HETATM" in line
                         ):
-                            ligand_atomtypes.append(line.strip()[-3:])
+                            ligand_atomtypes.append(line.strip()[97:])
                     if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                         index_map += (
                             line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
@@ -506,7 +506,7 @@ def parse_vina_pdbqt(fname):
                             [line[30:38], line[38:46], line[46:54]]
                         )
                         if first_model:
-                            ligand_atomtypes.append(line[77:-1].strip())
+                            ligand_atomtypes.append(line[77:].strip())
                             if line[13] != "H":
                                 num_heavy_atoms += 1
                 if line.startswith("REMARK SMILES IDX") and first_model:
@@ -615,7 +615,7 @@ def receptor_pdbqt_parser(fname):
         line_dict["occupancy"] = float(line[54:60])
         line_dict["b_iso"] = float(line[60:66])
         line_dict["q"] = float(line[70:76])
-        line_dict["atomtype"] = line[76:79]
+        line_dict["atomtype"] = line[77:]
 
         lines.append(line_dict)
 
