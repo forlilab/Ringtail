@@ -164,7 +164,7 @@ def cmdline_parser(defaults={}):
     write_parser.add_argument(
         "-su",
         "--summary",
-        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max binding energy and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
+        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
         action="store_true",
     )
     write_parser.add_argument(
@@ -339,7 +339,7 @@ def cmdline_parser(defaults={}):
     read_parser.add_argument(
         "-su",
         "--summary",
-        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max binding energy and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
+        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
         action="store_true",
     )
     read_parser.add_argument(
@@ -368,8 +368,8 @@ def cmdline_parser(defaults={}):
         "-of",
         "--outfields",
         help=(
-            'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, energies_binding (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
-            '"e" (energies_binding), '
+            'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
+            '"e" (docking_score), '
             '"le" (ligand efficiency), '
             '"delta" (delta energy from best pose), '
             '"ref_rmsd" (RMSD to reference pose), '
@@ -395,7 +395,7 @@ def cmdline_parser(defaults={}):
         "--order_results",
         help="Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
         "available fields are:  "
-        '"e" (energies_binding), '
+        '"e" (docking_score), '
         '"le" (ligand efficiency), '
         '"delta" (delta energy from best pose), '
         '"ref_rmsd" (RMSD to reference pose), '
@@ -852,6 +852,8 @@ class CLOptionParser:
                         f"--conflict_handing option {parsed_opts.duplicate_handling} not allowed. Reverting to default behavior."
                     )
                     conflict_handling = None
+            # set unused read options to None
+            parsed_opts.pymol = None
         else:
             self.save_receptor = False
             self.receptor_file = None

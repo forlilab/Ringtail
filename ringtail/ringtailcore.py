@@ -218,7 +218,7 @@ class RingtailCore:
             except Exception as e:
                 raise e
 
-    def produce_summary(self, columns=["energies_binding", "leff"], percentiles=[1, 10]) -> None:
+    def produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
         """Print summary of data in storage
         """
         summary_data = self.storageman.fetch_summary_data(columns, percentiles)
@@ -231,9 +231,9 @@ class RingtailCore:
         print("\nEnergy statistics:")
         print("=======================================")
         for col in columns:
-            if col == "energies_binding":
-                min_e = summary_data["min_energies_binding"]
-                max_e = summary_data["max_energies_binding"]
+            if col == "docking_score":
+                min_e = summary_data["min_docking_score"]
+                max_e = summary_data["max_docking_score"]
                 print(f"Energy (min)      : {min_e:.2f} kcal/mol")
                 print(f"Energy (max)      : {max_e:.2f} kcal/mol")
             elif col == "leff":
@@ -251,10 +251,10 @@ class RingtailCore:
 
             for col in columns:
                 for p in percentiles:
-                    if col == "energies_binding":
+                    if col == "docking_score":
                         p_string = f"Energy (top {p}% )"
                         p_string += ' ' * (colon_col - len(p_string))
-                        print(f"{p_string}: {summary_data[f'{p}%_energies_binding']:.2f} kcal/mol")
+                        print(f"{p_string}: {summary_data[f'{p}%_docking_score']:.2f} kcal/mol")
                     elif col == "leff":
                         p_string = f"LE     (top {p}% )"
                         p_string += ' ' * (colon_col - len(p_string))
@@ -750,7 +750,7 @@ class RingtailCore:
         """
         for (
             Pose_ID,
-            energies_binding,
+            docking_score,
             leff,
             ligand_pose,
             flexres_pose,
@@ -776,7 +776,7 @@ class RingtailCore:
                 interactions_str = ", ".join(interactions_list)
                 properties["Interactions"].append(interactions_str)
             # add properties to dictionary lists
-            properties["Binding energies"].append(energies_binding)
+            properties["Binding energies"].append(docking_score)
             properties["Ligand effiencies"].append(leff)
             # get pose coordinate info
             ligand_pose = json.loads(ligand_pose)
@@ -902,7 +902,7 @@ class OutputManager:
                 ),
                 label="Scatterplot bin count",
             )
-            self.ax.set_xlabel("Best Binding Energy / kcal/mol")
+            self.ax.set_xlabel("Best docking score / kcal/mol")
             self.ax.set_ylabel("Best Ligand Efficiency")
         except Exception as e:
             raise OutputError("Error occurred while initializing plot") from e
