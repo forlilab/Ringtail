@@ -69,7 +69,7 @@ The compounds used for the testing dataset were taken from the [NCI Diversity Se
 - __PDBQT__: Modified PDB format, used for receptors (input to AutoDock-GPU and Vina) and output ligand poses from AutoDock-Vina.
 - __Cluster__: Each DLG contains a number of independent runs, usually 20-50. These independent poses are then clustered by RMSD, giving groups of similar poses called clusters.
 - __Pose__: The predicted ligand shape and position for single run of a single ligand in a single receptor.
-- __Binding score/ binding energy__: The predicited binding energy from AutoDock.
+- __Docking score__: The predicited binding energy from AutoDock-GPU or Vina.
 - __Bookmark__: The set of ligands or ligand poses from a virtual screening passing a given set of filters. Stored within a virtual screening database as a view.
 - __Ringtail__: 
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
@@ -100,10 +100,10 @@ Total Stored Poses: 645
 Total Unique Interactions: 183
 
 Energy statistics:
-min_energies_binding: -7.93 kcal/mol
-max_energies_binding: -2.03 kcal/mol
-1%_energies_binding: -7.43 kcal/mol
-10%_energies_binding: -6.46 kcal/mol
+min_docking_score: -7.93 kcal/mol
+max_docking_score: -2.03 kcal/mol
+1%_docking_score: -7.43 kcal/mol
+10%_docking_score: -6.46 kcal/mol
 min_leff: -0.62 kcal/mol
 max_leff: -0.13 kcal/mol
 1%_leff: -0.58 kcal/mol
@@ -111,12 +111,12 @@ max_leff: -0.13 kcal/mol
 ```
 We could also have used the `--summary` option when writing the database to display this info at that time.
 
-Now, let us start filtering with a basic binding energy cutoff of -6 kcal/mol:
+Now, let us start filtering with a basic docking score cutoff of -6 kcal/mol:
 ```
 $ rt_process_vs.py read --input_db all_groups.db --eworst -6
 ```
 
-This produces an output log `output_log.txt` with the names of ligands passing the filter, as well as their binding energies. Let's now do another round of filtering, this time with an energy percentile filter of 5 percent (top 5% of coumpounds by binding energy). Each round of filtering is also stored in the database as a SQLite view, which we refer to as a "bookmark". We will also save this round of filtering with the bookmark name "ep5".
+This produces an output log `output_log.txt` with the names of ligands passing the filter, as well as their binding energies. Let's now do another round of filtering, this time with an energy percentile filter of 5 percent (top 5% of coumpounds by docking score). Each round of filtering is also stored in the database as a SQLite view, which we refer to as a "bookmark". We will also save this round of filtering with the bookmark name "ep5".
 
 ```
 $ rt_process_vs.py read --input_db all_groups.db --energy_percentile 5 --log ep5_log.txt --bookmark_name ep5
@@ -240,7 +240,7 @@ The `--interaction_tolerance` option also allows the user to give more leeway fo
 #### Read mode
 In `read` mode, an existing database is used to filter or export results.
 
-When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is `output_log.txt` and by default will include the ligand name and binding energy of every pose passing filtering criteria. The log name
+When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is `output_log.txt` and by default will include the ligand name and docking score of every pose passing filtering criteria. The log name
 may be changed with the `--log` option and the information written to the log can be specified with `--outfields`. The full list of available output fields may be seen by using the `--help` option with `read` mode (see example above).
 By default, only the information for the top-scoring binding pose will be written to the log. If desired, each individual passing pose can be written by using the `--output_all_poses` flag. The passing results may also be ordered in the log file using the `--order_results` option.
 
@@ -253,11 +253,11 @@ Filtering may take from seconds to minutes, depending on the size of the databas
 ##### Other available outputs
 The primary outputs from `rt_process_vs.py` are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
-The `--plot` flag generates a scatterplot of ligand efficiency vs binding energy for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with `--bookmark_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
+The `--plot` flag generates a scatterplot of ligand efficiency vs docking score for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with `--bookmark_name` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as `[filters_file].png` if a `--filters_file` is used, otherwise it is saved as `out.png`.
 
 The `--pymol` flag also generates a scatterplot of ligand efficiency vs docking score, but only for the ligands contained in the bookmark specified with `--bookmark_name`. It also launches a PyMol session and will display the ligands in PyMol when clicked on the scatterplot. N.B.: Some users may encounter a `ConnectionRefusedError`. If this happens, try manually launching PyMol (`pymol -R`) in a separate terminal window.
 
-Using the `--export_sdf_path` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the bookmark given with `--bookmark_name`. The SDF will contain poses passing the filter/in the bookmark ordered by increasing binding energy. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
+Using the `--export_sdf_path` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the bookmark given with `--bookmark_name`. The SDF will contain poses passing the filter/in the bookmark ordered by increasing docking score. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
 
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is `--export_bookmark_csv`, which takes a string for the name of a table or result bookmark in the database and returns the CSV of the data in that table. The file will be saved as `<table_name>.csv`.
 The second option is `--export_query_csv`. This takes a string of a properly-formatted SQL query to run on the database, returning the results of that query as `query.csv`. This option allows the user full, unobstructed access to all data in the database.
@@ -337,7 +337,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--export_bookmark_db |-xdb| Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db| FALSE      ||
 |--data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
 |--filter_bookmark |-fb| Filter over specified bookmark, not whole Results table. | FALSE       ||
-|--plot             |-p| Flag to create scatterplot of ligand efficiency vs binding energy for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        ||
+|--plot             |-p| Flag to create scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        ||
 |--pymol             |-py| Flag to launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with --bookmark_name will be ploted and displayed in PyMol when clicked on.| FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>
 |--eworst           |-e| Worst energy value accepted (kcal/mol)                | no_default  ||
 |--ebest            |-eb| Best energy value accepted (kcal/mol)                 | no default  ||

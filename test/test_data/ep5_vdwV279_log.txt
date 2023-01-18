@@ -1,0 +1,35 @@
+Filtered poses:
+***************
+##### PROPERTIES
+#   eworst :  [ none ]
+#    ebest :  [ none ]
+#  leworst :  [ none ]
+#   lebest :  [ none ]
+#  energy_percentile :  [ none ]
+#  le_percentile :  [ none ]
+#### INTERACTIONS
+#        V : ()A:VAL:279:
+#        H :  [ none ]
+#        R :  [ none ]
+
+Result bookmark name: ep5_vdwV279
+
+Number passing ligands: 13 
+---------------
+'11891', -6.91
+'15776', -7.12
+'11128', -7.25
+'13974', -7.75
+'127947', -7.0
+'127947', -6.96
+'136065', -7.11
+'8090', -7.93
+'8090', -7.08
+'83339', -7.43
+'99756', -6.95
+'8481', -6.93
+'77913', -7.41
+'5995', -7.11
+'3961', -7.05
+***************
+

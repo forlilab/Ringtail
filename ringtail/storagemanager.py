@@ -93,7 +93,7 @@ class StorageManager:
         self.interactions_initialized_flag = False
 
         self.field_to_column_name = {
-            "e": "energies_binding",
+            "e": "docking_score",
             "le": "leff",
             "delta": "deltas",
             "ref_rmsd": "reference_rmsd",
@@ -508,7 +508,7 @@ class StorageManager:
 
         No Longer Returned:
             DB cursor: contains
-                Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
+                Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
 
         Raises:
             NotImplementedError: Description
@@ -523,7 +523,7 @@ class StorageManager:
 
         No Longer Returned:
             DB cursor: contains
-                Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
+                Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
 
         Raises:
             NotImplementedError: Description
@@ -715,7 +715,7 @@ class StorageManager:
         receptor            VARCHAR[],
         pose_rank           INT[],
         run_number          INT[],
-        energies_binding    FLOAT(4),
+        docking_score    FLOAT(4),
         leff                FLOAT(4),
         deltas              FLOAT(4),
         cluster_rmsd        FLOAT(4),
@@ -877,7 +877,7 @@ class StorageManager:
         """Fetches cursor for best energies and leff for all ligands
 
         No Longer Returned:
-            DB Cursor: Cursor containing energies_binding,
+            DB Cursor: Cursor containing docking_score,
                 leff for the first pose for each ligand
 
         Raises:
@@ -886,7 +886,7 @@ class StorageManager:
         raise NotImplementedError
 
     def _generate_plot_all_results_query(self):
-        """Make DB-formatted query string to get energies_binding,
+        """Make DB-formatted query string to get docking_score,
             leff of first pose for each ligand
 
         No Longer Returned:
@@ -902,7 +902,7 @@ class StorageManager:
             passing filtering
 
         No Longer Returned:
-            SQLite cursor: Cursor containing energies_binding,
+            SQLite cursor: Cursor containing docking_score,
                 leff for the first pose for passing ligands
 
         Raises:
@@ -911,7 +911,7 @@ class StorageManager:
         raise NotImplementedError
 
     def _generate_plot_passing_results_query(self):
-        """Make DB-formatted query string to get energies_binding,
+        """Make DB-formatted query string to get docking_score,
             leff of first pose for passing ligands
 
         No Longer Returned:
@@ -1040,7 +1040,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _calc_percentile_cutoff(self, percentile, column="energies_binding"):
+    def _calc_percentile_cutoff(self, percentile, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
 
         Args:
@@ -1206,18 +1206,18 @@ class StorageManagerSQLite(StorageManager):
         super().__init__()
 
         self.energy_filter_sqlite_call_dict = {
-            "eworst": "energies_binding < {value}",
-            "ebest": "energies_binding > {value}",
+            "eworst": "docking_score < {value}",
+            "ebest": "docking_score > {value}",
             "leworst": "leff < {value}",
             "lebest": "leff > {value}",
         }
 
         self.energy_filter_col_name = {
-            "eworst": "energies_binding",
-            "ebest": "energies_binding",
+            "eworst": "docking_score",
+            "ebest": "docking_score",
             "leworst": "leff",
             "lebest": "leff",
-            "energy_percentile": "energies_binding",
+            "energy_percentile": "docking_score",
             "le_percentile": "leff",
         }
 
@@ -1312,7 +1312,7 @@ class StorageManagerSQLite(StorageManager):
             run_number, [4]
             cluster_rmsd, [5]
             reference_rmsd, [6]
-            energies_binding, [7]
+            docking_score, [7]
             leff, [8]
             deltas, [9]
             energies_inter, [10]
@@ -1539,7 +1539,7 @@ class StorageManagerSQLite(StorageManager):
         run_number,
         cluster_rmsd,
         reference_rmsd,
-        energies_binding,
+        docking_score,
         leff,
         deltas,
         energies_inter,
@@ -1756,7 +1756,7 @@ class StorageManagerSQLite(StorageManager):
             "SELECT * FROM {passing_view}".format(passing_view=self.results_view_name)
         )
 
-    def fetch_summary_data(self, columns=["energies_binding", "leff"], percentiles=[1,10]) -> dict:
+    def fetch_summary_data(self, columns=["docking_score", "leff"], percentiles=[1,10]) -> dict:
         """Collect summary data for database:
             Num Ligands
             Num stored poses
@@ -1857,10 +1857,10 @@ class StorageManagerSQLite(StorageManager):
             ligname (string): name of ligand to fetch coordinates for
 
         Returns:
-            SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
+            SQLite cursor: contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
+        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
             results_view=self.results_view_name, ligand=ligname
         )
         return self._run_query(query)
@@ -1872,10 +1872,10 @@ class StorageManagerSQLite(StorageManager):
             ligname (string): name of ligand to fetch coordinates for
 
         Returns:
-            SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
+            SQLite cursor: contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
+        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
             ligand=ligname, results_view=self.results_view_name
         )
         return self._run_query(query)
@@ -1887,10 +1887,10 @@ class StorageManagerSQLite(StorageManager):
             pose_ID (int): name of ligand to fetch coordinates for
 
         Returns:
-            SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
+            SQLite cursor: contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = f"SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
+        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
         return self._run_query(query)
 
     def fetch_interaction_bitvector(self, pose_id):
@@ -2249,7 +2249,7 @@ class StorageManagerSQLite(StorageManager):
         receptor            VARCHAR[],
         pose_rank           INT[],
         run_number          INT[],
-        energies_binding    FLOAT(4),
+        docking_score    FLOAT(4),
         leff                FLOAT(4),
         deltas              FLOAT(4),
         cluster_rmsd        FLOAT(4),
@@ -2299,7 +2299,7 @@ class StorageManagerSQLite(StorageManager):
             receptor            VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
-            energies_binding    FLOAT(4),
+            docking_score    FLOAT(4),
             leff                FLOAT(4),
             deltas              FLOAT(4),
             cluster_rmsd        FLOAT(4),
@@ -2617,38 +2617,38 @@ class StorageManagerSQLite(StorageManager):
         """Fetches cursor for best energies and leff for all ligands
 
         Returns:
-            SQLite Cursor: Cursor containing energies_binding,
+            SQLite Cursor: Cursor containing docking_score,
                 leff for the first pose for each ligand
         """
         return self._run_query(self._generate_plot_all_results_query())
 
     def _generate_plot_all_results_query(self):
-        """Make SQLite-formatted query string to get energies_binding,
+        """Make SQLite-formatted query string to get docking_score,
             leff of first pose of all ligands
 
         Returns:
             String: SQLite-formatted query string
         """
-        return "SELECT energies_binding, leff FROM Results GROUP BY LigName"
+        return "SELECT docking_score, leff FROM Results GROUP BY LigName"
 
     def _fetch_passing_plot_data(self):
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
 
         Returns:
-            SQLite cursor: Cursor containing energies_binding,
+            SQLite cursor: Cursor containing docking_score,
                 leff for the first pose for passing ligands
         """
         return self._run_query(self._generate_plot_passing_results_query())
 
     def _generate_plot_passing_results_query(self):
-        """Make SQLite-formatted query string to get energies_binding,
+        """Make SQLite-formatted query string to get docking_score,
             leff of first pose for passing ligands
 
         Returns:
             String: SQLite-formatted query string
         """
-        return "SELECT energies_binding, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
+        return "SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
             results_view=self.results_view_name
         )
 
@@ -2919,7 +2919,7 @@ class StorageManagerSQLite(StorageManager):
                         continue
                     name_sql_str = " LigName LIKE '%{value}%' OR".format(value=name)
                     sql_ligand_string += name_sql_str
-            if kw == "M":
+            if kw == "M" and ligand_filters[kw] is not None:
                 maxatom_sql_str = " mol_num_atms(ligand_rdmol) <= {} {}".format(ligand_filters[kw], logical_operator)
                 sql_ligand_string += maxatom_sql_str
             if kw == "S":
@@ -3024,14 +3024,14 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             String: SQLite-formatted string for creating
-                percent ranks on energies_binding and leff
+                percent ranks on docking_score and leff
         """
         column_names = ",".join(self._fetch_results_column_names())
-        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY energies_binding) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results Group BY LigName".format(
+        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY docking_score) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results Group BY LigName".format(
             columns=column_names
         )
 
-    def _calc_percentile_cutoff(self, percentile: float, column="energies_binding"):
+    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
 
         Args:
