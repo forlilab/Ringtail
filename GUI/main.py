@@ -68,8 +68,12 @@ class Ui_MainWindow(object):
         self.receptorLabel = QtWidgets.QLabel(self.writeEngineGroupBox)
         self.receptorLabel.setGeometry(QtCore.QRect(10, 90, 131, 17))
         self.receptorLabel.setObjectName("receptorLabel")
+        self.receptorLineEdit = QtWidgets.QLineEdit(self.writeEngineGroupBox)
+        self.receptorLineEdit.setGeometry(QtCore.QRect(140, 90, 161, 25))
+        self.receptorLineEdit.setObjectName("receptorLineEdit")
+        self.receptorLineEdit.setEnabled(False)
         self.browseReceptorButton = QtWidgets.QPushButton(self.writeEngineGroupBox)
-        self.browseReceptorButton.setGeometry(QtCore.QRect(190, 90, 121, 25))
+        self.browseReceptorButton.setGeometry(QtCore.QRect(310, 90, 71, 25))
         self.browseReceptorButton.setObjectName("browseReceptorButton")
         
         self.writeLigandsGroupBox = QtWidgets.QGroupBox(self.writeTab)
@@ -227,6 +231,7 @@ class Ui_MainWindow(object):
         self.dbLineEdit.textChanged.connect(self.enable_process)
         self.writeLigandsPatternLineEdit.textChanged.connect(self.set_ligands_pattern)
         self.writeLigandsSelectLineEdit.textChanged.connect(self.set_ligands_selection)
+        self.receptorLineEdit.textChanged.connect(self.set_receptor_filename)
         
         self.loadDbButton.clicked.connect(self.select_db)
         self.browseReceptorButton.clicked.connect(self.select_receptor)
@@ -251,7 +256,6 @@ class Ui_MainWindow(object):
         self.disable_everything()
         if self.db is None:
             self.proceedButton.setEnabled(False)
-        self.writeLigandsFromFileRadioButton.click()
         #-----------------------------------------------------------------#
         
     # CLASS METHODS
@@ -264,6 +268,13 @@ class Ui_MainWindow(object):
         
     def enable_receptor_groupBox(self):
         self.writeEngineGroupBox.setEnabled(True)
+        
+    def enable_ligands_groupBox(self):
+        self.writeLigandsGroupBox.setEnabled(True)
+        self.writeLigandsFromFileRadioButton.click()
+
+    def enable_interactions_groupBox(self):
+        self.writeInteractionsGroupBox.setEnabled(True)
     
     # GENERAL
     def create_db(self):
@@ -327,9 +338,16 @@ class Ui_MainWindow(object):
     
     # WRITE -> RECEPTOR
     def select_receptor(self):
-        self.receptor_file = browse_file("All Files (*)")[0]
-        if self.receptor_file:
+        self.receptorLineEdit.setText(browse_file("All Files (*)")[0])
+        
+    def set_receptor_filename(self):
+        self.receptor_file = self.receptorLineEdit.text()
+        if self.receptor_file == "":
+            self.receptor_file = None
+        if self.receptor_file is not None:
             self.enable_process()
+            self.enable_ligands_groupBox()
+            self.enable_interactions_groupBox()
     
     def set_engine(self):
         self.selected_engine = self.autodockComboBox.currentText()
