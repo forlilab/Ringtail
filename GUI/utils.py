@@ -37,3 +37,9 @@ def save_file():
     with open(file[0], 'w') as f:
         f.write("File saving try.")
     return file
+
+def get_energy_max_min():
+    return (370, -12)
+
+def get_ligands_efficiency_max_min():
+    return (3000, -3000)

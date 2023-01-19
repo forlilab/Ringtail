@@ -30,7 +30,7 @@
      <bool>false</bool>
     </property>
     <property name="currentIndex">
-     <number>0</number>
+     <number>1</number>
     </property>
     <widget class="QWidget" name="writeTab">
      <attribute name="title">
@@ -366,7 +366,7 @@
        </rect>
       </property>
       <property name="text">
-       <string>Proceed</string>
+       <string>Process</string>
       </property>
      </widget>
     </widget>
@@ -380,7 +380,7 @@
         <x>10</x>
         <y>0</y>
         <width>381</width>
-        <height>361</height>
+        <height>221</height>
        </rect>
       </property>
       <property name="title">
@@ -403,14 +403,27 @@
      <widget class="QGroupBox" name="readLigandsGroupBox">
       <property name="geometry">
        <rect>
-        <x>400</x>
+        <x>10</x>
         <y>230</y>
-        <width>401</width>
+        <width>381</width>
         <height>131</height>
        </rect>
       </property>
       <property name="title">
        <string>Ligand</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pushButton_2">
+      <property name="geometry">
+       <rect>
+        <x>700</x>
+        <y>340</y>
+        <width>89</width>
+        <height>25</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>PushButton</string>
       </property>
      </widget>
     </widget>

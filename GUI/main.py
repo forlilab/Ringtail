@@ -13,7 +13,8 @@ sys.path.append(ringtail_gui_path)
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from utils import show_message, browse_directory, browse_file, save_file
+from utils import show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min
+from range_slider import RangeSlider
 import multiprocessing
 
 
@@ -27,6 +28,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.verbose = False
         self.debug = False
         
+        # WRITE
         # Interactions
         self.add_interactions = False
         self.h_cutoff_distance = None
@@ -43,10 +45,19 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         
         # Receptor
         self.receptor_file = None
+        
+        # READ
+        # Properties
+        self.absolute = False
+        self.percentile = False
+        self.ligands_efficiency_range = (None, None)
+        self.energy_range = (None, None)
+        self.ligands_efficiency_percentile = None
+        self.energy_percentile = None
     
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(800, 601)
+        MainWindow.setFixedSize(800, 601)
         MainWindow.setAutoFillBackground(True)
         
         self.centralwidget = QtWidgets.QWidget(MainWindow)
@@ -158,16 +169,83 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.readTab = QtWidgets.QWidget()
         self.readTab.setObjectName("readTab")
         self.readPropertiesGroupBox = QtWidgets.QGroupBox(self.readTab)
-        self.readPropertiesGroupBox.setGeometry(QtCore.QRect(10, 0, 381, 361))
+        self.readPropertiesGroupBox.setGeometry(QtCore.QRect(10, 0, 381, 221))
         self.readPropertiesGroupBox.setObjectName("readPropertiesGroupBox")
+        
+        self.readLigandsGroupBox = QtWidgets.QGroupBox(self.readTab)
+        self.readLigandsGroupBox.setGeometry(QtCore.QRect(10, 230, 381, 131))
+        self.readLigandsGroupBox.setObjectName("readLigandsGroupBox")
         
         self.readInteractionsGroupBox = QtWidgets.QGroupBox(self.readTab)
         self.readInteractionsGroupBox.setGeometry(QtCore.QRect(400, 0, 401, 221))
         self.readInteractionsGroupBox.setObjectName("readInteractionsGroupBox")
         
-        self.readLigandsGroupBox = QtWidgets.QGroupBox(self.readTab)
-        self.readLigandsGroupBox.setGeometry(QtCore.QRect(400, 230, 401, 131))
-        self.readLigandsGroupBox.setObjectName("readLigandsGroupBox")
+        self.readProceedButton = QtWidgets.QPushButton(self.readTab)
+        self.readProceedButton.setGeometry(QtCore.QRect(688, 304, 101, 61))
+        self.readProceedButton.setObjectName("readProceedButton")
+        
+        # POPULATING PROPERTIES GROUP
+        self.readAbsoluteRadioButton = QtWidgets.QRadioButton(self.readPropertiesGroupBox)
+        self.readAbsoluteRadioButton.setObjectName("readAbsoluteRadioButton")
+        
+        self.readPercentileRadioButton = QtWidgets.QRadioButton(self.readPropertiesGroupBox)
+        self.readPercentileRadioButton.setObjectName("readPercentileRadioButton")
+        
+        self.gridContainer = QtWidgets.QGridLayout()
+        
+        self.readEnergyLabel = QtWidgets.QLabel(self.readPropertiesGroupBox)
+        self.readEnergyLabel.setObjectName("readEnergyLabel")
+        
+        self.readEnergySlider = RangeSlider(QtCore.Qt.Horizontal)
+        self.readEnergySlider.setMinimumHeight(30)
+        self.readEnergySlider.setObjectName("readAbsoluteEnergySlider")
+        
+        self.minEnergySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
+        self.minEnergySpinBox.setFixedWidth(51)
+        self.minEnergySpinBox.setFixedHeight(26)
+        self.minEnergySpinBox.setValue(self.readEnergySlider.minimum())
+        self.minEnergySpinBox.setObjectName("minEnergySpinBox")
+        self.maxEnergySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
+        self.maxEnergySpinBox.setFixedWidth(51)
+        self.maxEnergySpinBox.setFixedHeight(26)
+        self.maxEnergySpinBox.setValue(self.readEnergySlider.maximum())
+        self.maxEnergySpinBox.setObjectName("maxEnergySpinBox")        
+        
+        self.readLigandsEfficiencyLabel = QtWidgets.QLabel(self.readPropertiesGroupBox)
+        self.readLigandsEfficiencyLabel.setObjectName("readLigandsEfficiencyLabel")
+        
+        self.readLigandsEfficiencySlider = RangeSlider(QtCore.Qt.Horizontal)
+        self.readLigandsEfficiencySlider.setMinimumHeight(30)
+        self.readLigandsEfficiencySlider.setObjectName("readAbsoluteLigandsEfficiencySlider")
+        
+        self.minLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
+        self.minLigandsEfficiencySpinBox.setFixedWidth(51)
+        self.minLigandsEfficiencySpinBox.setFixedHeight(26)
+        self.minLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.minimum()/100)
+        self.minLigandsEfficiencySpinBox.setObjectName("minLigandsEfficiencySpinBox")
+        self.maxLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
+        self.maxLigandsEfficiencySpinBox.setFixedWidth(51)
+        self.maxLigandsEfficiencySpinBox.setFixedHeight(26)
+        self.maxLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.maximum()/100)
+        self.maxLigandsEfficiencySpinBox.setObjectName("maxLigandsEfficiencySpinBox")
+        
+        self.gridContainer.setSpacing(2)
+        self.gridContainer.addWidget(self.readAbsoluteRadioButton, 0, 0)
+        self.gridContainer.addWidget(self.readPercentileRadioButton, 0, 1)
+        self.gridContainer.addWidget(self.readEnergyLabel, 1, 0)
+        self.gridContainer.addWidget(self.readEnergySlider, 2, 0, 1, 1)
+        self.gridContainer.addWidget(self.minEnergySpinBox, 3, 0)
+        self.gridContainer.addWidget(self.maxEnergySpinBox, 3, 1)
+        self.gridContainer.addWidget(self.readLigandsEfficiencyLabel, 4, 0)
+        self.gridContainer.addWidget(self.readLigandsEfficiencySlider, 5, 0, 1, 1)
+        self.gridContainer.addWidget(self.minLigandsEfficiencySpinBox, 6, 0)
+        self.gridContainer.addWidget(self.maxLigandsEfficiencySpinBox, 6, 1)
+        self.gridContainer.setObjectName("gridContainer")
+        self.readPropertiesGroupBox.setLayout(self.gridContainer)
+        
+        # POPULATING LIGAND FILTER GROUP
+        
+        # POPULATING INTERACTIONS FILTER GROUP
         
         self.tabWidget.addTab(self.readTab, "")
         self.dbLineEdit = QtWidgets.QLineEdit(self.centralwidget)
@@ -209,6 +287,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.logo_label.setGeometry(QtCore.QRect(640, 10, 171, 60))
         
         MainWindow.setCentralWidget(self.centralwidget)
+        # self.setFixedSize(800, 601)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
@@ -235,6 +314,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         
         # EVENTS HANDLING
         #-----------------------------------------------------------------#
+        # WRITE
         self.autodockComboBox.currentIndexChanged.connect(self.set_engine)
         self.numberOfProcessorsBox.valueChanged.connect(self.set_number_of_processors)
         self.hSpinBox.valueChanged.connect(self.set_h_cutoff_distance)
@@ -258,6 +338,15 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.writeLigandsSelectButton.clicked.connect(self.select_ligands_sources)
         self.addInteractionsCheckBox.clicked.connect(self.set_add_interactions)
         
+        # READ
+        self.readAbsoluteRadioButton.clicked.connect(self.set_absolute_or_percentile)
+        self.readPercentileRadioButton.clicked.connect(self.set_absolute_or_percentile)
+        self.readEnergySlider.sliderMoved.connect(self.update_energy_spinboxes)
+        self.maxEnergySpinBox.valueChanged.connect(self.update_energy_slider_max)
+        self.minEnergySpinBox.valueChanged.connect(self.update_energy_slider_min)
+        self.readLigandsEfficiencySlider.sliderMoved.connect(self.update_ligands_spinboxes)
+        self.maxLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_max)
+        self.minLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_min)
         #-----------------------------------------------------------------#
         
                 # INITIALIZATION
@@ -268,6 +357,9 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.disable_everything()
         if self.db is None:
             self.proceedButton.setEnabled(False)
+            
+        # READ
+        self.readAbsoluteRadioButton.click()
         #-----------------------------------------------------------------#
         
     # CLASS METHODS
@@ -415,14 +507,12 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
             self.ligands_directory_pattern = self.writeLigandsPatternLineEdit.text()
         else:
             self.ligands_directory_pattern = None
-        print(f"Pattern: {self.ligands_directory_pattern}")
     
     def set_ligands_recursive_search(self):
         if self.writeLigandsRecursiveCheckBox.isChecked():
             self.recursive = True
         else:
             self.recursive = False
-        print(f"Recursive: {self.recursive}")
             
     def select_ligands_sources(self):
         if self.writeLigandsFromDirectoryRadioButton.isChecked():
@@ -433,8 +523,6 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
             self.ligands_file = browse_file()[0]
             self.ligands_directory = None
             self.writeLigandsSelectLineEdit.setText(self.ligands_file)
-        print(f"Ligands directory: {self.ligands_directory}")
-        print(f"Ligands file: {self.ligands_file}")
         
     def set_ligands_selection(self):
         if self.writeLigandsSelectLineEdit.text() == "":
@@ -471,6 +559,84 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
             self.tolerance = None
     #-----------------------------------------------------------------#
 
+    # READ -> PROPERTIES
+    def set_absolute_or_percentile(self):
+        if self.readAbsoluteRadioButton.isChecked():
+            self.absolute = True
+            self.percentile = False
+            self.hide_sliders(False)
+            energy_max, energy_min = get_energy_max_min()
+            lig_eff_max, lig_eff_min = get_ligands_efficiency_max_min()
+            self.readEnergySlider.setMaximum(energy_max)
+            self.readEnergySlider.setMinimum(energy_min)
+            self.readEnergySlider.setHigh(self.readEnergySlider.maximum())
+            self.readEnergySlider.setLow(self.readEnergySlider.minimum())
+            self.readLigandsEfficiencySlider.setMaximum(lig_eff_max)
+            self.readLigandsEfficiencySlider.setMinimum(lig_eff_min)
+            self.readLigandsEfficiencySlider.setHigh(self.readLigandsEfficiencySlider.maximum())
+            self.readLigandsEfficiencySlider.setLow(self.readLigandsEfficiencySlider.minimum())
+        elif self.readPercentileRadioButton.isChecked():
+            self.percentile = True
+            self.absolute = False
+            self.hide_sliders(True)
+        self.setup_spinboxes()
+            
+    
+    def hide_sliders(self, hide):
+        if hide:
+            self.readEnergySlider.setVisible(False)
+            self.readEnergySlider.setEnabled(False)
+            self.readLigandsEfficiencySlider.setVisible(False)
+            self.readLigandsEfficiencySlider.setEnabled(False)
+            self.maxLigandsEfficiencySpinBox.setVisible(False)
+            self.maxLigandsEfficiencySpinBox.setEnabled(False)
+            self.maxEnergySpinBox.setVisible(False)
+            self.maxEnergySpinBox.setEnabled(False)
+        else:
+            self.readEnergySlider.setVisible(True)
+            self.readEnergySlider.setEnabled(True)
+            self.readLigandsEfficiencySlider.setVisible(True)
+            self.readLigandsEfficiencySlider.setEnabled(True)
+            self.maxLigandsEfficiencySpinBox.setVisible(True)
+            self.maxLigandsEfficiencySpinBox.setEnabled(True)
+            self.maxEnergySpinBox.setVisible(True)
+            self.maxEnergySpinBox.setEnabled(True)
+            
+    def setup_spinboxes(self):
+        if self.readAbsoluteRadioButton.isChecked():
+            self.maxEnergySpinBox.setMaximum(self.readEnergySlider.maximum())
+            self.maxEnergySpinBox.setMinimum(self.readEnergySlider.minimum())
+            self.minEnergySpinBox.setMaximum(self.readEnergySlider.maximum())
+            self.minEnergySpinBox.setMinimum(self.readEnergySlider.minimum())
+            self.maxLigandsEfficiencySpinBox.setMaximum(self.readLigandsEfficiencySlider.maximum()/1000)
+            self.maxLigandsEfficiencySpinBox.setMinimum(self.readLigandsEfficiencySlider.minimum()/1000)
+            self.minLigandsEfficiencySpinBox.setMaximum(self.readLigandsEfficiencySlider.maximum()/1000)
+            self.minLigandsEfficiencySpinBox.setMinimum(self.readLigandsEfficiencySlider.minimum()/1000)
+        else:
+            self.minEnergySpinBox.setMaximum(100)
+            self.minEnergySpinBox.setMinimum(0)
+            self.minLigandsEfficiencySpinBox.setMaximum(100)
+            self.minLigandsEfficiencySpinBox.setMinimum(0)
+    
+    def update_energy_spinboxes(self):
+        self.maxEnergySpinBox.setValue(self.readEnergySlider.high())
+        self.minEnergySpinBox.setValue(self.readEnergySlider.low())
+    
+    def update_energy_slider_max(self):
+        self.readEnergySlider.setHigh(int(self.maxEnergySpinBox.value()))
+    
+    def update_energy_slider_min(self):
+        self.readEnergySlider.setLow(int(self.minEnergySpinBox.value()))
+        
+    def update_ligands_spinboxes(self):
+        self.maxLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.high() / 1000)
+        self.minLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.low() / 1000)
+        
+    def update_ligand_slider_max(self):
+        self.readLigandsEfficiencySlider.setHigh(int(self.maxLigandsEfficiencySpinBox.value() * 1000))
+    
+    def update_ligand_slider_min(self):
+        self.readLigandsEfficiencySlider.setLow(int(self.minLigandsEfficiencySpinBox.value() * 1000))
     #-----------------------------------------------------------------#
         
     def retranslateUi(self, MainWindow):
@@ -499,10 +665,6 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.hCutoffLabel.setText(_translate("MainWindow", "H"))
         self.vdwCutoffLabel.setText(_translate("MainWindow", "VDW"))
         self.writeLigandsGroupBox.setTitle(_translate("MainWindow", "Ligands:"))
-        
-        self.readPropertiesGroupBox.setTitle(_translate("MainWindow", "Properties:"))
-        self.readInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions:"))
-        self.readLigandsGroupBox.setTitle(_translate("MainWindow", "Ligands:"))
         self.writeLigandsFromFileRadioButton.setText(_translate("MainWindow", "From file"))
         self.writeLigandsFromDirectoryRadioButton.setText(_translate("MainWindow", "From directory"))
         self.writeLigandsPatternLabel.setText(_translate("MainWindow", "Pattern:"))
@@ -510,6 +672,17 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.writeLigandsSelectLabel.setText(_translate("MainWindow", "Select ligands source:"))
         self.writeLigandsSelectButton.setText(_translate("MainWindow", "Add ..."))
         self.addInteractionsCheckBox.setText(_translate("MainWindow", "Add interactions"))
+        
+        self.readPropertiesGroupBox.setTitle(_translate("MainWindow", "Properties:"))
+        self.readAbsoluteRadioButton.setText(_translate("MainWindow", "Absolute"))
+        self.readPercentileRadioButton.setText(_translate("MainWindow", "Percentile"))
+        self.readEnergyLabel.setText(_translate("MainWindow", "Energy:"))
+        self.readLigandsEfficiencyLabel.setText(_translate("MainWindow", "Ligands Efficiency:"))
+        
+        self.readInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions:"))
+        self.readLigandsGroupBox.setTitle(_translate("MainWindow", "Ligands:"))
+        self.readProceedButton.setText(_translate("MainWindow", "Process"))
+        
         
 if __name__ == "__main__":
     import sys
