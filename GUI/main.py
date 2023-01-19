@@ -54,6 +54,10 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.energy_range = (None, None)
         self.ligands_efficiency_percentile = None
         self.energy_percentile = None
+        
+        # LIGAND
+        self.selected_ligand_name_from_list = None
+        self.ligand_names = list()
     
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -244,6 +248,25 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.readPropertiesGroupBox.setLayout(self.gridContainer)
         
         # POPULATING LIGAND FILTER GROUP
+        self.readLigandLabel = QtWidgets.QLabel(self.readLigandsGroupBox)
+        self.readLigandLabel.setGeometry(QtCore.QRect(10, 30, 150, 17))
+        self.readLigandLabel.setObjectName("readLigandLabel")
+        
+        self.readLigandAddButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
+        self.readLigandAddButton.setGeometry(QtCore.QRect(258, 30, 41, 25))
+        icon = QtGui.QIcon.fromTheme("add")
+        self.readLigandAddButton.setIcon(icon)
+        self.readLigandAddButton.setObjectName("readLigandAddButton")
+        self.readLigandDeleteButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
+        self.readLigandDeleteButton.setGeometry(QtCore.QRect(320, 30, 41, 25))
+        icon = QtGui.QIcon.fromTheme("remove")
+        self.readLigandDeleteButton.setIcon(icon)
+        self.readLigandDeleteButton.setObjectName("readLigandDeleteButton")
+        
+        
+        self.readLigandListWidget = QtWidgets.QListWidget(self.readLigandsGroupBox)
+        self.readLigandListWidget.setGeometry(10, 59, 361, 70)
+        
         
         # POPULATING INTERACTIONS FILTER GROUP
         
@@ -347,6 +370,10 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.readLigandsEfficiencySlider.sliderMoved.connect(self.update_ligands_spinboxes)
         self.maxLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_max)
         self.minLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_min)
+        self.readLigandAddButton.clicked.connect(self.get_ligand_name)
+        self.readLigandDeleteButton.clicked.connect(self.delete_ligand_from_list)
+        self.readLigandListWidget.itemClicked.connect(self.item_selected_from_list)
+        self.readProceedButton.clicked.connect(self.get_ligand_names_from_widget)
         #-----------------------------------------------------------------#
         
                 # INITIALIZATION
@@ -606,12 +633,16 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         if self.readAbsoluteRadioButton.isChecked():
             self.maxEnergySpinBox.setMaximum(self.readEnergySlider.maximum())
             self.maxEnergySpinBox.setMinimum(self.readEnergySlider.minimum())
+            self.maxEnergySpinBox.setValue(self.readEnergySlider.high())
             self.minEnergySpinBox.setMaximum(self.readEnergySlider.maximum())
             self.minEnergySpinBox.setMinimum(self.readEnergySlider.minimum())
+            self.minEnergySpinBox.setValue(self.readEnergySlider.low())
             self.maxLigandsEfficiencySpinBox.setMaximum(self.readLigandsEfficiencySlider.maximum()/1000)
             self.maxLigandsEfficiencySpinBox.setMinimum(self.readLigandsEfficiencySlider.minimum()/1000)
+            self.maxLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.high())
             self.minLigandsEfficiencySpinBox.setMaximum(self.readLigandsEfficiencySlider.maximum()/1000)
             self.minLigandsEfficiencySpinBox.setMinimum(self.readLigandsEfficiencySlider.minimum()/1000)
+            self.minLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.low())
         else:
             self.minEnergySpinBox.setMaximum(100)
             self.minEnergySpinBox.setMinimum(0)
@@ -624,9 +655,19 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
     
     def update_energy_slider_max(self):
         self.readEnergySlider.setHigh(int(self.maxEnergySpinBox.value()))
+        if self.absolute:
+            self.energy_percentile = None
+            self.energy_range = (self.maxEnergySpinBox.value(), self.minEnergySpinBox.value())
+
     
     def update_energy_slider_min(self):
         self.readEnergySlider.setLow(int(self.minEnergySpinBox.value()))
+        if self.absolute:
+            self.energy_percentile = None
+            self.energy_range = (self.maxEnergySpinBox.value(), self.minEnergySpinBox.value())
+        elif self.percentile:
+            self.energy_range = (None, None)
+            self.energy_percentile = self.minEnergySpinBox.value()
         
     def update_ligands_spinboxes(self):
         self.maxLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.high() / 1000)
@@ -634,9 +675,48 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         
     def update_ligand_slider_max(self):
         self.readLigandsEfficiencySlider.setHigh(int(self.maxLigandsEfficiencySpinBox.value() * 1000))
-    
+        if self.absolute:
+            self.ligands_efficiency_percentile = None
+            self.ligands_efficiency_range = (self.maxLigandsEfficiencySpinBox.value(), self.minLigandsEfficiencySpinBox.value())
+        
     def update_ligand_slider_min(self):
         self.readLigandsEfficiencySlider.setLow(int(self.minLigandsEfficiencySpinBox.value() * 1000))
+        if self.absolute:
+            self.ligands_efficiency_range = (self.maxLigandsEfficiencySpinBox.value(), self.minLigandsEfficiencySpinBox.value())
+            self.ligands_efficiency_percentile = None
+        elif self.percentile:
+            self.ligands_efficiency_range = (None, None)
+            self.ligands_efficiency_percentile = self.minLigandsEfficiencySpinBox.value()
+        
+    # READ -> LIGAND
+    def get_ligand_name(self):
+        name, done = QtWidgets.QInputDialog.getText(self, "Input Dialog", "Enter ligand name:")
+        if done:
+            item = QtWidgets.QListWidgetItem(name)
+            self.readLigandListWidget.addItem(item)
+            self.ligand_names.append(item.text())
+            print(f"Add {self.ligand_names}")
+            
+    def delete_ligand_from_list(self):
+        if self.selected_ligand_name_from_list is not None:
+            for idx in range(0, self.readLigandListWidget.count()):
+                if self.readLigandListWidget.item(idx) == self.selected_ligand_name_from_list:
+                    self.readLigandListWidget.takeItem(idx)
+                    del self.ligand_names[idx]
+                    self.selected_ligand_name_from_list = None
+                    print(f"Delete {self.ligand_names}")
+            
+    def item_selected_from_list(self, item):
+        self.selected_ligand_name_from_list = item
+        
+    def get_ligand_names_from_widget(self):
+        if self.readLigandListWidget.count() > 0:
+            for idx in range(0, self.readLigandListWidget.count()):
+                item = self.readLigandListWidget.item(idx).text()
+                if item not in self.ligand_names:
+                    self.ligand_names.append(item)
+                
+        print(self.ligand_names)
     #-----------------------------------------------------------------#
         
     def retranslateUi(self, MainWindow):
@@ -682,6 +762,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.readInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions:"))
         self.readLigandsGroupBox.setTitle(_translate("MainWindow", "Ligands:"))
         self.readProceedButton.setText(_translate("MainWindow", "Process"))
+        self.readLigandLabel.setText(_translate("MainWindow", "Selected ligands:"))
         
         
 if __name__ == "__main__":

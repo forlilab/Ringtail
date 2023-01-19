@@ -383,9 +383,45 @@
         <height>221</height>
        </rect>
       </property>
+      <property name="autoFillBackground">
+       <bool>false</bool>
+      </property>
       <property name="title">
        <string>Properties</string>
       </property>
+      <widget class="QSlider" name="horizontalSlider">
+       <property name="geometry">
+        <rect>
+         <x>60</x>
+         <y>60</y>
+         <width>160</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="autoFillBackground">
+        <bool>false</bool>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">groove:horizontal {
+    border: 1px solid #999999;
+    height: 8px; /* the groove expands to the size of the slider by default. by giving it a height, it has a fixed size */
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #B1B1B1, stop:1 #c4c4c4);
+    margin: 2px 0;
+}</string>
+       </property>
+       <property name="minimum">
+        <number>-5</number>
+       </property>
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="invertedAppearance">
+        <bool>false</bool>
+       </property>
+       <property name="invertedControls">
+        <bool>false</bool>
+       </property>
+      </widget>
      </widget>
      <widget class="QGroupBox" name="readInteractionsGroupBox">
       <property name="geometry">
@@ -412,6 +448,74 @@
       <property name="title">
        <string>Ligand</string>
       </property>
+      <widget class="QLabel" name="label_2">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>30</y>
+         <width>67</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>TextLabel</string>
+       </property>
+      </widget>
+      <widget class="QScrollArea" name="scrollArea">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>69</y>
+         <width>361</width>
+         <height>61</height>
+        </rect>
+       </property>
+       <property name="widgetResizable">
+        <bool>true</bool>
+       </property>
+       <widget class="QWidget" name="scrollAreaWidgetContents">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>359</width>
+          <height>59</height>
+         </rect>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QPushButton" name="pushButton_3">
+       <property name="geometry">
+        <rect>
+         <x>258</x>
+         <y>30</y>
+         <width>41</width>
+         <height>25</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset theme="add"/>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="pushButton_4">
+       <property name="geometry">
+        <rect>
+         <x>320</x>
+         <y>30</y>
+         <width>41</width>
+         <height>25</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset theme="remove"/>
+       </property>
+      </widget>
      </widget>
      <widget class="QPushButton" name="pushButton_2">
       <property name="geometry">
