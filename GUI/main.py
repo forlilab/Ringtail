@@ -127,7 +127,6 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.writeInteractionsGroupBox = QtWidgets.QGroupBox(self.writeTab)
         self.writeInteractionsGroupBox.setGeometry(QtCore.QRect(410, 0, 381, 251))
         self.writeInteractionsGroupBox.setObjectName("writeInteractionsGroupBox")
-        
         self.maxPosesLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
         self.maxPosesLabel.setGeometry(QtCore.QRect(10, 30, 81, 17))
         self.maxPosesLabel.setObjectName("maxPosesLabel")
@@ -175,19 +174,6 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.readPropertiesGroupBox = QtWidgets.QGroupBox(self.readTab)
         self.readPropertiesGroupBox.setGeometry(QtCore.QRect(10, 0, 381, 221))
         self.readPropertiesGroupBox.setObjectName("readPropertiesGroupBox")
-        
-        self.readLigandsGroupBox = QtWidgets.QGroupBox(self.readTab)
-        self.readLigandsGroupBox.setGeometry(QtCore.QRect(10, 230, 381, 131))
-        self.readLigandsGroupBox.setObjectName("readLigandsGroupBox")
-        
-        self.readInteractionsGroupBox = QtWidgets.QGroupBox(self.readTab)
-        self.readInteractionsGroupBox.setGeometry(QtCore.QRect(400, 0, 401, 221))
-        self.readInteractionsGroupBox.setObjectName("readInteractionsGroupBox")
-        
-        self.readProceedButton = QtWidgets.QPushButton(self.readTab)
-        self.readProceedButton.setGeometry(QtCore.QRect(688, 304, 101, 61))
-        self.readProceedButton.setObjectName("readProceedButton")
-        
         # POPULATING PROPERTIES GROUP
         self.readAbsoluteRadioButton = QtWidgets.QRadioButton(self.readPropertiesGroupBox)
         self.readAbsoluteRadioButton.setObjectName("readAbsoluteRadioButton")
@@ -247,6 +233,9 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.gridContainer.setObjectName("gridContainer")
         self.readPropertiesGroupBox.setLayout(self.gridContainer)
         
+        self.readLigandsGroupBox = QtWidgets.QGroupBox(self.readTab)
+        self.readLigandsGroupBox.setGeometry(QtCore.QRect(10, 230, 381, 131))
+        self.readLigandsGroupBox.setObjectName("readLigandsGroupBox")
         # POPULATING LIGAND FILTER GROUP
         self.readLigandLabel = QtWidgets.QLabel(self.readLigandsGroupBox)
         self.readLigandLabel.setGeometry(QtCore.QRect(10, 30, 150, 17))
@@ -267,13 +256,21 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.readLigandListWidget = QtWidgets.QListWidget(self.readLigandsGroupBox)
         self.readLigandListWidget.setGeometry(10, 59, 361, 70)
         
-        
+        self.readInteractionsGroupBox = QtWidgets.QGroupBox(self.readTab)
+        self.readInteractionsGroupBox.setGeometry(QtCore.QRect(400, 0, 401, 221))
+        self.readInteractionsGroupBox.setObjectName("readInteractionsGroupBox")
         # POPULATING INTERACTIONS FILTER GROUP
+
         
+        self.readProceedButton = QtWidgets.QPushButton(self.readTab)
+        self.readProceedButton.setGeometry(QtCore.QRect(688, 304, 101, 61))
+        self.readProceedButton.setObjectName("readProceedButton")
+                
         self.tabWidget.addTab(self.readTab, "")
         self.dbLineEdit = QtWidgets.QLineEdit(self.centralwidget)
         self.dbLineEdit.setGeometry(QtCore.QRect(160, 10, 231, 25))
         self.dbLineEdit.setObjectName("dbLineEdit")
+        # self.dbLineEdit.setEnabled(False)
         self.dbLabel = QtWidgets.QLabel(self.centralwidget)
         self.dbLabel.setGeometry(QtCore.QRect(0, 10, 141, 17))
         self.dbLabel.setObjectName("dbLabel")
@@ -360,7 +357,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.writeLigandsRecursiveCheckBox.clicked.connect(self.set_ligands_recursive_search)
         self.writeLigandsSelectButton.clicked.connect(self.select_ligands_sources)
         self.addInteractionsCheckBox.clicked.connect(self.set_add_interactions)
-        
+                
         # READ
         self.readAbsoluteRadioButton.clicked.connect(self.set_absolute_or_percentile)
         self.readPercentileRadioButton.clicked.connect(self.set_absolute_or_percentile)
@@ -382,21 +379,28 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.set_default_number_of_processors()
         self.set_default_cutoffs()
         self.disable_everything()
-        if self.db is None:
-            self.proceedButton.setEnabled(False)
             
         # READ
-        self.readAbsoluteRadioButton.click()
+        # self.readAbsoluteRadioButton.click()
         #-----------------------------------------------------------------#
         
     # CLASS METHODS
     #-----------------------------------------------------------------#
+    def enable_read_tab(self):
+        self.readPropertiesGroupBox.setEnabled(True)
+        self.readLigandsGroupBox.setEnabled(True)
+        self.readInteractionsGroupBox.setEnabled(True)
+        self.readAbsoluteRadioButton.click()
+    
     def disable_everything(self):
         self.writeEngineGroupBox.setEnabled(False)
         self.writeLigandsGroupBox.setEnabled(False)
         self.writeInteractionsGroupBox.setEnabled(False)
         self.proceedButton.setEnabled(False)
-        
+        self.readPropertiesGroupBox.setEnabled(False)
+        self.readLigandsGroupBox.setEnabled(False)
+        self.readInteractionsGroupBox.setEnabled(False)        
+    
     def enable_receptor_groupBox(self):
         self.writeEngineGroupBox.setEnabled(True)
         
@@ -413,6 +417,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.dbLineEdit.setText(self.db)
         if self.db is not None:
             self.enable_receptor_groupBox()
+            self.enable_read_tab()
         
     def select_db(self):
         self.db = browse_file("All Files (*);;Db Files (*.db)")[0]
@@ -420,6 +425,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
             self.dbLineEdit.setText(self.db)
             if self.db is not None:
                 self.enable_receptor_groupBox()
+                self.enable_read_tab()
         
     def set_debug(self):
         if self.debugCheckBox.isChecked():
@@ -451,6 +457,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         print(self.dbLineEdit.text())
         if self.dbLineEdit.text() == "":
             self.db = None
+            self.disable_everything()
         if self.db is not None and self.receptor_file is not None:
             self.proceedButton.setEnabled(True)
         else:
