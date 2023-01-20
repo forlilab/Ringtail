@@ -711,7 +711,6 @@ class StorageManager:
         """Creates table for results. Columns are:
         Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL,
-        ligand_smile        VARCHAR[],
         receptor            VARCHAR[],
         pose_rank           INT[],
         run_number          INT[],
@@ -758,7 +757,7 @@ class StorageManager:
         ligand_rdmol        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
-        input_pdbqt         VARCHAR[]
+        input_model         VARCHAR[]
 
         Raises:
             NotImplementedError: Description
@@ -1306,7 +1305,6 @@ class StorageManagerSQLite(StorageManager):
             List: List of pose data to be inserted into Results table.
             In same order as expected in _insert_results:
             LigName, [0]
-            ligand_smile, [1]
             receptor, [2]
             pose_rank, [3]
             run_number, [4]
@@ -1347,7 +1345,6 @@ class StorageManagerSQLite(StorageManager):
         # We are only saving the top pose for each cluster
         ligand_data_list = [
             ligand_dict["ligname"],
-            ligand_dict["ligand_smile_string"],
             ligand_dict["receptor"],
             pose_rank + 1,
             int(run_number),
@@ -1431,20 +1428,20 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             List: List of data to be written as row in ligand table. Format:
             [ligand_name, ligand_smile, ligand_index_map,
-            ligand_h_parents, input_pdbqt]
+            ligand_h_parents, input_model]
         """
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
         ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
         ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
-        input_pdbqt = json.dumps(ligand_dict["ligand_input_pdbqt"])
+        input_model = json.dumps(ligand_dict["ligand_input_model"])
 
         return [
             ligand_name,
             ligand_smile,
             ligand_index_map,
             ligand_h_parents,
-            input_pdbqt,
+            input_model,
         ]
 
     @classmethod
@@ -1533,7 +1530,6 @@ class StorageManagerSQLite(StorageManager):
 
         sql_insert = """INSERT INTO Results (
         LigName,
-        ligand_smile,
         receptor,
         pose_rank,
         run_number,
@@ -1567,7 +1563,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_coordinates,
         flexible_res_coordinates
         ) VALUES \
-        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -1595,7 +1591,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_rdmol,
         atom_index_map,
         hydrogen_parents,
-        input_pdbqt
+        input_model
         ) VALUES
         (?,?,mol_from_smiles(?),?,?,?)"""
 
@@ -2245,7 +2241,6 @@ class StorageManagerSQLite(StorageManager):
         """Creates table for results. Columns are:
         Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL,
-        ligand_smile        VARCHAR[],
         receptor            VARCHAR[],
         pose_rank           INT[],
         run_number          INT[],
@@ -2295,7 +2290,6 @@ class StorageManagerSQLite(StorageManager):
         sql_results_table = """CREATE TABLE IF NOT EXISTS Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
-            ligand_smile        VARCHAR[],
             receptor            VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
@@ -2383,7 +2377,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_smile        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
-        input_pdbqt         VARCHAR[]
+        input_model         VARCHAR[]
 
         Raises:
             DatabaseTableCreationError: Description
@@ -2395,7 +2389,7 @@ class StorageManagerSQLite(StorageManager):
             ligand_rdmol        MOL,
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
-            input_pdbqt         VARCHAR[])"""
+            input_model         VARCHAR[])"""
 
         try:
             cur = self.conn.cursor()

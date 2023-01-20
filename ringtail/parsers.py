@@ -70,7 +70,7 @@ def parse_single_dlg(fname):
         inside_input = False
         inside_res = False
         smile_string = ""
-        input_pdbqt = []
+        input_model = []
         index_map = []
         h_parents = []
         ligand_atomtypes = []
@@ -136,7 +136,7 @@ def parse_single_dlg(fname):
                             " UNK " in line
                         ):  # replace ligand atoms ATOM flag with HETATM
                             line = line.replace("ATOM", "HETATM")
-                        input_pdbqt.append(line.lstrip("INPUT-LIGAND-PDBQT"))
+                        input_model.append(line[20:])
                         # save ligand atomtypes
                         if line.startswith("INPUT-LIGAND-PDBQT") and (
                             "ATOM" in line or "HETATM" in line
@@ -399,7 +399,7 @@ def parse_single_dlg(fname):
         "grid_center": center,
         "grid_dim": npts,
         "grid_spacing": spacing,
-        "ligand_input_pdbqt": input_pdbqt,
+        "ligand_input_model": input_model,
         "ligand_index_map": index_map,
         "ligand_h_parents": h_parents,
         "pose_coordinates": pose_coordinates,
@@ -549,7 +549,7 @@ def parse_vina_pdbqt(fname):
         "grid_center": "",
         "grid_dim": "",
         "grid_spacing": "",
-        "ligand_input_pdbqt": "",
+        "ligand_input_model": "",
         "ligand_index_map": smile_idx_map,
         "ligand_h_parents": ligand_h_parents,
         "pose_coordinates": pose_coordinates,  # list
