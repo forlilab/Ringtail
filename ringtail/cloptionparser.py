@@ -27,59 +27,6 @@ def cmdline_parser(defaults={}):
     confargs, remaining_argv = conf_parser.parse_known_args()
 
     defaults = RingtailCore.get_defaults()
-    """defaults = {
-            'append_results': False,
-            'order_results': None,
-            'output_all_poses': None,
-            'results_view_name': 'passing_results',
-            'overwrite': None,
-            'conflict_opt': None,
-            'mode': 'dlg',
-            'parser_manager': 'multiprocessing',
-            'chunk_size': 1,
-            'max_poses': 3,
-            'store_all_poses': False,
-            'interaction_tolerance': None,
-            'target': None,
-            'add_interactions': False,
-            'interaction_cutoffs': [3.7, 4.0],
-            'receptor_file': None,
-            'file_sources': {
-                'file': [[]],
-                'file_path': {'path': [[]], 'pattern': '*.dlg*', 'recursive': None},
-                'file_list': [[]]},
-            'file_pattern': '*.dlg*',
-            'max_proc': None,
-            'log': 'output_log.txt',
-            'export_sdf_path': None,
-            'plot': None,
-            'outfields': 'e',
-            'no_print': True,
-            'export_bookmark_csv': None,
-            'export_query_csv': None,
-            'export_bookmark_db': None,
-            'data_from_bookmark': None,
-            'filter_bookmark': None,
-            'eworst': None,
-            'ebest': None,
-            'leworst': None,
-            'lebest': None,
-            'energy_percentile': None,
-            'le_percentile': None, 
-            'van_der_waals': [],
-            'hydrogen_bond': [],
-            'reactive_res': [],
-            'interactions_count': [],
-            'name': [],
-            'smarts': [],
-            'smarts_join': 'OR',
-            'smarts': None,
-            'filter_ligands_flag': False,
-            'max_miss': 0,
-            'react_any': None,
-            'save_receptor': False,
-            'filter': False,
-    }"""
     config = {}
     for section in defaults:
         for k, v in defaults[section]["values"].items():
@@ -746,18 +693,10 @@ class CLOptionParser:
         filters = {}
         storage_opts = {}
         out_opts = {}
-        # make sure mode is allowed
-        allowed_modes = {"dlg", "vina"}
         self.mode = parsed_opts.mode.lower()
         # set receptor name, add_interactions if given
         self.rec_name = parsed_opts.receptor_file
         self.add_interactions = parsed_opts.add_interactions
-        if self.mode not in allowed_modes:
-            raise OptionError(
-                "Given mode {0} not allowed. Please be sure that requested mode is 'vina' or 'dlg'".format(
-                    self.mode
-                )
-            )
         if self.mode == "vina":
             # Guard against non-compatible options being called in Vina mode
             if parsed_opts.react_any:

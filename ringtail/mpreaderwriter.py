@@ -107,7 +107,11 @@ class DockingFileReader(multiprocessing.Process):
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 elif self.mode == "vina":
                     parsed_file_dict = parse_vina_pdbqt(next_task)
-                # future: NG parser, etc
+                # Example code for calling user-implemented mode
+                # elif self.mode == "my_mode":
+                #     parsed_file_dict = myparser(next_task)
+                else:
+                    raise NotImplementedError(f"Parser for input file mode {self.mode} not implemented!")
 
                 # check receptor name from file against that which we expect
                 if (
