@@ -457,7 +457,7 @@ def cmdline_parser(defaults={}):
     )
     properties_group.add_argument(
         "-pe",
-        "--energy_percentile",
+        "--score_percentile",
         help="specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.",
         action="store",
         type=float,
@@ -728,7 +728,7 @@ class CLOptionParser:
 
         # guard against unsing percentile filter with all_poses
         if parsed_opts.output_all_poses and (
-            parsed_opts.energy_percentile is not None
+            parsed_opts.score_percentile is not None
             or parsed_opts.le_percentile is not None
         ):
             logging.warning(
@@ -848,7 +848,7 @@ class CLOptionParser:
                 "ebest": None,
                 "leworst": None,
                 "lebest": None,
-                "energy_percentile": None,
+                "score_percentile": None,
                 "le_percentile": None,
             }
             for kw, _ in properties.items():
@@ -858,12 +858,12 @@ class CLOptionParser:
             # Cannot use energy/le cuttoffs with percentiles. Override percentile with given cutoff
             if (
                 properties["eworst"] is not None
-                and properties["energy_percentile"] is not None
+                and properties["score_percentile"] is not None
             ):
                 logging.warning(
-                    "Cannot use --eworst cutoff with --energy_percentile. Overiding energy_percentile with eworst."
+                    "Cannot use --eworst cutoff with --score_percentile. Overiding score_percentile with eworst."
                 )
-                properties["energy_percentile"] = None
+                properties["score_percentile"] = None
             if (
                 properties["leworst"] is not None
                 and properties["le_percentile"] is not None
@@ -873,11 +873,11 @@ class CLOptionParser:
                 )
                 properties["le_percentile"] = None
             if (
-                properties["energy_percentile"] is not None
+                properties["score_percentile"] is not None
                 or properties["le_percentile"] is not None
             ) and parsed_opts.filter_bookmark is not None:
                 raise OptionError(
-                    "Cannot use --energy_percentile or --le_percentile with --filter_bookmark."
+                    "Cannot use --score_percentile or --le_percentile with --filter_bookmark."
                 )
             # interaction filters (residues)
             interactions = {}

@@ -5,7 +5,7 @@ Filtered poses:
 #    ebest :  [ none ]
 #  leworst :  [ none ]
 #   lebest :  [ none ]
-#  energy_percentile :  [ none ]
+#  score_percentile :  [ none ]
 #  le_percentile :  [ none ]
 #### INTERACTIONS
 #        V :  [ none ]

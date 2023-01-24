@@ -456,7 +456,7 @@ class TestFilters:
             "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/rt_process_vs.py read --input_db output.db --energy_percentile 0.1"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --score_percentile 0.1"
         )
 
         os.system("rm output.db")
@@ -480,7 +480,7 @@ class TestFilters:
             "python ../scripts/rt_process_vs.py write --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/rt_process_vs.py read --input_db output.db --energy_percentile 0.1 --eworst -14"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --score_percentile 0.1 --eworst -14"
         )
 
         os.system("rm output.db")
@@ -677,7 +677,7 @@ class TestFilters:
 
     def test_all_filters(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --energy_percentile 99 --le_percentile 99 --name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279: --reactive_res A:TYR:169:"
+            "python ../scripts/rt_process_vs.py read --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279: --reactive_res A:TYR:169:"
         )
 
         assert status == 0
