@@ -345,7 +345,10 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--lebest           |-leb| Best ligand efficiency value accepted                 | no default  ||
 |--score_percentile      |-pe| Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  ||
 |--le_percentile   |-ple| Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default |  <tr><td colspan="5">LIGAND FILTERS</td></tr>
-|--name             |-n| Search for specific ligand name. Multiple names joined by "OR". Multiple filters should be separated by commas | no default  | <tr><td colspan="5">INTERACTION FILTERS</td></tr>
+|--name             |-n| Search for specific ligand name. Multiple names joined by "OR". Multiple filters should be separated by commas | no default  | <tr><td 
+|--smarts           |-n| SMARTS pattern(s) for substructur matching | no default  | <tr><td 
+|--smarts_idxyz     |-n| SMARTS pattern, index of atom in SMARTS, cutoff distance, and target xyz coordinates. Finds poses in which the specified substructure atom is within the distance cutoff from the target location | no default  | <tr><td 
+|--smarts_join     |-n| logical operator for multiple SMARTS | OR  | <tr><td colspan="5">INTERACTION FILTERS</td></tr>
 |--van_der_waals    |-vdw| Filter for van der Waals interaction with given receptor information.  | no default  | Yes|
 |--hydrogen_bond    |-hb| Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  | Yes|
 |--reactive_res     |-r| Filter for reation with residue containing specified information | no default  |Yes |
