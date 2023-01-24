@@ -286,7 +286,7 @@ class StorageManager:
             SQLite Cursor: Cursor of passing results
         """
         # create view of passing results
-        filter_results_str = self._generate_result_filtering_query(
+        filter_results_str, filter_results_dict = self._generate_result_filtering_query(
             results_filters_list, ligand_filters_dict, output_fields, filter_bookmark
         )
         logging.debug(filter_results_str)
@@ -302,7 +302,7 @@ class StorageManager:
         self._create_view(
             self.current_view_name, view_query
         )  # make sure we keep Pose_ID in view
-        self._insert_bookmark_info(self.current_view_name, filter_results_str)
+        self._insert_bookmark_info(self.current_view_name, filter_results_dict)
         # perform filtering
         logging.debug("Running filtering query")
         filtered_results = self._run_query(filter_results_str)
@@ -1216,7 +1216,7 @@ class StorageManagerSQLite(StorageManager):
             "ebest": "docking_score",
             "leworst": "leff",
             "lebest": "leff",
-            "energy_percentile": "docking_score",
+            "score_percentile": "docking_score",
             "le_percentile": "leff",
         }
 
@@ -2007,7 +2007,7 @@ class StorageManagerSQLite(StorageManager):
         compare_bookmark_str += ", ".join(wanted_list)
         if unwanted_list is not None:
             compare_bookmark_str += ". Unwanted: " + ", ".join(unwanted_list)
-        self._insert_bookmark_info(bookmark_name, compare_bookmark_str)
+        self._insert_bookmark_info(bookmark_name, {"comparison": compare_bookmark_str})
 
     # # # # # # # # # # # # # # # # #
     # # # # #Private methods # # # # #
@@ -2479,7 +2479,20 @@ class StorageManagerSQLite(StorageManager):
         """
         sql_str = """CREATE TABLE IF NOT EXISTS Bookmarks (
         Bookmark_name       VARCHAR[] PRIMARY KEY,
-        Query               VARCHAR[])"""
+        sql_query           VARCHAR[],
+        comparison          VARCHAR[],
+        eworst              FLOAT(4),
+        ebest               FLOAT(4),
+        leworst             FLOAT(4),
+        lebest              FLOAT(4),
+        score_percentile    FLOAT(4),
+        le_percentile       FLOAT(4),
+        ligname             VARCHAR[],
+        max_atoms           INT[],
+        substruct           VARCHAR[],
+        substruct_local     VARCHAR[],
+        interactions        VARCHAR[],
+        hb_count            INT[])"""
 
         try:
             cur = self.conn.cursor()
@@ -2490,24 +2503,32 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating bookmark table. If database already exists, use --overwrite to drop existing tables"
             ) from e
 
-    def _insert_bookmark_info(self, name: str, query: str):
+    def _insert_bookmark_info(self, name: str, queries: dict):
         """Insert bookmark info into bookmark table
 
         Args:
             name (str): name for bookmark
-            query (str): query used to generate bookmark
+            query (dict): queries used to generate bookmark
 
         Raises:
             DatabaseInsertionError: Description
         """
+        cols_list = queries.keys()
+        columns = ", ".join(cols_list)
+        col_filler = ",".join(["?" for i in cols_list])
         sql_insert = """INSERT OR REPLACE INTO Bookmarks (
         Bookmark_name,
-        Query
-        ) VALUES (?,?)"""
+        {0}
+        ) VALUES (?,{1})""".format(columns, col_filler)
+
+        # sanitize queries for sqlite if they are lists
+        for k, v in queries.items():
+            if type(v) == list:
+                queries[k] = json.dumps(v)
 
         try:
             cur = self.conn.cursor()
-            cur.execute(sql_insert, [name, query])
+            cur.execute(sql_insert, [name] + [queries[kw] for kw in cols_list])
             self.conn.commit()
             cur.close()
 
@@ -2677,14 +2698,16 @@ class StorageManagerSQLite(StorageManager):
 
         # write energy filters and compile list of interactions to search for
         queries = []
+        queries_dict = {}
         interaction_filters = []
 
         for filter_key, filter_value in results_filters_list:
             if filter_key in self.energy_filter_col_name:
                 self.index_columns.append(self.energy_filter_col_name[filter_key])
-                if filter_key == "energy_percentile" or filter_key == "le_percentile":
+                if filter_key == "score_percentile" or filter_key == "le_percentile":
                     # convert from percent to decimal
-                    queries.append( f"{self.energy_filter_col_name[filter_key]} < {self._calc_percentile_cutoff(filter_value, self.energy_filter_col_name[filter_key])}"
+                    cutoff = self._calc_percentile_cutoff(filter_value, self.energy_filter_col_name[filter_key])
+                    queries.append( f"{self.energy_filter_col_name[filter_key]} < {cutoff}"
                     )
                 else:
                     queries.append(
@@ -2692,10 +2715,12 @@ class StorageManagerSQLite(StorageManager):
                             value=filter_value
                         )
                     )
+                queries_dict[filter_key] = filter_value
 
             # write hb count filter(s)
             if filter_key == "hb_count":
                 self.index_columns.append("num_hb")
+                queries_dict[filter_key] = filter_value
                 if filter_value > 0:
                     queries.append("num_hb > {value}".format(value=filter_value))
                 else:
@@ -2716,6 +2741,7 @@ class StorageManagerSQLite(StorageManager):
 
         # for each interaction filter, get the index
         # from the interactions_indices table
+        queries_dict["interactions"] = json.dumps(interaction_filters)
         for interaction in interaction_filters:
             interaction_filter_indices = []
             interact_index_str = self._generate_interaction_index_filtering_query(
@@ -2759,13 +2785,15 @@ class StorageManagerSQLite(StorageManager):
 
         # add ligand filters
         if ligand_filters_dict["S"] != [] or ligand_filters_dict["N"] != []:
-            queries.append(
-                "LigName IN ({ligand_str})".format(
-                    ligand_str=self._generate_ligand_filtering_query(
+            ligand_query_str, ligand_query_dict = self._generate_ligand_filtering_query(
                         ligand_filters_dict
                     )
+            queries.append(
+                "LigName IN ({ligand_str})".format(
+                    ligand_str=ligand_query_str
                 )
             )
+            queries_dict = queries_dict | ligand_query_dict
         if len(ligand_filters_dict["X"]):
             nr_args_per_group = 6
             nr_smarts = int(len(ligand_filters_dict["X"]) / nr_args_per_group)
@@ -2789,6 +2817,7 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute("DROP TABLE IF EXISTS passed_smarts")
             cur.execute(cmd)
+            smarts_loc_filters = []
             for i in range(nr_smarts):
                 smarts =      ligand_filters_dict["X"][i * nr_args_per_group + 0]
                 index =   int(ligand_filters_dict["X"][i * nr_args_per_group + 1])
@@ -2796,6 +2825,8 @@ class StorageManagerSQLite(StorageManager):
                 x =     float(ligand_filters_dict["X"][i * nr_args_per_group + 3])
                 y =     float(ligand_filters_dict["X"][i * nr_args_per_group + 4])
                 z =     float(ligand_filters_dict["X"][i * nr_args_per_group + 5])
+                # save filter for bookmark
+                smarts_loc_filters.append((smarts, index, x, y, z))
                 poses = self._run_query("SELECT * FROM passed_smarts")
                 pose_id_list = []
                 smartsmol = Chem.MolFromSmarts(smarts)
@@ -2811,7 +2842,7 @@ class StorageManagerSQLite(StorageManager):
                             break # add pose only once
                 queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
             cur.close()
-
+            queries_dict["substruct_local"] = json.dumps(smarts_loc_filters)
         # initialize query string
         # raise error if query string is empty
         if queries == []:
@@ -2839,7 +2870,9 @@ class StorageManagerSQLite(StorageManager):
                     "Please ensure you are only requesting one option for --order_results and have written it correctly"
                 ) from None
 
-        return sql_string
+        queries_dict["sql_query"] = sql_string
+        
+        return sql_string, queries_dict
 
     def _generate_interaction_index_filtering_query(self, interaction_list):
         """takes list of interaction info for a given ligand,
@@ -2900,11 +2933,12 @@ class StorageManagerSQLite(StorageManager):
             ligand_filters (list): List of filters on ligand table
 
         Returns:
-            String: SQLite-formatted query
+            String: SQLite-formatted query, Dict: dictionary of filters and values
         """
 
         sql_ligand_string = "SELECT LigName FROM Ligands WHERE"
         logical_operator = ligand_filters["F"].upper()
+        queries_dict = {}
         for kw in ligand_filters.keys():
             fils = ligand_filters[kw]
             if kw == "N":
@@ -2913,9 +2947,15 @@ class StorageManagerSQLite(StorageManager):
                         continue
                     name_sql_str = " LigName LIKE '%{value}%' OR".format(value=name)
                     sql_ligand_string += name_sql_str
+                    if "ligname" not in queries_dict:
+                        queries_dict["ligname"] = [name]
+                    else:
+                        queries_dict["ligname"] = queries_dict["ligname"].append(name)
             if kw == "M" and ligand_filters[kw] is not None:
                 maxatom_sql_str = " mol_num_atms(ligand_rdmol) <= {} {}".format(ligand_filters[kw], logical_operator)
                 sql_ligand_string += maxatom_sql_str
+                queries_dict["max_atoms"] = ligand_filters[kw]
+                queries_dict["ligand_logical_operator"] = logical_operator
             if kw == "S":
                 for smarts in fils:
                     # check for hydrogens in smarts pattern
@@ -2926,13 +2966,16 @@ class StorageManagerSQLite(StorageManager):
                     substruct_sql_str = " mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}".format(
                         smarts=smarts, logical_operator=logical_operator)
                     sql_ligand_string += substruct_sql_str
-
+                    if "substruct" not in queries_dict:
+                        queries_dict["substruct"] = [smarts]
+                    else:
+                        queries_dict["substruct"].append(smarts)
         if sql_ligand_string.endswith("AND"):
             sql_ligand_string = sql_ligand_string.rstrip("AND")
         if sql_ligand_string.endswith("OR"):
             sql_ligand_string = sql_ligand_string.rstrip("OR")
-
-        return sql_ligand_string
+        
+        return sql_ligand_string, queries_dict
 
     def _generate_results_data_query(self, output_fields):
         """Generates SQLite-formatted query string to select outfields data for ligands in self.results_view_name
@@ -3021,7 +3064,7 @@ class StorageManagerSQLite(StorageManager):
                 percent ranks on docking_score and leff
         """
         column_names = ",".join(self._fetch_results_column_names())
-        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY docking_score) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results Group BY LigName".format(
+        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY docking_score) score_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results Group BY LigName".format(
             columns=column_names
         )
 

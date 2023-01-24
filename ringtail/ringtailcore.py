@@ -139,7 +139,7 @@ class RingtailCore:
                 "ebest": None,
                 "leworst": None,
                 "lebest": None,
-                "energy_percentile": None,
+                "score_percentile": None,
                 "le_percentile": None,
             },
             "interactions": {"V": [], "H": [], "R": []},
@@ -156,7 +156,7 @@ class RingtailCore:
                 "ebest": float,
                 "leworst": float,
                 "lebest": float,
-                "energy_percentile": float,
+                "score_percentile": float,
                 "le_percentile": float,
             },
             "interactions": dict,
@@ -435,7 +435,7 @@ class RingtailCore:
             "ebest",
             "leworst",
             "lebest",
-            "energy_percentile",
+            "score_percentile",
             "le_percentile",
         ]
 

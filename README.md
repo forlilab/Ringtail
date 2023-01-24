@@ -119,7 +119,7 @@ $ rt_process_vs.py read --input_db all_groups.db --eworst -6
 This produces an output log `output_log.txt` with the names of ligands passing the filter, as well as their binding energies. Let's now do another round of filtering, this time with an energy percentile filter of 5 percent (top 5% of coumpounds by docking score). Each round of filtering is also stored in the database as a SQLite view, which we refer to as a "bookmark". We will also save this round of filtering with the bookmark name "ep5".
 
 ```
-$ rt_process_vs.py read --input_db all_groups.db --energy_percentile 5 --log ep5_log.txt --bookmark_name ep5
+$ rt_process_vs.py read --input_db all_groups.db --score_percentile 5 --log ep5_log.txt --bookmark_name ep5
 ```
 Now, let us further refine the set of molecules we just filtered. We will use an interaction filter for van der Waals interactions with V279 on the receptor:
 
@@ -188,20 +188,20 @@ config_r.json:
 
 ```
 {
-"energy_percentile": "0.1"
+"score_percentile": "0.1"
 }
 ```
 
 #### Export results from a previous filtering as a CSV
 ```
 rt_process_vs.py write --file_path Files/
-rt_process_vs.py read --input_db output.db --energy_percentile 0.1 --bookmark_name filter1
+rt_process_vs.py read --input_db output.db --score_percentile 0.1 --bookmark_name filter1
 rt_process_vs.py read --input_db output.db --export_bookmark_csv filter1
 ```
 #### Create scatterplot highlighting ligands passing filters
 ```
 rt_process_vs.py write --file_path Files/
-rt_process_vs.py read --input_db output.db --energy_percentile 0.1 --bookmark_name filter1
+rt_process_vs.py read --input_db output.db --score_percentile 0.1 --bookmark_name filter1
 rt_process_vs.py read --input_db output.db --bookmark_name filter1 --plot
 ```
 `all_ligands_scatter.png`
@@ -244,7 +244,7 @@ When filtering, a text log file will be created containing the results passing t
 may be changed with the `--log` option and the information written to the log can be specified with `--outfields`. The full list of available output fields may be seen by using the `--help` option with `read` mode (see example above).
 By default, only the information for the top-scoring binding pose will be written to the log. If desired, each individual passing pose can be written by using the `--output_all_poses` flag. The passing results may also be ordered in the log file using the `--order_results` option.
 
-No filtering is performed if no filters are given. If both `--eworst` and `--energy_percentile` are used together, the `--eworst` cutoff alone is used. The same is true of `--leworst` and `--le_percentile`.
+No filtering is performed if no filters are given. If both `--eworst` and `--score_percentile` are used together, the `--eworst` cutoff alone is used. The same is true of `--leworst` and `--le_percentile`.
 
 When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--bookmark_name` option. Data for poses in a view may be accessed later using the `--new_data_from_bookmark` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<bookmark_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
 
@@ -343,7 +343,7 @@ Occassionally, errors may occur during database reading/writing that corrupt the
 |--ebest            |-eb| Best energy value accepted (kcal/mol)                 | no default  ||
 |--leworst          |-le| Worst ligand efficiency value accepted                | no default  ||
 |--lebest           |-leb| Best ligand efficiency value accepted                 | no default  ||
-|--energy_percentile      |-pe| Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  ||
+|--score_percentile      |-pe| Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  ||
 |--le_percentile   |-ple| Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default |  <tr><td colspan="5">LIGAND FILTERS</td></tr>
 |--name             |-n| Search for specific ligand name. Multiple names joined by "OR". Multiple filters should be separated by commas | no default  | <tr><td colspan="5">INTERACTION FILTERS</td></tr>
 |--van_der_waals    |-vdw| Filter for van der Waals interaction with given receptor information.  | no default  | Yes|
