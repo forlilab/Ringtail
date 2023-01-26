@@ -11,18 +11,17 @@ import os
 ringtail_gui_path = os.path.realpath(os.path.dirname(__file__))
 sys.path.append(ringtail_gui_path)
 
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 from utils import show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min
 from range_slider import RangeSlider
 import multiprocessing
+import qrc_resources
 
-
-class Ui_MainWindow(QtWidgets.QMainWindow):
+class Ui_MainWindow(object):
     def __init__(self):
         super().__init__()
         self.db = None
-        self.engine_types = ["AutoDock", "Vina"]
+        self.engine_types = ["AutoDockGPU", "Vina"]
         self.selected_engine = None
         self.processors_number = None        
         self.verbose = False
@@ -58,256 +57,358 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         # LIGAND
         self.selected_ligand_name_from_list = None
         self.ligand_names = list()
-    
+        
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.setFixedSize(800, 601)
-        MainWindow.setAutoFillBackground(True)
-        
+        MainWindow.setWindowModality(QtCore.Qt.ApplicationModal)
+        MainWindow.resize(944, 821)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
+        MainWindow.setSizePolicy(sizePolicy)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
-        self.tabWidget = QtWidgets.QTabWidget(self.centralwidget)
-        self.tabWidget.setGeometry(QtCore.QRect(-4, 50, 811, 401))
-        self.tabWidget.setAutoFillBackground(False)
-        self.tabWidget.setObjectName("tabWidget")
-        self.writeTab = QtWidgets.QWidget()
-        
-        # WRITE TAB
-        self.writeTab.setObjectName("writeTab")
-        
-        self.writeEngineGroupBox = QtWidgets.QGroupBox(self.writeTab)
-        self.writeEngineGroupBox.setGeometry(QtCore.QRect(10, 0, 391, 131))
-        self.writeEngineGroupBox.setObjectName("writeEngineGroupBox")
-        self.autodockLabel = QtWidgets.QLabel(self.writeEngineGroupBox)
-        self.autodockLabel.setGeometry(QtCore.QRect(10, 30, 171, 17))
-        self.autodockLabel.setObjectName("autodockLabel")
-        self.autodockComboBox = QtWidgets.QComboBox(self.writeEngineGroupBox)
-        self.autodockComboBox.setGeometry(QtCore.QRect(190, 30, 161, 25))
-        self.autodockComboBox.setObjectName("autodockComboBox")
-        self.receptorLabel = QtWidgets.QLabel(self.writeEngineGroupBox)
-        self.receptorLabel.setGeometry(QtCore.QRect(10, 90, 131, 17))
-        self.receptorLabel.setObjectName("receptorLabel")
-        self.receptorLineEdit = QtWidgets.QLineEdit(self.writeEngineGroupBox)
-        self.receptorLineEdit.setGeometry(QtCore.QRect(140, 90, 161, 25))
-        self.receptorLineEdit.setObjectName("receptorLineEdit")
-        self.receptorLineEdit.setEnabled(False)
-        self.browseReceptorButton = QtWidgets.QPushButton(self.writeEngineGroupBox)
-        self.browseReceptorButton.setGeometry(QtCore.QRect(310, 90, 71, 25))
-        self.browseReceptorButton.setObjectName("browseReceptorButton")
-        
-        self.writeLigandsGroupBox = QtWidgets.QGroupBox(self.writeTab)
-        self.writeLigandsGroupBox.setGeometry(QtCore.QRect(10, 140, 391, 221))
-        self.writeLigandsGroupBox.setObjectName("writeLigandsGroupBox")
-        self.writeLigandsFromFileRadioButton = QtWidgets.QRadioButton(self.writeLigandsGroupBox)
-        self.writeLigandsFromFileRadioButton.setGeometry(QtCore.QRect(20, 30, 191, 23))
-        self.writeLigandsFromFileRadioButton.setObjectName("writeLigandsFromFileRadioButton")
-        self.writeLigandsFromDirectoryRadioButton = QtWidgets.QRadioButton(self.writeLigandsGroupBox)
-        self.writeLigandsFromDirectoryRadioButton.setGeometry(QtCore.QRect(220, 30, 131, 23))
-        self.writeLigandsFromDirectoryRadioButton.setObjectName("writeLigandsFromDirectoryRadioButton")
-        self.writeLigandsPatternLabel = QtWidgets.QLabel(self.writeLigandsGroupBox)
-        self.writeLigandsPatternLabel.setGeometry(QtCore.QRect(20, 80, 67, 17))
-        self.writeLigandsPatternLabel.setObjectName("writeLigandsPatternLabel")
-        self.writeLigandsPatternLineEdit = QtWidgets.QLineEdit(self.writeLigandsGroupBox)
-        self.writeLigandsPatternLineEdit.setGeometry(QtCore.QRect(90, 80, 181, 25))
-        self.writeLigandsPatternLineEdit.setObjectName("writeLigandsPatternLineEdit")
-        self.writeLigandsRecursiveCheckBox = QtWidgets.QCheckBox(self.writeLigandsGroupBox)
-        self.writeLigandsRecursiveCheckBox.setGeometry(QtCore.QRect(20, 140, 92, 23))
-        self.writeLigandsRecursiveCheckBox.setObjectName("writeLigandsRecursiveCheckBox")
-        self.writeLigandsSelectLabel = QtWidgets.QLabel(self.writeLigandsGroupBox)
-        self.writeLigandsSelectLabel.setGeometry(QtCore.QRect(20, 190, 161, 17))
-        self.writeLigandsSelectLabel.setObjectName("writeLigandsSelectLabel")
-        self.writeLigandsSelectLineEdit = QtWidgets.QLineEdit(self.writeLigandsGroupBox)
-        self.writeLigandsSelectLineEdit.setGeometry(QtCore.QRect(180, 190, 113, 25))
-        self.writeLigandsSelectLineEdit.setObjectName("writeLigandsSelectLineEdit")
-        self.writeLigandsSelectLineEdit.setEnabled(False)
-        self.writeLigandsSelectButton = QtWidgets.QPushButton(self.writeLigandsGroupBox)
-        self.writeLigandsSelectButton.setGeometry(QtCore.QRect(300, 190, 89, 25))
-        self.writeLigandsSelectButton.setObjectName("writeLigandsSelectButton")
-        
-        self.writeInteractionsGroupBox = QtWidgets.QGroupBox(self.writeTab)
-        self.writeInteractionsGroupBox.setGeometry(QtCore.QRect(410, 0, 381, 251))
-        self.writeInteractionsGroupBox.setObjectName("writeInteractionsGroupBox")
-        self.maxPosesLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
-        self.maxPosesLabel.setGeometry(QtCore.QRect(10, 30, 81, 17))
-        self.maxPosesLabel.setObjectName("maxPosesLabel")
-        self.maxPosesSpinBox = QtWidgets.QSpinBox(self.writeInteractionsGroupBox)
-        self.maxPosesSpinBox.setGeometry(QtCore.QRect(90, 30, 61, 26))
-        self.maxPosesSpinBox.setObjectName("maxPosesSpinBox")
-        self.maxPosesSpinBox.setMaximum(1000000)
-        self.maxPosesSpinBox.setMinimum(1)
-        self.storeAllPosesCheckBox = QtWidgets.QCheckBox(self.writeInteractionsGroupBox)
-        self.storeAllPosesCheckBox.setGeometry(QtCore.QRect(220, 30, 131, 23))
-        self.storeAllPosesCheckBox.setObjectName("storeAllPosesCheckBox")
-        self.addInteractionsCheckBox = QtWidgets.QCheckBox(self.writeInteractionsGroupBox)
-        self.addInteractionsCheckBox.setGeometry(10, 90, 151, 23)
-        self.addInteractionsCheckBox.setObjectName("addInteractionsCheckBox")
-        self.distanceCutoffLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
-        self.distanceCutoffLabel.setGeometry(QtCore.QRect(10, 130, 121, 17))
-        self.distanceCutoffLabel.setObjectName("distanceCutoffLabel")
-        self.hCutoffLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
-        self.hCutoffLabel.setGeometry(QtCore.QRect(140, 130, 67, 17))
-        self.hCutoffLabel.setObjectName("hCutoffLabel")
-        self.vdwCutoffLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
-        self.vdwCutoffLabel.setGeometry(QtCore.QRect(240, 130, 67, 17))
-        self.vdwCutoffLabel.setObjectName("vdwCutoffLabel")
-        self.hSpinBox = QtWidgets.QDoubleSpinBox(self.writeInteractionsGroupBox)
-        self.hSpinBox.setGeometry(QtCore.QRect(140, 160, 65, 30))
-        self.hSpinBox.setObjectName("hSpinBox")
-        self.vdwSpinBox = QtWidgets.QDoubleSpinBox(self.writeInteractionsGroupBox)
-        self.vdwSpinBox.setGeometry(QtCore.QRect(240, 160, 65, 30))
-        self.vdwSpinBox.setObjectName("vdwSpinBox")
-        self.toleranceLabelAD = QtWidgets.QLabel(self.writeInteractionsGroupBox)
-        self.toleranceLabelAD.setGeometry(QtCore.QRect(10, 220, 81, 17))
-        self.toleranceLabelAD.setObjectName("toleranceLabelAD")
-        self.toleranceSpinBox = QtWidgets.QDoubleSpinBox(self.writeInteractionsGroupBox)
-        self.toleranceSpinBox.setGeometry(QtCore.QRect(140, 220, 65, 26))
-        self.toleranceSpinBox.setObjectName("toleranceSpinBox")
-        
-        self.proceedButton = QtWidgets.QPushButton(self.writeTab)
-        self.proceedButton.setGeometry(QtCore.QRect(688, 304, 101, 61))
-        self.proceedButton.setObjectName("proceedButton")
-        self.tabWidget.addTab(self.writeTab, "")
-        
-        # READ TAB
-        self.readTab = QtWidgets.QWidget()
-        self.readTab.setObjectName("readTab")
-        self.readPropertiesGroupBox = QtWidgets.QGroupBox(self.readTab)
-        self.readPropertiesGroupBox.setGeometry(QtCore.QRect(10, 0, 381, 221))
-        self.readPropertiesGroupBox.setObjectName("readPropertiesGroupBox")
-        # POPULATING PROPERTIES GROUP
-        self.readAbsoluteRadioButton = QtWidgets.QRadioButton(self.readPropertiesGroupBox)
-        self.readAbsoluteRadioButton.setObjectName("readAbsoluteRadioButton")
-        
-        self.readPercentileRadioButton = QtWidgets.QRadioButton(self.readPropertiesGroupBox)
-        self.readPercentileRadioButton.setObjectName("readPercentileRadioButton")
-        
-        self.gridContainer = QtWidgets.QGridLayout()
-        
-        self.readEnergyLabel = QtWidgets.QLabel(self.readPropertiesGroupBox)
-        self.readEnergyLabel.setObjectName("readEnergyLabel")
-        
-        self.readEnergySlider = RangeSlider(QtCore.Qt.Horizontal)
-        self.readEnergySlider.setMinimumHeight(30)
-        self.readEnergySlider.setObjectName("readAbsoluteEnergySlider")
-        
-        self.minEnergySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
-        self.minEnergySpinBox.setFixedWidth(60)
-        self.minEnergySpinBox.setFixedHeight(26)
-        self.minEnergySpinBox.setValue(self.readEnergySlider.minimum())
-        self.minEnergySpinBox.setObjectName("minEnergySpinBox")
-        self.maxEnergySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
-        self.maxEnergySpinBox.setFixedWidth(60)
-        self.maxEnergySpinBox.setFixedHeight(26)
-        self.maxEnergySpinBox.setValue(self.readEnergySlider.maximum())
-        self.maxEnergySpinBox.setObjectName("maxEnergySpinBox")        
-        
-        self.readLigandsEfficiencyLabel = QtWidgets.QLabel(self.readPropertiesGroupBox)
-        self.readLigandsEfficiencyLabel.setObjectName("readLigandsEfficiencyLabel")
-        
-        self.readLigandsEfficiencySlider = RangeSlider(QtCore.Qt.Horizontal)
-        self.readLigandsEfficiencySlider.setMinimumHeight(30)
-        self.readLigandsEfficiencySlider.setObjectName("readAbsoluteLigandsEfficiencySlider")
-        
-        self.minLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
-        self.minLigandsEfficiencySpinBox.setFixedWidth(60)
-        self.minLigandsEfficiencySpinBox.setFixedHeight(26)
-        self.minLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.minimum()/100)
-        self.minLigandsEfficiencySpinBox.setObjectName("minLigandsEfficiencySpinBox")
-        self.maxLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
-        self.maxLigandsEfficiencySpinBox.setFixedWidth(60)
-        self.maxLigandsEfficiencySpinBox.setFixedHeight(26)
-        self.maxLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.maximum()/100)
-        self.maxLigandsEfficiencySpinBox.setObjectName("maxLigandsEfficiencySpinBox")
-        
-        self.gridContainer.setSpacing(2)
-        self.gridContainer.addWidget(self.readAbsoluteRadioButton, 0, 0)
-        self.gridContainer.addWidget(self.readPercentileRadioButton, 0, 1)
-        self.gridContainer.addWidget(self.readEnergyLabel, 1, 0)
-        self.gridContainer.addWidget(self.readEnergySlider, 2, 0, 1, 1)
-        self.gridContainer.addWidget(self.minEnergySpinBox, 3, 0)
-        self.gridContainer.addWidget(self.maxEnergySpinBox, 3, 1)
-        self.gridContainer.addWidget(self.readLigandsEfficiencyLabel, 4, 0)
-        self.gridContainer.addWidget(self.readLigandsEfficiencySlider, 5, 0, 1, 1)
-        self.gridContainer.addWidget(self.minLigandsEfficiencySpinBox, 6, 0)
-        self.gridContainer.addWidget(self.maxLigandsEfficiencySpinBox, 6, 1)
-        self.gridContainer.setObjectName("gridContainer")
-        self.readPropertiesGroupBox.setLayout(self.gridContainer)
-        
-        self.readLigandsGroupBox = QtWidgets.QGroupBox(self.readTab)
-        self.readLigandsGroupBox.setGeometry(QtCore.QRect(10, 230, 381, 131))
-        self.readLigandsGroupBox.setObjectName("readLigandsGroupBox")
-        # POPULATING LIGAND FILTER GROUP
-        self.readLigandLabel = QtWidgets.QLabel(self.readLigandsGroupBox)
-        self.readLigandLabel.setGeometry(QtCore.QRect(10, 30, 150, 17))
-        self.readLigandLabel.setObjectName("readLigandLabel")
-        
-        self.readLigandAddButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
-        self.readLigandAddButton.setGeometry(QtCore.QRect(258, 30, 41, 25))
-        icon = QtGui.QIcon.fromTheme("add")
-        self.readLigandAddButton.setIcon(icon)
-        self.readLigandAddButton.setObjectName("readLigandAddButton")
-        self.readLigandDeleteButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
-        self.readLigandDeleteButton.setGeometry(QtCore.QRect(320, 30, 41, 25))
-        icon = QtGui.QIcon.fromTheme("remove")
-        self.readLigandDeleteButton.setIcon(icon)
-        self.readLigandDeleteButton.setObjectName("readLigandDeleteButton")
-        
-        
-        self.readLigandListWidget = QtWidgets.QListWidget(self.readLigandsGroupBox)
-        self.readLigandListWidget.setGeometry(10, 59, 361, 70)
-        
-        self.readInteractionsGroupBox = QtWidgets.QGroupBox(self.readTab)
-        self.readInteractionsGroupBox.setGeometry(QtCore.QRect(400, 0, 401, 221))
-        self.readInteractionsGroupBox.setObjectName("readInteractionsGroupBox")
-        # POPULATING INTERACTIONS FILTER GROUP
-
-        
-        self.readProceedButton = QtWidgets.QPushButton(self.readTab)
-        self.readProceedButton.setGeometry(QtCore.QRect(688, 304, 101, 61))
-        self.readProceedButton.setObjectName("readProceedButton")
-                
-        self.tabWidget.addTab(self.readTab, "")
-        self.dbLineEdit = QtWidgets.QLineEdit(self.centralwidget)
-        self.dbLineEdit.setGeometry(QtCore.QRect(160, 10, 231, 25))
-        self.dbLineEdit.setObjectName("dbLineEdit")
-        # self.dbLineEdit.setEnabled(False)
-        self.dbLabel = QtWidgets.QLabel(self.centralwidget)
-        self.dbLabel.setGeometry(QtCore.QRect(0, 10, 141, 17))
-        self.dbLabel.setObjectName("dbLabel")
-        self.loadDbButton = QtWidgets.QPushButton(self.centralwidget)
-        self.loadDbButton.setGeometry(QtCore.QRect(420, 10, 89, 25))
-        self.loadDbButton.setObjectName("loadDbButton")
-        self.createDbButton = QtWidgets.QPushButton(self.centralwidget)
-        self.createDbButton.setGeometry(QtCore.QRect(520, 10, 89, 25))
-        self.createDbButton.setObjectName("createDbButton")
+        self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
+        self.gridLayout.setObjectName("gridLayout")
         self.generalPropertiesBox = QtWidgets.QGroupBox(self.centralwidget)
-        self.generalPropertiesBox.setGeometry(QtCore.QRect(10, 470, 781, 101))
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.generalPropertiesBox.sizePolicy().hasHeightForWidth())
+        self.generalPropertiesBox.setSizePolicy(sizePolicy)
         self.generalPropertiesBox.setObjectName("generalPropertiesBox")
+        self.gridLayout_4 = QtWidgets.QGridLayout(self.generalPropertiesBox)
+        self.gridLayout_4.setObjectName("gridLayout_4")
         self.numberOfProcessorsLabel = QtWidgets.QLabel(self.generalPropertiesBox)
-        self.numberOfProcessorsLabel.setGeometry(QtCore.QRect(10, 30, 101, 17))
         self.numberOfProcessorsLabel.setObjectName("numberOfProcessorsLabel")
+        self.gridLayout_4.addWidget(self.numberOfProcessorsLabel, 0, 0, 1, 1)
         self.numberOfProcessorsBox = QtWidgets.QSpinBox(self.generalPropertiesBox)
-        self.numberOfProcessorsBox.setGeometry(QtCore.QRect(120, 30, 44, 26))
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.numberOfProcessorsBox.sizePolicy().hasHeightForWidth())
+        self.numberOfProcessorsBox.setSizePolicy(sizePolicy)
         self.numberOfProcessorsBox.setObjectName("numberOfProcessorsBox")
         self.numberOfProcessorsBox.setMaximum(multiprocessing.cpu_count())
         self.numberOfProcessorsBox.setMinimum(1)
-        self.verboseCheckBox = QtWidgets.QCheckBox(self.generalPropertiesBox)
-        self.verboseCheckBox.setGeometry(QtCore.QRect(200, 30, 112, 23))
-        self.verboseCheckBox.setObjectName("verboseCheckBox")
-        self.debugCheckBox = QtWidgets.QCheckBox(self.generalPropertiesBox)
-        self.debugCheckBox.setGeometry(QtCore.QRect(310, 30, 112, 23))
-        self.debugCheckBox.setObjectName("debugCheckBox")
+        self.gridLayout_4.addWidget(self.numberOfProcessorsBox, 0, 1, 1, 1)
+        self.verboseRadioButton = QtWidgets.QRadioButton(self.generalPropertiesBox)
+        self.verboseRadioButton.setObjectName("verboseRadioButton")
+        self.gridLayout_4.addWidget(self.verboseRadioButton, 0, 2, 1, 1)
+        self.debugRadioButton = QtWidgets.QRadioButton(self.generalPropertiesBox)
+        self.debugRadioButton.setObjectName("debugRadioButton")
+        self.gridLayout_4.addWidget(self.debugRadioButton, 0, 3, 1, 1)
+        self.gridLayout.addWidget(self.generalPropertiesBox, 2, 0, 1, 4)
+        self.dbLineEdit = QtWidgets.QLineEdit(self.centralwidget)
+        self.dbLineEdit.setObjectName("dbLineEdit")
+        self.gridLayout.addWidget(self.dbLineEdit, 0, 1, 1, 1)
+        self.createDbButton = QtWidgets.QPushButton(self.centralwidget)
+        self.createDbButton.setObjectName("createDbButton")
+        self.gridLayout.addWidget(self.createDbButton, 0, 3, 1, 1)
+        self.loadDbButton = QtWidgets.QPushButton(self.centralwidget)
+        self.loadDbButton.setObjectName("loadDbButton")
+        self.gridLayout.addWidget(self.loadDbButton, 0, 2, 1, 1)
+        self.dbLabel = QtWidgets.QLabel(self.centralwidget)
+        self.dbLabel.setObjectName("dbLabel")
+        self.gridLayout.addWidget(self.dbLabel, 0, 0, 1, 1)
+        self.tabWidget = QtWidgets.QTabWidget(self.centralwidget)
+        self.tabWidget.setAutoFillBackground(False)
+        self.tabWidget.setObjectName("tabWidget")
+        self.writeTab = QtWidgets.QWidget()
+        self.writeTab.setObjectName("writeTab")
+        self.gridLayout_2 = QtWidgets.QGridLayout(self.writeTab)
+        self.gridLayout_2.setObjectName("gridLayout_2")
+        self.writeEngineGroupBox = QtWidgets.QGroupBox(self.writeTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.writeEngineGroupBox.sizePolicy().hasHeightForWidth())
+        self.writeEngineGroupBox.setSizePolicy(sizePolicy)
+        self.writeEngineGroupBox.setObjectName("writeEngineGroupBox")
+        self.gridLayout_3 = QtWidgets.QGridLayout(self.writeEngineGroupBox)
+        self.gridLayout_3.setObjectName("gridLayout_3")
+        self.autodockLabel = QtWidgets.QLabel(self.writeEngineGroupBox)
+        self.autodockLabel.setObjectName("autodockLabel")
+        self.gridLayout_3.addWidget(self.autodockLabel, 0, 0, 1, 2)
+        self.autodockComboBox = QtWidgets.QComboBox(self.writeEngineGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.autodockComboBox.sizePolicy().hasHeightForWidth())
+        self.autodockComboBox.setSizePolicy(sizePolicy)
+        self.autodockComboBox.setObjectName("autodockComboBox")
+        self.gridLayout_3.addWidget(self.autodockComboBox, 0, 2, 1, 1)
+        self.receptorLabel = QtWidgets.QLabel(self.writeEngineGroupBox)
+        self.receptorLabel.setObjectName("receptorLabel")
+        self.gridLayout_3.addWidget(self.receptorLabel, 1, 0, 1, 1)
+        self.receptorLineEdit = QtWidgets.QLineEdit(self.writeEngineGroupBox)
+        self.receptorLineEdit.setObjectName("receptorLineEdit")
+        self.gridLayout_3.addWidget(self.receptorLineEdit, 1, 1, 1, 2)
+        self.browseReceptorButton = QtWidgets.QPushButton(self.writeEngineGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.browseReceptorButton.sizePolicy().hasHeightForWidth())
+        self.browseReceptorButton.setSizePolicy(sizePolicy)
+        self.browseReceptorButton.setObjectName("browseReceptorButton")
+        self.gridLayout_3.addWidget(self.browseReceptorButton, 1, 3, 1, 1)
+        self.gridLayout_2.addWidget(self.writeEngineGroupBox, 0, 0, 1, 1)
+        self.writeInteractionsGroupBox = QtWidgets.QGroupBox(self.writeTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.writeInteractionsGroupBox.sizePolicy().hasHeightForWidth())
+        self.writeInteractionsGroupBox.setSizePolicy(sizePolicy)
+        self.writeInteractionsGroupBox.setObjectName("writeInteractionsGroupBox")
+        self.gridLayout_5 = QtWidgets.QGridLayout(self.writeInteractionsGroupBox)
+        self.gridLayout_5.setObjectName("gridLayout_5")
+        self.maxPosesLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
+        self.maxPosesLabel.setObjectName("maxPosesLabel")
+        self.gridLayout_5.addWidget(self.maxPosesLabel, 0, 0, 1, 1)
+        self.maxPosesSpinBox = QtWidgets.QSpinBox(self.writeInteractionsGroupBox)
+        self.maxPosesSpinBox.setObjectName("maxPosesSpinBox")
+        self.gridLayout_5.addWidget(self.maxPosesSpinBox, 0, 1, 1, 1)
+        self.storeAllPosesCheckBox = QtWidgets.QCheckBox(self.writeInteractionsGroupBox)
+        self.storeAllPosesCheckBox.setObjectName("storeAllPosesCheckBox")
+        self.gridLayout_5.addWidget(self.storeAllPosesCheckBox, 0, 2, 1, 1)
+        self.addInteractionsCheckBox = QtWidgets.QCheckBox(self.writeInteractionsGroupBox)
+        self.addInteractionsCheckBox.setObjectName("addInteractionsCheckBox")
+        self.gridLayout_5.addWidget(self.addInteractionsCheckBox, 1, 0, 1, 1)
+        self.distanceCutoffLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
+        self.distanceCutoffLabel.setObjectName("distanceCutoffLabel")
+        self.gridLayout_5.addWidget(self.distanceCutoffLabel, 2, 0, 1, 1)
+        self.hCutoffLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
+        self.hCutoffLabel.setObjectName("hCutoffLabel")
+        self.gridLayout_5.addWidget(self.hCutoffLabel, 3, 0, 1, 1)
+        self.hSpinBox = QtWidgets.QDoubleSpinBox(self.writeInteractionsGroupBox)
+        self.hSpinBox.setObjectName("hSpinBox")
+        self.gridLayout_5.addWidget(self.hSpinBox, 3, 1, 1, 1)
+        self.vdwCutoffLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
+        self.vdwCutoffLabel.setObjectName("vdwCutoffLabel")
+        self.gridLayout_5.addWidget(self.vdwCutoffLabel, 4, 0, 1, 1)
+        self.vdwSpinBox = QtWidgets.QDoubleSpinBox(self.writeInteractionsGroupBox)
+        self.vdwSpinBox.setObjectName("vdwSpinBox")
+        self.gridLayout_5.addWidget(self.vdwSpinBox, 4, 1, 1, 1)
+        self.toleranceLabelAD = QtWidgets.QLabel(self.writeInteractionsGroupBox)
+        self.toleranceLabelAD.setObjectName("toleranceLabelAD")
+        self.gridLayout_5.addWidget(self.toleranceLabelAD, 5, 0, 1, 1)
+        self.toleranceSpinBox = QtWidgets.QDoubleSpinBox(self.writeInteractionsGroupBox)
+        self.toleranceSpinBox.setObjectName("toleranceSpinBox")
+        self.gridLayout_5.addWidget(self.toleranceSpinBox, 6, 0, 1, 1)
+        self.gridLayout_2.addWidget(self.writeInteractionsGroupBox, 0, 1, 2, 1)
+        self.writeLigandsGroupBox = QtWidgets.QGroupBox(self.writeTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.writeLigandsGroupBox.sizePolicy().hasHeightForWidth())
+        self.writeLigandsGroupBox.setSizePolicy(sizePolicy)
+        self.writeLigandsGroupBox.setObjectName("writeLigandsGroupBox")
+        self.gridLayout_6 = QtWidgets.QGridLayout(self.writeLigandsGroupBox)
+        self.gridLayout_6.setObjectName("gridLayout_6")
+        self.writeLigandsFromFileRadioButton = QtWidgets.QRadioButton(self.writeLigandsGroupBox)
+        self.writeLigandsFromFileRadioButton.setObjectName("writeLigandsFromFileRadioButton")
+        self.gridLayout_6.addWidget(self.writeLigandsFromFileRadioButton, 0, 0, 1, 3)
+        self.writeLigandsFromDirectoryRadioButton = QtWidgets.QRadioButton(self.writeLigandsGroupBox)
+        self.writeLigandsFromDirectoryRadioButton.setObjectName("writeLigandsFromDirectoryRadioButton")
+        self.gridLayout_6.addWidget(self.writeLigandsFromDirectoryRadioButton, 0, 3, 1, 2)
+        self.writeLigandsPatternLabel = QtWidgets.QLabel(self.writeLigandsGroupBox)
+        self.writeLigandsPatternLabel.setObjectName("writeLigandsPatternLabel")
+        self.gridLayout_6.addWidget(self.writeLigandsPatternLabel, 1, 0, 1, 1)
+        self.writeLigandsPatternLineEdit = QtWidgets.QLineEdit(self.writeLigandsGroupBox)
+        self.writeLigandsPatternLineEdit.setObjectName("writeLigandsPatternLineEdit")
+        self.gridLayout_6.addWidget(self.writeLigandsPatternLineEdit, 1, 1, 1, 3)
+        self.writeLigandsRecursiveCheckBox = QtWidgets.QCheckBox(self.writeLigandsGroupBox)
+        self.writeLigandsRecursiveCheckBox.setTristate(False)
+        self.writeLigandsRecursiveCheckBox.setObjectName("writeLigandsRecursiveCheckBox")
+        self.gridLayout_6.addWidget(self.writeLigandsRecursiveCheckBox, 2, 0, 1, 2)
+        self.writeLigandsSelectLabel = QtWidgets.QLabel(self.writeLigandsGroupBox)
+        self.writeLigandsSelectLabel.setObjectName("writeLigandsSelectLabel")
+        self.gridLayout_6.addWidget(self.writeLigandsSelectLabel, 3, 0, 1, 2)
+        self.writeLigandsSelectLineEdit = QtWidgets.QLineEdit(self.writeLigandsGroupBox)
+        self.writeLigandsSelectLineEdit.setObjectName("writeLigandsSelectLineEdit")
+        self.gridLayout_6.addWidget(self.writeLigandsSelectLineEdit, 3, 2, 1, 2)
+        self.writeLigandsSelectButton = QtWidgets.QPushButton(self.writeLigandsGroupBox)
+        self.writeLigandsSelectButton.setObjectName("writeLigandsSelectButton")
+        self.gridLayout_6.addWidget(self.writeLigandsSelectButton, 3, 4, 1, 1)
+        self.gridLayout_2.addWidget(self.writeLigandsGroupBox, 1, 0, 1, 1)
+        self.proceedButton = QtWidgets.QPushButton(self.writeTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.proceedButton.sizePolicy().hasHeightForWidth())
+        self.proceedButton.setSizePolicy(sizePolicy)
+        self.proceedButton.setObjectName("proceedButton")
+        self.gridLayout_2.addWidget(self.proceedButton, 2, 1, 1, 1)
+        self.tabWidget.addTab(self.writeTab, "")
+        self.readTab = QtWidgets.QWidget()
+        self.readTab.setObjectName("readTab")
+        self.gridLayout_8 = QtWidgets.QGridLayout(self.readTab)
+        self.gridLayout_8.setObjectName("gridLayout_8")
+        self.readPropertiesGroupBox = QtWidgets.QGroupBox(self.readTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readPropertiesGroupBox.sizePolicy().hasHeightForWidth())
+        self.readPropertiesGroupBox.setSizePolicy(sizePolicy)
+        self.readPropertiesGroupBox.setAutoFillBackground(False)
+        self.readPropertiesGroupBox.setObjectName("readPropertiesGroupBox")
+        self.gridLayout_9 = QtWidgets.QGridLayout(self.readPropertiesGroupBox)
+        self.gridLayout_9.setObjectName("gridLayout_9")
+        self.readEnergyLabel = QtWidgets.QLabel(self.readPropertiesGroupBox)
+        self.readEnergyLabel.setObjectName("readEnergyLabel")
+        self.gridLayout_9.addWidget(self.readEnergyLabel, 1, 0, 1, 1)
         
-        # Logo
-        self.logo_label = QtWidgets.QLabel(self.centralwidget)
-        self.ringtailLogo = QtGui.QPixmap(os.path.join(ringtail_gui_path, 'img/ringtail_logo.png'))
-        self.ringtail_logo_scaled = self.ringtailLogo.scaled(171, 60, QtCore.Qt.KeepAspectRatio)
-        self.logo_label.setPixmap(self.ringtail_logo_scaled)
-        self.logo_label.resize(self.ringtail_logo_scaled.width(), self.ringtail_logo_scaled.height())
-        self.logo_label.setGeometry(QtCore.QRect(640, 10, 171, 60))
-        
+        self.readLigandsEfficiencyLabel = QtWidgets.QLabel(self.readPropertiesGroupBox)
+        self.readLigandsEfficiencyLabel.setObjectName("readLigandsEfficiencyLabel")
+        self.gridLayout_9.addWidget(self.readLigandsEfficiencyLabel, 3, 0, 1, 2)
+        self.readEnergySlider = RangeSlider(QtCore.Qt.Horizontal)
+        self.readEnergySlider.setMinimumHeight(30)
+        self.readEnergySlider.setObjectName("readAbsoluteEnergySlider")
+        self.gridLayout_9.addWidget(self.readEnergySlider, 2, 1, 1, 2)
+        self.readPercentileRadioButton = QtWidgets.QRadioButton(self.readPropertiesGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readPercentileRadioButton.sizePolicy().hasHeightForWidth())
+        self.readPercentileRadioButton.setSizePolicy(sizePolicy)
+        self.readPercentileRadioButton.setObjectName("readPercentileRadioButton")
+        self.gridLayout_9.addWidget(self.readPercentileRadioButton, 0, 2, 1, 2)
+        self.readAbsoluteRadioButton = QtWidgets.QRadioButton(self.readPropertiesGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readAbsoluteRadioButton.sizePolicy().hasHeightForWidth())
+        self.readAbsoluteRadioButton.setSizePolicy(sizePolicy)
+        self.readAbsoluteRadioButton.setObjectName("readAbsoluteRadioButton")
+        self.gridLayout_9.addWidget(self.readAbsoluteRadioButton, 0, 0, 1, 2)
+        self.readLigandsEfficiencySlider = RangeSlider(QtCore.Qt.Horizontal)
+        self.readLigandsEfficiencySlider.setMinimumHeight(30)
+        self.readLigandsEfficiencySlider.setObjectName("readAbsoluteLigandsEfficiencySlider")
+        self.gridLayout_9.addWidget(self.readLigandsEfficiencySlider, 4, 1, 1, 2)
+        self.gridLayout_8.addWidget(self.readPropertiesGroupBox, 0, 0, 1, 1)
+        self.maxEnergySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.maxEnergySpinBox.sizePolicy().hasHeightForWidth())
+        self.maxEnergySpinBox.setSizePolicy(sizePolicy)
+        self.maxEnergySpinBox.setValue(self.readEnergySlider.maximum())
+        self.maxEnergySpinBox.setObjectName("maxEnergySpinBox")
+        self.gridLayout_9.addWidget(self.maxEnergySpinBox, 2, 3, 1, 1)
+        self.minLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.minLigandsEfficiencySpinBox.sizePolicy().hasHeightForWidth())
+        self.minLigandsEfficiencySpinBox.setSizePolicy(sizePolicy)
+        self.minLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.minimum()/100)
+        self.minLigandsEfficiencySpinBox.setObjectName("minLigandsEfficiencySpinBox")
+        self.gridLayout_9.addWidget(self.minLigandsEfficiencySpinBox, 4, 0, 1, 1)
+        self.minEnergySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.maxEnergySpinBox.sizePolicy().hasHeightForWidth())
+        self.minEnergySpinBox.setSizePolicy(sizePolicy)
+        self.minEnergySpinBox.setValue(self.readEnergySlider.minimum())
+        self.minEnergySpinBox.setObjectName("minEnergySpinBox")
+        self.gridLayout_9.addWidget(self.minEnergySpinBox, 2, 0, 1, 1)
+        self.maxLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(self.readPropertiesGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.maxLigandsEfficiencySpinBox.sizePolicy().hasHeightForWidth())
+        self.maxLigandsEfficiencySpinBox.setSizePolicy(sizePolicy)
+        self.maxLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.maximum()/100)
+        self.maxLigandsEfficiencySpinBox.setObjectName("maxLigandsEfficiencySpinBox")
+        self.gridLayout_9.addWidget(self.maxLigandsEfficiencySpinBox, 4, 3, 1, 1)
+        self.resultsGroupbox = QtWidgets.QGroupBox(self.readTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.resultsGroupbox.sizePolicy().hasHeightForWidth())
+        self.resultsGroupbox.setSizePolicy(sizePolicy)
+        self.resultsGroupbox.setObjectName("resultsGroupbox")
+        self.gridLayout_8.addWidget(self.resultsGroupbox, 0, 1, 4, 1)
+        self.readLigandsGroupBox = QtWidgets.QGroupBox(self.readTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readLigandsGroupBox.sizePolicy().hasHeightForWidth())
+        self.readLigandsGroupBox.setSizePolicy(sizePolicy)
+        self.readLigandsGroupBox.setObjectName("readLigandsGroupBox")
+        self.gridLayout_7 = QtWidgets.QGridLayout(self.readLigandsGroupBox)
+        self.gridLayout_7.setObjectName("gridLayout_7")
+        self.readLigandAddButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readLigandAddButton.sizePolicy().hasHeightForWidth())
+        self.readLigandAddButton.setSizePolicy(sizePolicy)
+        self.readLigandAddButton.setText("")
+        icon = QtGui.QIcon.fromTheme("add")
+        self.readLigandAddButton.setIcon(icon)
+        self.readLigandAddButton.setObjectName("readLigandAddButton")
+        self.gridLayout_7.addWidget(self.readLigandAddButton, 0, 1, 1, 1)
+        self.readLigandDeleteButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readLigandDeleteButton.sizePolicy().hasHeightForWidth())
+        self.readLigandDeleteButton.setSizePolicy(sizePolicy)
+        self.readLigandDeleteButton.setText("")
+        icon = QtGui.QIcon.fromTheme("remove")
+        self.readLigandDeleteButton.setIcon(icon)
+        self.readLigandDeleteButton.setObjectName("readLigandDeleteButton")
+        self.gridLayout_7.addWidget(self.readLigandDeleteButton, 0, 2, 1, 1)
+        self.readLigandEditButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readLigandEditButton.sizePolicy().hasHeightForWidth())
+        self.readLigandEditButton.setSizePolicy(sizePolicy)
+        self.readLigandEditButton.setText("")
+        icon = QtGui.QIcon.fromTheme("edit")
+        self.readLigandEditButton.setIcon(icon)
+        self.readLigandEditButton.setObjectName("readLigandEditButton")
+        self.gridLayout_7.addWidget(self.readLigandEditButton, 0, 3, 1, 1)
+        self.readLigandEnableButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readLigandEnableButton.sizePolicy().hasHeightForWidth())
+        self.readLigandEnableButton.setSizePolicy(sizePolicy)
+        self.readLigandEnableButton.setText("")
+        self.readLigandEnableButton.setIcon(QtGui.QIcon(":enable_disable_icon.png"))
+        self.readLigandEnableButton.setObjectName("readLigandEnableButton")
+        self.gridLayout_7.addWidget(self.readLigandEnableButton, 0, 4, 1, 1)
+        self.readLigandListWidget = QtWidgets.QListWidget(self.readLigandsGroupBox)
+        self.readLigandListWidget.setObjectName("readLigandListWidget")
+        self.gridLayout_7.addWidget(self.readLigandListWidget, 1, 0, 1, 5)
+        self.readLigandLabel = QtWidgets.QLabel(self.readLigandsGroupBox)
+        self.readLigandLabel.setObjectName("readLigandLabel")
+        self.gridLayout_7.addWidget(self.readLigandLabel, 0, 0, 1, 1)
+        self.gridLayout_8.addWidget(self.readLigandsGroupBox, 1, 0, 1, 1)
+        self.readInteractionsGroupBox = QtWidgets.QGroupBox(self.readTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readInteractionsGroupBox.sizePolicy().hasHeightForWidth())
+        self.readInteractionsGroupBox.setSizePolicy(sizePolicy)
+        self.readInteractionsGroupBox.setObjectName("readInteractionsGroupBox")
+        self.gridLayout_8.addWidget(self.readInteractionsGroupBox, 2, 0, 1, 1)
+        self.readProceedButton = QtWidgets.QPushButton(self.readTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readProceedButton.sizePolicy().hasHeightForWidth())
+        self.readProceedButton.setSizePolicy(sizePolicy)
+        self.readProceedButton.setObjectName("readProceedButton")
+        self.gridLayout_8.addWidget(self.readProceedButton, 3, 0, 1, 1)
+        self.tabWidget.addTab(self.readTab, "")
+        self.gridLayout.addWidget(self.tabWidget, 1, 0, 1, 4)
         MainWindow.setCentralWidget(self.centralwidget)
-        # self.setFixedSize(800, 601)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
@@ -316,42 +417,30 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
         
-        # CUSTOM VARIABLES
         #-----------------------------------------------------------------#
-        # self.db = None
-        # self.engine_types = ["AutoDock", "Vina"]
-        # self.selected_engine = None
-        # self.processors_number = None
-        # self.h_cutoff_distance = None
-        # self.vdw_cutoff_distance = None
-        # self.receptorForm = None
-        # self.tolerance = None
-        # self.max_poses = self.maxPosesSpinBox.value()
-        # self.store_all_poses = False
-        # self.verbose = False
-        # self.debug = False
-        #-----------------------------------------------------------------#
+        # TAB
+        self.tabWidget.tabBarClicked.connect(self.handle_enables_for_read_tab)
         
-        # EVENTS HANDLING
-        #-----------------------------------------------------------------#
         # WRITE
         self.autodockComboBox.currentIndexChanged.connect(self.set_engine)
         self.numberOfProcessorsBox.valueChanged.connect(self.set_number_of_processors)
         self.hSpinBox.valueChanged.connect(self.set_h_cutoff_distance)
         self.vdwSpinBox.valueChanged.connect(self.set_vdw_cutoff_distance)
         self.toleranceSpinBox.valueChanged.connect(self.set_tolerance)
+        self.maxPosesSpinBox.valueChanged.connect(self.set_number_of_poses)
         self.dbLineEdit.textChanged.connect(self.enable_process)
         self.writeLigandsPatternLineEdit.textChanged.connect(self.set_ligands_pattern)
         self.writeLigandsSelectLineEdit.textChanged.connect(self.set_ligands_selection)
         self.receptorLineEdit.textChanged.connect(self.set_receptor_filename)
+        self.writeLigandsPatternLineEdit.textChanged.connect(self.set_pattern)
         
         self.loadDbButton.clicked.connect(self.select_db)
         self.browseReceptorButton.clicked.connect(self.select_receptor)
         self.proceedButton.clicked.connect(self.proceed_write_analysis)
         self.createDbButton.clicked.connect(self.create_db)
         self.storeAllPosesCheckBox.clicked.connect(self.set_store_all_poses)
-        self.verboseCheckBox.clicked.connect(self.set_verbose)
-        self.debugCheckBox.clicked.connect(self.set_debug)
+        self.verboseRadioButton.clicked.connect(self.set_verbose)
+        self.debugRadioButton.clicked.connect(self.set_debug)
         self.writeLigandsFromDirectoryRadioButton.clicked.connect(self.enable_ligands_from_directory)
         self.writeLigandsFromFileRadioButton.clicked.connect(self.enable_ligands_from_file)
         self.writeLigandsRecursiveCheckBox.clicked.connect(self.set_ligands_recursive_search)
@@ -369,8 +458,12 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.minLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_min)
         self.readLigandAddButton.clicked.connect(self.get_ligand_name)
         self.readLigandDeleteButton.clicked.connect(self.delete_ligand_from_list)
+        self.readLigandEditButton.clicked.connect(self.edit_ligand_from_list)
+        self.readLigandEnableButton.clicked.connect(self.enable_ligand_item)
         self.readLigandListWidget.itemClicked.connect(self.item_selected_from_list)
         self.readProceedButton.clicked.connect(self.get_ligand_names_from_widget)
+        
+        self.readLigandListWidget.itemChanged.connect(self.set_edited_item)
         #-----------------------------------------------------------------#
         
                 # INITIALIZATION
@@ -379,13 +472,21 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.set_default_number_of_processors()
         self.set_default_cutoffs()
         self.disable_everything()
-            
+        
         # READ
         # self.readAbsoluteRadioButton.click()
         #-----------------------------------------------------------------#
         
     # CLASS METHODS
     #-----------------------------------------------------------------#
+    def handle_enables_for_read_tab(self, index):
+        if index == self.tabWidget.indexOf(self.readTab):
+            self.loadDbButton.setEnabled(False)
+            self.numberOfProcessorsBox.setEnabled(False)
+        else:
+            self.loadDbButton.setEnabled(True)
+            self.numberOfProcessorsBox.setEnabled(True)
+    
     def enable_read_tab(self):
         self.readPropertiesGroupBox.setEnabled(True)
         self.readLigandsGroupBox.setEnabled(True)
@@ -428,15 +529,19 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
                 self.enable_read_tab()
         
     def set_debug(self):
-        if self.debugCheckBox.isChecked():
+        if self.debugRadioButton.isChecked():
             self.debug = True
+            self.verbose = False
         else:
             self.debug = False
+            self.verbose = True
             
     def set_verbose(self):
-        if self.verboseCheckBox.isChecked():
+        if self.verboseRadioButton.isChecked():
+            self.debug = False
             self.verbose = True
         else:
+            self.debug = True
             self.verbose = False
     
     def set_default_number_of_processors(self):
@@ -489,13 +594,14 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
     
     def set_engine(self):
         self.selected_engine = self.autodockComboBox.currentText()
-        if self.selected_engine == 'AutoDock':
+        if self.selected_engine == 'AutoDockGPU':
             self.toleranceLabelAD.setVisible(True)
             self.toleranceSpinBox.setVisible(True)
             self.toleranceSpinBox.setEnabled(True)
             self.addInteractionsCheckBox.setChecked(False)
             self.hSpinBox.setEnabled(False)
             self.vdwSpinBox.setEnabled(False)
+            self.ligands_directory_pattern = "*.dlg*"
         else:
             self.addInteractionsCheckBox.setChecked(True)
             self.hSpinBox.setEnabled(True)
@@ -503,7 +609,9 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
             self.toleranceLabelAD.setVisible(False)
             self.toleranceSpinBox.setVisible(False)
             self.toleranceSpinBox.setEnabled(False)    
-    
+            self.ligands_directory_pattern = "*.pdbqt*"
+        self.set_pattern(self.ligands_directory_pattern)
+            
     def populate_engine_combo(self):
         for engine in self.engine_types:
             self.autodockComboBox.addItem(engine)
@@ -512,6 +620,12 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
     #-----------------------------------------------------------------#
     
     # WRITE -> LIGANDS
+    def set_pattern(self, default=None):
+        if default is None:
+            self.ligands_directory_pattern = self.writeLigandsPatternLineEdit.text()
+        else:
+            self.writeLigandsPatternLineEdit.setText(default)
+            
     def enable_ligands_from_file(self):
         if self.writeLigandsFromFileRadioButton.isChecked():
             self.writeLigandsRecursiveCheckBox.setEnabled(False)
@@ -581,13 +695,16 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
             self.maxPosesSpinBox.setEnabled(False)
             self.store_all_poses = True
         else:
-            self.maxPosesSpinBox.setValue(0)
+            self.maxPosesSpinBox.setValue(3)
             self.maxPosesSpinBox.setEnabled(True)
             self.store_all_poses = False
         self.max_poses = int(self.maxPosesSpinBox.value())
+        
+    def set_number_of_poses(self):
+        self.max_poses = int(self.maxPosesSpinBox.value())
             
     def set_tolerance(self):
-        if self.selected_engine == 'AutoDock':
+        if self.selected_engine == 'AutoDockGPU':
             self.tolerance = float(self.toleranceSpinBox.value())
         else:
             self.tolerance = None
@@ -697,11 +814,13 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         
     # READ -> LIGAND
     def get_ligand_name(self):
-        name, done = QtWidgets.QInputDialog.getText(self, "Input Dialog", "Enter ligand name:")
+        name, done = QtWidgets.QInputDialog.getText(self.readLigandsGroupBox, "Input Dialog", "Enter ligand name:")
         if done:
             item = QtWidgets.QListWidgetItem(name)
+            item.setFlags(item.flags() | QtCore.Qt.ItemIsEditable)
+            item.setIcon(QtGui.QIcon(":enabled_icon.svg"))
             self.readLigandListWidget.addItem(item)
-            self.ligand_names.append(item.text())
+            self.ligand_names.append([item.text(), True])
             print(f"Add {self.ligand_names}")
             
     def delete_ligand_from_list(self):
@@ -712,7 +831,15 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
                     del self.ligand_names[idx]
                     self.selected_ligand_name_from_list = None
                     print(f"Delete {self.ligand_names}")
-            
+                    break
+    
+    def edit_ligand_from_list(self):
+        if self.selected_ligand_name_from_list is not None:
+            for idx in range(0, self.readLigandListWidget.count()):
+                if self.readLigandListWidget.item(idx) == self.selected_ligand_name_from_list:
+                    self.readLigandListWidget.editItem(self.readLigandListWidget.item(idx))
+                    break
+                    
     def item_selected_from_list(self, item):
         self.selected_ligand_name_from_list = item
         
@@ -722,56 +849,70 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
                 item = self.readLigandListWidget.item(idx).text()
                 if item not in self.ligand_names:
                     self.ligand_names.append(item)
-                
-        print(self.ligand_names)
-    #-----------------------------------------------------------------#
-        
+                    break
+                        
+    def set_edited_item(self, item):
+        for idx in range(0, self.readLigandListWidget.count()):
+            if self.readLigandListWidget.item(idx) == item:
+                self.ligand_names[idx][0] = self.readLigandListWidget.item(idx).text()
+                print(f"Edit {self.ligand_names}")
+                break
+    
+    def enable_ligand_item(self):
+        for idx in range(0, self.readLigandListWidget.count()):
+            if self.readLigandListWidget.item(idx) == self.selected_ligand_name_from_list:
+                if self.ligand_names[idx][1] is True:
+                    self.ligand_names[idx][1] = False
+                    self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+                else:
+                    self.ligand_names[idx][1] = True
+                    self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                break
+    
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Mock RingTail"))
-        
-        self.writeEngineGroupBox.setTitle(_translate("MainWindow", "Receptor:"))
-        self.autodockLabel.setText(_translate("MainWindow", "Select docking engine:"))
-        self.receptorLabel.setText(_translate("MainWindow", "Select receptor:"))
-        self.browseReceptorButton.setText(_translate("MainWindow", "Browse"))
-        self.writeInteractionsGroupBox.setTitle(_translate("MainWindow", "Properties:"))
-        self.distanceCutoffLabel.setText(_translate("MainWindow", "Distance cutoff:"))
-        self.toleranceLabelAD.setText(_translate("MainWindow", "Tolerance:"))
-        self.maxPosesLabel.setText(_translate("MainWindow", "Max poses:"))
-        self.storeAllPosesCheckBox.setText(_translate("MainWindow", "Store all poses"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.writeTab), _translate("MainWindow", "Write"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.readTab), _translate("MainWindow", "Read"))
-        self.dbLabel.setText(_translate("MainWindow", "Select database file:"))
-        self.loadDbButton.setText(_translate("MainWindow", "Load"))
         self.generalPropertiesBox.setTitle(_translate("MainWindow", "Advanced options:"))
         self.numberOfProcessorsLabel.setText(_translate("MainWindow", "Processors #:"))
-        self.verboseCheckBox.setText(_translate("MainWindow", "Verbose"))
-        self.debugCheckBox.setText(_translate("MainWindow", "Debug"))
+        self.verboseRadioButton.setText(_translate("MainWindow", "Verbose"))
+        self.debugRadioButton.setText(_translate("MainWindow", "Debug"))
         self.createDbButton.setText(_translate("MainWindow", "Create"))
-        self.proceedButton.setText(_translate("MainWindow", "Process"))
-        self.hCutoffLabel.setText(_translate("MainWindow", "H"))
-        self.vdwCutoffLabel.setText(_translate("MainWindow", "VDW"))
+        self.loadDbButton.setText(_translate("MainWindow", "Load"))
+        self.dbLabel.setText(_translate("MainWindow", "Select database file:"))
+        self.writeEngineGroupBox.setTitle(_translate("MainWindow", "Receptor:"))
+        self.autodockLabel.setText(_translate("MainWindow", "Select docking engine:"))
+        self.receptorLabel.setText(_translate("MainWindow", "Select receptor(s):"))
+        self.browseReceptorButton.setText(_translate("MainWindow", "Browse"))
+        self.writeInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions:"))
+        self.maxPosesLabel.setText(_translate("MainWindow", "Max poses:"))
+        self.storeAllPosesCheckBox.setText(_translate("MainWindow", "Store all poses"))
+        self.distanceCutoffLabel.setText(_translate("MainWindow", "Distance cutoff:"))
+        self.hCutoffLabel.setText(_translate("MainWindow", "Hb"))
+        self.vdwCutoffLabel.setText(_translate("MainWindow", "vdW"))
+        self.toleranceLabelAD.setText(_translate("MainWindow", "Tolerance:"))
+        self.addInteractionsCheckBox.setText(_translate("MainWindow", "Add interactions"))
         self.writeLigandsGroupBox.setTitle(_translate("MainWindow", "Ligands:"))
         self.writeLigandsFromFileRadioButton.setText(_translate("MainWindow", "From file"))
         self.writeLigandsFromDirectoryRadioButton.setText(_translate("MainWindow", "From directory"))
         self.writeLigandsPatternLabel.setText(_translate("MainWindow", "Pattern:"))
         self.writeLigandsRecursiveCheckBox.setText(_translate("MainWindow", "Recursive"))
-        self.writeLigandsSelectLabel.setText(_translate("MainWindow", "Select ligands source:"))
+        self.writeLigandsSelectLabel.setText(_translate("MainWindow", "Ligand filter(s):"))
         self.writeLigandsSelectButton.setText(_translate("MainWindow", "Add ..."))
-        self.addInteractionsCheckBox.setText(_translate("MainWindow", "Add interactions"))
-        
-        self.readPropertiesGroupBox.setTitle(_translate("MainWindow", "Properties:"))
-        self.readAbsoluteRadioButton.setText(_translate("MainWindow", "Absolute"))
-        self.readPercentileRadioButton.setText(_translate("MainWindow", "Percentile"))
+        self.proceedButton.setText(_translate("MainWindow", "Process"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.writeTab), _translate("MainWindow", "Write"))
+        self.readPropertiesGroupBox.setTitle(_translate("MainWindow", "Properties"))
         self.readEnergyLabel.setText(_translate("MainWindow", "Energy:"))
-        self.readLigandsEfficiencyLabel.setText(_translate("MainWindow", "Ligands Efficiency:"))
-        
-        self.readInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions:"))
-        self.readLigandsGroupBox.setTitle(_translate("MainWindow", "Ligands:"))
+        self.readLigandsEfficiencyLabel.setText(_translate("MainWindow", "Ligands efficiency:"))
+        self.readPercentileRadioButton.setText(_translate("MainWindow", "Percentile"))
+        self.readAbsoluteRadioButton.setText(_translate("MainWindow", "Absolute"))
+        self.resultsGroupbox.setTitle(_translate("MainWindow", "Results"))
+        self.readLigandsGroupBox.setTitle(_translate("MainWindow", "Ligand"))
+        self.readLigandLabel.setText(_translate("MainWindow", "Ligands"))
+        self.readInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions"))
         self.readProceedButton.setText(_translate("MainWindow", "Process"))
-        self.readLigandLabel.setText(_translate("MainWindow", "Selected ligands:"))
-        
-        
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.readTab), _translate("MainWindow", "Read"))
+
+
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)

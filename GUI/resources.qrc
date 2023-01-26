@@ -1,0 +1,7 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file alias="enable_disable_icon.png">resources/enable_disable_icon.png</file>
+    <file alias="enabled_icon.svg">resources/enabled_icon.svg</file>
+    <file alias="disabled_icon.svg">resources/disabled_icon.svg</file>
+</qresource>
+</RCC>
