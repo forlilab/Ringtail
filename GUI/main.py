@@ -112,6 +112,20 @@ class Ui_MainWindow(object):
         self.dbLabel = QtWidgets.QLabel(self.centralwidget)
         self.dbLabel.setObjectName("dbLabel")
         self.gridLayout.addWidget(self.dbLabel, 0, 0, 1, 1)
+        # Logo
+        self.logo_label = QtWidgets.QLabel(self.centralwidget)
+        self.logo_label.setObjectName("logo_label")
+        self.ringtailLogo = QtGui.QPixmap(":ringtail_logo.png")
+        self.ringtail_logo_scaled = self.ringtailLogo.scaled(171, 60, QtCore.Qt.KeepAspectRatio)
+        self.logo_label.setPixmap(self.ringtail_logo_scaled)
+        self.logo_label.resize(self.ringtail_logo_scaled.width(), self.ringtail_logo_scaled.height())
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.logo_label.sizePolicy().hasHeightForWidth())
+        self.logo_label.setSizePolicy(sizePolicy)
+        self.gridLayout.addWidget(self.logo_label, 0, 4, 1, 1)
+        
         self.tabWidget = QtWidgets.QTabWidget(self.centralwidget)
         self.tabWidget.setAutoFillBackground(False)
         self.tabWidget.setObjectName("tabWidget")
@@ -408,6 +422,7 @@ class Ui_MainWindow(object):
         self.gridLayout_8.addWidget(self.readProceedButton, 3, 0, 1, 1)
         self.tabWidget.addTab(self.readTab, "")
         self.gridLayout.addWidget(self.tabWidget, 1, 0, 1, 4)
+        
         MainWindow.setCentralWidget(self.centralwidget)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
         self.statusbar.setObjectName("statusbar")
