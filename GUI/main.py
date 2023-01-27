@@ -16,12 +16,12 @@ from utils import show_message, browse_directory, browse_file, save_file, get_en
 from range_slider import RangeSlider
 import multiprocessing
 import qrc_resources
-from interaction_widget import Ui_Form
+from interaction_widget import Ui_Form, Interaction
 from list_example import list_example
 
 class Ui_MainWindow(object):
     def __init__(self):        
-        self.window = QtWidgets.QWidget()
+        self.window = None
         
         self.db = None
         self.engine_types = ["AutoDockGPU", "Vina"]
@@ -948,9 +948,13 @@ class Ui_MainWindow(object):
     
     # READ -> INTERACTIONS
     def add_interaction(self):
+        # self.window = QtWidgets.QDialog()
         self.interaction_ui = Ui_Form(list_example, self.window)
-        # MainWindow.hide()
-        self.window.show()
+        if self.interaction_ui.exec_():
+            # print(self.interaction_ui.filter)
+            self.interaction_filter = self.interaction_ui.filter
+            if self.interaction_filter is not None:
+                pass
         
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
