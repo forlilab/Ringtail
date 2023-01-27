@@ -16,10 +16,12 @@ from utils import show_message, browse_directory, browse_file, save_file, get_en
 from range_slider import RangeSlider
 import multiprocessing
 import qrc_resources
+from interaction_widget import Ui_Form
 
 class Ui_MainWindow(object):
-    def __init__(self):
-        super().__init__()
+    def __init__(self):        
+        self.window = QtWidgets.QWidget()
+        
         self.db = None
         self.engine_types = ["AutoDockGPU", "Vina"]
         self.selected_engine = None
@@ -60,7 +62,6 @@ class Ui_MainWindow(object):
         
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.setWindowModality(QtCore.Qt.ApplicationModal)
         MainWindow.resize(944, 821)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
@@ -411,6 +412,59 @@ class Ui_MainWindow(object):
         sizePolicy.setHeightForWidth(self.readInteractionsGroupBox.sizePolicy().hasHeightForWidth())
         self.readInteractionsGroupBox.setSizePolicy(sizePolicy)
         self.readInteractionsGroupBox.setObjectName("readInteractionsGroupBox")
+        
+        self.gridLayout_10 = QtWidgets.QGridLayout(self.readInteractionsGroupBox)
+        self.gridLayout_10.setObjectName("gridLayout_10")
+        self.readInteractionsAddButton = QtWidgets.QPushButton(self.readInteractionsGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readInteractionsAddButton.sizePolicy().hasHeightForWidth())
+        self.readInteractionsAddButton.setSizePolicy(sizePolicy)
+        self.readInteractionsAddButton.setText("")
+        icon = QtGui.QIcon.fromTheme("add")
+        self.readInteractionsAddButton.setIcon(icon)
+        self.readInteractionsAddButton.setObjectName("readInteractionsAddButton")
+        self.gridLayout_10.addWidget(self.readInteractionsAddButton, 0, 1, 1, 1)
+        self.readInteractionsDeleteButton = QtWidgets.QPushButton(self.readInteractionsGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readInteractionsDeleteButton.sizePolicy().hasHeightForWidth())
+        self.readInteractionsDeleteButton.setSizePolicy(sizePolicy)
+        self.readInteractionsDeleteButton.setText("")
+        icon = QtGui.QIcon.fromTheme("remove")
+        self.readInteractionsDeleteButton.setIcon(icon)
+        self.readInteractionsDeleteButton.setObjectName("readInteractionsDeleteButton")
+        self.gridLayout_10.addWidget(self.readInteractionsDeleteButton, 0, 2, 1, 1)
+        self.readInteractionsEditButton = QtWidgets.QPushButton(self.readInteractionsGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readInteractionsEditButton.sizePolicy().hasHeightForWidth())
+        self.readInteractionsEditButton.setSizePolicy(sizePolicy)
+        self.readInteractionsEditButton.setText("")
+        icon = QtGui.QIcon.fromTheme("edit")
+        self.readInteractionsEditButton.setIcon(icon)
+        self.readInteractionsEditButton.setObjectName("readInteractionsEditButton")
+        self.gridLayout_10.addWidget(self.readInteractionsEditButton, 0, 3, 1, 1)
+        self.readInteractionsEnableButton = QtWidgets.QPushButton(self.readInteractionsGroupBox)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.readInteractionsEnableButton.sizePolicy().hasHeightForWidth())
+        self.readInteractionsEnableButton.setSizePolicy(sizePolicy)
+        self.readInteractionsEnableButton.setText("")
+        self.readInteractionsEnableButton.setIcon(QtGui.QIcon(":enable_disable_icon.png"))
+        self.readInteractionsEnableButton.setObjectName("readInteractionsEnableButton")
+        self.gridLayout_10.addWidget(self.readInteractionsEnableButton, 0, 4, 1, 1)
+        self.readInteractionsListWidget = QtWidgets.QListWidget(self.readInteractionsGroupBox)
+        self.readInteractionsListWidget.setObjectName("readInteractionsListWidget")
+        self.gridLayout_10.addWidget(self.readInteractionsListWidget, 1, 0, 1, 5)
+        self.readInteractionsLabel = QtWidgets.QLabel(self.readInteractionsGroupBox)
+        self.readInteractionsLabel.setObjectName("readInteractionsLabel")
+        self.gridLayout_10.addWidget(self.readInteractionsLabel, 0, 0, 1, 1)
+        
         self.gridLayout_8.addWidget(self.readInteractionsGroupBox, 2, 0, 1, 1)
         self.readProceedButton = QtWidgets.QPushButton(self.readTab)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
@@ -421,7 +475,7 @@ class Ui_MainWindow(object):
         self.readProceedButton.setObjectName("readProceedButton")
         self.gridLayout_8.addWidget(self.readProceedButton, 3, 0, 1, 1)
         self.tabWidget.addTab(self.readTab, "")
-        self.gridLayout.addWidget(self.tabWidget, 1, 0, 1, 4)
+        self.gridLayout.addWidget(self.tabWidget, 1, 0, 1, 5)
         
         MainWindow.setCentralWidget(self.centralwidget)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
@@ -477,6 +531,13 @@ class Ui_MainWindow(object):
         self.readLigandEnableButton.clicked.connect(self.enable_ligand_item)
         self.readLigandListWidget.itemClicked.connect(self.item_selected_from_list)
         self.readProceedButton.clicked.connect(self.get_ligand_names_from_widget)
+        
+        # New Events
+        self.readInteractionsAddButton.clicked.connect(self.add_interaction)
+        # self.readInteractionsDeleteButton.clicked.connect(None)
+        # self.readInteractionsEditButton.clicked.connect(None)
+        # self.readInteractionsEnableButton.clicked.connect(None)
+        # self.readInteractionsListWidget.itemClicked.connect(None)
         
         self.readLigandListWidget.itemChanged.connect(self.set_edited_item)
         #-----------------------------------------------------------------#
@@ -884,6 +945,12 @@ class Ui_MainWindow(object):
                     self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
                 break
     
+    # READ -> INTERACTIONS
+    def add_interaction(self):
+        self.interaction_ui = Ui_Form(list(), self.window)
+        # MainWindow.hide()
+        self.window.show()
+        
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Mock RingTail"))
@@ -923,9 +990,10 @@ class Ui_MainWindow(object):
         self.resultsGroupbox.setTitle(_translate("MainWindow", "Results"))
         self.readLigandsGroupBox.setTitle(_translate("MainWindow", "Ligand"))
         self.readLigandLabel.setText(_translate("MainWindow", "Ligands"))
-        self.readInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions"))
+        self.readInteractionsGroupBox.setTitle(_translate("MainWindow", "Interaction"))
         self.readProceedButton.setText(_translate("MainWindow", "Process"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.readTab), _translate("MainWindow", "Read"))
+        self.readInteractionsLabel.setText(_translate("MainWindow", "Interactions"))
 
 
 if __name__ == "__main__":
