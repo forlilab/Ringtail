@@ -61,6 +61,10 @@ class Ui_MainWindow(object):
         self.selected_ligand_name_from_list = None
         self.ligand_names = list()
         
+        # INTERACTIONS
+        self.selected_interaction_from_list = None
+        self.interactions = []
+        
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(944, 821)
@@ -526,6 +530,7 @@ class Ui_MainWindow(object):
         self.readLigandsEfficiencySlider.sliderMoved.connect(self.update_ligands_spinboxes)
         self.maxLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_max)
         self.minLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_min)
+        
         self.readLigandAddButton.clicked.connect(self.get_ligand_name)
         self.readLigandDeleteButton.clicked.connect(self.delete_ligand_from_list)
         self.readLigandEditButton.clicked.connect(self.edit_ligand_from_list)
@@ -534,11 +539,11 @@ class Ui_MainWindow(object):
         self.readProceedButton.clicked.connect(self.get_ligand_names_from_widget)
         
         # New Events
+        self.readInteractionsListWidget.itemClicked.connect(self.item_selected_from_interactions_list)
         self.readInteractionsAddButton.clicked.connect(self.add_interaction)
-        # self.readInteractionsDeleteButton.clicked.connect(None)
+        self.readInteractionsDeleteButton.clicked.connect(self.delete_interaction)
         # self.readInteractionsEditButton.clicked.connect(None)
-        # self.readInteractionsEnableButton.clicked.connect(None)
-        # self.readInteractionsListWidget.itemClicked.connect(None)
+        self.readInteractionsEnableButton.clicked.connect(self.enable_interaction_item)
         
         self.readLigandListWidget.itemChanged.connect(self.set_edited_item)
         #-----------------------------------------------------------------#
@@ -947,15 +952,46 @@ class Ui_MainWindow(object):
                 break
     
     # READ -> INTERACTIONS
+    def item_selected_from_interactions_list(self, item):
+        self.selected_interaction_from_list = item
+    
     def add_interaction(self):
-        # self.window = QtWidgets.QDialog()
         self.interaction_ui = Ui_Form(list_example, self.window)
         if self.interaction_ui.exec_():
-            # print(self.interaction_ui.filter)
             self.interaction_filter = self.interaction_ui.filter
             if self.interaction_filter is not None:
-                pass
-        
+                f = self.interaction_filter.__str__()
+                self.interactions.append(self.interaction_filter)
+                self.readInteractionsListWidget.addItem(f)
+                if self.interaction_filter.wanted:
+                    self.readInteractionsListWidget.item(self.readInteractionsListWidget.count()-1).setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                else:
+                    self.readInteractionsListWidget.item(self.readInteractionsListWidget.count()-1).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+                    
+    def delete_interaction(self):
+        if self.selected_interaction_from_list is not None:
+            for idx in range(0, self.readInteractionsListWidget.count()):
+                if self.readInteractionsListWidget.item(idx) == self.selected_interaction_from_list:
+                    self.readInteractionsListWidget.takeItem(idx)
+                    del self.interactions[idx]
+                    self.selected_interaction_from_list = None
+                    print(f"Delete {self.interactions}")
+                    break
+                
+    def enable_interaction_item(self):
+        for idx in range(0, self.readInteractionsListWidget.count()):
+            if self.readInteractionsListWidget.item(idx) == self.selected_interaction_from_list:
+                if self.interactions[idx].wanted is True:
+                    self.interactions[idx].set_wanted(False)
+                    self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+                else:
+                    self.interactions[idx].set_wanted(True)
+                    self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                self.readInteractionsListWidget.item(idx).setText(self.interactions[idx].__str__())
+                break
+    
+    
+    
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Mock RingTail"))

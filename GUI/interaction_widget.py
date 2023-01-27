@@ -19,7 +19,7 @@ class Interaction:
         self.res_type = None
         self.res_number = None
         self.atom_name = None
-        
+                    
     def set_interaction_type(self, interaction_type):
         if interaction_type != '': self.interaction_type = interaction_type
         else: self.interaction_type = None
@@ -45,7 +45,7 @@ class Interaction:
             self.wanted = wanted
     
     def __str__(self):
-        rep = f"Interaction: {self.interaction_type}\nChain: {self.chain}\nRes Name: {self.res_type}\nRes ID: {self.res_number}\nAtom Name: {self.atom_name}"
+        rep = f"Interaction:{self.interaction_type},Chain:{self.chain},Res_Name:{self.res_type},Res_ID:{self.res_number},Atom_Name:{self.atom_name},Enabled:{str(self.wanted)}"
         return rep
     
 class Ui_Form(QtWidgets.QDialog):
@@ -330,7 +330,6 @@ class Ui_Form(QtWidgets.QDialog):
         self.filter.set_res_type(self.interactionResTypeComboBox.currentText())
         self.filter.set_res_number(self.interactionResNComboBox.currentText())
         self.filter.set_atom_name(self.interactionAtomNameComboBox.currentText())
-        # print(self.filter)
         self.accept()
     
     def close_widget(self):
