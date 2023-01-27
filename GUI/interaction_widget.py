@@ -9,6 +9,7 @@
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from list_example import list_example
 
 class Interaction:
     def __init__(self):
@@ -37,14 +38,25 @@ class Interaction:
     def set_wanted(self, wanted):
         if isinstance(wanted, bool):
             self.wanted = wanted
-
+    
+    def __str__(self):
+        rep = f"Interaction: {self.interaction_type}\nChain: {self.chain}\nRes Name: {self.res_type}\nRes ID: {self.res_number}\nAtom Name: {self.atom_name}"
+        return rep
+    
 class Ui_Form(QtWidgets.QWidget):
     def __init__(self, list_of_available_items, parent : QtWidgets.QWidget):
         super().__init__(parent)
         self.interactions_type = ['R', 'H', 'vdW']
-        self.items = list_of_available_items
+        self.items = parse_list_of_items(list_of_available_items)
+        self.filtered_items = self.items
         self.filter = Interaction()
         self.setupUi(parent)
+        
+        self.interaction_filter = False
+        self.chain_filter = False
+        self.res_name_filter = False
+        self.res_id_filter = False
+        self.atom_name_filter = False
     
     def setupUi(self, Form):
         Form.setObjectName("Form")
@@ -100,24 +112,58 @@ class Ui_Form(QtWidgets.QWidget):
 
         self.retranslateUi(Form)
         QtCore.QMetaObject.connectSlotsByName(Form)
+
         
         self.interactionTypeComboBox.currentIndexChanged.connect(self.set_interaction_type)
         self.wantedRadioButton.clicked.connect(self.set_filter_wanted)
         self.unwantedRadioButton.clicked.connect(self.set_filter_unwanted)
         
-        # self.interactionChainComboBox.currentIndexChanged.connect(None)
+        self.interactionTypeComboBox.currentIndexChanged.connect(self.update_from_interaction_type)
+        self.interactionChainComboBox.currentIndexChanged.connect(self.update_from_chain)
         # self.interactionResTypeComboBox.currentIndexChanged.connect(None)
         # self.interactionResNComboBox.currentIndexChanged.connect(None)
         # self.interactionAtomNameComboBox.currentIndexChanged.connect(None)
         
         # DEFAULTS
-        self.populate_interactions_type()
+        self.populate_comboboxes(self.items)
         self.wantedRadioButton.click()
-
+        
     # CLASS METHODS
-    def populate_interactions_type(self):
-        for interaction in self.interactions_type:
-                self.interactionTypeComboBox.addItem(interaction)
+    def populate_comboboxes(self, 
+                            items, 
+                            interaction=False, 
+                            chain=False, 
+                            res_type=False, 
+                            res_number=False, 
+                            atom_name=False):
+        
+        if not interaction:
+            self.interactionTypeComboBox.clear()
+            self.interactionTypeComboBox.addItems(str(t) for t in set([x.interaction_type for x in items]))
+        if not chain:
+            self.interactionChainComboBox.clear()
+            self.interactionChainComboBox.addItems(str(t) for t in set([x.chain for x in items]))
+        if not res_type:
+            self.interactionResTypeComboBox.clear()
+            self.interactionResTypeComboBox.addItems(str(t) for t in set([x.res_type for x in items]))
+        if not res_number:
+            self.interactionResNComboBox.clear()
+            self.interactionResNComboBox.addItems(str(t) for t in set([x.res_number for x in items]))
+        if not atom_name:
+            self.interactionAtomNameComboBox.clear()
+            self.interactionAtomNameComboBox.addItems(str(t) for t in set([x.atom_name for x in items]))
+    
+    def update_from_interaction_type(self):
+        # The interaction filter is the first filter applied
+        self.interaction_filter = True
+        self.chain_filter = False
+        self.res_name_filter = False
+        self.res_id_filter = False
+        self.atom_name_filter = False
+        
+        interaction_type = self.interactionTypeComboBox.currentText()
+        self.filtered_items = list(filter(lambda x: x.interaction_type == interaction_type, self.items))
+        self.populate_comboboxes(self.filtered_items, interaction=self.interaction_filter)
     
     def set_interaction_type(self):
         self.filter.set_interaction_type(self.interactionTypeComboBox.currentText())
@@ -148,11 +194,23 @@ class Ui_Form(QtWidgets.QWidget):
         self.interactionResNLabel.setText(_translate("Form", "Res #:"))
         self.interactionAtomNameLabel.setText(_translate("Form", "Atom Name:"))
 
+def parse_list_of_items(items):
+    retvalue = list()
+    for element in items:
+        interaction = Interaction()
+        interaction.set_interaction_type(element[0].strip())
+        interaction.set_chain(element[1].strip())
+        interaction.set_res_type(element[2].strip())
+        interaction.set_res_number(element[3].strip())
+        interaction.set_atom_name(element[4].strip())
+        retvalue.append(interaction)
+    return retvalue
+
+
 if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    Form = QtWidgets.QWidget()
-    ui = Ui_Form(list(), Form)
-    # ui.setupUi(Form)
-    Form.show()
-    sys.exit(app.exec_())
+    interactions = parse_list_of_items(list_example)
+    print(f"Unique Interactions: {set([x.interaction_type for x in interactions])}")
+    print(f"Unique Chains: {set([x.chain for x in interactions])}")
+    print(f"Unique Res Names: {set([x.res_type for x in interactions])}")
+    print(f"Unique Res IDs: {set([x.res_number for x in interactions])}")
+    print(f"Unique Atom Names: {set([x.atom_name for x in interactions])}")

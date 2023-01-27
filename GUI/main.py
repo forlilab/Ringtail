@@ -17,6 +17,7 @@ from range_slider import RangeSlider
 import multiprocessing
 import qrc_resources
 from interaction_widget import Ui_Form
+from list_example import list_example
 
 class Ui_MainWindow(object):
     def __init__(self):        
@@ -947,7 +948,7 @@ class Ui_MainWindow(object):
     
     # READ -> INTERACTIONS
     def add_interaction(self):
-        self.interaction_ui = Ui_Form(list(), self.window)
+        self.interaction_ui = Ui_Form(list_example, self.window)
         # MainWindow.hide()
         self.window.show()
         
