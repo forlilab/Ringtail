@@ -554,6 +554,7 @@ class Ui_MainWindow(object):
         self.set_default_number_of_processors()
         self.set_default_cutoffs()
         self.disable_everything()
+        self.verboseRadioButton.click()
         
         # READ
         # self.readAbsoluteRadioButton.click()
@@ -563,10 +564,10 @@ class Ui_MainWindow(object):
     #-----------------------------------------------------------------#
     def handle_enables_for_read_tab(self, index):
         if index == self.tabWidget.indexOf(self.readTab):
-            self.loadDbButton.setEnabled(False)
+            self.createDbButton.setEnabled(False)
             self.numberOfProcessorsBox.setEnabled(False)
         else:
-            self.loadDbButton.setEnabled(True)
+            self.createDbButton.setEnabled(True)
             self.numberOfProcessorsBox.setEnabled(True)
     
     def enable_read_tab(self):

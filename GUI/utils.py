@@ -1,7 +1,5 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 
-from interaction_widget import Interaction
-
 error_level = [0, 1, 2]
 
 def show_message(message, error_level):
@@ -45,6 +43,44 @@ def get_energy_max_min():
 
 def get_ligands_efficiency_max_min():
     return (3000, -3000)
+
+class Interaction:
+    def __init__(self):
+        self.wanted = False
+        self.interaction_type = None
+        self.chain = None
+        self.res_type = None
+        self.res_number = None
+        self.atom_name = None
+                    
+    def set_interaction_type(self, interaction_type):
+        if interaction_type != '' and interaction_type != 'Any' and interaction_type != 'None': self.interaction_type = interaction_type
+        else: self.interaction_type = None
+            
+    def set_chain(self, chain):
+        if chain != '' and chain != 'Any' and chain != 'None': self.chain = chain
+        else: self.chain = None
+    
+    def set_res_type(self, res_type):
+        if res_type != '' and res_type != 'Any' and res_type != 'None': self.res_type = res_type
+        else: self.res_type = None
+        
+    def set_res_number(self, res_number):
+        if res_number != '' and res_number != 'Any' and res_number != 'None': self.res_number = res_number
+        else: self.res_number = None
+        
+    def set_atom_name(self, atom_name):
+        if atom_name != '' and atom_name != 'Any' and atom_name != 'None': self.atom_name = atom_name
+        else: self.atom_name = None
+        
+    def set_wanted(self, wanted):
+        if isinstance(wanted, bool):
+            self.wanted = wanted
+    
+    def __str__(self):
+        rep = f"Interaction:{self.interaction_type},Chain:{self.chain},Res_Name:{self.res_type},Res_ID:{self.res_number},Atom_Name:{self.atom_name},Enabled:{str(self.wanted)}"
+        return rep
+
 
 def get_interaction_obj_from_str(s_filter):
     retvalue = Interaction()
