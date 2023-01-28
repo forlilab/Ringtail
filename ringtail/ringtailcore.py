@@ -21,7 +21,7 @@ from rdkit.Chem import SDWriter
 import itertools
 import logging
 import os
-import typing
+from typing import Union
 
 
 class RingtailCore:
@@ -88,7 +88,7 @@ class RingtailCore:
         self.output_manager = None
 
     @classmethod
-    def get_defaults(cls, storage_type="sqlite", terse=False):
+    def get_defaults(cls, storage_type="sqlite", terse=False) -> dict:
 
         cls.__default_options = {
             "storage_opts": {
@@ -175,6 +175,209 @@ class RingtailCore:
         defaults["filters"] = {"values": filters, "ignore": [], "types": filter_types}
 
         return defaults
+
+    @classmethod
+    def set_opts(cls, opts_dict: dict, option_names: Union[str, list], values) -> dict:
+        """Given dictionary of options, set given option_name(s) to given value(s). Indices of option_names and values should correspond. Will not set filters
+
+        Args:
+            opts_dict (dict): dictionary of RTCore options. Follow format of dict returned by cls.get_defaults()
+            option_names (string or list): name(s) of option to change
+            values: values to set option_name(s) to
+        """
+        # format inputs into lists if not already
+        if type(option_names) != list:
+            if type(option_names) == str:
+                option_names = [option_names]
+                values = [values]
+            else:
+                raise TypeError(f"Expecting string or list for option_names. Given {type(option_names)}")
+        # set file_source options
+        for idx, option_name in enumerate(option_names):
+            if option_name == "file" or option_name == "file_list":
+                opts_dict["rman_opts"]["values"]["file_sources"][option_name] = values[idx]
+            elif option_name == "path" or option_name == "pattern" or option_name == "recursive":
+                opts_dict["rman_opts"]["values"]["file_sources"]["file_path"][option_name] = values[idx]
+            # set anything else
+            else:
+                found = False
+                for opts_subdict in opts_dict:
+                    if opts_subdict == "filters":
+                        continue
+                    if option_name in opts_dict[opts_subdict]["values"]:
+                        opts_dict[opts_subdict]["values"][option_name] = values[idx]
+                        found = True
+
+                if not found:
+                    raise RTCoreError(f"Given option {option_name} not found. Please check spelling try setting again.")
+
+        return opts_dict
+
+    @classmethod
+    def get_opts(cls, opts_dict: dict, option_names: Union[str, list]) -> list:
+        """Given dictionary of options and option_names, get value. Will not get filters
+
+        Args:
+            opts_dict (dict): dictionary of RTCore options. Should follow format of dict returned by cls.get_defaults()
+            option_names (str): name of option to change
+
+        Returns:
+            list: list of option values for given option types
+        """
+        if type(option_names) != list:
+            if type(option_names) == str:
+                option_names = [option_names]
+            else:
+                raise TypeError(f"Expecting string or list for option_names. Given {type(option_names)}")
+        opts = []
+        for option_name in option_names:
+            if option_name == "file" or option_name == "file_list":
+                opts.append(opts_dict["rman_opts"]["values"]["file_sources"][option_name])
+            elif option_name == "path" or option_name == "pattern" or option_name == "recursive":
+                opts.append(opts_dict["rman_opts"]["values"]["file_sources"]["file_path"][option_name])
+            else:
+                for opts_subdict in opts_dict:
+                    if opts_subdict == "filters":
+                        continue
+                    if option_name in opts_dict[opts_subdict]["values"]:
+                        opts.append(opts_dict[opts_subdict]["values"][option_name])
+                # will only enter if we failed to find and return the option value
+                logging.warning(f"Given option {option_name} not found.")
+
+        return opts
+
+    @classmethod
+    def get_opt_types(cls, opts_dict: dict, option_names: Union[str, list]) -> list:
+        """Given dictionary of options and option_names, get type of option_names. Will not get filters
+
+        Args:
+            opts_dict (dict): dictionary of RTCore options. Should follow format of dict returned by cls.get_defaults()
+            option_names (str or list): name(s) of option to get type for
+
+        Returns:
+            list: list of option types for given option types
+        """
+        if type(option_names) != list:
+            if type(option_names) == str:
+                option_names = [option_names]
+            else:
+                raise TypeError(f"Expecting string or list for option_names. Given {type(option_names)}")
+        types = []
+        for option_name in option_names:
+            if option_name == "file" or option_name == "file_list":
+                types.append(opts_dict["rman_opts"]["types"]["file_sources"][option_name])
+            elif option_name == "path" or option_name == "pattern" or option_name == "recursive":
+                types.append(opts_dict["rman_opts"]["types"]["file_sources"]["file_path"][option_name])
+            else:
+                for opts_subdict in opts_dict:
+                    if opts_subdict == "filters":
+                        continue
+                    if option_name in opts_dict[opts_subdict]["types"]:
+                        types.append(opts_dict[opts_subdict]["types"][option_name])
+                # will only enter if we failed to find and return the option value
+                raise logging.warning(f"Given option {option_name} not found.")
+
+        return types
+
+    @classmethod
+    def set_filters(cls, opts_dict: dict, filter_names: Union[str, list], values) -> dict:
+        """Given opts_dict and filter_name, will set filter_name to value
+
+        Args:
+            opts_dict (dict): dictionary of RTCore options. Should follow format of dict returned by cls.get_defaults()
+            filter_names (str or list): name(s) of filter to change
+            values: value to set filter_name to
+        """
+        if type(filter_names) != list:
+            if type(filter_names) == str:
+                filter_names = [filter_names]
+                values = [values]
+            else:
+                raise TypeError(f"Expecting string or list for filter_names. Given {type(filter_names)}")
+        found = False
+        filters_dict = opts_dict["filters"]["values"]
+        for idx, filter_name in enumerate(filter_names):
+            if filter_name in filters_dict:
+                filters_dict[filter_name] = values[idx]
+                found = True
+                continue
+            else:
+                for filter_set in filters_dict:
+                    if type(filters_dict[filter_set]) == dict and filter_name in filters_dict[filter_set]:
+                        filters_dict[filter_set][filter_name] = values[idx]
+                        found = True
+                        # set filter_ligands_flag if we set a ligand filter
+                        if filter_set == "ligand_filters":
+                            filters_dict["filter_ligands_flag"] = True
+            if not found:
+                raise RTCoreError(f"Given filter_name {filter_name} not found. Please check spelling try setting again.")
+
+        return opts_dict
+
+    @classmethod
+    def get_filters(cls, opts_dict: dict, filter_names: Union[str, list]) -> list:
+        """Given opts_dict and filter_name, will set filter_name to value
+
+        Args:
+            opts_dict (dict): dictionary of RTCore options. Should follow format of dict returned by cls.get_defaults()
+            filter_names (str or list): name(s) of filter to change
+            values: value to set filter_name to
+        """
+        if type(filter_names) != list:
+            if type(filter_names) == str:
+                filter_names = [filter_names]
+            else:
+                raise TypeError(f"Expecting string or list for filter_names. Given {type(filter_names)}")
+        filters = []
+        filters_dict = opts_dict["filters"]["values"]
+        print(filters_dict)
+        for filter_name in filter_names:
+            found = False
+            if filter_name in filters_dict:
+                filters.append(filters_dict[filter_name])
+                found = True
+                continue
+            else:
+                for filter_set in filters_dict:
+                    if type(filters_dict[filter_set]) == dict and filter_name in filters_dict[filter_set]:
+                        filters.append(filters_dict[filter_set][filter_name])
+                        found = True
+            if not found:
+                raise RTCoreError(f"Given filter_name {filter_name} not found.")
+
+        return filters
+
+    @classmethod
+    def get_filter_types(cls, opts_dict: dict, filter_names: Union[str, list]) -> list:
+        """Given opts_dict and filter_name, will set filter_name to value
+
+        Args:
+            opts_dict (dict): dictionary of RTCore options. Should follow format of dict returned by cls.get_defaults()
+            filter_names (str or list): name(s) of filter to change
+            values: value to set filter_name to
+        """
+        if type(filter_names) != list:
+            if type(filter_names) == str:
+                filter_names = [filter_names]
+            else:
+                raise TypeError(f"Expecting string or list for filter_names. Given {type(filter_names)}")
+        filters_types = []
+        filters_dict = opts_dict["filters"]["types"]
+        for filter_name in filter_names:
+            found = False
+            if filter_name in filters_dict:
+                filters_types.append(filters_dict[filter_name])
+                found = True
+                continue
+            else:
+                for filter_set in filters_dict:
+                    if type(filters_dict[filter_set]) == dict and filter_name in filters_dict[filter_set]:
+                        filters_types.append(filters_dict[filter_set][filter_name])
+                        found = True
+            if not found:
+                raise RTCoreError(f"Given filter_name {filter_name} not found.")
+
+        return filters_types
 
     def __enter__(self):
         return self
