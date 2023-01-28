@@ -10,6 +10,7 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from list_example import list_example
+from utils import get_interaction_obj_from_str, parse_list_of_items
 
 class Interaction:
     def __init__(self):
@@ -21,23 +22,23 @@ class Interaction:
         self.atom_name = None
                     
     def set_interaction_type(self, interaction_type):
-        if interaction_type != '': self.interaction_type = interaction_type
+        if interaction_type != '' and interaction_type != 'Any' and interaction_type != 'None': self.interaction_type = interaction_type
         else: self.interaction_type = None
             
     def set_chain(self, chain):
-        if chain != '': self.chain = chain
+        if chain != '' and chain != 'Any' and chain != 'None': self.chain = chain
         else: self.chain = None
     
     def set_res_type(self, res_type):
-        if res_type != '': self.res_type = res_type
+        if res_type != '' and res_type != 'Any' and res_type != 'None': self.res_type = res_type
         else: self.res_type = None
         
     def set_res_number(self, res_number):
-        if res_number != '': self.res_number = res_number
+        if res_number != '' and res_number != 'Any' and res_number != 'None': self.res_number = res_number
         else: self.res_number = None
         
     def set_atom_name(self, atom_name):
-        if atom_name != '': self.atom_name = atom_name
+        if atom_name != '' and atom_name != 'Any' and atom_name != 'None': self.atom_name = atom_name
         else: self.atom_name = None
         
     def set_wanted(self, wanted):
@@ -47,14 +48,19 @@ class Interaction:
     def __str__(self):
         rep = f"Interaction:{self.interaction_type},Chain:{self.chain},Res_Name:{self.res_type},Res_ID:{self.res_number},Atom_Name:{self.atom_name},Enabled:{str(self.wanted)}"
         return rep
+
+
     
 class Ui_Form(QtWidgets.QDialog):
-    def __init__(self, list_of_available_items, parent : QtWidgets.QWidget):
+    def __init__(self, list_of_available_items, parent : QtWidgets.QWidget, active_filter=None):
         super(Ui_Form, self).__init__(parent)
         self.interactions_type = ['R', 'H', 'vdW']
         self.items = parse_list_of_items(list_of_available_items)
         self.filtered_items = self.items
         self.filter = Interaction()
+        
+        if active_filter is not None:
+            active_filter = get_interaction_obj_from_str(active_filter)
         
         # Active filters
         self.interaction_filter = False
@@ -63,9 +69,9 @@ class Ui_Form(QtWidgets.QDialog):
         self.res_id_filter = False
         self.atom_name_filter = False
         
-        self.setupUi(self)
+        self.setupUi(self, active_filter=active_filter)
     
-    def setupUi(self, Form):
+    def setupUi(self, Form, active_filter):
         Form.setObjectName("Form")
         Form.resize(542, 128)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
@@ -81,6 +87,8 @@ class Ui_Form(QtWidgets.QDialog):
         self.gridLayout.addWidget(self.interactionTypeLabel, 0, 0, 1, 2)
         self.interactionTypeComboBox = QtWidgets.QComboBox(Form)
         self.interactionTypeComboBox.setObjectName("interactionTypeComboBox")
+        self.interactionTypeComboBox.setStyleSheet("QComboBox { combobox-popup: 0; }")
+        self.interactionTypeComboBox.setMaxVisibleItems(20)
         self.gridLayout.addWidget(self.interactionTypeComboBox, 0, 2, 1, 2)
         self.wantedRadioButton = QtWidgets.QRadioButton(Form)
         self.wantedRadioButton.setObjectName("wantedRadioButton")
@@ -102,15 +110,23 @@ class Ui_Form(QtWidgets.QDialog):
         self.gridLayout.addWidget(self.interactionAtomNameLabel, 1, 4, 1, 2)
         self.interactionChainComboBox = QtWidgets.QComboBox(Form)
         self.interactionChainComboBox.setObjectName("interactionChainComboBox")
+        self.interactionChainComboBox.setStyleSheet("QComboBox { combobox-popup: 0; }")
+        self.interactionChainComboBox.setMaxVisibleItems(20)
         self.gridLayout.addWidget(self.interactionChainComboBox, 2, 0, 1, 1)
         self.interactionResTypeComboBox = QtWidgets.QComboBox(Form)
         self.interactionResTypeComboBox.setObjectName("interactionResTypeComboBox")
+        self.interactionResTypeComboBox.setStyleSheet("QComboBox { combobox-popup: 0; }")
+        self.interactionResTypeComboBox.setMaxVisibleItems(20)
         self.gridLayout.addWidget(self.interactionResTypeComboBox, 2, 1, 1, 2)
         self.interactionResNComboBox = QtWidgets.QComboBox(Form)
         self.interactionResNComboBox.setObjectName("interactionResNComboBox")
+        self.interactionResNComboBox.setStyleSheet("QComboBox { combobox-popup: 0; }")
+        self.interactionResNComboBox.setMaxVisibleItems(20)
         self.gridLayout.addWidget(self.interactionResNComboBox, 2, 3, 1, 1)
         self.interactionAtomNameComboBox = QtWidgets.QComboBox(Form)
         self.interactionAtomNameComboBox.setObjectName("interactionAtomNameComboBox")
+        self.interactionAtomNameComboBox.setStyleSheet("QComboBox { combobox-popup: 0; }")
+        self.interactionAtomNameComboBox.setMaxVisibleItems(20)
         self.gridLayout.addWidget(self.interactionAtomNameComboBox, 2, 4, 1, 2)
         self.interactionDialogButtonBox = QtWidgets.QDialogButtonBox(Form)
         self.interactionDialogButtonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.Ok)
@@ -120,7 +136,7 @@ class Ui_Form(QtWidgets.QDialog):
         self.retranslateUi(Form)
         QtCore.QMetaObject.connectSlotsByName(Form)
 
-        self.populate_at_startup_comboboxes(self.items)
+        self.populate_at_startup_comboboxes(self.items, active_filter)
         
         self.interactionTypeComboBox.currentIndexChanged.connect(self.set_interaction_type)
         self.wantedRadioButton.clicked.connect(self.set_filter_wanted)
@@ -138,174 +154,247 @@ class Ui_Form(QtWidgets.QDialog):
         self.wantedRadioButton.click()
         
     # CLASS METHODS
-    def populate_at_startup_comboboxes(self, items):
-        self.interactionTypeComboBox.addItems(str(t) for t in set([x.interaction_type for x in items]))
-        self.interactionTypeComboBox.insertItem(0, "")
-        self.interactionTypeComboBox.setCurrentIndex(0)
-        self.interactionChainComboBox.addItems(str(t) for t in set([x.chain for x in items]))
-        self.interactionChainComboBox.insertItem(0, "")
-        self.interactionChainComboBox.setCurrentIndex(0)
-        self.interactionResTypeComboBox.addItems(str(t) for t in set([x.res_type for x in items]))
-        self.interactionResTypeComboBox.insertItem(0, "")
-        self.interactionResTypeComboBox.setCurrentIndex(0)
-        self.interactionResNComboBox.addItems(str(t) for t in set([x.res_number for x in items]))
-        self.interactionResNComboBox.insertItem(0, "")
-        self.interactionResNComboBox.setCurrentIndex(0)
-        self.interactionAtomNameComboBox.addItems(str(t) for t in set([x.atom_name for x in items]))
-        self.interactionAtomNameComboBox.insertItem(0, "")
-        self.interactionAtomNameComboBox.setCurrentIndex(0)
-        
+    def populate_at_startup_comboboxes(self, items, active_filter):
+        if active_filter is None:
+            self.interactionTypeComboBox.addItems(str(t) for t in set([x.interaction_type for x in items]))
+            self.interactionTypeComboBox.insertItem(0, "Any")
+            self.interactionTypeComboBox.setCurrentIndex(0)
+            self.interactionChainComboBox.addItems(str(t) for t in set([x.chain for x in items]))
+            self.interactionChainComboBox.insertItem(0, "Any")
+            self.interactionChainComboBox.setCurrentIndex(0)
+            self.interactionResTypeComboBox.addItems(str(t) for t in set([x.res_type for x in items]))
+            self.interactionResTypeComboBox.insertItem(0, "Any")
+            self.interactionResTypeComboBox.setCurrentIndex(0)
+            self.interactionResNComboBox.addItems(str(t) for t in set([x.res_number for x in items]))
+            self.interactionResNComboBox.insertItem(0, "Any")
+            self.interactionResNComboBox.setCurrentIndex(0)
+            self.interactionAtomNameComboBox.addItems(str(t) for t in set([x.atom_name for x in items]))
+            self.interactionAtomNameComboBox.insertItem(0, "Any")
+            self.interactionAtomNameComboBox.setCurrentIndex(0)
+        else:
+            filtered_data = self.filter_data_from_obj(active_filter)
+            self.interactionTypeComboBox.addItems(str(t) for t in set([x.interaction_type for x in filtered_data]))
+            self.interactionTypeComboBox.insertItem(0, "Any")
+            if self.interaction_filter:
+                for idx in range(0, self.interactionTypeComboBox.count()):
+                    if self.interactionTypeComboBox.itemText(idx) == active_filter.interaction_type:
+                        self.interactionTypeComboBox.setCurrentIndex(idx)
+            else: self.interactionTypeComboBox.setCurrentIndex(0)
+            self.interactionChainComboBox.addItems(str(t) for t in set([x.chain for x in filtered_data]))
+            self.interactionChainComboBox.insertItem(0, "Any")
+            if self.chain_filter:
+                for idx in range(0, self.interactionChainComboBox.count()):
+                    if self.interactionChainComboBox.itemText(idx) == active_filter.chain:
+                        self.interactionChainComboBox.setCurrentIndex(idx)
+            else: self.interactionChainComboBox.setCurrentIndex(0)
+            self.interactionResTypeComboBox.addItems(str(t) for t in set([x.res_type for x in filtered_data]))
+            self.interactionResTypeComboBox.insertItem(0, "Any")
+            if self.res_name_filter:
+                for idx in range(0, self.interactionResTypeComboBox.count()):
+                    if self.interactionResTypeComboBox.itemText(idx) == active_filter.res_type:
+                        self.interactionTypeComboBox.setCurrentIndex(idx)
+            else: self.interactionResTypeComboBox.setCurrentIndex(0)
+            self.interactionResNComboBox.addItems(str(t) for t in set([x.res_number for x in filtered_data]))
+            self.interactionResNComboBox.insertItem(0, "Any")
+            if self.res_id_filter:
+                for idx in range(0, self.interactionResNComboBox.count()):
+                    if self.interactionResNComboBox.itemText(idx) == active_filter.res_number:
+                        self.interactionResNComboBox.setCurrentIndex(idx)
+            else: self.interactionResNComboBox.setCurrentIndex(0)
+            self.interactionAtomNameComboBox.addItems(str(t) for t in set([x.atom_name for x in filtered_data]))
+            self.interactionAtomNameComboBox.insertItem(0, "Any")
+            if self.atom_name_filter:
+                for idx in range(0, self.interactionAtomNameComboBox.count()):
+                    if self.interactionAtomNameComboBox.itemText(idx) == active_filter.atom_name:
+                        self.interactionAtomNameComboBox.setCurrentIndex(idx)
+            else: self.interactionAtomNameComboBox.setCurrentIndex(0)
+            
     def update_from_interaction_type(self):        
-        filtered_items = self.filter_data()
+        filtered_items = self.filter_data_from_GUI()
         if not self.chain_filter: 
             self.interactionChainComboBox.clear()
             self.interactionChainComboBox.addItems(str(t) for t in set([x.chain for x in filtered_items]))
-            self.interactionChainComboBox.insertItem(0, "")
+            self.interactionChainComboBox.insertItem(0, "Any")
             self.interactionChainComboBox.setCurrentIndex(0)
         if not self.res_name_filter:
             self.interactionResTypeComboBox.clear()
             self.interactionResTypeComboBox.addItems(str(t) for t in set([x.res_type for x in filtered_items]))
-            self.interactionResTypeComboBox.insertItem(0, "")
+            self.interactionResTypeComboBox.insertItem(0, "Any")
             self.interactionResTypeComboBox.setCurrentIndex(0)
         if not self.res_id_filter:
             self.interactionResNComboBox.clear()
             self.interactionResNComboBox.addItems(str(t) for t in set([x.res_number for x in filtered_items]))
-            self.interactionResNComboBox.insertItem(0, "")
+            self.interactionResNComboBox.insertItem(0, "Any")
             self.interactionResNComboBox.setCurrentIndex(0)
         if not self.atom_name_filter:
             self.interactionAtomNameComboBox.clear()
             self.interactionAtomNameComboBox.addItems(str(t) for t in set([x.atom_name for x in filtered_items]))
-            self.interactionAtomNameComboBox.insertItem(0, "")
+            self.interactionAtomNameComboBox.insertItem(0, "Any")
             self.interactionAtomNameComboBox.setCurrentIndex(0)
         
     def update_from_chain(self):
-        filtered_items = self.filter_data()
+        filtered_items = self.filter_data_from_GUI()
         if not self.interaction_filter:
             self.interactionTypeComboBox.clear()
             self.interactionTypeComboBox.addItems(str(t) for t in set([x.interaction_type for x in filtered_items]))
-            self.interactionTypeComboBox.insertItem(0, "")
+            self.interactionTypeComboBox.insertItem(0, "Any")
             self.interactionTypeComboBox.setCurrentIndex(0)
         if not self.res_name_filter:
             self.interactionResTypeComboBox.clear()
             self.interactionResTypeComboBox.addItems(str(t) for t in set([x.res_type for x in filtered_items]))
-            self.interactionResTypeComboBox.insertItem(0, "")
+            self.interactionResTypeComboBox.insertItem(0, "Any")
             self.interactionResTypeComboBox.setCurrentIndex(0)
         if not self.res_id_filter:
             self.interactionResNComboBox.clear()
             self.interactionResNComboBox.addItems(str(t) for t in set([x.res_number for x in filtered_items]))
-            self.interactionResNComboBox.insertItem(0, "")
+            self.interactionResNComboBox.insertItem(0, "Any")
             self.interactionResNComboBox.setCurrentIndex(0)
         if not self.atom_name_filter:
             self.interactionAtomNameComboBox.clear()
             self.interactionAtomNameComboBox.addItems(str(t) for t in set([x.atom_name for x in filtered_items]))
-            self.interactionAtomNameComboBox.insertItem(0, "")
+            self.interactionAtomNameComboBox.insertItem(0, "Any")
             self.interactionAtomNameComboBox.setCurrentIndex(0)
     
     def update_from_res_type(self):
-        filtered_items = self.filter_data()
+        filtered_items = self.filter_data_from_GUI()
         if not self.interaction_filter:
             self.interactionTypeComboBox.clear()
             self.interactionTypeComboBox.addItems(str(t) for t in set([x.interaction_type for x in filtered_items]))
-            self.interactionTypeComboBox.insertItem(0, "")
+            self.interactionTypeComboBox.insertItem(0, "Any")
             self.interactionTypeComboBox.setCurrentIndex(0)
         if not self.chain_filter:
             self.interactionChainComboBox.clear()
             self.interactionChainComboBox.addItems(str(t) for t in set([x.chain for x in filtered_items]))
-            self.interactionChainComboBox.insertItem(0, "")
+            self.interactionChainComboBox.insertItem(0, "Any")
             self.interactionChainComboBox.setCurrentIndex(0)
         if not self.res_id_filter:
             self.interactionResNComboBox.clear()
             self.interactionResNComboBox.addItems(str(t) for t in set([x.res_number for x in filtered_items]))
-            self.interactionResNComboBox.insertItem(0, "")
+            self.interactionResNComboBox.insertItem(0, "Any")
             self.interactionResNComboBox.setCurrentIndex(0)
         if not self.atom_name_filter:
             self.interactionAtomNameComboBox.clear()
             self.interactionAtomNameComboBox.addItems(str(t) for t in set([x.atom_name for x in filtered_items]))
-            self.interactionAtomNameComboBox.insertItem(0, "")
+            self.interactionAtomNameComboBox.insertItem(0, "Any")
             self.interactionAtomNameComboBox.setCurrentIndex(0)
     
     def update_from_res_number(self):
-        filtered_items = self.filter_data()
+        filtered_items = self.filter_data_from_GUI()
         if not self.interaction_filter:
             self.interactionTypeComboBox.clear()
             self.interactionTypeComboBox.addItems(str(t) for t in set([x.interaction_type for x in filtered_items]))
-            self.interactionTypeComboBox.insertItem(0, "")
+            self.interactionTypeComboBox.insertItem(0, "Any")
             self.interactionTypeComboBox.setCurrentIndex(0)
         if not self.chain_filter:
             self.interactionChainComboBox.clear()
             self.interactionChainComboBox.addItems(str(t) for t in set([x.chain for x in filtered_items]))
-            self.interactionChainComboBox.insertItem(0, "")
+            self.interactionChainComboBox.insertItem(0, "Any")
             self.interactionChainComboBox.setCurrentIndex(0)
         if not self.res_name_filter:
             self.interactionResTypeComboBox.clear()
             self.interactionResTypeComboBox.addItems(str(t) for t in set([x.res_type for x in filtered_items]))
-            self.interactionResTypeComboBox.insertItem(0, "")
+            self.interactionResTypeComboBox.insertItem(0, "Any")
             self.interactionResTypeComboBox.setCurrentIndex(0)
         if not self.atom_name_filter:
             self.interactionAtomNameComboBox.clear()
             self.interactionAtomNameComboBox.addItems(str(t) for t in set([x.atom_name for x in filtered_items]))
-            self.interactionAtomNameComboBox.insertItem(0, "")
+            self.interactionAtomNameComboBox.insertItem(0, "Any")
             self.interactionAtomNameComboBox.setCurrentIndex(0)
 
     def update_from_atom(self):
-        filtered_items = self.filter_data()
+        filtered_items = self.filter_data_from_GUI()
         if not self.interaction_filter:
             self.interactionTypeComboBox.clear()
             self.interactionTypeComboBox.addItems(str(t) for t in set([x.interaction_type for x in filtered_items]))
-            self.interactionTypeComboBox.insertItem(0, "")
+            self.interactionTypeComboBox.insertItem(0, "Any")
             self.interactionTypeComboBox.setCurrentIndex(0)
         if not self.chain_filter:
             self.interactionChainComboBox.clear()
             self.interactionChainComboBox.addItems(str(t) for t in set([x.chain for x in filtered_items]))
-            self.interactionChainComboBox.insertItem(0, "")
+            self.interactionChainComboBox.insertItem(0, "Any")
             self.interactionChainComboBox.setCurrentIndex(0)
         if not self.res_name_filter:
             self.interactionResTypeComboBox.clear()
             self.interactionResTypeComboBox.addItems(str(t) for t in set([x.res_type for x in filtered_items]))
-            self.interactionResTypeComboBox.insertItem(0, "")
+            self.interactionResTypeComboBox.insertItem(0, "Any")
             self.interactionResTypeComboBox.setCurrentIndex(0)
         if not self.res_id_filter:
             self.interactionResNComboBox.clear()
             self.interactionResNComboBox.addItems(str(t) for t in set([x.res_number for x in filtered_items]))
-            self.interactionResNComboBox.insertItem(0, "")
+            self.interactionResNComboBox.insertItem(0, "Any")
             self.interactionResNComboBox.setCurrentIndex(0)
-        
-    def filter_data(self):
+    
+    def filter_data_from_obj(self, active_filter):
         filtered_items = None
-        if self.interactionTypeComboBox.currentText() != '':
+        if active_filter.interaction_type != None:
+            self.interaction_filter = True
+            filtered_items = list(filter(lambda x: x.interaction_type == active_filter.interaction_type, self.items))
+        else:
+            self.interaction_filter = False
+        if active_filter.chain != None:
+            if filtered_items is None:
+                filtered_items = self.items
+            self.chain_filter = True
+            filtered_items = list(filter(lambda x: x.chain == active_filter.chain, filtered_items))
+        else: self.chain_filter = False
+        if active_filter.res_type != None:
+            if filtered_items is None:
+                filtered_items = self.items
+            self.res_name_filter = True
+            filtered_items = list(filter(lambda x: x.res_type == active_filter.res_type, filtered_items))
+        else: self.res_name_filter = False
+        if active_filter.res_number != None:
+            if filtered_items is None:
+                filtered_items = self.items
+            self.res_id_filter = True
+            filtered_items = list(filter(lambda x: x.res_number == active_filter.res_number, filtered_items))
+        else: self.res_id_filter = False
+        if active_filter.atom_name != None:
+            if filtered_items is None:
+                filtered_items = self.items
+            self.atom_name_filter = True
+            filtered_items = list(filter(lambda x: x.atom_name == active_filter.atom_name, filtered_items))
+        else: self.atom_name_filter = False
+        if filtered_items is None: return self.items
+        return filtered_items
+        
+    def filter_data_from_GUI(self):
+        filtered_items = None
+        if self.interactionTypeComboBox.currentText() != 'Any':
             self.interaction_filter = True
             interaction_type = self.interactionTypeComboBox.currentText()
             filtered_items = list(filter(lambda x: x.interaction_type == interaction_type, self.items))
         else:
             self.interaction_filter = False
-        if self.interactionChainComboBox.currentText() != '':
+        if self.interactionChainComboBox.currentText() != 'Any':
             if filtered_items is None:
                 filtered_items = self.items
             self.chain_filter = True
             chain = self.interactionChainComboBox.currentText()
             filtered_items = list(filter(lambda x: x.chain == chain, filtered_items))
         else: self.chain_filter = False
-        if self.interactionResTypeComboBox.currentText() != '':
+        if self.interactionResTypeComboBox.currentText() != 'Any':
             if filtered_items is None:
                 filtered_items = self.items
             self.res_name_filter = True
             res_type = self.interactionResTypeComboBox.currentText()
             filtered_items = list(filter(lambda x: x.res_type == res_type, filtered_items))
         else: self.res_name_filter = False
-        if self.interactionResNComboBox.currentText() != '':
+        if self.interactionResNComboBox.currentText() != 'Any':
             if filtered_items is None:
                 filtered_items = self.items
             self.res_id_filter = True
             res_n = self.interactionResNComboBox.currentText()
             filtered_items = list(filter(lambda x: x.res_number == res_n, filtered_items))
         else: self.res_id_filter = False
-        if self.interactionAtomNameComboBox.currentText() != '':
+        if self.interactionAtomNameComboBox.currentText() != 'Any':
             if filtered_items is None:
                 filtered_items = self.items
             self.atom_name_filter = True
             atom_name = self.interactionAtomNameComboBox.currentText()
             filtered_items = list(filter(lambda x: x.atom_name == atom_name, filtered_items))
         else: self.atom_name_filter = False
+        if filtered_items is None: return self.items
         return filtered_items
     
     
@@ -340,26 +429,12 @@ class Ui_Form(QtWidgets.QDialog):
         _translate = QtCore.QCoreApplication.translate
         Form.setWindowTitle(_translate("Form", "Form"))
         self.interactionTypeLabel.setText(_translate("Form", "Select interaction type:"))
-        self.wantedRadioButton.setText(_translate("Form", "Enable"))
-        self.unwantedRadioButton.setText(_translate("Form", "Disable"))
+        self.wantedRadioButton.setText(_translate("Form", "Wanted"))
+        self.unwantedRadioButton.setText(_translate("Form", "Unwanted"))
         self.interactionChainLabel.setText(_translate("Form", "Chain:"))
         self.interactionResTypeLabel.setText(_translate("Form", "Res Type:"))
         self.interactionResNLabel.setText(_translate("Form", "Res #:"))
         self.interactionAtomNameLabel.setText(_translate("Form", "Atom Name:"))
-        # self.interactionAcceptButton.setText(_translate("Form", "Ok"))
-        # self.interactionCancelButton.setText(_translate("Form", "Cancel"))
-        
-def parse_list_of_items(items):
-    retvalue = list()
-    for element in items:
-        interaction = Interaction()
-        interaction.set_interaction_type(element[0].strip())
-        interaction.set_chain(element[1].strip())
-        interaction.set_res_type(element[2].strip())
-        interaction.set_res_number(element[3].strip())
-        interaction.set_atom_name(element[4].strip())
-        retvalue.append(interaction)
-    return retvalue
 
 
 if __name__ == "__main__":

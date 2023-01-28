@@ -542,7 +542,7 @@ class Ui_MainWindow(object):
         self.readInteractionsListWidget.itemClicked.connect(self.item_selected_from_interactions_list)
         self.readInteractionsAddButton.clicked.connect(self.add_interaction)
         self.readInteractionsDeleteButton.clicked.connect(self.delete_interaction)
-        # self.readInteractionsEditButton.clicked.connect(None)
+        self.readInteractionsEditButton.clicked.connect(self.edit_interaction)
         self.readInteractionsEnableButton.clicked.connect(self.enable_interaction_item)
         
         self.readLigandListWidget.itemChanged.connect(self.set_edited_item)
@@ -977,7 +977,24 @@ class Ui_MainWindow(object):
                     self.selected_interaction_from_list = None
                     print(f"Delete {self.interactions}")
                     break
-                
+    
+    def edit_interaction(self, item):
+        if self.selected_interaction_from_list is not None:
+            for idx in range(0, self.readInteractionsListWidget.count()):
+                if self.readInteractionsListWidget.item(idx) == self.selected_interaction_from_list:
+                    self.interaction_ui = Ui_Form(list_example, self.window, self.selected_interaction_from_list)
+                    if self.interaction_ui.exec_():
+                        self.interaction_filter = self.interaction_ui.filter
+                        if self.interaction_filter is not None:
+                            f = self.interaction_filter.__str__()
+                            self.readInteractionsListWidget.takeItem(idx)
+                            self.readInteractionsListWidget.insertItem(idx, f)
+                            if self.interaction_filter.wanted:
+                                self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                            else:
+                                self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+                    break
+    
     def enable_interaction_item(self):
         for idx in range(0, self.readInteractionsListWidget.count()):
             if self.readInteractionsListWidget.item(idx) == self.selected_interaction_from_list:
