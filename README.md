@@ -421,9 +421,7 @@ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --export_csv
 from ringtail import RingtailCore
 
 opts = RingtailCore.get_defaults()
-opts["storage_opts"]["values"]["storage_type"] = "sqlite"
-opts["rman_opts"]["values"]["file_sources"]["file_path"]["path"] = [["."]]
-opts["rman_opts"]["values"]["file_sources"]["file_path"]["recursive"] = True
+RingtailCore.set_opts(opts, ["storage_type", "db_file", "path", "recursive"], ["sqlite", "example.db", [["."]], True])
 
 with RingtailCore(**opts) as rt_core:
     rt_core.add_results()
