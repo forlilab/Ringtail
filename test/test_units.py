@@ -6,6 +6,7 @@
 from ringtail import StorageManagerSQLite, RingtailCore
 import sqlite3
 import os
+import json
 
 class Test_StorageManSQLite:
 
@@ -31,9 +32,9 @@ class Test_StorageManSQLite:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        bookmark = cur.execute("SELECT * FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'")
-        bookmark_tuple = list(bookmark.fetchone())
-        assert tuple([bookmark_tuple[0]] + bookmark_tuple[3:]) == ('passing_results', -15.0, -16.0, -0.4, -0.5, None, None, '["127458"]', None, None, None, '[["V", "A", "VAL", "279", "", true], ["H", "A", "LYS", "162", "", true], ["R", "A", "TYR", "169", "", true], ["R", "", "", "", "", true]]', 5)
+        bookmark = cur.execute("SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'")
+        bookmark_filters_db_str = bookmark.fetchone()[0]
+        assert bookmark_filters_db_str == json.dumps(filters)
         cur.close()
         conn.close()
 

@@ -409,17 +409,14 @@ class RingtailCore:
         for rec, rec_name in receptor_list:
             # NOTE: in current implementation, only one receptor allowed per database
             # Check that any receptor row is incomplete (needs receptor blob) before inserting
-            try:
-                filled_receptor_rows = self.storageman.check_receptors_saved()
-                if filled_receptor_rows != 0:
-                    raise RTCoreError(
-                        "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
-                            filled_receptor_rows
-                        )
+            filled_receptor_rows = self.storageman.check_receptors_saved()
+            if filled_receptor_rows != 0:
+                raise RTCoreError(
+                    "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
+                        filled_receptor_rows
                     )
-                self.storageman.save_receptor(rec)
-            except Exception as e:
-                raise e
+                )
+            self.storageman.save_receptor(rec)
 
     def produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
         """Print summary of data in storage
@@ -543,6 +540,7 @@ class RingtailCore:
             # ask storageManager to fetch results
             try:
                 self.filtered_results = self.storageman.filter_results(
+                    self.filters,
                     results_filters_list,
                     self.filters["ligand_filters"],
                     self.out_opts["outfields"],
@@ -560,8 +558,6 @@ class RingtailCore:
                 raise e
             except OutputError as e:
                 logging.exception("Logging error occurred after filtering")
-                raise e
-            except Exception as e:
                 raise e
 
     def get_previous_filter_data(self):
@@ -581,8 +577,6 @@ class RingtailCore:
             raise e
         except OutputError as e:
             logging.exception("Error occurred while writing log")
-            raise e
-        except Exception as e:
             raise e
 
     def plot(self, save=True):
