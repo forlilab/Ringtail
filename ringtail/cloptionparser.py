@@ -78,8 +78,7 @@ def cmdline_parser(defaults={}):
     )
 
     subparsers = parser.add_subparsers(
-        help="Specify if should write to or read from database. To show options of each mode use the in-line help, e.g.: %s read -h"
-        % os.path.basename(__main__.__file__),
+        help=f"Specify if should write to or read from database. To show options of each mode use the in-line help, e.g.: {os.path.basename(__main__.__file__)} read -h",
         dest="rr_mode",
     )
 
@@ -111,7 +110,7 @@ def cmdline_parser(defaults={}):
     write_parser.add_argument(
         "-su",
         "--summary",
-        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
+        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1%% (percentile) and 10%% (percentile) energy and ligand efficiency.',
         action="store_true",
     )
     write_parser.add_argument(
@@ -286,7 +285,7 @@ def cmdline_parser(defaults={}):
     read_parser.add_argument(
         "-su",
         "--summary",
-        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1% (percentile) and 10% (percentile) energy and ligand efficiency.',
+        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1%% (percentile) and 10%% (percentile) energy and ligand efficiency.',
         action="store_true",
     )
     read_parser.add_argument(
@@ -651,7 +650,6 @@ class CLOptionParser:
             ) = cmdline_parser()
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
-            self.parser.print_help()
             logging.error("\n")
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
@@ -686,6 +684,10 @@ class CLOptionParser:
         self.debug = parsed_opts.debug
         if self.debug:
             logging.getLogger().setLevel(logging.DEBUG)
+
+        self.rr_mode = parsed_opts.rr_mode
+        self.pattern = parsed_opts.file_pattern
+
         self.filter = False  # set flag indicating if any filters given
         conflict_handling = None
         file_sources = None
@@ -735,10 +737,6 @@ class CLOptionParser:
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             parsed_opts.output_all_poses = False
-
-        # check options for write mode
-        self.rr_mode = parsed_opts.rr_mode
-        self.pattern = parsed_opts.file_pattern
 
         if self.rr_mode is None:
             raise OptionError(
