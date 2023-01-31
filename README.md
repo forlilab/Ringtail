@@ -206,7 +206,7 @@ rt_process_vs.py read --input_db output.db --bookmark_name filter1 --plot
 ```
 `all_ligands_scatter.png`
 
-![all_ligands_scatter](https://user-images.githubusercontent.com/41704502/171295726-7315f929-edfa-49a0-b984-dacadf1a4327.png)
+![all_ligands_scatter](https://user-images.githubusercontent.com/41704502/215909808-2edc29e9-ebdb-4f0e-a87a-a1c293687b2e.png)
 
 ### Usage Details
 The script for writing a database and filtering is `rt_process_vs.py`. __This is intended to be used for a set of DLGs/Vina PDBQTs pertaining to a single target and binding site. This may include multiple ligand libraries as long as the target and binding site is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ One receptor PDBQT may also be saved to the database.
