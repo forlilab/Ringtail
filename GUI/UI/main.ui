@@ -527,7 +527,8 @@
               <string/>
              </property>
              <property name="icon">
-              <iconset theme="edit"/>
+              <iconset theme="edit">
+               <normaloff>.</normaloff>.</iconset>
              </property>
             </widget>
            </item>
@@ -543,7 +544,8 @@
               <string/>
              </property>
              <property name="icon">
-              <iconset theme="lock"/>
+              <iconset theme="lock">
+               <normaloff>.</normaloff>.</iconset>
              </property>
             </widget>
            </item>

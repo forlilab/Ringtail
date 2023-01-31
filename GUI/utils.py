@@ -1,5 +1,97 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 
+# CLASSES
+class Interaction:
+    def __init__(self):
+        self.wanted = False
+        self.interaction_type = None
+        self.chain = None
+        self.res_type = None
+        self.res_number = None
+        self.atom_name = None
+                    
+    def set_interaction_type(self, interaction_type):
+        if interaction_type != '' and interaction_type != 'Any' and interaction_type != 'None': self.interaction_type = interaction_type
+        else: self.interaction_type = None
+            
+    def set_chain(self, chain):
+        if chain != '' and chain != 'Any' and chain != 'None': self.chain = chain
+        else: self.chain = None
+    
+    def set_res_type(self, res_type):
+        if res_type != '' and res_type != 'Any' and res_type != 'None': self.res_type = res_type
+        else: self.res_type = None
+        
+    def set_res_number(self, res_number):
+        if res_number != '' and res_number != 'Any' and res_number != 'None': self.res_number = res_number
+        else: self.res_number = None
+        
+    def set_atom_name(self, atom_name):
+        if atom_name != '' and atom_name != 'Any' and atom_name != 'None': self.atom_name = atom_name
+        else: self.atom_name = None
+        
+    def set_wanted(self, wanted):
+        if isinstance(wanted, bool):
+            self.wanted = wanted
+    
+    def __str__(self):
+        rep = f"Interaction:{self.interaction_type},Chain:{self.chain},Res_Name:{self.res_type},Res_ID:{self.res_number},Atom_Name:{self.atom_name},Enabled:{str(self.wanted)}"
+        return rep
+
+class LigandFilter:
+    def __init__(self):
+        self.ligand_name = None
+        self.substructure_match = None
+        self.include_coordinates = False
+        self.x = None
+        self.y = None
+        self.z = None
+        self.cutoff = None
+        self.index = None
+        self.enabled = None
+        
+    def set_ligand_name(self, name):
+        self.ligand_name = name
+    
+    def set_substructure_match(self, sub):
+        self.substructure_match = sub
+    
+    def set_coordinates(self, x, y, z):
+        self.x = x
+        self.y = y
+        self.z = z
+            
+    def set_x(self, x):
+        self.x = x
+    
+    def set_y(self, y):
+        self.y = y
+    
+    def set_z(self, z):
+        self.z = z
+            
+    def set_cutoff(self, cutoff):
+        self.cutoff = cutoff
+    
+    def set_index(self, idx):
+        self.index = idx
+            
+    def set_wanted(self, enabled):
+        if isinstance(enabled, bool):
+            self.enabled = enabled
+            
+    def __str__(self):
+        if self.ligand_name is not None:
+            rep = f"Name: {self.ligand_name}"
+            rep += f"\nWanted: {self.enabled}"
+            return rep
+        elif self.substructure_match is not None:
+            rep = f"Sub: {self.substructure_match}"
+            rep += f"Wanted: {self.enabled}"
+            if self.include_coordinates:
+                rep += f"\nx:{self.x}, y:{self.y}, z:{self.x}, cutoff:{self.cutoff}, idx:{self.index}"
+            return rep
+
 error_level = [0, 1, 2]
 
 def show_message(message, error_level):
@@ -44,42 +136,7 @@ def get_energy_max_min():
 def get_ligands_efficiency_max_min():
     return (3000, -3000)
 
-class Interaction:
-    def __init__(self):
-        self.wanted = False
-        self.interaction_type = None
-        self.chain = None
-        self.res_type = None
-        self.res_number = None
-        self.atom_name = None
-                    
-    def set_interaction_type(self, interaction_type):
-        if interaction_type != '' and interaction_type != 'Any' and interaction_type != 'None': self.interaction_type = interaction_type
-        else: self.interaction_type = None
-            
-    def set_chain(self, chain):
-        if chain != '' and chain != 'Any' and chain != 'None': self.chain = chain
-        else: self.chain = None
-    
-    def set_res_type(self, res_type):
-        if res_type != '' and res_type != 'Any' and res_type != 'None': self.res_type = res_type
-        else: self.res_type = None
-        
-    def set_res_number(self, res_number):
-        if res_number != '' and res_number != 'Any' and res_number != 'None': self.res_number = res_number
-        else: self.res_number = None
-        
-    def set_atom_name(self, atom_name):
-        if atom_name != '' and atom_name != 'Any' and atom_name != 'None': self.atom_name = atom_name
-        else: self.atom_name = None
-        
-    def set_wanted(self, wanted):
-        if isinstance(wanted, bool):
-            self.wanted = wanted
-    
-    def __str__(self):
-        rep = f"Interaction:{self.interaction_type},Chain:{self.chain},Res_Name:{self.res_type},Res_ID:{self.res_number},Atom_Name:{self.atom_name},Enabled:{str(self.wanted)}"
-        return rep
+
 
 
 def get_interaction_obj_from_str(s_filter):
@@ -104,3 +161,5 @@ def parse_list_of_items(items):
         interaction.set_atom_name(element[4].strip())
         retvalue.append(interaction)
     return retvalue
+            
+    
