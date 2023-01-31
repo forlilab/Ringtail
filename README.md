@@ -299,6 +299,14 @@ When writing from Vina PDBQTs, ensure there are no other PDBQTs (input or recept
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. This may result in the database becoming locked. If this occurs it is recommended to delete the existing database and re-write it from scratch.
 
+If trying to read a database created with Ringtail v1.0.0 with a newer version of Ringtail, you may encounter errors related to changes to the internal database structure. If you encounter this, run the follow commands (example of database named `output.db`:
+```
+$ sqlite3 output.db
+> ALTER TABLE Results RENAME energies_binding TO docking_score;
+> ALTER TABLE Bookmarks ADD COLUMN filters;
+```
+If you encounter further errors related to views/bookmarks, please contact the ForliLab.
+
 ### rt_process_vs.py supported arguments
 
 | Argument          || Description                                           | Default value   | Requires interactions |
