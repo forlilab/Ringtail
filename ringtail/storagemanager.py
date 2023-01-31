@@ -2481,7 +2481,7 @@ class StorageManagerSQLite(StorageManager):
         """
         sql_str = """CREATE TABLE IF NOT EXISTS Bookmarks (
         Bookmark_name       VARCHAR[] PRIMARY KEY,
-        sql_query           VARCHAR[],
+        Query               VARCHAR[],
         filters             VARCHAR[])"""
 
         try:
@@ -2506,7 +2506,7 @@ class StorageManagerSQLite(StorageManager):
         """
         sql_insert = """INSERT OR REPLACE INTO Bookmarks (
         Bookmark_name,
-        sql_query,
+        Query,
         filters
         ) VALUES (?,?,?)"""
 
