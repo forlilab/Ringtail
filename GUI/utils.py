@@ -87,7 +87,7 @@ class LigandFilter:
             return rep
         elif self.substructure_match is not None:
             rep = f"Sub: {self.substructure_match}"
-            rep += f"Wanted: {self.enabled}"
+            rep += f"\nWanted: {self.enabled}"
             if self.include_coordinates:
                 rep += f"\nx:{self.x}, y:{self.y}, z:{self.x}, cutoff:{self.cutoff}, idx:{self.index}"
             return rep
@@ -136,7 +136,30 @@ def get_energy_max_min():
 def get_ligands_efficiency_max_min():
     return (3000, -3000)
 
-
+def get_ligand_obj_from_str(s_filter):
+    retvalue = LigandFilter()
+    set_name = False
+    splitted_filter = s_filter.split("\n")
+    retvalue.set_wanted(bool(splitted_filter[1].split('Wanted:')[-1].strip()))
+    for x in splitted_filter:
+        if x.find('Name:') >= 0:
+            set_name = True
+    if set_name is True:
+        retvalue.set_ligand_name(splitted_filter[0].split('Name:')[-1].strip())
+    else:
+        retvalue.set_substructure_match(splitted_filter[0].split('Sub:')[-1].strip())
+    if len(splitted_filter) > 2:
+        retvalue.include_coordinates = True
+        splitted_coordinates = splitted_filter[-1].split(',')
+        x = float(splitted_coordinates[0].split('x:')[-1].strip())
+        y = float(splitted_coordinates[1].split('y:')[-1].strip())
+        z = float(splitted_coordinates[2].split('z:')[-1].strip())
+        cutoff = float(splitted_coordinates[3].split('cutoff:')[-1].strip())
+        idx = int(splitted_coordinates[-1].split('idx:')[-1].strip())
+        retvalue.set_coordinates(x, y, z)
+        retvalue.set_cutoff(cutoff)
+        retvalue.set_index(idx)
+    return retvalue
 
 
 def get_interaction_obj_from_str(s_filter):

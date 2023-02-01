@@ -13,9 +13,9 @@ from list_example import list_example
 from utils import get_interaction_obj_from_str, parse_list_of_items, Interaction
 
     
-class Ui_Form(QtWidgets.QDialog):
+class Interaction_Dialog(QtWidgets.QDialog):
     def __init__(self, list_of_available_items, parent : QtWidgets.QWidget, active_filter=None):
-        super(Ui_Form, self).__init__(parent)
+        super(Interaction_Dialog, self).__init__(parent)
         self.interactions_type = ['R', 'H', 'vdW']
         self.items = parse_list_of_items(list_of_available_items)
         self.filtered_items = self.items
@@ -402,7 +402,7 @@ class Ui_Form(QtWidgets.QDialog):
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    MainWindow = Ui_Form(list_example, None)
+    MainWindow = Interaction_Dialog(list_example, None)
     MainWindow.show()
     sys.exit(app.exec_())
     # interactions = parse_list_of_items(list_example)

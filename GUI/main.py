@@ -12,11 +12,12 @@ ringtail_gui_path = os.path.realpath(os.path.dirname(__file__))
 sys.path.append(ringtail_gui_path)
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from utils import show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min
+from utils import show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min, Interaction, LigandFilter
 from range_slider import RangeSlider
 import multiprocessing
 import qrc_resources
-from interaction_widget import Ui_Form, Interaction
+from interaction_widget import Interaction_Dialog
+from ligand_widget import Ligand_Dialog
 from list_example import list_example
 
 class Ui_MainWindow(object):
@@ -957,7 +958,7 @@ class Ui_MainWindow(object):
         self.selected_interaction_from_list = item
     
     def add_interaction(self):
-        self.interaction_ui = Ui_Form(list_example, self.window)
+        self.interaction_ui = Interaction_Dialog(list_example, self.window)
         if self.interaction_ui.exec_():
             self.interaction_filter = self.interaction_ui.filter
             if self.interaction_filter is not None:
@@ -983,7 +984,7 @@ class Ui_MainWindow(object):
         if self.selected_interaction_from_list is not None:
             for idx in range(0, self.readInteractionsListWidget.count()):
                 if self.readInteractionsListWidget.item(idx) == self.selected_interaction_from_list:
-                    self.interaction_ui = Ui_Form(list_example, self.window, self.selected_interaction_from_list)
+                    self.interaction_ui = Interaction_Dialog(list_example, self.window, self.selected_interaction_from_list)
                     if self.interaction_ui.exec_():
                         self.interaction_filter = self.interaction_ui.filter
                         if self.interaction_filter is not None:

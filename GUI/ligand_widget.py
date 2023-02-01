@@ -1,18 +1,18 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from utils import LigandFilter, show_message
+from utils import LigandFilter, show_message, get_ligand_obj_from_str
 
 
-class Ui_Dialog(QtWidgets.QDialog):
-    def __init__(self, wanted=None):
-        super(Ui_Dialog, self).__init__()
+class Ligand_Dialog(QtWidgets.QDialog):
+    def __init__(self, active_filter=None):
+        super(Ligand_Dialog, self).__init__()
         self.substructure = False
         self.ligand_name = False
         self.ligand_filter = LigandFilter()
-        self.ligand_filter.enabled = wanted
+        self.ligand_filter.set_wanted(True)
         
-        self.setupUi(self)
+        self.setupUi(self, active_filter)
     
-    def setupUi(self, Dialog):
+    def setupUi(self, Dialog, active_filter):
         Dialog.setObjectName("Dialog")
         Dialog.resize(450, 287)
         self.gridLayout = QtWidgets.QGridLayout(Dialog)
@@ -105,39 +105,52 @@ class Ui_Dialog(QtWidgets.QDialog):
         self.okCancelButtonBox.accepted.connect(self.get_ligand_filter_obj)
         self.okCancelButtonBox.rejected.connect(self.reject)
         
-        self.ligandNameRadioButton.click()
-        self.xDoubleSpinBox.clear()
-        self.yDoubleSpinBox.clear()
-        self.zDoubleSpinBox.clear()
-        self.cutoffDoubleSpinBox.clear()
-        self.indexSpinBox.clear()
-    
-    def set_mode(self):
-        self.okCancelButtonBox.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(False)
-        if self.ligandNameRadioButton.isChecked():
-            self.substructure = False
-            self.ligand_name = True
-            self.enable_substructure_elements(False)
-            self.ligandNameLineEdit.clear()
-            self.substructureLineEdit.clear()
+        if active_filter is None:
+            self.ligandNameRadioButton.click()
             self.xDoubleSpinBox.clear()
             self.yDoubleSpinBox.clear()
             self.zDoubleSpinBox.clear()
             self.cutoffDoubleSpinBox.clear()
             self.indexSpinBox.clear()
         else:
+            self.populate_from_existing_filter(active_filter)
+            
+    def populate_from_existing_filter(self, active_filter):
+        self.ligand_filter = get_ligand_obj_from_str(active_filter)
+        if self.ligand_filter.ligand_name is not None:
+            self.ligandNameLineEdit.setText(self.ligand_filter.ligand_name)
+            self.ligandNameRadioButton.click()
+        else:
+            self.substructureLineEdit.setText(self.ligand_filter.substructure_match)
+            if self.ligand_filter.include_coordinates is True:
+                self.coordinatesCheckBox.setChecked(True)
+                self.xDoubleSpinBox.setValue(self.ligand_filter.x)
+                self.yDoubleSpinBox.setValue(self.ligand_filter.y)
+                self.zDoubleSpinBox.setValue(self.ligand_filter.z)
+                self.cutoffDoubleSpinBox.setValue(self.ligand_filter.cutoff)
+                self.indexSpinBox.setValue(self.ligand_filter.index)
+                self.ligandSubstructureRadioButton.click()
+                
+    def set_mode(self):
+        if self.ligandNameRadioButton.isChecked():
+            self.substructure = False
+            self.ligand_name = True
+            self.enable_substructure_elements(False)
+            if self.ligandNameLineEdit.text() != '':
+                self.okCancelButtonBox.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(True)
+            else:
+                self.okCancelButtonBox.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(False)
+        else:
             self.substructure = True
             self.ligand_name = False
             self.enable_substructure_elements(True)
-            self.ligandNameLineEdit.clear()
-            self.substructureLineEdit.clear()
-            self.xDoubleSpinBox.clear()
-            self.yDoubleSpinBox.clear()
-            self.zDoubleSpinBox.clear()
-            self.cutoffDoubleSpinBox.clear()
-            self.indexSpinBox.clear()
             self.enable_coordinates()
-            self.coordinatesCheckBox.setEnabled(False)
+            if self.substructureLineEdit.text() != '':
+                self.okCancelButtonBox.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(True)
+                self.coordinatesCheckBox.setEnabled(True)
+            else:
+                self.okCancelButtonBox.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(False)
+                self.coordinatesCheckBox.setEnabled(False)
             
     def enable_coordinates(self):
         if self.coordinatesCheckBox.isChecked():
@@ -244,7 +257,8 @@ class Ui_Dialog(QtWidgets.QDialog):
 
 if __name__ == "__main__":
     import sys
+    s = "Sub: hdddhfh\nWanted: True\nx:2.0, y:1.0, z:2.0, cutoff:1.0, idx:0"
     app = QtWidgets.QApplication(sys.argv)
-    ui = Ui_Dialog()
+    ui = Ligand_Dialog(s)
     ui.show()
     sys.exit(app.exec_())
