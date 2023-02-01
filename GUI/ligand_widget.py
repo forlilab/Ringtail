@@ -129,7 +129,7 @@ class Ligand_Dialog(QtWidgets.QDialog):
                 self.zDoubleSpinBox.setValue(self.ligand_filter.z)
                 self.cutoffDoubleSpinBox.setValue(self.ligand_filter.cutoff)
                 self.indexSpinBox.setValue(self.ligand_filter.index)
-                self.ligandSubstructureRadioButton.click()
+            self.ligandSubstructureRadioButton.click()
                 
     def set_mode(self):
         if self.ligandNameRadioButton.isChecked():
@@ -225,7 +225,11 @@ class Ligand_Dialog(QtWidgets.QDialog):
             self.ligand_filter.set_substructure_match(self.substructureLineEdit.text())
             if self.coordinatesCheckBox.isChecked():
                 if self.coordinates_sanity_check():
-                    print(self.ligand_filter)
+                    self.ligand_filter.set_coordinates(self.xDoubleSpinBox.value(),
+                                                       self.yDoubleSpinBox.value(),
+                                                       self.zDoubleSpinBox.value())
+                    self.ligand_filter.set_cutoff(self.cutoffDoubleSpinBox.value())
+                    self.ligand_filter.set_index(self.indexSpinBox.value())
                     self.accept()
                 else: show_message("Error if coordinates checkbox is active all the fields must be filled in.",
                                    2)
@@ -240,7 +244,8 @@ class Ligand_Dialog(QtWidgets.QDialog):
         return self.xDoubleSpinBox.value() != 0.0 and self.xDoubleSpinBox.text() != '' \
             and self.yDoubleSpinBox.value() != 0.0 and self.yDoubleSpinBox.text() != '' \
             and self.zDoubleSpinBox.value() != 0.0  and self.zDoubleSpinBox.text() != '' \
-            and self.cutoffDoubleSpinBox.value() > 0.0 and self.indexSpinBox.text() != ''
+            and self.cutoffDoubleSpinBox.value() > 0.0 and self.cutoffDoubleSpinBox.text() != '' \
+            and self.indexSpinBox.value() >= 0 and self.indexSpinBox.text() != ''
     
     def retranslateUi(self, Dialog):
         _translate = QtCore.QCoreApplication.translate

@@ -935,6 +935,7 @@ class Ui_MainWindow(object):
                             f = self.ligand_filter.__str__()
                             self.readLigandListWidget.takeItem(idx)
                             self.readLigandListWidget.insertItem(idx, f)
+                            self.ligands[idx] = self.ligand_filter
                             if self.ligand_filter.enabled:
                                 self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
                             else:
@@ -991,6 +992,7 @@ class Ui_MainWindow(object):
                             f = self.interaction_filter.__str__()
                             self.readInteractionsListWidget.takeItem(idx)
                             self.readInteractionsListWidget.insertItem(idx, f)
+                            self.interactions[idx] = self.interaction_filter
                             if self.interaction_filter.wanted:
                                 self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
                             else:
