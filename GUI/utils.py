@@ -35,7 +35,7 @@ class Interaction:
             self.wanted = wanted
     
     def __str__(self):
-        rep = f"Interaction:{self.interaction_type},Chain:{self.chain},Res_Name:{self.res_type},Res_ID:{self.res_number},Atom_Name:{self.atom_name},Enabled:{str(self.wanted)}"
+        rep = f"Interaction:{self.interaction_type},Chain:{self.chain},Res_Name:{self.res_type},Res_ID:{self.res_number},Atom_Name:{self.atom_name},Wanted:{str(self.wanted)}"
         return rep
 
 class LigandFilter:
@@ -139,7 +139,7 @@ def get_ligands_efficiency_max_min():
 def get_ligand_obj_from_str(s_filter):
     retvalue = LigandFilter()
     set_name = False
-    splitted_filter = s_filter.split("\n")
+    splitted_filter = s_filter.text().split("\n")
     retvalue.set_wanted(bool(splitted_filter[1].split('Wanted:')[-1].strip()))
     for x in splitted_filter:
         if x.find('Name:') >= 0:

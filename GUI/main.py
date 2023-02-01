@@ -60,11 +60,11 @@ class Ui_MainWindow(object):
         
         # LIGAND
         self.selected_ligand_name_from_list = None
-        self.ligand_names = list()
+        self.ligands = list()
         
         # INTERACTIONS
         self.selected_interaction_from_list = None
-        self.interactions = []
+        self.interactions = list()
         
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -532,21 +532,22 @@ class Ui_MainWindow(object):
         self.maxLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_max)
         self.minLigandsEfficiencySpinBox.valueChanged.connect(self.update_ligand_slider_min)
         
-        self.readLigandAddButton.clicked.connect(self.get_ligand_name)
-        self.readLigandDeleteButton.clicked.connect(self.delete_ligand_from_list)
-        self.readLigandEditButton.clicked.connect(self.edit_ligand_from_list)
+        # Ligand filter
+        self.readLigandListWidget.itemClicked.connect(self.item_selected_from_ligands_list)
+        self.readLigandAddButton.clicked.connect(self.add_ligand)
+        self.readLigandDeleteButton.clicked.connect(self.delete_ligand)
+        self.readLigandEditButton.clicked.connect(self.edit_ligand)
         self.readLigandEnableButton.clicked.connect(self.enable_ligand_item)
-        self.readLigandListWidget.itemClicked.connect(self.item_selected_from_list)
-        self.readProceedButton.clicked.connect(self.get_ligand_names_from_widget)
         
-        # New Events
+        # Interactions filter
         self.readInteractionsListWidget.itemClicked.connect(self.item_selected_from_interactions_list)
         self.readInteractionsAddButton.clicked.connect(self.add_interaction)
         self.readInteractionsDeleteButton.clicked.connect(self.delete_interaction)
         self.readInteractionsEditButton.clicked.connect(self.edit_interaction)
         self.readInteractionsEnableButton.clicked.connect(self.enable_interaction_item)
         
-        self.readLigandListWidget.itemChanged.connect(self.set_edited_item)
+        # self.readLigandListWidget.itemChanged.connect(self.set_edited_item)
+        # self.readProceedButton.clicked.connect(self.get_ligand_names_from_widget)
         #-----------------------------------------------------------------#
         
                 # INITIALIZATION
@@ -897,60 +898,59 @@ class Ui_MainWindow(object):
             self.ligands_efficiency_percentile = self.minLigandsEfficiencySpinBox.value()
         
     # READ -> LIGAND
-    def get_ligand_name(self):
-        name, done = QtWidgets.QInputDialog.getText(self.readLigandsGroupBox, "Input Dialog", "Enter ligand name:")
-        if done:
-            item = QtWidgets.QListWidgetItem(name)
-            item.setFlags(item.flags() | QtCore.Qt.ItemIsEditable)
-            item.setIcon(QtGui.QIcon(":enabled_icon.svg"))
-            self.readLigandListWidget.addItem(item)
-            self.ligand_names.append([item.text(), True])
-            print(f"Add {self.ligand_names}")
+    def item_selected_from_ligands_list(self, item):
+        self.selected_ligand_name_from_list = item
+        
+    def add_ligand(self):
+        self.ligand_ui = Ligand_Dialog()
+        if self.ligand_ui.exec_():
+            self.ligand_filter = self.ligand_ui.ligand_filter
+            if self.ligand_filter is not None:
+                f = self.ligand_filter.__str__()
+                self.ligands.append(self.ligand_filter)
+                self.readLigandListWidget.addItem(f)
+                if self.ligand_filter.enabled:
+                    self.readLigandListWidget.item(self.readLigandListWidget.count()-1).setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                else:
+                    self.readLigandListWidget.item(self.readLigandListWidget.count()-1).setIcon(QtGui.QIcon(":disabled_icon.svg"))
             
-    def delete_ligand_from_list(self):
+    def delete_ligand(self):
         if self.selected_ligand_name_from_list is not None:
             for idx in range(0, self.readLigandListWidget.count()):
                 if self.readLigandListWidget.item(idx) == self.selected_ligand_name_from_list:
                     self.readLigandListWidget.takeItem(idx)
-                    del self.ligand_names[idx]
+                    del self.ligands[idx]
                     self.selected_ligand_name_from_list = None
-                    print(f"Delete {self.ligand_names}")
+                    print(f"Delete {self.ligands}")
                     break
     
-    def edit_ligand_from_list(self):
+    def edit_ligand(self):
         if self.selected_ligand_name_from_list is not None:
             for idx in range(0, self.readLigandListWidget.count()):
                 if self.readLigandListWidget.item(idx) == self.selected_ligand_name_from_list:
-                    self.readLigandListWidget.editItem(self.readLigandListWidget.item(idx))
+                    self.ligand_ui = Ligand_Dialog(self.selected_ligand_name_from_list)
+                    if self.ligand_ui.exec_():
+                        self.ligand_filter = self.ligand_ui.ligand_filter
+                        if self.ligand_filter is not None:
+                            f = self.ligand_filter.__str__()
+                            self.readLigandListWidget.takeItem(idx)
+                            self.readLigandListWidget.insertItem(idx, f)
+                            if self.ligand_filter.enabled:
+                                self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                            else:
+                                self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
                     break
-                    
-    def item_selected_from_list(self, item):
-        self.selected_ligand_name_from_list = item
-        
-    def get_ligand_names_from_widget(self):
-        if self.readLigandListWidget.count() > 0:
-            for idx in range(0, self.readLigandListWidget.count()):
-                item = self.readLigandListWidget.item(idx).text()
-                if item not in self.ligand_names:
-                    self.ligand_names.append(item)
-                    break
-                        
-    def set_edited_item(self, item):
-        for idx in range(0, self.readLigandListWidget.count()):
-            if self.readLigandListWidget.item(idx) == item:
-                self.ligand_names[idx][0] = self.readLigandListWidget.item(idx).text()
-                print(f"Edit {self.ligand_names}")
-                break
     
     def enable_ligand_item(self):
         for idx in range(0, self.readLigandListWidget.count()):
             if self.readLigandListWidget.item(idx) == self.selected_ligand_name_from_list:
-                if self.ligand_names[idx][1] is True:
-                    self.ligand_names[idx][1] = False
+                if self.ligands[idx].enabled is True:
+                    self.ligands[idx].set_wanted(False)
                     self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
                 else:
-                    self.ligand_names[idx][1] = True
+                    self.ligands[idx].set_wanted(True)
                     self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                self.readLigandListWidget.item(idx).setText(self.ligands[idx].__str__())
                 break
     
     # READ -> INTERACTIONS
