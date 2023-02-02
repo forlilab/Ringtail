@@ -262,7 +262,7 @@ class Ligand_Dialog(QtWidgets.QDialog):
 
 if __name__ == "__main__":
     import sys
-    s = "Sub: hdddhfh\nWanted: True\nx:2.0, y:1.0, z:2.0, cutoff:1.0, idx:0"
+    s = QtWidgets.QListWidgetItem("Sub: hdddhfh\nWanted: True\nx:2.0, y:1.0, z:2.0, cutoff:1.0, idx:0")
     app = QtWidgets.QApplication(sys.argv)
     ui = Ligand_Dialog(s)
     ui.show()

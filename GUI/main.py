@@ -546,7 +546,6 @@ class Ui_MainWindow(object):
         self.readInteractionsEditButton.clicked.connect(self.edit_interaction)
         self.readInteractionsEnableButton.clicked.connect(self.enable_interaction_item)
         
-        # self.readLigandListWidget.itemChanged.connect(self.set_edited_item)
         # self.readProceedButton.clicked.connect(self.get_ligand_names_from_widget)
         #-----------------------------------------------------------------#
         
