@@ -9,6 +9,8 @@ class Interaction:
         self.res_type = None
         self.res_number = None
         self.atom_name = None
+        self.accepted = False
+        self.enabled = True
                     
     def set_interaction_type(self, interaction_type):
         if interaction_type != '' and interaction_type != 'Any' and interaction_type != 'None': self.interaction_type = interaction_type
@@ -34,6 +36,10 @@ class Interaction:
         if isinstance(wanted, bool):
             self.wanted = wanted
     
+    def set_enabled(self, enabled):
+        if isinstance(enabled, bool):
+            self.enabled = enabled
+    
     def __str__(self):
         rep = f"Interaction:{self.interaction_type},Chain:{self.chain},Res_Name:{self.res_type},Res_ID:{self.res_number},Atom_Name:{self.atom_name},Wanted:{str(self.wanted)}"
         return rep
@@ -48,7 +54,7 @@ class LigandFilter:
         self.z = None
         self.cutoff = None
         self.index = None
-        self.enabled = None
+        self.enabled = True
         
     def set_ligand_name(self, name):
         self.ligand_name = name

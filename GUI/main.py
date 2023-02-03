@@ -16,8 +16,8 @@ from utils import show_message, browse_directory, browse_file, save_file, get_en
 from range_slider import RangeSlider
 import multiprocessing
 import qrc_resources
-from interaction_widget import Interaction_Dialog
-from ligand_widget import Ligand_Dialog
+from interaction_widget import Interaction_Dialog, InteractionWidget
+from ligand_widget import Ligand_Dialog, LigandWidget
 from list_example import list_example
 
 class Ui_MainWindow(object):
@@ -371,7 +371,7 @@ class Ui_MainWindow(object):
         icon = QtGui.QIcon.fromTheme("add")
         self.readLigandAddButton.setIcon(icon)
         self.readLigandAddButton.setObjectName("readLigandAddButton")
-        self.gridLayout_7.addWidget(self.readLigandAddButton, 0, 1, 1, 1)
+        self.gridLayout_7.addWidget(self.readLigandAddButton, 0, 2, 1, 1)
         self.readLigandDeleteButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
@@ -382,18 +382,7 @@ class Ui_MainWindow(object):
         icon = QtGui.QIcon.fromTheme("remove")
         self.readLigandDeleteButton.setIcon(icon)
         self.readLigandDeleteButton.setObjectName("readLigandDeleteButton")
-        self.gridLayout_7.addWidget(self.readLigandDeleteButton, 0, 2, 1, 1)
-        self.readLigandEditButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.readLigandEditButton.sizePolicy().hasHeightForWidth())
-        self.readLigandEditButton.setSizePolicy(sizePolicy)
-        self.readLigandEditButton.setText("")
-        icon = QtGui.QIcon.fromTheme("edit")
-        self.readLigandEditButton.setIcon(icon)
-        self.readLigandEditButton.setObjectName("readLigandEditButton")
-        self.gridLayout_7.addWidget(self.readLigandEditButton, 0, 3, 1, 1)
+        self.gridLayout_7.addWidget(self.readLigandDeleteButton, 0, 3, 1, 1)
         self.readLigandEnableButton = QtWidgets.QPushButton(self.readLigandsGroupBox)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
@@ -406,6 +395,7 @@ class Ui_MainWindow(object):
         self.gridLayout_7.addWidget(self.readLigandEnableButton, 0, 4, 1, 1)
         self.readLigandListWidget = QtWidgets.QListWidget(self.readLigandsGroupBox)
         self.readLigandListWidget.setObjectName("readLigandListWidget")
+        self.readLigandListWidget.setStyleSheet('QListWidget::item:selected{background: rgba(255,0,0,0);}')
         self.gridLayout_7.addWidget(self.readLigandListWidget, 1, 0, 1, 5)
         self.readLigandLabel = QtWidgets.QLabel(self.readLigandsGroupBox)
         self.readLigandLabel.setObjectName("readLigandLabel")
@@ -431,7 +421,7 @@ class Ui_MainWindow(object):
         icon = QtGui.QIcon.fromTheme("add")
         self.readInteractionsAddButton.setIcon(icon)
         self.readInteractionsAddButton.setObjectName("readInteractionsAddButton")
-        self.gridLayout_10.addWidget(self.readInteractionsAddButton, 0, 1, 1, 1)
+        self.gridLayout_10.addWidget(self.readInteractionsAddButton, 0, 2, 1, 1)
         self.readInteractionsDeleteButton = QtWidgets.QPushButton(self.readInteractionsGroupBox)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
@@ -442,18 +432,7 @@ class Ui_MainWindow(object):
         icon = QtGui.QIcon.fromTheme("remove")
         self.readInteractionsDeleteButton.setIcon(icon)
         self.readInteractionsDeleteButton.setObjectName("readInteractionsDeleteButton")
-        self.gridLayout_10.addWidget(self.readInteractionsDeleteButton, 0, 2, 1, 1)
-        self.readInteractionsEditButton = QtWidgets.QPushButton(self.readInteractionsGroupBox)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.readInteractionsEditButton.sizePolicy().hasHeightForWidth())
-        self.readInteractionsEditButton.setSizePolicy(sizePolicy)
-        self.readInteractionsEditButton.setText("")
-        icon = QtGui.QIcon.fromTheme("edit")
-        self.readInteractionsEditButton.setIcon(icon)
-        self.readInteractionsEditButton.setObjectName("readInteractionsEditButton")
-        self.gridLayout_10.addWidget(self.readInteractionsEditButton, 0, 3, 1, 1)
+        self.gridLayout_10.addWidget(self.readInteractionsDeleteButton, 0, 3, 1, 1)
         self.readInteractionsEnableButton = QtWidgets.QPushButton(self.readInteractionsGroupBox)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
@@ -466,6 +445,7 @@ class Ui_MainWindow(object):
         self.gridLayout_10.addWidget(self.readInteractionsEnableButton, 0, 4, 1, 1)
         self.readInteractionsListWidget = QtWidgets.QListWidget(self.readInteractionsGroupBox)
         self.readInteractionsListWidget.setObjectName("readInteractionsListWidget")
+        self.readInteractionsListWidget.setStyleSheet('QListWidget::item:selected{background: rgba(255,0,0,0);}')
         self.gridLayout_10.addWidget(self.readInteractionsListWidget, 1, 0, 1, 5)
         self.readInteractionsLabel = QtWidgets.QLabel(self.readInteractionsGroupBox)
         self.readInteractionsLabel.setObjectName("readInteractionsLabel")
@@ -536,17 +516,16 @@ class Ui_MainWindow(object):
         self.readLigandListWidget.itemClicked.connect(self.item_selected_from_ligands_list)
         self.readLigandAddButton.clicked.connect(self.add_ligand)
         self.readLigandDeleteButton.clicked.connect(self.delete_ligand)
-        self.readLigandEditButton.clicked.connect(self.edit_ligand)
+        # self.readLigandEditButton.clicked.connect(self.edit_ligand)
         self.readLigandEnableButton.clicked.connect(self.enable_ligand_item)
         
         # Interactions filter
         self.readInteractionsListWidget.itemClicked.connect(self.item_selected_from_interactions_list)
         self.readInteractionsAddButton.clicked.connect(self.add_interaction)
         self.readInteractionsDeleteButton.clicked.connect(self.delete_interaction)
-        self.readInteractionsEditButton.clicked.connect(self.edit_interaction)
-        self.readInteractionsEnableButton.clicked.connect(self.enable_interaction_item)
+        # self.readInteractionsEditButton.clicked.connect(self.edit_interaction)
         
-        # self.readProceedButton.clicked.connect(self.get_ligand_names_from_widget)
+        self.readProceedButton.clicked.connect(self.get_filters)
         #-----------------------------------------------------------------#
         
                 # INITIALIZATION
@@ -901,26 +880,19 @@ class Ui_MainWindow(object):
         self.selected_ligand_name_from_list = item
         
     def add_ligand(self):
-        self.ligand_ui = Ligand_Dialog()
-        if self.ligand_ui.exec_():
-            self.ligand_filter = self.ligand_ui.ligand_filter
-            if self.ligand_filter is not None:
-                f = self.ligand_filter.__str__()
-                self.ligands.append(self.ligand_filter)
-                self.readLigandListWidget.addItem(f)
-                if self.ligand_filter.enabled:
-                    self.readLigandListWidget.item(self.readLigandListWidget.count()-1).setIcon(QtGui.QIcon(":enabled_icon.svg"))
-                else:
-                    self.readLigandListWidget.item(self.readLigandListWidget.count()-1).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+        listItem = QtWidgets.QListWidgetItem()
+        widget = LigandWidget()
+        listItem.setSizeHint(widget.sizeHint())
+        listItem.setIcon(QtGui.QIcon(":enabled_icon.svg"))
+        self.readLigandListWidget.addItem(listItem)
+        self.readLigandListWidget.setItemWidget(listItem, widget)
             
     def delete_ligand(self):
         if self.selected_ligand_name_from_list is not None:
             for idx in range(0, self.readLigandListWidget.count()):
                 if self.readLigandListWidget.item(idx) == self.selected_ligand_name_from_list:
                     self.readLigandListWidget.takeItem(idx)
-                    del self.ligands[idx]
                     self.selected_ligand_name_from_list = None
-                    print(f"Delete {self.ligands}")
                     break
     
     def edit_ligand(self):
@@ -944,72 +916,76 @@ class Ui_MainWindow(object):
     def enable_ligand_item(self):
         for idx in range(0, self.readLigandListWidget.count()):
             if self.readLigandListWidget.item(idx) == self.selected_ligand_name_from_list:
-                if self.ligands[idx].enabled is True:
-                    self.ligands[idx].set_wanted(False)
-                    self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+                item = self.readLigandListWidget.item(idx)
+                widget = self.readLigandListWidget.itemWidget(item)
+                widget.ligand_filter = widget.get_ligand_filter_obj()
+                if widget.ligand_filter.enabled is True:
+                    widget.ligand_filter.set_wanted(False)
+                    item.setIcon(QtGui.QIcon(":disabled_icon.svg"))
                 else:
-                    self.ligands[idx].set_wanted(True)
-                    self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
-                self.readLigandListWidget.item(idx).setText(self.ligands[idx].__str__())
-                break
+                    widget.ligand_filter.set_wanted(True)
+                    item.setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                break        
     
     # READ -> INTERACTIONS
     def item_selected_from_interactions_list(self, item):
         self.selected_interaction_from_list = item
     
     def add_interaction(self):
-        self.interaction_ui = Interaction_Dialog(list_example, self.window)
-        if self.interaction_ui.exec_():
-            self.interaction_filter = self.interaction_ui.filter
-            if self.interaction_filter is not None:
-                f = self.interaction_filter.__str__()
-                self.interactions.append(self.interaction_filter)
-                self.readInteractionsListWidget.addItem(f)
-                if self.interaction_filter.wanted:
-                    self.readInteractionsListWidget.item(self.readInteractionsListWidget.count()-1).setIcon(QtGui.QIcon(":enabled_icon.svg"))
-                else:
-                    self.readInteractionsListWidget.item(self.readInteractionsListWidget.count()-1).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+        listItem = QtWidgets.QListWidgetItem()
+        widget = InteractionWidget(list_example, self.window)
+        listItem.setSizeHint(widget.sizeHint())
+        listItem.setIcon(QtGui.QIcon(":enabled_icon.svg"))
+        self.readInteractionsListWidget.addItem(listItem)
+        self.readInteractionsListWidget.setItemWidget(listItem, widget)
                     
     def delete_interaction(self):
         if self.selected_interaction_from_list is not None:
             for idx in range(0, self.readInteractionsListWidget.count()):
                 if self.readInteractionsListWidget.item(idx) == self.selected_interaction_from_list:
                     self.readInteractionsListWidget.takeItem(idx)
-                    del self.interactions[idx]
                     self.selected_interaction_from_list = None
-                    print(f"Delete {self.interactions}")
-                    break
-    
-    def edit_interaction(self, item):
-        if self.selected_interaction_from_list is not None:
-            for idx in range(0, self.readInteractionsListWidget.count()):
-                if self.readInteractionsListWidget.item(idx) == self.selected_interaction_from_list:
-                    self.interaction_ui = Interaction_Dialog(list_example, self.window, self.selected_interaction_from_list)
-                    if self.interaction_ui.exec_():
-                        self.interaction_filter = self.interaction_ui.filter
-                        if self.interaction_filter is not None:
-                            f = self.interaction_filter.__str__()
-                            self.readInteractionsListWidget.takeItem(idx)
-                            self.readInteractionsListWidget.insertItem(idx, f)
-                            self.interactions[idx] = self.interaction_filter
-                            if self.interaction_filter.wanted:
-                                self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
-                            else:
-                                self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
                     break
     
     def enable_interaction_item(self):
         for idx in range(0, self.readInteractionsListWidget.count()):
             if self.readInteractionsListWidget.item(idx) == self.selected_interaction_from_list:
-                if self.interactions[idx].wanted is True:
-                    self.interactions[idx].set_wanted(False)
-                    self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+                item = self.readInteractionsListWidget.item(idx)
+                widget = self.readInteractionsListWidget.itemWidget(item)
+                widget.filter = widget.get_interaction_obj()
+                if widget.filter.enabled:
+                    widget.filter.set_enabled(False)
+                    item.setIcon(QtGui.QIcon(":disabled_icon.svg"))
                 else:
-                    self.interactions[idx].set_wanted(True)
-                    self.readInteractionsListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
-                self.readInteractionsListWidget.item(idx).setText(self.interactions[idx].__str__())
+                    widget.filter.set_enabled(True)
+                    item.setIcon(QtGui.QIcon(":enabled_icon.svg"))
                 break
     
+    
+    def get_filters(self):
+        self.ligands.clear()
+        self.interactions.clear()
+        for idx in range(0, self.readLigandListWidget.count()):
+            item = self.readLigandListWidget.item(idx)
+            widget = self.readLigandListWidget.itemWidget(item)
+            if not widget.sanity_check():
+                item.setBackground(QtGui.QColor("#ec5c5c"))
+            else:
+                item.setBackground(QtGui.QColor('#7fc97f'))
+                self.ligands.append(widget.get_ligand_filter_obj())
+        self.readLigandListWidget.clearSelection()
+        
+        for idx, ligand in enumerate(self.ligands):
+            print(idx, ligand)
+        
+        for idx in range(0, self.readInteractionsListWidget.count()):
+            item = self.readInteractionsListWidget.item(idx)
+            widget = self.readInteractionsListWidget.itemWidget(item)
+            self.interactions.append(widget.get_interaction_obj())
+        self.readInteractionsListWidget.clearSelection()
+        
+        for idx, inter in enumerate(self.interactions):
+            print(idx, inter)
     
     
     def retranslateUi(self, MainWindow):
