@@ -25,7 +25,7 @@ class Ui_MainWindow(object):
         self.window = None
         
         self.db = None
-        self.engine_types = ["AutoDockGPU", "Vina"]
+        self.engine_types = ["AutoDock-GPU", "Vina"]
         self.selected_engine = None
         self.processors_number = None        
         self.verbose = False
@@ -1000,7 +1000,7 @@ class Ui_MainWindow(object):
         self.dbLabel.setText(_translate("MainWindow", "Select database file:"))
         self.writeEngineGroupBox.setTitle(_translate("MainWindow", "Receptor:"))
         self.autodockLabel.setText(_translate("MainWindow", "Select docking engine:"))
-        self.receptorLabel.setText(_translate("MainWindow", "Select receptor(s):"))
+        self.receptorLabel.setText(_translate("MainWindow", "Select receptor:"))
         self.browseReceptorButton.setText(_translate("MainWindow", "Browse"))
         self.writeInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions:"))
         self.maxPosesLabel.setText(_translate("MainWindow", "Max poses:"))
@@ -1015,12 +1015,12 @@ class Ui_MainWindow(object):
         self.writeLigandsFromDirectoryRadioButton.setText(_translate("MainWindow", "From directory"))
         self.writeLigandsPatternLabel.setText(_translate("MainWindow", "Pattern:"))
         self.writeLigandsRecursiveCheckBox.setText(_translate("MainWindow", "Recursive"))
-        self.writeLigandsSelectLabel.setText(_translate("MainWindow", "Ligand filter(s):"))
+        self.writeLigandsSelectLabel.setText(_translate("MainWindow", "Ligand source(s):"))
         self.writeLigandsSelectButton.setText(_translate("MainWindow", "Add ..."))
         self.proceedButton.setText(_translate("MainWindow", "Process"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.writeTab), _translate("MainWindow", "Write"))
         self.readPropertiesGroupBox.setTitle(_translate("MainWindow", "Properties"))
-        self.readEnergyLabel.setText(_translate("MainWindow", "Energy:"))
+        self.readEnergyLabel.setText(_translate("MainWindow", "Docking score:"))
         self.readLigandsEfficiencyLabel.setText(_translate("MainWindow", "Ligands efficiency:"))
         self.readPercentileRadioButton.setText(_translate("MainWindow", "Percentile"))
         self.readAbsoluteRadioButton.setText(_translate("MainWindow", "Absolute"))
