@@ -539,83 +539,61 @@ class RingtailCore:
             if len(interaction_combs) > 1:
                 self.storageman.set_view_suffix(str(ic_idx))
             # ask storageManager to fetch results
-            try:
-                self.filtered_results = self.storageman.filter_results(
-                    self.filters,
-                    results_filters_list,
-                    self.filters["ligand_filters"],
-                    self.out_opts["outfields"],
-                    self.out_opts["filter_bookmark"],
-                )
-                number_passing_ligands = self.storageman.get_number_passing_ligands()
-                print("Number passing Ligands:", number_passing_ligands)
-                result_bookmark_name = self.storageman.get_current_view_name()
-                self.output_manager.write_filters_to_log(self.filters, combination)
-                self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
-                self.output_manager.log_num_passing_ligands(number_passing_ligands)
-                self.output_manager.write_log(self.filtered_results)
-            except StorageError as e:
-                logging.exception("Database error occurred while filtering")
-                raise e
-            except OutputError as e:
-                logging.exception("Logging error occurred after filtering")
-                raise e
+            self.filtered_results = self.storageman.filter_results(
+                self.filters,
+                results_filters_list,
+                self.filters["ligand_filters"],
+                self.out_opts["outfields"],
+                self.out_opts["filter_bookmark"],
+            )
+            number_passing_ligands = self.storageman.get_number_passing_ligands()
+            print("Number passing Ligands:", number_passing_ligands)
+            result_bookmark_name = self.storageman.get_current_view_name()
+            self.output_manager.write_filters_to_log(self.filters, combination)
+            self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
+            self.output_manager.log_num_passing_ligands(number_passing_ligands)
+            self.output_manager.write_log(self.filtered_results)
 
     def get_previous_filter_data(self):
         """Get data requested in self.out_opts['outfields'] from the
         results view of a previous filtering
         """
-        try:
-            self._prepare_output_manager()
-            new_data = self.storageman.fetch_data_for_passing_results(
-                self.out_opts["outfields"]
-            )
-            self.output_manager.write_log(new_data)
-        except StorageError as e:
-            logging.exception(
-                "Database error occurred while fetching data for bookmark"
-            )
-            raise e
-        except OutputError as e:
-            logging.exception("Error occurred while writing log")
-            raise e
+        self._prepare_output_manager()
+        new_data = self.storageman.fetch_data_for_passing_results(
+            self.out_opts["outfields"]
+        )
+        self.output_manager.write_log(new_data)
 
     def plot(self, save=True):
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
         """
-        try:
-            logging.info("Creating plot of results")
-            self._prepare_output_manager()
-            # get data from storageMan
-            all_data, passing_data = self.storageman.get_plot_data()
-            all_plot_data_binned = dict()
-            # bin the all_ligands data by 1000ths to make plotting faster
-            for line in all_data:
-                # add to dictionary as bin of energy and le
-                data_bin = (round(line[0], 3), round(line[1], 3))
-                if data_bin not in all_plot_data_binned:
-                    all_plot_data_binned[data_bin] = 1
-                else:
-                    all_plot_data_binned[data_bin] += 1
-            # plot the data
-            self.output_manager.plot_all_data(all_plot_data_binned)
-            if passing_data != []:  # handle if no passing ligands
-                for line in passing_data:
-                    self.output_manager.plot_single_point(
-                        line[0], line[1], "red"
-                    )  # energy (line[0]) on x axis, le (line[1]) on y axis
-            if save:
-                self.output_manager.save_scatterplot()
+
+        logging.info("Creating plot of results")
+        self._prepare_output_manager()
+        # get data from storageMan
+        all_data, passing_data = self.storageman.get_plot_data()
+        all_plot_data_binned = dict()
+        # bin the all_ligands data by 1000ths to make plotting faster
+        for line in all_data:
+            # add to dictionary as bin of energy and le
+            data_bin = (round(line[0], 3), round(line[1], 3))
+            if data_bin not in all_plot_data_binned:
+                all_plot_data_binned[data_bin] = 1
             else:
-                plt.show()
-        except StorageError as e:
-            logging.exception("Database error occurred while fetching data for plot")
-            raise e
-        except Exception as e:
-            logging.exception("Error occurred during plotting")
-            raise e
+                all_plot_data_binned[data_bin] += 1
+        # plot the data
+        self.output_manager.plot_all_data(all_plot_data_binned)
+        if passing_data != []:  # handle if no passing ligands
+            for line in passing_data:
+                self.output_manager.plot_single_point(
+                    line[0], line[1], "red"
+                )  # energy (line[0]) on x axis, le (line[1]) on y axis
+        if save:
+            self.output_manager.save_scatterplot()
+        else:
+            plt.show()
 
     def prepare_results_filter_list(self, included_interactions):
         """takes filters dictionary from option parser.
@@ -669,45 +647,33 @@ class RingtailCore:
         Args:
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
         """
-        try:
-            self._prepare_output_manager()
-            if not self.storageman.check_passing_view_exists():
-                logging.warning(
-                    "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
-                )
-                return
-            passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
-            flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-            if flexible_residues != []:
-                flexible_residues = json.loads(flexible_residues)
-                flexres_atomnames = json.loads(flexres_atomnames)
-            for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
-                logging.info("Writing " + ligname.split(".")[0] + ".sdf")
-                # create rdkit ligand molecule and flexible residue container
-                if smiles == "":
-                    logging.warning(
-                        f"No SMILES found for {ligname}. Cannot create SDF."
-                    )
-                    continue
 
-                mol, flexres_mols, properties = self.create_ligand_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, write_nonpassing=write_nonpassing)
-
-                # write out mol
-                self.output_manager.write_out_mol(
-                    ligname, mol, flexres_mols, properties
-                )
-
-        except StorageError as e:
-            logging.exception(
-                "Error occurred while fetching database information for SDF output"
+        self._prepare_output_manager()
+        if not self.storageman.check_passing_view_exists():
+            logging.warning(
+                "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
             )
-            raise e
-        except OutputError as e:
-            logging.exception(f"Error occured while writing {ligname} to an SDF")
-            raise e
-        except Exception as e:
-            logging.exception("Error occurred during SDF output")
-            raise e
+            return
+        passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
+        flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
+        if flexible_residues != []:
+            flexible_residues = json.loads(flexible_residues)
+            flexres_atomnames = json.loads(flexres_atomnames)
+        for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
+            logging.info("Writing " + ligname.split(".")[0] + ".sdf")
+            # create rdkit ligand molecule and flexible residue container
+            if smiles == "":
+                logging.warning(
+                    f"No SMILES found for {ligname}. Cannot create SDF."
+                )
+                continue
+
+            mol, flexres_mols, properties = self.create_ligand_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, write_nonpassing=write_nonpassing)
+
+            # write out mol
+            self.output_manager.write_out_mol(
+                ligname, mol, flexres_mols, properties
+            )
 
     def create_ligand_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
         """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
@@ -844,17 +810,8 @@ class RingtailCore:
             csv_name (string): Name for exported CSV file
             table (bool): flag indicating is requested data is a table name
         """
-        try:
-            df = self.storageman.to_dataframe(requested_data, table=table)
-            df.to_csv(csv_name)
-        except StorageError as e:
-            logging.exception(
-                f"Error occured while getting data for exporting CSV of {requested_data}"
-            )
-            raise e
-        except Exception as e:
-            logging.exception(f"Error occured while exporting CSV of {requested_data}")
-            raise e
+        df = self.storageman.to_dataframe(requested_data, table=table)
+        df.to_csv(csv_name)
 
     def export_bookmark_db(self, bookmark_db_name: str):
         """Export database containing data from bookmark
