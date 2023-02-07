@@ -509,9 +509,10 @@ class RingtailCore:
                 flexres_atomnames = json.loads(flexres_atomnames)
 
             mol, flexres_mols, _ = self.create_ligand_rdkit_mol(ligname, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames, pose_ID=chosen_pose[0])
+            logging.debug(Chem.MolToSmiles(mol))
             pymol.ShowMol(mol, name=ligname, showOnly=False)
             for idx, resmol in enumerate(flexres_mols):
-                pymol.ShowMol(resmol, name=ligname + "_" + flexible_residues[idx])
+                pymol.ShowMol(resmol, name=ligname + "_" + flexible_residues[idx], showOnly=False)
 
         fig = plt.gcf()
         cid = fig.canvas.mpl_connect('pick_event', onpick)
@@ -978,7 +979,9 @@ class RingtailCore:
             # get pose coordinate info
             ligand_pose = json.loads(ligand_pose)
             flexres_pose = json.loads(flexres_pose)
+            print(ligand_pose)
             mol = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices)
+            print(Chem.MolToMolBlock(mol))
             for fr_idx, fr_mol in enumerate(flexres_mols):
                 flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(
                     fr_mol, flexres_pose[fr_idx], flexres_info[fr_idx][1]
