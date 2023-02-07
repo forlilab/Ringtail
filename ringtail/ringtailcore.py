@@ -690,7 +690,7 @@ class RingtailCore:
                     )
                     continue
 
-                mol, flexres_mols, properties = self.create_ligand_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, write_nonpassing=write_nonpassing)
+                mol, flexres_mols, properties = self.create_ligand_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, write_nonpassing=write_nonpassing)
 
                 # write out mol
                 self.output_manager.write_out_mol(
