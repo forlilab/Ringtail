@@ -48,6 +48,7 @@ class Ui_MainWindow(object):
         
         # Receptor
         self.receptor_file = None
+        self.save_receptor = False
         
         # READ
         # Properties
@@ -174,6 +175,12 @@ class Ui_MainWindow(object):
         self.browseReceptorButton.setSizePolicy(sizePolicy)
         self.browseReceptorButton.setObjectName("browseReceptorButton")
         self.gridLayout_3.addWidget(self.browseReceptorButton, 1, 3, 1, 1)
+        self.saveReceptorCheckBox = QtWidgets.QCheckBox(self.writeEngineGroupBox)
+        self.saveReceptorCheckBox.setObjectName("saveReceptorCheckBox")
+        self.gridLayout_3.addWidget(self.saveReceptorCheckBox, 1, 4, 1, 1)
+        self.saveReceptorLabel = QtWidgets.QLabel(self.writeEngineGroupBox)
+        self.saveReceptorLabel.setObjectName("saveReceptorLabel")
+        self.gridLayout_3.addWidget(self.saveReceptorLabel, 1, 5, 1, 1)
         self.gridLayout_2.addWidget(self.writeEngineGroupBox, 0, 0, 1, 1)
         self.writeInteractionsGroupBox = QtWidgets.QGroupBox(self.writeTab)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
@@ -184,15 +191,6 @@ class Ui_MainWindow(object):
         self.writeInteractionsGroupBox.setObjectName("writeInteractionsGroupBox")
         self.gridLayout_5 = QtWidgets.QGridLayout(self.writeInteractionsGroupBox)
         self.gridLayout_5.setObjectName("gridLayout_5")
-        self.maxPosesLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
-        self.maxPosesLabel.setObjectName("maxPosesLabel")
-        self.gridLayout_5.addWidget(self.maxPosesLabel, 0, 0, 1, 1)
-        self.maxPosesSpinBox = QtWidgets.QSpinBox(self.writeInteractionsGroupBox)
-        self.maxPosesSpinBox.setObjectName("maxPosesSpinBox")
-        self.gridLayout_5.addWidget(self.maxPosesSpinBox, 0, 1, 1, 1)
-        self.storeAllPosesCheckBox = QtWidgets.QCheckBox(self.writeInteractionsGroupBox)
-        self.storeAllPosesCheckBox.setObjectName("storeAllPosesCheckBox")
-        self.gridLayout_5.addWidget(self.storeAllPosesCheckBox, 0, 2, 1, 1)
         self.addInteractionsCheckBox = QtWidgets.QCheckBox(self.writeInteractionsGroupBox)
         self.addInteractionsCheckBox.setObjectName("addInteractionsCheckBox")
         self.gridLayout_5.addWidget(self.addInteractionsCheckBox, 1, 0, 1, 1)
@@ -252,6 +250,15 @@ class Ui_MainWindow(object):
         self.writeLigandsSelectButton = QtWidgets.QPushButton(self.writeLigandsGroupBox)
         self.writeLigandsSelectButton.setObjectName("writeLigandsSelectButton")
         self.gridLayout_6.addWidget(self.writeLigandsSelectButton, 3, 4, 1, 1)
+        self.maxPosesLabel = QtWidgets.QLabel(self.writeInteractionsGroupBox)
+        self.maxPosesLabel.setObjectName("maxPosesLabel")
+        self.gridLayout_6.addWidget(self.maxPosesLabel, 4, 0, 1, 1)
+        self.maxPosesSpinBox = QtWidgets.QSpinBox(self.writeInteractionsGroupBox)
+        self.maxPosesSpinBox.setObjectName("maxPosesSpinBox")
+        self.gridLayout_6.addWidget(self.maxPosesSpinBox, 4, 1, 1, 1)
+        self.storeAllPosesCheckBox = QtWidgets.QCheckBox(self.writeInteractionsGroupBox)
+        self.storeAllPosesCheckBox.setObjectName("storeAllPosesCheckBox")
+        self.gridLayout_6.addWidget(self.storeAllPosesCheckBox, 4, 2, 1, 1)
         self.gridLayout_2.addWidget(self.writeLigandsGroupBox, 1, 0, 1, 1)
         self.proceedButton = QtWidgets.QPushButton(self.writeTab)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
@@ -262,6 +269,7 @@ class Ui_MainWindow(object):
         self.proceedButton.setObjectName("proceedButton")
         self.gridLayout_2.addWidget(self.proceedButton, 2, 1, 1, 1)
         self.tabWidget.addTab(self.writeTab, "")
+        
         self.readTab = QtWidgets.QWidget()
         self.readTab.setObjectName("readTab")
         self.gridLayout_8 = QtWidgets.QGridLayout(self.readTab)
@@ -501,6 +509,7 @@ class Ui_MainWindow(object):
         self.writeLigandsRecursiveCheckBox.clicked.connect(self.set_ligands_recursive_search)
         self.writeLigandsSelectButton.clicked.connect(self.select_ligands_sources)
         self.addInteractionsCheckBox.clicked.connect(self.set_add_interactions)
+        self.saveReceptorCheckBox.clicked.connect(self.set_save_receptor)
                 
         # READ
         self.readAbsoluteRadioButton.clicked.connect(self.set_absolute_or_percentile)
@@ -643,6 +652,12 @@ class Ui_MainWindow(object):
             self.vdw_cutoff_distance = None
     
     # WRITE -> RECEPTOR
+    def set_save_receptor(self):
+        if self.saveReceptorCheckBox.isChecked():
+            self.save_receptor = True
+        else:
+            self.save_receptor = False
+    
     def select_receptor(self):
         self.receptorLineEdit.setText(browse_file("All Files (*)")[0])
         
@@ -783,12 +798,8 @@ class Ui_MainWindow(object):
             lig_eff_max, lig_eff_min = get_ligands_efficiency_max_min()
             self.readEnergySlider.setMaximum(energy_max)
             self.readEnergySlider.setMinimum(energy_min)
-            # self.readEnergySlider.setHigh(self.readEnergySlider.maximum())
-            # self.readEnergySlider.setLow(self.readEnergySlider.minimum())
             self.readLigandsEfficiencySlider.setMaximum(lig_eff_max)
             self.readLigandsEfficiencySlider.setMinimum(lig_eff_min)
-            # self.readLigandsEfficiencySlider.setHigh(self.readLigandsEfficiencySlider.maximum())
-            # self.readLigandsEfficiencySlider.setLow(self.readLigandsEfficiencySlider.minimum())
         elif self.readPercentileRadioButton.isChecked():
             self.percentile = True
             self.absolute = False
@@ -1002,6 +1013,7 @@ class Ui_MainWindow(object):
         self.autodockLabel.setText(_translate("MainWindow", "Select docking engine:"))
         self.receptorLabel.setText(_translate("MainWindow", "Select receptor:"))
         self.browseReceptorButton.setText(_translate("MainWindow", "Browse"))
+        self.saveReceptorLabel.setText(_translate("MainWindow", "Save receptor"))
         self.writeInteractionsGroupBox.setTitle(_translate("MainWindow", "Interactions:"))
         self.maxPosesLabel.setText(_translate("MainWindow", "Max poses:"))
         self.storeAllPosesCheckBox.setText(_translate("MainWindow", "Store all poses"))
