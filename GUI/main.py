@@ -657,7 +657,7 @@ class Ui_MainWindow(object):
     
     def set_engine(self):
         self.selected_engine = self.autodockComboBox.currentText()
-        if self.selected_engine == 'AutoDockGPU':
+        if self.selected_engine == 'AutoDock-GPU':
             self.toleranceLabelAD.setVisible(True)
             self.toleranceSpinBox.setVisible(True)
             self.toleranceSpinBox.setEnabled(True)
@@ -783,12 +783,12 @@ class Ui_MainWindow(object):
             lig_eff_max, lig_eff_min = get_ligands_efficiency_max_min()
             self.readEnergySlider.setMaximum(energy_max)
             self.readEnergySlider.setMinimum(energy_min)
-            self.readEnergySlider.setHigh(self.readEnergySlider.maximum())
-            self.readEnergySlider.setLow(self.readEnergySlider.minimum())
+            # self.readEnergySlider.setHigh(self.readEnergySlider.maximum())
+            # self.readEnergySlider.setLow(self.readEnergySlider.minimum())
             self.readLigandsEfficiencySlider.setMaximum(lig_eff_max)
             self.readLigandsEfficiencySlider.setMinimum(lig_eff_min)
-            self.readLigandsEfficiencySlider.setHigh(self.readLigandsEfficiencySlider.maximum())
-            self.readLigandsEfficiencySlider.setLow(self.readLigandsEfficiencySlider.minimum())
+            # self.readLigandsEfficiencySlider.setHigh(self.readLigandsEfficiencySlider.maximum())
+            # self.readLigandsEfficiencySlider.setLow(self.readLigandsEfficiencySlider.minimum())
         elif self.readPercentileRadioButton.isChecked():
             self.percentile = True
             self.absolute = False
@@ -826,15 +826,15 @@ class Ui_MainWindow(object):
             self.minEnergySpinBox.setValue(self.readEnergySlider.low())
             self.maxLigandsEfficiencySpinBox.setMaximum(self.readLigandsEfficiencySlider.maximum()/1000)
             self.maxLigandsEfficiencySpinBox.setMinimum(self.readLigandsEfficiencySlider.minimum()/1000)
-            self.maxLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.high())
+            self.maxLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.high()/1000)
             self.minLigandsEfficiencySpinBox.setMaximum(self.readLigandsEfficiencySlider.maximum()/1000)
             self.minLigandsEfficiencySpinBox.setMinimum(self.readLigandsEfficiencySlider.minimum()/1000)
-            self.minLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.low())
+            self.minLigandsEfficiencySpinBox.setValue(self.readLigandsEfficiencySlider.low()/1000)
         else:
-            self.minEnergySpinBox.setMaximum(100)
-            self.minEnergySpinBox.setMinimum(0)
-            self.minLigandsEfficiencySpinBox.setMaximum(100)
-            self.minLigandsEfficiencySpinBox.setMinimum(0)
+            self.minEnergySpinBox.setMaximum(self.readEnergySlider.maximum())
+            self.minEnergySpinBox.setMinimum(self.readEnergySlider.minimum())
+            self.minLigandsEfficiencySpinBox.setMaximum(self.readLigandsEfficiencySlider.maximum()/1000)
+            self.minLigandsEfficiencySpinBox.setMinimum(self.readLigandsEfficiencySlider.minimum()/1000)
     
     def update_energy_spinboxes(self):
         self.maxEnergySpinBox.setValue(self.readEnergySlider.high())
