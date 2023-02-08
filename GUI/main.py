@@ -12,7 +12,7 @@ ringtail_gui_path = os.path.realpath(os.path.dirname(__file__))
 sys.path.append(ringtail_gui_path)
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from utils import show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min, Interaction, LigandFilter
+from utils import show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min, Interaction, LigandFilter, MyDelegate
 from range_slider import RangeSlider
 import multiprocessing
 import qrc_resources
@@ -403,7 +403,9 @@ class Ui_MainWindow(object):
         self.gridLayout_7.addWidget(self.readLigandEnableButton, 0, 4, 1, 1)
         self.readLigandListWidget = QtWidgets.QListWidget(self.readLigandsGroupBox)
         self.readLigandListWidget.setObjectName("readLigandListWidget")
-        self.readLigandListWidget.setStyleSheet('QListWidget::item:selected{background: rgba(255,0,0,0);}')
+        de = MyDelegate()
+        self.readLigandListWidget.setItemDelegate(de)
+        # self.readLigandListWidget.setStyleSheet('QListWidget:item{border: 1px solid black; background-color: transparent;}')
         self.gridLayout_7.addWidget(self.readLigandListWidget, 1, 0, 1, 5)
         self.readLigandLabel = QtWidgets.QLabel(self.readLigandsGroupBox)
         self.readLigandLabel.setObjectName("readLigandLabel")
@@ -453,7 +455,7 @@ class Ui_MainWindow(object):
         self.gridLayout_10.addWidget(self.readInteractionsEnableButton, 0, 4, 1, 1)
         self.readInteractionsListWidget = QtWidgets.QListWidget(self.readInteractionsGroupBox)
         self.readInteractionsListWidget.setObjectName("readInteractionsListWidget")
-        self.readInteractionsListWidget.setStyleSheet('QListWidget::item:selected{background: rgba(255,0,0,0);}')
+        self.readInteractionsListWidget.setStyleSheet('QListWidget:item{border: 1px solid black}')
         self.gridLayout_10.addWidget(self.readInteractionsListWidget, 1, 0, 1, 5)
         self.readInteractionsLabel = QtWidgets.QLabel(self.readInteractionsGroupBox)
         self.readInteractionsLabel.setObjectName("readInteractionsLabel")
@@ -525,6 +527,7 @@ class Ui_MainWindow(object):
         self.readLigandListWidget.itemClicked.connect(self.item_selected_from_ligands_list)
         self.readLigandAddButton.clicked.connect(self.add_ligand)
         self.readLigandDeleteButton.clicked.connect(self.delete_ligand)
+        # self.readLigandListWidget.currentRowChanged.connect(self.sanity_check_filters)
         # self.readLigandEditButton.clicked.connect(self.edit_ligand)
         self.readLigandEnableButton.clicked.connect(self.enable_ligand_item)
         
@@ -895,6 +898,7 @@ class Ui_MainWindow(object):
         widget = LigandWidget()
         listItem.setSizeHint(widget.sizeHint())
         listItem.setIcon(QtGui.QIcon(":enabled_icon.svg"))
+        listItem.setData(QtCore.Qt.DisplayRole+1, "#FFFFFF")
         self.readLigandListWidget.addItem(listItem)
         self.readLigandListWidget.setItemWidget(listItem, widget)
             
@@ -919,9 +923,9 @@ class Ui_MainWindow(object):
                             self.readLigandListWidget.insertItem(idx, f)
                             self.ligands[idx] = self.ligand_filter
                             if self.ligand_filter.enabled:
-                                self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                                self.readLigandListWidget.item(idx).setIcon(QtCore.Qt.DisplayRole+1, QtGui.QIcon(":enabled_icon.svg"))
                             else:
-                                self.readLigandListWidget.item(idx).setIcon(QtGui.QIcon(":disabled_icon.svg"))
+                                self.readLigandListWidget.item(idx).setIcon(QtCore.Qt.DisplayRole+1, QtGui.QIcon(":disabled_icon.svg"))
                     break
     
     def enable_ligand_item(self):
@@ -932,11 +936,23 @@ class Ui_MainWindow(object):
                 widget.ligand_filter = widget.get_ligand_filter_obj()
                 if widget.ligand_filter.enabled is True:
                     widget.ligand_filter.set_wanted(False)
-                    item.setIcon(QtGui.QIcon(":disabled_icon.svg"))
+                    item.setIcon(QtCore.Qt.DisplayRole+1, QtGui.QIcon(":disabled_icon.svg"))
                 else:
                     widget.ligand_filter.set_wanted(True)
-                    item.setIcon(QtGui.QIcon(":enabled_icon.svg"))
+                    item.setIcon(QtCore.Qt.DisplayRole+1, QtGui.QIcon(":enabled_icon.svg"))
                 break        
+            
+    # def sanity_check_filters(self):
+    #     self.ligands.clear()
+    #     for idx in range(0, self.readLigandListWidget.count()):
+    #         item = self.readLigandListWidget.item(idx)
+    #         widget = self.readLigandListWidget.itemWidget(item)
+    #         if not widget.sanity_check():
+    #             item.setBackground(QtGui.QColor("#ec5c5c"))
+    #         else:
+    #             item.setBackground(QtGui.QColor('#7fc97f'))
+    #             self.ligands.append(widget.get_ligand_filter_obj())
+    #     self.readLigandListWidget.clearSelection()
     
     # READ -> INTERACTIONS
     def item_selected_from_interactions_list(self, item):
@@ -980,9 +996,9 @@ class Ui_MainWindow(object):
             item = self.readLigandListWidget.item(idx)
             widget = self.readLigandListWidget.itemWidget(item)
             if not widget.sanity_check():
-                item.setBackground(QtGui.QColor("#ec5c5c"))
+                item.setData(QtCore.Qt.DisplayRole+1, "#ec5c5c")
             else:
-                item.setBackground(QtGui.QColor('#7fc97f'))
+                item.setData(QtCore.Qt.DisplayRole+1, '#7fc97f')
                 self.ligands.append(widget.get_ligand_filter_obj())
         self.readLigandListWidget.clearSelection()
         

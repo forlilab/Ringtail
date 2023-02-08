@@ -1,6 +1,42 @@
-from PyQt5 import QtWidgets, QtCore, QtGui
-
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5.QtWidgets import *
 # CLASSES
+class MyDelegate(QItemDelegate):
+    def __init__(self, parent=None, *args):
+        QItemDelegate.__init__(self, parent, *args)
+
+    def paint(self, painter, option, index):
+        painter.save()
+
+        # set background color
+        painter.setPen(QPen(Qt.NoPen))
+        if option.state & QStyle.State_Selected:
+            # If the item is selected, always draw background red
+            painter.setBrush(QBrush(Qt.transparent))
+        else:
+            c = index.data(Qt.DisplayRole+1) # Get the color
+            painter.setBrush(QBrush(QColor(c)))
+
+        # Draw the background rectangle            
+        painter.drawRect(option.rect)
+
+        # Draw the bottom border
+        # option.rect is the shape of the item; top left bottom right
+        # e.g. 0, 0, 256, 16 in the parent listwidget
+        painter.setPen(QPen(Qt.black))        
+        painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
+
+        # Draw the text
+        painter.setPen(QPen(Qt.black))
+        text = index.data(Qt.DisplayRole)
+        # Adjust the rect (to pad)
+        option.rect.setLeft(5)
+        option.rect.setRight(option.rect.right()-5)
+        painter.drawText(option.rect, Qt.AlignLeft, text)
+
+        painter.restore()
+
 class Interaction:
     def __init__(self):
         self.wanted = False
@@ -101,37 +137,37 @@ class LigandFilter:
 error_level = [0, 1, 2]
 
 def show_message(message, error_level):
-    msg_box = QtWidgets.QMessageBox()
+    msg_box = QMessageBox()
     msg_box.setAutoFillBackground(True)
     
     if error_level == 0:
-        msg_box.setIcon(QtWidgets.QMessageBox.Information)
+        msg_box.setIcon(QMessageBox.Information)
         msg_box.setWindowTitle("Information")
     elif error_level == 1:
-        msg_box.setIcon(QtWidgets.QMessageBox.Warning)
+        msg_box.setIcon(QMessageBox.Warning)
         msg_box.setWindowTitle("Warning!")
     elif error_level == 2:
-        msg_box.setIcon(QtWidgets.QMessageBox.Critical)
+        msg_box.setIcon(QMessageBox.Critical)
         msg_box.setWindowTitle("Error!")
     
     msg_box.setText(message)
-    msg_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    msg_box.setStandardButtons(QMessageBox.Ok)
     msg_box.exec_()
     
 def browse_file(file_extension=None):
-    file = QtWidgets.QFileDialog.getOpenFileName(None, "Find file",
+    file = QFileDialog.getOpenFileName(None, "Find file",
                                                  filter=file_extension)
     return file
 
 def browse_directory():
-    dialog = QtWidgets.QDialog()
-    directory = QtWidgets.QFileDialog.getExistingDirectory(dialog, "Find Directory",
-            QtCore.QDir.currentPath(), )
+    dialog = QDialog()
+    directory = QFileDialog.getExistingDirectory(dialog, "Find Directory",
+            QDir.currentPath(), )
     return directory
 
 def save_file():
-    dialog = QtWidgets.QDialog()
-    file = QtWidgets.QFileDialog.getSaveFileName(dialog, "Save file")
+    dialog = QDialog()
+    file = QFileDialog.getSaveFileName(dialog, "Save file")
     with open(file[0], 'w') as f:
         f.write("File saving try.")
     return file
