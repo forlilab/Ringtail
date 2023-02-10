@@ -206,7 +206,7 @@ rt_process_vs.py read --input_db output.db --bookmark_name filter1 --plot
 ```
 `all_ligands_scatter.png`
 
-![all_ligands_scatter](https://user-images.githubusercontent.com/41704502/171295726-7315f929-edfa-49a0-b984-dacadf1a4327.png)
+![all_ligands_scatter](https://user-images.githubusercontent.com/41704502/215909808-2edc29e9-ebdb-4f0e-a87a-a1c293687b2e.png)
 
 ### Usage Details
 The script for writing a database and filtering is `rt_process_vs.py`. __This is intended to be used for a set of DLGs/Vina PDBQTs pertaining to a single target and binding site. This may include multiple ligand libraries as long as the target and binding site is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not.__ One receptor PDBQT may also be saved to the database.
@@ -298,6 +298,14 @@ Any PDBQT files specified through any of the input options in ADGPU mode will be
 When writing from Vina PDBQTs, ensure there are no other PDBQTs (input or receptor) in directories specified with `--file_path` UNLESS the receptor PDBQT is specified with the `--receptor_file` option.
 
 Occassionally, errors may occur during database reading/writing that corrupt the database. This may result in the database becoming locked. If this occurs it is recommended to delete the existing database and re-write it from scratch.
+
+If trying to read a database created with Ringtail v1.0.0 with a newer version of Ringtail, you may encounter errors related to changes to the internal database structure. If you encounter this, run the follow commands (example of database named `output.db`:
+```
+$ sqlite3 output.db
+> ALTER TABLE Results RENAME energies_binding TO docking_score;
+> ALTER TABLE Bookmarks ADD COLUMN filters;
+```
+If you encounter further errors related to views/bookmarks, please contact the ForliLab.
 
 ### rt_process_vs.py supported arguments
 
