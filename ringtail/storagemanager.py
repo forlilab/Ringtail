@@ -273,7 +273,7 @@ class StorageManager:
         """Generate and execute database queries from given filters.
 
         Args:
-            all_filters (dict): dict containing all filters in RTCore API format
+            all_filters (dict): dict containing all filters. Expects format and keys corresponding to ringtail.Filters().to_dict()
             results_filters_list (list): list of tuples with first element
                 indicating column to filter and second element
                 indicating passing value
@@ -281,6 +281,7 @@ class StorageManager:
                 N: ligand name
                 S: SMARTS
                 X: SMARTS, atom index, dist cutoff, X, Y, Z
+                M: max number of atoms in ligand
             output_fields (list): List of fields (columns) to be
                 included in log
 
