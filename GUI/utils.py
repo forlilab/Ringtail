@@ -4,7 +4,8 @@ from PyQt5.QtWidgets import *
 
 colors = {'red': "#ec5c5c",
           'green': "#7fc97f",
-          'white': "#FFFFFF"}
+          'white': "#FFFFFF",
+          'grey': '#d3d3d3'}
 # CLASSES
 class MyDelegate(QItemDelegate):
     def __init__(self, parent=None, *args):
