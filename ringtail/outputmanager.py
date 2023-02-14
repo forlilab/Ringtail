@@ -273,15 +273,14 @@ class OutputManager:
                 else:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
-            if filters_dict["filter_ligands_flag"]:
-                buff.append("#### LIGAND FILTERS")
-                for k, v in filters_dict["ligand_filters"].items():
-                    if v is not None:
-                        if isinstance(v, list):
-                            v = ", ".join([f for f in v if f != ""])
-                    else:
-                        v = " [ none ]"
-                    buff.append("#  % 7s : %s" % (k, v))
+            buff.append("#### LIGAND FILTERS")
+            for k, v in filters_dict["ligand_filters"].items():
+                if v is not None:
+                    if isinstance(v, list):
+                        v = ", ".join([f for f in v if f != ""])
+                else:
+                    v = " [ none ]"
+                buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### INTERACTIONS")
             labels = ["~", ""]
             for _type, info in filters_dict["interactions"].items():
