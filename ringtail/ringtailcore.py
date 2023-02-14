@@ -104,7 +104,7 @@ class RingtailCore:
                 "ignore": [],
                 "types": OutputManager.get_default_types(),
             },
-            "filters_dict": {
+            "filters": {
                 "values": Filters.get_defaults(),
                 "ignore": [],
                 "types": Filters.get_default_types(),
