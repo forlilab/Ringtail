@@ -4,7 +4,7 @@
 # Ringtail Filter dataclass
 #
 
-from dataclasses import dataclass, field, asdict, astuple
+from dataclasses import dataclass, field, fields, asdict, astuple
 import typing
 from .exceptions import OptionError
 
@@ -12,26 +12,25 @@ from .exceptions import OptionError
 @dataclass
 class Filters:
     # property filters
-    eworst: float = None
-    ebest: float = None
-    leworst: float = None
-    lebest: float = None
-    score_percentile: float = None
-    le_percentile: float = None
+    eworst: float = field(default=None, metadata={"filter_type": "property"})
+    ebest: float = field(default=None, metadata={"filter_type": "property"})
+    leworst: float = field(default=None, metadata={"filter_type": "property"})
+    lebest: float = field(default=None, metadata={"filter_type": "property"})
+    score_percentile: float = field(default=None, metadata={"filter_type": "property"})
+    le_percentile: float = field(default=None, metadata={"filter_type": "property"})
     # interaction filters
-    vdw_interactions: list[tuple] = field(default_factory=list)  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-    hb_interactions: list[tuple] = field(default_factory=list)  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-    reactive_interactions: list[tuple] = field(default_factory=list)  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-    interactions_count: list[tuple] = field(default_factory=list)  # e.g. [('hb_count', 5)]
-    react_any: bool = None
-    max_miss: int = 0
+    vdw_interactions: list[tuple] = field(default_factory=list, metadata={"filter_type": "interaction"})  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+    hb_interactions: list[tuple] = field(default_factory=list, metadata={"filter_type": "interaction"})  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+    reactive_interactions: list[tuple] = field(default_factory=list, metadata={"filter_type": "interaction"})  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+    interactions_count: list[tuple] = field(default_factory=list, metadata={"filter_type": "interactions_count"})  # e.g. [('hb_count', 5)]
+    react_any: bool = field(default=None, metadata={"filter_type": "react_any"})
+    max_miss: int = field(default=0, metadata={"filter_type": "max_miss"})
     # ligand filters
-    ligand_name: list[str] = field(default_factory=list)  # e.g. ["lig1", "lig2"]
-    ligand_substruct: list[str] = field(default_factory=list)  # e.g. ["ccc", "CN"]
-    ligand_substruct_pos: list[str] = field(default_factory=list)  # e.g. ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
-    ligand_max_atoms: int = None
-    ligand_operator: str = "OR"  # Choose AND or OR
-    filter_ligands_flag: bool = False
+    ligand_name: list[str] = field(default_factory=list, metadata={"filter_type": "ligand"})  # e.g. ["lig1", "lig2"]
+    ligand_substruct: list[str] = field(default_factory=list, metadata={"filter_type": "ligand"})  # e.g. ["ccc", "CN"]
+    ligand_substruct_pos: list[str] = field(default_factory=list, metadata={"filter_type": "ligand"})  # e.g. ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
+    ligand_max_atoms: int = field(default=None, metadata={"filter_type": "ligand"})
+    ligand_operator: str = field(default="OR", metadata={"filter_type": "ligand"})  # Choose AND or OR
 
     def __post_init__(self):
 
@@ -52,6 +51,30 @@ class Filters:
     @classmethod
     def get_default_types(cls):
         return typing.get_type_hints(cls.__init__)
+
+    @classmethod
+    def get_interaction_filter_keys(cls):
+        keys = []
+        for f in fields(cls):
+            if f.metadata["filter_type"] == "interaction":
+                keys.append(f.name)
+        return keys
+
+    @classmethod
+    def get_property_filter_keys(cls):
+        keys = []
+        for f in fields(cls):
+            if f.metadata["filter_type"] == "property":
+                keys.append(f.name)
+        return keys
+
+    @classmethod
+    def get_ligand_filter_keys(cls):
+        keys = []
+        for f in fields(cls):
+            if f.metadata["filter_type"] == "ligand":
+                keys.append(f.name)
+        return keys
 
     def to_dict(self):
         return asdict(self)

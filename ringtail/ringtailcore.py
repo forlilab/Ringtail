@@ -41,7 +41,7 @@ class RingtailCore:
             files for insertion into database
     """
 
-    def __init__(self, storage_type = "sqlite", opts_dict: dict = None):
+    def __init__(self, storage_type = "sqlite", outfields = ["LigName"], opts_dict: dict = None):
         """Initialize RingtailCore object. Will create storageManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
@@ -250,6 +250,24 @@ class RingtailCore:
         fig = plt.gcf()
         cid = fig.canvas.mpl_connect('pick_event', onpick)
         plt.show()
+
+    def _prepare_filters_for_storageman(self, interaction_combination):
+        """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
+
+        Args:
+            interaction_combination (list): list of interactions to be included in this round of filtering
+        Returns:
+            dict: dictionary of filters for storageman
+        """
+
+        filters_dict = self.filters.to_dict()
+        for itype in Filters.get_interaction_filter_keys():
+            itype_interactions = filters_dict[itype]
+            for interaction in itype_interactions:
+                if itype + "-" + interaction[0] not in interaction_combination:
+                    filters_dict[itype].remove(interaction)
+
+        return filters_dict
     
     def filter(self):
         """
@@ -265,24 +283,22 @@ class RingtailCore:
         )
 
         for ic_idx, combination in enumerate(interaction_combs):
-            # prepare list of filter values and keys for storageManager
-            results_filters_list = self.prepare_results_filter_list(combination)
+            # prepare Filter object with only desired interaction combination for storageManager
+            filters_dict = self._prepare_filters_for_storageman(combination)
 
             # set storageMan's internal ic_counter to reflect current ic_idx
             if len(interaction_combs) > 1:
                 self.storageman.set_view_suffix(str(ic_idx))
             # ask storageManager to fetch results
             self.filtered_results = self.storageman.filter_results(
-                self.filters,
-                results_filters_list,
-                self.filters["ligand_filters"],
+                filters_dict,
                 self.out_opts["outfields"],
                 self.out_opts["filter_bookmark"],
             )
             number_passing_ligands = self.storageman.get_number_passing_ligands()
             print("Number passing Ligands:", number_passing_ligands)
             result_bookmark_name = self.storageman.get_current_view_name()
-            self.output_manager.write_filters_to_log(self.filters, combination)
+            self.output_manager.write_filters_to_log(self.filters.to_dict(), combination)
             self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
             self.output_manager.log_num_passing_ligands(number_passing_ligands)
             self.output_manager.write_log(self.filtered_results)
@@ -337,17 +353,19 @@ class RingtailCore:
 
         filters_list = []
 
-        # get property filters
-        properties_keys = [
+        # get filters where the key only has one value
+        single_value_keys = [
             "eworst",
             "ebest",
             "leworst",
             "lebest",
             "score_percentile",
             "le_percentile",
+            "ligand_max_atoms",
+            "ligand_operator",
         ]
 
-        for key in properties_keys:
+        for key in single_value_keys:
             if getattr(self.filters, key) is not None:
                 filters_list.append(getattr(self.filters, key))
 
@@ -362,9 +380,19 @@ class RingtailCore:
                         kept_interactions.append(interaction)
                 filters_list.append((key, kept_interactions))
 
-        # get interaction count filters
-        for count in self.filters.interactions_count:
-            filters_list.append(count)  # already a tuple, don't need to reformat
+        # get filters for keys where mutltiple filters are allowed
+        multiple_value_keys = [
+            "ligand_name",
+            "ligand_substruct",
+            "ligand_substruct_pos"
+        ]
+        for key in multiple_value_keys:
+            if getattr(self.filters, key) != []:
+                filters_list.append(key, getattr(self.filters, key))
+
+        # add interactions_count
+        if self.filters.interactions_count is not None:
+            filters_list.append(self.filters.interactions_count)  # already a tuple, don't need to format
 
         # add react_any flag
         filters_list.append(("react_any", self.filters.react_any))
@@ -564,44 +592,6 @@ class RingtailCore:
         """Tell database we are done and it can close the connection"""
         self.storageman.close_connection()
 
-    def _clean_storage_string(self, input_str):
-        """take a storage string representing a list,
-        strips unwanted characters
-
-        Args:
-            input_str (str)
-
-        Returns:
-            String: cleaned string
-        """
-        return (
-            input_str.replace("[", "")
-            .replace("]", "")
-            .replace("'", "")
-            .replace('"', "")
-            .replace("\n", "")
-            .replace("\\n", "")
-            .replace(" \n", "")
-        )
-
-    def _generate_pdbqt_block(self, pdbqt_lines):
-        """Generate pdbqt block from given lines from a pdbqt
-
-        Args:
-            flexres_lines (TYPE): Description
-        """
-
-        return "\n".join(
-            [
-                line.lstrip(" ")
-                for line in list(
-                    filter(
-                        None, [self._clean_storage_string(line) for line in pdbqt_lines]
-                    )
-                )
-            ]
-        )
-
     def _add_poses(
         self,
         atom_indices,
@@ -678,7 +668,8 @@ class RingtailCore:
         """
 
         all_interactions = []
-        for _type, interactions in {"V": self.filters.vdw_interactions, "H": self.filters.hb_interactions, "R": self.filters.reactive_interactions}.items():
+        for _type in Filters.get_interaction_filter_keys():
+            interactions = getattr(self.filters, _type)
             for interact in interactions:
                 all_interactions.append(_type + "-" + interact[0])
 

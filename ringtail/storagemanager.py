@@ -16,13 +16,15 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
+
+from .filters import Filters
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
     DatabaseConnectionError,
     DatabaseTableCreationError,
 )
-from .exceptions import DatabaseQueryError, DatabaseViewCreationError
+from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError
 
 
 class StorageManager:
@@ -91,36 +93,6 @@ class StorageManager:
         self.unique_interactions = {}
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
-
-        self.field_to_column_name = {
-            "e": "docking_score",
-            "le": "leff",
-            "delta": "deltas",
-            "ref_rmsd": "reference_rmsd",
-            "e_inter": "energies_inter",
-            "e_vdw": "energies_vdw",
-            "e_elec": "energies_electro",
-            "e_intra": "energies_intra",
-            "n_interact": "nr_interactions",
-            "interactions": "interactions",
-            "ligand_smile": "ligand_smile",
-            "rank": "pose_rank",
-            "run": "run_number",
-            "hb": "num_hb",
-            "receptor": "receptor",
-        }
-        self.interaction_filter_types = {"V", "H", "R"}
-
-        self.view_suffix = None
-
-        self.temptable_suffix = 0
-
-        self.filtering_window = "Results"
-
-        self.index_columns = []
-
-        # keep track of any open cursors
-        self.open_cursors = []
 
         self._initialize_db()
 
@@ -265,32 +237,19 @@ class StorageManager:
     def filter_results(
         self,
         all_filters: dict,
-        results_filters_list: list,
-        ligand_filters_dict: dict,
-        output_fields: list,
-        filter_bookmark=False,
     ) -> iter:
         """Generate and execute database queries from given filters.
 
         Args:
             all_filters (dict): dict containing all filters. Expects format and keys corresponding to ringtail.Filters().to_dict()
-            results_filters_list (list): list of tuples with first element
-                indicating column to filter and second element
-                indicating passing value
-            ligand_filters_dict (dict): possible keys are
-                N: ligand name
-                S: SMARTS
-                X: SMARTS, atom index, dist cutoff, X, Y, Z
-                M: max number of atoms in ligand
-            output_fields (list): List of fields (columns) to be
-                included in log
+
 
         Returns:
             SQLite Cursor: Cursor of passing results
         """
         # create view of passing results
         filter_results_str = self._generate_result_filtering_query(
-            results_filters_list, ligand_filters_dict, output_fields, filter_bookmark
+            all_filters
         )
         logging.debug(filter_results_str)
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.results_view_name
@@ -1181,6 +1140,8 @@ class StorageManagerSQLite(StorageManager):
         db_file: str = "output.db",
         append_results: bool = False,
         order_results: str = None,
+        outfields: str = "LigName,e",
+        filter_bookmark: str = None,
         output_all_poses: bool = None,
         results_view_name: str = "passing_results",
         overwrite: bool = None,
@@ -1193,10 +1154,13 @@ class StorageManagerSQLite(StorageManager):
         Args:
             db_file (str): database file name
             opts (dict, optional): Dictionary of database options
+            # TODO update this
         """
         self.append_results = append_results
         self.order_results = order_results
+        self.outfields = outfields
         self.output_all_poses = output_all_poses
+        self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
         self.overwrite = overwrite
         self.conflict_opt = conflict_opt
@@ -1206,6 +1170,69 @@ class StorageManagerSQLite(StorageManager):
             return
 
         super().__init__()
+
+        self.outfield_options = [
+            "e",
+            "le",
+            "delta",
+            "ref_rmsd",
+            "e_inter",
+            "e_vdw",
+            "e_elec",
+            "e_intra",
+            "n_interact",
+            "interactions",
+            "fname",
+            "ligand_smile",
+            "rank",
+            "run",
+            "hb",
+            "source_file",
+        ]
+        self.order_options = {
+            "e",
+            "le",
+            "delta",
+            "ref_rmsd",
+            "e_inter",
+            "e_vdw",
+            "e_elec",
+            "e_intra",
+            "n_interact",
+            "rank",
+            "run",
+            "hb",
+        }
+
+        self.field_to_column_name = {
+            "e": "docking_score",
+            "le": "leff",
+            "delta": "deltas",
+            "ref_rmsd": "reference_rmsd",
+            "e_inter": "energies_inter",
+            "e_vdw": "energies_vdw",
+            "e_elec": "energies_electro",
+            "e_intra": "energies_intra",
+            "n_interact": "nr_interactions",
+            "interactions": "interactions",
+            "ligand_smile": "ligand_smile",
+            "rank": "pose_rank",
+            "run": "run_number",
+            "hb": "num_hb",
+            "receptor": "receptor",
+        }
+        self.interaction_filter_types = {"V", "H", "R"}
+
+        self.view_suffix = None
+
+        self.temptable_suffix = 0
+
+        self.filtering_window = "Results"
+
+        self.index_columns = []
+
+        # keep track of any open cursors
+        self.open_cursors = []
 
         self.energy_filter_sqlite_call_dict = {
             "eworst": "docking_score < {value}",
@@ -2654,38 +2681,45 @@ class StorageManagerSQLite(StorageManager):
 
     def _generate_result_filtering_query(
         self,
-        results_filters_list,
-        ligand_filters_dict,
-        output_fields,
-        filter_bookmark=False,
+        filters_dict
     ):
         """takes lists of filters, writes sql filtering string
 
         Args:
-            results_filters_list (list): list of tuples where
-                (filter column/key, filtering cutoff)
-            ligand_filters_list (list): list of filters on ligand information
-            output_fields (list): List of result column data for output
-            filter_bookmark (bool, optional): flag to indicate that self.results_view_name should be filtering window
+            filters_dict (dict): dict of filters. Keys names and value formats must match those found in the Filters class
 
         Returns:
             String: SQLite-formatted string for filtering query
         """
 
         # parse requested output fields and convert to column names in database
-
-        outfield_string = "LigName, " + ", ".join(
-            [self.field_to_column_name[field] for field in output_fields.split(",")]
+        outfields_list = parsed_opts.outfields.split(",")
+        for outfield in outfields_list:
+            if outfield not in self.outfield_options:
+                raise OptionError(
+                    "WARNING: {out_f} is not a valid output option. Please see rt_process_vs.py --help for allowed options".format(
+                        out_f=outfield
+                    )
+                )
+        outfield_string = ", ".join(
+            [self.field_to_column_name[field] for field in outfields_list]
         )
 
-        if filter_bookmark is not None:
-            self.filtering_window = filter_bookmark
+        if self.filter_bookmark is not None:
+            if self.filter_bookmark == self.results_view_name:
+                logging.error(
+                    f"Specified filter_bookmark and bookmark_name are the same: {self.results_view_name}"
+                )
+                raise OptionError(
+                    "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
+                )
+            self.filtering_window = self.filter_bookmark
 
         # write energy filters and compile list of interactions to search for
         queries = []
         interaction_filters = []
 
-        for filter_key, filter_value in results_filters_list:
+        for filter_key, filter_value in filters_dict.items():
             if filter_key in self.energy_filter_col_name:
                 self.index_columns.append(self.energy_filter_col_name[filter_key])
                 if filter_key == "score_percentile" or filter_key == "le_percentile":
@@ -2701,15 +2735,19 @@ class StorageManagerSQLite(StorageManager):
                     )
 
             # write hb count filter(s)
-            if filter_key == "hb_count":
-                self.index_columns.append("num_hb")
-                if filter_value > 0:
-                    queries.append("num_hb > {value}".format(value=filter_value))
-                else:
-                    queries.append("num_hb <= {value}".format(value=-1 * filter_value))
+            if filter_key == "interactions_count":
+                for k,v in filter_value:
+                    # TODO implement other interaction count filters
+                    if k != "hb_count":
+                        continue
+                    self.index_columns.append("num_hb")
+                    if v > 0:
+                        queries.append("num_hb > {value}".format(value=v))
+                    else:
+                        queries.append("num_hb <= {value}".format(value=-1 * v))
 
             # reformat interaction filters as list
-            if filter_key in self.interaction_filter_types:
+            if filter_key in Filters.get_interaction_filter_keys():
                 for interact in filter_value:
                     interaction_string = filter_key + ":" + interact[0]
                     interaction_filters.append(
@@ -2765,7 +2803,8 @@ class StorageManagerSQLite(StorageManager):
             )
 
         # add ligand filters
-        if ligand_filters_dict["S"] != [] or ligand_filters_dict["N"] != []:
+        ligand_filters_dict = {k:v for k, v in filters_dict.items() if k in Filters.get_ligand_filter_keys()}
+        if filters_dict["ligand_substruct"] != [] or filters_dict["ligand_name"] != []:
             ligand_query_str = self._generate_ligand_filtering_query(
                         ligand_filters_dict
                     )
@@ -2774,14 +2813,14 @@ class StorageManagerSQLite(StorageManager):
                     ligand_str=ligand_query_str
                 )
             )
-        if len(ligand_filters_dict["X"]):
+        if len(ligand_filters_dict["ligand_substruct_pos"]):
             nr_args_per_group = 6
-            nr_smarts = int(len(ligand_filters_dict["X"]) / nr_args_per_group)
+            nr_smarts = int(len(ligand_filters_dict["ligand_substruct_pos"]) / nr_args_per_group)
             # create temporary table with molecules that pass all smiles
-            tmp_lig_filters = {"F": ligand_filters_dict["F"]}
-            if "M" in ligand_filters_dict:
-                tmp_lig_filters["M"] = ligand_filters_dict["M"]
-            tmp_lig_filters["S"] = [ligand_filters_dict["X"][i * nr_args_per_group] for i in range(nr_smarts)]
+            tmp_lig_filters = {"ligand_operator": ligand_filters_dict["ligand_operator"]}
+            if "ligand_max_atoms" in ligand_filters_dict:
+                tmp_lig_filters["ligand_max_atoms"] = ligand_filters_dict["ligand_max_atoms"]
+            tmp_lig_filters["ligand_substruct"] = [ligand_filters_dict["ligand_substruct"][i * nr_args_per_group] for i in range(nr_smarts)]
             cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
             cmd = cmd.replace(
                 "SELECT LigName FROM Ligands",
@@ -2799,12 +2838,12 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(cmd)
             smarts_loc_filters = []
             for i in range(nr_smarts):
-                smarts =      ligand_filters_dict["X"][i * nr_args_per_group + 0]
-                index =   int(ligand_filters_dict["X"][i * nr_args_per_group + 1])
-                sqdist = float(ligand_filters_dict["X"][i * nr_args_per_group + 2])**2
-                x =     float(ligand_filters_dict["X"][i * nr_args_per_group + 3])
-                y =     float(ligand_filters_dict["X"][i * nr_args_per_group + 4])
-                z =     float(ligand_filters_dict["X"][i * nr_args_per_group + 5])
+                smarts =      ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 0]
+                index =   int(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 1])
+                sqdist = float(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 2])**2
+                x =     float(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 3])
+                y =     float(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 4])
+                z =     float(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 5])
                 # save filter for bookmark
                 smarts_loc_filters.append((smarts, index, x, y, z))
                 poses = self._run_query("SELECT * FROM passed_smarts")
@@ -2914,19 +2953,19 @@ class StorageManagerSQLite(StorageManager):
         """
 
         sql_ligand_string = "SELECT LigName FROM Ligands WHERE"
-        logical_operator = ligand_filters["F"].upper()
+        logical_operator = ligand_filters["ligand_operator"].upper()
         for kw in ligand_filters.keys():
             fils = ligand_filters[kw]
-            if kw == "N":
+            if kw == "ligand_name":
                 for name in fils:
                     if name == "":
                         continue
                     name_sql_str = " LigName LIKE '%{value}%' OR".format(value=name)
                     sql_ligand_string += name_sql_str
-            if kw == "M" and ligand_filters[kw] is not None:
+            if kw == "ligand_max_atoms" and ligand_filters[kw] is not None:
                 maxatom_sql_str = " mol_num_atms(ligand_rdmol) <= {} {}".format(ligand_filters[kw], logical_operator)
                 sql_ligand_string += maxatom_sql_str
-            if kw == "S":
+            if kw == "ligand_substruct":
                 for smarts in fils:
                     # check for hydrogens in smarts pattern
                     smarts_mol = Chem.MolFromSmarts(smarts)
