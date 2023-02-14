@@ -41,7 +41,7 @@ class RingtailCore:
             files for insertion into database
     """
 
-    def __init__(self, storage_type = "sqlite", outfields = ["LigName"], opts_dict: dict = None):
+    def __init__(self, storage_type = "sqlite", opts_dict: dict = None):
         """Initialize RingtailCore object. Will create storageManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
@@ -55,6 +55,16 @@ class RingtailCore:
             out_opts (dictionary): Specified output options including data
                 fields to output, export_sdf_path, log file name
         """
+
+        # set storage type
+        self.storage_type = storage_type
+        storage_types = {
+            "sqlite": StorageManagerSQLite,
+        }
+        # confirm given storage type is implemented
+        if self.storage_type not in storage_types:
+            raise NotImplementedError(f"Given storage type {self.storage_type} is not implemented.")
+
         # check if given opt_dict and set attrbutes if so
         if opts_dict is None:
             self.storage_opts = {}
@@ -66,21 +76,14 @@ class RingtailCore:
             self.rman_opts = opts_dict["rman_opts"]["values"]
             self.filters_dict = opts_dict["filters"]["values"]
             self.out_opts = opts_dict["out_opts"]["values"]
-
-        # set storage type
-        self.storage_type = storage_type
-        storage_types = {
-            "sqlite": StorageManagerSQLite,
-        }
-        # confirm given storage type is implemented
-        if self.storage_type not in storage_types:
-            raise NotImplementedError(f"Given storage type {self.storage_type} is not implemented.")
         
         # initialize "worker" classes
         self.storageman = storage_types[storage_type](**self.storage_opts)
         self.results_man = ResultsManager(storageman=self.storageman, storageman_class=storage_types[storage_type], **self.rman_opts)
         self.output_manager = OutputManager(**self.out_opts)
         self.filters = Filters(**self.filters_dict)
+
+        self.storage_opened = False
 
     @classmethod
     def get_defaults(cls, storage_type="sqlite", terse=False) -> dict:
@@ -116,21 +119,18 @@ class RingtailCore:
         return defaults
 
     def __enter__(self):
+        self.storageman.open_storage()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.close_database()
+        self.close_storage()
 
     def add_results(self):
         """
         Call results manager to process result files and add to database
         """
         # check that we want to overwrite or add results if storage already exists
-        if (
-            not self.storage_opts["overwrite"]
-            and not self.storage_opts["append_results"]
-        ):
-            self.storageman.check_storage_empty()
+        self.storageman.check_storage_empty()
         logging.info("Adding results...")
         self.results_man.process_results()
 
@@ -586,11 +586,11 @@ class RingtailCore:
         # connect to cloned database
         db_clone = StorageManagerSQLite(bookmark_db_name, self.storage_opts)
         db_clone.prune()
-        db_clone.close_connection(vacuum=True)
+        db_clone.close_storage(vacuum=True)
 
-    def close_database(self):
+    def close_storage(self):
         """Tell database we are done and it can close the connection"""
-        self.storageman.close_connection()
+        self.storageman.close_storage()
 
     def _add_poses(
         self,
