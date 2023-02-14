@@ -890,7 +890,7 @@ class CLOptionParser:
                     continue
                 for fil in ligand_filter_list:
                     ligand_filters[_type].append(fil)
-            if len(ligand_filters["ligand_max_atoms"]) % 6 != 0:
+            if ligand_filters["ligand_max_atoms"] is not None and len(ligand_filters["ligand_max_atoms"]) % 6 != 0:
                 msg = "--smarts_idxyz needs groups of 6 values:\n"
                 msg += "  1. SMARTS\n"
                 msg += "  2. index of atom in SMARTS (0 based)\n"
@@ -955,7 +955,7 @@ class CLOptionParser:
          # save target name
         if parsed_opts.receptor_file is not None:
             receptor = (
-                os.path.basename(parsed_opts.receptor_file)
+                os.path.basename(parsed_opts.receptor_file).split(".")[0]
             )  # remove file extension and path
         else:
             receptor = None
