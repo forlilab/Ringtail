@@ -22,6 +22,7 @@ class Filters:
     vdw_interactions: list[tuple] = field(default_factory=list, metadata={"filter_type": "interaction"})  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
     hb_interactions: list[tuple] = field(default_factory=list, metadata={"filter_type": "interaction"})  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
     reactive_interactions: list[tuple] = field(default_factory=list, metadata={"filter_type": "interaction"})  # e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+
     interactions_count: list[tuple] = field(default_factory=list, metadata={"filter_type": "interactions_count"})  # e.g. [('hb_count', 5)]
     react_any: bool = field(default=None, metadata={"filter_type": "react_any"})
     max_miss: int = field(default=0, metadata={"filter_type": "max_miss"})

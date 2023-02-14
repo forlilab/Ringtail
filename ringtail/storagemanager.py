@@ -94,8 +94,6 @@ class StorageManager:
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
 
-        self._initialize_db()
-
     @classmethod
     def get_defaults(cls, storage_type):
         storage_types = {
@@ -114,7 +112,7 @@ class StorageManager:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.close_connection()
+        self.close_storage()
 
     # # # # # # # # # # # # # # # # # # #
     # # # Common StorageManager methods # # #
@@ -156,7 +154,7 @@ class StorageManager:
             name[0] for name in self._fetch_view_names().fetchall()
         ]
 
-    def close_connection(self, attached_db=None, vacuum=False):
+    def close_storage(self, attached_db=None, vacuum=False):
         """close connection to database
 
         Args:
@@ -590,7 +588,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _initialize_db(self):
+    def open_storage(self):
         """Create connection to db. Then, check if db needs to be written.
         If so, (if self.overwrite drop existing tables and )
         initialize the tables
@@ -1146,7 +1144,6 @@ class StorageManagerSQLite(StorageManager):
         results_view_name: str = "passing_results",
         overwrite: bool = None,
         conflict_opt: str = None,
-        mode: str = "ADGPU",
         _stop_at_defaults=False,
     ):
         """Initialize superclass and subclass-specific instance variables
@@ -1164,7 +1161,6 @@ class StorageManagerSQLite(StorageManager):
         self.results_view_name = results_view_name
         self.overwrite = overwrite
         self.conflict_opt = conflict_opt
-        self.mode = mode
         self.db_file = db_file
         if _stop_at_defaults:
             return
@@ -2082,7 +2078,7 @@ class StorageManagerSQLite(StorageManager):
 
         self.open_cursors = []
 
-    def _initialize_db(self):
+    def open_storage(self):
         """Create connection to db. Then, check if db needs to be written.
         If so, (if self.overwrite drop existing tables and )
         initialize the tables
@@ -3287,14 +3283,15 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             StorageError: Description
         """
-        try:
-            cur = self.conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM Results")
-            if cur.fetchone()[0] != 0:
-                raise StorageError(
-                    "Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database."
-                )
-        except Exception as e:
-            raise e
-        finally:
-            cur.close()
+        if not self.overwrite and not self.append_results:
+            try:
+                cur = self.conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM Results")
+                if cur.fetchone()[0] != 0:
+                    raise StorageError(
+                        "Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database."
+                    )
+            except Exception as e:
+                raise e
+            finally:
+                cur.close()
