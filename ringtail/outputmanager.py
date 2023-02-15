@@ -4,6 +4,7 @@
 # Ringtail output manager
 #
 
+from.filters import Filters
 from .exceptions import OutputError
 import logging
 import typing
@@ -33,7 +34,7 @@ class OutputManager:
             export_sdf_path (string): path for exporting sdf files
         """
 
-        self.log = log_file
+        self.log_file = log_file
         self.export_sdf_path = export_sdf_path
         if _stop_at_defaults:
             return
@@ -144,7 +145,7 @@ class OutputManager:
             line (string): Line to write to log
         """
         try:
-            with open(self.log, "a") as f:
+            with open(self.log_file, "a") as f:
                 f.write(line)
                 f.write("\n")
         except Exception as e:
@@ -158,7 +159,7 @@ class OutputManager:
             number_passing_ligands (int): number of ligands that passed filter
         """
         try:
-            with open(self.log, "a") as f:
+            with open(self.log_file, "a") as f:
                 f.write("\n")
                 f.write(
                     "Number passing ligands: {num} \n".format(
@@ -176,7 +177,7 @@ class OutputManager:
             bookmark_name (string): name of current results' bookmark in db
         """
         try:
-            with open(self.log, "a") as f:
+            with open(self.log_file, "a") as f:
                 f.write("\n")
                 f.write(f"Result bookmark name: {bookmark_name}\n")
         except Exception as e:
@@ -217,7 +218,7 @@ class OutputManager:
         Initializes log file
         """
         try:
-            with open(self.log, "w") as f:
+            with open(self.log_file, "w") as f:
                 f.write("Filtered poses:\n")
                 f.write("***************\n")
         except Exception as e:
@@ -263,18 +264,20 @@ class OutputManager:
         """Takes dictionary of filters, formats as string and writes to log file
 
         Args:
-            filters_dict (dict): dictionary of filtering options
+            filters_dict (dict): dictionary with filtering options
         """
         try:
             buff = ["##### PROPERTIES"]
-            for k, v in filters_dict["properties"].items():
+            for k in Filters.get_property_filter_keys():
+                v = filters_dict.pop(k)
                 if v is not None:
                     v = "%2.3f" % v
                 else:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### LIGAND FILTERS")
-            for k, v in filters_dict["ligand_filters"].items():
+            for k in Filters.get_ligand_filter_keys():
+                v = filters_dict.pop(k)
                 if v is not None:
                     if isinstance(v, list):
                         v = ", ".join([f for f in v if f != ""])
@@ -283,7 +286,8 @@ class OutputManager:
                 buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### INTERACTIONS")
             labels = ["~", ""]
-            for _type, info in filters_dict["interactions"].items():
+            for _type in Filters.get_interaction_filter_keys():
+                info = filters_dict.pop(_type)
                 kept_interactions = []
                 if len(info) == 0:
                     buff.append("#  % 7s :  [ none ]" % (_type))
@@ -298,6 +302,12 @@ class OutputManager:
                 )
                 l_str = "#  % 7s : %s" % (_type, res_str)
                 buff.append(l_str)
+
+            buff.append("#### OTHER FILTERS")
+            for k, v in filters_dict.items():
+                if v is None:
+                    v = " [ none ]"
+                buff.append("#  % 7s : %s" % (k, v))
 
             for line in buff:
                 self._write_log_line(line)

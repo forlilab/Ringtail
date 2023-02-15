@@ -312,6 +312,7 @@ def cmdline_parser(defaults={}):
         "--outfields",
         help=(
             'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
+            '"Ligand_name" (Ligand name), '
             '"e" (docking_score), '
             '"le" (ligand efficiency), '
             '"delta" (delta energy from best pose), '
@@ -690,6 +691,7 @@ class CLOptionParser:
             parsed_opts.export_bookmark_db = None
             parsed_opts.data_from_bookmark = None
             parsed_opts.pymol = None
+            parsed_opts.log = None
             # confirm that receptor file was found if needed, else throw error
             # if only receptor files found and --save_receptor, assume we just want to
             # add receptor and not modify the rest of the db
@@ -774,18 +776,18 @@ class CLOptionParser:
                     raise OptionError(
                         "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
                     )
-                if parsed_opts.export_sdf_path is not None:
+                if parsed_opts.export_sdf_path:
                     raise OptionError(
                         "Cannot use --export_sdf_path with --max_miss > 0. Can export poses for desired bookmark --bookmark_name"
                     )
-            if parsed_opts.order_results is not None:
+            if parsed_opts.order_results:
                 if parsed_opts.order_results not in self.order_options:
                     raise OptionError(
                         "Requested ording option that is not available. Please see --help for available options."
                     )
             # parse output options
             # Make sure that export_sdf_path has trailing /, is directory
-            if parsed_opts.export_sdf_path is not None:
+            if parsed_opts.export_sdf_path:
                 if not parsed_opts.export_sdf_path.endswith("/"):
                     parsed_opts.export_sdf_path += "/"
                 if not os.path.isdir(parsed_opts.export_sdf_path):
@@ -917,12 +919,14 @@ class CLOptionParser:
             "export_bookmark_db": parsed_opts.export_bookmark_db,
             "data_from_bookmark": parsed_opts.data_from_bookmark,
             "pymol": parsed_opts.pymol,
+            "export_sdf_path": parsed_opts.export_sdf_path,
             "receptor_file": parsed_opts.receptor_file,  # write only
             "save_receptor": parsed_opts.save_receptor,  # write only
         }
 
         # set core filter attributes
         all_filters["react_any"] = parsed_opts.react_any
+        print(all_filters)
         for k,v in all_filters.items():
             setattr(self.rtcore.filters, k, v)
 
@@ -977,3 +981,11 @@ class CLOptionParser:
         }
         for k,v in rman_opts.items():
             setattr(self.rtcore.results_man, k, v)
+
+        # set outputman options
+        outman_opts = {
+            "log_file": parsed_opts.log,
+            "export_sdf_path": parsed_opts.export_sdf_path,
+        }
+        for k,v in outman_opts.items():
+            setattr(self.rtcore.output_manager, k, v)

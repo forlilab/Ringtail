@@ -73,19 +73,19 @@ if __name__ == "__main__":
                     rt_core.display_pymol()
 
                 # write out molecules if requested
-                if cl_opts.rt_process_options["export_sdf_path"] is not None:
+                if cl_opts.rt_process_options["export_sdf_path"]:
                     rt_core.write_molecule_sdfs()
 
                 # write out requested CSVs
-                if cl_opts.rt_process_options["export_bookmark_csv"] is not None:
+                if cl_opts.rt_process_options["export_bookmark_csv"]:
                     rt_core.export_csv(
                         cl_opts.rt_process_options["export_bookmark_csv"],
                         cl_opts.rt_process_options["export_bookmark_csv"] + ".csv",
                         table=True,
                     )
-                if cl_opts.rt_process_options["export_query_csv"] is not None:
+                if cl_opts.rt_process_options["export_query_csv"]:
                     rt_core.export_csv(cl_opts.rt_process_options["export_query_csv"], "query.csv")
-                if cl_opts.rt_process_options["export_bookmark_db"] is not None:
+                if cl_opts.rt_process_options["export_bookmark_db"]:
                     bookmark_name = (
                         rt_core.storageman.db_file.rstrip(".db")
                         + "_"
