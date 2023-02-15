@@ -292,8 +292,6 @@ class RingtailCore:
             # ask storageManager to fetch results
             self.filtered_results = self.storageman.filter_results(
                 filters_dict,
-                self.out_opts["outfields"],
-                self.out_opts["filter_bookmark"],
             )
             number_passing_ligands = self.storageman.get_number_passing_ligands()
             print("Number passing Ligands:", number_passing_ligands)
@@ -308,9 +306,7 @@ class RingtailCore:
         results view of a previous filtering
         """
         self.output_manager.create_log_file()
-        new_data = self.storageman.fetch_data_for_passing_results(
-            self.out_opts["outfields"]
-        )
+        new_data = self.storageman.fetch_data_for_passing_results()
         self.output_manager.write_log(new_data)
 
     def plot(self, save=True):

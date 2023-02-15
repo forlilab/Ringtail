@@ -11,22 +11,25 @@ import json
 class Test_StorageManSQLite:
 
     def test_fetch_summary_data(self):
+        os.system("rm output.db")
+        status1 = os.system(
+            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+        )
         with StorageManagerSQLite("output.db") as dbman:
             summ_dict = dbman.fetch_summary_data()
-            assert summ_dict == {'num_ligands': 287, 'num_poses': 645, 'num_unique_interactions': 183, 'min_docking_score': -7.93, 'max_docking_score': -2.03, '1%_docking_score': -7.43, '10%_docking_score': -6.46, 'min_leff': -0.6183333333333333, 'max_leff': -0.13277777777777777, '1%_leff': -0.581, '10%_leff': -0.4653846153846154, 'num_interacting_residues': 82}
+            print(summ_dict)
+            assert summ_dict == {'num_ligands': 3, 'num_poses': 7, 'num_unique_interactions': 57, 'num_interacting_residues': 30, 'min_docking_score': -6.66, 'max_docking_score': -4.98, '1%_docking_score': -6.66, '10%_docking_score': -6.66, 'min_leff': -0.444, 'max_leff': -0.35000000000000003, '1%_leff': -0.444, '10%_leff': -0.444}
 
     def test_bookmark_info(self):
         os.system("rm output.db")
 
         opts = RingtailCore.get_defaults()
-        opts["storage_opts"]["values"]["storage_type"] = "sqlite"
         opts["rman_opts"]["values"]["file_sources"]["file_path"]["path"] = [["test_data/"]]
         opts["rman_opts"]["values"]["file_sources"]["file_path"]["recursive"] = True
 
-        filters = {'properties': {'eworst': -15.0, 'ebest': -16.0, 'leworst': -0.4, 'lebest': -0.5, 'score_percentile': None, 'le_percentile': None}, 'interactions': {'V': [('A:VAL:279:', True)], 'H': [('A:LYS:162:', True)], 'R': [('A:TYR:169:', True)]}, 'interactions_count': [('hb_count', 5)], 'ligand_filters': {'N': ['127458'], 'S': [], 'F': 'OR', 'X': []}, 'filter_ligands_flag': True, 'max_miss': 0, 'react_any': True}
-        opts["filters"]["values"] = filters
+        opts["filters"]["values"] = {'eworst': -3, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'}
 
-        with RingtailCore(**opts) as rt_core:
+        with RingtailCore(opts_dict=opts) as rt_core:
             rt_core.add_results()
             rt_core.filter()
 
@@ -34,6 +37,8 @@ class Test_StorageManSQLite:
         cur = conn.cursor()
         bookmark = cur.execute("SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'")
         bookmark_filters_db_str = bookmark.fetchone()[0]
+        print(bookmark_filters_db_str)
+        filters = {'eworst': -3, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'}
         assert bookmark_filters_db_str == json.dumps(filters)
         cur.close()
         conn.close()

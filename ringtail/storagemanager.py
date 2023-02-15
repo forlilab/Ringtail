@@ -109,6 +109,7 @@ class StorageManager:
         return typing.get_type_hints(storage_types[storage_type].__init__)
 
     def __enter__(self):
+        self.open_storage()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -269,17 +270,13 @@ class StorageManager:
         # get number of passing ligands
         return filtered_results
 
-    def fetch_data_for_passing_results(self, outfields: list) -> iter:
+    def fetch_data_for_passing_results(self) -> iter:
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.results_view_name
-
-        Args:
-            outfields (list): List of fields (columns) to be
-                included in log
 
         Returns:
             sqlite cursor: cursor of data from passing data
         """
-        return self._run_query(self._generate_results_data_query(outfields))
+        return self._run_query(self._generate_results_data_query(self.outfields))
 
     def _fetch_view_names(self):
         """Returns DB curor with the names of all view in DB
@@ -1138,7 +1135,7 @@ class StorageManagerSQLite(StorageManager):
         db_file: str = "output.db",
         append_results: bool = False,
         order_results: str = None,
-        outfields: str = "LigName,e",
+        outfields: str = "Ligand_name,e",
         filter_bookmark: str = None,
         output_all_poses: bool = None,
         results_view_name: str = "passing_results",
@@ -1168,6 +1165,7 @@ class StorageManagerSQLite(StorageManager):
         super().__init__()
 
         self.outfield_options = [
+            "Ligand_name",
             "e",
             "le",
             "delta",
@@ -1201,6 +1199,7 @@ class StorageManagerSQLite(StorageManager):
         }
 
         self.field_to_column_name = {
+            "Ligand_name": "LigName",
             "e": "docking_score",
             "le": "leff",
             "delta": "deltas",
@@ -1217,7 +1216,11 @@ class StorageManagerSQLite(StorageManager):
             "hb": "num_hb",
             "receptor": "receptor",
         }
-        self.interaction_filter_types = {"V", "H", "R"}
+        self.interaction_name_to_letter = {
+            "vdw_interactions": "V", 
+            "hb_interactions": "H", 
+            "reactive_interactions": "R",
+            }
 
         self.view_suffix = None
 
@@ -2689,11 +2692,11 @@ class StorageManagerSQLite(StorageManager):
         """
 
         # parse requested output fields and convert to column names in database
-        outfields_list = parsed_opts.outfields.split(",")
+        outfields_list = self.outfields.split(",")
         for outfield in outfields_list:
             if outfield not in self.outfield_options:
                 raise OptionError(
-                    "WARNING: {out_f} is not a valid output option. Please see rt_process_vs.py --help for allowed options".format(
+                    "{out_f} is not a valid output option. Please see rt_process_vs.py --help for allowed options".format(
                         out_f=outfield
                     )
                 )
@@ -2716,6 +2719,8 @@ class StorageManagerSQLite(StorageManager):
         interaction_filters = []
 
         for filter_key, filter_value in filters_dict.items():
+            if filter_value is None:
+                continue
             if filter_key in self.energy_filter_col_name:
                 self.index_columns.append(self.energy_filter_col_name[filter_key])
                 if filter_key == "score_percentile" or filter_key == "le_percentile":
@@ -2753,11 +2758,12 @@ class StorageManagerSQLite(StorageManager):
             # add react_any flag as interaction filter
             # check if react_any is true
             if filter_key == "react_any" and filter_value:
-                interaction_filters.append(["R", "", "", "", "", True])
+                interaction_filters.append(["reactive_interactions", "", "", "", "", True])
 
         # for each interaction filter, get the index
         # from the interactions_indices table
         for interaction in interaction_filters:
+            interaction = [self.interaction_name_to_letter[interaction[0]]] + interaction[1:]
             interaction_filter_indices = []
             interact_index_str = self._generate_interaction_index_filtering_query(
                 interaction[:-1]
@@ -2949,7 +2955,7 @@ class StorageManagerSQLite(StorageManager):
         """
 
         sql_ligand_string = "SELECT LigName FROM Ligands WHERE"
-        logical_operator = ligand_filters["ligand_operator"].upper()
+        logical_operator = ligand_filters["ligand_operator"]
         for kw in ligand_filters.keys():
             fils = ligand_filters[kw]
             if kw == "ligand_name":
