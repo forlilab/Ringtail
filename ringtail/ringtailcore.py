@@ -322,6 +322,8 @@ class RingtailCore:
         # bin the all_ligands data by 1000ths to make plotting faster
         for line in all_data:
             # add to dictionary as bin of energy and le
+            if None in line:
+                raise OutputError("Detected empty data line when plotting. Please check that database and bookmarks are not empty.")
             data_bin = (round(line[0], 3), round(line[1], 3))
             if data_bin not in all_plot_data_binned:
                 all_plot_data_binned[data_bin] = 1
