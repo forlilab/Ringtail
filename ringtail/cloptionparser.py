@@ -301,7 +301,7 @@ def cmdline_parser(defaults={}):
     output_group = read_parser.add_argument_group("Output options")
     output_group.add_argument(
         "-l",
-        "--log",
+        "--log_file",
         help='by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file',
         action="store",
         type=str,
@@ -691,7 +691,7 @@ class CLOptionParser:
             parsed_opts.export_bookmark_db = None
             parsed_opts.data_from_bookmark = None
             parsed_opts.pymol = None
-            parsed_opts.log = None
+            parsed_opts.log_file = None
             # confirm that receptor file was found if needed, else throw error
             # if only receptor files found and --save_receptor, assume we just want to
             # add receptor and not modify the rest of the db
@@ -984,8 +984,9 @@ class CLOptionParser:
 
         # set outputman options
         outman_opts = {
-            "log_file": parsed_opts.log,
+            "log_file": parsed_opts.log_file,
             "export_sdf_path": parsed_opts.export_sdf_path,
         }
         for k,v in outman_opts.items():
+            print(k,v)
             setattr(self.rtcore.output_manager, k, v)
