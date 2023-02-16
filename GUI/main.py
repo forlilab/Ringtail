@@ -790,6 +790,7 @@ class Ui_MainWindow(object):
     def set_default_cutoffs(self):
         self.hSpinBox.setValue(3.7)
         self.vdwSpinBox.setValue(4.0)
+        self.maxPosesSpinBox.setValue(3)
     
     def set_h_cutoff_distance(self):
         self.h_cutoff_distance = float(self.hSpinBox.value())
