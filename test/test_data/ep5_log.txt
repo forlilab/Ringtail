@@ -1,0 +1,36 @@
+Filtered poses:
+***************
+##### PROPERTIES
+#   eworst :  [ none ]
+#    ebest :  [ none ]
+#  leworst :  [ none ]
+#   lebest :  [ none ]
+#  score_percentile : 5.000
+#  le_percentile :  [ none ]
+#### INTERACTIONS
+#        V :  [ none ]
+#        H :  [ none ]
+#        R :  [ none ]
+
+Result bookmark name: ep5
+
+Number passing ligands: 14 
+---------------
+'8090', -7.93
+'13974', -7.75
+'83339', -7.43
+'77913', -7.41
+'11128', -7.25
+'15776', -7.12
+'136065', -7.11
+'5995', -7.11
+'8090', -7.08
+'11991', -7.05
+'3961', -7.05
+'127947', -7.0
+'127947', -6.96
+'99756', -6.95
+'8481', -6.93
+'11891', -6.91
+***************
+
