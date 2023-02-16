@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Summary
-"""
 #
 # Ringtail storage adaptors
 #
@@ -12,18 +10,21 @@ import json
 import pandas as pd
 import logging
 import typing
+from rdkit import Chem
 
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
+
+from .filters import Filters
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
     DatabaseConnectionError,
     DatabaseTableCreationError,
 )
-from .exceptions import DatabaseQueryError, DatabaseViewCreationError
+from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError
 
 
 class StorageManager:
@@ -93,38 +94,6 @@ class StorageManager:
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
 
-        self.field_to_column_name = {
-            "e": "energies_binding",
-            "le": "leff",
-            "delta": "deltas",
-            "ref_rmsd": "reference_rmsd",
-            "e_inter": "energies_inter",
-            "e_vdw": "energies_vdw",
-            "e_elec": "energies_electro",
-            "e_intra": "energies_intra",
-            "n_interact": "nr_interactions",
-            "interactions": "interactions",
-            "ligand_smile": "ligand_smile",
-            "rank": "pose_rank",
-            "run": "run_number",
-            "hb": "num_hb",
-            "receptor": "receptor",
-        }
-        self.interaction_filter_types = {"V", "H", "R"}
-
-        self.view_suffix = None
-
-        self.temptable_suffix = 0
-
-        self.filtering_window = "Results"
-
-        self.index_columns = []
-
-        # keep track of any open cursors
-        self.open_cursors = []
-
-        self._initialize_db()
-
     @classmethod
     def get_defaults(cls, storage_type):
         storage_types = {
@@ -140,16 +109,17 @@ class StorageManager:
         return typing.get_type_hints(storage_types[storage_type].__init__)
 
     def __enter__(self):
+        self.open_storage()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.close_connection()
+        self.close_storage()
 
     # # # # # # # # # # # # # # # # # # #
     # # # Common StorageManager methods # # #
     # # # # # # # # # # # # # # # # # # #
 
-    def get_plot_data(self):
+    def get_plot_data(self, only_passing=False):
         """this function is expected to return an ascii plot
         representation of the results
 
@@ -160,7 +130,10 @@ class StorageManager:
         # checks if we have filtered by looking for view name in list of view names
         self._create_indices()
         if self.check_passing_view_exists():
-            return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
+            if only_passing:
+                return [], self._fetch_passing_plot_data()
+            else:
+                return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
         else:
             return self._fetch_all_plot_data(), []
 
@@ -182,7 +155,7 @@ class StorageManager:
             name[0] for name in self._fetch_view_names().fetchall()
         ]
 
-    def close_connection(self, attached_db=None, vacuum=False):
+    def close_storage(self, attached_db=None, vacuum=False):
         """close connection to database
 
         Args:
@@ -262,31 +235,22 @@ class StorageManager:
 
     def filter_results(
         self,
-        results_filters_list: list,
-        ligand_filters_list: list,
-        output_fields: list,
-        filter_bookmark=False,
+        all_filters: dict,
     ) -> iter:
         """Generate and execute database queries from given filters.
 
         Args:
-            results_filters_list (list): list of tuples with first element
-                indicating column to filter and second element
-                indicating passing value
-            ligand_filters_list (list): list of tuples with first element
-                indicating column to filter and second element
-                indicating passing value
-            output_fields (list): List of fields (columns) to be
-                included in log
+            all_filters (dict): dict containing all filters. Expects format and keys corresponding to ringtail.Filters().to_dict()
+
 
         Returns:
             SQLite Cursor: Cursor of passing results
         """
         # create view of passing results
         filter_results_str = self._generate_result_filtering_query(
-            results_filters_list, ligand_filters_list, output_fields, filter_bookmark
+            all_filters
         )
-        logging.info(filter_results_str)
+        logging.debug(filter_results_str)
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.results_view_name
         if self.view_suffix is not None:
             self.current_view_name = self.results_view_name + "_" + self.view_suffix
@@ -299,24 +263,20 @@ class StorageManager:
         self._create_view(
             self.current_view_name, view_query
         )  # make sure we keep Pose_ID in view
-        self._insert_bookmark_info(self.current_view_name, filter_results_str)
+        self._insert_bookmark_info(self.current_view_name, view_query, all_filters)
         # perform filtering
         logging.debug("Running filtering query")
         filtered_results = self._run_query(filter_results_str)
         # get number of passing ligands
         return filtered_results
 
-    def fetch_data_for_passing_results(self, outfields: list) -> iter:
+    def fetch_data_for_passing_results(self) -> iter:
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.results_view_name
-
-        Args:
-            outfields (list): List of fields (columns) to be
-                included in log
 
         Returns:
             sqlite cursor: cursor of data from passing data
         """
-        return self._run_query(self._generate_results_data_query(outfields))
+        return self._run_query(self._generate_results_data_query(self.outfields))
 
     def _fetch_view_names(self):
         """Returns DB curor with the names of all view in DB
@@ -505,7 +465,7 @@ class StorageManager:
 
         No Longer Returned:
             DB cursor: contains
-                Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
+                Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
 
         Raises:
             NotImplementedError: Description
@@ -520,7 +480,7 @@ class StorageManager:
 
         No Longer Returned:
             DB cursor: contains
-                Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
+                Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
 
         Raises:
             NotImplementedError: Description
@@ -625,7 +585,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _initialize_db(self):
+    def open_storage(self):
         """Create connection to db. Then, check if db needs to be written.
         If so, (if self.overwrite drop existing tables and )
         initialize the tables
@@ -708,11 +668,10 @@ class StorageManager:
         """Creates table for results. Columns are:
         Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL,
-        ligand_smile        VARCHAR[],
         receptor            VARCHAR[],
         pose_rank           INT[],
         run_number          INT[],
-        energies_binding    FLOAT(4),
+        docking_score    FLOAT(4),
         leff                FLOAT(4),
         deltas              FLOAT(4),
         cluster_rmsd        FLOAT(4),
@@ -752,9 +711,10 @@ class StorageManager:
         """Create table for ligands. Columns are:
         LigName             VARCHAR NOT NULL,
         ligand_smile        VARCHAR[],
+        ligand_rdmol        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
-        input_pdbqt         VARCHAR[]
+        input_model         VARCHAR[]
 
         Raises:
             NotImplementedError: Description
@@ -873,7 +833,7 @@ class StorageManager:
         """Fetches cursor for best energies and leff for all ligands
 
         No Longer Returned:
-            DB Cursor: Cursor containing energies_binding,
+            DB Cursor: Cursor containing docking_score,
                 leff for the first pose for each ligand
 
         Raises:
@@ -882,7 +842,7 @@ class StorageManager:
         raise NotImplementedError
 
     def _generate_plot_all_results_query(self):
-        """Make DB-formatted query string to get energies_binding,
+        """Make DB-formatted query string to get docking_score,
             leff of first pose for each ligand
 
         No Longer Returned:
@@ -898,7 +858,7 @@ class StorageManager:
             passing filtering
 
         No Longer Returned:
-            SQLite cursor: Cursor containing energies_binding,
+            SQLite cursor: Cursor containing docking_score,
                 leff for the first pose for passing ligands
 
         Raises:
@@ -907,7 +867,7 @@ class StorageManager:
         raise NotImplementedError
 
     def _generate_plot_passing_results_query(self):
-        """Make DB-formatted query string to get energies_binding,
+        """Make DB-formatted query string to get docking_score,
             leff of first pose for passing ligands
 
         No Longer Returned:
@@ -1036,12 +996,12 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _generate_percentile_query(self, percentile, column="energies_binding"):
+    def _calc_percentile_cutoff(self, percentile, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
 
         Args:
             percentile (float): cutoff percentile
-            column (str, optional): string indicating if cutoff should be for energies_binding or leff
+            column (str, optional): string indicating column for cutoff to be calculated for
         """
         raise NotImplementedError
 
@@ -1175,11 +1135,12 @@ class StorageManagerSQLite(StorageManager):
         db_file: str = "output.db",
         append_results: bool = False,
         order_results: str = None,
+        outfields: str = "Ligand_name,e",
+        filter_bookmark: str = None,
         output_all_poses: bool = None,
         results_view_name: str = "passing_results",
         overwrite: bool = None,
         conflict_opt: str = None,
-        mode: str = "ADGPU",
         _stop_at_defaults=False,
     ):
         """Initialize superclass and subclass-specific instance variables
@@ -1187,33 +1148,104 @@ class StorageManagerSQLite(StorageManager):
         Args:
             db_file (str): database file name
             opts (dict, optional): Dictionary of database options
+            # TODO update this
         """
         self.append_results = append_results
         self.order_results = order_results
+        self.outfields = outfields
         self.output_all_poses = output_all_poses
+        self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
         self.overwrite = overwrite
         self.conflict_opt = conflict_opt
-        self.mode = mode
         self.db_file = db_file
         if _stop_at_defaults:
             return
 
         super().__init__()
 
+        self.outfield_options = [
+            "Ligand_name",
+            "e",
+            "le",
+            "delta",
+            "ref_rmsd",
+            "e_inter",
+            "e_vdw",
+            "e_elec",
+            "e_intra",
+            "n_interact",
+            "interactions",
+            "fname",
+            "ligand_smile",
+            "rank",
+            "run",
+            "hb",
+            "source_file",
+        ]
+        self.order_options = {
+            "e",
+            "le",
+            "delta",
+            "ref_rmsd",
+            "e_inter",
+            "e_vdw",
+            "e_elec",
+            "e_intra",
+            "n_interact",
+            "rank",
+            "run",
+            "hb",
+        }
+
+        self.field_to_column_name = {
+            "Ligand_name": "LigName",
+            "e": "docking_score",
+            "le": "leff",
+            "delta": "deltas",
+            "ref_rmsd": "reference_rmsd",
+            "e_inter": "energies_inter",
+            "e_vdw": "energies_vdw",
+            "e_elec": "energies_electro",
+            "e_intra": "energies_intra",
+            "n_interact": "nr_interactions",
+            "interactions": "interactions",
+            "ligand_smile": "ligand_smile",
+            "rank": "pose_rank",
+            "run": "run_number",
+            "hb": "num_hb",
+            "receptor": "receptor",
+        }
+        self.interaction_name_to_letter = {
+            "vdw_interactions": "V", 
+            "hb_interactions": "H", 
+            "reactive_interactions": "R",
+            }
+
+        self.view_suffix = None
+
+        self.temptable_suffix = 0
+
+        self.filtering_window = "Results"
+
+        self.index_columns = []
+
+        # keep track of any open cursors
+        self.open_cursors = []
+
         self.energy_filter_sqlite_call_dict = {
-            "eworst": "energies_binding < {value}",
-            "ebest": "energies_binding > {value}",
+            "eworst": "docking_score < {value}",
+            "ebest": "docking_score > {value}",
             "leworst": "leff < {value}",
             "lebest": "leff > {value}",
         }
 
         self.energy_filter_col_name = {
-            "eworst": "energies_binding",
-            "ebest": "energies_binding",
+            "eworst": "docking_score",
+            "ebest": "docking_score",
             "leworst": "leff",
             "lebest": "leff",
-            "energy_percentile": "energies_binding",
+            "score_percentile": "docking_score",
             "le_percentile": "leff",
         }
 
@@ -1302,13 +1334,12 @@ class StorageManagerSQLite(StorageManager):
             List: List of pose data to be inserted into Results table.
             In same order as expected in _insert_results:
             LigName, [0]
-            ligand_smile, [1]
             receptor, [2]
             pose_rank, [3]
             run_number, [4]
             cluster_rmsd, [5]
             reference_rmsd, [6]
-            energies_binding, [7]
+            docking_score, [7]
             leff, [8]
             deltas, [9]
             energies_inter, [10]
@@ -1343,7 +1374,6 @@ class StorageManagerSQLite(StorageManager):
         # We are only saving the top pose for each cluster
         ligand_data_list = [
             ligand_dict["ligname"],
-            ligand_dict["ligand_smile_string"],
             ligand_dict["receptor"],
             pose_rank + 1,
             int(run_number),
@@ -1427,20 +1457,20 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             List: List of data to be written as row in ligand table. Format:
             [ligand_name, ligand_smile, ligand_index_map,
-            ligand_h_parents, input_pdbqt]
+            ligand_h_parents, input_model]
         """
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
         ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
         ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
-        input_pdbqt = json.dumps(ligand_dict["ligand_input_pdbqt"])
+        input_model = json.dumps(ligand_dict["ligand_input_model"])
 
         return [
             ligand_name,
             ligand_smile,
             ligand_index_map,
             ligand_h_parents,
-            input_pdbqt,
+            input_model,
         ]
 
     @classmethod
@@ -1529,13 +1559,12 @@ class StorageManagerSQLite(StorageManager):
 
         sql_insert = """INSERT INTO Results (
         LigName,
-        ligand_smile,
         receptor,
         pose_rank,
         run_number,
         cluster_rmsd,
         reference_rmsd,
-        energies_binding,
+        docking_score,
         leff,
         deltas,
         energies_inter,
@@ -1563,7 +1592,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_coordinates,
         flexible_res_coordinates
         ) VALUES \
-        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         try:
             cur = self.conn.cursor()
@@ -1588,11 +1617,17 @@ class StorageManagerSQLite(StorageManager):
         sql_insert = """INSERT INTO Ligands (
         LigName,
         ligand_smile,
+        ligand_rdmol,
         atom_index_map,
         hydrogen_parents,
-        input_pdbqt
+        input_model
         ) VALUES
-        (?,?,?,?,?)"""
+        (?,?,mol_from_smiles(?),?,?,?)"""
+
+        ## repeat smiles in the third position of ligand array, to create rdmol
+        for ligand_entry in ligand_array:
+            smiles = ligand_entry[1]
+            ligand_entry.insert(2, smiles)
 
         try:
             cur = self.conn.cursor()
@@ -1746,6 +1781,36 @@ class StorageManagerSQLite(StorageManager):
             "SELECT * FROM {passing_view}".format(passing_view=self.results_view_name)
         )
 
+    def fetch_summary_data(self, columns=["docking_score", "leff"], percentiles=[1,10]) -> dict:
+        """Collect summary data for database:
+            Num Ligands
+            Num stored poses
+            Num unique interactions
+            
+            min, max, percentiles for columns in columns
+        """
+        try:
+            summary_data = {}
+            cur = self.conn.cursor()
+            summary_data["num_ligands"] = cur.execute("SELECT COUNT(*) FROM Ligands").fetchone()[0]
+            summary_data["num_poses"] = cur.execute("SELECT COUNT(*) FROM Results").fetchone()[0]
+            summary_data["num_unique_interactions"] = cur.execute("SELECT COUNT(*) FROM Interaction_indices").fetchone()[0]
+            summary_data["num_interacting_residues"] = cur.execute("SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)").fetchone()[0]
+
+            allowed_columns = self._fetch_results_column_names()
+            for col in columns:
+                if col not in allowed_columns:
+                    raise StorageError(f"Requested summary column {col} not found in Results table! Available columns: {allowed_columns}")
+                summary_data[f"min_{col}"] = cur.execute(f"SELECT MIN({col}) FROM Results").fetchone()[0]
+                summary_data[f"max_{col}"] = cur.execute(f"SELECT MAX({col}) FROM Results").fetchone()[0]
+                for p in percentiles:
+                    summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
+
+            return summary_data
+                
+        except sqlite3.OperationalError as e:
+            raise StorageError("Error while fetching summary data!") from e
+
     def get_number_passing_ligands(self, bookmark_name=None):
         """Returns count of the number of ligands that
             passed filtering criteria
@@ -1800,6 +1865,16 @@ class StorageManagerSQLite(StorageManager):
         )
         return self._run_query(query)
 
+    def fetch_single_ligand_output_info(self, ligname):
+        try:
+            cur = self.conn.cursor()
+            cur.execute(f"SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName LIKE '{ligname}'")
+            info = cur.fetchone()
+            cur.close()
+            return info
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError(f"Error retrieving ligand info for {ligname}") from e
+
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
 
@@ -1807,10 +1882,10 @@ class StorageManagerSQLite(StorageManager):
             ligname (string): name of ligand to fetch coordinates for
 
         Returns:
-            SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
+            SQLite cursor: contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
+        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
             results_view=self.results_view_name, ligand=ligname
         )
         return self._run_query(query)
@@ -1822,12 +1897,25 @@ class StorageManagerSQLite(StorageManager):
             ligname (string): name of ligand to fetch coordinates for
 
         Returns:
-            SQLite cursor: contains Pose_ID, energies_binding, leff, ligand_coordinates,
+            SQLite cursor: contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, energies_binding, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
+        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
             ligand=ligname, results_view=self.results_view_name
         )
+        return self._run_query(query)
+
+    def fetch_single_pose_properties(self, pose_ID:int):
+        """fetch coordinates for pose given by pose_ID
+
+        Args:
+            pose_ID (int): name of ligand to fetch coordinates for
+
+        Returns:
+            SQLite cursor: contains Pose_ID, docking_score, leff, ligand_coordinates,
+                flexible_res_coordinates, flexible_residues
+        """
+        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
         return self._run_query(query)
 
     def fetch_interaction_bitvector(self, pose_id):
@@ -1966,6 +2054,9 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             con = sqlite3.connect(self.db_file)
+            con.enable_load_extension(True)
+            con.load_extension("chemicalite")
+            con.enable_load_extension(False) 
             cursor = con.cursor()
             cursor.execute("PRAGMA synchronous = OFF")
             cursor.execute("PRAGMA journal_mode = MEMORY")
@@ -1990,7 +2081,7 @@ class StorageManagerSQLite(StorageManager):
 
         self.open_cursors = []
 
-    def _initialize_db(self):
+    def open_storage(self):
         """Create connection to db. Then, check if db needs to be written.
         If so, (if self.overwrite drop existing tables and )
         initialize the tables
@@ -2179,11 +2270,10 @@ class StorageManagerSQLite(StorageManager):
         """Creates table for results. Columns are:
         Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL,
-        ligand_smile        VARCHAR[],
         receptor            VARCHAR[],
         pose_rank           INT[],
         run_number          INT[],
-        energies_binding    FLOAT(4),
+        docking_score    FLOAT(4),
         leff                FLOAT(4),
         deltas              FLOAT(4),
         cluster_rmsd        FLOAT(4),
@@ -2229,11 +2319,10 @@ class StorageManagerSQLite(StorageManager):
         sql_results_table = """CREATE TABLE IF NOT EXISTS Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
-            ligand_smile        VARCHAR[],
             receptor            VARCHAR[],
             pose_rank           INT[],
             run_number          INT[],
-            energies_binding    FLOAT(4),
+            docking_score    FLOAT(4),
             leff                FLOAT(4),
             deltas              FLOAT(4),
             cluster_rmsd        FLOAT(4),
@@ -2317,7 +2406,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_smile        VARCHAR[],
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
-        input_pdbqt         VARCHAR[]
+        input_model         VARCHAR[]
 
         Raises:
             DatabaseTableCreationError: Description
@@ -2326,9 +2415,10 @@ class StorageManagerSQLite(StorageManager):
         ligand_table = """CREATE TABLE IF NOT EXISTS Ligands (
             LigName             VARCHAR NOT NULL PRIMARY KEY ON CONFLICT IGNORE,
             ligand_smile        VARCHAR[],
+            ligand_rdmol        MOL,
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
-            input_pdbqt         VARCHAR[])"""
+            input_model         VARCHAR[])"""
 
         try:
             cur = self.conn.cursor()
@@ -2418,7 +2508,8 @@ class StorageManagerSQLite(StorageManager):
         """
         sql_str = """CREATE TABLE IF NOT EXISTS Bookmarks (
         Bookmark_name       VARCHAR[] PRIMARY KEY,
-        Query               VARCHAR[])"""
+        Query               VARCHAR[],
+        filters             VARCHAR[])"""
 
         try:
             cur = self.conn.cursor()
@@ -2429,24 +2520,26 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating bookmark table. If database already exists, use --overwrite to drop existing tables"
             ) from e
 
-    def _insert_bookmark_info(self, name: str, query: str):
+    def _insert_bookmark_info(self, name: str, sqlite_query: str, filters = {}):
         """Insert bookmark info into bookmark table
 
         Args:
             name (str): name for bookmark
-            query (str): query used to generate bookmark
+            sqlite_query (str): sqlite query used to generate bookmark
+            filters (dict): filters used to generate bookmark
 
         Raises:
             DatabaseInsertionError: Description
         """
         sql_insert = """INSERT OR REPLACE INTO Bookmarks (
         Bookmark_name,
-        Query
-        ) VALUES (?,?)"""
+        Query,
+        filters
+        ) VALUES (?,?,?)"""
 
         try:
             cur = self.conn.cursor()
-            cur.execute(sql_insert, [name, query])
+            cur.execute(sql_insert, [name, sqlite_query, json.dumps(filters)])
             self.conn.commit()
             cur.close()
 
@@ -2550,84 +2643,90 @@ class StorageManagerSQLite(StorageManager):
         """Fetches cursor for best energies and leff for all ligands
 
         Returns:
-            SQLite Cursor: Cursor containing energies_binding,
+            SQLite Cursor: Cursor containing docking_score,
                 leff for the first pose for each ligand
         """
         return self._run_query(self._generate_plot_all_results_query())
 
     def _generate_plot_all_results_query(self):
-        """Make SQLite-formatted query string to get energies_binding,
+        """Make SQLite-formatted query string to get docking_score,
             leff of first pose of all ligands
 
         Returns:
             String: SQLite-formatted query string
         """
-        return "SELECT energies_binding, leff FROM Results GROUP BY LigName"
+        return "SELECT docking_score, leff FROM Results GROUP BY LigName"
 
     def _fetch_passing_plot_data(self):
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
 
         Returns:
-            SQLite cursor: Cursor containing energies_binding,
+            SQLite cursor: Cursor containing docking_score,
                 leff for the first pose for passing ligands
         """
         return self._run_query(self._generate_plot_passing_results_query())
 
     def _generate_plot_passing_results_query(self):
-        """Make SQLite-formatted query string to get energies_binding,
+        """Make SQLite-formatted query string to get docking_score,
             leff of first pose for passing ligands
 
         Returns:
             String: SQLite-formatted query string
         """
-        return "SELECT energies_binding, leff FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
+        return "SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
             results_view=self.results_view_name
         )
 
     def _generate_result_filtering_query(
         self,
-        results_filters_list,
-        ligand_filters_list,
-        output_fields,
-        filter_bookmark=False,
+        filters_dict
     ):
         """takes lists of filters, writes sql filtering string
 
         Args:
-            results_filters_list (list): list of tuples where
-                (filter column/key, filtering cutoff)
-            ligand_filters_list (list): list of filters on ligand information
-            output_fields (list): List of result column data for output
-            filter_bookmark (bool, optional): flag to indicate that self.results_view_name should be filtering window
+            filters_dict (dict): dict of filters. Keys names and value formats must match those found in the Filters class
 
         Returns:
             String: SQLite-formatted string for filtering query
         """
 
         # parse requested output fields and convert to column names in database
-
-        outfield_string = "LigName, " + ", ".join(
-            [self.field_to_column_name[field] for field in output_fields.split(",")]
+        outfields_list = self.outfields.split(",")
+        for outfield in outfields_list:
+            if outfield not in self.outfield_options:
+                raise OptionError(
+                    "{out_f} is not a valid output option. Please see rt_process_vs.py --help for allowed options".format(
+                        out_f=outfield
+                    )
+                )
+        outfield_string = ", ".join(
+            [self.field_to_column_name[field] for field in outfields_list]
         )
 
-        if filter_bookmark is not None:
-            self.filtering_window = filter_bookmark
+        if self.filter_bookmark is not None:
+            if self.filter_bookmark == self.results_view_name:
+                logging.error(
+                    f"Specified filter_bookmark and bookmark_name are the same: {self.results_view_name}"
+                )
+                raise OptionError(
+                    "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
+                )
+            self.filtering_window = self.filter_bookmark
 
         # write energy filters and compile list of interactions to search for
         queries = []
         interaction_filters = []
 
-        for filter_key, filter_value in results_filters_list:
+        for filter_key, filter_value in filters_dict.items():
+            if filter_value is None:
+                continue
             if filter_key in self.energy_filter_col_name:
                 self.index_columns.append(self.energy_filter_col_name[filter_key])
-                if filter_key == "energy_percentile" or filter_key == "le_percentile":
+                if filter_key == "score_percentile" or filter_key == "le_percentile":
                     # convert from percent to decimal
-                    filter_value = float(filter_value) / 100
-                    queries.append(
-                        self._generate_percentile_query(
-                            filter_value, self.energy_filter_col_name[filter_key]
-                        )
+                    cutoff = self._calc_percentile_cutoff(filter_value, self.energy_filter_col_name[filter_key])
+                    queries.append( f"{self.energy_filter_col_name[filter_key]} < {cutoff}"
                     )
                 else:
                     queries.append(
@@ -2637,15 +2736,19 @@ class StorageManagerSQLite(StorageManager):
                     )
 
             # write hb count filter(s)
-            if filter_key == "hb_count":
-                self.index_columns.append("num_hb")
-                if filter_value > 0:
-                    queries.append("num_hb > {value}".format(value=filter_value))
-                else:
-                    queries.append("num_hb <= {value}".format(value=-1 * filter_value))
+            if filter_key == "interactions_count":
+                for k,v in filter_value:
+                    # TODO implement other interaction count filters
+                    if k != "hb_count":
+                        continue
+                    self.index_columns.append("num_hb")
+                    if v > 0:
+                        queries.append("num_hb > {value}".format(value=v))
+                    else:
+                        queries.append("num_hb <= {value}".format(value=-1 * v))
 
             # reformat interaction filters as list
-            if filter_key in self.interaction_filter_types:
+            if filter_key in Filters.get_interaction_filter_keys():
                 for interact in filter_value:
                     interaction_string = filter_key + ":" + interact[0]
                     interaction_filters.append(
@@ -2655,11 +2758,12 @@ class StorageManagerSQLite(StorageManager):
             # add react_any flag as interaction filter
             # check if react_any is true
             if filter_key == "react_any" and filter_value:
-                interaction_filters.append(["R", "", "", "", "", True])
+                interaction_filters.append(["reactive_interactions", "", "", "", "", True])
 
         # for each interaction filter, get the index
         # from the interactions_indices table
         for interaction in interaction_filters:
+            interaction = [self.interaction_name_to_letter[interaction[0]]] + interaction[1:]
             interaction_filter_indices = []
             interact_index_str = self._generate_interaction_index_filtering_query(
                 interaction[:-1]
@@ -2701,15 +2805,64 @@ class StorageManagerSQLite(StorageManager):
             )
 
         # add ligand filters
-        if ligand_filters_list != []:
+        ligand_filters_dict = {k:v for k, v in filters_dict.items() if k in Filters.get_ligand_filter_keys()}
+        if filters_dict["ligand_substruct"] != [] or filters_dict["ligand_name"] != []:
+            ligand_query_str = self._generate_ligand_filtering_query(
+                        ligand_filters_dict
+                    )
             queries.append(
                 "LigName IN ({ligand_str})".format(
-                    ligand_str=self._generate_ligand_filtering_query(
-                        ligand_filters_list
-                    )
+                    ligand_str=ligand_query_str
                 )
             )
-
+        if len(ligand_filters_dict["ligand_substruct_pos"]):
+            nr_args_per_group = 6
+            nr_smarts = int(len(ligand_filters_dict["ligand_substruct_pos"]) / nr_args_per_group)
+            # create temporary table with molecules that pass all smiles
+            tmp_lig_filters = {"ligand_operator": ligand_filters_dict["ligand_operator"]}
+            if "ligand_max_atoms" in ligand_filters_dict:
+                tmp_lig_filters["ligand_max_atoms"] = ligand_filters_dict["ligand_max_atoms"]
+            tmp_lig_filters["ligand_substruct"] = [ligand_filters_dict["ligand_substruct"][i * nr_args_per_group] for i in range(nr_smarts)]
+            cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
+            cmd = cmd.replace(
+                "SELECT LigName FROM Ligands",
+                "SELECT "
+                    "Results.Pose_ID, "
+                    "Ligands.LigName, "
+                    "Ligands.ligand_smile, "
+                    "Ligands.atom_index_map, "
+                    "Results.ligand_coordinates "
+                    "FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName"
+            )
+            cmd = "CREATE TEMP TABLE passed_smarts AS " + cmd
+            cur = self.conn.cursor()
+            cur.execute("DROP TABLE IF EXISTS passed_smarts")
+            cur.execute(cmd)
+            smarts_loc_filters = []
+            for i in range(nr_smarts):
+                smarts =      ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 0]
+                index =   int(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 1])
+                sqdist = float(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 2])**2
+                x =     float(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 3])
+                y =     float(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 4])
+                z =     float(ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 5])
+                # save filter for bookmark
+                smarts_loc_filters.append((smarts, index, x, y, z))
+                poses = self._run_query("SELECT * FROM passed_smarts")
+                pose_id_list = []
+                smartsmol = Chem.MolFromSmarts(smarts)
+                for pose_id, ligname, smiles, idxmap, coords in poses:
+                    mol = Chem.MolFromSmiles(smiles)
+                    idxmap = [int(value)-1 for value in json.loads(idxmap)]
+                    idxmap = {idxmap[j*2]: idxmap[j*2+1] for j in range(int(len(idxmap)/2))}
+                    for hit in mol.GetSubstructMatches(smartsmol):
+                        xyz = [float(value) for value in json.loads(coords)[idxmap[hit[index]]]]
+                        d2 = (xyz[0] - x)**2 + (xyz[1] - y)**2 + (xyz[2] - z)**2
+                        if d2 <= sqdist:
+                            pose_id_list.append(str(pose_id))
+                            break # add pose only once
+                queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
+            cur.close()
         # initialize query string
         # raise error if query string is empty
         if queries == []:
@@ -2798,34 +2951,36 @@ class StorageManagerSQLite(StorageManager):
             ligand_filters (list): List of filters on ligand table
 
         Returns:
-            String: SQLite-formatted query
+            String: SQLite-formatted query, Dict: dictionary of filters and values
         """
 
-        sql_ligand_string = "SELECT LigName FROM Ligands WHERE "
-
-        substruct_flag = ligand_filters["F"].upper()
+        sql_ligand_string = "SELECT LigName FROM Ligands WHERE"
+        logical_operator = ligand_filters["ligand_operator"]
         for kw in ligand_filters.keys():
             fils = ligand_filters[kw]
-            if kw == "N":
+            if kw == "ligand_name":
                 for name in fils:
                     if name == "":
                         continue
-                    name_sql_str = "LigName LIKE '%{value}%' OR ".format(value=name)
+                    name_sql_str = " LigName LIKE '%{value}%' OR".format(value=name)
                     sql_ligand_string += name_sql_str
-            if kw == "S":
-                for substruct in fils:
-                    substruct_sql_str = "ligand_smile LIKE '%{value}%' {flag} ".format(
-                        value=substruct, flag=substruct_flag
-                    )
-                    sql_ligand_string += substruct_sql_str
-
-        if sql_ligand_string.endswith("AND "):
-            sql_ligand_string = sql_ligand_string.rstrip("AND ")
-        if sql_ligand_string.endswith("OR "):
-            sql_ligand_string = sql_ligand_string.rstrip("OR ")
-
-        logging.info(sql_ligand_string)
-
+            if kw == "ligand_max_atoms" and ligand_filters[kw] is not None:
+                maxatom_sql_str = " mol_num_atms(ligand_rdmol) <= {} {}".format(ligand_filters[kw], logical_operator)
+                sql_ligand_string += maxatom_sql_str
+            if kw == "ligand_substruct":
+                for smarts in fils:
+                    # check for hydrogens in smarts pattern
+                    smarts_mol = Chem.MolFromSmarts(smarts)
+                    for atom in smarts_mol.GetAtoms():
+                        if atom.GetAtomicNum() == 1:
+                            raise DatabaseQueryError(f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen.")
+                    substruct_sql_str = " mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}".format(
+                        smarts=smarts, logical_operator=logical_operator)
+        if sql_ligand_string.endswith("AND"):
+            sql_ligand_string = sql_ligand_string.rstrip("AND")
+        if sql_ligand_string.endswith("OR"):
+            sql_ligand_string = sql_ligand_string.rstrip("OR")
+        
         return sql_ligand_string
 
     def _generate_results_data_query(self, output_fields):
@@ -2912,19 +3067,19 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             String: SQLite-formatted string for creating
-                percent ranks on energies_binding and leff
+                percent ranks on docking_score and leff
         """
         column_names = ",".join(self._fetch_results_column_names())
-        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY energies_binding) energy_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results Group BY LigName".format(
+        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY docking_score) score_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results Group BY LigName".format(
             columns=column_names
         )
 
-    def _generate_percentile_query(self, percentile, column="energies_binding"):
+    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
 
         Args:
             percentile (float): cutoff percentile
-            column (str, optional): string indicating if cutoff should be for energies_binding or leff
+            column (str, optional): string indicating column for percentile to be calculated over
         """
         # get total number of ligands
         try:
@@ -2932,7 +3087,7 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(LigName) FROM Ligands")
             n_ligands = int(cur.fetchone()[0])
-            n_passing = int(percentile * n_ligands)
+            n_passing = int((percentile / 100) * n_ligands)
             # find energy cutoff
             counter = 0
             for i in cur.execute(
@@ -2943,7 +3098,7 @@ class StorageManagerSQLite(StorageManager):
                     break
                 counter += 1
             logging.debug(f"{column} percentile cutoff is {cutoff}")
-            return f"{column} < {cutoff}"
+            return cutoff
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
 
@@ -3134,14 +3289,15 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             StorageError: Description
         """
-        try:
-            cur = self.conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM Results")
-            if cur.fetchone()[0] != 0:
-                raise StorageError(
-                    "Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database."
-                )
-        except Exception as e:
-            raise e
-        finally:
-            cur.close()
+        if not self.overwrite and not self.append_results:
+            try:
+                cur = self.conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM Results")
+                if cur.fetchone()[0] != 0:
+                    raise StorageError(
+                        "Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database."
+                    )
+            except Exception as e:
+                raise e
+            finally:
+                cur.close()

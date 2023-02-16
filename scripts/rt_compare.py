@@ -269,6 +269,6 @@ if __name__ == "__main__":
 
     finally:
         try:
-            dbman.close_connection()
+            dbman.close_storage()
         except NameError:
             pass

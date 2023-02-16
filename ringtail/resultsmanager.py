@@ -8,6 +8,7 @@ from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
 from .storagemanager import StorageManager, StorageManagerSQLite
 import typing
+import logging
 
 
 class ResultsManager:
@@ -52,15 +53,6 @@ class ResultsManager:
             return
 
         self.storageman = storageman
-        parser_managers = {
-            "multiprocessing": MPManager,
-        }
-        parser_opts = {}
-        for k, v in self.__dict__.items():
-            if k == "parser_manager":
-                continue
-            parser_opts[k] = v
-        self.parser = parser_managers[self.parser_manager](**parser_opts)
 
     def process_results(self):
         # check that we have file source(s)
@@ -73,6 +65,18 @@ class ResultsManager:
                 "No file sources given. File sources must be given for writing results to database."
             )
         # start MP process
+        logging.debug(self.file_sources)
+
+        # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
+        implemented_parser_managers = {
+            "multiprocessing": MPManager,
+        }
+        parser_opts = {}
+        for k, v in self.__dict__.items():
+            if k == "parser_manager":
+                continue
+            parser_opts[k] = v
+        self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
         self.parser.process_files()
 
     @classmethod

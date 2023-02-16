@@ -103,24 +103,28 @@ class DockingFileReader(multiprocessing.Process):
                 # parser depends on requested mode
                 if self.mode == "dlg":
                     parsed_file_dict = parse_single_dlg(next_task)
+                    # find the run number for the best pose in each cluster for adgpu
+                    parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 elif self.mode == "vina":
                     parsed_file_dict = parse_vina_pdbqt(next_task)
-                # future: NG parser, etc
+                # Example code for calling user-implemented mode
+                # elif self.mode == "my_mode":
+                #     parsed_file_dict = myparser(next_task)
+                else:
+                    raise NotImplementedError(f"Parser for input file mode {self.mode} not implemented!")
 
                 # check receptor name from file against that which we expect
                 if (
                     parsed_file_dict["receptor"] != self.target
                     and self.target is not None
-                    and self.mode != "vina"
+                    and self.mode == "dlg"
                 ):
                     raise FileParsingError(
                         "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
                             parsed_file_dict["receptor"], next_task, self.target
                         )
                     )
-                # find the run number for the best pose in each cluster for adgpu
-                if self.mode == "dlg":
-                    parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
+                
                 # find run numbers for poses we want to save
                 parsed_file_dict["poses_to_save"] = self._find_poses_to_save(
                     parsed_file_dict

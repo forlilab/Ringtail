@@ -68,14 +68,14 @@ class MPManager:
         self.storageman = storageman
         self.storageman_class = storageman_class
         self.num_files = 0
-
-        if max_proc is None:
-            max_proc = multiprocessing.cpu_count()
-        self.num_readers = max_proc - 1
-        self.queueIn = multiprocessing.Queue(maxsize=2 * max_proc)
-        self.queueOut = multiprocessing.Queue(maxsize=2 * max_proc)
+        self.max_proc = max_proc
 
     def process_files(self):
+        if self.max_proc is None:
+            self.max_proc = multiprocessing.cpu_count()
+        self.num_readers = self.max_proc - 1
+        self.queueIn = multiprocessing.Queue(maxsize=2 * self.max_proc)
+        self.queueOut = multiprocessing.Queue(maxsize=2 * self.max_proc)
         # start the workers in background
         self.workers = []
         self.p_conn, self.c_conn = multiprocessing.Pipe(True)
