@@ -323,7 +323,8 @@ class RingtailCore:
         for line in all_data:
             # add to dictionary as bin of energy and le
             if None in line:
-                raise OutputError("Detected empty data line when plotting. Please check that database and bookmarks are not empty.")
+                continue
+                #raise OutputError("Detected empty data line when plotting. Please check that database and bookmarks are not empty.")
             data_bin = (round(line[0], 3), round(line[1], 3))
             if data_bin not in all_plot_data_binned:
                 all_plot_data_binned[data_bin] = 1
@@ -647,9 +648,7 @@ class RingtailCore:
             # get pose coordinate info
             ligand_pose = json.loads(ligand_pose)
             flexres_pose = json.loads(flexres_pose)
-            print(ligand_pose)
             mol = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices)
-            print(Chem.MolToMolBlock(mol))
             for fr_idx, fr_mol in enumerate(flexres_mols):
                 flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(
                     fr_mol, flexres_pose[fr_idx], flexres_info[fr_idx][1]

@@ -128,7 +128,7 @@ class StorageManager:
         """
 
         # checks if we have filtered by looking for view name in list of view names
-        self._create_indices()
+        #self._create_indices()
         if self.check_passing_view_exists():
             if only_passing:
                 return [], self._fetch_passing_plot_data()
@@ -2639,6 +2639,7 @@ class StorageManagerSQLite(StorageManager):
                 )
             ) from e
 
+    #TODO combine functions here
     def _fetch_all_plot_data(self):
         """Fetches cursor for best energies and leff for all ligands
 
