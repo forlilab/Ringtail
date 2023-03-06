@@ -926,7 +926,6 @@ class CLOptionParser:
 
         # set core filter attributes
         all_filters["react_any"] = parsed_opts.react_any
-        print(all_filters)
         for k,v in all_filters.items():
             setattr(self.rtcore.filters, k, v)
 
@@ -988,5 +987,4 @@ class CLOptionParser:
             "export_sdf_path": parsed_opts.export_sdf_path,
         }
         for k,v in outman_opts.items():
-            print(k,v)
             setattr(self.rtcore.output_manager, k, v)
