@@ -2823,7 +2823,7 @@ class StorageManagerSQLite(StorageManager):
             tmp_lig_filters = {"ligand_operator": ligand_filters_dict["ligand_operator"]}
             if "ligand_max_atoms" in ligand_filters_dict:
                 tmp_lig_filters["ligand_max_atoms"] = ligand_filters_dict["ligand_max_atoms"]
-            tmp_lig_filters["ligand_substruct"] = [ligand_filters_dict["ligand_substruct"][i * nr_args_per_group] for i in range(nr_smarts)]
+            tmp_lig_filters["ligand_substruct"] = [ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group] for i in range(nr_smarts)]
             cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
             cmd = cmd.replace(
                 "SELECT LigName FROM Ligands",
@@ -2957,6 +2957,8 @@ class StorageManagerSQLite(StorageManager):
 
         sql_ligand_string = "SELECT LigName FROM Ligands WHERE"
         logical_operator = ligand_filters["ligand_operator"]
+        if logical_operator is None:
+            logical_operator = "AND"
         for kw in ligand_filters.keys():
             fils = ligand_filters[kw]
             if kw == "ligand_name":
@@ -2977,6 +2979,7 @@ class StorageManagerSQLite(StorageManager):
                             raise DatabaseQueryError(f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen.")
                     substruct_sql_str = " mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}".format(
                         smarts=smarts, logical_operator=logical_operator)
+                sql_ligand_string += substruct_sql_str
         if sql_ligand_string.endswith("AND"):
             sql_ligand_string = sql_ligand_string.rstrip("AND")
         if sql_ligand_string.endswith("OR"):
