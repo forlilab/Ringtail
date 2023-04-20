@@ -328,7 +328,7 @@ def cmdline_parser(defaults={}):
             '"hb" (hydrogen bonds), '
             '"receptor" (receptor name); '
             "Fields are "
-            "printed in the order in which they are provided. Ligand name will always be returned and should not be specified"
+            "printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified."
         ),
         action="store",
         type=str,
@@ -360,6 +360,16 @@ def cmdline_parser(defaults={}):
         "--output_all_poses",
         help="By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.",
         action="store_true",
+    )
+    output_group.add_argument(
+        "-bc",
+        "--butina_cluster",
+        help="Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output representative ligand from each cluster. Default clustering cutoff is 0.5.",
+        action="store",
+        type=float,
+        metavar="FLOAT",
+        const=0.5,
+        nargs="?",
     )
     output_group.add_argument(
         "-xs",
@@ -942,6 +952,7 @@ class CLOptionParser:
             "outfields": parsed_opts.outfields,
             "filter_bookmark": parsed_opts.filter_bookmark,
             "output_all_poses": parsed_opts.output_all_poses,
+            "butina_cluster": parsed_opts.butina_cluster,
             "results_view_name": parsed_opts.results_view_name,
             "overwrite": parsed_opts.overwrite,
             "append_results": parsed_opts.append_results,

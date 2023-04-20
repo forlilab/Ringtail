@@ -219,7 +219,7 @@ class OutputManager:
         """
         try:
             with open(self.log_file, "w") as f:
-                f.write("Filtered poses:\n")
+                f.write("Filters:\n")
                 f.write("***************\n")
         except Exception as e:
             raise OutputError("Error while creating log file") from e
@@ -260,14 +260,16 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error occurred while adding all data to plot") from e
 
-    def write_filters_to_log(self, filters_dict, included_interactions):
+    def write_filters_to_log(self, filters_dict, included_interactions, additional_info=""):
         """Takes dictionary of filters, formats as string and writes to log file
 
         Args:
+            TODO: update this
             filters_dict (dict): dictionary with filtering options
+            additional_info (str): any additional information to write to top of log file
         """
         try:
-            buff = ["##### PROPERTIES"]
+            buff = [additional_info, "##### PROPERTIES"]
             for k in Filters.get_property_filter_keys():
                 v = filters_dict.pop(k)
                 if v is not None:
