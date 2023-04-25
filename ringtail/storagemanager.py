@@ -10,8 +10,9 @@ import json
 import pandas as pd
 import logging
 import typing
+import sys
+from signal import signal, SIGINT
 from rdkit import Chem
-from rdkit.Chem import AllChem
 from rdkit import DataStructs
 from rdkit.ML.Cluster import Butina
 import numpy as np
@@ -118,6 +119,11 @@ class StorageManager:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close_storage()
+
+    def _sigint_handler(self, signal_received, frame):
+        logging.critical("Ctrl + C pressed, keyboard interupt initiated")
+        self.__exit__(None, None, None)
+        sys.exit(0)
 
     # # # # # # # # # # # # # # # # # # #
     # # # Common StorageManager methods # # #
@@ -2130,7 +2136,11 @@ class StorageManagerSQLite(StorageManager):
         If so, (if self.overwrite drop existing tables and )
         initialize the tables
         """
+        
         self.conn = self._create_connection()
+        
+        # register signal handler to catch keyboard interupts
+        signal(SIGINT, self._sigint_handler)
 
         # if we want to overwrite old db, drop existing tables
         if self.overwrite:
