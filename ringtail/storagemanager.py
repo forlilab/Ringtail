@@ -312,7 +312,7 @@ class StorageManager:
         logging.debug("Running filtering query...")
         time0 = time.perf_counter()
         filtered_results = self._run_query(filter_results_str)
-        logging.debug(f"Time to filter: {time.perf_counter() - time0:.2f} seconds")
+        logging.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
         # get number of passing ligands
         return filtered_results
 
