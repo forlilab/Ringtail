@@ -128,7 +128,6 @@ class StorageManager:
         """
 
         # checks if we have filtered by looking for view name in list of view names
-        #self._create_indices()
         if self.check_passing_view_exists():
             if only_passing:
                 return [], self._fetch_passing_plot_data()
@@ -256,7 +255,6 @@ class StorageManager:
             self.current_view_name = self.results_view_name + "_" + self.view_suffix
         else:
             self.current_view_name = self.results_view_name
-        self._create_indices(index_lignames=False)
         view_query = filter_results_str.replace(
             filter_results_str.split(" FROM ")[0], "SELECT *"
         )
@@ -635,7 +633,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _create_indices(self, index_lignames=True):
+    def create_indices(self):
         """Create indices for columns in self.index_columns
 
         Args:
@@ -2185,32 +2183,13 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
 
-    def _create_indices(self, index_lignames=True):
-        """Create indices for columns in self.index_columns
-
-        Args:
-            index_lignames (bool, optional): flag indicating that index should be created over ligand names
-
-        Raises:
-            StorageError: Description
+    def create_indices(self):
+        """Create index containing possible filter and order by columns
         """
         try:
             cur = self.conn.cursor()
-            ligname_idx_str = (
-                "CREATE INDEX IF NOT EXISTS idx_ligname ON Results(LigName)"
-            )
-            index_str = (
-                """CREATE INDEX IF NOT EXISTS idx_filter_cols ON Results({0})""".format(
-                    ", ".join(self.index_columns)
-                )
-            )
-
-            if index_lignames:
-                logging.debug("Creating LigName index...")
-                cur.execute(ligname_idx_str)
-            if self.index_columns != []:
-                logging.debug("Creating filter columns index...")
-                cur.execute(index_str)
+            logging.debug("Creating columns index...")
+            cur.execute("CREATE INDEX allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)")
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
