@@ -299,7 +299,7 @@ class Writer(multiprocessing.Process):
                     # received as many poison pills as workers
                     logging.info("Performing final database write")
                     # perform final storage write
-                    self.write_to_storage()
+                    self.write_to_storage(final=True)
                     # no workers left, no job to do
                     logging.info("File processing completed")
                     self.close()
@@ -314,7 +314,7 @@ class Writer(multiprocessing.Process):
                 )
             )
 
-    def write_to_storage(self):
+    def write_to_storage(self, final=False):
         # insert result, ligand, and receptor data
         self.storageman.insert_data(
             self.results_array,
@@ -336,6 +336,9 @@ class Writer(multiprocessing.Process):
         self.interactions_list = []
         self.receptor_array = []
         self.counter = 0
+
+        # if final write, tell storageman to index
+        self.storageman.create_indices()
 
     def process_file(self, file_packet):
         results_rows, ligand_row, interaction_rows, receptor_row = file_packet
