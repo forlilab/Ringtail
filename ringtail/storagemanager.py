@@ -1722,8 +1722,19 @@ class StorageManagerSQLite(StorageManager):
                 rec_name
             )
         )
-        rec_pickle = str(cursor.fetchone())
-        return pickle.loads(rec_pickle)
+        return str(cursor.fetchone()[0])
+
+    def fetch_receptor_objects(self):
+        """Returns all Receptor objects from database
+
+        Args:
+            rec_name (string): Name of receptor to return object for
+        """
+
+        cursor = self._run_query(
+            "SELECT RecName, receptor_object FROM Receptors"
+        )
+        return cursor.fetchall()
 
     def clone(self, backup_name=None):
         """Creates a copy of the db"""

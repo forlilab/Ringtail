@@ -394,6 +394,12 @@ def cmdline_parser(defaults={}):
         action="store_true",
     )
     output_group.add_argument(
+        "-xr",
+        "--export_receptor",
+        help="Export stored receptor pdbqt",
+        action="store_true",
+    )
+    output_group.add_argument(
         "-nd",
         "--data_from_bookmark",
         help="Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.",
