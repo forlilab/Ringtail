@@ -32,23 +32,20 @@ def cmdline_parser(defaults={}):
         for k, v in defaults[section]["values"].items():
             config[k] = v
     # separate filters into separate arguments
-    filter_keys = ["properties", "interactions", "ligand_filters"]
     replace_filter_keys = {
-        "V": "van_der_waals",
-        "H": "hydrogen_bond",
-        "R": "reactive_res",
-        "N": "name",
-        "S": "smarts",
-        "F": "smarts_join",
+        "vdw_interactions": "van_der_waals",
+        "hb_interactions": "hydrogen_bond",
+        "reactive_interactions": "reactive_res",
+        "ligand_name": "name",
+        "ligand_substruct": "smarts",
+        "ligand_operator": "smarts_join",
+        "ligand_substruct_pos": "smarts_idxyz",
+        "ligand_max_atoms": "max_nr_atoms",
     }
 
-    for fk in filter_keys:
-        filterdict = config.pop(fk)
-        for k, v in filterdict.items():
-            if k in replace_filter_keys:
-                config[replace_filter_keys[k]] = v
-            else:
-                config[k] = v
+
+    for k, v in replace_filter_keys.items():
+        config[k] = v
 
     if confargs.config is not None:
         logging.info("Reading options from config file")
@@ -70,7 +67,7 @@ def cmdline_parser(defaults={}):
                 AutoDock mailing list   http://autodock.scripps.edu/mailing_list\n
 
         COPYRIGHT
-                Copyright (C) 2022 Forli Lab, Center for Computational Structural Biology,
+                Copyright (C) 2023 Forli Lab, Center for Computational Structural Biology,
                              The Scripps Research Institute.
                 GNU L-GPL version 2.1 or later <https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html> \n
         """,
@@ -79,7 +76,7 @@ def cmdline_parser(defaults={}):
 
     subparsers = parser.add_subparsers(
         help=f"Specify if should write to or read from database. To show options of each mode use the in-line help, e.g.: {os.path.basename(__main__.__file__)} read -h",
-        dest="rr_mode",
+        dest="process_mode",
     )
 
     write_parser = subparsers.add_parser("write")
@@ -304,7 +301,7 @@ def cmdline_parser(defaults={}):
     output_group = read_parser.add_argument_group("Output options")
     output_group.add_argument(
         "-l",
-        "--log",
+        "--log_file",
         help='by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file',
         action="store",
         type=str,
@@ -315,6 +312,7 @@ def cmdline_parser(defaults={}):
         "--outfields",
         help=(
             'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
+            '"Ligand_name" (Ligand name), '
             '"e" (docking_score), '
             '"le" (ligand efficiency), '
             '"delta" (delta energy from best pose), '
@@ -586,63 +584,10 @@ def cmdline_parser(defaults={}):
 
 
 class CLOptionParser:
-    def __init__(self):
+    def __init__(self, ringtail_core):
 
-        self.outfield_options = [
-            "e",
-            "le",
-            "delta",
-            "ref_rmsd",
-            "e_inter",
-            "e_vdw",
-            "e_elec",
-            "e_intra",
-            "n_interact",
-            "interactions",
-            "fname",
-            "ligand_smile",
-            "rank",
-            "run",
-            "hb",
-            "source_file",
-        ]
-        self.order_options = {
-            "e",
-            "le",
-            "delta",
-            "ref_rmsd",
-            "e_inter",
-            "e_vdw",
-            "e_elec",
-            "e_intra",
-            "n_interact",
-            "rank",
-            "run",
-            "hb",
-        }
-
+        self.rtcore = ringtail_core
         self._initialize_parser()
-
-        # confirm that receptor file was found if needed, else throw error
-        # if only receptor files found and --save_receptor, assume we just want to
-        # add receptor and not modify the rest of the db
-        if self.save_receptor:
-            if self.storage_opts["append_results"]:
-                raise OptionError(
-                    "Cannot use --append_results with --save_receptor. Please remove the --save_receptor flag"
-                )
-            if self.receptor_file is None:
-                raise OptionError(
-                    "Must provide path for receptor PDBQT file is using --save_receptor"
-                )
-
-        # raise error if --save_receptor or --add_interactions and receptor not found
-        if (self.save_receptor or self.add_interactions) and not os.path.exists(
-            self.receptor_file
-        ):
-            raise OptionError(
-                "--save_receptor or --add_interaction flag specified but no receptor PDBQT found. Please check location of receptor file and --receptor_file option"
-            )
 
     def _initialize_parser(self):
         # create parser
@@ -662,9 +607,9 @@ class CLOptionParser:
             ) from e
         except Exception as e:
             try:
-                if self.rr_mode == "write":
+                if self.process_mode == "write":
                     self.write_parser.print_help()
-                elif self.rr_mode == "read":
+                elif self.process_mode == "read":
                     self.read_parser.print_help()
             finally:
                 logging.error("\n")
@@ -691,21 +636,17 @@ class CLOptionParser:
         if self.debug:
             logging.getLogger().setLevel(logging.DEBUG)
 
-        self.rr_mode = parsed_opts.rr_mode
-        self.pattern = parsed_opts.file_pattern
+        self.process_mode = parsed_opts.process_mode
 
-        self.filter = False  # set flag indicating if any filters given
+        filter_flag = False  # set flag indicating if any filters given
         conflict_handling = None
         file_sources = None
         self.rec_files_pool = []
-        filters = {}
+        all_filters = {}
         storage_opts = {}
-        out_opts = {}
-        self.mode = parsed_opts.mode.lower()
-        # set receptor name, add_interactions if given
-        self.rec_name = parsed_opts.receptor_file
-        self.add_interactions = parsed_opts.add_interactions
-        if self.mode == "vina":
+        parsed_opts.mode = parsed_opts.mode.lower()
+
+        if parsed_opts.mode == "vina":
             # Guard against non-compatible options being called in Vina mode
             if parsed_opts.react_any:
                 logging.warning(
@@ -744,13 +685,40 @@ class CLOptionParser:
             )
             parsed_opts.output_all_poses = False
 
-        if self.rr_mode is None:
+        if self.process_mode is None:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
-        if self.rr_mode == "write":
-            self.save_receptor = parsed_opts.save_receptor
-            self.receptor_file = parsed_opts.receptor_file
+        if self.process_mode == "write":
+            # initialize rt_process read-only options to prevent errors
+            parsed_opts.plot = None
+            parsed_opts.export_bookmark_csv = None
+            parsed_opts.export_query_csv = None
+            parsed_opts.export_bookmark_db = None
+            parsed_opts.data_from_bookmark = None
+            parsed_opts.pymol = None
+            parsed_opts.log_file = None
+            # confirm that receptor file was found if needed, else throw error
+            # if only receptor files found and --save_receptor, assume we just want to
+            # add receptor and not modify the rest of the db
+            # set receptor name, add_interactions if given
+            if parsed_opts.save_receptor:
+                if parsed_opts.append_results:
+                    raise OptionError(
+                        "Cannot use --append_results with --save_receptor. Please remove the --save_receptor flag"
+                    )
+                if parsed_opts.receptor_file is None:
+                    raise OptionError(
+                        "Must provide path for receptor PDBQT file is using --save_receptor"
+                    )
+
+            # raise error if --save_receptor or --add_interactions and receptor not found
+            if (parsed_opts.save_receptor or parsed_opts.add_interactions) and not os.path.exists(
+                parsed_opts.receptor_file
+            ):
+                raise OptionError(
+                    "--save_receptor or --add_interaction flag specified but no receptor PDBQT found. Please check location of receptor file and --receptor_file option"
+                )
             # check that required input options are provided
             file_sources = {}  # 'file':None, 'files_path':None, 'file_list':None}
             if parsed_opts.file is None:
@@ -797,9 +765,12 @@ class CLOptionParser:
                     conflict_handling = None
             # set unused read options to None
             parsed_opts.pymol = None
-        else:
-            self.save_receptor = False
-            self.receptor_file = None
+        elif self.process_mode == "read":
+            # initialize write-only rt_process options to prevent errors
+            parsed_opts.receptor_file = None
+            parsed_opts.save_receptor = None
+
+            # option compatibility checking
             if parsed_opts.input_db is None:
                 raise OptionError(
                     "No input database specified in read mode. Please specify database with --input_db"
@@ -811,26 +782,18 @@ class CLOptionParser:
                     raise OptionError(
                         "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
                     )
-                if parsed_opts.export_sdf_path is not None:
+                if parsed_opts.export_sdf_path:
                     raise OptionError(
                         "Cannot use --export_sdf_path with --max_miss > 0. Can export poses for desired bookmark --bookmark_name"
                     )
-            outfields_list = parsed_opts.outfields.split(",")
-            for outfield in outfields_list:
-                if outfield not in self.outfield_options:
-                    raise OptionError(
-                        "WARNING: {out_f} is not a valid output option. Please see --help".format(
-                            out_f=outfield
-                        )
-                    )
-            if parsed_opts.order_results is not None:
+            if parsed_opts.order_results:
                 if parsed_opts.order_results not in self.order_options:
                     raise OptionError(
                         "Requested ording option that is not available. Please see --help for available options."
                     )
             # parse output options
             # Make sure that export_sdf_path has trailing /, is directory
-            if parsed_opts.export_sdf_path is not None:
+            if parsed_opts.export_sdf_path:
                 if not parsed_opts.export_sdf_path.endswith("/"):
                     parsed_opts.export_sdf_path += "/"
                 if not os.path.isdir(parsed_opts.export_sdf_path):
@@ -839,15 +802,36 @@ class CLOptionParser:
                     )
 
             # # # filters
-            if parsed_opts.filter_bookmark == parsed_opts.results_view_name:
-                logging.error(
-                    f"Specified filter_bookmark and bookmark_name are the same: {parsed_opts.results_view_name}"
+            optional_filters = ["eworst", "ebest", "leworst", "lebest", "score_percentile", "le_percentile", "van_der_waals", "hydrogen_bond", "reactive_res", "name", "smarts", "smarts_idxyz", "max_nr_atoms"]
+            for f in optional_filters:
+                if getattr(parsed_opts, f) is not None:
+                    filter_flag = True
+            # Cannot use energy/le cuttoffs with percentiles. Override percentile with given cutoff
+            if (
+                parsed_opts.eworst is not None
+                and parsed_opts.score_percentile is not None
+            ):
+                logging.warning(
+                    "Cannot use --eworst cutoff with --score_percentile. Overiding score_percentile with eworst."
                 )
+                parsed_opts.score_percentile = None
+            if (
+                parsed_opts.leworst is not None
+                and parsed_opts.le_percentile is not None
+            ):
+                logging.warning(
+                    "Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst."
+                )
+                parsed_opts.le_percentile = None
+            if (
+                parsed_opts.score_percentile is not None
+                or parsed_opts.le_percentile is not None
+            ) and parsed_opts.filter_bookmark is not None:
                 raise OptionError(
-                    "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
+                    "Cannot use --score_percentile or --le_percentile with --filter_bookmark."
                 )
             # property filters
-            properties = {
+            property_filters = {
                 "eworst": None,
                 "ebest": None,
                 "leworst": None,
@@ -855,40 +839,14 @@ class CLOptionParser:
                 "score_percentile": None,
                 "le_percentile": None,
             }
-            for kw, _ in properties.items():
-                properties[kw] = getattr(parsed_opts, kw)
-                if properties[kw] is not None:
-                    self.filter = True
-            # Cannot use energy/le cuttoffs with percentiles. Override percentile with given cutoff
-            if (
-                properties["eworst"] is not None
-                and properties["score_percentile"] is not None
-            ):
-                logging.warning(
-                    "Cannot use --eworst cutoff with --score_percentile. Overiding score_percentile with eworst."
-                )
-                properties["score_percentile"] = None
-            if (
-                properties["leworst"] is not None
-                and properties["le_percentile"] is not None
-            ):
-                logging.warning(
-                    "Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst."
-                )
-                properties["le_percentile"] = None
-            if (
-                properties["score_percentile"] is not None
-                or properties["le_percentile"] is not None
-            ) and parsed_opts.filter_bookmark is not None:
-                raise OptionError(
-                    "Cannot use --score_percentile or --le_percentile with --filter_bookmark."
-                )
+            for kw, _ in property_filters.items():
+                property_filters[kw] = getattr(parsed_opts, kw)
             # interaction filters (residues)
             interactions = {}
             res_interactions_kw = [
-                ("van_der_waals", "V"),
-                ("hydrogen_bond", "H"),
-                ("reactive_res", "R"),
+                ("van_der_waals", "vdw_interactions"),
+                ("hydrogen_bond", "hb_interactions"),
+                ("reactive_res", "reactive_interactions"),
             ]
             for opt, _type in res_interactions_kw:
                 interactions[_type] = []
@@ -918,22 +876,17 @@ class CLOptionParser:
                         res = res[1:]
                         wanted = False
                     interactions[_type].append((res, wanted))
-                    self.filter = True
             # count interactions
             interactions_count = []
-            count_kw = [("hb_count", ("hb_count")), ("react_count", ("R"))]
+            count_kw = [("hb_count", ("hb_count"))]
             for kw, pool in count_kw:
                 c = getattr(parsed_opts, kw, None)
                 if c is None:
                     continue
                 interactions_count.append((pool, c))
-                self.filter = True
-            if parsed_opts.react_any is not None:
-                self.filter = True
             # make dictionary for ligand filters
-            ligand_filters_kw = [("name", "N"), ("smarts", "S"), ("smarts_idxyz", "X"), ("max_nr_atoms", "M")]
+            ligand_filters_kw = [("name", "ligand_name"), ("smarts", "ligand_substruct"), ("smarts_idxyz", "ligand_substruct_pos"), ("max_nr_atoms", "ligand_max_atoms")]
             ligand_filters = {}
-            filter_ligands_flag = True
             ligand_filter_list = []
             for kw, _type in ligand_filters_kw:
                 ligand_filter_list = getattr(parsed_opts, kw)
@@ -945,7 +898,7 @@ class CLOptionParser:
                     continue
                 for fil in ligand_filter_list:
                     ligand_filters[_type].append(fil)
-            if len(ligand_filters["X"]) % 6 != 0:
+            if ligand_filters["ligand_max_atoms"] is not None and len(ligand_filters["ligand_max_atoms"]) % 6 != 0:
                 msg = "--smarts_idxyz needs groups of 6 values:\n"
                 msg += "  1. SMARTS\n"
                 msg += "  2. index of atom in SMARTS (0 based)\n"
@@ -955,88 +908,89 @@ class CLOptionParser:
                 msg += "  6. Z\n"
                 msg += "For example --smarts_idxyz \"[C][Oh]\" 1 1.5 -20. 42. -7.1"
                 raise OptionError(msg)
-            ligand_filters["F"] = getattr(parsed_opts, "smarts_join")
-            if ligand_filters["N"] == [] and ligand_filters["S"] == [] and ligand_filters["X"] == [] and ("M" not in ligand_filters or ligand_filters["M"] is None):
-                filter_ligands_flag = False
-            if filter_ligands_flag:
-                self.filter = True
+            ligand_filters["ligand_operator"] = getattr(parsed_opts, "smarts_join")
 
-            filters = {
-                "properties": properties,
-                "interactions": interactions,
-                "interactions_count": interactions_count,
-                "ligand_filters": ligand_filters,
-                "filter_ligands_flag": filter_ligands_flag,
-                "max_miss": parsed_opts.max_miss,
-                "react_any": parsed_opts.react_any,
-            }
+            all_filters = property_filters | ligand_filters | interactions
 
-        out_opts = {
-            "log": parsed_opts.log,
-            "export_sdf_path": parsed_opts.export_sdf_path,
+        # set all object options for both read and write mode
+
+        self.rt_process_options = {
+            "filter": filter_flag,
+            "verbose": parsed_opts.verbose,  # both modes
+            "debug": parsed_opts.debug,  # both modes
+            "summary": parsed_opts.summary,  # both modes
             "plot": parsed_opts.plot,
-            "outfields": parsed_opts.outfields,
-            "no_print": not parsed_opts.verbose,
             "export_bookmark_csv": parsed_opts.export_bookmark_csv,
             "export_query_csv": parsed_opts.export_query_csv,
             "export_bookmark_db": parsed_opts.export_bookmark_db,
             "data_from_bookmark": parsed_opts.data_from_bookmark,
-            "filter_bookmark": parsed_opts.filter_bookmark,
-            "summary": parsed_opts.summary,
             "pymol": parsed_opts.pymol,
+            "export_sdf_path": parsed_opts.export_sdf_path,
+            "receptor_file": parsed_opts.receptor_file,  # write only
+            "save_receptor": parsed_opts.save_receptor,  # write only
         }
 
-        storage_opts = {
-            "order_results": parsed_opts.order_results,
-            "output_all_poses": parsed_opts.output_all_poses,
-            "results_view_name": parsed_opts.results_view_name,
-            "overwrite": parsed_opts.overwrite,
-            "append_results": parsed_opts.append_results,
-            "conflict_opt": conflict_handling,
-            "mode": self.mode,
-            "storage_type": "sqlite",
-        }
+        # set core filter attributes
+        all_filters["react_any"] = parsed_opts.react_any
+        for k,v in all_filters.items():
+            setattr(self.rtcore.filters, k, v)
 
-        if isinstance(parsed_opts.interaction_tolerance, str):
-            parsed_opts.interaction_tolerance = [
-                float(val) for val in parsed_opts.interaction_cutoffs.split(",")
-            ]
-        rman_opts = {
-            "chunk_size": 1,
-            "mode": self.mode,
-            "store_all_poses": parsed_opts.store_all_poses,
-            "max_poses": parsed_opts.max_poses,
-            "interaction_tolerance": parsed_opts.interaction_tolerance,
-            "add_interactions": parsed_opts.add_interactions,
-            "interaction_cutoffs": parsed_opts.interaction_cutoffs,
-            "receptor_file": parsed_opts.receptor_file,
-            "file_sources": file_sources,
-            "file_pattern": self.pattern,
-            "parser_manager": "multiprocessing",
-            "max_proc": parsed_opts.max_proc,
-        }
-
-        # save target name
-        if rman_opts["receptor_file"] is not None:
-            receptor = (
-                rman_opts["receptor_file"].split(".")[0].split("/")[-1]
-            )  # remove file extension and path
-        else:
-            receptor = None
-        rman_opts["target"] = receptor
-
-        self.file_sources = file_sources
-        self.input_db = parsed_opts.input_db
+        # set storageman opts
         if parsed_opts.input_db is not None:
             dbFile = parsed_opts.input_db
             if not os.path.exists(dbFile):
                 raise OptionError("WARNING: input database does not exist!")
         else:
             dbFile = parsed_opts.output_db
-        storage_opts["db_file"] = dbFile
+        storage_opts = {
+            "db_file": dbFile,
+            "order_results": parsed_opts.order_results,
+            "outfields": parsed_opts.outfields,
+            "filter_bookmark": parsed_opts.filter_bookmark,
+            "output_all_poses": parsed_opts.output_all_poses,
+            "results_view_name": parsed_opts.results_view_name,
+            "overwrite": parsed_opts.overwrite,
+            "append_results": parsed_opts.append_results,
+            "conflict_opt": conflict_handling,
+        }
+        for k,v in storage_opts.items():
+            setattr(self.rtcore.storageman, k, v)
 
-        # make attributes for parsed opts
-        self.storage_opts = storage_opts
-        self.filters = filters
-        self.out_opts = out_opts
-        self.rman_opts = rman_opts
+        # prepare and set results_man opts
+        if isinstance(parsed_opts.interaction_tolerance, str):
+            parsed_opts.interaction_tolerance = [
+                float(val) for val in parsed_opts.interaction_cutoffs.split(",")
+            ]
+         # save target name
+        if parsed_opts.receptor_file is not None:
+            receptor = (
+                os.path.basename(parsed_opts.receptor_file).split(".")[0]
+            )  # remove file extension and path
+        else:
+            receptor = None
+        logging.debug(file_sources)
+        rman_opts = {
+            "chunk_size": 1,
+            "mode": parsed_opts.mode,
+            "store_all_poses": parsed_opts.store_all_poses,
+            "max_poses": parsed_opts.max_poses,
+            "interaction_tolerance": parsed_opts.interaction_tolerance,
+            "add_interactions": parsed_opts.add_interactions,
+            "interaction_cutoffs": parsed_opts.interaction_cutoffs,
+            "receptor_file": parsed_opts.receptor_file,
+            "target": receptor,
+            "file_sources": file_sources,
+            "file_pattern": parsed_opts.file_pattern,
+            "parser_manager": "multiprocessing",
+            "max_proc": parsed_opts.max_proc,
+        }
+        for k,v in rman_opts.items():
+            setattr(self.rtcore.results_man, k, v)
+
+        # set outputman options
+        outman_opts = {
+            "log_file": parsed_opts.log_file,
+            "export_sdf_path": parsed_opts.export_sdf_path,
+        }
+        for k,v in outman_opts.items():
+            setattr(self.rtcore.output_manager, k, v)
