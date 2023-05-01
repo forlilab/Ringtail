@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>542</width>
+    <height>128</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="0" column="0" colspan="2">
+    <widget class="QLabel" name="interactionTypeLabel">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="text">
+      <string>Select interaction type:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="2" colspan="2">
+    <widget class="QComboBox" name="interactionTypeComboBox"/>
+   </item>
+   <item row="0" column="4">
+    <widget class="QRadioButton" name="wantedRadioButton">
+     <property name="text">
+      <string>Enable</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="5">
+    <widget class="QRadioButton" name="unwantedRadioButton">
+     <property name="text">
+      <string>Disable</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="interactionChainLabel">
+     <property name="text">
+      <string>Chain:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1" colspan="2">
+    <widget class="QLabel" name="interactionResTypeLabel">
+     <property name="text">
+      <string>Res Type:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="3">
+    <widget class="QLabel" name="interactionResNLabel">
+     <property name="text">
+      <string>Res #:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="4" colspan="2">
+    <widget class="QLabel" name="interactionAtomNameLabel">
+     <property name="text">
+      <string>Atom Name:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QComboBox" name="interactionChainComboBox"/>
+   </item>
+   <item row="2" column="1" colspan="2">
+    <widget class="QComboBox" name="interactionResTypeComboBox"/>
+   </item>
+   <item row="2" column="3">
+    <widget class="QComboBox" name="interactionResNComboBox"/>
+   </item>
+   <item row="2" column="4" colspan="2">
+    <widget class="QComboBox" name="interactionAtomNameComboBox"/>
+   </item>
+   <item row="3" column="4" colspan="2">
+    <widget class="QDialogButtonBox" name="interactionDialogButtonBox">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

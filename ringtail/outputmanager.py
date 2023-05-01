@@ -11,6 +11,7 @@ import logging
 import typing
 import json
 import numpy as np
+
 import time
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -41,7 +42,7 @@ class OutputManager:
         if _stop_at_defaults:
             return
         self._log_open = False
-    
+
     @classmethod
     def get_defaults(cls):
         return cls(_stop_at_defaults=True).__dict__

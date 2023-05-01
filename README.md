@@ -13,6 +13,8 @@ Ringtail reads collections of Docking Log File (DLG) or PDBQT results from virtu
 a SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of a simple result scatterplot, export of 
 molecule SDFs, and export of CSVs of result data. Result file parsing is parallelized across the user's CPU.
 
+**The pre-print publication describing the design, implementation, and features of Ringtail may be found on [ChemRxiv](https://chemrxiv.org/engage/chemrxiv/article-details/6372bfc874b7b6da1efd9527).**
+
 Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
@@ -36,9 +38,21 @@ It is recommended that you create a new Conda environment for installing Ringtai
 - [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
 - [Multiprocess](https://pypi.org/project/multiprocess/) (MacOS only)
 
-Installation from source code is outlined below:
+### Installation (from PyPI)
+Please note that Ringtail requires Python 3.9 or 3.10.
+
+```bash
+$ pip install ringtail
 ```
-$ conda create -n ringtail
+If using conda, `pip` installs the package in the active environment.
+Also note that if using MacOS, you may need to install Multiprocess separately:
+```bash
+$ pip install multiprocess
+```
+
+### Installation (from source code)
+```
+$ conda create -n ringtail python=3.10
 $ conda activate ringtail
 ```
 After this, navigate to the desired directory for installing Ringtail and do the following:
@@ -82,7 +96,7 @@ Let us begin in the Ringtail directory. First, we must navigate to the test data
 ```
 $ cd test/test_data/
 ```
-Now, let us create a database containing the results from only group 1:
+Now, let us create a database containing the results from only group 1. Note that these files are DLGs. If we were using Vina PDBQTs, we would need to add `--mode vina`.
 ```
 $ rt_process_vs.py write --file_path group1
 ```
@@ -436,7 +450,7 @@ with RingtailCore(**opts) as rt_core:
 ```
 #### Convert database tables to pandas dataframes
 ```
-from ringtail import DBManagerSQLite
+from ringtail import StorageManagerSQLite
 
 # make database manager with connection to SQLite file vs.db
 with StorageManagerSQLite("vs.db") as dbman:
@@ -457,3 +471,55 @@ with StorageManagerSQLite("vs.db") as dbman:
     interaction_bv_df = dbman.to_dataframe("Interaction_bitvectors")
 
 ```
+#### Make an ROC plot and calculate its AUC for a virtual screening with a file containing a list of known binders
+```
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import auc
+import matplotlib.pyplot as plt
+from ringtail import RingtailCore, StorageManagerSQLite
+
+# make database manager with connection to SQLite file output.db
+with StorageManagerSQLite("output.db") as dbman:
+
+    # fetch entire Results table as pandas dataframe
+    results_df = dbman.to_dataframe("Select LigName FROM Results GROUP BY LigName ORDER BY energies_binding", table=False)
+
+print(results_df)
+
+with open("binders.txt", 'r') as f:
+    binders = [l.strip() for l in f.readlines() if l != ""]
+
+num_actives = len(binders)
+num_decoys = len(results_df) - num_actives
+
+roc_tpr = []
+roc_fpr = []
+tp = 0
+fp = 0
+i = 1
+for l in results_df["LigName"]:
+    print("Testing cutoff:", i)
+    i += 1
+    if l in binders:
+        tp += 1
+    else:
+        fp += 1
+    roc_tpr.append(tp / num_actives)
+    roc_fpr.append(fp / num_decoys)
+auc = auc(roc_fpr, roc_tpr)
+
+with open("auc.txt", 'w') as f:
+    f.write(str(auc))
+
+plt.plot(roc_fpr, roc_tpr)
+x = np.linspace(0,1)
+plt.plot(x, x, linestyle="--")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.show()
+```
+

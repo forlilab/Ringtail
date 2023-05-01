@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>450</width>
+    <height>287</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Dialog</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="0" column="0" colspan="3">
+    <widget class="QRadioButton" name="ligandNameRadioButton">
+     <property name="text">
+      <string>Ligand Name</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="5" colspan="2">
+    <widget class="QRadioButton" name="ligandSubstructureRadioButton">
+     <property name="text">
+      <string>Substructure Match</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="ligandNameLabel">
+     <property name="text">
+      <string>Name:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1" colspan="5">
+    <widget class="QLineEdit" name="ligandNameLineEdit"/>
+   </item>
+   <item row="2" column="0" colspan="2">
+    <widget class="QLabel" name="substructureLabel">
+     <property name="text">
+      <string>Substructure:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="3" colspan="3">
+    <widget class="QLineEdit" name="substructureLineEdit"/>
+   </item>
+   <item row="3" column="0" colspan="4">
+    <widget class="QCheckBox" name="coordinatesCheckBox">
+     <property name="text">
+      <string>Include coordinates</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0" colspan="3">
+    <widget class="QLabel" name="coordinatesLabel">
+     <property name="text">
+      <string>Coordinates (x, y, z):</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="5">
+    <widget class="QLabel" name="cutoffLabel">
+     <property name="text">
+      <string>Cutoff:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="6">
+    <widget class="QLabel" name="indexLabel">
+     <property name="text">
+      <string>Index:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="0" colspan="2">
+    <widget class="QDoubleSpinBox" name="xDoubleSpinBox">
+     <property name="minimum">
+      <double>-300.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>300.000000000000000</double>
+     </property>
+     <property name="value">
+      <double>0.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="2" colspan="2">
+    <widget class="QDoubleSpinBox" name="yDoubleSpinBox">
+     <property name="minimum">
+      <double>-300.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>300.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="4">
+    <widget class="QDoubleSpinBox" name="zDoubleSpinBox">
+     <property name="minimum">
+      <double>-300.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>300.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="5">
+    <widget class="QDoubleSpinBox" name="cutoffDoubleSpinBox">
+     <property name="maximum">
+      <double>300.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="6">
+    <widget class="QSpinBox" name="indexSpinBox">
+     <property name="maximum">
+      <number>500</number>
+     </property>
+    </widget>
+   </item>
+   <item row="6" column="5" colspan="2">
+    <widget class="QDialogButtonBox" name="okCancelButtonBox">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
