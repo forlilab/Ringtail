@@ -5,11 +5,14 @@
 #
 
 from.filters import Filters
+from.receptormanager import blob2str
 from .exceptions import OutputError
 import logging
 import typing
 import json
 import numpy as np
+
+import time
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib import colors
@@ -38,7 +41,8 @@ class OutputManager:
         self.export_sdf_path = export_sdf_path
         if _stop_at_defaults:
             return
-    
+        self._log_open = False
+
     @classmethod
     def get_defaults(cls):
         return cls(_stop_at_defaults=True).__dict__
@@ -46,6 +50,10 @@ class OutputManager:
     @classmethod
     def get_default_types(cls):
         return typing.get_type_hints(cls.__init__)
+
+    def close_log(self):
+        if self._log_open:
+            self.log_file.close()
 
     def plot_all_data(self, binned_data):
         """takes dictionary of binned data where key is the
@@ -129,12 +137,17 @@ class OutputManager:
                 writing into log
         """
         try:
+            time0 = time.perf_counter()
+            num_passing = 0
             for line in lines:
                 logging.info(line)
                 self._write_log_line(
                     str(line).replace("(", "").replace(")", "")
                 )  # strip parens from line, which is natively a tuple
+                num_passing += 1
             self._write_log_line("***************\n")
+            logging.debug(f"Time to write log: {time.perf_counter() - time0:.2f} seconds")
+            return num_passing
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
 
@@ -145,9 +158,8 @@ class OutputManager:
             line (string): Line to write to log
         """
         try:
-            with open(self.log_file, "a") as f:
-                f.write(line)
-                f.write("\n")
+            self.log_file.write(line)
+            self.log_file.write("\n")
         except Exception as e:
             raise OutputError(f"Error writing line {line} to log") from e
 
@@ -159,14 +171,13 @@ class OutputManager:
             number_passing_ligands (int): number of ligands that passed filter
         """
         try:
-            with open(self.log_file, "a") as f:
-                f.write("\n")
-                f.write(
+            self.log_file.write("\n")
+            self.log_file.write(
                     "Number passing ligands: {num} \n".format(
                         num=str(number_passing_ligands)
                     )
                 )
-                f.write("---------------\n")
+            self.log_file.write("---------------\n")
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
 
@@ -177,9 +188,8 @@ class OutputManager:
             bookmark_name (string): name of current results' bookmark in db
         """
         try:
-            with open(self.log_file, "a") as f:
-                f.write("\n")
-                f.write(f"Result bookmark name: {bookmark_name}\n")
+            self.log_file.write("\n")
+            self.log_file.write(f"Result bookmark name: {bookmark_name}\n")
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
@@ -217,10 +227,11 @@ class OutputManager:
         """
         Initializes log file
         """
+        self.log_file = open(self.log_file, 'w')
+        self._log_open = True
         try:
-            with open(self.log_file, "w") as f:
-                f.write("Filtered poses:\n")
-                f.write("***************\n")
+            self.log_file.write("Filters:\n")
+            self.log_file.write("***************\n")
         except Exception as e:
             raise OutputError("Error while creating log file") from e
 
@@ -260,14 +271,16 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error occurred while adding all data to plot") from e
 
-    def write_filters_to_log(self, filters_dict, included_interactions):
+    def write_filters_to_log(self, filters_dict, included_interactions, additional_info=""):
         """Takes dictionary of filters, formats as string and writes to log file
 
         Args:
+            TODO: update this
             filters_dict (dict): dictionary with filtering options
+            additional_info (str): any additional information to write to top of log file
         """
         try:
-            buff = ["##### PROPERTIES"]
+            buff = [additional_info, "##### PROPERTIES"]
             for k in Filters.get_property_filter_keys():
                 v = filters_dict.pop(k)
                 if v is not None:
@@ -314,3 +327,8 @@ class OutputManager:
 
         except Exception as e:
             raise OutputError("Error occurred while writing filters to log") from e
+
+    def write_receptor_pdbqt(self, recname, receptor_compbytes):
+        receptor_str = blob2str(receptor_compbytes)
+        with open(recname, 'w') as f:
+            f.write(receptor_str)

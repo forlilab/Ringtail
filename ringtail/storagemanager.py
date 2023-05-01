@@ -11,6 +11,7 @@ import pandas as pd
 import logging
 import typing
 from rdkit import Chem
+import time
 
 try:
     import cPickle as pickle
@@ -264,7 +265,9 @@ class StorageManager:
         self._insert_bookmark_info(self.current_view_name, view_query, all_filters)
         # perform filtering
         logging.debug("Running filtering query")
+        time0 = time.perf_counter()
         filtered_results = self._run_query(filter_results_str)
+        logging.debug(f"Time to filter: {time.perf_counter() - time0:.2f} seconds")
         # get number of passing ligands
         return filtered_results
 
@@ -1744,8 +1747,19 @@ class StorageManagerSQLite(StorageManager):
                 rec_name
             )
         )
-        rec_pickle = str(cursor.fetchone())
-        return pickle.loads(rec_pickle)
+        return str(cursor.fetchone()[0])
+
+    def fetch_receptor_objects(self):
+        """Returns all Receptor objects from database
+
+        Args:
+            rec_name (string): Name of receptor to return object for
+        """
+
+        cursor = self._run_query(
+            "SELECT RecName, receptor_object FROM Receptors"
+        )
+        return cursor.fetchall()
 
     def clone(self, backup_name=None):
         """Creates a copy of the db"""

@@ -39,7 +39,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=required_modules,
-    python_requires=">=3.9.*",
+    python_requires=">=3.9",
     license="L-GPL-v2.1",
     keywords=["virtual screening", "molecular modeling", "drug discovery", "drug design", "docking", "autodock"],
     classifiers=[

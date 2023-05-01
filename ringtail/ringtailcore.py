@@ -587,6 +587,14 @@ class RingtailCore:
         db_clone.prune()
         db_clone.close_storage(vacuum=True)
 
+    def export_receptors(self):
+        receptor_tuples = self.storageman.fetch_receptor_objects()
+        for recname, recblob in receptor_tuples:
+            if recblob is None:
+                logging.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
+                continue
+            self.output_manager.write_receptor_pdbqt(recname, recblob)
+
     def close_storage(self):
         """Tell database we are done and it can close the connection"""
         self.storageman.close_storage()
