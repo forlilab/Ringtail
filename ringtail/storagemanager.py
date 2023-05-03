@@ -5,12 +5,17 @@
 #
 
 import sqlite3
-import os
+import time
 import json
 import pandas as pd
 import logging
 import typing
+import sys
+from signal import signal, SIGINT
 from rdkit import Chem
+from rdkit import DataStructs
+from rdkit.ML.Cluster import Butina
+import numpy as np
 import time
 
 try:
@@ -115,6 +120,11 @@ class StorageManager:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close_storage()
+
+    def _sigint_handler(self, signal_received, frame):
+        logging.critical("Ctrl + C pressed, keyboard interupt initiated")
+        self.__exit__(None, None, None)
+        sys.exit(0)
 
     # # # # # # # # # # # # # # # # # # #
     # # # Common StorageManager methods # # #
@@ -256,6 +266,40 @@ class StorageManager:
             self.current_view_name = self.results_view_name + "_" + self.view_suffix
         else:
             self.current_view_name = self.results_view_name
+        # if clustering is requested, do that before saving view or filtering results for output
+        if self.butina_cluster is not None:
+            #cur = self.conn.cursor()
+            #cur.execute(f"CREATE TEMP TABLE unclustered_results AS {filter_results_str.replace(filter_results_str.split(' FROM ')[0], 'SELECT LigName')}")
+            #cur.execute("CREATE VIRTUAL TABLE morganFPs USING rdtree(LigName, fp bits(1024))")
+            #cur.execute("INSERT INTO morganFPs(LigName, fp) SELECT LigName, mol_morgan_bfp(ligand_rdmol, 2, 1024) FROM Ligands WHERE LigName IS IN (Select LigName FROM unclustered_results)")
+            logging.warning("WARNING: Butina clustering is memory-constrained. Using overly-permissive filters with Butina clustering may cause issues.")# TODO: remove this memory bottleneck
+            poseid_leff_mfps = self._run_query(f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({filter_results_str.replace(filter_results_str.split(' FROM ')[0], 'SELECT Pose_ID')})").fetchall()
+            #Define clustering setup
+            def clusterFps(fps):  #https://www.macinchem.org/reviews/clustering/clustering.php
+
+                # first generate the distance matrix:
+                dists = []
+                nfps = len(fps)
+                for i in range(1,nfps):
+                    sims = DataStructs.BulkTanimotoSimilarity(fps[i],fps[:i])
+                    dists.extend([1-x for x in sims])
+
+                # now cluster the data:
+                cs = Butina.ClusterData(dists,nfps,self.butina_cluster,isDistData=True)
+                return cs
+
+            bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps])
+            logging.info(f"Number of Butina clusters: {len(bclusters)}")
+            
+            # select ligand from each cluster with best ligand efficiency
+            bc_rep_poseids = []
+            for c in bclusters:
+                c_leffs = np.array([poseid_leff_mfps[i][1] for i in c])
+                best_lig_c = poseid_leff_mfps[c[np.argmin(c_leffs)]][0]
+                bc_rep_poseids.append(str(best_lig_c))
+
+            filter_results_str = filter_results_str.split(' WHERE ')[0] + " WHERE Pose_ID=" + " OR Pose_ID=".join(bc_rep_poseids)
+
         view_query = filter_results_str.replace(
             filter_results_str.split(" FROM ")[0], "SELECT *"
         )
@@ -264,10 +308,12 @@ class StorageManager:
         )  # make sure we keep Pose_ID in view
         self._insert_bookmark_info(self.current_view_name, view_query, all_filters)
         # perform filtering
-        logging.debug("Running filtering query")
+
+        logging.debug("Running filtering query...")
         time0 = time.perf_counter()
         filtered_results = self._run_query(filter_results_str)
-        logging.debug(f"Time to filter: {time.perf_counter() - time0:.2f} seconds")
+        logging.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
+
         # get number of passing ligands
         return filtered_results
 
@@ -712,7 +758,7 @@ class StorageManager:
         """Create table for ligands. Columns are:
         LigName             VARCHAR NOT NULL,
         ligand_smile        VARCHAR[],
-        ligand_rdmol        VARCHAR[],
+        ligand_rdmol        MOL,
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
         input_model         VARCHAR[]
@@ -1139,6 +1185,7 @@ class StorageManagerSQLite(StorageManager):
         outfields: str = "Ligand_name,e",
         filter_bookmark: str = None,
         output_all_poses: bool = None,
+        butina_cluster: float = None,
         results_view_name: str = "passing_results",
         overwrite: bool = None,
         conflict_opt: str = None,
@@ -1153,8 +1200,11 @@ class StorageManagerSQLite(StorageManager):
         """
         self.append_results = append_results
         self.order_results = order_results
+        if "Ligand_name" not in outfields:  # make sure we are outputting the ligand name
+            outfields = "Ligand_name," + outfields
         self.outfields = outfields
         self.output_all_poses = output_all_poses
+        self.butina_cluster = butina_cluster
         self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
         self.overwrite = overwrite
@@ -2098,7 +2148,11 @@ class StorageManagerSQLite(StorageManager):
         If so, (if self.overwrite drop existing tables and )
         initialize the tables
         """
+        
         self.conn = self._create_connection()
+        
+        # register signal handler to catch keyboard interupts
+        signal(SIGINT, self._sigint_handler)
 
         # if we want to overwrite old db, drop existing tables
         if self.overwrite:
@@ -2972,7 +3026,7 @@ class StorageManagerSQLite(StorageManager):
                             raise DatabaseQueryError(f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen.")
                     substruct_sql_str = " mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}".format(
                         smarts=smarts, logical_operator=logical_operator)
-                sql_ligand_string += substruct_sql_str
+                    sql_ligand_string += substruct_sql_str
         if sql_ligand_string.endswith("AND"):
             sql_ligand_string = sql_ligand_string.rstrip("AND")
         if sql_ligand_string.endswith("OR"):
