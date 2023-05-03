@@ -11,7 +11,6 @@ import logging
 import typing
 import json
 import numpy as np
-
 import time
 import matplotlib.pyplot as plt
 from matplotlib import cm

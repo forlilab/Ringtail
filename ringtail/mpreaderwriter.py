@@ -337,8 +337,9 @@ class Writer(multiprocessing.Process):
         self.receptor_array = []
         self.counter = 0
 
-        # if final write, tell storageman to index
-        self.storageman.create_indices()
+        if final:
+            # if final write, tell storageman to index
+            self.storageman.create_indices()
 
     def process_file(self, file_packet):
         results_rows, ligand_row, interaction_rows, receptor_row = file_packet
