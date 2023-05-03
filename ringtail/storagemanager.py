@@ -16,6 +16,7 @@ from rdkit import Chem
 from rdkit import DataStructs
 from rdkit.ML.Cluster import Butina
 import numpy as np
+import time
 
 try:
     import cPickle as pickle
@@ -307,10 +308,12 @@ class StorageManager:
         )  # make sure we keep Pose_ID in view
         self._insert_bookmark_info(self.current_view_name, view_query, all_filters)
         # perform filtering
+
         logging.debug("Running filtering query...")
         time0 = time.perf_counter()
         filtered_results = self._run_query(filter_results_str)
         logging.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
+
         # get number of passing ligands
         return filtered_results
 
@@ -1794,8 +1797,19 @@ class StorageManagerSQLite(StorageManager):
                 rec_name
             )
         )
-        rec_pickle = str(cursor.fetchone())
-        return pickle.loads(rec_pickle)
+        return str(cursor.fetchone()[0])
+
+    def fetch_receptor_objects(self):
+        """Returns all Receptor objects from database
+
+        Args:
+            rec_name (string): Name of receptor to return object for
+        """
+
+        cursor = self._run_query(
+            "SELECT RecName, receptor_object FROM Receptors"
+        )
+        return cursor.fetchall()
 
     def clone(self, backup_name=None):
         """Creates a copy of the db"""
@@ -2237,14 +2251,8 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
 
-    def create_indices(self, index_lignames=True):
-        """Create indices for columns in self.index_columns
-
-        Args:
-            index_lignames (bool, optional): flag indicating that index should be created over ligand names
-
-        Raises:
-            StorageError: Description
+    def create_indices(self):
+        """Create index containing possible filter and order by columns
         """
         try:
             cur = self.conn.cursor()

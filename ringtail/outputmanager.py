@@ -5,6 +5,7 @@
 #
 
 from.filters import Filters
+from.receptormanager import blob2str
 from .exceptions import OutputError
 import logging
 import typing
@@ -40,7 +41,7 @@ class OutputManager:
         if _stop_at_defaults:
             return
         self._log_open = False
-    
+
     @classmethod
     def get_defaults(cls):
         return cls(_stop_at_defaults=True).__dict__
@@ -325,3 +326,8 @@ class OutputManager:
 
         except Exception as e:
             raise OutputError("Error occurred while writing filters to log") from e
+
+    def write_receptor_pdbqt(self, recname, receptor_compbytes):
+        receptor_str = blob2str(receptor_compbytes)
+        with open(recname, 'w') as f:
+            f.write(receptor_str)
