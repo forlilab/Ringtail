@@ -915,6 +915,7 @@ class CLOptionParser:
             ligand_filters["ligand_operator"] = getattr(parsed_opts, "smarts_join")
 
             all_filters = property_filters | ligand_filters | interactions
+            all_filters["max_miss"] = parsed_opts.max_miss
 
         # set all object options for both read and write mode
 
