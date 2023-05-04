@@ -257,7 +257,7 @@ class StorageManager:
             SQLite Cursor: Cursor of passing results
         """
         # create view of passing results
-        filter_results_str = self._generate_result_filtering_query(
+        filter_results_str, view_query = self._generate_result_filtering_query(
             all_filters
         )
         logging.debug(filter_results_str)
@@ -266,43 +266,7 @@ class StorageManager:
             self.current_view_name = self.results_view_name + "_" + self.view_suffix
         else:
             self.current_view_name = self.results_view_name
-        # if clustering is requested, do that before saving view or filtering results for output
-        if self.butina_cluster is not None:
-            #cur = self.conn.cursor()
-            #cur.execute(f"CREATE TEMP TABLE unclustered_results AS {filter_results_str.replace(filter_results_str.split(' FROM ')[0], 'SELECT LigName')}")
-            #cur.execute("CREATE VIRTUAL TABLE morganFPs USING rdtree(LigName, fp bits(1024))")
-            #cur.execute("INSERT INTO morganFPs(LigName, fp) SELECT LigName, mol_morgan_bfp(ligand_rdmol, 2, 1024) FROM Ligands WHERE LigName IS IN (Select LigName FROM unclustered_results)")
-            logging.warning("WARNING: Butina clustering is memory-constrained. Using overly-permissive filters with Butina clustering may cause issues.")# TODO: remove this memory bottleneck
-            poseid_leff_mfps = self._run_query(f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({filter_results_str.replace(filter_results_str.split(' FROM ')[0], 'SELECT Pose_ID')})").fetchall()
-            #Define clustering setup
-            def clusterFps(fps):  #https://www.macinchem.org/reviews/clustering/clustering.php
 
-                # first generate the distance matrix:
-                dists = []
-                nfps = len(fps)
-                for i in range(1,nfps):
-                    sims = DataStructs.BulkTanimotoSimilarity(fps[i],fps[:i])
-                    dists.extend([1-x for x in sims])
-
-                # now cluster the data:
-                cs = Butina.ClusterData(dists,nfps,self.butina_cluster,isDistData=True)
-                return cs
-
-            bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps])
-            logging.info(f"Number of Butina clusters: {len(bclusters)}")
-            
-            # select ligand from each cluster with best ligand efficiency
-            bc_rep_poseids = []
-            for c in bclusters:
-                c_leffs = np.array([poseid_leff_mfps[i][1] for i in c])
-                best_lig_c = poseid_leff_mfps[c[np.argmin(c_leffs)]][0]
-                bc_rep_poseids.append(str(best_lig_c))
-
-            filter_results_str = filter_results_str.split(' WHERE ')[0] + " WHERE Pose_ID=" + " OR Pose_ID=".join(bc_rep_poseids)
-
-        view_query = filter_results_str.replace(
-            filter_results_str.split(" FROM ")[0], "SELECT *"
-        )
         self._create_view(
             self.current_view_name, view_query
         )  # make sure we keep Pose_ID in view
@@ -2810,6 +2774,7 @@ class StorageManagerSQLite(StorageManager):
 
         # for each interaction filter, get the index
         # from the interactions_indices table
+        interaction_queries = []
         for interaction in interaction_filters:
             interaction = [self.interaction_name_to_letter[interaction[0]]] + interaction[1:]
             interaction_filter_indices = []
@@ -2843,7 +2808,7 @@ class StorageManagerSQLite(StorageManager):
                     "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
                 )
             # find pose ids for ligands with desired interactions
-            queries.append(
+            interaction_queries.append(
                 "Pose_ID {include_str} ({interaction_str})".format(
                     include_str=include_str,
                     interaction_str=self._generate_interaction_filtering_query(
@@ -2911,16 +2876,27 @@ class StorageManagerSQLite(StorageManager):
                             break # add pose only once
                 queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
             cur.close()
-        # initialize query string
+        # format query string
         # raise error if query string is empty
-        if queries == []:
+        if queries == [] and interaction_queries == []:
             raise DatabaseQueryError(
-                "Query string is empty. Please check filter options and ensure requested interactions are present."
+                "Query strings are empty. Please check filter options and ensure requested interactions are present."
             )
-        sql_string = """SELECT {out_columns} FROM {window} WHERE """.format(
+
+        sql_string = output_str = """SELECT {out_columns} FROM {window} WHERE """.format(
             out_columns=outfield_string, window=self.filtering_window
         )
-        sql_string += " AND ".join(queries)
+        if interaction_queries == []:
+            joined_queries = " AND ".join(queries)
+            sql_string = sql_string + joined_queries
+            unclustered_query = "SELECT Pose_id FROM Results WHERE " + joined_queries
+        else:
+            with_stmt = "WITH subq as (SELECT Pose_id FROM Results) "
+            if queries != []:
+                with_stmt = with_stmt[:-2] + f" WHERE {' AND '.join(queries)}) "
+            joined_interact_queries = " AND ".join(interaction_queries)
+            sql_string = with_stmt + sql_string + joined_interact_queries
+            unclustered_query = "SELECT Pose_id FROM Results WHERE " + joined_interact_queries
 
         # adding if we only want to keep
         # one pose per ligand (will keep first entry)
@@ -2938,7 +2914,46 @@ class StorageManagerSQLite(StorageManager):
                     "Please ensure you are only requesting one option for --order_results and have written it correctly"
                 ) from None
 
-        return sql_string
+        # if clustering is requested, do that before saving view or filtering results for output
+        if self.butina_cluster is not None:
+            logging.warning("WARNING: Butina clustering is memory-constrained. Using overly-permissive filters with Butina clustering may cause issues.")# TODO: remove this memory bottleneck
+            cluster_query = f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({unclustered_query})"
+            if interaction_queries != []:
+                cluster_query = with_stmt + cluster_query
+            poseid_leff_mfps = self._run_query(cluster_query).fetchall()
+            #Define clustering setup
+            def clusterFps(fps):  #https://www.macinchem.org/reviews/clustering/clustering.php
+
+                # first generate the distance matrix:
+                dists = []
+                nfps = len(fps)
+                for i in range(1,nfps):
+                    sims = DataStructs.BulkTanimotoSimilarity(fps[i],fps[:i])
+                    dists.extend([1-x for x in sims])
+
+                # now cluster the data:
+                cs = Butina.ClusterData(dists,nfps,self.butina_cluster,isDistData=True)
+                return cs
+
+            bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps])
+            logging.info(f"Number of Butina clusters: {len(bclusters)}")
+            
+            # select ligand from each cluster with best ligand efficiency
+            bc_rep_poseids = []
+            for c in bclusters:
+                c_leffs = np.array([poseid_leff_mfps[i][1] for i in c])
+                best_lig_c = poseid_leff_mfps[c[np.argmin(c_leffs)]][0]
+                bc_rep_poseids.append(str(best_lig_c))
+
+            # catch if no pose_ids returned
+            if bc_rep_poseids == []:
+                logging.warning("No passing results prior to clustering. Clustering not performed.")
+            else:
+                sql_string = output_str + "Pose_ID=" + " OR Pose_ID=".join(bc_rep_poseids)
+
+        return sql_string, sql_string.replace("""SELECT {out_columns} FROM {window}""".format(
+            out_columns=outfield_string, window=self.filtering_window
+        ), f"SELECT * FROM {self.filtering_window}")  # sql_query, view_query
 
     def _generate_interaction_index_filtering_query(self, interaction_list):
         """takes list of interaction info for a given ligand,
@@ -2985,7 +3000,7 @@ class StorageManagerSQLite(StorageManager):
             String: SQLite-formatted query
         """
 
-        return "SELECT Pose_id FROM Interaction_bitvectors WHERE " + " OR ".join(
+        return "SELECT Pose_id FROM (SELECT * FROM Interaction_bitvectors WHERE Pose_ID IN subq) WHERE " + " OR ".join(
             [
                 "Interaction_{index_n} = 1".format(index_n=index)
                 for index in interaction_index_list

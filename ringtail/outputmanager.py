@@ -4,8 +4,8 @@
 # Ringtail output manager
 #
 
-from.filters import Filters
-from.receptormanager import blob2str
+from .filters import Filters
+from .receptormanager import ReceptorManager
 from .exceptions import OutputError
 import logging
 import typing
@@ -328,6 +328,6 @@ class OutputManager:
             raise OutputError("Error occurred while writing filters to log") from e
 
     def write_receptor_pdbqt(self, recname, receptor_compbytes):
-        receptor_str = blob2str(receptor_compbytes)
+        receptor_str = ReceptorManager.blob2str(receptor_compbytes)
         with open(recname, 'w') as f:
             f.write(receptor_str)
