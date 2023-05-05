@@ -301,6 +301,14 @@ class RingtailCore:
             self.output_manager.log_num_passing_ligands(number_passing_ligands)
             print("Number passing Ligands:", number_passing_ligands)
 
+        if len(interaction_combs) > 1:
+            maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
+            self.output_manager.write_maxmiss_union_header()
+            self.output_manager.write_results_bookmark_to_log(self.storageman.results_view_name + "_union")
+            number_passing_union = self.output_manager.write_log(maxmiss_union_results)
+            self.output_manager.log_num_passing_ligands(number_passing_union)
+            print("Number passing Ligands in max_miss union:", number_passing_union)
+
     def get_previous_filter_data(self):
         """Get data requested in self.out_opts['outfields'] from the
         results view of a previous filtering

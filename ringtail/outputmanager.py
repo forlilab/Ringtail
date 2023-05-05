@@ -189,6 +189,7 @@ class OutputManager:
         try:
             self.log_file.write("\n")
             self.log_file.write(f"Result bookmark name: {bookmark_name}\n")
+            self.log_file.write("***************\n")
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
@@ -331,3 +332,7 @@ class OutputManager:
         receptor_str = ReceptorManager.blob2str(receptor_compbytes)
         with open(recname, 'w') as f:
             f.write(receptor_str)
+
+    def write_maxmiss_union_header(self):
+        self.log_file.write("\n---------------\n")
+        self.log_file.write("Max Miss Union:\n")

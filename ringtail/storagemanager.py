@@ -281,6 +281,20 @@ class StorageManager:
         # get number of passing ligands
         return filtered_results
 
+    def get_maxmiss_union(self, total_combinations: int):
+        """"""
+        selection_strs = []
+        for i in range(total_combinations):
+            selection_strs.append(f"SELECT * FROM {self.results_view_name + '_' + str(i)}")
+
+        union_query = " UNION ".join(selection_strs)
+        view_name = f"{self.results_view_name}_union"
+        logging.debug("Saving union bookmark...")
+        self._create_view(view_name, union_query)
+        self._insert_bookmark_info(view_name, union_query)
+        logging.debug("Running union query...")
+        return self._run_query(union_query)
+
     def fetch_data_for_passing_results(self) -> iter:
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.results_view_name
 
