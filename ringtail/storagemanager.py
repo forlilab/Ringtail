@@ -2889,14 +2889,14 @@ class StorageManagerSQLite(StorageManager):
         if interaction_queries == []:
             joined_queries = " AND ".join(queries)
             sql_string = sql_string + joined_queries
-            unclustered_query = "SELECT Pose_id FROM Results WHERE " + joined_queries
+            unclustered_query = f"SELECT Pose_id FROM {self.filtering_window} WHERE " + joined_queries
         else:
-            with_stmt = "WITH subq as (SELECT Pose_id FROM Results) "
+            with_stmt = f"WITH subq as (SELECT Pose_id FROM {self.filtering_window}) "
             if queries != []:
                 with_stmt = with_stmt[:-2] + f" WHERE {' AND '.join(queries)}) "
             joined_interact_queries = " AND ".join(interaction_queries)
             sql_string = with_stmt + sql_string + joined_interact_queries
-            unclustered_query = "SELECT Pose_id FROM Results WHERE " + joined_interact_queries
+            unclustered_query = f"SELECT Pose_id FROM {self.filtering_window} WHERE " + joined_interact_queries
 
         # adding if we only want to keep
         # one pose per ligand (will keep first entry)
