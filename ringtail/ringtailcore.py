@@ -413,6 +413,8 @@ class RingtailCore:
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
         """
 
+        if self.filters.max_miss > 0:
+            self.storageman.results_view_name = self.storageman.results_view_name + "_union"
         if not self.storageman.check_passing_view_exists():
             logging.warning(
                 "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
