@@ -281,20 +281,6 @@ class StorageManager:
         # get number of passing ligands
         return filtered_results
 
-    def get_maxmiss_union(self, total_combinations: int):
-        """"""
-        selection_strs = []
-        for i in range(total_combinations):
-            selection_strs.append(f"SELECT * FROM {self.results_view_name + '_' + str(i)}")
-
-        union_query = " UNION ".join(selection_strs)
-        view_name = f"{self.results_view_name}_union"
-        logging.debug("Saving union bookmark...")
-        self._create_view(view_name, union_query)
-        self._insert_bookmark_info(view_name, union_query)
-        logging.debug("Running union query...")
-        return self._run_query(union_query)
-
     def fetch_data_for_passing_results(self) -> iter:
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.results_view_name
 
@@ -1821,6 +1807,21 @@ class StorageManagerSQLite(StorageManager):
             "SELECT * FROM {passing_view}".format(passing_view=self.results_view_name)
         )
 
+    def get_maxmiss_union(self, total_combinations: int):
+        """"""
+        selection_strs = []
+        outfield_str = self._generate_outfield_string()
+        for i in range(total_combinations):
+            selection_strs.append(f"SELECT {outfield_str} FROM {self.results_view_name + '_' + str(i)}")
+
+        union_query = " UNION ".join(selection_strs)
+        view_name = f"{self.results_view_name}_union"
+        logging.debug("Saving union bookmark...")
+        self._create_view(view_name, union_query)
+        self._insert_bookmark_info(view_name, union_query)
+        logging.debug("Running union query...")
+        return self._run_query(union_query)
+
     def fetch_summary_data(self, columns=["docking_score", "leff"], percentiles=[1,10]) -> dict:
         """Collect summary data for database:
             Num Ligands
@@ -2704,6 +2705,21 @@ class StorageManagerSQLite(StorageManager):
             results_view=self.results_view_name
         )
 
+    def _generate_outfield_string(self):
+
+        # parse requested output fields and convert to column names in database
+        outfields_list = self.outfields.split(",")
+        for outfield in outfields_list:
+            if outfield not in self.outfield_options:
+                raise OptionError(
+                    "{out_f} is not a valid output option. Please see rt_process_vs.py --help for allowed options".format(
+                        out_f=outfield
+                    )
+                )
+        return", ".join(
+            [self.field_to_column_name[field] for field in outfields_list]
+        )
+
     def _generate_result_filtering_query(
         self,
         filters_dict
@@ -2717,18 +2733,7 @@ class StorageManagerSQLite(StorageManager):
             String: SQLite-formatted string for filtering query
         """
 
-        # parse requested output fields and convert to column names in database
-        outfields_list = self.outfields.split(",")
-        for outfield in outfields_list:
-            if outfield not in self.outfield_options:
-                raise OptionError(
-                    "{out_f} is not a valid output option. Please see rt_process_vs.py --help for allowed options".format(
-                        out_f=outfield
-                    )
-                )
-        outfield_string = ", ".join(
-            [self.field_to_column_name[field] for field in outfields_list]
-        )
+        outfield_string = self._generate_outfield_string()
 
         if self.filter_bookmark is not None:
             if self.filter_bookmark == self.results_view_name:

@@ -793,9 +793,7 @@ class CLOptionParser:
                         "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
                     )
                 if parsed_opts.export_sdf_path:
-                    raise OptionError(
-                        "Cannot use --export_sdf_path with --max_miss > 0. Can export poses for desired bookmark --bookmark_name"
-                    )
+                    logging.warning("WARNING: Requested --export_sdf_path with --max_miss. Exported SDFs will be for union of interaction combinations.")
             if parsed_opts.order_results:
                 if parsed_opts.order_results not in self.order_options:
                     raise OptionError(
