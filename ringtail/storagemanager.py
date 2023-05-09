@@ -1810,17 +1810,18 @@ class StorageManagerSQLite(StorageManager):
     def get_maxmiss_union(self, total_combinations: int):
         """"""
         selection_strs = []
+        view_strs = []
         outfield_str = self._generate_outfield_string()
         for i in range(total_combinations):
             selection_strs.append(f"SELECT {outfield_str} FROM {self.results_view_name + '_' + str(i)}")
+            view_strs.append(f"SELECT * FROM {self.results_view_name + '_' + str(i)}")
 
-        union_query = " UNION ".join(selection_strs)
         view_name = f"{self.results_view_name}_union"
         logging.debug("Saving union bookmark...")
-        self._create_view(view_name, union_query)
-        self._insert_bookmark_info(view_name, union_query)
+        self._create_view(view_name, " UNION ".join(view_strs))
+        self._insert_bookmark_info(view_name, " UNION ".join(view_strs))
         logging.debug("Running union query...")
-        return self._run_query(union_query)
+        return self._run_query(" UNION ".join(selection_strs))
 
     def fetch_summary_data(self, columns=["docking_score", "leff"], percentiles=[1,10]) -> dict:
         """Collect summary data for database:
@@ -1901,9 +1902,7 @@ class StorageManagerSQLite(StorageManager):
             SQLite cursor: contains LigName, ligand_smile,
                 atom_index_map, hydrogen_parents
         """
-        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view})".format(
-            results_view=self.results_view_name
-        )
+        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM passing_temp)"
         return self._run_query(query)
 
     def fetch_single_ligand_output_info(self, ligname):
@@ -1916,6 +1915,11 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(f"Error retrieving ligand info for {ligname}") from e
 
+    def create_temp_passing_table(self):
+        cur = self.conn.cursor()
+        cur.execute(f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {self.results_view_name}")
+        cur.close()
+
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
 
@@ -1926,9 +1930,7 @@ class StorageManagerSQLite(StorageManager):
             SQLite cursor: contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {results_view} WHERE LigName LIKE '{ligand}')".format(
-            results_view=self.results_view_name, ligand=ligname
-        )
+        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM passing_temp WHERE LigName LIKE '{ligand}')".format(ligand=ligname)
         return self._run_query(query)
 
     def fetch_nonpassing_pose_properties(self, ligname):
@@ -1941,8 +1943,8 @@ class StorageManagerSQLite(StorageManager):
             SQLite cursor: contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM {results_view})".format(
-            ligand=ligname, results_view=self.results_view_name
+        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM passing_temp)".format(
+            ligand=ligname,
         )
         return self._run_query(query)
 
