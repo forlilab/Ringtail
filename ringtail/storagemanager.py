@@ -1116,7 +1116,7 @@ class StorageManager:
     def _vacuum(self):
         raise NotImplementedError
 
-    def _check_storage_empty(self):
+    def check_storage_empty(self):
         """Check that storage is empty before proceeding.
 
         Raises:
