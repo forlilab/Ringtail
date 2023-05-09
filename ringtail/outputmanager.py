@@ -328,7 +328,9 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error occurred while writing filters to log") from e
 
-    def write_receptor_pdbqt(self, recname, receptor_compbytes):
+    def write_receptor_pdbqt(self, recname: str, receptor_compbytes):
+        if not recname.endswith(".pdbqt"):
+            recname = recname + ".pdbqt"
         receptor_str = ReceptorManager.blob2str(receptor_compbytes)
         with open(recname, 'w') as f:
             f.write(receptor_str)

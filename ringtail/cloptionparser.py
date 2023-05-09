@@ -410,7 +410,7 @@ def cmdline_parser(defaults={}):
     output_group.add_argument(
         "-xr",
         "--export_receptor",
-        help="Export stored receptor pdbqt",
+        help="Export stored receptor pdbqt. Will write to current directory.",
         action="store_true",
     )
     output_group.add_argument(
@@ -711,6 +711,7 @@ class CLOptionParser:
             parsed_opts.export_bookmark_csv = None
             parsed_opts.export_query_csv = None
             parsed_opts.export_bookmark_db = None
+            parsed_opts.export_receptor = None
             parsed_opts.data_from_bookmark = None
             parsed_opts.pymol = None
             parsed_opts.log_file = None
@@ -759,13 +760,21 @@ class CLOptionParser:
                 file_sources["file_list"] = parsed_opts.file_list
             if (
                 (file_sources["file"] == [[]])
-                and (file_sources["file_path"] == [[]])
+                and (file_sources["file_path"] == {'path': [[]], 'pattern': '*.dlg*', 'recursive': None})
                 and (file_sources["file_list"] == [[]])
                 and (parsed_opts.input_db is None)
             ):
                 raise OptionError(
                     "At least one input option needs to be used:  --file, --file_path, --file_list, --input_db"
                 )
+            if (
+                (file_sources["file"] == [[]])
+                and (file_sources["file_path"] == {'path': [[]], 'pattern': '*.dlg*', 'recursive': None})
+                and (file_sources["file_list"] == [[]])
+                and parsed_opts.save_receptor
+            ):
+                self.process_mode = "add_receptor"
+
             if parsed_opts.append_results and parsed_opts.input_db is None:
                 raise OptionError(
                     "Must specify --input_db if adding results to an existing database"
@@ -938,6 +947,7 @@ class CLOptionParser:
             "export_bookmark_csv": parsed_opts.export_bookmark_csv,
             "export_query_csv": parsed_opts.export_query_csv,
             "export_bookmark_db": parsed_opts.export_bookmark_db,
+            "export_receptor": parsed_opts.export_receptor,
             "data_from_bookmark": parsed_opts.data_from_bookmark,
             "pymol": parsed_opts.pymol,
             "export_sdf_path": parsed_opts.export_sdf_path,

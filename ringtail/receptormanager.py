@@ -27,4 +27,4 @@ class ReceptorManager:
 
     @staticmethod
     def blob2str(receptor_blob):
-        return gzip.uncompress(receptor_blob).decode()
+        return gzip.decompress(receptor_blob).decode()
