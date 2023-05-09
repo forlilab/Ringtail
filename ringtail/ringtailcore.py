@@ -420,6 +420,8 @@ class RingtailCore:
                 "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
             )
             return
+        # make temp table for SDF writing
+        self.storageman.create_temp_passing_table()
         passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
         flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
         if flexible_residues != []:
