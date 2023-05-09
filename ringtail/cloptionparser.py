@@ -59,8 +59,14 @@ def cmdline_parser(defaults={}):
                  Script to process virtual screening data by writing/filtering/exporting from database. In 'write' mode, provide docking files for writing to database with --file, --file_list, and/or --file_path. In 'read' mode, provide input database with --input_db. Please see GitHub for full usage details.""",
         description="Package for creating, managing, and filtering databases of virtual screening results.",
         epilog="""
-        AUTHORS
-                Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, Diogo Santos-Martins, PhD, and Matthew Holcomb, PhD.\n
+
+        CITATION
+                If using Ringtail in your work, please cite the following publication:\n
+
+                Ringtail: A Python Tool for Efficient Management and Storage of Virtual Screening Results
+                Althea T. Hansel-Harris, Diogo Santos-Martins, Niccolò Bruciaferri, Andreas F. Tillack, Matthew Holcomb, and Stefano Forli
+                Journal of Chemical Information and Modeling 2023 63 (7), 1858-1864
+                DOI: 10.1021/acs.jcim.3c00166
 
         REPORTING BUGS
                 Please report bugs to:
