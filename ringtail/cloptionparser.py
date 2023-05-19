@@ -580,10 +580,16 @@ def cmdline_parser(defaults={}):
     interaction_group.add_argument(
         "-mm",
         "--max_miss",
-        help="Will separately log all possible combinations of interaction filters in log file excluding up to max_miss numer of interactions from given set. Cannot be used with --plot or --export_sdf_path.",
+        help="Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with --enumerate_interaction_combs for enumeration of poses passing each individual combination of interaction filters.",
         action="store",
         type=int,
         metavar="INTEGER",
+    )
+    interaction_group.add_argument(
+        "-eic",
+        "--enumerate_interaction_combs",
+        help="Use with max_miss. If used, will output ligands passing each individual combination of interaction filters with max_miss.",
+        action="store_true",
     )
 
     # catch if running with no options
@@ -715,6 +721,7 @@ class CLOptionParser:
             parsed_opts.data_from_bookmark = None
             parsed_opts.pymol = None
             parsed_opts.log_file = None
+            parsed_opts.enumerate_interaction_combs = None
             # confirm that receptor file was found if needed, else throw error
             # if only receptor files found and --save_receptor, assume we just want to
             # add receptor and not modify the rest of the db
@@ -788,8 +795,6 @@ class CLOptionParser:
                         f"--conflict_handing option {parsed_opts.duplicate_handling} not allowed. Reverting to default behavior."
                     )
                     conflict_handling = None
-            # set unused read options to None
-            parsed_opts.pymol = None
         elif self.process_mode == "read":
             # initialize write-only rt_process options to prevent errors
             parsed_opts.receptor_file = None
@@ -950,6 +955,7 @@ class CLOptionParser:
             "export_receptor": parsed_opts.export_receptor,
             "data_from_bookmark": parsed_opts.data_from_bookmark,
             "pymol": parsed_opts.pymol,
+            "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
             "export_sdf_path": parsed_opts.export_sdf_path,
             "receptor_file": parsed_opts.receptor_file,  # write only
             "save_receptor": parsed_opts.save_receptor,  # write only

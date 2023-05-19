@@ -270,11 +270,14 @@ class RingtailCore:
 
         return filters_dict
     
-    def filter(self):
+    def filter(self, enumerate_interaction_combs=False):
         """
         Prepare list of filters, then hand it off to storageManager to
             perform filtering. Create log of passing results.
         """
+        # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
+        if self.filters.max_miss == 0:
+            enumerate_interaction_combs = True
 
         logging.info("Filtering results...")
         self.output_manager.create_log_file()
@@ -291,15 +294,16 @@ class RingtailCore:
             if len(interaction_combs) > 1:
                 self.storageman.set_view_suffix(str(ic_idx))
             # ask storageManager to fetch results
-            self.filtered_results = self.storageman.filter_results(
-                filters_dict,
+            filtered_results = self.storageman.filter_results(
+                filters_dict, not enumerate_interaction_combs
             )
             result_bookmark_name = self.storageman.get_current_view_name()
             self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Butina clustering cutoff: {self.storageman.butina_cluster}")
             self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
-            number_passing_ligands = self.output_manager.write_log(self.filtered_results)
-            self.output_manager.log_num_passing_ligands(number_passing_ligands)
-            print("Number passing Ligands:", number_passing_ligands)
+            if filtered_results is not None:
+                number_passing_ligands = self.output_manager.write_log(filtered_results)
+                self.output_manager.log_num_passing_ligands(number_passing_ligands)
+                print("Number passing Ligands:", number_passing_ligands)
 
         if len(interaction_combs) > 1:
             maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
