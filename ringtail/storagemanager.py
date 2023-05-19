@@ -246,6 +246,7 @@ class StorageManager:
     def filter_results(
         self,
         all_filters: dict,
+        suppress_output=False
     ) -> iter:
         """Generate and execute database queries from given filters.
 
@@ -272,6 +273,8 @@ class StorageManager:
         )  # make sure we keep Pose_ID in view
         self._insert_bookmark_info(self.current_view_name, view_query, all_filters)
         # perform filtering
+        if suppress_output:
+            return None
 
         logging.debug("Running filtering query...")
         time0 = time.perf_counter()
