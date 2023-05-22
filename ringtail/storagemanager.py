@@ -1153,6 +1153,7 @@ class StorageManagerSQLite(StorageManager):
         filter_bookmark: str = None,
         output_all_poses: bool = None,
         mfpt_cluster: float = None,
+        interaction_cluster: float = None,
         results_view_name: str = "passing_results",
         overwrite: bool = None,
         conflict_opt: str = None,
@@ -1172,6 +1173,7 @@ class StorageManagerSQLite(StorageManager):
         self.outfields = outfields
         self.output_all_poses = output_all_poses
         self.mfpt_cluster = mfpt_cluster
+        self.interaction_cluster = interaction_cluster
         self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
         self.overwrite = overwrite
@@ -2939,41 +2941,77 @@ class StorageManagerSQLite(StorageManager):
                 ) from None
 
         # if clustering is requested, do that before saving view or filtering results for output
+        #Define clustering setup
+        def clusterFps(fps, cutoff):  #https://www.macinchem.org/reviews/clustering/clustering.php
+
+            # first generate the distance matrix:
+            dists = []
+            nfps = len(fps)
+            for i in range(1,nfps):
+                sims = DataStructs.BulkTanimotoSimilarity(fps[i],fps[:i])
+                dists.extend([1-x for x in sims])
+
+            # now cluster the data:
+            cs = Butina.ClusterData(dists,nfps,cutoff,isDistData=True)
+            return cs
+
+        if self.interaction_cluster is not None:
+            logging.warning("WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
+            cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_id WHERE Results.Pose_ID IN ({unclustered_query})"
+            if interaction_queries != []:
+                cluster_query = with_stmt + cluster_query
+            leff_poseid_ifps = self._run_query(cluster_query).fetchall()
+            def make_bitstring(pose_bv):
+                bs = ""
+                for i in pose_bv:
+                    if i is None:
+                        bs += "0"
+                    elif i == 1:
+                        bs += "1"
+                    else:
+                        raise RuntimeError(f"Unrecognized character {i} in interaction bitvector.")
+                return bs
+
+            bclusters = clusterFps([DataStructs.CreateFromBitString(make_bitstring(pose[2:])) for pose in leff_poseid_ifps], self.interaction_cluster)
+            logging.info(f"Number of interaction fingerprint butina clusters: {len(bclusters)}")
+
+            # select ligand from each cluster with best ligand efficiency
+            int_rep_poseids = []
+            for c in bclusters:
+                c_leffs = np.array([leff_poseid_ifps[i][0] for i in c])  # beware magic numbers
+                best_lig_c = leff_poseid_ifps[c[np.argmin(c_leffs)]][1]
+                int_rep_poseids.append(str(best_lig_c))
+
+            # catch if no pose_ids returned
+            if int_rep_poseids == []:
+                logging.warning("No passing results prior to clustering. Clustering not performed.")
+            else:
+                if self.mfpt_cluster is None:
+                    sql_string = output_str + "Pose_ID=" + " OR Pose_ID=".join(int_rep_poseids)
+                else:
+                    unclustered_query = f"SELECT Pose_ID FROM Results WHERE {'Pose_ID=' + ' OR Pose_ID='.join(int_rep_poseids)}"
+
         if self.mfpt_cluster is not None:
-            logging.warning("WARNING: Butina clustering is memory-constrained. Using overly-permissive filters with Butina clustering may cause issues.")# TODO: remove this memory bottleneck
+            logging.warning("WARNING: Ligand morgan fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
             cluster_query = f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({unclustered_query})"
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
             poseid_leff_mfps = self._run_query(cluster_query).fetchall()
-            #Define clustering setup
-            def clusterFps(fps):  #https://www.macinchem.org/reviews/clustering/clustering.php
-
-                # first generate the distance matrix:
-                dists = []
-                nfps = len(fps)
-                for i in range(1,nfps):
-                    sims = DataStructs.BulkTanimotoSimilarity(fps[i],fps[:i])
-                    dists.extend([1-x for x in sims])
-
-                # now cluster the data:
-                cs = Butina.ClusterData(dists,nfps,self.mfpt_cluster,isDistData=True)
-                return cs
-
-            bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps])
+            bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps], self.mfpt_cluster)
             logging.info(f"Number of Morgan fingerprint butina clusters: {len(bclusters)}")
             
             # select ligand from each cluster with best ligand efficiency
-            bc_rep_poseids = []
+            fp_rep_poseids = []
             for c in bclusters:
                 c_leffs = np.array([poseid_leff_mfps[i][1] for i in c])
                 best_lig_c = poseid_leff_mfps[c[np.argmin(c_leffs)]][0]
-                bc_rep_poseids.append(str(best_lig_c))
+                fp_rep_poseids.append(str(best_lig_c))
 
             # catch if no pose_ids returned
-            if bc_rep_poseids == []:
+            if fp_rep_poseids == []:
                 logging.warning("No passing results prior to clustering. Clustering not performed.")
             else:
-                sql_string = output_str + "Pose_ID=" + " OR Pose_ID=".join(bc_rep_poseids)
+                sql_string = output_str + "Pose_ID=" + " OR Pose_ID=".join(fp_rep_poseids)
 
         return sql_string, sql_string.replace("""SELECT {out_columns} FROM {window}""".format(
             out_columns=outfield_string, window=self.filtering_window
