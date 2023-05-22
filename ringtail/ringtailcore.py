@@ -298,7 +298,7 @@ class RingtailCore:
                 filters_dict, not enumerate_interaction_combs
             )
             result_bookmark_name = self.storageman.get_current_view_name()
-            self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Butina clustering cutoff: {self.storageman.butina_cluster}")
+            self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}")
             self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
             if filtered_results is not None:
                 number_passing_ligands = self.output_manager.write_log(filtered_results)
