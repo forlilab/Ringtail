@@ -368,8 +368,8 @@ def cmdline_parser(defaults={}):
         action="store_true",
     )
     output_group.add_argument(
-        "-bc",
-        "--butina_cluster",
+        "-mc",
+        "--mfpt_cluster",
         help="Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output representative ligand from each cluster. Default clustering cutoff is 0.5.",
         action="store",
         type=float,
@@ -979,7 +979,7 @@ class CLOptionParser:
             "outfields": parsed_opts.outfields,
             "filter_bookmark": parsed_opts.filter_bookmark,
             "output_all_poses": parsed_opts.output_all_poses,
-            "butina_cluster": parsed_opts.butina_cluster,
+            "mfpt_cluster": parsed_opts.mfpt_cluster,
             "results_view_name": parsed_opts.results_view_name,
             "overwrite": parsed_opts.overwrite,
             "append_results": parsed_opts.append_results,

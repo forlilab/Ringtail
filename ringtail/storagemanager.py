@@ -1152,7 +1152,7 @@ class StorageManagerSQLite(StorageManager):
         outfields: str = "Ligand_name,e",
         filter_bookmark: str = None,
         output_all_poses: bool = None,
-        butina_cluster: float = None,
+        mfpt_cluster: float = None,
         results_view_name: str = "passing_results",
         overwrite: bool = None,
         conflict_opt: str = None,
@@ -1171,7 +1171,7 @@ class StorageManagerSQLite(StorageManager):
             outfields = "Ligand_name," + outfields
         self.outfields = outfields
         self.output_all_poses = output_all_poses
-        self.butina_cluster = butina_cluster
+        self.mfpt_cluster = mfpt_cluster
         self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
         self.overwrite = overwrite
@@ -2939,7 +2939,7 @@ class StorageManagerSQLite(StorageManager):
                 ) from None
 
         # if clustering is requested, do that before saving view or filtering results for output
-        if self.butina_cluster is not None:
+        if self.mfpt_cluster is not None:
             logging.warning("WARNING: Butina clustering is memory-constrained. Using overly-permissive filters with Butina clustering may cause issues.")# TODO: remove this memory bottleneck
             cluster_query = f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({unclustered_query})"
             if interaction_queries != []:
@@ -2956,11 +2956,11 @@ class StorageManagerSQLite(StorageManager):
                     dists.extend([1-x for x in sims])
 
                 # now cluster the data:
-                cs = Butina.ClusterData(dists,nfps,self.butina_cluster,isDistData=True)
+                cs = Butina.ClusterData(dists,nfps,self.mfpt_cluster,isDistData=True)
                 return cs
 
             bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps])
-            logging.info(f"Number of Butina clusters: {len(bclusters)}")
+            logging.info(f"Number of Morgan fingerprint butina clusters: {len(bclusters)}")
             
             # select ligand from each cluster with best ligand efficiency
             bc_rep_poseids = []
