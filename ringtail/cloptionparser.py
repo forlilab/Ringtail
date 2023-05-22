@@ -368,9 +368,19 @@ def cmdline_parser(defaults={}):
         action="store_true",
     )
     output_group.add_argument(
-        "-mc",
+        "-mfpc",
         "--mfpt_cluster",
-        help="Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output representative ligand from each cluster. Default clustering cutoff is 0.5.",
+        help="Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.",
+        action="store",
+        type=float,
+        metavar="FLOAT",
+        const=0.5,
+        nargs="?",
+    )
+    output_group.add_argument(
+        "-ifpc",
+        "--interaction_cluster",
+        help="Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.",
         action="store",
         type=float,
         metavar="FLOAT",
@@ -980,6 +990,7 @@ class CLOptionParser:
             "filter_bookmark": parsed_opts.filter_bookmark,
             "output_all_poses": parsed_opts.output_all_poses,
             "mfpt_cluster": parsed_opts.mfpt_cluster,
+            "interaction_cluster": parsed_opts.interaction_cluster,
             "results_view_name": parsed_opts.results_view_name,
             "overwrite": parsed_opts.overwrite,
             "append_results": parsed_opts.append_results,
