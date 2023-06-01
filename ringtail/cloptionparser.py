@@ -1011,7 +1011,6 @@ class CLOptionParser:
             )  # remove file extension and path
         else:
             receptor = None
-        logging.debug(file_sources)
         rman_opts = {
             "chunk_size": 1,
             "mode": parsed_opts.mode,
