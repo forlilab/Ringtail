@@ -368,9 +368,19 @@ def cmdline_parser(defaults={}):
         action="store_true",
     )
     output_group.add_argument(
-        "-bc",
-        "--butina_cluster",
-        help="Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output representative ligand from each cluster. Default clustering cutoff is 0.5.",
+        "-mfpc",
+        "--mfpt_cluster",
+        help="Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.",
+        action="store",
+        type=float,
+        metavar="FLOAT",
+        const=0.5,
+        nargs="?",
+    )
+    output_group.add_argument(
+        "-ifpc",
+        "--interaction_cluster",
+        help="Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.",
         action="store",
         type=float,
         metavar="FLOAT",
@@ -580,10 +590,16 @@ def cmdline_parser(defaults={}):
     interaction_group.add_argument(
         "-mm",
         "--max_miss",
-        help="Will separately log all possible combinations of interaction filters in log file excluding up to max_miss numer of interactions from given set. Cannot be used with --plot or --export_sdf_path.",
+        help="Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with --enumerate_interaction_combs for enumeration of poses passing each individual combination of interaction filters.",
         action="store",
         type=int,
         metavar="INTEGER",
+    )
+    interaction_group.add_argument(
+        "-eic",
+        "--enumerate_interaction_combs",
+        help="Use with max_miss. If used, will output ligands passing each individual combination of interaction filters with max_miss.",
+        action="store_true",
     )
 
     # catch if running with no options
@@ -715,6 +731,7 @@ class CLOptionParser:
             parsed_opts.data_from_bookmark = None
             parsed_opts.pymol = None
             parsed_opts.log_file = None
+            parsed_opts.enumerate_interaction_combs = None
             # confirm that receptor file was found if needed, else throw error
             # if only receptor files found and --save_receptor, assume we just want to
             # add receptor and not modify the rest of the db
@@ -788,8 +805,6 @@ class CLOptionParser:
                         f"--conflict_handing option {parsed_opts.duplicate_handling} not allowed. Reverting to default behavior."
                     )
                     conflict_handling = None
-            # set unused read options to None
-            parsed_opts.pymol = None
         elif self.process_mode == "read":
             # initialize write-only rt_process options to prevent errors
             parsed_opts.receptor_file = None
@@ -950,6 +965,7 @@ class CLOptionParser:
             "export_receptor": parsed_opts.export_receptor,
             "data_from_bookmark": parsed_opts.data_from_bookmark,
             "pymol": parsed_opts.pymol,
+            "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
             "export_sdf_path": parsed_opts.export_sdf_path,
             "receptor_file": parsed_opts.receptor_file,  # write only
             "save_receptor": parsed_opts.save_receptor,  # write only
@@ -973,7 +989,8 @@ class CLOptionParser:
             "outfields": parsed_opts.outfields,
             "filter_bookmark": parsed_opts.filter_bookmark,
             "output_all_poses": parsed_opts.output_all_poses,
-            "butina_cluster": parsed_opts.butina_cluster,
+            "mfpt_cluster": parsed_opts.mfpt_cluster,
+            "interaction_cluster": parsed_opts.interaction_cluster,
             "results_view_name": parsed_opts.results_view_name,
             "overwrite": parsed_opts.overwrite,
             "append_results": parsed_opts.append_results,
@@ -994,7 +1011,6 @@ class CLOptionParser:
             )  # remove file extension and path
         else:
             receptor = None
-        logging.debug(file_sources)
         rman_opts = {
             "chunk_size": 1,
             "mode": parsed_opts.mode,
