@@ -18,8 +18,14 @@ if __name__ == "__main__":
         level=level, stream=sys.stdout, filemode="w", format="%(message)s"
     )
 
-    rt_core = RingtailCore()
-    cl_opts = CLOptionParser(rt_core)
+    try:
+        rt_core = RingtailCore()
+        cl_opts = CLOptionParser(rt_core)
+    except Exception as e:
+        tb = traceback.format_exc()
+        logging.debug(tb)
+        logging.critical("ERROR: " + str(e))
+        sys.exit(1)
 
     # set logging level
     levels = {10: "debug", 20: "info", 30: "warning"}
@@ -58,7 +64,7 @@ if __name__ == "__main__":
 
                 # perform filtering
                 if cl_opts.rt_process_options["filter"]:
-                    rt_core.filter()
+                    rt_core.filter(cl_opts.rt_process_options["enumerate_interaction_combs"])
 
                 # Write log with new data for previous filtering results
                 if cl_opts.rt_process_options["data_from_bookmark"] and not cl_opts.rt_process_options["filter"]:

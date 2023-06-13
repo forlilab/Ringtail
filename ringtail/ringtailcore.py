@@ -270,11 +270,14 @@ class RingtailCore:
 
         return filters_dict
     
-    def filter(self):
+    def filter(self, enumerate_interaction_combs=False):
         """
         Prepare list of filters, then hand it off to storageManager to
             perform filtering. Create log of passing results.
         """
+        # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
+        if self.filters.max_miss == 0:
+            enumerate_interaction_combs = True
 
         logging.info("Filtering results...")
         self.output_manager.create_log_file()
@@ -291,15 +294,16 @@ class RingtailCore:
             if len(interaction_combs) > 1:
                 self.storageman.set_view_suffix(str(ic_idx))
             # ask storageManager to fetch results
-            self.filtered_results = self.storageman.filter_results(
-                filters_dict,
+            filtered_results = self.storageman.filter_results(
+                filters_dict, not enumerate_interaction_combs
             )
             result_bookmark_name = self.storageman.get_current_view_name()
-            self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Butina clustering cutoff: {self.storageman.butina_cluster}")
+            self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
             self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
-            number_passing_ligands = self.output_manager.write_log(self.filtered_results)
-            self.output_manager.log_num_passing_ligands(number_passing_ligands)
-            print("Number passing Ligands:", number_passing_ligands)
+            if filtered_results is not None:
+                number_passing = self.output_manager.write_log(filtered_results)
+                self.output_manager.log_num_passing_ligands(number_passing)
+                print("Number passing:", number_passing)
 
         if len(interaction_combs) > 1:
             maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
@@ -406,11 +410,12 @@ class RingtailCore:
 
         return filters_list
 
-    def write_molecule_sdfs(self, write_nonpassing=False):
+    def write_molecule_sdfs(self, write_nonpassing=False, return_rdmol_dict=False):
         """have output manager write sdf molecules for passing results in given results bookmark
 
         Args:
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
+            return_rdmol_dict (bool, optional): Suppresses SDF file writing, returns dictionary of rdkit mols
         """
 
         if self.filters.max_miss > 0:
@@ -419,7 +424,7 @@ class RingtailCore:
             logging.warning(
                 "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
             )
-            return
+            return None
         # make temp table for SDF writing
         self.storageman.create_temp_passing_table()
         passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
@@ -427,6 +432,7 @@ class RingtailCore:
         if flexible_residues != []:
             flexible_residues = json.loads(flexible_residues)
             flexres_atomnames = json.loads(flexres_atomnames)
+        all_mols = {}
         for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
             logging.info("Writing " + ligname.split(".")[0] + ".sdf")
             # create rdkit ligand molecule and flexible residue container
@@ -439,9 +445,15 @@ class RingtailCore:
             mol, flexres_mols, properties = self.create_ligand_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, write_nonpassing=write_nonpassing)
 
             # write out mol
-            self.output_manager.write_out_mol(
-                ligname, mol, flexres_mols, properties
-            )
+            if not return_rdmol_dict:
+                self.output_manager.write_out_mol(
+                    ligname, mol, flexres_mols, properties
+                )
+            else:
+                all_mols[ligname] = {"ligand": mol, "flex_residues": flexres_mols}
+
+        if return_rdmol_dict:
+            return all_mols
 
     def create_ligand_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
         """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
@@ -484,7 +496,9 @@ class RingtailCore:
                 raise OutputError(
                     f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes"
                 )
-            flexres_mols.append(Chem.MolFromSmiles(res_smiles))
+            frm = Chem.MolFromSmiles(res_smiles)
+            frm.SetProp("resinfo", res)
+            flexres_mols.append(frm)
             flexres_info.append((res_smiles, res_index_map, res_h_parents))
 
         # fetch coordinates for passing poses and add to
