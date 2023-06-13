@@ -2982,6 +2982,8 @@ class StorageManagerSQLite(StorageManager):
                 best_lig_c = leff_poseid_ifps[c[np.argmin(c_leffs)]][1]
                 int_rep_poseids.append(str(best_lig_c))
 
+            self._insert_cluster_data(bclusters, [l[1] for l in leff_poseid_ifps], "ifp", str(self.interaction_cluster))
+
             # catch if no pose_ids returned
             if int_rep_poseids == []:
                 logging.warning("No passing results prior to clustering. Clustering not performed.")
@@ -2993,6 +2995,7 @@ class StorageManagerSQLite(StorageManager):
 
         if self.mfpt_cluster is not None:
             logging.warning("WARNING: Ligand morgan fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
+            logging.warning("N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering.")
             cluster_query = f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({unclustered_query})"
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
@@ -3007,6 +3010,8 @@ class StorageManagerSQLite(StorageManager):
                 best_lig_c = poseid_leff_mfps[c[np.argmin(c_leffs)]][0]
                 fp_rep_poseids.append(str(best_lig_c))
 
+            self._insert_cluster_data(bclusters, [l[0] for l in poseid_leff_mfps], "mfp", str(self.mfpt_cluster))
+
             # catch if no pose_ids returned
             if fp_rep_poseids == []:
                 logging.warning("No passing results prior to clustering. Clustering not performed.")
@@ -3017,6 +3022,21 @@ class StorageManagerSQLite(StorageManager):
             out_columns=outfield_string, window=self.filtering_window
         ), f"SELECT * FROM {self.filtering_window}")  # sql_query, view_query
 
+    def _insert_cluster_data(self, clusters: list, poseid_list: list, cluster_type: str, cluster_cutoff: str):
+            cur = self.conn.cursor()
+            cur.execute("CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)")
+            self.conn.commit()
+            ligand_cluster_columns = [c[1] for c in self._run_query("PRAGMA table_info(Ligand_clusters)").fetchall()]
+            column_name = f"{self.results_view_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
+            if column_name not in ligand_cluster_columns:
+                cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
+            for ci, cl in enumerate(clusters):
+                for i in cl:
+                    poseid = poseid_list[i]
+                    cur.execute(f"INSERT INTO Ligand_clusters (pose_id, {column_name}) VALUES (?,?) ON CONFLICT (pose_id) DO UPDATE SET {column_name}=excluded.{column_name}", (poseid, ci))
+
+            cur.close()
+    
     def _generate_interaction_index_filtering_query(self, interaction_list):
         """takes list of interaction info for a given ligand,
             looks up corresponding interaction index
