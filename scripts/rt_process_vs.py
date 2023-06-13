@@ -94,6 +94,9 @@ if __name__ == "__main__":
                     )
                     rt_core.export_bookmark_db(bookmark_name)
 
+                if cl_opts.rt_process_options["export_receptor"]:
+                    rt_core.export_receptors()
+
     except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
