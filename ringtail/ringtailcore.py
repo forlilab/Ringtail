@@ -301,9 +301,9 @@ class RingtailCore:
             self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
             self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
             if filtered_results is not None:
-                number_passing_ligands = self.output_manager.write_log(filtered_results)
-                self.output_manager.log_num_passing_ligands(number_passing_ligands)
-                print("Number passing Ligands:", number_passing_ligands)
+                number_passing = self.output_manager.write_log(filtered_results)
+                self.output_manager.log_num_passing_ligands(number_passing)
+                print("Number passing:", number_passing)
 
         if len(interaction_combs) > 1:
             maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
