@@ -164,7 +164,7 @@ $ rt_process_vs.py read --input_db all_groups.db --bookmark_name ep5_vdwV279 --e
 
 Now we have our filtered molecules as SDF files ready for visual inspection!
 
-## Expected Filtering Timings (M1Pro MacBook, ~2 million ligands)
+## Example Filtering Timings (M1Pro MacBook, ~2 million ligands)
 - __Summary:__ 8.4 sec (v1.1)
 - __Energy cutoff:__ 3.2 sec (v1.1), 80 sec (v1.0)
 - __Energy percentile:__ 6.1 sec (v1.1), 167 sec (v1.0)
