@@ -521,7 +521,9 @@ def cmdline_parser(defaults={}):
         nargs="+",
     )
     ligand_group.add_argument(
+        "-mna"
         "--max_nr_atoms",
+        help="Maximum number of heavy atoms a ligand may have",
         action="store",
         type=int,
         metavar="INT",

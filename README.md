@@ -13,11 +13,20 @@ Ringtail reads collections of Docking Log File (DLG) or PDBQT results from virtu
 a SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of a simple result scatterplot, export of 
 molecule SDFs, and export of CSVs of result data. Result file parsing is parallelized across the user's CPU.
 
-**The pre-print publication describing the design, implementation, and features of Ringtail may be found on [ChemRxiv](https://chemrxiv.org/engage/chemrxiv/article-details/6372bfc874b7b6da1efd9527).**
+**The publication describing the design, implementation, and features of Ringtail may be found on [JCIM](https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166). If using Ringtail in your work, please cite this publication**
 
 Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
+
+### New in version 1.1:
+- Significant filtering runtime improvements vs v1.0 (filtering in seconds instead of minutes)
+- `--summary` option for getting quick overview of data across entire dataset
+- Selection of dissimilar output ligands with Morgan fingerprint or interaction fingerprint clustering
+- Option for exporting stored receptor PDBQTs
+- Ligand substructure filter
+- Ligand substructure location filter
+- `--max_miss` option now outputs union of interaction combinations by default, with `--enumerate_interaction_combs` option to log passing ligands/poses for individual interaction combination
 
 ## README Outline
 - [Installation](https://github.com/forlilab/Ringtail#installation)
@@ -260,9 +269,13 @@ By default, only the information for the top-scoring binding pose will be writte
 
 No filtering is performed if no filters are given. If both `--eworst` and `--score_percentile` are used together, the `--eworst` cutoff alone is used. The same is true of `--leworst` and `--le_percentile`.
 
-When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--bookmark_name` option. Data for poses in a view may be accessed later using the `--new_data_from_bookmark` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<bookmark_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
+In addition to the filtering options outlined in the table below, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (`--mfpt_cluster`) or interaction (`--interaction_cluster`) fingerprints. Dissimilarity is measured by Tanimoto distance and clustering is performed with the Butina clustering algorithm.
 
-Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database Results rows (i.e. stored poses). One may also filter over a previous bookmark specified with the `--filter_bookmark` option. If using this option, the bookmarks specified by `--filter_bookmark` and `--bookmark_name` must be different. In our experience, it is faster to export the bookmark of interest as its own database with the `--export_bookmark_db` flag and perform additional sub-selection and export tasks from there.
+When filtering, the passing results are saved as a view in the database. This view is named `passing_results` by default. The user can specify a name for the view using the `--bookmark_name` option. Data for poses in a view may be accessed later using the `--data_from_bookmark` option. When `max_miss` > 0 is used, a view is created for each combination of interaction filters and is named `<bookmark_name>_<n>` where n is the index of the filter combination in the log file (indexing from 0).
+
+Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database Results rows (i.e. stored poses). One may also filter over a previous bookmark specified with the `--filter_bookmark` option. If using this option, the bookmarks specified by `--filter_bookmark` and `--bookmark_name` must be different.
+
+While not quite a filtering option, the user can provide a ligand name from a previously-run clustering and re-output other ligands that were clustered with that query ligand with `--find_similar_ligands`. The user is prompted at runtime to choose a specific clustering group from which to re-output ligands. Filtering/clustering will be performed from the same command-line call prior to this similarity search, but all subsequent output tasks will be performed on the group of similar ligands obtained with this option unless otherwise specified. 
 
 ##### Other available outputs
 The primary outputs from `rt_process_vs.py` are the database itself (`write` mode) and the filtering log file (`read` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
@@ -278,13 +291,17 @@ The second option is `--export_query_csv`. This takes a string of a properly-for
 
 As noted above, a bookmark may also be exported as a separate SQLite dabase with the `--export_bookmark_db` flag.
 
+Finally, a receptor stored in the database may be re-exported as a PDBQT with the `--export_receptor` option.
+
 ### Interaction filter formatting and options
 
 **Interaction filtering requires interactions to be present in database.**
 
 The `--vdw`, `--hb`, and `--react_res` interaction filters must be specified in the order `CHAIN:RES:NUM:ATOM_NAME`. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. `--vdw`) may be specified with a single option tag (`--vdw=B:THR:276:,B:HIS:226:`) or separate tags (`--vdw=B:THR:276: --vdw=B:HIS:226:`).
 
-The `--max_miss` option allows the user to separately filter each combination of the given interaction filters excluding up to `max_miss` interactions. This gives ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination of interaction filters will be written separately in the log file. This option cannot be used with `--plot` or `--export_poses_path`.
+The `--max_miss` option allows the user to filter by given interactions excluding up to `max_miss` interactions. This gives ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. By default, results will be given for the union of the interaction conbinations. Use with `--enumerate_interaction_combs` to log ligands/poses passing each separate interaction combination (can significantly increase runtime).
+
+The `--smarts_idxyz` option may be used to filter for a specific ligand substructure (specified with a SMARTS string) to be placed within some distance of a given cartesian coordinate. The format for this option is `"<SMARTS pattern: str>" <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>`.
 
 ### Exploring the database in the Command Line
 View the data contained within the database using a terminal, we recommend using the [VisiData tool](https://www.visidata.org/). In addition to command line visualization, this tool has a number of other feature, including ploting. Upon opening the database with `vd`, the terminal should look like this:
@@ -359,24 +376,31 @@ If you encounter further errors related to views/bookmarks, please contact the F
 |--export_bookmark_db |-xdb| Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db| FALSE      ||
 |--data_from_bookmark |-nd| Flag that out_fields data should be written to log for results in given --bookmark_name. Requires no filters. | FALSE       ||
 |--filter_bookmark |-fb| Filter over specified bookmark, not whole Results table. | FALSE       ||
+|--find_similar_ligands |-fsl| Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest. | no default       ||
 |--plot             |-p| Flag to create scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        ||
-|--pymol             |-py| Flag to launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with --bookmark_name will be ploted and displayed in PyMol when clicked on.| FALSE        | <tr><td colspan="5">PROPERTY FILTERS</td></tr>
-|--eworst           |-e| Worst energy value accepted (kcal/mol)                | no_default  ||
+|--pymol             |-py| Flag to launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with --bookmark_name will be ploted and displayed in PyMol when clicked on.| FALSE        |
+<tr><td colspan="5">PROPERTY FILTERS</td></tr>
+|--eworst           |-e| Worst energy value accepted (kcal/mol)                | no default  ||
 |--ebest            |-eb| Best energy value accepted (kcal/mol)                 | no default  ||
 |--leworst          |-le| Worst ligand efficiency value accepted                | no default  ||
 |--lebest           |-leb| Best ligand efficiency value accepted                 | no default  ||
 |--score_percentile      |-pe| Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  ||
 |--le_percentile   |-ple| Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default |  <tr><td colspan="5">LIGAND FILTERS</td></tr>
-|--name             |-n| Search for specific ligand name. Multiple names joined by "OR". Multiple filters should be separated by commas | no default  | <tr><td 
-|--smarts           |-n| SMARTS pattern(s) for substructur matching | no default  | <tr><td 
-|--smarts_idxyz     |-n| SMARTS pattern, index of atom in SMARTS, cutoff distance, and target xyz coordinates. Finds poses in which the specified substructure atom is within the distance cutoff from the target location | no default  | <tr><td 
+|--name             |-n| Search for specific ligand name. Multiple names joined by "OR". Multiple filters should be separated by commas | no default  ||
+|--max_nr_atoms     |-mna| Specify maximum number of heavy atoms a ligand may have | no default  ||
+|--smarts           || SMARTS pattern(s) for substructur matching | no default  ||
+|--smarts_idxyz     || SMARTS pattern, index of atom in SMARTS, cutoff distance, and target xyz coordinates. Finds poses in which the specified substructure atom is within the distance cutoff from the target location | no default  ||
 |--smarts_join     |-n| logical operator for multiple SMARTS | OR  | <tr><td colspan="5">INTERACTION FILTERS</td></tr>
 |--van_der_waals    |-vdw| Filter for van der Waals interaction with given receptor information.  | no default  | Yes|
 |--hydrogen_bond    |-hb| Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  | Yes|
 |--reactive_res     |-r| Filter for reation with residue containing specified information | no default  |Yes |
 |--hb_count         |-hc| Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | Yes|
 |--react_any        |-ra| Filter for poses with reaction with any residue       | FALSE     | Yes|
-|--max_miss         |-mm| Will separately filter each combination of given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Results for each combination written separately in log file. Cannot be used with --plot or --export_sdf_path. | 0  | Yes|
+|--max_miss         |-mm| Will filter given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Will log and output union of combinations unless used with `--enumerate_interaction_combs`. | 0  | Yes |
+|--enumerate_interactions_combs  |-eic| When used with `--max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. | FALSE  | Yes 
+<tr><td colspan="5">PASSING RESULT CLUSTERING</td></tr>
+|--mfpt_cluster     |-mfpc| Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm | 0.5  ||
+|--interaction_cluster     |-ifpc| Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm | 0.5  | Yes |
 
 ---
 
