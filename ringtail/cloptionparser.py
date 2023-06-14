@@ -437,6 +437,13 @@ def cmdline_parser(defaults={}):
         type=str,
     )
     output_group.add_argument(
+        "-fsl",
+        "--find_similar_ligands",
+        help="Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.",
+        action="store",
+        type=str,
+    )
+    output_group.add_argument(
         "-p",
         "--plot",
         help="Makes scatterplot of LE vs Best Energy, saves as scatter.png.",
@@ -724,6 +731,7 @@ class CLOptionParser:
         if self.process_mode == "write":
             # initialize rt_process read-only options to prevent errors
             parsed_opts.plot = None
+            parsed_opts.find_similar_ligands=None
             parsed_opts.export_bookmark_csv = None
             parsed_opts.export_query_csv = None
             parsed_opts.export_bookmark_db = None
@@ -959,6 +967,7 @@ class CLOptionParser:
             "debug": parsed_opts.debug,  # both modes
             "summary": parsed_opts.summary,  # both modes
             "plot": parsed_opts.plot,
+            "find_similar_ligands": parsed_opts.find_similar_ligands,
             "export_bookmark_csv": parsed_opts.export_bookmark_csv,
             "export_query_csv": parsed_opts.export_query_csv,
             "export_bookmark_db": parsed_opts.export_bookmark_db,

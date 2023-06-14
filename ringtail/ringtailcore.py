@@ -304,6 +304,8 @@ class RingtailCore:
                 number_passing = self.output_manager.write_log(filtered_results)
                 self.output_manager.log_num_passing_ligands(number_passing)
                 print("Number passing:", number_passing)
+            else:
+                logging.warning("WARNING: No ligands found passing filters")
 
         if len(interaction_combs) > 1:
             maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
@@ -320,6 +322,17 @@ class RingtailCore:
         self.output_manager.create_log_file()
         new_data = self.storageman.fetch_data_for_passing_results()
         self.output_manager.write_log(new_data)
+
+    def find_similar_ligands(self, query_ligname: str):
+        """Find ligands in cluster with query_ligname
+        """
+        similar_ligands, bookmark_name, cluster_name = self.storageman.fetch_clustered_similars(query_ligname)
+        if similar_ligands is not None:
+            self.output_manager.write_find_similar_header(query_ligname, cluster_name)
+            self.output_manager.write_results_bookmark_to_log(bookmark_name)
+            number_similar = self.output_manager.write_log(similar_ligands)
+            self.output_manager.log_num_passing_ligands(number_similar)
+            print("Number similar ligands:", number_similar)
 
     def plot(self, save=True):
         """

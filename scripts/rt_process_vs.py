@@ -69,6 +69,9 @@ if __name__ == "__main__":
                 # Write log with new data for previous filtering results
                 if cl_opts.rt_process_options["data_from_bookmark"] and not cl_opts.rt_process_options["filter"]:
                     rt_core.get_previous_filter_data()
+                
+                if cl_opts.rt_process_options["find_similar_ligands"]:
+                    rt_core.find_similar_ligands(cl_opts.rt_process_options["find_similar_ligands"])
 
                 # plot if requested
                 if cl_opts.rt_process_options["plot"]:

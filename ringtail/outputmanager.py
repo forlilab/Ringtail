@@ -223,15 +223,16 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error occurred while writing SDF from RDKit Mol") from e
 
-    def create_log_file(self):
+    def create_log_file(self, write_filters_header=True):
         """
         Initializes log file
         """
         self.log_file = open(self.log_file, 'w')
         self._log_open = True
         try:
-            self.log_file.write("Filters:\n")
-            self.log_file.write("***************\n")
+            if write_filters_header:
+                self.log_file.write("Filters:\n")
+                self.log_file.write("***************\n")
         except Exception as e:
             raise OutputError("Error while creating log file") from e
 
@@ -338,3 +339,9 @@ class OutputManager:
     def write_maxmiss_union_header(self):
         self.log_file.write("\n---------------\n")
         self.log_file.write("Max Miss Union:\n")
+
+    def write_find_similar_header(self, query_ligname, cluster_name):
+        if not self._log_open:
+            self.create_log_file(write_filters_header=False)
+        self.log_file.write("\n---------------\n")
+        self.log_file.write(f"Found ligands similar to {query_ligname} in clustering {cluster_name}:\n")

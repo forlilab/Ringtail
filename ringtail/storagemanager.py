@@ -1920,6 +1920,45 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(f"Error retrieving ligand info for {ligname}") from e
 
+    def fetch_clustered_similars(self, ligname: str):
+        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
+
+        Args:
+            ligname (str): ligname for ligand to find similarity with
+        """
+        logging.warning("N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters.")
+        cur = self.conn.cursor()
+
+        ligand_cluster_columns = self._fetch_ligand_cluster_columns()
+        print("Here are the existing clustering groups. Please ensure that you query ligand(s) is a part of the group you select.")
+        print("   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint?   |   cutoff   ")
+        print("----------------------------------------------------------------------------------------------------------")
+        for i, col in enumerate(ligand_cluster_columns):
+            col_info = col.split("_")
+            option_list = [str(i)] + ["_".join(col_info[:-2])] + [col_info[-2]] + [col_info[-1].replace("p", ".")]
+            print(f"{'    |    '.join(option_list)}")
+        cluster_choice = input("Please specify choice number for the cluster you would like to return similar ligands from: ")
+        try:
+            cluster_col_choice = ligand_cluster_columns[int(cluster_choice)]
+        except ValueError:
+            raise ValueError(f"Given cluster number {cluster_choice} cannot be converted to int. Please be sure you are specifying integer.")
+       
+        query_ligand_cluster = cur.execute(f"SELECT {cluster_col_choice} FROM Ligand_clusters WHERE pose_id IN (SELECT Pose_ID FROM Results WHERE LigName LIKE '{ligname}')").fetchone()
+        if query_ligand_cluster is None:
+            raise DatabaseQueryError(f"Requested ligand name {ligname} not found in cluster {cluster_col_choice}!")
+        query_ligand_cluster = query_ligand_cluster[0]  # extract from tuple
+        sql_query = f"SELECT LigName FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
+        view_query = f"SELECT * FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
+
+        view_name = f"similar_{ligname}_{cluster_col_choice}"
+        self._create_view(view_name, view_query)
+        self._insert_bookmark_info(name=view_name, sqlite_query=sql_query)
+
+        self.results_view_name = view_name
+
+        return self._run_query(sql_query), view_name, cluster_col_choice
+
+
     def create_temp_passing_table(self):
         cur = self.conn.cursor()
         cur.execute(f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {self.results_view_name}")
@@ -2102,9 +2141,13 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             con = sqlite3.connect(self.db_file)
-            con.enable_load_extension(True)
-            con.load_extension("chemicalite")
-            con.enable_load_extension(False) 
+            try:
+                con.enable_load_extension(True)
+                con.load_extension("chemicalite")
+                con.enable_load_extension(False)
+            except sqlite3.OperationalError as e:
+                logging.critical("Failed to load chemicalite cartridge. Please ensure chemicalite is installed with `conda install -c conda-forge chemicalite`.")
+                raise e
             cursor = con.cursor()
             cursor.execute("PRAGMA synchronous = OFF")
             cursor.execute("PRAGMA journal_mode = MEMORY")
@@ -3022,11 +3065,17 @@ class StorageManagerSQLite(StorageManager):
             out_columns=outfield_string, window=self.filtering_window
         ), f"SELECT * FROM {self.filtering_window}")  # sql_query, view_query
 
+    def _fetch_ligand_cluster_columns(self):
+        try:
+            return [c[1] for c in self._run_query("PRAGMA table_info(Ligand_clusters)").fetchall()][1:]
+        except IndexError:
+            raise IndexError("Error fetching columns from Ligand_clusters table. Confirm that ligand clustering has been previously performed.")
+
     def _insert_cluster_data(self, clusters: list, poseid_list: list, cluster_type: str, cluster_cutoff: str):
             cur = self.conn.cursor()
             cur.execute("CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)")
             self.conn.commit()
-            ligand_cluster_columns = [c[1] for c in self._run_query("PRAGMA table_info(Ligand_clusters)").fetchall()]
+            ligand_cluster_columns = self._fetch_ligand_cluster_columns()
             column_name = f"{self.results_view_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
             if column_name not in ligand_cluster_columns:
                 cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
