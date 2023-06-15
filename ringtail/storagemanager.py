@@ -17,6 +17,7 @@ from rdkit import DataStructs
 from rdkit.ML.Cluster import Butina
 import numpy as np
 import time
+import pkg_resources
 
 try:
     import cPickle as pickle
@@ -1789,6 +1790,47 @@ class StorageManagerSQLite(StorageManager):
             self.conn.backup(bck, pages=1)
         bck.close()
 
+    def set_ringtaildb_version(self):
+        rt_version = pkg_resources.get_distribution("ringtail").version.replace(".", "")
+        cur = self.conn.cursor()
+        cur.execute(f"PRAGMA user_version = {rt_version}")
+        self.conn.commit()
+        cur.close()
+
+    def check_ringtaildb_version(self):
+        cur = self.conn.cursor()
+        db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
+        cur.close()
+        return db_version == pkg_resources.get_distribution("ringtail").version.replace(".", ""), db_version
+
+    def update_database(self, consent=False):
+        cur = self.conn.cursor()
+        # get views and drop them
+        if not consent:
+            logging.warning("WARNING: All existing bookmarks in database will be dropped during database update!")
+            consent = input("Type 'yes' if you wish to continue: ") == 'yes'
+        if not consent:
+            logging.critical("Consent not given for database update. Cancelling...")
+            sys.exit(1)
+
+        logging.info(f"Updating {self.db_file}...")
+        views = cur.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall()
+        for v in views:
+            cur.execute(f"DROP VIEW IF EXISTS {v[0]}")
+        # delete all rows in bookmarks table
+        cur.execute("DELETE FROM Bookmarks")
+
+        # reformat for v1.1.0
+        cur.execute("ALTER TABLE Results RENAME COLUMN energies_binding TO docking_score")
+        cur.execute("ALTER TABLE Bookmarks ADD COLUMN filters")
+        cur.execute("CREATE INDEX allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)")
+        self.conn.commit()
+        cur.close()
+
+        self.set_ringtaildb_version()
+
+        return consent
+
     def remake_bookmarks(self):
         """Reads all views from Bookmarks table and remakes them"""
         try:
@@ -2782,6 +2824,14 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             String: SQLite-formatted string for filtering query
         """
+        # before we do anything, check that the DB version matches the version number of our module
+        rt_version_same, db_rt_version = self.check_ringtaildb_version()
+        if not rt_version_same:
+            # TODO: will cause error when any version int is > 10
+            # catch version 1.0.0 where returned db_rt_version will be 0
+            if db_rt_version == 0:
+                db_rt_version = 100
+            raise StorageError(f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed.")
 
         outfield_string = self._generate_outfield_string()
 
@@ -3072,19 +3122,19 @@ class StorageManagerSQLite(StorageManager):
             raise IndexError("Error fetching columns from Ligand_clusters table. Confirm that ligand clustering has been previously performed.")
 
     def _insert_cluster_data(self, clusters: list, poseid_list: list, cluster_type: str, cluster_cutoff: str):
-            cur = self.conn.cursor()
-            cur.execute("CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)")
-            self.conn.commit()
-            ligand_cluster_columns = self._fetch_ligand_cluster_columns()
-            column_name = f"{self.results_view_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
-            if column_name not in ligand_cluster_columns:
-                cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
-            for ci, cl in enumerate(clusters):
-                for i in cl:
-                    poseid = poseid_list[i]
-                    cur.execute(f"INSERT INTO Ligand_clusters (pose_id, {column_name}) VALUES (?,?) ON CONFLICT (pose_id) DO UPDATE SET {column_name}=excluded.{column_name}", (poseid, ci))
+        cur = self.conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)")
+        ligand_cluster_columns = self._fetch_ligand_cluster_columns()
+        column_name = f"{self.results_view_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
+        if column_name not in ligand_cluster_columns:
+            cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
+        for ci, cl in enumerate(clusters):
+            for i in cl:
+                poseid = poseid_list[i]
+                cur.execute(f"INSERT INTO Ligand_clusters (pose_id, {column_name}) VALUES (?,?) ON CONFLICT (pose_id) DO UPDATE SET {column_name}=excluded.{column_name}", (poseid, ci))
 
-            cur.close()
+        cur.close()
+        self.conn.commit()
     
     def _generate_interaction_index_filtering_query(self, interaction_list):
         """takes list of interaction info for a given ligand,
