@@ -31,10 +31,20 @@ at [Scripps Research](https://www.scripps.edu/).
 - [Significant filtering runtime improvements vs v1.0](https://github.com/forlilab/Ringtail/tree/prep-v1.1#example-filtering-timings-m1pro-macbook-2-million-ligands)
 - `--summary` option for getting quick overview of data across entire dataset
 - Selection of dissimilar output ligands with Morgan fingerprint or interaction fingerprint clustering
+- Select similar ligands from query ligand name in previous Morgan fingerprint or interaction finger clustering groups
 - Option for exporting stored receptor PDBQTs
-- Ligand substructure filter
-- Ligand substructure location filter
+- Filter by ligand substructure
+- Filter by ligand substructure location in cartesian space
 - `--max_miss` option now outputs union of interaction combinations by default, with `--enumerate_interaction_combs` option to log passing ligands/poses for individual interaction combination
+
+#### Updating database written with v1.0.0 to work with v1.1.0
+If you have previously written a database with Ringtail v1.0.0, it will need to be updated to be compatible with filtering with v1.1.0. We have included a new script `rt_db_v100_to_v110.py` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
+
+```
+$ rt_db_v100_to_v110.py -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (optional)>
+```
+
+Multiple databases may be specified at once. The update may take a few minutes per database.
 
 ## README Outline
 - [Installation](https://github.com/forlilab/Ringtail#installation)
