@@ -54,6 +54,7 @@ old_test_data/
 test/output.db
 test/*.csv
 test/*.png
+test/*.sdf
 test/output_log.txt
 
 # Translations

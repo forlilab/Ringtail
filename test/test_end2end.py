@@ -681,3 +681,15 @@ class TestFilters:
         )
 
         assert status == 0
+
+    def test_export_sdf(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read --input_db output.db -e -7.3 -sdf . -d "
+        )
+
+        import glob
+        sdf_files = glob.glob("*.sdf")
+        print(sdf_files)
+        assert sdf_files == ['77913.sdf', '83339.sdf', '13974.sdf', '8090.sdf']
+
+        assert status == 0
