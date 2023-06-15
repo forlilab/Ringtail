@@ -1,5 +1,6 @@
 ![ringtail logo final](https://user-images.githubusercontent.com/41704502/170797800-53a9d94a-932e-4936-9bea-e2d292b0c62b.png)
 
+(Original artwork by Althea Hansel-Harris)
 
 
 # Ringtail
@@ -13,12 +14,14 @@ Ringtail reads collections of Docking Log File (DLG) or PDBQT results from virtu
 a SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of a simple result scatterplot, export of 
 molecule SDFs, and export of CSVs of result data. Result file parsing is parallelized across the user's CPU.
 
-**The publication describing the design, implementation, and features of Ringtail may be found on [JCIM](https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166). If using Ringtail in your work, please cite this publication:**
+The publication describing the design, implementation, and features of Ringtail may be found in the JCIM paper:
 
-**Ringtail: A Python Tool for Efficient Management and Storage of Virtual Screening Results.
+[_Ringtail: A Python Tool for Efficient Management and Storage of Virtual Screening Results._
 Althea T. Hansel-Harris, Diogo Santos-Martins, Niccolò Bruciaferri, Andreas F. Tillack, Matthew Holcomb, and Stefano Forli.
-Journal of Chemical Information and Modeling 2023 63 (7), 1858-1864.
-DOI: 10.1021/acs.jcim.3c00166**
+_Journal of Chemical Information and Modeling_ **2023** 63 (7), 1858-1864.
+DOI: 10.1021/acs.jcim.3c00166](https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166)
+
+If using Ringtail in your work, please cite this publication.
 
 Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
