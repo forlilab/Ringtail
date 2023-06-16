@@ -34,7 +34,8 @@ jobs:
         conda create -y --name ringtail
         conda activate ringtail
         conda install pip
-        pip install flake8 pytest
+        conda install flake8
+        pip install pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install .
         conda install -c conda-forge chemicalite
