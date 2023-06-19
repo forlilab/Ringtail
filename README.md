@@ -405,7 +405,7 @@ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --export_csv
 ---
 ## Brief python tutorials
 #### Make sqlite database from current directory
-```
+```python
 from ringtail import RingtailCore
 
 opts = RingtailCore.get_defaults()
@@ -417,7 +417,7 @@ with RingtailCore(**opts) as rt_core:
     rt_core.add_results()
 ```
 #### Convert database tables to pandas dataframes
-```
+```python
 from ringtail import StorageManagerSQLite
 
 # make database manager with connection to SQLite file vs.db
@@ -440,7 +440,7 @@ with StorageManagerSQLite("vs.db") as dbman:
 
 ```
 #### Make an ROC plot and calculate its AUC for a virtual screening with a file containing a list of known binders
-```
+```python
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
