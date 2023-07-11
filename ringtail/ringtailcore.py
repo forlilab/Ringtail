@@ -134,6 +134,7 @@ class RingtailCore:
         self.storageman.check_storage_empty()
         logging.info("Adding results...")
         self.results_man.process_results()
+        self.storageman.set_ringtaildb_version()
 
     def save_receptors(self, receptor_file):
         """Add receptor to database
@@ -738,3 +739,6 @@ class RingtailCore:
             return combinations + self._generate_interaction_combinations(
                 max_miss=max_miss - 1
             )
+
+    def update_database(self, consent=False):
+        return self.storageman.update_database(consent)

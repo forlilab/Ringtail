@@ -681,3 +681,19 @@ class TestFilters:
         )
 
         assert status == 0
+
+    def test_export_sdf(self):
+        status2 = os.system(
+            "python ../scripts/rt_process_vs.py read --input_db output.db -e -4 -sdf . -d "
+        )
+
+        import glob
+        sdf_files = glob.glob("*.sdf")
+        print(sdf_files)
+        expected = ['127458.sdf', '100729.sdf', '173101.sdf']
+        assert len(sdf_files) == len(expected)
+        for f in sdf_files:
+            assert f in expected
+            os.remove(f)
+
+        assert status2 == 0
