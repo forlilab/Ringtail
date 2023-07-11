@@ -1,5 +1,6 @@
 ![ringtail logo final](https://user-images.githubusercontent.com/41704502/170797800-53a9d94a-932e-4936-9bea-e2d292b0c62b.png)
 
+(Original artwork by Althea Hansel-Harris)
 
 
 # Ringtail
@@ -13,20 +14,37 @@ Ringtail reads collections of Docking Log File (DLG) or PDBQT results from virtu
 a SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of a simple result scatterplot, export of 
 molecule SDFs, and export of CSVs of result data. Result file parsing is parallelized across the user's CPU.
 
-**The publication describing the design, implementation, and features of Ringtail may be found on [JCIM](https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166). If using Ringtail in your work, please cite this publication**
+The publication describing the design, implementation, and features of Ringtail may be found in the JCIM paper:
+
+[_Ringtail: A Python Tool for Efficient Management and Storage of Virtual Screening Results._
+Althea T. Hansel-Harris, Diogo Santos-Martins, Niccolò Bruciaferri, Andreas F. Tillack, Matthew Holcomb, and Stefano Forli.
+_Journal of Chemical Information and Modeling_ **2023** 63 (7), 1858-1864.
+DOI: 10.1021/acs.jcim.3c00166](https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166)
+
+If using Ringtail in your work, please cite this publication.
 
 Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
 
 ### New in version 1.1:
-- [Significant filtering runtime improvements vs v1.0] (https://github.com/forlilab/Ringtail/tree/prep-v1.1#expected-filtering-timings-m1pro-macbook-2-million-ligands)
+- [Significant filtering runtime improvements vs v1.0](https://github.com/forlilab/Ringtail/tree/prep-v1.1#example-filtering-timings-m1pro-macbook-2-million-ligands)
 - `--summary` option for getting quick overview of data across entire dataset
 - Selection of dissimilar output ligands with Morgan fingerprint or interaction fingerprint clustering
+- Select similar ligands from query ligand name in previous Morgan fingerprint or interaction finger clustering groups
 - Option for exporting stored receptor PDBQTs
-- Ligand substructure filter
-- Ligand substructure location filter
+- Filter by ligand substructure
+- Filter by ligand substructure location in cartesian space
 - `--max_miss` option now outputs union of interaction combinations by default, with `--enumerate_interaction_combs` option to log passing ligands/poses for individual interaction combination
+
+#### Updating database written with v1.0.0 to work with v1.1.0
+If you have previously written a database with Ringtail v1.0.0, it will need to be updated to be compatible with filtering with v1.1.0. We have included a new script `rt_db_v100_to_v110.py` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
+
+```
+$ rt_db_v100_to_v110.py -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (optional)>
+```
+
+Multiple databases may be specified at once. The update may take a few minutes per database.
 
 ## README Outline
 - [Installation](https://github.com/forlilab/Ringtail#installation)
@@ -159,13 +177,13 @@ $ rt_process_vs.py read --input_db all_groups.db --bookmark_name ep5_vdwV279 --e
 
 Now we have our filtered molecules as SDF files ready for visual inspection!
 
-## Expected Filtering Timings (M1Pro MacBook, ~2 million ligands)
-- Summary: 8.4 sec (v1.1)
-- Energy cutoff: 3.2 sec (v1.1), 80 sec (v1.0)
-- Energy percentile: 6.1 sec (v1.1), 167 sec (v1.0)
-- 1 hydrogen bond: 34 sec (v1.1), 291 sec (v1.0)
-- 2 hydrogen bonds:  66 sec (v1.1), 386 sec (v1.0)
-- Energy cutoff, 2 hydrogen bonds: 11 sec (v1.1)
+## Example Filtering Timings (M1Pro MacBook, ~2 million ligands)
+- __Summary:__ 8.4 sec (v1.1)
+- __Energy cutoff:__ 3.2 sec (v1.1), 80 sec (v1.0)
+- __Energy percentile:__ 6.1 sec (v1.1), 167 sec (v1.0)
+- __1 hydrogen bond:__ 34 sec (v1.1), 291 sec (v1.0)
+- __2 hydrogen bonds:__  66 sec (v1.1), 386 sec (v1.0)
+- __Energy cutoff, 2 hydrogen bonds:__ 11 sec (v1.1)
 
 # Extended documentation
 
