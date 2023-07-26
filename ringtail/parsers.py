@@ -218,6 +218,9 @@ def parse_single_dlg(fname):
                             raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
+                    finally:
+                        if np.isnan(e):
+                            raise ValueError("Error! File contains NaN value for energy.")
                     scores.append(e)
                 elif "Final Intermolecular Energy" in line:
                     try:
