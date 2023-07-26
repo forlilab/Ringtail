@@ -88,8 +88,8 @@ class DockingFileReader(multiprocessing.Process):
         # each multiprocessing.Process class must have a "run" method which
         # is called by the initialization (see below) with start()
         #
-        try:
-            while True:
+        while True:
+            try:
                 # retrieve from the queue in the next task to be done
                 next_task = self.queueIn.get()
                 # logging.debug("Next Task: " + str(next_task))
@@ -164,13 +164,11 @@ class DockingFileReader(multiprocessing.Process):
                 # put the result in the out queue
                 data_packet = self.storageman_class.format_for_storage(parsed_file_dict)
                 self._add_to_queueout(data_packet)
-        except Exception:
-            tb = traceback.format_exc()
-            self.pipe.send(
-                (FileParsingError("Error while parsing file"), tb, next_task)
-            )
-        finally:
-            return
+            except Exception:
+                tb = traceback.format_exc()
+                self.pipe.send(
+                    (FileParsingError(f"Error while parsing {next_task}"), tb, next_task)
+                )
 
     def _add_to_queueout(self, obj):
         max_attempts = 750
