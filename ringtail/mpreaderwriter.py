@@ -338,6 +338,7 @@ class Writer(multiprocessing.Process):
         if final:
             # if final write, tell storageman to index
             self.storageman.create_indices()
+            self.storageman.set_ringtaildb_version()
 
     def process_file(self, file_packet):
         results_rows, ligand_row, interaction_rows, receptor_row = file_packet
