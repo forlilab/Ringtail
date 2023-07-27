@@ -43,6 +43,20 @@ class Test_StorageManSQLite:
         cur.close()
         conn.close()
 
+    def test_version_info(self):
+        os.system("rm output.db")
+
+        opts = RingtailCore.get_defaults()
+        opts["rman_opts"]["values"]["file_sources"]["file_path"]["path"] = [["test_data/"]]
+        opts["rman_opts"]["values"]["file_sources"]["file_path"]["recursive"] = True
+
+        with RingtailCore(opts_dict=opts) as rt_core:
+            rt_core.add_results()
+            versionmatch, version = rt_core.storageman.check_ringtaildb_version()
+        
+        assert versionmatch
+        assert int(version) == 110  # TODO: update for new versions
+
 class Test_RingtailCore:
 
     def test_prepare_filters_for_storageman(self):
