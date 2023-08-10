@@ -1411,10 +1411,11 @@ class StorageManagerSQLite(StorageManager):
         ):  # catch lack of interaction data
             # add interaction count
             ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0])
-            # count number H bonds, add to ligand data list
-            ligand_data_list.append(
-                ligand_dict["interactions"][pose_rank]["type"].count("H")
-            )
+            if int(ligand_dict["interactions"][pose_rank]["count"][0]) != 0:
+                # count number H bonds, add to ligand data list
+                ligand_data_list.append(
+                    ligand_dict["interactions"][pose_rank]["type"].count("H")
+                )
             # Add the cluster size for the cluster this pose belongs to
             ligand_data_list.append(
                 ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
