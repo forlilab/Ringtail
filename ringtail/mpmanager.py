@@ -194,6 +194,7 @@ class MPManager:
             else:
                 with open("ringtail_failed_files.log", 'a') as f:
                     f.write(str(datetime.now()) + f"\tRingtail failed to parse {filename}\n")
+                    logging.debug(tb)
 
     def _kill_all_workers(self, error, filename, tb):
         for s in self.workers:
