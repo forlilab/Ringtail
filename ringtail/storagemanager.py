@@ -1416,6 +1416,8 @@ class StorageManagerSQLite(StorageManager):
                 ligand_data_list.append(
                     ligand_dict["interactions"][pose_rank]["type"].count("H")
                 )
+            else:
+                ligand_data_list.append(0)
             # Add the cluster size for the cluster this pose belongs to
             ligand_data_list.append(
                 ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
