@@ -2360,6 +2360,9 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseViewCreationError: Description
         """
+        # check that bookmark does not start with int, this causes a sqlite error
+        if name[0].isdigit():
+            raise DatabaseViewCreationError(f"Bookmark names may not start with digit. Given bookmark name {name}.")
         cur = self.conn.cursor()
         if add_poseID:
             query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
