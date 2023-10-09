@@ -13,32 +13,27 @@ import traceback
 if __name__ == "__main__":
 
     time0 = time.perf_counter()
-    level = logging.DEBUG
+    level = logging.INFO
     logging.basicConfig(
         level=level, stream=sys.stdout, filemode="w", format="%(message)s"
     )
-    # parse command line options and filters file (if given)
+
     try:
-        cl_opts = CLOptionParser()
-        debug = cl_opts.debug
+        rt_core = RingtailCore()
+        cl_opts = CLOptionParser(rt_core)
     except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
         logging.critical("ERROR: " + str(e))
         sys.exit(1)
 
-    # prepare option dictionaries for RingtailCore
-    storage_opts = cl_opts.storage_opts
-    rman_opts = cl_opts.rman_opts
-    filters = cl_opts.filters
-    out_opts = cl_opts.out_opts
-
     # set logging level
     levels = {10: "debug", 20: "info", 30: "warning"}
-    no_print = out_opts.pop("no_print")
+    debug = cl_opts.rt_process_options["debug"]
+    verbose = cl_opts.rt_process_options["verbose"]
     if debug:
         level = logging.DEBUG
-    elif no_print is False:
+    elif verbose:
         level = logging.INFO
     else:
         level = logging.WARNING
@@ -48,65 +43,68 @@ if __name__ == "__main__":
     # create manager object for virtual screening. Will make database if needed
     try:
         defaults = RingtailCore.get_defaults()
-        with RingtailCore(
-            storage_opts={
-                "values": storage_opts,
-                "types": defaults["storage_opts"]["types"],
-            },
-            rman_opts={"values": rman_opts, "types": defaults["rman_opts"]["types"]},
-            filters={"values": filters, "types": defaults["filters"]["types"]},
-            out_opts={"values": out_opts, "types": defaults["out_opts"]["types"]},
-        ) as rt_core:
+        with rt_core:
 
-            file_sources_empty = rt_core.get_defaults()["rman_opts"]["values"][
-                "file_sources"
-            ]
+                # parse command line options and filters file (if given)
 
-            if cl_opts.rr_mode == "write" and (
-                rman_opts["file_sources"] != file_sources_empty
-            ):
+            if cl_opts.process_mode == "write":
                 rt_core.add_results()
 
             # Add receptors to database if requested
-            if cl_opts.save_receptor:
-                rt_core.save_receptors(rman_opts["receptor_file"])
+            if cl_opts.rt_process_options["save_receptor"]:
+                rt_core.save_receptors(cl_opts.rt_process_options["receptor_file"])
+
+            # print summary
+            if cl_opts.rt_process_options["summary"]:
+                rt_core.produce_summary()
 
             time1 = time.perf_counter()
 
-            if cl_opts.rr_mode == "read":
+            if cl_opts.process_mode == "read":
+
                 # perform filtering
-                if cl_opts.filter:
-                    rt_core.filter()
+                if cl_opts.rt_process_options["filter"]:
+                    rt_core.filter(cl_opts.rt_process_options["enumerate_interaction_combs"])
 
                 # Write log with new data for previous filtering results
-                if out_opts["data_from_bookmark"] and not cl_opts.filter:
+                if cl_opts.rt_process_options["data_from_bookmark"] and not cl_opts.rt_process_options["filter"]:
                     rt_core.get_previous_filter_data()
+                
+                if cl_opts.rt_process_options["find_similar_ligands"]:
+                    rt_core.find_similar_ligands(cl_opts.rt_process_options["find_similar_ligands"])
 
                 # plot if requested
-                if out_opts["plot"]:
+                if cl_opts.rt_process_options["plot"]:
                     rt_core.plot()
 
+                # def open pymol viewer
+                if cl_opts.rt_process_options["pymol"]:
+                    rt_core.display_pymol()
+
                 # write out molecules if requested
-                if out_opts["export_sdf_path"] is not None:
+                if cl_opts.rt_process_options["export_sdf_path"]:
                     rt_core.write_molecule_sdfs()
 
                 # write out requested CSVs
-                if out_opts["export_bookmark_csv"] is not None:
+                if cl_opts.rt_process_options["export_bookmark_csv"]:
                     rt_core.export_csv(
-                        out_opts["export_bookmark_csv"],
-                        out_opts["export_bookmark_csv"] + ".csv",
+                        cl_opts.rt_process_options["export_bookmark_csv"],
+                        cl_opts.rt_process_options["export_bookmark_csv"] + ".csv",
                         table=True,
                     )
-                if out_opts["export_query_csv"] is not None:
-                    rt_core.export_csv(out_opts["export_query_csv"], "query.csv")
-                if out_opts["export_bookmark_db"] is not None:
+                if cl_opts.rt_process_options["export_query_csv"]:
+                    rt_core.export_csv(cl_opts.rt_process_options["export_query_csv"], "query.csv")
+                if cl_opts.rt_process_options["export_bookmark_db"]:
                     bookmark_name = (
-                        storage_opts["dbFile"].rstrip(".db")
+                        rt_core.storageman.db_file.rstrip(".db")
                         + "_"
-                        + storage_opts["results_view_name"]
+                        + rt_core.storageman.results_view_name
                         + ".db"
                     )
                     rt_core.export_bookmark_db(bookmark_name)
+
+                if cl_opts.rt_process_options["export_receptor"]:
+                    rt_core.export_receptors()
 
     except Exception as e:
         tb = traceback.format_exc()

@@ -70,7 +70,7 @@ def parse_single_dlg(fname):
         inside_input = False
         inside_res = False
         smile_string = ""
-        input_pdbqt = []
+        input_model = []
         index_map = []
         h_parents = []
         ligand_atomtypes = []
@@ -136,12 +136,12 @@ def parse_single_dlg(fname):
                             " UNK " in line
                         ):  # replace ligand atoms ATOM flag with HETATM
                             line = line.replace("ATOM", "HETATM")
-                        input_pdbqt.append(line.lstrip("INPUT-LIGAND-PDBQT"))
+                        input_model.append(line[20:])
                         # save ligand atomtypes
                         if line.startswith("INPUT-LIGAND-PDBQT") and (
                             "ATOM" in line or "HETATM" in line
                         ):
-                            ligand_atomtypes.append(line.strip()[-3:])
+                            ligand_atomtypes.append(line.strip()[97:])
                     if line.startswith("INPUT-LIGAND-PDBQT: REMARK SMILES IDX"):
                         index_map += (
                             line.lstrip("INPUT-LIGAND-PDBQT: REMARK SMILES IDX")
@@ -218,6 +218,9 @@ def parse_single_dlg(fname):
                             raise ValueError(
                                 "ERROR! Cannot parse {0} in {1}".format(line, fname)
                             )
+                    finally:
+                        if np.isnan(e):
+                            raise ValueError("Error! File contains NaN value for energy.")
                     scores.append(e)
                 elif "Final Intermolecular Energy" in line:
                     try:
@@ -399,7 +402,7 @@ def parse_single_dlg(fname):
         "grid_center": center,
         "grid_dim": npts,
         "grid_spacing": spacing,
-        "ligand_input_pdbqt": input_pdbqt,
+        "ligand_input_model": input_model,
         "ligand_index_map": index_map,
         "ligand_h_parents": h_parents,
         "pose_coordinates": pose_coordinates,
@@ -506,7 +509,7 @@ def parse_vina_pdbqt(fname):
                             [line[30:38], line[38:46], line[46:54]]
                         )
                         if first_model:
-                            ligand_atomtypes.append(line[77:-1].strip())
+                            ligand_atomtypes.append(line[77:].strip())
                             if line[13] != "H":
                                 num_heavy_atoms += 1
                 if line.startswith("REMARK SMILES IDX") and first_model:
@@ -549,7 +552,7 @@ def parse_vina_pdbqt(fname):
         "grid_center": "",
         "grid_dim": "",
         "grid_spacing": "",
-        "ligand_input_pdbqt": "",
+        "ligand_input_model": "",
         "ligand_index_map": smile_idx_map,
         "ligand_h_parents": ligand_h_parents,
         "pose_coordinates": pose_coordinates,  # list
@@ -615,7 +618,7 @@ def receptor_pdbqt_parser(fname):
         line_dict["occupancy"] = float(line[54:60])
         line_dict["b_iso"] = float(line[60:66])
         line_dict["q"] = float(line[70:76])
-        line_dict["atomtype"] = line[76:79]
+        line_dict["atomtype"] = line[77:]
 
         lines.append(line_dict)
 

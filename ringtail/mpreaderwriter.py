@@ -88,8 +88,8 @@ class DockingFileReader(multiprocessing.Process):
         # each multiprocessing.Process class must have a "run" method which
         # is called by the initialization (see below) with start()
         #
-        try:
-            while True:
+        while True:
+            try:
                 # retrieve from the queue in the next task to be done
                 next_task = self.queueIn.get()
                 # logging.debug("Next Task: " + str(next_task))
@@ -103,24 +103,28 @@ class DockingFileReader(multiprocessing.Process):
                 # parser depends on requested mode
                 if self.mode == "dlg":
                     parsed_file_dict = parse_single_dlg(next_task)
+                    # find the run number for the best pose in each cluster for adgpu
+                    parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 elif self.mode == "vina":
                     parsed_file_dict = parse_vina_pdbqt(next_task)
-                # future: NG parser, etc
+                # Example code for calling user-implemented mode
+                # elif self.mode == "my_mode":
+                #     parsed_file_dict = myparser(next_task)
+                else:
+                    raise NotImplementedError(f"Parser for input file mode {self.mode} not implemented!")
 
                 # check receptor name from file against that which we expect
                 if (
                     parsed_file_dict["receptor"] != self.target
                     and self.target is not None
-                    and self.mode != "vina"
+                    and self.mode == "dlg"
                 ):
                     raise FileParsingError(
                         "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
                             parsed_file_dict["receptor"], next_task, self.target
                         )
                     )
-                # find the run number for the best pose in each cluster for adgpu
-                if self.mode == "dlg":
-                    parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
+                
                 # find run numbers for poses we want to save
                 parsed_file_dict["poses_to_save"] = self._find_poses_to_save(
                     parsed_file_dict
@@ -160,13 +164,11 @@ class DockingFileReader(multiprocessing.Process):
                 # put the result in the out queue
                 data_packet = self.storageman_class.format_for_storage(parsed_file_dict)
                 self._add_to_queueout(data_packet)
-        except Exception:
-            tb = traceback.format_exc()
-            self.pipe.send(
-                (FileParsingError("Error while parsing file"), tb, next_task)
-            )
-        finally:
-            return
+            except Exception:
+                tb = traceback.format_exc()
+                self.pipe.send(
+                    (FileParsingError(f"Error while parsing {next_task}"), tb, next_task)
+                )
 
     def _add_to_queueout(self, obj):
         max_attempts = 750
@@ -295,7 +297,7 @@ class Writer(multiprocessing.Process):
                     # received as many poison pills as workers
                     logging.info("Performing final database write")
                     # perform final storage write
-                    self.write_to_storage()
+                    self.write_to_storage(final=True)
                     # no workers left, no job to do
                     logging.info("File processing completed")
                     self.close()
@@ -310,7 +312,7 @@ class Writer(multiprocessing.Process):
                 )
             )
 
-    def write_to_storage(self):
+    def write_to_storage(self, final=False):
         # insert result, ligand, and receptor data
         self.storageman.insert_data(
             self.results_array,
@@ -332,6 +334,11 @@ class Writer(multiprocessing.Process):
         self.interactions_list = []
         self.receptor_array = []
         self.counter = 0
+
+        if final:
+            # if final write, tell storageman to index
+            self.storageman.create_indices()
+            self.storageman.set_ringtaildb_version()
 
     def process_file(self, file_packet):
         results_rows, ligand_row, interaction_rows, receptor_row = file_packet
