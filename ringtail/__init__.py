@@ -11,7 +11,9 @@ from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
-from .ringtailcore import RingtailCore, OutputManager
+from .ringtailcore import RingtailCore
+from .outputmanager import OutputManager
+from .filters import Filters
 from .interactions import InteractionFinder
 from .exceptions import (
     StorageError,
@@ -39,6 +41,7 @@ __all__ = [
     "ResultsManager",
     "RingtailCore",
     "OutputManager",
+    "Filters",
     "InteractionFinder",
     "StorageError",
     "DatabaseInsertionError",

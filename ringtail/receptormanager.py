@@ -24,3 +24,7 @@ class ReceptorManager:
                     receptors.append((gzip.compress(r.read().encode()), rec_name))
 
         return receptors
+
+    @staticmethod
+    def blob2str(receptor_blob):
+        return gzip.decompress(receptor_blob).decode()

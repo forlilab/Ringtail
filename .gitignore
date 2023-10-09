@@ -52,6 +52,10 @@ coverage.xml
 cover/
 old_test_data/
 test/output.db
+test/*.csv
+test/*.png
+test/*.sdf
+test/output_log.txt
 
 # Translations
 *.mo
@@ -160,3 +164,6 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# customs
+GUI/img/ringtail_logo.png
