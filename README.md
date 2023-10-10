@@ -29,7 +29,7 @@ Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 at [Scripps Research](https://www.scripps.edu/).
 
 ### New in version 1.1:
-- [Significant filtering runtime improvements vs v1.0](https://github.com/forlilab/Ringtail/tree/prep-v1.1#example-filtering-timings-m1pro-macbook-2-million-ligands)
+- [Significant filtering runtime improvements vs v1.0](https://github.com/forlilab/Ringtail/#example-filtering-timings-m1pro-macbook-2-million-ligands)
 - `--summary` option for getting quick overview of data across entire dataset
 - Selection of dissimilar output ligands with Morgan fingerprint or interaction fingerprint clustering
 - Select similar ligands from query ligand name in previous Morgan fingerprint or interaction finger clustering groups
