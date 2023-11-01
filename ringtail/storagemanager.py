@@ -100,6 +100,7 @@ class StorageManager:
         self.unique_interactions = {}
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
+        self.closed_connection = False
 
     @classmethod
     def get_defaults(cls, storage_type):
@@ -120,7 +121,8 @@ class StorageManager:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.close_storage()
+        if not self.closed_connection:
+            self.close_storage()
 
     def _sigint_handler(self, signal_received, frame):
         logging.critical("Ctrl + C pressed, keyboard interupt initiated")
@@ -184,6 +186,7 @@ class StorageManager:
             self._vacuum()
         # close db itself
         self._close_connection()
+        self.closed_connection = True
 
     def _add_unique_interactions(self, interactions_list):
         """takes list of interaction tuple lists. Examines
