@@ -625,9 +625,10 @@ class RingtailCore:
             return
         self.storageman.clone(bookmark_db_name)
         # connect to cloned database
-        db_clone = StorageManagerSQLite(bookmark_db_name, self.storage_opts)
-        db_clone.prune()
-        db_clone.close_storage(vacuum=True)
+        self.storage_opts["db_file"] = bookmark_db_name
+        with StorageManagerSQLite(**self.storage_opts) as db_clone:
+            db_clone.prune()
+            db_clone.close_storage(vacuum=True)
 
     def export_receptors(self):
         receptor_tuples = self.storageman.fetch_receptor_objects()
