@@ -41,7 +41,7 @@ class Ui_MainWindow(object):
         self.vdw_cutoff_distance = None        
         self.tolerance = None
         self.max_poses = None
-        self.store_all_poses = False
+        self.store_all_poses = True
         
         # Ligands
         self.recursive = False
@@ -184,7 +184,7 @@ class Ui_MainWindow(object):
         self.saveReceptorLabel = QtWidgets.QLabel(self.writeEngineGroupBox)
         self.saveReceptorLabel.setObjectName("saveReceptorLabel")
         self.gridLayout_3.addWidget(self.saveReceptorLabel, 1, 5, 1, 1)
-        self.gridLayout_2.addWidget(self.writeEngineGroupBox, 0, 0, 1, 1)
+        self.gridLayout_2.addWidget(self.writeEngineGroupBox, 0, 0, 1, 1) 
         self.writeInteractionsGroupBox = QtWidgets.QGroupBox(self.writeTab)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
@@ -1083,6 +1083,7 @@ class Ui_MainWindow(object):
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
+    app.setWindowIcon(QtGui.QIcon(":ringtail_logo.png"))
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)

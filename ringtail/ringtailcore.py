@@ -134,6 +134,7 @@ class RingtailCore:
         self.storageman.check_storage_empty()
         logging.info("Adding results...")
         self.results_man.process_results()
+        self.storageman.set_ringtaildb_version()
 
     def save_receptors(self, receptor_file):
         """Add receptor to database
@@ -270,7 +271,7 @@ class RingtailCore:
 
         return filters_dict
     
-    def filter(self, enumerate_interaction_combs=False):
+    def filter(self, enumerate_interaction_combs=False, return_iter=False):
         """
         Prepare list of filters, then hand it off to storageManager to
             perform filtering. Create log of passing results.
@@ -297,10 +298,12 @@ class RingtailCore:
             filtered_results = self.storageman.filter_results(
                 filters_dict, not enumerate_interaction_combs
             )
-            result_bookmark_name = self.storageman.get_current_view_name()
-            self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
-            self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
             if filtered_results is not None:
+                if return_iter:
+                    return filtered_results
+                result_bookmark_name = self.storageman.get_current_view_name()
+                self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
+                self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
                 number_passing = self.output_manager.write_log(filtered_results)
                 self.output_manager.log_num_passing_ligands(number_passing)
                 print("Number passing:", number_passing)
@@ -622,9 +625,10 @@ class RingtailCore:
             return
         self.storageman.clone(bookmark_db_name)
         # connect to cloned database
-        db_clone = StorageManagerSQLite(bookmark_db_name, self.storage_opts)
-        db_clone.prune()
-        db_clone.close_storage(vacuum=True)
+        self.storage_opts["db_file"] = bookmark_db_name
+        with StorageManagerSQLite(**self.storage_opts) as db_clone:
+            db_clone.prune()
+            db_clone.close_storage(vacuum=True)
 
     def export_receptors(self):
         receptor_tuples = self.storageman.fetch_receptor_objects()
@@ -736,3 +740,6 @@ class RingtailCore:
             return combinations + self._generate_interaction_combinations(
                 max_miss=max_miss - 1
             )
+
+    def update_database(self, consent=False):
+        return self.storageman.update_database(consent)

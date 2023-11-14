@@ -16,6 +16,7 @@ from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .exceptions import MultiprocessingError
 import traceback
+from datetime import datetime
 
 os_string = platform.system()
 if os_string == "Darwin":  # mac
@@ -119,7 +120,7 @@ class MPManager:
             self._process_sources()
         except Exception as e:
             tb = traceback.format_exc()
-            self._kill_all_workers("file sources", tb)
+            self._kill_all_workers(e, "file sources", tb)
         # put as many poison pills in the queue as there are workers
         for i in range(self.num_readers):
             self.queueIn.put(None)
@@ -185,16 +186,22 @@ class MPManager:
 
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
-            logging.debug("Caught error in multiprocessing")
             error, tb, filename = self.p_conn.recv()
-            self._kill_all_workers(filename, tb)
+            logging.error(f"Caught error in multiprocessing from {filename}")
+            # don't kill parser errors, only database error
+            if filename == "Database":
+                self._kill_all_workers(error, filename, tb)
+            else:
+                with open("ringtail_failed_files.log", 'a') as f:
+                    f.write(str(datetime.now()) + f"\tRingtail failed to parse {filename}\n")
+                    logging.debug(tb)
 
-    def _kill_all_workers(self, filename, tb):
+    def _kill_all_workers(self, error, filename, tb):
         for s in self.workers:
             s.kill()
-        logging.debug(f"Error encountered while parsing {filename}")
+        logging.debug(f"Error encountered while handling {filename}")
         logging.debug(tb)
-        raise MultiprocessingError(f"Error occurred while parsing {filename}!")
+        raise error
 
     def _scan_dir(self, path, pattern, recursive=False):
         """scan for valid output files in a directory

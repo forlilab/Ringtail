@@ -1,5 +1,6 @@
 ![ringtail logo final](https://user-images.githubusercontent.com/41704502/170797800-53a9d94a-932e-4936-9bea-e2d292b0c62b.png)
 
+(Original artwork by Althea Hansel-Harris)
 
 
 # Ringtail
@@ -8,25 +9,43 @@ Package for creating SQLite database from virtual screening results, performing 
 [![AD compat](https://img.shields.io/badge/AutoDock_Compatibility-ADGPU|Vina-brightgreen)](https://shields.io/)
 [![License: L-GPL v2.1](https://img.shields.io/badge/License-LGPLv2.1-blue.svg)](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html)
 [![made-with-python](https://img.shields.io/badge/Made%20with-Python-1f425f.svg)](https://www.python.org/)
+![Build Status](https://github.com/forlilab/Ringtail/actions/workflows/python-package.yml/badge.svg?event=push)
 
 Ringtail reads collections of Docking Log File (DLG) or PDBQT results from virtual screenings performed with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina), respectively, and deposits them into
 a SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of a simple result scatterplot, export of 
 molecule SDFs, and export of CSVs of result data. Result file parsing is parallelized across the user's CPU.
 
-**The publication describing the design, implementation, and features of Ringtail may be found on [JCIM](https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166). If using Ringtail in your work, please cite this publication**
+The publication describing the design, implementation, and features of Ringtail may be found in the JCIM paper:
+
+[_Ringtail: A Python Tool for Efficient Management and Storage of Virtual Screening Results._
+Althea T. Hansel-Harris, Diogo Santos-Martins, Niccolò Bruciaferri, Andreas F. Tillack, Matthew Holcomb, and Stefano Forli.
+_Journal of Chemical Information and Modeling_ **2023** 63 (7), 1858-1864.
+DOI: 10.1021/acs.jcim.3c00166](https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166)
+
+If using Ringtail in your work, please cite this publication.
 
 Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
 
 ### New in version 1.1:
-- Significant filtering runtime improvements vs v1.0 (filtering in seconds instead of minutes)
+- [Significant filtering runtime improvements vs v1.0](https://github.com/forlilab/Ringtail/#example-filtering-timings-m1pro-macbook-2-million-ligands)
 - `--summary` option for getting quick overview of data across entire dataset
 - Selection of dissimilar output ligands with Morgan fingerprint or interaction fingerprint clustering
+- Select similar ligands from query ligand name in previous Morgan fingerprint or interaction finger clustering groups
 - Option for exporting stored receptor PDBQTs
-- Ligand substructure filter
-- Ligand substructure location filter
+- Filter by ligand substructure
+- Filter by ligand substructure location in cartesian space
 - `--max_miss` option now outputs union of interaction combinations by default, with `--enumerate_interaction_combs` option to log passing ligands/poses for individual interaction combination
+
+#### Updating database written with v1.0.0 to work with v1.1.0
+If you have previously written a database with Ringtail v1.0.0, it will need to be updated to be compatible with filtering with v1.1.0. We have included a new script `rt_db_v100_to_v110.py` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
+
+```
+$ rt_db_v100_to_v110.py -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (optional)>
+```
+
+Multiple databases may be specified at once. The update may take a few minutes per database.
 
 ## README Outline
 - [Installation](https://github.com/forlilab/Ringtail#installation)
@@ -158,6 +177,10 @@ $ rt_process_vs.py read --input_db all_groups.db --bookmark_name ep5_vdwV279 --e
 ```
 
 Now we have our filtered molecules as SDF files ready for visual inspection!
+
+## Example Filtering Timings (M1Pro MacBook, ~2 million ligands)
+![rt_v11_timings](https://github.com/forlilab/Ringtail/assets/41704502/eac373fc-1324-45df-b845-6697dc9d1465)
+
 
 # Extended documentation
 
@@ -378,8 +401,7 @@ If you encounter further errors related to views/bookmarks, please contact the F
 |--filter_bookmark |-fb| Filter over specified bookmark, not whole Results table. | FALSE       ||
 |--find_similar_ligands |-fsl| Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest. | no default       ||
 |--plot             |-p| Flag to create scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as [filters_file].png or out.png. | FALSE        ||
-|--pymol             |-py| Flag to launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with --bookmark_name will be ploted and displayed in PyMol when clicked on.| FALSE        |
-<tr><td colspan="5">PROPERTY FILTERS</td></tr>
+|--pymol             |-py| Flag to launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with --bookmark_name will be ploted and displayed in PyMol when clicked on.| FALSE        |<tr><td colspan="5">PROPERTY FILTERS</td></tr>
 |--eworst           |-e| Worst energy value accepted (kcal/mol)                | no default  ||
 |--ebest            |-eb| Best energy value accepted (kcal/mol)                 | no default  ||
 |--leworst          |-le| Worst ligand efficiency value accepted                | no default  ||
@@ -397,8 +419,7 @@ If you encounter further errors related to views/bookmarks, please contact the F
 |--hb_count         |-hc| Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | Yes|
 |--react_any        |-ra| Filter for poses with reaction with any residue       | FALSE     | Yes|
 |--max_miss         |-mm| Will filter given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Will log and output union of combinations unless used with `--enumerate_interaction_combs`. | 0  | Yes |
-|--enumerate_interactions_combs  |-eic| When used with `--max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. | FALSE  | Yes 
-<tr><td colspan="5">PASSING RESULT CLUSTERING</td></tr>
+|--enumerate_interactions_combs  |-eic| When used with `--max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. | FALSE  | Yes <tr><td colspan="5">PASSING RESULT CLUSTERING</td></tr>
 |--mfpt_cluster     |-mfpc| Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm | 0.5  ||
 |--interaction_cluster     |-ifpc| Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm | 0.5  | Yes |
 
@@ -463,7 +484,7 @@ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --export_csv
 ---
 ## Brief python tutorials
 #### Make sqlite database from current directory
-```
+```python
 from ringtail import RingtailCore
 
 opts = RingtailCore.get_defaults()
@@ -473,7 +494,7 @@ with RingtailCore(**opts) as rt_core:
     rt_core.add_results()
 ```
 #### Convert database tables to pandas dataframes
-```
+```python
 from ringtail import StorageManagerSQLite
 
 # make database manager with connection to SQLite file vs.db
@@ -496,7 +517,7 @@ with StorageManagerSQLite("vs.db") as dbman:
 
 ```
 #### Make an ROC plot and calculate its AUC for a virtual screening with a file containing a list of known binders
-```
+```python
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
