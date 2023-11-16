@@ -618,7 +618,7 @@ class Ui_MainWindow(object):
             self.enable_read_tab()
         
     def select_db(self):
-        self.db = browse_file("All Files (*);;Db Files (*.db)")[0]
+        self.db = browse_file("All Files (*);;Db Files (*.db)")
         if self.db != "":
             self.dbLineEdit.setText(self.db)
             if self.db is not None:

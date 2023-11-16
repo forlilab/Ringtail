@@ -1,7 +1,6 @@
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
-from pathlib import Path
 from ringtail import StorageManager, StorageManagerSQLite
 
 colors = {'red': "#ec5c5c",
@@ -162,8 +161,12 @@ def show_message(message, error_level):
     msg_box.exec_()
     
 def browse_file(file_extension=None):
-    file = QFileDialog.getOpenFileName(None, "Find file",
+    file, _ = QFileDialog.getOpenFileName(None, "Find file",
                                                  filter=file_extension)
+    storageman = StorageManager()
+    storagemanSQL = StorageManagerSQLite(storageman)
+    storagemanSQL.db_file = file
+    storagemanSQL.open_storage()
     return file
 
 def browse_directory():
