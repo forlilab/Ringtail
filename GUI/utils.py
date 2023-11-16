@@ -1,6 +1,8 @@
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+from pathlib import Path
+from ringtail import StorageManager, StorageManagerSQLite
 
 colors = {'red': "#ec5c5c",
           'green': "#7fc97f",
@@ -172,9 +174,12 @@ def browse_directory():
 
 def save_file():
     dialog = QDialog()
-    file = QFileDialog.getSaveFileName(dialog, "Save file")
-    with open(file[0], 'w') as f:
-        f.write("File saving try.")
+    file, _ = QFileDialog.getSaveFileName(dialog, "Save file") #gives a tuple of filepath and filter
+    storageman = StorageManager()
+    storagemanSQL = StorageManagerSQLite(storageman)
+    storagemanSQL.db_file = file
+    storagemanSQL.open_storage()
+
     return file
 
 def get_energy_max_min():
@@ -232,4 +237,3 @@ def parse_list_of_items(items):
         retvalue.append(interaction)
     return retvalue
             
-    

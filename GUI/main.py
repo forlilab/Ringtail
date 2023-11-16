@@ -610,9 +610,10 @@ class Ui_MainWindow(object):
     
     # GENERAL
     def create_db(self):
-        self.db = save_file()[0]
+        self.db = save_file()
         self.dbLineEdit.setText(self.db)
-        if self.db is not None:
+        print("creating file")
+        if self.db is not None: #TODO disable if picking wrong? 
             self.enable_receptor_groupBox()
             self.enable_read_tab()
         
