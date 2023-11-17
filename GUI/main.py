@@ -13,7 +13,7 @@ ringtail_gui_path = os.path.realpath(os.path.dirname(__file__))
 sys.path.append(ringtail_gui_path)
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from utils import colors, show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min, Interaction, LigandFilter, MyDelegate
+from utils import colors, show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min, Interaction, LigandFilter, MyDelegate, browse_db, save_db
 from range_slider import RangeSlider
 import multiprocessing
 import qrc_resources
@@ -610,7 +610,7 @@ class Ui_MainWindow(object):
     
     # GENERAL
     def create_db(self):
-        self.db = save_file()
+        self.db = save_db()
         self.dbLineEdit.setText(self.db)
         print("creating file")
         if self.db is not None: #TODO disable if picking wrong? 
@@ -618,7 +618,7 @@ class Ui_MainWindow(object):
             self.enable_read_tab()
         
     def select_db(self):
-        self.db = browse_file("All Files (*);;Db Files (*.db)")
+        self.db = browse_db("All Files (*);;Db Files (*.db)")
         if self.db != "":
             self.dbLineEdit.setText(self.db)
             if self.db is not None:
@@ -688,10 +688,11 @@ class Ui_MainWindow(object):
             self.save_receptor = False
     
     def select_receptor(self):
-        self.receptorLineEdit.setText(browse_file("All Files (*)")[0])
+        self.receptorLineEdit.setText(browse_file("All Files (*)"))
         
     def set_receptor_filename(self):
         self.receptor_file = self.receptorLineEdit.text()
+        print(self.receptor_file)
         if self.receptor_file == "":
             self.receptor_file = None
         if self.receptor_file is not None:

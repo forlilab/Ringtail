@@ -160,7 +160,7 @@ def show_message(message, error_level):
     msg_box.setStandardButtons(QMessageBox.Ok)
     msg_box.exec_()
     
-def browse_file(file_extension=None):
+def browse_db(file_extension=None):
     file, _ = QFileDialog.getOpenFileName(None, "Find file",
                                                  filter=file_extension)
     storageman = StorageManager()
@@ -169,19 +169,32 @@ def browse_file(file_extension=None):
     storagemanSQL.open_storage()
     return file
 
+def browse_file(file_extension=None):
+    file, _ = QFileDialog.getOpenFileName(None, "Find file",
+                                                 filter=file_extension)
+    return file
+
 def browse_directory():
     dialog = QDialog()
     directory = QFileDialog.getExistingDirectory(dialog, "Find Directory",
             QDir.currentPath(), )
     return directory
 
-def save_file():
+def save_db():
     dialog = QDialog()
     file, _ = QFileDialog.getSaveFileName(dialog, "Save file") #gives a tuple of filepath and filter
     storageman = StorageManager()
     storagemanSQL = StorageManagerSQLite(storageman)
     storagemanSQL.db_file = file
     storagemanSQL.open_storage()
+
+    return file
+
+def save_file():
+    dialog = QDialog()
+    file, _ = QFileDialog.getSaveFileName(dialog, "Save file")
+    with open(file[0], 'w') as f:
+        f.write("File saving try.")
 
     return file
 
