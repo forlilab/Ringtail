@@ -41,7 +41,7 @@ class RingtailCore:
             files for insertion into database
     """
 
-    def __init__(self, storage_type = "sqlite", opts_dict: dict = None):
+    def __init__(self, storage_type = "sqlite", opts_dict: dict = None, db_name = "output.db"):
         """Initialize RingtailCore object. Will create storageManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
@@ -78,6 +78,7 @@ class RingtailCore:
             self.out_opts = opts_dict["out_opts"]["values"]
         
         # initialize "worker" classes
+        self.storage_opts["db_file"] = db_name
         self.storageman = storage_types[storage_type](**self.storage_opts)
         self.results_man = ResultsManager(storageman=self.storageman, storageman_class=storage_types[storage_type], **self.rman_opts)
         self.output_manager = OutputManager(**self.out_opts)
@@ -119,7 +120,7 @@ class RingtailCore:
         return defaults
 
     def __enter__(self):
-        self.storageman.open_storage()
+        self.open_storage()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -144,7 +145,6 @@ class RingtailCore:
         """
         receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
         for rec, rec_name in receptor_list:
-            # NOTE: in current implementation, only one receptor allowed per database
             # Check that any receptor row is incomplete (needs receptor blob) before inserting
             filled_receptor_rows = self.storageman.check_receptors_saved()
             if filled_receptor_rows != 0:
@@ -153,7 +153,7 @@ class RingtailCore:
                         filled_receptor_rows
                     )
                 )
-            self.storageman.save_receptor(rec)
+            self.storageman.save_receptor(rec) 
 
     def produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
         """Print summary of data in storage
@@ -641,6 +641,9 @@ class RingtailCore:
     def close_storage(self):
         """Tell database we are done and it can close the connection"""
         self.storageman.close_storage()
+
+    def open_storage(self):
+        self.storageman.open_storage()
 
     def _add_poses(
         self,

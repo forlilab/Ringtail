@@ -1733,7 +1733,10 @@ class StorageManagerSQLite(StorageManager):
             self._generate_interaction_bitvectors(interactions_list)
         )
 
-    def save_receptor(self, receptor):
+    def save_receptor(self, receptor): 
+        # I am struggling, receptor has data but it is not saving to the database. 
+        # In fact database does not update at all. I wonder if it closes for writing the first time
+        # it closes? 
         """Takes object of Receptor class, updates the column in Receptor table
 
         Args:
@@ -1746,15 +1749,20 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError: Description
         """
 
-        sql_update = (
-            """UPDATE Receptors SET receptor_object = ? WHERE Receptor_ID == 1"""
+        sql_insert = (
+            """ INSERT OR IGNORE INTO Receptors (Receptor_ID) VALUES (1)"""
         )
-
+        sql_update = (
+            """UPDATE Receptors set receptor_object = ? WHERE Receptor_ID == 1"""
+        )
         try:
             cur = self.conn.cursor()
+            cur.execute(sql_insert)
             cur.execute(sql_update, (receptor,))
             self.conn.commit()
+            self.fetch_receptor_objects()
             cur.close()
+
 
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
@@ -1785,6 +1793,7 @@ class StorageManagerSQLite(StorageManager):
         cursor = self._run_query(
             "SELECT RecName, receptor_object FROM Receptors"
         )
+
         return cursor.fetchall()
 
     def clone(self, backup_name=None):
@@ -2198,12 +2207,13 @@ class StorageManagerSQLite(StorageManager):
                 raise e
             cursor = con.cursor()
             cursor.execute("PRAGMA synchronous = OFF")
-            cursor.execute("PRAGMA journal_mode = MEMORY")
+            cursor.execute("PRAGMA journal_mode = MEMORY") 
             cursor.close()
         except sqlite3.OperationalError as e:
             raise DatabaseConnectionError(
                 "Error while establishing database connection"
             ) from e
+        logging.info("Opening database")
         return con
 
     def _close_connection(self):
@@ -2220,18 +2230,8 @@ class StorageManagerSQLite(StorageManager):
 
         self.open_cursors = []
 
-    def open_storage(self):
-        """Create connection to db. Then, check if db needs to be written.
-        If so, (if self.overwrite drop existing tables and )
-        initialize the tables
-        """
+    def create_tables(self): 
         
-        self.conn = self._create_connection()
-        
-        # register signal handler to catch keyboard interupts
-        signal(SIGINT, self._sigint_handler)
-
-        # if we want to overwrite old db, drop existing tables
         if self.overwrite:
             self._drop_existing_tables()
         # create tables in db
@@ -2240,6 +2240,24 @@ class StorageManagerSQLite(StorageManager):
         self._create_receptors_table()
         self._create_interaction_index_table()
         self._create_bookmark_table()
+
+    def open_storage(self): 
+        """Create connection to db. Then, check if db needs to be written.
+        If so, (if self.overwrite drop existing tables and )
+        initialize the tables
+        """
+        self.conn = self._create_connection()
+
+        # check if there is contents in database, if none, create tables
+        cur = self.conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master")
+        rows = cur.fetchall()
+        if len(rows) == 0:
+            self.create_tables()            
+        cur.close()
+        
+        # register signal handler to catch keyboard interupts
+        signal(SIGINT, self._sigint_handler)
 
     def _fetch_existing_table_names(self):
         """Returns list of all tables in database
@@ -2340,12 +2358,13 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error occurred while indexing") from e
 
-    def _remove_indices(self):
+    def _remove_indices(self): # this is being run instead of 
         """Removes idx_filter_cols and idx_ligname"""
         try:
             cur = self.conn.cursor()
             cur.execute("DROP INDEX IF EXISTS idx_filter_cols")
             cur.execute("DROP INDEX IF EXISTS idx_ligname")
+            self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError("Error while dropping indices") from e
@@ -2646,6 +2665,14 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseTableCreationError(
                 "Error while creating bookmark table. If database already exists, use --overwrite to drop existing tables"
             ) from e
+        
+    def _mlp_table(self):
+        sql_mlp = """CREATE TABLE IF NOT EXISTS MLP (
+        mlp_color           VARCHAR[] PRIMARY KEY,
+        number               INT[])"""
+        cur = self.conn.cursor()
+        cur.execute(sql_mlp)
+        cur.close()
 
     def _insert_bookmark_info(self, name: str, sqlite_query: str, filters = {}):
         """Insert bookmark info into bookmark table
