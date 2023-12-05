@@ -17,7 +17,7 @@ from rdkit import DataStructs
 from rdkit.ML.Cluster import Butina
 import numpy as np
 import time
-import pkg_resources
+from importlib.metadata import version  
 
 try:
     import cPickle as pickle
@@ -1797,7 +1797,7 @@ class StorageManagerSQLite(StorageManager):
         bck.close()
 
     def set_ringtaildb_version(self):
-        rt_version = pkg_resources.get_distribution("ringtail").version.replace(".", "")
+        rt_version = version("ringtail").replace(".", "") 
         cur = self.conn.cursor()
         cur.execute(f"PRAGMA user_version = {rt_version}")
         self.conn.commit()
@@ -1807,7 +1807,7 @@ class StorageManagerSQLite(StorageManager):
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
         cur.close()
-        return db_version == pkg_resources.get_distribution("ringtail").version.replace(".", ""), db_version
+        return db_version == version("ringtail").replace(".", ""), db_version 
 
     def update_database(self, consent=False):
         cur = self.conn.cursor()
