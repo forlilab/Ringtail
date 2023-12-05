@@ -4,5 +4,6 @@
     <file alias="enabled_icon.svg">resources/enabled_icon.svg</file>
     <file alias="disabled_icon.svg">resources/disabled_icon.svg</file>
     <file alias="ringtail_logo.png">resources/ringtail_logo.png</file>
+    <file alias="ringtail_head.png">resources/ringtail_head.png</file>
 </qresource>
 </RCC>

@@ -5,6 +5,7 @@
 #
 
 from .cloptionparser import CLOptionParser
+from .apioptionsparser import APIOptionParser
 from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
@@ -12,6 +13,7 @@ from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .ringtailcore import RingtailCore
+from .ringtailoptions import RingtailArguments
 from .outputmanager import OutputManager
 from .filters import Filters
 from .interactions import InteractionFinder
@@ -30,6 +32,7 @@ from .exceptions import OutputError
 
 __all__ = [
     "CLOptionParser",
+    "APIOptionParser",
     "StorageManager",
     "StorageManagerSQLite",
     "MPManager",
@@ -40,6 +43,7 @@ __all__ = [
     "ReceptorManager",
     "ResultsManager",
     "RingtailCore",
+    "RingtailOptions",
     "OutputManager",
     "Filters",
     "InteractionFinder",

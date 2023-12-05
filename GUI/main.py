@@ -13,6 +13,7 @@ ringtail_gui_path = os.path.realpath(os.path.dirname(__file__))
 sys.path.append(ringtail_gui_path)
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtWidgets import QMessageBox
 from utils import colors, show_message, browse_directory, browse_file, save_file, get_energy_max_min, get_ligands_efficiency_max_min, Interaction, LigandFilter, MyDelegate
 from range_slider import RangeSlider
 import multiprocessing
@@ -21,7 +22,7 @@ from interaction_widget import Interaction_Dialog, InteractionWidget
 from ligand_widget import Ligand_Dialog, LigandWidget
 from logger_widget import setup_logger, QTextEditLogger
 from list_example import list_example
-from ringtail import RingtailCore
+from ringtail import RingtailCore, RingtailArguments, APIOptionParser
 
 class Ui_MainWindow(object):
         def __init__(self): 
@@ -611,69 +612,73 @@ class Ui_MainWindow(object):
             self.writeInteractionsGroupBox.setEnabled(True)
         
         # GENERAL
+        rtargs = RingtailArguments() # create object to hold arguments for ringtail 
+        #TODO decide hwo to handle variables and make sure they are compact and concise
+
         def create_db(self):
-            self.db = save_file()
-            self.dbLineEdit.setText(self.db)
-            if self.db is not None: 
-                self.rtcore = RingtailCore(db_name = self.db)
-                self.rtcore.open_storage()
+            self.rtargs.output_db = save_file()
+            self.dbLineEdit.setText(self.rtargs.output_db )
+            if self.rtargs.output_db is not None: 
+                self.db = self.rtargs.output_db
                 self.enable_receptor_groupBox()
                 self.enable_read_tab()
-                logging.debug(" creating new database " + self.db)
-                self.rtcore.close_storage()
+                logging.debug("selecting new database " + self.rtargs.output_db)
             
         def select_db(self):
-            self.db = browse_file("All Files (*);;Db Files (*.db)")
-            if self.db != "":
-                self.dbLineEdit.setText(self.db)
-                if self.db is not None:
-                    self.rtcore = RingtailCore(db_name = self.db)
-                    self.rtcore.open_storage()
+            self.rtargs.input_db = browse_file("All Files (*);;Db Files (*.db)")
+            if self.rtargs.input_db  != "":
+                self.dbLineEdit.setText(self.rtargs.input_db )
+                if self.rtargs.input_db  is not None:
+                    self.db = self.rtargs.input_db
                     self.enable_receptor_groupBox()
                     self.enable_read_tab()
-                    logging.debug("loaded existing database " + self.db)
-                    self.rtcore.close_storage()
+                    logging.debug("selected existing database " + self.rtargs.input_db)
+                    #TODO more direct interaction here with ringtail to check if exist etc
 
         def set_debug(self):
             if self.debugRadioButton.isChecked():
-                self.debug = True
-                self.verbose = False
+                self.rtargs.debug = True
+                self.rtargs.verbose = False
                 logging.info("setting DEBUG")
             else:
-                self.debug = False
-                self.verbose = True
+                self.rtargs.debug = False
+                self.rtargs.verbose = True
                 logging.info("setting VERBOSE")
                 
         def set_verbose(self):
             if self.verboseRadioButton.isChecked():
-                self.debug = False
-                self.verbose = True
+                self.rtargs.debug = False
+                self.rtargs.verbose = True
                 logging.info("setting VERBOSE")
             else:
-                self.debug = True
-                self.verbose = False
+                self.rtargs.debug = True
+                self.rtargs.verbose = False
                 logging.info("setting DEBUG")
         
         def set_default_number_of_processors(self):
             self.numberOfProcessorsBox.setValue(self.numberOfProcessorsBox
                                                 .maximum())
-            self.processors_number = int(self.numberOfProcessorsBox.value())
+            self.rtargs.max_proc = int(self.numberOfProcessorsBox.value())
         
         def set_number_of_processors(self):
-            self.processors_number = self.numberOfProcessorsBox.value()
+            self.rtargs.max_proc = self.numberOfProcessorsBox.value()
         #-----------------------------------------------------------------#
 
         
         # WRITE
         def proceed_write_analysis(self):
-            show_message("Starts the analysis!", 0)
+            self.rtargs.process_mode = "write"
+            show_message("Starting the analysis!", 0)
+            rtcore = RingtailCore()
+            APIopts = APIOptionParser(ringtail_core=rtcore, opts = self.rtargs)
+            self.rtargs.addresults(rtcore)
             
         def enable_process(self):
             print(self.dbLineEdit.text())
             if self.dbLineEdit.text() == "":
-                self.db = None
+                self.db = None #TODO be careful about what variable to assign db
                 self.disable_everything()
-            if self.db is not None and self.receptor_file is not None:
+            if self.db is not None and self.rtargs.receptor_file is not None:
                 self.proceedButton.setEnabled(True)
             else:
                 self.proceedButton.setEnabled(False)
@@ -692,25 +697,21 @@ class Ui_MainWindow(object):
         # WRITE -> RECEPTOR
         def set_save_receptor(self):
             if self.saveReceptorCheckBox.isChecked():
-                self.save_receptor = True
+                self.rtargs.save_receptor = True
             else:
-                self.save_receptor = False
+                self.rtargs.save_receptor = False
         
-        def select_receptor(self):
+        def select_receptor(self): #TODO make class for any text field to value used in program
             self.receptorLineEdit.setText(browse_file("All Files (*)"))
             
         def set_receptor_filename(self): 
-            
-            self.receptor_file = self.receptorLineEdit.text()
-            if self.receptor_file == "":
-                self.receptor_file = None
-            if self.receptor_file is not None and self.save_receptor == True:
-                self.rtcore.open_storage()
-                self.rtcore.save_receptors(self.receptor_file)
+            self.rtargs.receptor_file = self.receptorLineEdit.text()
+            if self.rtargs.receptor_file == "":
+                self.rtargs.receptor_file = None
+            else: 
                 self.enable_process() 
                 self.enable_ligands_groupBox()
                 self.enable_interactions_groupBox()
-                self.rtcore.close_storage()
         
         def set_engine(self):
             self.selected_engine = self.autodockComboBox.currentText()
@@ -733,6 +734,8 @@ class Ui_MainWindow(object):
                 self.toleranceSpinBox.setEnabled(False)    
                 self.ligands_directory_pattern = "*.pdbqt*"
             self.set_pattern(self.ligands_directory_pattern)
+            self.rtargs.file_pattern = self.ligands_directory_pattern
+            #TODO ensure to communicate if there are default values
                 
         def populate_engine_combo(self):
             for engine in self.engine_types:
@@ -780,28 +783,35 @@ class Ui_MainWindow(object):
         
         def set_ligands_recursive_search(self):
             if self.writeLigandsRecursiveCheckBox.isChecked():
-                self.recursive = True
+                self.rtargs.recursive = True
             else:
-                self.recursive = False
+                self.rtargs.recursive = False
                 
-        def select_ligands_sources(self):
+        def select_ligands_sources(self): #TODO multiple file options, how is that handled (GUI question not rt core question)
             if self.writeLigandsFromDirectoryRadioButton.isChecked():
                 self.ligands_directory = browse_directory()
                 self.ligands_file = None
                 self.writeLigandsSelectLineEdit.setText(self.ligands_directory)
+                self.rtargs.file_path = [[self.ligands_directory]] #TODO gotta clean up the list of lists
             elif self.writeLigandsFromFileRadioButton.isChecked():
                 self.ligands_file = browse_file()[0]
                 self.ligands_directory = None
                 self.writeLigandsSelectLineEdit.setText(self.ligands_file)
+                self.rtargs.file = self.ligands_file
             
         def set_ligands_selection(self):
+            msg_box_name = QMessageBox() 
+            msg_box_name.setIcon(QMessageBox.Information)
+            msg_box_name.setText("The ligand file path is " + self.writeLigandsSelectLineEdit.text()) 
+            msg_box_name.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel) 
+            retval = msg_box_name.exec_() 
             if self.writeLigandsSelectLineEdit.text() == "":
                 self.ligands_directory = None
                 self.ligands_file = None
         #-----------------------------------------------------------------#
 
         # WRITE -> PROPERTIES
-        def set_default_cutoffs(self):
+        def set_default_cutoffs(self): #TODO connect to ringtail defaults
             self.hSpinBox.setValue(3.7)
             self.vdwSpinBox.setValue(4.0)
             self.maxPosesSpinBox.setValue(3)
@@ -1097,7 +1107,7 @@ class Ui_MainWindow(object):
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    app.setWindowIcon(QtGui.QIcon(":ringtail_logo.png"))
+    app.setWindowIcon(QtGui.QIcon("resources/ringtail_head.png"))
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)
