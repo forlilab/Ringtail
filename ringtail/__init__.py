@@ -12,6 +12,8 @@ from .parsers import parse_single_dlg, parse_vina_pdbqt
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .ringtailcore import RingtailCore
+from .apioptionsparser import APIOptionParser
+from .ringtailoptions import RingtailArguments
 from .outputmanager import OutputManager
 from .filters import Filters
 from .interactions import InteractionFinder
@@ -56,4 +58,6 @@ __all__ = [
     "ResultsProcessingError",
     "DatabaseViewCreationError",
     "OutputError",
+    "APIOptionParser",
+    "RingtailArguments",
 ]

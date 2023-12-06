@@ -72,21 +72,3 @@ class RingtailArguments(object):
     find_similar_ligands = None
     plot = None
     pymol = None
-
-    def addresults(self, rtcore):
-        defaults = RingtailCore.get_defaults()
-        with rtcore:
-            rtcore.add_results()
-
-
-    
-# #TODO this needs to go in unit test instead
-# rtopt = RingtailArguments()
-# rtopt.process_mode = "write"
-# rtopt.output_db = "newdb.db"
-# rtopt.file_path = [['/Users/maylinnp/forlilab/Ringtail/test/test_data/']]
-# rtopt.recursive = True
-
-# rtcore = RingtailCore()
-# APIopts = APIOptionParser(ringtail_core=rtcore, opts =rtopt)
-# rtopt.addresults(rtcore)
