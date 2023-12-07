@@ -3,7 +3,7 @@ import os
 import pytest
 from ringtail import RingtailCore, RingtailArguments as RTArgs, APIOptionParser as api
 
-@pytest.fixture(scope='function')
+@pytest.fixture
 def cur():
     conn = sqlite3.connect("output.db")
     curs = conn.cursor()
@@ -12,7 +12,20 @@ def cur():
     conn.close()
     os.system("rm output.db")
 
-def test_new_api(cur):
+@pytest.fixture
+def countrows():
+    def __dbconnect(query):
+        conn = sqlite3.connect("output.db")
+        curs = conn.cursor()
+        curs.execute(query)
+        count = curs.fetchone()[0]
+        curs.close()
+        conn.close()
+        os.system("rm output.db")
+        return count
+    return __dbconnect
+
+def test_new_api(countrows):
     
     rtopt = RTArgs()
     rtopt.process_mode = "write"
@@ -26,13 +39,11 @@ def test_new_api(cur):
     with rtcore: rtcore.add_results()
     with rtcore: rtcore.save_receptors(rtopt.receptor_file)
 
-    query = """SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL;""" 
-    cur.execute(query)
-    count = cur.fetchone()[0]
+    count = countrows("""SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL;""" )
 
     assert count == 1
 
-def test_new_api2(cur):
+def test_new_api2(countrows):
     
     rtopt = RTArgs()
     rtopt.process_mode = "write"
@@ -45,13 +56,10 @@ def test_new_api2(cur):
     api(ringtail_core=rtcore, opts =rtopt)
     with rtcore: rtcore.add_results()
 
-    query = """SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL;""" 
-    cur.execute(query)
-    count = cur.fetchone()[0]
-
+    count = countrows("""SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL;""" )
     assert count == 0
 
-def test_new_api3(cur):
+def test_new_api3(countrows):
     
     rtopt = RTArgs()
     rtopt.process_mode = "write"
@@ -64,8 +72,5 @@ def test_new_api3(cur):
     api(ringtail_core=rtcore, opts =rtopt)
     with rtcore: rtcore.add_results()
 
-    query = """SELECT COUNT(*) FROM Results;""" 
-    cur.execute(query)
-    count = cur.fetchone()[0]
-
+    count = countrows("""SELECT COUNT(*) FROM Results;""" )
     assert count == 370
