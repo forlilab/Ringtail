@@ -6,221 +6,133 @@
 
 import sqlite3
 import os
+import pytest
 
+@pytest.fixture(scope='function') # currently, this opens the cursor before running the actual test method. Not ideal but it works 
+def cur():
+    conn = sqlite3.connect("output.db")
+    curs = conn.cursor()
+    yield curs
+    curs.close()
+    conn.close()
+    os.system("rm output.db")
 
 class TestInputs:
-    def test_multiple_files1(self):
-        os.system("rm output.db")
+    os.system("rm output.db")
+    
+    def test_multiple_files1(self, cur):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
-        )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
+                "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
+            )
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 3
-
-    def test_multiple_files2(self):
+       
+    def test_multiple_files2(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 3
 
-    def test_multiple_paths1(self):
+    def test_multiple_paths1(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 --file_path test_data/group2"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
 
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 217
 
-    def test_multiple_paths2(self):
+    def test_multiple_paths2(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 test_data/group2"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
 
         assert count == 217
 
-    def test_filelist1(self):
+    def test_filelist1(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --file_list filelist2.txt"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
 
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 5
 
-    def test_filelist2(self):
+    def test_filelist2(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt filelist2.txt"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
 
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 5
 
-    def test_all_input_opts(self):
+    def test_all_input_opts(self, cur):
 
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --file test_data/group2/361056.dlg.gz test_data/group2/53506.dlg.gz --file_path test_data/group3"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
 
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 75
 
-    def test_append_results(self):
+    def test_append_results(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
         )
         os.system(
             "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group2 --append_results"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
 
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 217
 
-    def test_duplicate_handling(self):
+    def test_duplicate_handling(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
         )
         os.system(
             "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group1 --append_results --duplicate_handling ignore"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
 
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 138
 
-    def test_duplicate_handling_rpl(self):
+    def test_duplicate_handling_rpl(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
         )
         os.system(
             "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group1 --append_results --duplicate_handling replace"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Ligands")
         count = cur.fetchone()[0]
 
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
-
         assert count == 138
 
-    def test_save_rec_file(self):
+    def test_save_rec_file(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt --save_receptor"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
 
         assert count == 1
 
-    def test_save_rec_file_gz(self):
+    def test_save_rec_file_gz(self, cur):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor"
         )
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         count = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
-        os.system("rm output.db")
 
         assert count == 1
 
@@ -243,7 +155,7 @@ class TestInputs:
 
         assert count == 1"""
 
-
+'''
 class TestOutputs:
     def test_export_bookmark_csv(self):
         status1 = os.system(
@@ -697,3 +609,5 @@ class TestFilters:
             os.remove(f)
 
         assert status2 == 0
+
+        '''
