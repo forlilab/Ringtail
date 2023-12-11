@@ -1,7 +1,9 @@
 import sqlite3
 import os
 import pytest
-from ringtail import RingtailCore, RingtailArguments as RTArgs, APIOptionParser as api
+from ringtail import RingtailCore, RTArgs, RTWrite, RTRead, APIOptionParser as api
+
+if os.path.isfile("output.db"): os.system("rm output.db")
 
 @pytest.fixture
 def cur():
@@ -25,52 +27,55 @@ def countrows():
         return count
     return __dbconnect
 
-def test_new_api(countrows):
-    
-    rtopt = RTArgs()
+@pytest.fixture(scope='class')
+def dbquery():
+    conn = sqlite3.connect("output.db")
+    curs = conn.cursor()
+    def __dbconnect(query):
+        curs.execute(query)
+        return curs
+    yield __dbconnect
+    curs.close()
+    conn.close()
+    os.system("rm output.db")
+
+def write_standard_setup():
+    print("\nSetting up Ringtail Core\n")
+    rtopt = RTWrite()
     rtopt.process_mode = "write"
     rtopt.file_path = [['test_data/group1/']]
     rtopt.recursive = True
     rtopt.save_receptor = True
     rtopt.receptor_file = "test_data/4j8m.pdbqt"
-
+    rtopt.summary = True
+    rtopt.max_poses = 2
     rtcore = RingtailCore()
     api(ringtail_core=rtcore, opts =rtopt)
     with rtcore: rtcore.add_results()
     with rtcore: rtcore.save_receptors(rtopt.receptor_file)
+    print("\n\nRingtail Core set up\n")
 
-    count = countrows("""SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL;""" )
+write_standard_setup()
+class TestRingtailWrite:
 
-    assert count == 1
+    def test_receptor_save(self, dbquery):
+        curs = dbquery("""SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL;""" )
+        count = curs.fetchone()[0]
+        assert count == 1
 
-def test_new_api2(countrows):
+    def test_ligand_write(self, dbquery):
+        curs = dbquery("""SELECT COUNT(*) FROM Results;""" )
+        count = curs.fetchone()[0]
+        assert count == 242
+
+# write_standard_setup()
+# class TestRingtailRead:
+#     print("\nSetting up Ringtail Core\n")
+#     rtread = RTWrite()
+#     rtread.process_mode = "read"
     
-    rtopt = RTArgs()
-    rtopt.process_mode = "write"
-    rtopt.file_path = [['test_data/group1/']]
-    rtopt.recursive = True
-    rtopt.save_receptor = False
-    rtopt.receptor_file = "test_data/4j8m.pdbqt"
-
-    rtcore = RingtailCore()
-    api(ringtail_core=rtcore, opts =rtopt)
-    with rtcore: rtcore.add_results()
-
-    count = countrows("""SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL;""" )
-    assert count == 0
-
-def test_new_api3(countrows):
+#     rtread.summary = True
     
-    rtopt = RTArgs()
-    rtopt.process_mode = "write"
-    rtopt.file_path = [['test_data/group1/']]
-    rtopt.recursive = True
-    rtopt.save_receptor = False
-    rtopt.receptor_file = "test_data/4j8m.pdbqt"
-
-    rtcore = RingtailCore()
-    api(ringtail_core=rtcore, opts =rtopt)
-    with rtcore: rtcore.add_results()
-
-    count = countrows("""SELECT COUNT(*) FROM Results;""" )
-    assert count == 370
+#     rtcore = RingtailCore()
+#     api(ringtail_core=rtcore, opts =rtread)
+#     print("\n\nRingtail Core set up\n")

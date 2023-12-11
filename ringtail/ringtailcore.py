@@ -18,8 +18,8 @@ import itertools
 import logging
 import os
 
-
-class RingtailCore:
+# MLP started editing this for refactoring
+class RingtailCoreMLP:
     """Core class for coordinating different actions on virtual screening
     i.e. adding results to storage, filtering, output options
 
@@ -30,8 +30,6 @@ class RingtailCore:
         filtered_results (storage cursor object): Cursor object
             containing results passing requested filters (iterable)
         filters (dictionary): Dictionary containing user-specified filters
-        no_print_flag (boolean): Flag specifying whether passing results
-            should be printed to terminal
         out_opts (dictionary): Specified output options including data fields
             to output, export_sdf_path, log file name
         output_manager (OutputManager object): Manager for output tasks of
@@ -41,30 +39,22 @@ class RingtailCore:
             files for insertion into database
     """
 
-    def __init__(self, storage_type = "sqlite", opts_dict: dict = None):
+    def __init__(self, storage_type = "sqlite", db_file = "output.db"):
         """Initialize RingtailCore object. Will create storageManager object to serve
         as interface with database (currently implemented in SQLite).
         Will create ResultsManager to process result files.
         Will create OutputManager object to assist in creating output files.
 
         Args:
-            storage_opts (dictionary): dictionary of options required by storageManager
-            rman_opts (dictionary): dictionary of options required by
-                results manager
-            filters (dictionary): Dictionary containing user-specified filters
-            out_opts (dictionary): Specified output options including data
-                fields to output, export_sdf_path, log file name
+            storage_opts (dictionary)
+            rman_opts (dictionary)
+            filters (dictionary)
+            out_opts (dictionary)
         """
 
-        # set storage type
-        self.storage_type = storage_type
-        storage_types = {
-            "sqlite": StorageManagerSQLite,
-        }
-        # confirm given storage type is implemented
-        if self.storage_type not in storage_types:
-            raise NotImplementedError(f"Given storage type {self.storage_type} is not implemented.")
-
+        storage_class = StorageManager.check_storage_compatibility(storage_type) #this now straight up references the class
+        self.storageman = storage_class(db_file = db_file)
+        '''
         # check if given opt_dict and set attrbutes if so
         if opts_dict is None:
             self.storage_opts = {}
@@ -77,13 +67,12 @@ class RingtailCore:
             self.filters_dict = opts_dict["filters"]["values"]
             self.out_opts = opts_dict["out_opts"]["values"]
         
-        # initialize "worker" classes
-        self.storageman = storage_types[storage_type](**self.storage_opts)
+        initialize "worker" classes
+        TODO these should only be initialized as needed, likely one at the time
+        
         self.results_man = ResultsManager(storageman=self.storageman, storageman_class=storage_types[storage_type], **self.rman_opts)
         self.output_manager = OutputManager(**self.out_opts)
         self.filters = Filters(**self.filters_dict)
-
-        self.storage_opened = False
 
     @classmethod
     def get_defaults(cls, storage_type="sqlite", terse=False) -> dict:
@@ -117,7 +106,8 @@ class RingtailCore:
                 defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
 
         return defaults
-
+'''
+    
     def __enter__(self):
         self.storageman.open_storage()
         return self
@@ -293,8 +283,9 @@ class RingtailCore:
 
             # set storageMan's internal ic_counter to reflect current ic_idx
             if len(interaction_combs) > 1:
-                self.storageman.set_view_suffix(str(ic_idx))
+                self.storageman.view_suffix(str(ic_idx))
             # ask storageManager to fetch results
+            #TODO here is the place to insert filter dict object
             filtered_results = self.storageman.filter_results(
                 filters_dict, not enumerate_interaction_combs
             )
