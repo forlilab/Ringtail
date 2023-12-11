@@ -8,12 +8,79 @@
 #TODO so there are two things going on, one is the group during cmd inputs,
 # the other is regrouping them for what managers the options go to
 
-class RTArgs(object): 
-    process_mode = None # write or read
+#TODO start setting some limits for various parameters, maybe an acronym attribute
+# that can be used to join with cmd line options, as well as ensuring default values
+# are set when they need to.
+# Then I can make do with the default methods in RT core
+#TODO create a new method in RTCore to display what the default values are, organized 
+# by dictionary/grouping
+
+class rtargs: 
+    '''Base class for all options used in Ringtail. Each option is set as its
+    own object, and has metadata (some which is legacy from cmd line parser).
+    The value of each option is safely set according to assigned type.'''
+
+    def __init__(self, type):
+        self.name = None
+        self.altname = None
+        self.dest = None 
+        self.nargs = None
+        self.default = None
+        self.type = type
+        self.choices = None
+        self.required = False
+        self.help = None 
+        self.metavar = None
+
+    def _set_value(self, value):
+        '''Checks that set value is of correct type'''
+        if not isinstance(value, self.type):
+            raise TypeError(self.name + " must be set to type " + str(self.type))
+        self.__value = value
+    
+    def _get_value(self):
+        '''Checks if value has been set'''
+        try: 
+            return self.__value
+        except:
+            raise NameError(self.name + " does not have a value.")
+        
+    value = property(_get_value, _set_value)
+
+    def set_attr(self, **kwargs):
+        '''assigns keyword arguments for each argument object, used e.g., for CLOPtionparser'''
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+class input_db(rtargs):
+    def __init__(self):
+        super(input_db, self).__init__(str)
+        input_db.set_attr(self, **{"name": __class__.__name__, 
+                                    "altname":"i", 
+                                    "help":"specify a database file to perform actions with", 
+                                    "action":"store",
+                                    "metavar":"DATABASE"})
+        
+class output_db(rtargs):
+    def __init__(self):
+        super(input_db, self).__init__(str)
+        input_db.set_attr(self, **{"name": __class__.__name__, 
+                                   "altname": "o",
+                                    "help":"Name for output database file",
+                                    "action":"store",
+                                    "type":str,
+                                    "metavar":"[FILE_NAME].DB",
+                                    "default":"output.db"})
+
+"""
     mode  = "dlg" #rw, rman
 
     output_db = "output.db" #w
     input_db = None #rw
+    input_db = types.SimpleNamespace
+    kwargs = {"altname":"i", "help":"specify a database file to perform actions with", "action":"store","type":"str","metavar":"DATABASE"}
+    
+
     bookmark_name = None #r
 
     summary = None #rw
@@ -121,3 +188,6 @@ class RTFilters(RTRead):
             "log_file": parsed_opts.log_file,
             "export_sdf_path": parsed_opts.export_sdf_path,
         }'''
+
+
+"""
