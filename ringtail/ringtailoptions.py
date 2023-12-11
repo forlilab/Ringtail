@@ -1,74 +1,123 @@
-from ringtail import RingtailCore, APIOptionParser
 #TODO ringtail should have validation checks of all parameters at the time they are set, 
 # so they can set values independently 
 
-class RingtailArguments(object): 
-    # set all variables to default values
-    process_mode = None
-    # write args
-    output_db = "output.db"
-    input_db = None
-    bookmark_name = None
-    mode  = "dlg"
-    summary = None
-    verbose = None
-    debug = None
-    file = None
-    file_path = []
-    file_list = None
-    file_pattern = "*.dlg*"
-    recursive = None
-    append_results = False
-    duplicate_handling = None
-    save_receptor = None
-    overwrite = False
-    max_poses = None
-    store_all_poses = None
-    interaction_tolerance = None
-    add_interactions = None
-    interaction_cutoffs = None
-    receptor_file = None
-    max_proc = None
-    # Interaction args
-    van_der_waals = None
-    hydrogen_bond = None
-    reactive_res = None
-    hb_count = None
-    react_any = None
-    max_miss = None
-    enumerate_interaction_combs = None
-    # ligand_group
-    name = None
-    max_nr_atoms = None
-    smarts = None
-    smarts_idxyz = None
-    smarts_join = None
-    # properties_group
-    eworst = None
-    ebest = None
-    leworst = None
-    lebest = None
-    score_percentile = None
-    le_percentile = None
-    # read_parser
+#TODO the interface needs to host the logger
+
+#TODO what values are needed for what specific job
+
+#TODO so there are two things going on, one is the group during cmd inputs,
+# the other is regrouping them for what managers the options go to
+
+class RTArgs(object): 
+    process_mode = None # write or read
+    mode  = "dlg" #rw, rman
+
+    output_db = "output.db" #w
+    input_db = None #rw
+    bookmark_name = None #r
+
+    summary = None #rw
+    verbose = False #rw
+    debug = False #rw
+
+class RTWrite(RTArgs):  
+    max_poses = None #rman also rw? 
+    store_all_poses = None #rman
+    interaction_tolerance = 0.8 #rman
+    add_interactions = None #rman
+    interaction_cutoffs = None #rman
+    receptor_file = None #rman
+    save_receptor = None #rman implicit
+    max_proc = None #rman
+    #I wonder of these file options could be internal properties
+    file = None #rman
+    file_path = [] #rman 
+    file_list = None #rman
+    file_pattern = "*.dlg*" #rman
+    recursive = None #part of file sources
+    # file handling options
+    append_results = None #storage
+    duplicate_handling = None #storage, part of conflict handling
+    overwrite = None #storage
+
+class RTRead(RTArgs):
     results_view_name = None
-    summary = None
-    verbose = None
-    debug = None
-    # output group
-    log_file = None
+    # are read only according to CLOptionparser
+    find_similar_ligands = None
+    plot = None
+    pymol = None
+    export_bookmark_db = None
+    export_receptor = None
+    data_from_bookmark = None
+    export_bookmark_csv = None
+    export_query_csv = None
+    log_file = None #outman
+    enumerate_interaction_combs = None
+
+class RTFilters(RTRead):
+    # goes into all_filters
+    van_der_waals = None #optional filter
+    hydrogen_bond = None #optional filter
+    reactive_res = None #optional filter
+    hb_count = None
+    react_any = None #boolean
+    max_miss = None
+    #ligand
+    name = None #optional filter
+    max_nr_atoms = None #optional filter
+    smarts = None #optional filter
+    smarts_idxyz = None #optional filter
+    smarts_join = None
+    #"properties group" --> goes into all_filters
+    eworst = None #optional filter
+    ebest = None #optional filter
+    leworst = None #optional filter
+    lebest = None #optional filter
+    score_percentile = None #optional filter
+    le_percentile = None #optional filter
+    # output options
     outfields = None
     order_results = None
     output_all_poses = None
     mfpt_cluster = None
     interaction_cluster = None
-    export_bookmark_csv = None
-    export_query_csv = None
-    export_sdf_path = None
-    export_bookmark_db = None
-    export_receptor = None
-    data_from_bookmark = None
+    export_sdf_path = None #outman
     filter_bookmark = None
-    find_similar_ligands = None
-    plot = None
-    pymol = None
+
+
+# storage_opts
+'''         "db_file": dbFile,
+            "order_results": parsed_opts.order_results,
+            "outfields": parsed_opts.outfields,
+            "filter_bookmark": parsed_opts.filter_bookmark,
+            "output_all_poses": parsed_opts.output_all_poses,
+            "mfpt_cluster": parsed_opts.mfpt_cluster,
+            "interaction_cluster": parsed_opts.interaction_cluster,
+            "results_view_name": parsed_opts.results_view_name,
+            "overwrite": parsed_opts.overwrite,
+            "append_results": parsed_opts.append_results,
+            "conflict_opt": conflict_handling,
+        }'''
+    
+
+#rman_opts
+'''         "chunk_size": 1,
+            "mode": parsed_opts.mode,
+            "store_all_poses": parsed_opts.store_all_poses,
+            "max_poses": parsed_opts.max_poses,
+            "interaction_tolerance": parsed_opts.interaction_tolerance,
+            "add_interactions": parsed_opts.add_interactions,
+            "interaction_cutoffs": parsed_opts.interaction_cutoffs,
+            "receptor_file": parsed_opts.receptor_file,
+            "target": receptor,
+            "file_sources": file_sources,
+            "file_pattern": parsed_opts.file_pattern,
+            "parser_manager": "multiprocessing",
+            "max_proc": parsed_opts.max_proc,
+        }'''
+
+#outman_opts
+'''{
+            "log_file": parsed_opts.log_file,
+            "export_sdf_path": parsed_opts.export_sdf_path,
+        }'''

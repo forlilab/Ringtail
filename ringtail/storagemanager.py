@@ -94,14 +94,25 @@ class StorageManager:
         "recid",
     ]
 
+    def check_storage_compatibility(storage_type):
+        storage_types = {
+            "sqlite": StorageManagerSQLite,
+        }
+        if storage_type in storage_types:
+            return storage_types[storage_type]
+        else:
+            raise NotImplementedError(f"Given storage type {storage_type} is not implemented.")
+
     def __init__(self):
         """Initialize instance variables common to all StorageManager subclasses"""
+        # I am not sure these are necessary
 
         self.unique_interactions = {}
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
-        self.closed_connection = False
-
+        self.closed_connection = False        
+    '''
+    # I don't think I need these with a new format
     @classmethod
     def get_defaults(cls, storage_type):
         storage_types = {
@@ -115,7 +126,8 @@ class StorageManager:
             "sqlite": StorageManagerSQLite,
         }
         return typing.get_type_hints(storage_types[storage_type].__init__)
-
+    '''
+    
     def __enter__(self):
         self.open_storage()
         return self
@@ -211,41 +223,6 @@ class StorageManager:
                             self.next_unique_interaction_idx
                         )
                     self.next_unique_interaction_idx += 1
-
-    @classmethod
-    def format_for_storage(cls, ligand_dict: dict) -> tuple:
-        """takes file dictionary from the file parser, formats required storage format
-
-        Args:
-            ligand_dict (dict): Dictionary containing data from the fileparser
-        """
-
-        raise NotImplementedError
-
-    def insert_data(
-        self,
-        results_array,
-        ligands_array,
-        interaction_array,
-        receptor_array=[],
-        insert_receptor=False,
-    ):
-        """Summary
-
-        Args:
-            data_dictionaries (list): list of dictionaries of data to be stored
-            insert_receptor (bool, optional): flag indicating that receptor info should inserted
-        """
-        raise NotImplementedError
-
-    def set_view_suffix(self, suffix):
-        """Sets internal view_suffix variable
-
-        Args:
-            suffix(str): suffix to attached to view-related queries or creation
-        """
-
-        self.view_suffix = suffix
 
     def filter_results(
         self,
@@ -350,791 +327,6 @@ class StorageManager:
 
         return temp_name, num_passing
 
-    # # # # # # # # # # # # # # # # #
-    # # # Child-specific methods # # #
-    # # # # # # # # # # # # # # # # #
-
-    def insert_results(self, results_array):
-        """takes array of database rows to insert, adds data to results table
-
-        Args:
-            results_array (list): list of lists
-                containing formatted result rows
-
-        """
-        raise NotImplementedError
-
-    def insert_ligands(self, ligand_array):
-        """Takes array of ligand rows, inserts into Ligands table.
-
-        Args:
-            ligand_array (list): List of lists
-                containing formatted ligand rows
-
-        """
-        raise NotImplementedError
-
-    def insert_receptors(self, receptor_array):
-        """Takes array of receptor rows, inserts into Receptors table
-
-        Args:
-            receptor_array (list): List of lists
-                containing formatted ligand rows
-        """
-        raise NotImplementedError
-
-    def insert_interactions(self, interactions_list):
-        """generic function for inserting interactions from given
-            interaction list into DB
-
-        Args:
-            interactions_list (list): List of tuples for interactions
-                in form
-                ("type", "chain", "residue", "resid", "recname", "recid")
-        """
-        raise NotImplementedError
-
-    def save_receptor(self, receptor, rec_name):
-        """Takes object of Receptor class, updates the column in Receptor table for the row with rec_name
-
-        Args:
-            receptor (Receptor): Receptor object to be inserted into DB
-            rec_name (string): Name of receptor. Used to insert into correct row of DB
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def fetch_receptor_object_by_name(self, rec_name):
-        """Returns Receptor object from database for given rec_name
-
-        Args:
-            rec_name (string): Name of receptor to return object for
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def get_results(self):
-        """Gets all fields for filtered results
-
-        No Longer Returned:
-            DB cursor: Cursor with all fields and rows in passing results view
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def clone(self):
-        """Creates a copy of the db
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def remake_bookmarks(self):
-        """Reads all views from Bookmarks table and remakes them"""
-        raise NotImplementedError
-
-    def get_number_passing_ligands(self):
-        """Returns count of ligands that passed filtering criteria
-
-        No Longer Returned:
-            Int: Number of passing ligands
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def fetch_flexres_info(self):
-        """fetch flexres names and atomname_lists
-
-        No Longer Returned:
-            DB cursor: contains
-                flexible_residues, flexres_atomnames
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def fetch_passing_ligand_output_info(self):
-        """fetch information required by vsmanager for writing out molecules
-
-        No Longer Returned:
-            DB cursor: contains
-                LigName, ligand_smile, atom_index_map, hydrogen_parents
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def fetch_passing_pose_properties(self, ligname):
-        """fetch coordinates for poses passing filter for given ligand
-
-        Args:
-            ligname (string): name of ligand to return coordinates for
-
-        No Longer Returned:
-            DB cursor: contains
-                Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def fetch_nonpassing_pose_properties(self, ligname):
-        """fetch coordinates for poses of ligname which did not pass the filter
-
-        Args:
-            ligname (string): name of ligand to fetch coordinates for
-
-        No Longer Returned:
-            DB cursor: contains
-                Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates, flexible_residues
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def fetch_interaction_bitvector(self, pose_id):
-        """Returns tuple containing interaction bitvector line for given pose_id
-
-        Args:
-            pose_id (int): pose id to fetch interaction bitvector for
-
-        No Longer Returned:
-            tuple: tuple representing interaction bitvector
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def fetch_interaction_info_by_index(self, interaction_idx):
-        """Returns tuple containing interaction info for given interaction_idx
-
-        Args:
-            interaction_idx (int): interaction index to fetch info for
-
-        No Longer Returned:
-            tuple: tuple of info for requested interaction
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
-        """Returns dataframe of table or query given as requested_data
-
-        Args:
-            requested_data (str): String containing SQL-formatted query or table name
-            table (bool): Flag indicating if requested_data is table name or not
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def fetch_view(self, viewname):
-        """returns SQLite cursor of all fields in viewname
-
-        Args:
-            viewname (TYPE): Description
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def save_temp_bookmark(self, bookmark_name, original_bookmark_name):
-        """Resaves temp bookmark stored in self.current_view_name as new permenant bookmark
-
-        Args:
-            bookmark_name (string): name of bookmark to save last temp bookmark as
-            original_bookmark_name (TYPE): Description
-
-        Deleted Parameters:
-            orginal_bookmark_name (string): Name of original bookmark to pull data from
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _create_connection(self):
-        """Creates database connection to self.db_file
-
-        No Longer Returned:
-            DB connection: Connection object to self.db_file
-
-        Raises:
-            NotImplementedError: Description
-
-        """
-        raise NotImplementedError
-
-    def _close_connection(self, attached_db=None):
-        """Closes connection to database
-
-        Args:
-            attached_db (None, optional): Description
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _close_open_cursors(self):
-        """closes any cursors stored in self.open_cursors.
-        Resets self.open_cursors to empty list
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def open_storage(self):
-        """Create connection to db. Then, check if db needs to be written.
-        If so, (if self.overwrite drop existing tables and )
-        initialize the tables
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _fetch_existing_table_names(self):
-        """Returns list of all tables in database
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _drop_existing_tables(self):
-        """drop any existing tables. Will only be called
-        if self.overwrite is true
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _drop_existing_views(self):
-        """drop any existing views. Will only be called
-        if self.overwrite is true
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _run_query(self, query):
-        """Executes provided SQLite query. Returns cursor for results
-
-        Args:
-            query (string): Formated SQLite query as string
-
-        No Longer Returned:
-            DB cursor: Contains results of query
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def create_indices(self):
-        """Create indices for columns in self.index_columns
-
-        Args:
-            index_lignames (bool, optional): flag indicating that index should be created over ligand names
-
-        Raises:
-            StorageError: Description
-        """
-        raise NotImplementedError
-
-    def _remove_indices(self):
-        """Removes idx_filter_cols and idx_ligname"""
-        raise NotImplementedError
-
-    def _create_view(self, name, query, temp=False):
-        """takes name and selection query,
-            creates view of query stored as name.
-
-        Args:
-            name (string): Name for view which will be created
-            query (string): DB-formated query which will be used to create view
-            temp (bool, optional): Flag if view should be temporary
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _create_results_table(self):
-        """Creates table for results. Columns are:
-        Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
-        LigName             VARCHAR NOT NULL,
-        receptor            VARCHAR[],
-        pose_rank           INT[],
-        run_number          INT[],
-        docking_score    FLOAT(4),
-        leff                FLOAT(4),
-        deltas              FLOAT(4),
-        cluster_rmsd        FLOAT(4),
-        cluster_size        INT[],
-        reference_rmsd      FLOAT(4),
-        energies_inter      FLOAT(4),
-        energies_vdw        FLOAT(4),
-        energies_electro    FLOAT(4),
-        energies_flexLig    FLOAT(4),
-        energies_flexLR     FLOAT(4),
-        energies_intra      FLOAT(4),
-        energies_torsional  FLOAT(4),
-        unbound_energy      FLOAT(4),
-        nr_interactions     INT[],
-        num_hb              INT[],
-        about_x             FLOAT(4),
-        about_y             FLOAT(4),
-        about_z             FLOAT(4),
-        trans_x             FLOAT(4),
-        trans_y             FLOAT(4),
-        trans_z             FLOAT(4),
-        axisangle_x         FLOAT(4),
-        axisangle_y         FLOAT(4),
-        axisangle_z         FLOAT(4),
-        axisangle_w         FLOAT(4),
-        dihedrals           VARCHAR[],
-        ligand_coordinates         VARCHAR[],
-        flexible_residues   VARCHAR[],
-        flexible_res_coordinates   VARCHAR[]
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _create_ligands_table(self):
-        """Create table for ligands. Columns are:
-        LigName             VARCHAR NOT NULL,
-        ligand_smile        VARCHAR[],
-        ligand_rdmol        MOL,
-        atom_index_map      VARCHAR[],
-        hydrogen_parents    VARCHAR[],
-        input_model         VARCHAR[]
-
-        Raises:
-            NotImplementedError: Description
-
-        """
-        raise NotImplementedError
-
-    def _create_receptors_table(self):
-        """Create table for receptors. Columns are:
-        Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
-        RecName                VARCHAR NOT NULL,
-        box_dim             VARCHAR[],
-        box_center          VARCHAR[],
-        grid_spacing        INT[],
-        flexible_residues   VARCHAR[],
-        flexres_atomnames   VARCHAR[],
-        receptor_object     BLOB
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _create_interaction_index_table(self):
-        """create table of data for each unique interaction. Columns are:
-        interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-        interaction_type    VARCHAR[],
-        rec_chain           VARCHAR[],
-        rec_resname         VARCHAR[],
-        rec_resid           VARCHAR[],
-        rec_atom            VARCHAR[],
-        rec_atomid          VARCHAR[]
-
-        Raises:
-            NotImplementedError: Description
-
-        """
-        raise NotImplementedError
-
-    def _create_interaction_bv_table(self):
-        """Create table of interaction bits for each pose. Columns are:
-        Pose_ID INTERGER PRIMARY KEY AUTOINCREMENT
-        Interaction_1
-        Interaction_2
-        ...
-        Interaction_n
-
-        Raises:
-            NotImplementedError: Description
-
-        """
-        raise NotImplementedError
-
-    def _create_bookmark_table(self):
-        """Create table of bookmark names and their queries. Columns are:
-        Bookmark_name
-        Query
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _insert_bookmark_info(self, name: str, query: str):
-        """Insert bookmark info into bookmark table
-
-        Args:
-            name (str): name for bookmark
-            query (str): query used to generate bookmark
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _insert_unique_interactions(self, unique_interactions):
-        """Inserts interaction data for unique interactions
-            into Interaction_index table
-
-        Args:
-            unique_interactions (list): List of tuples of
-                interactions to be inserted
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _insert_one_interaction(self, interaction):
-        """Insert interaction data for a single new interaction
-            into the interaction indices table
-
-        Args:
-            interaction (tuple): Tuple of interaction data
-            (interaction_type, rec_chain, rec_resname,
-            rec_resid, rec_atom, rec_atomid)
-
-        Raises:
-            NotImplementedError: Description
-
-        """
-        raise NotImplementedError
-
-    def _make_new_interaction_column(self, column_number):
-        """Add column for new interaction to interaction bitvector table
-
-        Args:
-            column_number (int): Index for new interaction
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _fetch_all_plot_data(self):
-        """Fetches cursor for best energies and leff for all ligands
-
-        No Longer Returned:
-            DB Cursor: Cursor containing docking_score,
-                leff for the first pose for each ligand
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_plot_all_results_query(self):
-        """Make DB-formatted query string to get docking_score,
-            leff of first pose for each ligand
-
-        No Longer Returned:
-            String: DB-formatted query string
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _fetch_passing_plot_data(self):
-        """Fetches cursor for best energies and leffs for ligands
-            passing filtering
-
-        No Longer Returned:
-            SQLite cursor: Cursor containing docking_score,
-                leff for the first pose for passing ligands
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_plot_passing_results_query(self):
-        """Make DB-formatted query string to get docking_score,
-            leff of first pose for passing ligands
-
-        No Longer Returned:
-            String: DB-formatted query string
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_result_filtering_query(
-        self, results_filters_list, ligand_filters_list, output_fields
-    ):
-        """takes lists of filters, writes sql filtering string
-
-        Args:
-            results_filters_list (list): list of tuples where
-                (filter column/key, filtering cutoff)
-            ligand_filters_list (list): list of filters on ligand information
-            output_fields (list): List of result column data to for output
-
-        No Longer Returned:
-            String: DB-formatted string for filtering query
-
-        No Longer Raises:
-            KeyError: Raises KeyError if user requests result ordering by
-                invalid or multiple options
-        """
-        raise NotImplementedError
-
-    def _generate_interaction_index_filtering_query(self, interaction_list):
-        """takes list of interaction info for a given ligand, looks up
-            corresponding interaction index
-
-        Args:
-            interaction_list (List): List containing interaction info
-            in format
-            [<interaction_type>, <rec_chain>, <rec_resname>,
-            <rec_resid>, <rec_atom>]
-
-        No Longer Returned:
-            String: DB-formated query on Interaction_indices table
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_interaction_filtering_query(self, interaction_index_list):
-        """takes list of interaction indices and searches for ligand ids which
-            have those interactions
-
-        Args:
-            interaction_index_list (list): List of interaction indices
-
-        No Longer Returned:
-            String: DB-formatted query
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_ligand_filtering_query(self, ligand_filters):
-        """write string to select from ligand table
-
-        Args:
-            ligand_filters (list): List of filters on ligand table
-
-        No Longer Returned:
-            String: DB-formatted query
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_results_data_query(self, output_fields):
-        """Generates SQLite-formatted query string to select outfields data
-            for ligands in self.results_view_name
-
-        Args:
-            output_fields (List): List of result column data for output
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_interaction_bitvectors(self, interactions_list):
-        """takes string of interactions and makes bitvector
-
-        Args:
-            interactions_list (list): list of list of tuples. Inner lists
-            contain interaction tuples for the saved poses for a single ligand
-
-        No Longer Returned:
-            List: List of bitvectors for saved poses
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _insert_interaction_bitvectors(self, bitvectors):
-        """Insert bitvectors of interaction data into database
-
-        Args:
-            bitvectors (List): List of lists With inner list representing
-                interaction bitvector for a pose
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_percentile_rank_window(self):
-        """makes window with percentile ranks for percentile filtering
-
-        No Longer Returned:
-            String: DB-formatted string for creating percent ranks on energies
-                binding and leff
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _calc_percentile_cutoff(self, percentile, column="docking_score"):
-        """Make query for percentile by calculating energy or leff cutoff
-
-        Args:
-            percentile (float): cutoff percentile
-            column (str, optional): string indicating column for cutoff to be calculated for
-        """
-        raise NotImplementedError
-
-    def _fetch_results_column_names(self):
-        """Fetches list of string for column names in results table
-
-        No Longer Returned:
-            List: List of strings of results table column names
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _delete_from_results(self):
-        """Remove rows from results table if they did not pass filtering
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _delete_from_ligands(self):
-        """Remove rows from ligands table if they did not pass filtering
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _delete_from_interactions(self):
-        """Remove rows from interactions bitvector table
-        if they did not pass filtering
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _generate_view_names_query(self):
-        """Generate string to return names of views in database
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _attach_db(self, new_db, new_db_name):
-        """Attaches new database file to current database
-
-        Args:
-            new_db (string): file name for database to attach
-            new_db_name (TYPE): Description
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _detach_db(self, new_db_name):
-        """Detaches new database file from current database
-
-        Args:
-            new_db_name (string): db name for database to detach
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
-
-    def _create_temp_table(self, table_name):
-        """create temporary table with given name
-
-        Args:
-            table_name (string): name for temp table
-        """
-        raise NotImplementedError
-
-    def _generate_selective_insert_query(
-        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
-    ):
-        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
-
-        Args:
-            bookmark1_name (string): name of bookmark to cross-reference for main db
-            bookmark2_name (string): name of bookmark to cross-reference for attached db
-            select_str (string): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            new_db_name (str): name of attached db
-            temp_table (str): name of temporary table to store passing results in
-        """
-        raise NotImplementedError
-
-    def _insert_into_temp_table(self, query):
-        """Execute insertion into temporary table
-
-        Args:
-            query (str): Insertion command
-        """
-        raise NotImplementedError
-
-    def _vacuum(self):
-        raise NotImplementedError
-
-    def check_storage_empty(self):
-        """Check that storage is empty before proceeding.
-
-        Raises:
-            StorageError: Description
-        """
-        raise NotImplementedError
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-
 class StorageManagerSQLite(StorageManager):
     """SQLite-specific StorageManager subclass
 
@@ -1148,46 +340,21 @@ class StorageManagerSQLite(StorageManager):
 
     """
 
-    def __init__(
-        self,
-        db_file: str = "output.db",
-        append_results: bool = False,
-        order_results: str = None,
-        outfields: str = "Ligand_name,e",
-        filter_bookmark: str = None,
-        output_all_poses: bool = None,
-        mfpt_cluster: float = None,
-        interaction_cluster: float = None,
-        results_view_name: str = "passing_results",
-        overwrite: bool = None,
-        conflict_opt: str = None,
-        _stop_at_defaults=False,
-    ):
+    def __init__(self, db_file: str = "output.db",):
         """Initialize superclass and subclass-specific instance variables
-
         Args:
             db_file (str): database file name
-            opts (dict, optional): Dictionary of database options
-            # TODO update this
         """
-        self.append_results = append_results
-        self.order_results = order_results
-        if "Ligand_name" not in outfields:  # make sure we are outputting the ligand name
-            outfields = "Ligand_name," + outfields
-        self.outfields = outfields
-        self.output_all_poses = output_all_poses
-        self.mfpt_cluster = mfpt_cluster
-        self.interaction_cluster = interaction_cluster
-        self.filter_bookmark = filter_bookmark
-        self.results_view_name = results_view_name
-        self.overwrite = overwrite
-        self.conflict_opt = conflict_opt
+
         self.db_file = db_file
-        if _stop_at_defaults:
-            return
 
-        super().__init__()
+        # super().__init__()
 
+#TODO what does stop_at_defaults mean
+
+
+#TODO these are all specific conversions to use with sqlite, can probably be abstracted to multiple tables as they 
+# are not specific to a database, but rather how the data is written (i.e., no sql)
         self.outfield_options = [
             "Ligand_name",
             "e",
@@ -1254,7 +421,6 @@ class StorageManagerSQLite(StorageManager):
 
         self.index_columns = []
 
-        # keep track of any open cursors
         self.open_cursors = []
 
         self.energy_filter_sqlite_call_dict = {
@@ -1761,6 +927,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while adding receptor blob to database"
             ) from e
 
+    #TODO might not be in use
     def fetch_receptor_object_by_name(self, rec_name):
         """Returns Receptor object from database for given rec_name
 
@@ -1775,6 +942,7 @@ class StorageManagerSQLite(StorageManager):
         )
         return str(cursor.fetchone()[0])
 
+    #TODO might not be in use
     def fetch_receptor_objects(self):
         """Returns all Receptor objects from database
 
@@ -1787,6 +955,7 @@ class StorageManagerSQLite(StorageManager):
         )
         return cursor.fetchall()
 
+    #TODO here comes the important db methods
     def clone(self, backup_name=None):
         """Creates a copy of the db"""
         if backup_name is None:
@@ -1838,6 +1007,7 @@ class StorageManagerSQLite(StorageManager):
         return consent
 
     def remake_bookmarks(self):
+        #TODO why?
         """Reads all views from Bookmarks table and remakes them"""
         try:
             bookmark_info = self._run_query("SELECT * from Bookmarks")
@@ -2005,7 +1175,6 @@ class StorageManagerSQLite(StorageManager):
         self.results_view_name = view_name
 
         return self._run_query(sql_query), view_name, cluster_col_choice
-
 
     def create_temp_passing_table(self):
         cur = self.conn.cursor()
@@ -2234,6 +1403,7 @@ class StorageManagerSQLite(StorageManager):
         # if we want to overwrite old db, drop existing tables
         if self.overwrite:
             self._drop_existing_tables()
+        #TODO is this right? Does it have to create new tables each time? I feel open storage can be invoked from the read as well, so then this would not make sense
         # create tables in db
         self._create_results_table()
         self._create_ligands_table()

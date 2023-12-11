@@ -19,8 +19,8 @@ class APIOptionParser:
     def __init__(self, ringtail_core, opts):
 
         self.rtcore = ringtail_core
-        self._initialize_options()
         self.process_options(opts)
+        self._initialize_options()
 
     def read_filter_file(self, fname):
         """parse the filter file to define filters"""
@@ -38,38 +38,7 @@ class APIOptionParser:
         self.cmdline_opts += opts
 
     def _initialize_options(self):
-        # write args
-        self.input_db = None
-        self.bookmark_name = None
-        self.mode  = None
-        self.summary = None
-        self.verbose = None
-        self.debug = None
-        self.file = None
-        self.file_path = None
-        self.file_list = None
-        self.pattern = None
-        self.recursive = None
-        self.append_results = None
-        self.duplicate_handling = None
-        self.save_receptor = None
-        self.output_db = None
-        self.overwrite = None
-        self.max_poses = None
-        self.store_all_poses = None
-        self.interaction_tolerance = None
-        self.add_interactions = None
-        self.interaction_cutoffs = None
-        self.receptor_file = None
-        self.max_proc = None
-        # Interaction args
-        self.van_der_waals = None
-        self.hydrogen_bond = None
-        self.reactive_res = None
-        self.hb_count = None
-        self.react_any = None
-        self.max_miss = None
-        self.enumerate_interaction_combs = None
+        RingtailCore.get_defaults() #I changed this, could be bad
 
     def process_options(self, parsed_opts):
         """convert command line options to the dict of filters"""
@@ -130,8 +99,10 @@ class APIOptionParser:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
+        
         if self.process_mode == "write":
             # initialize rt_process read-only options to prevent errors
+            #TODO I won't need this if we use the objects and restructure the code
             parsed_opts.plot = None
             parsed_opts.find_similar_ligands=None
             parsed_opts.export_bookmark_csv = None
@@ -146,6 +117,8 @@ class APIOptionParser:
             # if only receptor files found and --save_receptor, assume we just want to
             # add receptor and not modify the rest of the db
             # set receptor name, add_interactions if given
+
+            #TODO This might be OK to keep here, or put in whatever code runs the main argument logic
             if parsed_opts.save_receptor:
                 if parsed_opts.append_results:
                     raise OptionError(
@@ -252,7 +225,7 @@ class APIOptionParser:
             # # # filters
             optional_filters = ["eworst", "ebest", "leworst", "lebest", "score_percentile", "le_percentile", "van_der_waals", "hydrogen_bond", "reactive_res", "name", "smarts", "smarts_idxyz", "max_nr_atoms"]
             for f in optional_filters:
-                if getattr(parsed_opts, f) is not None:
+                if getattr(parsed_opts, f) is not None: #TODO this just says if either of these values is not None, then there are filters available
                     filter_flag = True
             # Cannot use energy/le cuttoffs with percentiles. Override percentile with given cutoff
             if (
@@ -363,8 +336,11 @@ class APIOptionParser:
 
         # set all object options for both read and write mode
 
+        #TODO ok so here I think RT took cmd line inputs, then "erased" the read options if write was 
+        # used, and then now the dict draws values from the opt object, where cmd line opts had been
+        # erased at the appropriate places. So some of these values (read only) are sat twice basically
         self.rt_process_options = {
-            "filter": filter_flag,
+            "filter": filter_flag, #TODO what are you
             "verbose": parsed_opts.verbose,  # both modes
             "debug": parsed_opts.debug,  # both modes
             "summary": parsed_opts.summary,  # both modes
@@ -383,13 +359,15 @@ class APIOptionParser:
         }
 
         # set core filter attributes
+        #TODO this for example is not needed if you are writing, right? 
         all_filters["react_any"] = parsed_opts.react_any
         for k,v in all_filters.items():
             setattr(self.rtcore.filters, k, v)
 
         # set storageman opts
+        #TODO only one database treated at the time, so it writes only to bookmarks after write, it 
+        # does not write back to the database? 
         if parsed_opts.input_db is not None:
-            print("inside apioptionparser: " + parsed_opts.input_db)
             dbFile = parsed_opts.input_db
             if not os.path.exists(dbFile):
                 raise OptionError("WARNING: input database does not exist!")
@@ -422,7 +400,8 @@ class APIOptionParser:
                 os.path.basename(parsed_opts.receptor_file).split(".")[0]
             )  # remove file extension and path
         else:
-            receptor = None
+            receptor = None #TODO seems redundant
+
         rman_opts = {
             "chunk_size": 1,
             "mode": parsed_opts.mode,
