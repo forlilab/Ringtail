@@ -7,6 +7,7 @@
 import sqlite3
 import time
 import json
+from types import SimpleNamespace
 import pandas as pd
 import logging
 import typing
@@ -31,7 +32,7 @@ from .exceptions import (
     DatabaseConnectionError,
     DatabaseTableCreationError,
 )
-from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError
+from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError, ResultsProcessingError
 
 
 class StorageManager:
@@ -68,6 +69,7 @@ class StorageManager:
         view_suffix (str): suffix to add to end of view. Used with max_miss
     """
 
+    #TODO is this necessary? It feels like these should be somehere more data oriented 
     # initialize dictionary processing kw lists
     stateVar_keys = ["pose_about", "pose_translations", "pose_quarternions"]
     ligand_data_keys = [
@@ -111,7 +113,10 @@ class StorageManager:
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
         self.closed_connection = False        
-    '''
+        self.conflict_opt = None
+        #NOTE should I have file sources here? 
+   
+    
     # I don't think I need these with a new format
     @classmethod
     def get_defaults(cls, storage_type):
@@ -126,11 +131,30 @@ class StorageManager:
             "sqlite": StorageManagerSQLite,
         }
         return typing.get_type_hints(storage_types[storage_type].__init__)
-    '''
+    
+    @classmethod
+    def format_for_storage(cls, ligand_dict: dict) -> tuple:
+        """takes file dictionary from the file parser, formats required storage format
+
+        Args:
+            ligand_dict (dict): Dictionary containing data from the fileparser
+        """
+
+        raise NotImplementedError
     
     def __enter__(self):
         self.open_storage()
         return self
+    
+    def open_storage(self):
+        """Create connection to db. Then, check if db needs to be written.
+        If so, (if self.overwrite drop existing tables and )
+        initialize the tables
+
+        Raises:
+            NotImplementedError: Description
+        """
+        raise NotImplementedError
 
     def __exit__(self, exc_type, exc_value, traceback):
         if not self.closed_connection:
@@ -141,9 +165,9 @@ class StorageManager:
         self.__exit__(None, None, None)
         sys.exit(0)
 
-    # # # # # # # # # # # # # # # # # # #
+    # # # # # # # # # # # # # # # # # # # # #
     # # # Common StorageManager methods # # #
-    # # # # # # # # # # # # # # # # # # #
+    # # # # # # # # # # # # # # # # # # # # #
 
     def get_plot_data(self, only_passing=False):
         """this function is expected to return an ascii plot
@@ -326,6 +350,12 @@ class StorageManager:
         self.temptable_suffix += 1
 
         return temp_name, num_passing
+    
+    # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
+    def implemented_parser_managers(self):
+        return {
+            "multiprocessing": MPManager,
+        }
 
 class StorageManagerSQLite(StorageManager):
     """SQLite-specific StorageManager subclass
@@ -340,18 +370,18 @@ class StorageManagerSQLite(StorageManager):
 
     """
 
-    def __init__(self, db_file: str = "output.db",):
+    #NOTE needed
+    def __init__(self, db_file: str = "output.db", overwrite=False, append_results=False):
         """Initialize superclass and subclass-specific instance variables
         Args:
-            db_file (str): database file name
-        """
+            db_file (str): database file name"""
 
         self.db_file = db_file
+        self.overwrite = overwrite
+        self.append_results = append_results
 
-        # super().__init__()
 
-#TODO what does stop_at_defaults mean
-
+        super().__init__()
 
 #TODO these are all specific conversions to use with sqlite, can probably be abstracted to multiple tables as they 
 # are not specific to a database, but rather how the data is written (i.e., no sql)
@@ -450,6 +480,8 @@ class StorageManagerSQLite(StorageManager):
     # # # # # # # # # # # # # # # # #
     # # # # #Public methods # # # # #
     # # # # # # # # # # # # # # # # #
+
+    #NOTE needed
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> tuple:
         """takes file dictionary from the file parser, formats required storage format
@@ -899,6 +931,7 @@ class StorageManagerSQLite(StorageManager):
             self._generate_interaction_bitvectors(interactions_list)
         )
 
+    #NOTE needed
     def save_receptor(self, receptor):
         """Takes object of Receptor class, updates the column in Receptor table
 
@@ -917,8 +950,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
         try:
-            cur = self.conn.cursor()
-            cur.execute(sql_update, (receptor,))
+            cur = self.conn.execute(sql_update, (receptor,))
             self.conn.commit()
             cur.close()
 
@@ -1264,7 +1296,8 @@ class StorageManagerSQLite(StorageManager):
         """
         return self.current_view_name
 
-    def check_receptors_saved(self):
+    #NOTE needed
+    def count_receptors_in_db(self):
         """returns number of rows in Receptors table where receptor_object already has blob
 
         Returns:
@@ -1274,8 +1307,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseQueryError: Description
         """
         try:
-            cur = self.conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+            cur = self.conn.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
             row_count = cur.fetchone()[0]
             cur.close()
             return row_count
@@ -1346,6 +1378,7 @@ class StorageManagerSQLite(StorageManager):
     # # # # #Private methods # # # # #
     # # # # # # # # # # # # # # # # #
 
+    #NOTE needed
     def _create_connection(self):
         """Creates database connection to self.db_file
 
@@ -1365,8 +1398,7 @@ class StorageManagerSQLite(StorageManager):
             except sqlite3.OperationalError as e:
                 logging.critical("Failed to load chemicalite cartridge. Please ensure chemicalite is installed with `conda install -c conda-forge chemicalite`.")
                 raise e
-            cursor = con.cursor()
-            cursor.execute("PRAGMA synchronous = OFF")
+            cursor = con.execute("PRAGMA synchronous = OFF")
             cursor.execute("PRAGMA journal_mode = MEMORY")
             cursor.close()
         except sqlite3.OperationalError as e:
@@ -1389,27 +1421,55 @@ class StorageManagerSQLite(StorageManager):
 
         self.open_cursors = []
 
-    def open_storage(self):
-        """Create connection to db. Then, check if db needs to be written.
-        If so, (if self.overwrite drop existing tables and )
-        initialize the tables
-        """
-        
-        self.conn = self._create_connection()
-        
-        # register signal handler to catch keyboard interupts
-        signal(SIGINT, self._sigint_handler)
-
-        # if we want to overwrite old db, drop existing tables
-        if self.overwrite:
-            self._drop_existing_tables()
-        #TODO is this right? Does it have to create new tables each time? I feel open storage can be invoked from the read as well, so then this would not make sense
-        # create tables in db
+    #NOTE needed
+    def _db_empty(self):
+        cur = self.conn.execute("SELECT COUNT(*) name FROM sqlite_master WHERE type='table';")
+        tablecount = cur.fetchone()[0]
+        cur.close()
+        return True if tablecount == 0 else False
+    
+    #NOTE needed
+    def _create_tables(self):
         self._create_results_table()
         self._create_ligands_table()
         self._create_receptors_table()
         self._create_interaction_index_table()
         self._create_bookmark_table()
+
+    #NOTE needed
+    def open_storage(self):
+        """Create connection to db. Then, check if db needs to be written.
+        If self.overwrite drop existing tables and initialize new tables
+        """
+        
+        self.conn = self._create_connection()
+
+        signal(SIGINT, self._sigint_handler)            # signal handler to catch keyboard interupts
+            
+        if self._db_empty() or self.overwrite:          # write and drop tables as necessary
+            if not self._db_empty(): 
+                self._drop_existing_tables()
+            self._create_tables()  
+            self.set_ringtaildb_version()
+        
+    #NOTE needed
+    def check_storage_ready(self):
+        """Check that storage is ready before proceeding.
+
+        Raises:
+            StorageError: Description
+        """
+        if not self.overwrite and not self.append_results:
+            try:
+                cur = self.conn.execute("SELECT COUNT(*) FROM Results")
+                if cur.fetchone()[0] != 0:
+                    raise StorageError(
+                        "Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database."
+                    )
+            except Exception as e:
+                raise e
+            finally:
+                cur.close()
 
     def _fetch_existing_table_names(self):
         """Returns list of all tables in database
@@ -1497,6 +1557,17 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
         return cur
+
+    def _update_query(self, query):
+        """Executes SQLite update query, does not return cursor.
+        Args:
+            query (string): Formated SQLite query as string
+        """
+        try:
+            cur = self.conn.execute(query)
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
 
     def create_indices(self):
         """Create index containing possible filter and order by columns
@@ -2709,21 +2780,4 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while vacuuming DB") from e
 
-    def check_storage_empty(self):
-        """Check that storage is empty before proceeding.
-
-        Raises:
-            StorageError: Description
-        """
-        if not self.overwrite and not self.append_results:
-            try:
-                cur = self.conn.cursor()
-                cur.execute("SELECT COUNT(*) FROM Results")
-                if cur.fetchone()[0] != 0:
-                    raise StorageError(
-                        "Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database."
-                    )
-            except Exception as e:
-                raise e
-            finally:
-                cur.close()
+   

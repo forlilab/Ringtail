@@ -13,7 +13,7 @@ from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .ringtailcore import RingtailCore
 from .apioptionsparser import APIOptionParser
-from .ringtailoptions import RingtailArguments
+from .ringtailoptions import *
 from .outputmanager import OutputManager
 from .filters import Filters
 from .interactions import InteractionFinder
@@ -59,5 +59,4 @@ __all__ = [
     "DatabaseViewCreationError",
     "OutputError",
     "APIOptionParser",
-    "RingtailArguments",
 ]
