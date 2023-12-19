@@ -710,15 +710,13 @@ class RingtailCore:
         and optional options for how to process the files in the multiprocessor.
         """
         fs = self._file_sources(file, file_path, file_list, pattern, recursive, receptor_file) 
-        self.rman = ResultsManager(file_sources=fs, storageman=self.storageman, storageman_class=StorageManagerSQLite)
-        #TODO the problem is that how I handle storagemanager class was not getting through, so parser could not get method that interpreted and wrote to database
+        self.rman = ResultsManager(file_sources=fs, storageman=self.storageman, storageman_class=self.storageman.__class__)
       
         if write_options != {}:
             for k,v in write_options.items():  
                 setattr(self.rman, k, v)
 
         self._before_adding_results() 
-        # with self.storageman: self.rman.process_results() 
         self.rman.process_results() 
 
         if self.summary:
@@ -754,7 +752,8 @@ class RingtailCore:
                             interaction_tolerance: float = None,
                             interaction_cutoffs: list = [3.7, 4.0],
                             max_proc: int = None):
-        """ Optional inputs to set up how the file processing will run"""
+        """ Creates a dictionary of ptional inputs to set up how the file processing&writing 
+        will be performed"""
 
         opts = {"store_all_poses": StoreAllPoses(store_all_poses).value,
                 "max_poses": MaxPoses(max_poses).value,
