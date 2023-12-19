@@ -1,9 +1,12 @@
 import sqlite3
 import os
 import pytest
-from ringtail import RingtailCore, RTArgs, RTWrite, RTRead, APIOptionParser as api
+from ringtail import RingtailCore as ringtail
 
 if os.path.isfile("output.db"): os.system("rm output.db")
+
+
+
 
 @pytest.fixture
 def cur():
@@ -12,7 +15,7 @@ def cur():
     yield curs
     curs.close()
     conn.close()
-    os.system("rm output.db")
+    # os.system("rm output.db")
 
 @pytest.fixture
 def countrows():
@@ -23,7 +26,7 @@ def countrows():
         count = curs.fetchone()[0]
         curs.close()
         conn.close()
-        os.system("rm output.db")
+        # os.system("rm output.db")
         return count
     return __dbconnect
 
@@ -37,22 +40,19 @@ def dbquery():
     yield __dbconnect
     curs.close()
     conn.close()
-    os.system("rm output.db")
+    # os.system("rm output.db")
+
 
 def write_standard_setup():
     print("\nSetting up Ringtail Core\n")
-    rtopt = RTWrite()
-    rtopt.process_mode = "write"
-    rtopt.file_path = [['test_data/group1/']]
-    rtopt.recursive = True
-    rtopt.save_receptor = True
-    rtopt.receptor_file = "test_data/4j8m.pdbqt"
-    rtopt.summary = True
-    rtopt.max_poses = 2
-    rtcore = RingtailCore()
-    api(ringtail_core=rtcore, opts =rtopt)
-    with rtcore: rtcore.add_results()
-    with rtcore: rtcore.save_receptors(rtopt.receptor_file)
+    rtstorage = ringtail(db_file="output.db")
+    rtstorage.open()
+    rtstorage.set_general_options(process_mode="write", summary=True)
+    # rtstorage.file_writer_options(max_poses=2)
+    rtstorage.add_results_from_files(file_path = [['test_data/group2/']],
+                                     recursive = True,
+                                     receptor_file="test_data/4j8m.pdbqt")
+
     print("\n\nRingtail Core set up\n")
 
 write_standard_setup()
@@ -66,16 +66,4 @@ class TestRingtailWrite:
     def test_ligand_write(self, dbquery):
         curs = dbquery("""SELECT COUNT(*) FROM Results;""" )
         count = curs.fetchone()[0]
-        assert count == 242
-
-# write_standard_setup()
-# class TestRingtailRead:
-#     print("\nSetting up Ringtail Core\n")
-#     rtread = RTWrite()
-#     rtread.process_mode = "read"
-    
-#     rtread.summary = True
-    
-#     rtcore = RingtailCore()
-#     api(ringtail_core=rtcore, opts =rtread)
-#     print("\n\nRingtail Core set up\n")
+        assert count == 176 #242

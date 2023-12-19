@@ -11,6 +11,7 @@ from .storagemanager import StorageManager, StorageManagerSQLite
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
+from .ringtailoptions import *
 from .filters import Filters
 from .exceptions import RTCoreError, OutputError
 from rdkit import Chem
@@ -19,7 +20,7 @@ import logging
 import os
 
 # MLP started editing this for refactoring
-class RingtailCoreMLP:
+class RingtailCore:
     """Core class for coordinating different actions on virtual screening
     i.e. adding results to storage, filtering, output options
 
@@ -39,158 +40,25 @@ class RingtailCoreMLP:
             files for insertion into database
     """
 
-    def __init__(self, storage_type = "sqlite", db_file = "output.db"):
-        """Initialize RingtailCore object. Will create storageManager object to serve
-        as interface with database (currently implemented in SQLite).
-        Will create ResultsManager to process result files.
-        Will create OutputManager object to assist in creating output files.
-
-        Args:
-            storage_opts (dictionary)
-            rman_opts (dictionary)
-            filters (dictionary)
-            out_opts (dictionary)
-        """
-
-        storage_class = StorageManager.check_storage_compatibility(storage_type) #this now straight up references the class
-        self.storageman = storage_class(db_file = db_file)
-        '''
-        # check if given opt_dict and set attrbutes if so
-        if opts_dict is None:
-            self.storage_opts = {}
-            self.rman_opts = {}
-            self.filters_dict = {}
-            self.out_opts = {}
-        else:
-            self.storage_opts = opts_dict["storage_opts"]["values"]
-            self.rman_opts = opts_dict["rman_opts"]["values"]
-            self.filters_dict = opts_dict["filters"]["values"]
-            self.out_opts = opts_dict["out_opts"]["values"]
-        
-        initialize "worker" classes
-        TODO these should only be initialized as needed, likely one at the time
-        
-        self.results_man = ResultsManager(storageman=self.storageman, storageman_class=storage_types[storage_type], **self.rman_opts)
-        self.output_manager = OutputManager(**self.out_opts)
-        self.filters = Filters(**self.filters_dict)
-
-    @classmethod
-    def get_defaults(cls, storage_type="sqlite", terse=False) -> dict:
-
-        cls.__default_options = {
-            "storage_opts": {
-                "values": StorageManager.get_defaults(storage_type),
-                "ignore": [],
-                "types": StorageManager.get_default_types(storage_type),
-            },
-            "rman_opts": {
-                "values": ResultsManager.get_defaults(),
-                "ignore": [],
-                "types": ResultsManager.get_default_types(),
-            },
-            "out_opts": {
-                "values": OutputManager.get_defaults(),
-                "ignore": [],
-                "types": OutputManager.get_default_types(),
-            },
-            "filters": {
-                "values": Filters.get_defaults(),
-                "ignore": [],
-                "types": Filters.get_default_types(),
-            },
-        }
-
-        defaults = cls.__default_options.copy()
-        if terse:
-            for group, opt in defaults.items():
-                defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
-
-        return defaults
-'''
+    #NOTE needed
+    def __init__(self, db_file = "output.db", storage_type = "sqlite", readonly=True):
+        """Initialize RingtailCore object."""
+        self.db_file = db_file
+        storageman = StorageManager.check_storage_compatibility(storage_type) #this now straight up references the class
+        self.storageman = storageman(db_file)
+        self.storageopen = False
     
+    #NOTE refactored
     def __enter__(self):
-        self.storageman.open_storage()
+        """legacy method so rtcore can be a context manager"""
+        self.open()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close_storage()
         self.output_manager.close_log()
-
-    def add_results(self):
-        """
-        Call results manager to process result files and add to database
-        """
-        # check that we want to overwrite or add results if storage already exists
-        self.storageman.check_storage_empty()
-        logging.info("Adding results...")
-        self.results_man.process_results()
-        self.storageman.set_ringtaildb_version()
-
-    def save_receptors(self, receptor_file):
-        """Add receptor to database
-
-        Args:
-            receptors (list): list of receptor blobs to add to database
-        """
-        receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
-        for rec, rec_name in receptor_list:
-            # NOTE: in current implementation, only one receptor allowed per database
-            # Check that any receptor row is incomplete (needs receptor blob) before inserting
-            filled_receptor_rows = self.storageman.check_receptors_saved()
-            if filled_receptor_rows != 0:
-                raise RTCoreError(
-                    "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
-                        filled_receptor_rows
-                    )
-                )
-            self.storageman.save_receptor(rec)
-
-    def produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
-        """Print summary of data in storage
-        """
-        summary_data = self.storageman.fetch_summary_data(columns, percentiles)
-        print("Total Stored Ligands          :", summary_data.pop("num_ligands"))
-        print("Total Stored Poses            :", summary_data.pop("num_poses"))
-        print("Total Unique Interactions     :", summary_data.pop("num_unique_interactions"))
-        print("Number Interacting Residues   :", summary_data.pop("num_interacting_residues"))
-
-        colon_col = 18
-        print("\nEnergy statistics:")
-        print("=======================================")
-        for col in columns:
-            if col == "docking_score":
-                min_e = summary_data["min_docking_score"]
-                max_e = summary_data["max_docking_score"]
-                print(f"Energy (min)      : {min_e:.2f} kcal/mol")
-                print(f"Energy (max)      : {max_e:.2f} kcal/mol")
-            elif col == "leff":
-                min_le = summary_data["min_leff"]
-                max_le = summary_data["max_leff"]
-                print(f"LE     (min)      : {min_le:.2f} kcal/mol/heavyatom")
-                print(f"LE     (max)      : {max_le:.2f} kcal/mol/heavyatom")
-            else:
-                min_col = summary_data[f"min_{col}"]
-                max_col = summary_data[f"max_{col}"]
-                print(f"{col} (min) : {min_col}")
-                print(f"{col} (max) : {max_col}")
-        if percentiles != [] and percentiles is not None:
-            print("----------------------------------------")
-
-            for col in columns:
-                for p in percentiles:
-                    if col == "docking_score":
-                        p_string = f"Energy (top {p}% )"
-                        p_string += ' ' * (colon_col - len(p_string))
-                        print(f"{p_string}: {summary_data[f'{p}%_docking_score']:.2f} kcal/mol")
-                    elif col == "leff":
-                        p_string = f"LE     (top {p}% )"
-                        p_string += ' ' * (colon_col - len(p_string))
-                        print(f"{p_string}: {summary_data[f'{p}%_leff']:.2f} kcal/mol/heavyatom")
-                    else:
-                        p_string = f"{col} (top {p}%)"
-                        p_string += ' ' * (colon_col - len(p_string))
-                        print(f"{p_string}: {summary_data[f'{p}%_{col}']:.2f}")
-
+   
+    
     def display_pymol(self):
         """launch pymol session and plot of LE vs docking score. Displays molecules when clicked
         """
@@ -734,3 +602,178 @@ class RingtailCoreMLP:
 
     def update_database(self, consent=False):
         return self.storageman.update_database(consent)
+    
+    ''' new or updated methods that construct the interface'''
+# # # MLP private methods
+    def _before_adding_results(self):
+        self.storageman.check_storage_ready()
+        logging.info("Adding results...")
+    
+    def _after_adding_results(self):
+        if self.summary:
+            self.produce_summary()
+        self.storageman.set_ringtaildb_version()   
+
+    def _file_sources(self, 
+                 file=[[]], 
+                 file_path=[[]], 
+                 file_list=[[]], 
+                 file_pattern="*.dlg*", 
+                 recursive=False, 
+                 receptor_file=None,):
+        """ Takes input file sources and builds a dictionary true to first iteration of ringtail.
+        Automatically saves receptor if receptor file is given."""
+
+        fs = {}
+
+        fs["file"] = [File(file).value]
+        fs["file_path"] = {
+            "path": FilePath(file_path).value,
+            "pattern" : Pattern(file_pattern).value,
+            "recursive" : Recursive (recursive).value}
+        fs["file_list"] = [FileList(file_list).value]
+        fs["receptor_file"] = ReceptorFile(receptor_file).value
+        fs["target"] = (os.path.basename(receptor_file).split(".")[0])
+        fs["save_receptor"] = True
+
+        return fs
+    
+    def _produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
+        """Print summary of data in storage
+        """
+        summary_data = self.storageman.fetch_summary_data(columns, percentiles)
+        print("Total Stored Ligands          :", summary_data.pop("num_ligands"))
+        print("Total Stored Poses            :", summary_data.pop("num_poses"))
+        print("Total Unique Interactions     :", summary_data.pop("num_unique_interactions"))
+        print("Number Interacting Residues   :", summary_data.pop("num_interacting_residues"))
+
+        colon_col = 18
+        print("\nEnergy statistics:")
+        print("=======================================")
+        for col in columns:
+            if col == "docking_score":
+                min_e = summary_data["min_docking_score"]
+                max_e = summary_data["max_docking_score"]
+                print(f"Energy (min)      : {min_e:.2f} kcal/mol")
+                print(f"Energy (max)      : {max_e:.2f} kcal/mol")
+            elif col == "leff":
+                min_le = summary_data["min_leff"]
+                max_le = summary_data["max_leff"]
+                print(f"LE     (min)      : {min_le:.2f} kcal/mol/heavyatom")
+                print(f"LE     (max)      : {max_le:.2f} kcal/mol/heavyatom")
+            else:
+                min_col = summary_data[f"min_{col}"]
+                max_col = summary_data[f"max_{col}"]
+                print(f"{col} (min) : {min_col}")
+                print(f"{col} (max) : {max_col}")
+        if percentiles != [] and percentiles is not None:
+            print("----------------------------------------")
+
+            for col in columns:
+                for p in percentiles:
+                    if col == "docking_score":
+                        p_string = f"Energy (top {p}% )"
+                        p_string += ' ' * (colon_col - len(p_string))
+                        print(f"{p_string}: {summary_data[f'{p}%_docking_score']:.2f} kcal/mol")
+                    elif col == "leff":
+                        p_string = f"LE     (top {p}% )"
+                        p_string += ' ' * (colon_col - len(p_string))
+                        print(f"{p_string}: {summary_data[f'{p}%_leff']:.2f} kcal/mol/heavyatom")
+                    else:
+                        p_string = f"{col} (top {p}%)"
+                        p_string += ' ' * (colon_col - len(p_string))
+                        print(f"{p_string}: {summary_data[f'{p}%_{col}']:.2f}")
+
+
+# # # MLP API
+
+    def open(self):
+        """Methods that opens db connection through storagemanager"""
+        self.storageman.open_storage()
+        self.storageopen = True
+
+    def add_results_from_dlg(self, dlg_string):
+        self._before_adding_results()
+        # Method to add results from a string rather than one or more files
+
+    def add_results_from_files(self, 
+                               file = [], 
+                               file_path = [[]], 
+                               file_list = [], 
+                               pattern = "*.dlg*", 
+                               recursive = False, 
+                               receptor_file=None,
+                               write_options={}):
+        """
+        Call storage manager to process result files and add to database.
+        It takes input as one or more sources of files, optional source of a receptor file,
+        and optional options for how to process the files in the multiprocessor.
+        """
+        fs = self._file_sources(file, file_path, file_list, pattern, recursive, receptor_file) 
+        self.rman = ResultsManager(file_sources=fs, storageman=self.storageman, storageman_class=StorageManagerSQLite)
+        #TODO the problem is that how I handle storagemanager class was not getting through, so parser could not get method that interpreted and wrote to database
+      
+        if write_options != {}:
+            for k,v in write_options.items():  
+                setattr(self.rman, k, v)
+
+        self._before_adding_results() 
+        # with self.storageman: self.rman.process_results() 
+        self.rman.process_results() 
+
+        if self.summary:
+            self._produce_summary()
+
+        if fs["save_receptor"]==True: 
+            self.save_receptor(receptor_file)
+    
+    def save_receptor(self, receptor_file):
+        """Add receptor to database
+
+        Args:
+            receptors (list): list of receptor blobs to add to database
+        """
+        receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
+        for rec, rec_name in receptor_list:
+            # with self.storageman: 
+            # NOTE: in current implementation, only one receptor allowed per database
+            # Check that any receptor row is incomplete (needs receptor blob) before inserting
+            filled_receptor_rows = self.storageman.count_receptors_in_db()
+            if filled_receptor_rows != 0:
+                raise RTCoreError(
+                    "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
+                        filled_receptor_rows
+                    )
+                )
+            self.storageman.save_receptor(rec)
+    
+    def file_writer_options(self, 
+                            store_all_poses: bool = False,
+                            max_poses: int = 3,
+                            add_interactions: bool = False,
+                            interaction_tolerance: float = None,
+                            interaction_cutoffs: list = [3.7, 4.0],
+                            max_proc: int = None):
+        """ Optional inputs to set up how the file processing will run"""
+
+        opts = {"store_all_poses": StoreAllPoses(store_all_poses).value,
+                "max_poses": MaxPoses(max_poses).value,
+                "interaction_tolerance": AddInteractions(add_interactions).value,
+                "add_interactions": InteractionTolerance(interaction_tolerance).value,
+                "interaction_cutoffs": InteractionCutoffs(interaction_cutoffs).value,
+                "max_proc": MaxProc(max_proc).value }
+        
+        return opts
+
+    def set_general_options(self, process_mode=None,
+                 mode="dlg",
+                 summary=False,
+                 verbose=False,
+                 debug=True,
+                 ):
+        
+        self.process_mode = ProcessMode(process_mode).value
+        self.mode = Mode(mode).value
+        self.summary = Summary(summary).value 
+        self.verbose = Verbose(verbose).value 
+        self.debug = Debug(debug).value 
