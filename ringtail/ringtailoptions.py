@@ -41,28 +41,6 @@ def parserargs(object):
             parser_string += str(var) + '="' + str(value) + '",'
     return parser_string
 
-class DBOptions():
-
-    def __init__(self, 
-                input_db=None,
-                output_db="output.db",
-                bookmark_name=None,
-                append_results=None, 
-                duplicate_handling=None,
-                overwrite=None):
-        self.input_db = InputDB(input_db).value 
-        self.output_db = OutputDB(output_db).value 
-        self.bookmark_name = BookmarkName(bookmark_name, process_mode).value
-        self.append_results = AppendResults(append_results).value
-        self.duplicate_handling = DuplicateHandling(duplicate_handling).value
-        self.overwrite = Overwrite(overwrite).value
-    #outman_opts
-'''{
-            "log_file": parsed_opts.log_file,
-            "export_sdf_path": parsed_opts.export_sdf_path,
-        }'''
-
-
 # # # General options for Ringtail
 class ProcessMode(RTArgs): #TODO this might need some finagling 
     def __init__(self, value=None):
@@ -141,7 +119,7 @@ class OutputDB(RTArgs): #only used in write. I am wondering if there can be just
             self.value = value
     
 class BookmarkName(RTArgs): 
-    def __init__(self, value=None, process_mode="read"):
+    def __init__(self, value=None, process_mode="write"):
         super(BookmarkName, self).__init__(str)
         if process_mode == "read":
             BookmarkName._set_attr(self, **{"name":"bookmark_name", 
@@ -151,11 +129,11 @@ class BookmarkName(RTArgs):
                                             "metavar":"STRING",
                                             "dest":"results_view_name"})
         else:
-            BookmarkName._set_attr(self, **{"name":"bookmark_name", 
-                                    "altname":"s",
-                                    "help":'Specify name for db view of passing results to create (write mode) or export from (read mode)',
-                                    "action":"store",
-                                    "metavar":"STRING"})
+            BookmarkName._set_attr(self, **{"name":"bookmark_name",
+                                            "altname":"s",
+                                            "help":'Specify name for db view of passing results to create (write mode) or export from (read mode)',
+                                            "action":"store",
+                                            "metavar":"STRING"})
         if value != None:
             self.value = value
         
@@ -336,4 +314,415 @@ class MaxProc(RTArgs):
                                     "action":"store"})
         if value != None:
             self.value = value
-        
+
+# Read options
+# # # Output options, some filters but mostly file handling
+#Output file setup
+class LogFile(RTArgs):
+    def __init__(self, value=None):
+        super(LogFile, self).__init__(str)
+        LogFile._set_attr(self, **{"name":"log_file", 
+                                    "altname":"l",
+                                    "help":'by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file',
+                                    "action":"store",
+                                    "metavar":"[FILE_NAME].TXT"})
+        if value != None:
+            self.value = value
+
+class Outfields(RTArgs):
+    def __init__(self, value=None):
+        super(Outfields, self).__init__(str)
+        Outfields._set_attr(self, **{"name":"outfields", 
+                                    "altname":"of",
+                                    "help":
+                                        'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
+                                        '"Ligand_name" (Ligand name), '
+                                        '"e" (docking_score), '
+                                        '"le" (ligand efficiency), '
+                                        '"delta" (delta energy from best pose), '
+                                        '"ref_rmsd" (RMSD to reference pose), '
+                                        '"e_inter" (intermolecular energy), '
+                                        '"e_vdw" (van der waals energy), '
+                                        '"e_elec" (electrostatic energy), '
+                                        '"e_intra" (intermolecular energy), '
+                                        '"n_interact" (number of interactions), '
+                                        '"ligand_smile" , '
+                                        '"rank" (rank of ligand pose), '
+                                        '"run" (run number for ligand pose), '
+                                        '"hb" (hydrogen bonds), '
+                                        '"receptor" (receptor name); '
+                                        "Fields are "
+                                        "printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified.",
+                                    "action":"store",
+                                    "metavar":"FIELD1,FIELD2,..."})
+        if value != None:
+            self.value = value
+
+class OrderResults(RTArgs):
+    def __init__(self, value=None):
+        super(OrderResults, self).__init__(str)
+        OrderResults._set_attr(self, **{"name":"order_results", 
+                                    "altname":"ord",
+                                    "help":"Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
+                                        "available fields are:  "
+                                        '"e" (docking_score), '
+                                        '"le" (ligand efficiency), '
+                                        '"delta" (delta energy from best pose), '
+                                        '"ref_rmsd" (RMSD to reference pose), '
+                                        '"e_inter" (intermolecular energy), '
+                                        '"e_vdw" (van der waals energy), '
+                                        '"e_elec" (electrostatic energy), '
+                                        '"e_intra" (intermolecular energy), '
+                                        '"n_interact" (number of interactions), '
+                                        '"rank" (rank of ligand pose), '
+                                        '"run" (run number for ligand pose), '
+                                        '"hb" (hydrogen bonds); ',
+                                    "action":"store",
+                                    "metavar":"STRING"})
+        if value != None:
+            self.value = value
+
+#These are sort of filters
+class OutputAllPoses(RTArgs):
+    def __init__(self, value=None):
+        super(OutputAllPoses, self).__init__(bool)
+        OutputAllPoses._set_attr(self, **{"name":"output_all_poses", 
+                                    "altname":"oap",
+                                    "help":"By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.",
+                                    "action":"store_true",})
+        if value != None:
+            self.value = value
+
+class MFPTCLuster(RTArgs):
+    def __init__(self, value=None):
+        super(MFPTCLuster, self).__init__(float)
+        MFPTCLuster._set_attr(self, **{"name":"mfpt_cluster", 
+                                    "altname":"mfpc",
+                                    "help":"Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.",
+                                    "action":"store",
+                                    "metavar":"FLOAT",
+                                    "const": 0.5,
+                                    "nargs":"?"})
+        if value != None:
+            self.value = value
+
+class InteractionCluster(RTArgs):
+    def __init__(self, value=None):
+        super(InteractionCluster, self).__init__(float)
+        InteractionCluster._set_attr(self, **{"name":"interaction_cluster", 
+                                    "altname":"ifpc",
+                                    "help":"Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.",
+                                    "action":"store",
+                                    "metavar":"FLOAT",
+                                    "const": 0.5,
+                                    "nargs":"?"})
+        if value != None:
+            self.value = value
+
+class FindSimilarLigands(RTArgs):
+    def __init__(self, value=None):
+        super(FindSimilarLigands, self).__init__(str)
+        FindSimilarLigands._set_attr(self, **{"name":"find_similar_ligands", 
+                                    "altname":"fsl",
+                                    "help":"Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.",
+                                    "action":"store"})
+        if value != None:
+            self.value = value
+
+#More output and export options
+class ExportBookmarkCSV(RTArgs):
+    def __init__(self, value=None):
+        super(ExportBookmarkCSV, self).__init__(str)
+        ExportBookmarkCSV._set_attr(self, **{"name":"export_bookmark_csv", 
+                                    "altname":"xs",
+                                    "help":"Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables",
+                                    "action":"store",
+                                    "metavar":"BOOKMARK_NAME"})
+        if value != None:
+            self.value = value
+
+class ExportQueryCSV(RTArgs):
+    def __init__(self, value=None):
+        super(ExportQueryCSV, self).__init__(str)
+        ExportQueryCSV._set_attr(self, **{"name":"export_query_csv", 
+                                    "altname":"xq",
+                                    "help":"Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]",
+                                    "action":"store",
+                                    "metavar":"[VALID SQL QUERY]"})
+        if value != None:
+            self.value = value
+
+class ExportSDFPath(RTArgs):
+    def __init__(self, value=None):
+        super(ExportSDFPath, self).__init__(str)
+        ExportSDFPath._set_attr(self, **{"name":"export_sdf_path", 
+                                    "altname":"sdf",
+                                    "help":"specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.",
+                                    "action":"store",
+                                    "metavar":"DIRECTORY_NAME"})
+        if value != None:
+            self.value = value
+
+class ExportBookmarkDB(RTArgs):
+    def __init__(self, value=None):
+        super(ExportBookmarkDB, self).__init__(bool)
+        ExportBookmarkDB._set_attr(self, **{"name":"export_bookmark_db", 
+                                    "altname":"xdb",
+                                    "help":"Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db",
+                                    "action":"store_true"})
+        if value != None:
+            self.value = value
+
+class ExportReceptor(RTArgs):
+    def __init__(self, value=None):
+        super(ExportReceptor, self).__init__(bool)
+        ExportReceptor._set_attr(self, **{"name":"export_receptor", 
+                                    "altname":"xr",
+                                    "help":"Export stored receptor pdbqt. Will write to current directory.",
+                                    "action":"store_true"})
+        if value != None:
+            self.value = value
+
+class DataFromBookmark(RTArgs):
+    def __init__(self, value=None):
+        super(DataFromBookmark, self).__init__(bool)
+        DataFromBookmark._set_attr(self, **{"name":"data_from_bookmark", 
+                                    "altname":"nd",
+                                    "help":"Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.",
+                                    "action":"store_true"})
+        if value != None:
+            self.value = value
+
+class FilterBookmark(RTArgs):
+    def __init__(self, value=None):
+        super(FilterBookmark, self).__init__(str)
+        FilterBookmark._set_attr(self, **{"name":"filter_bookmark", 
+                                    "altname":"fb",
+                                    "help":"Perform filtering over specified bookmark.",
+                                    "action":"store"})
+        if value != None:
+            self.value = value
+
+class Plot(RTArgs):
+    def __init__(self, value=None):
+        super(Plot, self).__init__(bool)
+        Plot._set_attr(self, **{"name":"plot", 
+                                    "altname":"p",
+                                    "help":"Makes scatterplot of LE vs Best Energy, saves as scatter.png.",
+                                    "action":"store_true"})
+        if value != None:
+            self.value = value
+
+class PyMOL(RTArgs):
+    def __init__(self, value=None):
+        super(PyMOL, self).__init__(bool)
+        PyMOL._set_attr(self, **{"name":"pymol", 
+                                    "altname":"py",
+                                    "help":"Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.",
+                                    "action":"store_true"})
+        if value != None:
+            self.value = value
+
+# # # Filters
+#Properties group, energies and efficiencies 
+class EWorst(RTArgs):
+    def __init__(self, value=None):
+        super(EWorst, self).__init__(float)
+        EWorst._set_attr(self, **{"name":"eworst", 
+                                    "altname":"e",
+                                    "help":"specify the worst energy value accepted",
+                                    "action":"store",
+                                    "metavar":"FLOAT"})
+        if value != None:
+            self.value = value
+
+class EBest(RTArgs):
+    def __init__(self, value=None):
+        super(EBest, self).__init__(float)
+        EBest._set_attr(self, **{"name":"ebest", 
+                                    "altname":"eb",
+                                    "help":"specify the best energy value accepted",
+                                    "action":"store",
+                                    "metavar":"FLOAT"})
+        if value != None:
+            self.value = value
+
+class LEWorst(RTArgs):
+    def __init__(self, value=None):
+        super(LEWorst, self).__init__(float)
+        LEWorst._set_attr(self, **{"name":"leworst", 
+                                    "altname":"le",
+                                    "help":"specify the worst ligand efficiency value accepted",
+                                    "action":"store",
+                                    "metavar":"FLOAT"})
+        if value != None:
+            self.value = value
+
+class LEBest(RTArgs):
+    def __init__(self, value=None):
+        super(LEBest, self).__init__(float)
+        LEBest._set_attr(self, **{"name":"lebest", 
+                                    "altname":"leb",
+                                    "help":"specify the best ligand efficiency value accepted",
+                                    "action":"store",
+                                    "metavar":"FLOAT"})
+        if value != None:
+            self.value = value
+
+class ScorePercentile(RTArgs):
+    def __init__(self, value=None):
+        super(ScorePercentile, self).__init__(float)
+        ScorePercentile._set_attr(self, **{"name":"score_percentile", 
+                                    "altname":"pe",
+                                    "help":"specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.",
+                                    "action":"store",
+                                    "metavar":"FLOAT"})
+        if value != None:
+            self.value = value
+
+class LEPercentile(RTArgs):
+    def __init__(self, value=None):
+        super(LEPercentile, self).__init__(float)
+        LEPercentile._set_attr(self, **{"name":"le_percentile", 
+                                    "altname":"ple",
+                                    "help":"specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.",
+                                    "action":"store",
+                                    "metavar":"FLOAT"})
+        if value != None:
+            self.value = value
+
+#Ligand filtesr
+class Name(RTArgs):
+    def __init__(self, value=None):
+        super(Name, self).__init__(str)
+        Name._set_attr(self, **{"name":"name", 
+                                    "altname":"n",
+                                    "help":"specify ligand name(s). Will combine name filters with OR",
+                                    "action":"store",
+                                    "metavar":"STRING",
+                                    "nargs":"+"})
+        if value != None:
+            self.value = value
+
+class MaxNrAtoms(RTArgs):
+    def __init__(self, value=None):
+        super(MaxNrAtoms, self).__init__(int)
+        MaxNrAtoms._set_attr(self, **{"name":"max_nr_atoms", 
+                                    "altname":"mna",
+                                    "help":"Maximum number of heavy atoms a ligand may have",
+                                    "action":"store",
+                                    "metavar":"INT"})
+        if value != None:
+            self.value = value
+
+class Smarts(RTArgs):
+    def __init__(self, value=None):
+        super(Smarts, self).__init__(str)
+        Smarts._set_attr(self, **{"name":"smarts", 
+                                    "altname":"smarts",
+                                    "help":"SMARTS pattern(s) for substructure matching",
+                                    "action":"store",
+                                    "metavar":"STRING",
+                                    "nargs":"+"})
+        if value != None:
+            self.value = value
+
+class SmartsIDXYZ(RTArgs):
+    def __init__(self, value=None):
+        super(SmartsIDXYZ, self).__init__(str)
+        SmartsIDXYZ._set_attr(self, **{"name":"smarts_idxyz", 
+                                    "altname":"smarts_idxyz",
+                                    "help":"SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords",
+                                    "action":"store",
+                                    "metavar":"STRING",
+                                    "nargs":"+"})
+        if value != None:
+            self.value = value
+
+class SmartsJoin(RTArgs):
+    def __init__(self, value=None):
+        super(SmartsJoin, self).__init__(str)
+        SmartsJoin._set_attr(self, **{"name":"smarts_join", 
+                                    "altname":"sj",
+                                    "choices":["AND", "OR"],
+                                    "help":"logical operator for multiple SMARTS (default: OR)",
+                                    "action":"store",
+                                    "metavar":"STRING"})
+        if value != None:
+            self.value = value
+
+#Interaction filters
+class VanDerWaals(RTArgs):
+    def __init__(self, value=None):
+        super(VanDerWaals, self).__init__(str)
+        VanDerWaals._set_attr(self, **{"name":"van_der_waals", 
+                                    "altname":"vdw",
+                                    "help":"define van der Waals interactions with residue",
+                                    "action":"append",
+                                    "metavar":"[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"})
+        if value != None:
+            self.value = value
+
+class HydrogenBond(RTArgs):
+    def __init__(self, value=None):
+        super(HydrogenBond, self).__init__(str)
+        HydrogenBond._set_attr(self, **{"name":"hydrogen_bond", 
+                                    "altname":"hb",
+                                    "help":"define HB (ligand acceptor or donor) interaction",
+                                    "action":"append",
+                                    "metavar":"[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"})
+        if value != None:
+            self.value = value
+
+class ReactiveRes(RTArgs):
+    def __init__(self, value=None):
+        super(ReactiveRes, self).__init__(str)
+        ReactiveRes._set_attr(self, **{"name":"reactive_res", 
+                                    "altname":"r",
+                                    "help":"check if ligand reacted with specified residue",
+                                    "action":"append",
+                                    "metavar":"[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]"})
+        if value != None:
+            self.value = value
+
+class HBCount(RTArgs):
+    def __init__(self, value=None):
+        super(HBCount, self).__init__(int)
+        HBCount._set_attr(self, **{"name":"hb_count", 
+                                    "altname":"hc",
+                                    "help":"accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions",
+                                    "action":"store",
+                                    "metavar":"NUMBER"})
+        if value != None:
+            self.value = value
+
+class ReactAny(RTArgs):
+    def __init__(self, value=None):
+        super(ReactAny, self).__init__(bool)
+        ReactAny._set_attr(self, **{"name":"react_any", 
+                                    "altname":"ra",
+                                    "help":"check if ligand reacted with any residue",
+                                    "action":"store_true"})
+        if value != None:
+            self.value = value
+
+class MaxMiss(RTArgs):
+    def __init__(self, value=None):
+        super(MaxMiss, self).__init__(int)
+        MaxMiss._set_attr(self, **{"name":"max_miss", 
+                                    "altname":"mm",
+                                    "help":"Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with --enumerate_interaction_combs for enumeration of poses passing each individual combination of interaction filters.",
+                                    "action":"store",
+                                    "metavar":"INTEGER"})
+        if value != None:
+            self.value = value
+
+class EnumerateInteractionCombs(RTArgs):
+    def __init__(self, value=None):
+        super(EnumerateInteractionCombs, self).__init__(bool)
+        EnumerateInteractionCombs._set_attr(self, **{"name":"enumerate_interaction_combs", 
+                                    "altname":"eic",
+                                    "help":"Use with max_miss. If used, will output ligands passing each individual combination of interaction filters with max_miss.",
+                                    "action":"store_true"})
+        if value != None:
+            self.value = value         
