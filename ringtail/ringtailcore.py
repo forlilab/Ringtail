@@ -129,53 +129,6 @@ class RingtailCore:
 
         return filters_dict
     
-    def filter(self, enumerate_interaction_combs=False, return_iter=False):
-        """
-        Prepare list of filters, then hand it off to storageManager to
-            perform filtering. Create log of passing results.
-        """
-        # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
-        if self.filters.max_miss == 0:
-            enumerate_interaction_combs = True
-
-        logging.info("Filtering results...")
-        self.output_manager.create_log_file()
-        # get possible permutations of interaction with max_miss excluded
-        interaction_combs = self._generate_interaction_combinations(
-            self.filters.max_miss
-        )
-
-        for ic_idx, combination in enumerate(interaction_combs):
-            # prepare Filter object with only desired interaction combination for storageManager
-            filters_dict = self._prepare_filters_for_storageman(combination)
-
-            # set storageMan's internal ic_counter to reflect current ic_idx
-            if len(interaction_combs) > 1:
-                self.storageman.view_suffix(str(ic_idx))
-            # ask storageManager to fetch results
-            #TODO here is the place to insert filter dict object
-            filtered_results = self.storageman.filter_results(
-                filters_dict, not enumerate_interaction_combs
-            )
-            if filtered_results is not None:
-                if return_iter:
-                    return filtered_results
-                result_bookmark_name = self.storageman.get_current_view_name()
-                self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
-                self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
-                number_passing = self.output_manager.write_log(filtered_results)
-                self.output_manager.log_num_passing_ligands(number_passing)
-                print("Number passing:", number_passing)
-            else:
-                logging.warning("WARNING: No ligands found passing filters")
-
-        if len(interaction_combs) > 1:
-            maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
-            self.output_manager.write_maxmiss_union_header()
-            self.output_manager.write_results_bookmark_to_log(self.storageman.results_view_name + "_union")
-            number_passing_union = self.output_manager.write_log(maxmiss_union_results)
-            self.output_manager.log_num_passing_ligands(number_passing_union)
-            print("Number passing Ligands in max_miss union:", number_passing_union)
 
     def get_previous_filter_data(self):
         """Get data requested in self.out_opts['outfields'] from the
@@ -686,13 +639,14 @@ class RingtailCore:
 
 
 # # # MLP API
-
+### Write to database
     def open(self):
         """Methods that opens db connection through storagemanager"""
         self.storageman.open_storage()
         self.storageopen = True
 
     def add_results_from_dlg(self, dlg_string):
+        ### Good option for context manager
         self._before_adding_results()
         # Method to add results from a string rather than one or more files
 
@@ -704,6 +658,7 @@ class RingtailCore:
                                recursive = False, 
                                receptor_file=None,
                                write_options={}):
+        ### Good option for context manager
         """
         Call storage manager to process result files and add to database.
         It takes input as one or more sources of files, optional source of a receptor file,
@@ -726,25 +681,25 @@ class RingtailCore:
             self.save_receptor(receptor_file)
     
     def save_receptor(self, receptor_file):
-        """Add receptor to database
+            ### Good option for context manager
+            """Add receptor to database
 
-        Args:
-            receptors (list): list of receptor blobs to add to database
-        """
-        receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
-        for rec, rec_name in receptor_list:
-            # with self.storageman: 
-            # NOTE: in current implementation, only one receptor allowed per database
-            # Check that any receptor row is incomplete (needs receptor blob) before inserting
-            filled_receptor_rows = self.storageman.count_receptors_in_db()
-            if filled_receptor_rows != 0:
-                raise RTCoreError(
-                    "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
-                        filled_receptor_rows
+            Args:
+                receptors (list): list of receptor blobs to add to database
+            """
+            receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
+            for rec, rec_name in receptor_list:
+                # NOTE: in current implementation, only one receptor allowed per database
+                # Check that any receptor row is incomplete (needs receptor blob) before inserting
+                filled_receptor_rows = self.storageman.count_receptors_in_db()
+                if filled_receptor_rows != 0:
+                    raise RTCoreError(
+                        "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
+                            filled_receptor_rows
+                        )
                     )
-                )
-            self.storageman.save_receptor(rec)
-    
+                self.storageman.save_receptor(rec)
+
     def file_writer_options(self, 
                             store_all_poses: bool = False,
                             max_poses: int = 3,
@@ -776,3 +731,143 @@ class RingtailCore:
         self.summary = Summary(summary).value 
         self.verbose = Verbose(verbose).value 
         self.debug = Debug(debug).value 
+
+###Filter and read
+        
+    # Method that sets filter attributes
+        # The method should give a warning or error if a filter value has already been set 
+        # and is being changed
+    
+        '''eworst = None,
+                    ebest = None,
+                    leworst = None,
+                    lebest = None,
+                    score_percentile = None,
+                    le_percentile = None,
+                    name = None,
+                    max_nr_atoms = None,
+                    smarts = None,
+                    smarts_idxyz = None,
+                    smarts_join = None,
+                    van_der_waals = None,
+                    hydrogen_bond = None,
+                    reactive_res = None,
+                    hb_count = None,
+                    react_any = None,
+                    max_miss = None,
+                    enumerate_interaction_combs = None'''
+
+    def set_filters(self, 
+                    eworst=None, 
+                    ebest=None, 
+                    leworst=None, 
+                    lebest=None, 
+                    score_percentile=None,
+                    le_percentile=None,
+                    name=None,
+                    max_nr_atoms=None,
+                    smarts=None,
+                    smarts_idxyz=None,
+                    smarts_join=None,
+                    van_der_waals=None,
+                    hydrogen_bond=None,
+                    reactive_res=None,
+                    hb_count=None,
+                    react_any=None,
+                    max_miss=None,
+                    enumerate_interaction_combs=None):
+        
+        filters = {"eworst":eworst, 
+                    "ebest":ebest, 
+                    "leworst":leworst, 
+                    "lebest":lebest, 
+                    "score_percentile":score_percentile,
+                    "le_percentile":le_percentile,
+                    "name":name,
+                    "max_nr_atoms":max_nr_atoms,
+                    "smarts":smarts,
+                    "smarts_idxyz":smarts_idxyz,
+                    "smarts_join":smarts_join,
+                    "van_der_waals":van_der_waals,
+                    "hydrogen_bond":hydrogen_bond,
+                    "reactive_res":reactive_res,
+                    "hb_count":hb_count,
+                    "react_any":react_any,
+                    "max_miss":max_miss,
+                    "enumerate_interaction_combs":enumerate_interaction_combs}
+        # ensure object is instantiated
+        if not isinstance(self.filterobj, Filters):
+            self.filterobj = Filters()
+
+        for (k, v) in filters.items():
+            if v != None:
+                setattr(self.filterobj, k, v)
+                
+    def filter(self, enumerate_interaction_combs=False, return_iter=False):
+        """
+        Prepare list of filters, then hand it off to storageManager to
+            perform filtering. Create log of passing results.
+        """
+        # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
+        if self.filters.max_miss == 0:
+            enumerate_interaction_combs = True
+
+        logging.info("Filtering results...")
+        self.output_manager.create_log_file()
+        # get possible permutations of interaction with max_miss excluded
+        interaction_combs = self._generate_interaction_combinations(
+            self.filters.max_miss
+        )
+
+        for ic_idx, combination in enumerate(interaction_combs):
+            # prepare Filter object with only desired interaction combination for storageManager
+            filters_dict = self._prepare_filters_for_storageman(combination)
+
+            # set storageMan's internal ic_counter to reflect current ic_idx
+            if len(interaction_combs) > 1:
+                self.storageman.view_suffix(str(ic_idx))
+            # ask storageManager to fetch results
+            #TODO here is the place to insert filter dict object
+            filtered_results = self.storageman.filter_results(
+                filters_dict, not enumerate_interaction_combs
+            )
+            if filtered_results is not None:
+                if return_iter:
+                    return filtered_results
+                result_bookmark_name = self.storageman.get_current_view_name()
+                self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
+                self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
+                number_passing = self.output_manager.write_log(filtered_results)
+                self.output_manager.log_num_passing_ligands(number_passing)
+                print("Number passing:", number_passing)
+            else:
+                logging.warning("WARNING: No ligands found passing filters")
+
+        if len(interaction_combs) > 1:
+            maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
+            self.output_manager.write_maxmiss_union_header()
+            self.output_manager.write_results_bookmark_to_log(self.storageman.results_view_name + "_union")
+            number_passing_union = self.output_manager.write_log(maxmiss_union_results)
+            self.output_manager.log_num_passing_ligands(number_passing_union)
+            print("Number passing Ligands in max_miss union:", number_passing_union)
+
+        
+    # One method performs filtering and uses enumerate_interactions_combs --> This is probably where Matt got an error? 
+        ### Uses storageman, good for context manager? 
+        
+    # write "log" with new data for previous filtering results
+            # =as long as there are no filters, it takes data from bookmark
+        
+    # find similar ligands
+        
+    # plot data
+        
+    # display pymol
+        
+    # export bookmark csv
+        
+    # export query csv
+        
+    # export bookmark db
+        
+    # export receptor

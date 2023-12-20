@@ -41,6 +41,47 @@ def parserargs(object):
             parser_string += str(var) + '="' + str(value) + '",'
     return parser_string
 
+class Filters():
+    """ Class that holds all ringtail filters and their values"""
+    def __init__(self, 
+                 eworst = None,
+                 ebest = None,
+                 leworst = None,
+                 lebest = None,
+                 score_percentile = None,
+                 le_percentile = None,
+                 name = None,
+                 max_nr_atoms = None,
+                 smarts = None,
+                 smarts_idxyz = None,
+                 smarts_join = None,
+                 van_der_waals = None,
+                 hydrogen_bond = None,
+                 reactive_res = None,
+                 hb_count = None,
+                 react_any = None,
+                 max_miss = None,
+                 enumerate_interaction_combs = None):
+        self.eworst = EWorst(eworst)
+        self.ebest = EBest(ebest)
+        self.leworst = LEWorst(leworst),
+        self.lebest = LEBest(lebest)
+        self.score_percentile = ScorePercentile(score_percentile)
+        self.le_percentile = LEPercentile(le_percentile)
+        self.name = Name(name)
+        self.max_nr_atoms = MaxNrAtoms(max_nr_atoms)
+        self.smarts = Smarts(smarts)
+        self.smarts_idxyz = SmartsIDXYZ(smarts_idxyz)
+        self.smarts_join = SmartsJoin(smarts_join)
+        self.van_der_waals = VanDerWaals(van_der_waals)
+        self.hydrogen_bond = HydrogenBond(hydrogen_bond)
+        self.reactive_res = ReactiveRes(reactive_res)
+        self.hb_count = HBCount(hb_count)
+        self.react_any = ReactAny(react_any)
+        self.max_miss = MaxMiss(max_miss)
+        self.enumerate_interaction_combs = EnumerateInteractionCombs(enumerate_interaction_combs)
+    
+
 # # # General options for Ringtail
 class ProcessMode(RTArgs): #TODO this might need some finagling 
     def __init__(self, value=None):
