@@ -292,7 +292,6 @@ class Writer(multiprocessing.Process):
 
                     # process next file
                     self.process_file(next_task)
-
                 if self.num_readers == 0:
                     # received as many poison pills as workers
                     logging.info("Performing final database write")
@@ -321,6 +320,7 @@ class Writer(multiprocessing.Process):
             self.receptor_array,
             self.first_insert,
         )
+        # So at this point the ligand array is empty
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
 

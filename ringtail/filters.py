@@ -7,6 +7,7 @@
 from dataclasses import dataclass, field, fields, asdict, astuple
 import typing
 from .exceptions import OptionError
+import logging
 
 
 @dataclass
@@ -32,19 +33,44 @@ class Filters:
     ligand_substruct_pos: list[str] = field(default_factory=list, metadata={"filter_type": "ligand"})  # e.g. ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
     ligand_max_atoms: int = field(default=None, metadata={"filter_type": "ligand"})
     ligand_operator: str = field(default="OR", metadata={"filter_type": "ligand"})  # Choose AND or OR
+        
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        self._compatibility_checks()
+        
+    def _compatibility_checks(self):
+        '''It is probably not super efficient to run comp checks every time a value is set, but in this case attributes are not that many 
+        and is only set a limited number of times per ringtail core. I don't think it is a performance issue, but maybe a performance curiosity.'''
 
-    def __post_init__(self):
+        if (self.eworst is not None and self.score_percentile is not None):
+            logging.warning("Cannot use --eworst cutoff with --score_percentile. Overiding score_percentile with eworst.")
+            self.score_percentile = None
+        
+        if (self.leworst is not None and self.le_percentile is not None):
+            logging.warning("Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst.")
+            self.le_percentile = None  
 
-        # check percentiles between 0 and 100
         if self.score_percentile is not None and (self.score_percentile < 0 or self.score_percentile > 100):
             raise OptionError(f"Given score_percentile {self.score_percentile} not allowed. Should be within percentile range of 0-100.")
+        
         if self.le_percentile is not None and (self.le_percentile < 0 or self.le_percentile > 100):
             raise OptionError(f"Given score_percentile {self.le_percentile} not allowed. Should be within percentile range of 0-100.")
 
-        # check ligand operator
         if self.ligand_operator not in ["OR", "AND"]:
             raise OptionError(f"Given ligand_operator {self.ligand_operator} not allowed. Must be 'OR' or 'AND'.")
+        
+        if self.max_miss < 0:
+            raise OptionError("--max_miss must be greater than or equal to 0")
 
+    def filters_in_group(self, group: str) -> dict:
+        ''' Returns filters as a dict for a given group'''
+        fg = {}
+        for f in fields(self):
+            if f.metadata["filter_type"] == group:
+                fg[f.name] = getattr(self, f.name)
+
+        return fg
+        
     @classmethod
     def get_defaults(cls):
         return cls().__dict__

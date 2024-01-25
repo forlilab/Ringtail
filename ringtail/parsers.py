@@ -6,10 +6,11 @@
 
 import os
 import gzip
+import bz2
 import numpy as np
 from .exceptions import FileParsingError
 
-
+#-#-#- I need to add a second zip method here (bz2), and there is some duplication between dlg and pdbqt
 def parse_single_dlg(fname):
     """parse an ADGPU DLG file uncompressed or gzipped"""
     STD_END = "DOCKED: ENDMDL"

@@ -19,7 +19,6 @@ import itertools
 import logging
 import os
 
-# MLP started editing this for refactoring
 class RingtailCore:
     """Core class for coordinating different actions on virtual screening
     i.e. adding results to storage, filtering, output options
@@ -40,15 +39,13 @@ class RingtailCore:
             files for insertion into database
     """
 
-    #NOTE needed
     def __init__(self, db_file = "output.db", storage_type = "sqlite", readonly=True):
         """Initialize RingtailCore object."""
         self.db_file = db_file
-        storageman = StorageManager.check_storage_compatibility(storage_type) #this now straight up references the class
+        storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
         self.storageopen = False
     
-    #NOTE refactored
     def __enter__(self):
         """legacy method so rtcore can be a context manager"""
         self.open()
@@ -56,80 +53,42 @@ class RingtailCore:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close_storage()
-        self.output_manager.close_log()
+        if hasattr(self, "output_manager"):
+            self.output_manager.close_log()
    
-    
-    def display_pymol(self):
-        """launch pymol session and plot of LE vs docking score. Displays molecules when clicked
-        """
+    @classmethod 
+    def get_defaults(cls, storage_type="sqlite", terse=False) -> dict:
 
-        import subprocess
-        from rdkit.Chem import PyMol
+        cls.__default_options = {
+            "storage_opts": {
+                "values": StorageManager.get_defaults(storage_type),
+                "ignore": [],
+                "types": StorageManager.get_default_types(storage_type),
+            },
+            "rman_opts": {
+                "values": ResultsManager.get_defaults(),
+                "ignore": [],
+                "types": ResultsManager.get_default_types(),
+            },
+            "out_opts": {
+                "values": OutputManager.get_defaults(),
+                "ignore": [],
+                "types": OutputManager.get_default_types(),
+            },
+            "filters": {
+                "values": Filters.get_defaults(),
+                "ignore": [],
+                "types": Filters.get_default_types(),
+            },
+        }
 
-        # launch pymol session
-        p = subprocess.Popen(
-        ["pymol", "-R"],
-        stdout=subprocess.PIPE,
-        )
+        defaults = cls.__default_options.copy()
+        if terse:
+            for group, opt in defaults.items():
+                defaults[group] = {k: v for k, v in opt.items() if not k == "ignore"}
 
-        poseIDs = {}
-
-        # fetch data for passing ligands
-        _, passing_data = self.storageman.get_plot_data(only_passing=True)
-        for line in passing_data:
-            plt.plot(line[0], line[1], '.r', mfc='None', picker=5)
-            poseIDs[(line[0], line[1])] = (line[2], line[3])  # line[0] is LE, line[1] is docking score, line[2] is pose_ID, line[3] is LigName
-        plt.ylabel("Ligand Efficiency (kcal/mol/heavy atom)")
-        plt.xlabel("Docking Score (kcal/mol)")
-        plt.title("Passing Docking Poses")
-
-        try:
-            pymol = PyMol.MolViewer()
-        except ConnectionRefusedError as e:
-            raise RTCoreError("Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window.") from e
-        
-        def onpick(event):
-            line = event.artist
-            coords = tuple([c[0] for c in line.get_data()])
-            chosen_pose = poseIDs[coords]
-            logging.info(f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}")
-
-            # make rdkit mol for poseid
-            ligname, ligand_smile, atom_index_map, hydrogen_parents = self.storageman.fetch_single_ligand_output_info(chosen_pose[1])
-            flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-            if flexible_residues != []:  # converts string to list
-                flexible_residues = json.loads(flexible_residues)
-                flexres_atomnames = json.loads(flexres_atomnames)
-
-            mol, flexres_mols, _ = self.create_ligand_rdkit_mol(ligname, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames, pose_ID=chosen_pose[0])
-            logging.debug(Chem.MolToSmiles(mol))
-            pymol.ShowMol(mol, name=ligname, showOnly=False)
-            for idx, resmol in enumerate(flexres_mols):
-                pymol.ShowMol(resmol, name=ligname + "_" + flexible_residues[idx], showOnly=False)
-
-        fig = plt.gcf()
-        cid = fig.canvas.mpl_connect('pick_event', onpick)
-        plt.show()
-
-    def _prepare_filters_for_storageman(self, interaction_combination):
-        """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
-
-        Args:
-            interaction_combination (list): list of interactions to be included in this round of filtering
-        Returns:
-            dict: dictionary of filters for storageman
-        """
-
-        filters_dict = self.filters.to_dict()
-        for itype in Filters.get_interaction_filter_keys():
-            itype_interactions = filters_dict[itype]
-            for interaction in itype_interactions:
-                if itype + "-" + interaction[0] not in interaction_combination:
-                    filters_dict[itype].remove(interaction)
-
-        return filters_dict
-    
-
+        return defaults
+     
     def get_previous_filter_data(self):
         """Get data requested in self.out_opts['outfields'] from the
         results view of a previous filtering
@@ -137,50 +96,6 @@ class RingtailCore:
         self.output_manager.create_log_file()
         new_data = self.storageman.fetch_data_for_passing_results()
         self.output_manager.write_log(new_data)
-
-    def find_similar_ligands(self, query_ligname: str):
-        """Find ligands in cluster with query_ligname
-        """
-        similar_ligands, bookmark_name, cluster_name = self.storageman.fetch_clustered_similars(query_ligname)
-        if similar_ligands is not None:
-            self.output_manager.write_find_similar_header(query_ligname, cluster_name)
-            self.output_manager.write_results_bookmark_to_log(bookmark_name)
-            number_similar = self.output_manager.write_log(similar_ligands)
-            self.output_manager.log_num_passing_ligands(number_similar)
-            print("Number similar ligands:", number_similar)
-
-    def plot(self, save=True):
-        """
-        Get data needed for creating Ligand Efficiency vs
-        Energy scatter plot from storageManager. Call OutputManager to create plot.
-        """
-
-        logging.info("Creating plot of results")
-        # get data from storageMan
-        all_data, passing_data = self.storageman.get_plot_data()
-        all_plot_data_binned = dict()
-        # bin the all_ligands data by 1000ths to make plotting faster
-        for line in all_data:
-            # add to dictionary as bin of energy and le
-            if None in line:
-                continue
-                #raise OutputError("Detected empty data line when plotting. Please check that database and bookmarks are not empty.")
-            data_bin = (round(line[0], 3), round(line[1], 3))
-            if data_bin not in all_plot_data_binned:
-                all_plot_data_binned[data_bin] = 1
-            else:
-                all_plot_data_binned[data_bin] += 1
-        # plot the data
-        self.output_manager.plot_all_data(all_plot_data_binned)
-        if passing_data != []:  # handle if no passing ligands
-            for line in passing_data:
-                self.output_manager.plot_single_point(
-                    line[0], line[1], "red"
-                )  # energy (line[0]) on x axis, le (line[1]) on y axis
-        if save:
-            self.output_manager.save_scatterplot()
-        else:
-            plt.show()
 
     def prepare_results_filter_list(self, included_interactions):
         """takes filters dictionary from option parser.
@@ -205,11 +120,11 @@ class RingtailCore:
         ]
 
         for key in single_value_keys:
-            if getattr(self.filters, key) is not None:
-                filters_list.append(getattr(self.filters, key))
+            if getattr(self.filterobj, key) is not None:
+                filters_list.append(getattr(self.filterobj, key))
 
         # interaction filters
-        interaction_filters = {"V": self.filters.vdw_interactions, "H": self.filters.hb_interactions, "R": self.filters.reactive_interactions}
+        interaction_filters = {"V": self.filterobj.vdw_interactions, "H": self.filterobj.hb_interactions, "R": self.filterobj.reactive_interactions}
         for key in interaction_filters:
             if interaction_filters[key] is not None:
                 kept_interactions = []
@@ -226,62 +141,17 @@ class RingtailCore:
             "ligand_substruct_pos"
         ]
         for key in multiple_value_keys:
-            if getattr(self.filters, key) != []:
-                filters_list.append(key, getattr(self.filters, key))
+            if getattr(self.filterobj, key) != []:
+                filters_list.append(key, getattr(self.filterobj, key))
 
         # add interactions_count
-        if self.filters.interactions_count is not None:
-            filters_list.append(self.filters.interactions_count)  # already a tuple, don't need to format
+        if self.filterobj.interactions_count is not None:
+            filters_list.append(self.filterobj.interactions_count)  # already a tuple, don't need to format
 
         # add react_any flag
-        filters_list.append(("react_any", self.filters.react_any))
+        filters_list.append(("react_any", self.filterobj.react_any))
 
         return filters_list
-
-    def write_molecule_sdfs(self, write_nonpassing=False, return_rdmol_dict=False):
-        """have output manager write sdf molecules for passing results in given results bookmark
-
-        Args:
-            write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
-            return_rdmol_dict (bool, optional): Suppresses SDF file writing, returns dictionary of rdkit mols
-        """
-
-        if self.filters.max_miss > 0:
-            self.storageman.results_view_name = self.storageman.results_view_name + "_union"
-        if not self.storageman.check_passing_view_exists():
-            logging.warning(
-                "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
-            )
-            return None
-        # make temp table for SDF writing
-        self.storageman.create_temp_passing_table()
-        passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
-        flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-        if flexible_residues != []:
-            flexible_residues = json.loads(flexible_residues)
-            flexres_atomnames = json.loads(flexres_atomnames)
-        all_mols = {}
-        for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
-            logging.info("Writing " + ligname.split(".")[0] + ".sdf")
-            # create rdkit ligand molecule and flexible residue container
-            if smiles == "":
-                logging.warning(
-                    f"No SMILES found for {ligname}. Cannot create SDF."
-                )
-                continue
-
-            mol, flexres_mols, properties = self.create_ligand_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, write_nonpassing=write_nonpassing)
-
-            # write out mol
-            if not return_rdmol_dict:
-                self.output_manager.write_out_mol(
-                    ligname, mol, flexres_mols, properties
-                )
-            else:
-                all_mols[ligname] = {"ligand": mol, "flex_residues": flexres_mols}
-
-        if return_rdmol_dict:
-            return all_mols
 
     def create_ligand_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
         """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
@@ -412,6 +282,8 @@ class RingtailCore:
 
         return mol, flexres_mols, properties
     
+    #TODO I think maybe this should be a hidden method, and expose two methods
+    # to deal with each csv export option (see rt process vs)
     def export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV
 
@@ -422,34 +294,7 @@ class RingtailCore:
         """
         df = self.storageman.to_dataframe(requested_data, table=table)
         df.to_csv(csv_name)
-
-    def export_bookmark_db(self, bookmark_db_name: str):
-        """Export database containing data from bookmark
-
-        Args:
-            bookmark_db_name (str): name for bookmark_db
-        """
-        logging.info("Exporting bookmark database")
-        if os.path.exists(bookmark_db_name):
-            logging.warning(
-                "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
-            )
-            return
-        self.storageman.clone(bookmark_db_name)
-        # connect to cloned database
-        self.storage_opts["db_file"] = bookmark_db_name
-        with StorageManagerSQLite(**self.storage_opts) as db_clone:
-            db_clone.prune()
-            db_clone.close_storage(vacuum=True)
-
-    def export_receptors(self):
-        receptor_tuples = self.storageman.fetch_receptor_objects()
-        for recname, recblob in receptor_tuples:
-            if recblob is None:
-                logging.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
-                continue
-            self.output_manager.write_receptor_pdbqt(recname, recblob)
-
+    
     def close_storage(self):
         """Tell database we are done and it can close the connection"""
         self.storageman.close_storage()
@@ -520,76 +365,8 @@ class RingtailCore:
             ligand_saved_coords.append(ligand_pose)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
 
-    def _generate_interaction_combinations(self, max_miss=0):
-        """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
-
-        Args:
-            max_miss (int): Maximum number of interactions to be excluded
-        """
-
-        all_interactions = []
-        for _type in Filters.get_interaction_filter_keys():
-            interactions = getattr(self.filters, _type)
-            for interact in interactions:
-                all_interactions.append(_type + "-" + interact[0])
-
-        # warn if max_miss greater than number of interactions
-        if max_miss > len(all_interactions):
-            logging.warning(
-                "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
-            )
-            max_miss = len(all_interactions)
-
-        # BASE CASE:
-        if max_miss == 0:
-            return [tuple(all_interactions)]
-        else:
-            combinations = list(
-                itertools.combinations(
-                    all_interactions, len(all_interactions) - max_miss
-                )
-            )
-            return combinations + self._generate_interaction_combinations(
-                max_miss=max_miss - 1
-            )
-
     def update_database(self, consent=False):
         return self.storageman.update_database(consent)
-    
-    ''' new or updated methods that construct the interface'''
-# # # MLP private methods
-    def _before_adding_results(self):
-        self.storageman.check_storage_ready()
-        logging.info("Adding results...")
-    
-    def _after_adding_results(self):
-        if self.summary:
-            self.produce_summary()
-        self.storageman.set_ringtaildb_version()   
-
-    def _file_sources(self, 
-                 file=[[]], 
-                 file_path=[[]], 
-                 file_list=[[]], 
-                 file_pattern="*.dlg*", 
-                 recursive=False, 
-                 receptor_file=None,):
-        """ Takes input file sources and builds a dictionary true to first iteration of ringtail.
-        Automatically saves receptor if receptor file is given."""
-
-        fs = {}
-
-        fs["file"] = [File(file).value]
-        fs["file_path"] = {
-            "path": FilePath(file_path).value,
-            "pattern" : Pattern(file_pattern).value,
-            "recursive" : Recursive (recursive).value}
-        fs["file_list"] = [FileList(file_list).value]
-        fs["receptor_file"] = ReceptorFile(receptor_file).value
-        fs["target"] = (os.path.basename(receptor_file).split(".")[0])
-        fs["save_receptor"] = True
-
-        return fs
     
     def _produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
         """Print summary of data in storage
@@ -637,49 +414,174 @@ class RingtailCore:
                         p_string += ' ' * (colon_col - len(p_string))
                         print(f"{p_string}: {summary_data[f'{p}%_{col}']:.2f}")
 
+    def _generate_interaction_combinations(self, max_miss=0):
+        """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
 
-# # # MLP API
-### Write to database
-    def open(self):
+        Args:
+            max_miss (int): Maximum number of interactions to be excluded
+        """
+
+        all_interactions = []
+        for _type in Filters.get_interaction_filter_keys():
+            interactions = getattr(self.filterobj, _type)
+            for interact in interactions:
+                all_interactions.append(_type + "-" + interact[0])
+        
+        # warn if max_miss greater than number of interactions
+        if max_miss > len(all_interactions):
+            logging.warning(
+                "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
+            )
+            max_miss = len(all_interactions)
+
+        # BASE CASE:
+        if max_miss == 0:
+            return [tuple(all_interactions)]
+        else:
+            combinations = list(
+                itertools.combinations(
+                    all_interactions, len(all_interactions) - max_miss
+                )
+            )
+            return combinations + self._generate_interaction_combinations(
+                max_miss=max_miss - 1
+            )
+
+    def _prepare_filters_for_storageman(self, interaction_combination):
+        """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
+
+        Args:
+            interaction_combination (list): list of interactions to be included in this round of filtering
+        Returns:
+            dict: dictionary of filters for storageman
+        """
+
+        filters_dict = self.filterobj.to_dict()
+        for itype in Filters.get_interaction_filter_keys():
+            itype_interactions = filters_dict[itype]
+            for interaction in itype_interactions:
+                if itype + "-" + interaction[0] not in interaction_combination:
+                    filters_dict[itype].remove(interaction)
+
+        return filters_dict
+
+    def _docking_mode_from_file_extension(self, file_pattern: str) -> str:
+        if file_pattern.lower() == "*.dlg*":
+            mode = "dlg"
+        elif file_pattern.lower() == "*.pdbqt*":
+            mode = "vina"
+        else:
+            raise OptionError(f'{file_pattern} is not a valid docking file format for ringtail.')
+        return mode
+    
+#-#-#- API -#-#-#
+    #-#- General processing methods -#-# 
+    def open(self, process_mode = "read"):
         """Methods that opens db connection through storagemanager"""
         self.storageman.open_storage()
         self.storageopen = True
+        self.set_general_options(process_mode)
+    
+    def add_options_from_config_file(self, config_file: str =None):
+        replace_filter_keys = {
+            "vdw_interactions": "van_der_waals",
+            "hb_interactions": "hydrogen_bond",
+            "reactive_interactions": "reactive_res",
+            "ligand_name": "name",
+            "ligand_substruct": "smarts",
+            "ligand_operator": "smarts_join",
+            "ligand_substruct_pos": "smarts_idxyz",
+            "ligand_max_atoms": "max_nr_atoms",
+        }
+        defaults = RingtailCore.get_defaults() 
+        configs = {}
+        for section in defaults:
+            for k, v in defaults[section]["values"].items():
+                configs[k] = v
 
-    def add_results_from_dlg(self, dlg_string):
-        ### Good option for context manager
-        self._before_adding_results()
-        # Method to add results from a string rather than one or more files
+        for k, v in replace_filter_keys.items():
+            configs[k] = v
 
-    def add_results_from_files(self, 
-                               file = [], 
-                               file_path = [[]], 
-                               file_list = [], 
-                               pattern = "*.dlg*", 
+        if config_file is not None:
+            logging.info("Reading options from config file")
+            with open(config_file) as f:
+                c = json.load(f)
+                configs.update(c)
+        return configs
+
+    def add_results_from_files(self,
+                               file = None, 
+                               file_path = None, 
+                               file_list = None, 
+                               file_pattern = "*.dlg*", 
                                recursive = False, 
                                receptor_file=None,
-                               write_options={}):
-        ### Good option for context manager
+                               save_receptor = None,
+                               file_source_object = None,
+                               store_all_poses: bool = False,
+                               max_poses: int = 3,
+                               add_interactions: bool = False,
+                               interaction_tolerance: float = None,
+                               interaction_cutoffs: list = [3.7, 4.0],
+                               max_proc: int = None,
+                               writeopts=None
+                               ):
         """
         Call storage manager to process result files and add to database.
         It takes input as one or more sources of files, optional source of a receptor file,
         and optional options for how to process the files in the multiprocessor.
         """
-        fs = self._file_sources(file, file_path, file_list, pattern, recursive, receptor_file) 
-        self.rman = ResultsManager(file_sources=fs, storageman=self.storageman, storageman_class=self.storageman.__class__)
-      
-        if write_options != {}:
-            for k,v in write_options.items():  
-                setattr(self.rman, k, v)
 
-        self._before_adding_results() 
-        self.rman.process_results() 
+        self.set_general_options("write")
 
-        if self.summary:
-            self._produce_summary()
+        if file_source_object is not None:
+            files = file_source_object
+        else: files = InputFiles(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor)
 
-        if fs["save_receptor"]==True: 
-            self.save_receptor(receptor_file)
-    
+        #NOTE will overwrite docking mode set in set general options 
+        if self.general_options.docking_mode is None:
+            docking_mode = self._docking_mode_from_file_extension(file_pattern)
+        else: docking_mode = self.general_options.docking_mode
+
+        results_files_given = (files.file is not None or files.file_path is not None or files.file_list is not None)
+        
+        if not results_files_given and not files.save_receptor:
+            raise OptionError("At least one input option needs to be used: --file, --file_path, --file_list, or --input_db and --save_receptor")
+
+        if not hasattr(self, "storageopts"):
+            self.storageopts = StorageOptions()
+
+        # If there are any ligand files, process ligand data
+        if results_files_given:
+            if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
+                raise OptionError("The provided --input_db is not a valid path, please check the provided path.")
+            
+            if writeopts is not None: self.set_write_options(writeopts=writeopts)
+            else: self.set_write_options(docking_mode, store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc)
+
+            if not hasattr(self, "rman"):
+                self.rman = ResultsManager(file_sources=files, storageman=self.storageman, storageman_class=self.storageman.__class__)
+            else:
+                self.rman.file_sources = files
+                self.rman.storageman = self.storageman
+                self.rman.storageman_class = self.storageman.__class__
+            #TODO I might want to move this to "set options" to make it consistent
+                # although it makes more sense here
+            self.rmanopts.__delattr__("docking_mode")
+            for k,v in self.rmanopts.todict().items():  
+                if v is not None:
+                    setattr(self.rman, k, v)
+            self.storageman.check_storage_ready()
+            logging.info("Adding results...")
+
+            self.rman.process_results() 
+            self.storageman.set_ringtaildb_version()   
+
+            if self.general_options.summary: self._produce_summary()
+        
+        if files.save_receptor: 
+            self.save_receptor(files.receptor_file)
+ 
     def save_receptor(self, receptor_file):
             ### Good option for context manager
             """Add receptor to database
@@ -700,146 +602,67 @@ class RingtailCore:
                     )
                 self.storageman.save_receptor(rec)
 
-    def file_writer_options(self, 
-                            store_all_poses: bool = False,
-                            max_poses: int = 3,
-                            add_interactions: bool = False,
-                            interaction_tolerance: float = None,
-                            interaction_cutoffs: list = [3.7, 4.0],
-                            max_proc: int = None):
-        """ Creates a dictionary of ptional inputs to set up how the file processing&writing 
-        will be performed"""
-
-        opts = {"store_all_poses": StoreAllPoses(store_all_poses).value,
-                "max_poses": MaxPoses(max_poses).value,
-                "interaction_tolerance": AddInteractions(add_interactions).value,
-                "add_interactions": InteractionTolerance(interaction_tolerance).value,
-                "interaction_cutoffs": InteractionCutoffs(interaction_cutoffs).value,
-                "max_proc": MaxProc(max_proc).value }
-        
-        return opts
-
-    def set_general_options(self, process_mode=None,
-                 mode="dlg",
-                 summary=False,
-                 verbose=False,
-                 debug=True,
-                 ):
-        
-        self.process_mode = ProcessMode(process_mode).value
-        self.mode = Mode(mode).value
-        self.summary = Summary(summary).value 
-        self.verbose = Verbose(verbose).value 
-        self.debug = Debug(debug).value 
-
-###Filter and read
-        
-    # Method that sets filter attributes
-        # The method should give a warning or error if a filter value has already been set 
-        # and is being changed
-    
-        '''eworst = None,
-                    ebest = None,
-                    leworst = None,
-                    lebest = None,
-                    score_percentile = None,
-                    le_percentile = None,
-                    name = None,
-                    max_nr_atoms = None,
-                    smarts = None,
-                    smarts_idxyz = None,
-                    smarts_join = None,
-                    van_der_waals = None,
-                    hydrogen_bond = None,
-                    reactive_res = None,
-                    hb_count = None,
-                    react_any = None,
-                    max_miss = None,
-                    enumerate_interaction_combs = None'''
-
-    def set_filters(self, 
-                    eworst=None, 
-                    ebest=None, 
-                    leworst=None, 
-                    lebest=None, 
-                    score_percentile=None,
-                    le_percentile=None,
-                    name=None,
-                    max_nr_atoms=None,
-                    smarts=None,
-                    smarts_idxyz=None,
-                    smarts_join=None,
-                    van_der_waals=None,
-                    hydrogen_bond=None,
-                    reactive_res=None,
-                    hb_count=None,
-                    react_any=None,
-                    max_miss=None,
-                    enumerate_interaction_combs=None):
-        
-        filters = {"eworst":eworst, 
-                    "ebest":ebest, 
-                    "leworst":leworst, 
-                    "lebest":lebest, 
-                    "score_percentile":score_percentile,
-                    "le_percentile":le_percentile,
-                    "name":name,
-                    "max_nr_atoms":max_nr_atoms,
-                    "smarts":smarts,
-                    "smarts_idxyz":smarts_idxyz,
-                    "smarts_join":smarts_join,
-                    "van_der_waals":van_der_waals,
-                    "hydrogen_bond":hydrogen_bond,
-                    "reactive_res":reactive_res,
-                    "hb_count":hb_count,
-                    "react_any":react_any,
-                    "max_miss":max_miss,
-                    "enumerate_interaction_combs":enumerate_interaction_combs}
-        # ensure object is instantiated
-        if not isinstance(self.filterobj, Filters):
-            self.filterobj = Filters()
-
-        for (k, v) in filters.items():
-            if v != None:
-                setattr(self.filterobj, k, v)
-                
     def filter(self, enumerate_interaction_combs=False, return_iter=False):
         """
         Prepare list of filters, then hand it off to storageManager to
             perform filtering. Create log of passing results.
         """
+        ### Initial checks on values
+
+        self.set_general_options("read")
+
+        if not hasattr(self, "filterobj"):
+            logging.debug("ERROR No filters have been set, using default values (can be found in Filters class)") 
+            self.set_filters()
+
+        if not hasattr(self, "storageopts"):
+            logging.debug("No storage options have been set, using default values can be found in 'set_storage_options'") 
+            self.set_storage_options()
+
+        if not hasattr(self, "readopts"):
+            logging.debug("No read options have been set, using default values can be found in 'set_read_options'") 
+            self.set_read_options()
+            print(f'\n\n log file name is {self.readopts.log_file}\n\n')
+        
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
-        if self.filters.max_miss == 0:
-            enumerate_interaction_combs = True
+        if self.filterobj.max_miss == 0:
+            self.readopts.enumerate_interaction_combs = True
+
+        # guard against unsing percentile filter with all_poses
+        if self.storageopts.output_all_poses and (self.filterobj.score_percentile is not None or self.filterobj.le_percentile is not None):
+            logging.warning(
+                "Cannot return all passing poses with percentile filter. Will only log best pose."
+            )
+            self.storageopts.output_all_poses = False
 
         logging.info("Filtering results...")
-        self.output_manager.create_log_file()
+        self.output_manager.create_log_file() #TODO
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(
-            self.filters.max_miss
+            self.filterobj.max_miss
         )
-
+        ligands_passed = 0
+        '''This for comprehension takes all combinations represented in one union of one or multiple, and filters, and goes around until all combinations have been used to filter'''
         for ic_idx, combination in enumerate(interaction_combs):
             # prepare Filter object with only desired interaction combination for storageManager
             filters_dict = self._prepare_filters_for_storageman(combination)
-
             # set storageMan's internal ic_counter to reflect current ic_idx
             if len(interaction_combs) > 1:
-                self.storageman.view_suffix(str(ic_idx))
+                self.storageman.set_view_suffix(ic_idx)
             # ask storageManager to fetch results
-            #TODO here is the place to insert filter dict object
             filtered_results = self.storageman.filter_results(
-                filters_dict, not enumerate_interaction_combs
+                filters_dict, not self.readopts.enumerate_interaction_combs
             )
             if filtered_results is not None:
                 if return_iter:
                     return filtered_results
                 result_bookmark_name = self.storageman.get_current_view_name()
-                self.output_manager.write_filters_to_log(self.filters.to_dict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
+                self.output_manager.write_filters_to_log(self.filterobj.__dict__, combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
                 self.output_manager.write_results_bookmark_to_log(result_bookmark_name)
                 number_passing = self.output_manager.write_log(filtered_results)
                 self.output_manager.log_num_passing_ligands(number_passing)
-                print("Number passing:", number_passing)
+                print("\n\n\nNumber passing:", number_passing)
+                ligands_passed = number_passing
             else:
                 logging.warning("WARNING: No ligands found passing filters")
 
@@ -850,24 +673,334 @@ class RingtailCore:
             number_passing_union = self.output_manager.write_log(maxmiss_union_results)
             self.output_manager.log_num_passing_ligands(number_passing_union)
             print("Number passing Ligands in max_miss union:", number_passing_union)
+            ligands_passed = number_passing_union
+        
+        return ligands_passed
 
+    #-#- Methods to set ringtail options explicitly -#-#
+    def set_general_options(self, process_mode: str,
+                                docking_mode="dlg",
+                                summary=False,
+                                verbose=False,
+                                debug=False,
+                                rtopts=None):
         
-    # One method performs filtering and uses enumerate_interactions_combs --> This is probably where Matt got an error? 
-        ### Uses storageman, good for context manager? 
+        if rtopts is not None:self.general_options = rtopts
+        else: self.general_options =GeneralOptions(process_mode=process_mode, docking_mode=docking_mode, summary=summary, verbose=verbose, debug=debug)
+        for k,v in self.general_options.todict().items():  
+                if v is not None:
+                    setattr(self, k, v)
+
+    def set_storage_options(self, 
+                            filter_bookmark = None,
+                            append_results = None,
+                            duplicate_handling = None,
+                            overwrite_log_file = None,
+                            order_results_by = None,
+                            outfields = "Ligand_name,e",
+                            output_all_poses = None,
+                            mfpt_cluster = None,
+                            interaction_cluster = None,
+                            results_view_name = "passing_results",
+                            storageopts=None):
+        '''Currently, if the method is given a storageopts object, values in it will overwrite individual values assigned during this call'''
+
+        if storageopts is None:
+            self.storageopts = StorageOptions(filter_bookmark,
+                                        append_results,
+                                        duplicate_handling,
+                                        overwrite_log_file,
+                                        order_results_by,
+                                        outfields,
+                                        output_all_poses,
+                                        mfpt_cluster,
+                                        interaction_cluster,
+                                        results_view_name)
+        else: self.storageopts = storageopts
+        # set storage options to storageman object that already exists with a database
+        for k,v in self.storageopts.todict().items():
+            if v is not None:
+                setattr(self.storageman, k, v)
+    
+    def set_write_options(self, docking_mode: str = None,
+                                store_all_poses = None,
+                                max_poses = None,
+                                add_interactions = None,
+                                interaction_tolerance = None,
+                                interaction_cutoffs = None,
+                                max_proc = None,
+                                writeopts=None):
+        if writeopts is not None:
+            self.rmanopts = writeopts
+        elif not hasattr(self, "rmanopts"):
+            self.rmanopts = WriteOptions(docking_mode, 
+                            store_all_poses, 
+                            max_poses,
+                            add_interactions,
+                            interaction_tolerance,
+                            interaction_cutoffs,
+                            max_proc)
+        else:
+            self.rmanopts.docking_mode = docking_mode
+            self.rmanopts.store_all_poses = store_all_poses
+            self.rmanopts.max_poses = max_poses
+            self.rmanopts.add_interactions = add_interactions
+            self.rmanopts.interaction_tolerance = interaction_cutoffs
+            self.rmanopts.interaction_cutoffs = interaction_cutoffs
+            self.rmanopts.max_proc = max_proc
+
+    def set_read_options(self, 
+                         filtering = None,
+                         plot = None,
+                         find_similar_ligands = None,
+                         export_bookmark_csv =  None,
+                         export_bookmark_db =  None,
+                         export_query_csv =  None,
+                         export_receptor =  None,
+                         data_from_bookmark =  None,
+                         pymol =  None,
+                         enumerate_interaction_combs =  None,
+                         log_file =  "output_log.txt",
+                         export_sdf_path = None,
+                         readopts: ReadOptions=None):
         
+        if readopts is not None:
+            self.readopts = readopts
+        else: self.readopts = ReadOptions(filtering,
+                                          plot, 
+                                          find_similar_ligands, 
+                                          export_bookmark_csv, 
+                                          export_bookmark_db, 
+                                          export_query_csv, 
+                                          export_receptor, 
+                                          data_from_bookmark, 
+                                          pymol, 
+                                          enumerate_interaction_combs, 
+                                          log_file, 
+                                          export_sdf_path)
+        if hasattr(self, "output_manager"):
+            self.output_manager.export_sdf_path = self.readopts.export_sdf_path
+            self.output_manager.log_file = self.readopts.log_file
+            
+        else: self.output_manager = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
+
+    def set_filters(self,
+                    eworst=None, 
+                    ebest=None, 
+                    leworst=None, 
+                    lebest=None, 
+                    score_percentile=None,
+                    le_percentile=None,
+                    name=[],
+                    max_nr_atoms=None,
+                    smarts=[],
+                    smarts_idxyz=[],
+                    smarts_join="OR",
+                    van_der_waals=[],
+                    hydrogen_bond=[],
+                    reactive_res=[],
+                    hb_count=[],
+                    react_any=None,
+                    max_miss=0,):
+        
+        if self.general_options.docking_mode == "vina" and react_any:
+            logging.warning("Cannot use reaction filters with Vina mode. Removing react_any filter.")
+            react_any = False
+            
+        self.filterobj = Filters(eworst=eworst, 
+                                ebest=ebest, 
+                                leworst=leworst, 
+                                lebest=lebest,
+                                score_percentile=score_percentile,
+                                le_percentile=le_percentile,
+                                ligand_name=name,
+                                ligand_max_atoms=max_nr_atoms,
+                                ligand_substruct=smarts,
+                                ligand_substruct_pos=smarts_idxyz,
+                                ligand_operator=smarts_join,
+                                vdw_interactions=van_der_waals,
+                                hb_interactions=hydrogen_bond,
+                                reactive_interactions=reactive_res,
+                                interactions_count=hb_count,
+                                react_any=react_any,
+                                max_miss=max_miss,)
+    
+       
     # write "log" with new data for previous filtering results
             # =as long as there are no filters, it takes data from bookmark
         
-    # find similar ligands
+    def find_similar_ligands(self, query_ligname: str):
+        """Find ligands in cluster with query_ligname
+        """
+        similar_ligands, bookmark_name, cluster_name = self.storageman.fetch_clustered_similars(query_ligname)
+        if similar_ligands is not None:
+            self.output_manager.write_find_similar_header(query_ligname, cluster_name)
+            self.output_manager.write_results_bookmark_to_log(bookmark_name)
+            number_similar = self.output_manager.write_log(similar_ligands)
+            self.output_manager.log_num_passing_ligands(number_similar)
+            print("Number similar ligands:", number_similar)
         
-    # plot data
+    def plot(self, save=True):
+        """
+        Get data needed for creating Ligand Efficiency vs
+        Energy scatter plot from storageManager. Call OutputManager to create plot.
+        """
+        if self.filter.max_miss > 0:
+            raise OptionError("Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name.")
         
-    # display pymol
+        logging.info("Creating plot of results")
+        # get data from storageMan
+        all_data, passing_data = self.storageman.get_plot_data()
+        all_plot_data_binned = dict()
+        # bin the all_ligands data by 1000ths to make plotting faster
+        for line in all_data:
+            # add to dictionary as bin of energy and le
+            if None in line:
+                continue
+                #raise OutputError("Detected empty data line when plotting. Please check that database and bookmarks are not empty.")
+            data_bin = (round(line[0], 3), round(line[1], 3))
+            if data_bin not in all_plot_data_binned:
+                all_plot_data_binned[data_bin] = 1
+            else:
+                all_plot_data_binned[data_bin] += 1
+        # plot the data
+        self.output_manager.plot_all_data(all_plot_data_binned)
+        if passing_data != []:  # handle if no passing ligands
+            for line in passing_data:
+                self.output_manager.plot_single_point(
+                    line[0], line[1], "red"
+                )  # energy (line[0]) on x axis, le (line[1]) on y axis
+        if save:
+            self.output_manager.save_scatterplot()
+        else:
+            plt.show()
+
+    def write_molecule_sdfs(self, write_nonpassing=False, return_rdmol_dict=False):
+        """have output manager write sdf molecules for passing results in given results bookmark
+
+        Args:
+            write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
+            return_rdmol_dict (bool, optional): Suppresses SDF file writing, returns dictionary of rdkit mols
+        """
+
+        if self.filterobj.max_miss > 0:
+            logging.warning("WARNING: Requested --export_sdf_path with --max_miss. Exported SDFs will be for union of interaction combinations.")
+            self.storageman.results_view_name = self.storageman.results_view_name + "_union"
+        if not self.storageman.check_passing_view_exists():
+            logging.warning(
+                "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
+            )
+            return None
+        # make temp table for SDF writing
+        self.storageman.create_temp_passing_table()
+        passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
+        flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
+        if flexible_residues != []:
+            flexible_residues = json.loads(flexible_residues)
+            flexres_atomnames = json.loads(flexres_atomnames)
+        all_mols = {}
+        for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
+            logging.info("Writing " + ligname.split(".")[0] + ".sdf")
+            # create rdkit ligand molecule and flexible residue container
+            if smiles == "":
+                logging.warning(
+                    f"No SMILES found for {ligname}. Cannot create SDF."
+                )
+                continue
+            mol, flexres_mols, properties = self.create_ligand_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, write_nonpassing=write_nonpassing)
+
+            # write out mol
+            if not return_rdmol_dict:
+                self.output_manager.write_out_mol(
+                    ligname, mol, flexres_mols, properties
+                )
+            else:
+                all_mols[ligname] = {"ligand": mol, "flex_residues": flexres_mols}
+
+        if return_rdmol_dict:
+            return all_mols
+
+    def display_pymol(self):
+        """launch pymol session and plot of LE vs docking score. Displays molecules when clicked
+        """
+
+        import subprocess
+        from rdkit.Chem import PyMol
+
+        # launch pymol session
+        p = subprocess.Popen(
+        ["pymol", "-R"],
+        stdout=subprocess.PIPE,
+        )
+
+        poseIDs = {}
+
+        # fetch data for passing ligands
+        _, passing_data = self.storageman.get_plot_data(only_passing=True)
+        for line in passing_data:
+            plt.plot(line[0], line[1], '.r', mfc='None', picker=5)
+            poseIDs[(line[0], line[1])] = (line[2], line[3])  # line[0] is LE, line[1] is docking score, line[2] is pose_ID, line[3] is LigName
+        plt.ylabel("Ligand Efficiency (kcal/mol/heavy atom)")
+        plt.xlabel("Docking Score (kcal/mol)")
+        plt.title("Passing Docking Poses")
+
+        try:
+            pymol = PyMol.MolViewer()
+        except ConnectionRefusedError as e:
+            raise RTCoreError("Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window.") from e
+        
+        def onpick(event):
+            line = event.artist
+            coords = tuple([c[0] for c in line.get_data()])
+            chosen_pose = poseIDs[coords]
+            logging.info(f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}")
+
+            # make rdkit mol for poseid
+            ligname, ligand_smile, atom_index_map, hydrogen_parents = self.storageman.fetch_single_ligand_output_info(chosen_pose[1])
+            flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
+            if flexible_residues != []:  # converts string to list
+                flexible_residues = json.loads(flexible_residues)
+                flexres_atomnames = json.loads(flexres_atomnames)
+
+            mol, flexres_mols, _ = self.create_ligand_rdkit_mol(ligname, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames, pose_ID=chosen_pose[0])
+            logging.debug(Chem.MolToSmiles(mol))
+            pymol.ShowMol(mol, name=ligname, showOnly=False)
+            for idx, resmol in enumerate(flexres_mols):
+                pymol.ShowMol(resmol, name=ligname + "_" + flexible_residues[idx], showOnly=False)
+
+        fig = plt.gcf()
+        cid = fig.canvas.mpl_connect('pick_event', onpick)
+        plt.show()
+
         
     # export bookmark csv
         
     # export query csv
         
-    # export bookmark db
-        
-    # export receptor
+    def export_bookmark_db(self, bookmark_db_name: str):
+        """Export database containing data from bookmark
+
+        Args:
+            bookmark_db_name (str): name for bookmark_db
+        """
+        logging.info("Exporting bookmark database")
+        if os.path.exists(bookmark_db_name):
+            logging.warning(
+                "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
+            )
+            return
+        self.storageman.clone(bookmark_db_name)
+        # connect to cloned database
+        self.storage_opts["db_file"] = bookmark_db_name
+        with StorageManagerSQLite(**self.storage_opts) as db_clone:
+            db_clone.prune()
+            db_clone.close_storage(vacuum=True)
+
+    def export_receptors(self):
+        receptor_tuples = self.storageman.fetch_receptor_objects()
+        for recname, recblob in receptor_tuples:
+            if recblob is None:
+                logging.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
+                continue
+            self.output_manager.write_receptor_pdbqt(recname, recblob)
+

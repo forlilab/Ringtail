@@ -14,6 +14,7 @@ import glob
 from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
+from .ringtailoptions import *
 from .exceptions import MultiprocessingError
 import traceback
 from datetime import datetime
@@ -39,11 +40,14 @@ class MPManager:
         add_interactions=False,
         interaction_cutoffs=[3.7, 4.0],
         receptor_file=None,
-        file_sources={
-            "file": [[]],
-            "file_path": {"path": [[]], "pattern": "*.dlg*", "recursive": None},
-            "file_list": [[]],
-        },
+        file_sources=InputFiles,
+        # {
+        #     "file": None , #[[]]
+        #     "file_path": None, #[[]] 
+        #     "file_pattern": "*.dlg*", 
+        #     "recursive": None,
+        #     "file_list": None ,#[[]],
+        # },
         file_pattern="*.dlg*",
         max_proc=None,
     ):
@@ -65,7 +69,6 @@ class MPManager:
         self.receptor_file = receptor_file
         self.file_sources = file_sources
         self.file_pattern = file_pattern
-
         self.storageman = storageman
         self.storageman_class = storageman_class
         self.num_files = 0
@@ -136,17 +139,18 @@ class MPManager:
 
     def _process_sources(self):
         # add individual file(s)
-        if self.file_sources["file"] != [[]]:
-            for file_list in self.file_sources["file"]:
+        if self.file_sources.file != (None and [[]]):
+            for file_list in self.file_sources.file:
                 for file in file_list:
                     if (
                         fnmatch.fnmatch(file, self.file_pattern)
                         and file != self.receptor_file
                     ):
                         self._add_to_queue(file)
+                        
         # add files from file path(s)
-        if self.file_sources["file_path"]["path"] != [[]]:
-            for path_list in self.file_sources["file_path"]["path"]:
+        if self.file_sources.file_path != (None and [[]]):
+            for path_list in self.file_sources.file_path:
                 for path in path_list:
                     # scan for ligand dlgs
                     for files in self._scan_dir(
@@ -155,8 +159,8 @@ class MPManager:
                         for f in files:
                             self._add_to_queue(f)
         # add files from file list(s)
-        if self.file_sources["file_list"] != [[]]:
-            for filelist_list in self.file_sources["file_list"]:
+        if self.file_sources.file_list != (None and [[]]):
+            for filelist_list in self.file_sources.file_list:
                 for filelist in filelist_list:
                     self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
 

@@ -21,16 +21,16 @@ def countrows():
         return count
     return __dbconnect
 
-@pytest.fixture
-def cur():
-    def __dbconnect():
-        conn = sqlite3.connect("output.db")
-        curs = conn.cursor()
-        yield curs
-        curs.close()
-        conn.close()
-        os.system("rm output.db")
-    return __dbconnect
+# @pytest.fixture
+# def cur():
+#     def __dbconnect():
+#         conn = sqlite3.connect("output.db")
+#         curs = conn.cursor()
+#         yield curs
+#         curs.close()
+#         conn.close()
+#         #os.system("rm output.db")
+#     return __dbconnect
 
 
 class TestInputs:
@@ -138,10 +138,10 @@ class TestOutputs:
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --export_bookmark_csv Ligands"
         )
 
-        os.system("rm output.db")
-
         assert status1 == status2 == 0
         assert os.path.exists("Ligands.csv")
+        os.system("rm output.db")
+        os.system("rm Ligands.csv")
 
     def test_export_query_csv(self):
         status1 = os.system(
@@ -152,10 +152,10 @@ class TestOutputs:
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --export_query_csv 'SELECT * FROM Results'"
         )
 
-        os.system("rm output.db")
-
         assert status1 == status2 == 0
         assert os.path.exists("query.csv")
+        os.system("rm output.db")
+        os.system("rm query.csv")
 
     def test_interaction_tolerance(self):
         status_notol = os.system(
@@ -217,11 +217,19 @@ class TestOutputs:
             or count_tol2 != count_notol
         )
 
-    def test_max_poses(self, countrows):
+    def test_max_poses(self):
         status3 = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
         )
-        count3 = countrows("SELECT COUNT(*) FROM Results")
+        conn = sqlite3.connect("output.db")
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM Results")
+        count3 = cur.fetchone()[0]
+
+        cur.close()
+        conn.close()
+
+        os.system("rm output.db")
 
         status1 = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --max_poses 1"
@@ -242,9 +250,15 @@ class TestOutputs:
         status5 = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --max_poses 5"
         )
+        conn = sqlite3.connect("output.db")
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM Results")
+        count5 = cur.fetchone()[0]
 
-        count5 = countrows("SELECT COUNT(*) FROM Results")
+        cur.close()
+        conn.close()
 
+        os.system("rm output.db")
         print(count1, count3, count5)
 
         assert status1 == 0
@@ -275,6 +289,7 @@ class TestOutputs:
 
 
 class TestFilters:
+
     def test_eworst(self):
         status1 = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
@@ -284,7 +299,7 @@ class TestFilters:
         )
 
         os.system("rm output.db")
-
+        print(f"\n\n {status1} is status 1 \n\n")
         assert status1 == status2 == 0
 
     def test_ebest(self):
@@ -546,14 +561,14 @@ class TestFilters:
         )
 
         assert status == 0
-
+    
     def test_all_filters(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279: --reactive_res A:TYR:169:"
         )
 
         assert status == 0
-
+    
     def test_export_sdf(self):
         status2 = os.system(
             "python ../scripts/rt_process_vs.py read --input_db output.db -e -4 -sdf . -d "
