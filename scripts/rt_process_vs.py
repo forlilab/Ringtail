@@ -11,16 +11,20 @@ import logging
 import traceback
 
 if __name__ == "__main__":
-
+    ''' The altered rt_process_vs now makes use of the new ringtail api. The CLOptionParser just makes the option objects, 
+    and this script assigns the objects to the relevant managers then runs the ringtail methods with the new API.
+    I am not using ringtail core as a context anymore'''
     time0 = time.perf_counter()
     level = logging.INFO
     logging.basicConfig(
         level=level, stream=sys.stdout, filemode="w", format="%(message)s"
     )
 
+
     try:
-        rt_core = RingtailCore()
-        cl_opts = CLOptionParser(rt_core)
+        # parse command line options and filters file (if given)
+        cmdinput = CLOptionParser()
+        rtopts = cmdinput.rtopts
     except Exception as e:
         tb = traceback.format_exc()
         logging.debug(tb)
@@ -29,8 +33,8 @@ if __name__ == "__main__":
 
     # set logging level
     levels = {10: "debug", 20: "info", 30: "warning"}
-    debug = cl_opts.rt_process_options["debug"]
-    verbose = cl_opts.rt_process_options["verbose"]
+    debug = rtopts.debug
+    verbose = rtopts.verbose
     if debug:
         level = logging.DEBUG
     elif verbose:
@@ -43,68 +47,71 @@ if __name__ == "__main__":
     # create manager object for virtual screening. Will make database if needed
     try:
         defaults = RingtailCore.get_defaults()
-        with rt_core:
+        rtcore = RingtailCore(rtopts.db_file)
+        read_opts = cmdinput.read_opts
 
-                # parse command line options and filters file (if given)
+        #-#-#- Universal/shared options
+        rtcore.set_storage_options(storageopts = cmdinput.storageman_opts)
+        rtcore.set_general_options(process_mode=rtopts.process_mode, rtopts = rtopts)
+        rtcore.open()
+        if rtopts.process_mode == "write":
+            #-#-#- Set write options to the write managers, and processes results
+            #-#-#- Will add receptor if "save_receptor" is true
+            rtcore.add_results_from_files(file_source_object=cmdinput.file_sources, 
+                                          writeopts=cmdinput.write_opts)
 
-            if cl_opts.process_mode == "write":
-                rt_core.add_results()
-
-            # Add receptors to database if requested
-            if cl_opts.rt_process_options["save_receptor"]:
-                rt_core.save_receptors(cl_opts.rt_process_options["receptor_file"])
-
-            # print summary
-            if cl_opts.rt_process_options["summary"]:
-                rt_core.produce_summary()
-
-            time1 = time.perf_counter()
-
-            if cl_opts.process_mode == "read":
-
+        time1 = time.perf_counter()
+        if rtopts.process_mode == "read":
+                #-#-#- Set read options to the read managers, inc result and output man right? 
                 # perform filtering
-                if cl_opts.rt_process_options["filter"]:
-                    rt_core.filter(cl_opts.rt_process_options["enumerate_interaction_combs"])
-
+                if rtcore.summary:
+                    rtcore._produce_summary()
+                    
+                rtcore.set_read_options(readopts=read_opts)
+                rtcore.filterobj = cmdinput.filters
+                if read_opts.filtering:
+                    rtcore.filter(read_opts.enumerate_interaction_combs)
                 # Write log with new data for previous filtering results
-                if cl_opts.rt_process_options["data_from_bookmark"] and not cl_opts.rt_process_options["filter"]:
-                    rt_core.get_previous_filter_data()
+                if read_opts.data_from_bookmark and not read_opts.filtering:
+                    rtcore.get_previous_filter_data()
                 
-                if cl_opts.rt_process_options["find_similar_ligands"]:
-                    rt_core.find_similar_ligands(cl_opts.rt_process_options["find_similar_ligands"])
+                if read_opts.find_similar_ligands:
+                    rtcore.find_similar_ligands(read_opts.find_similar_ligands)
 
                 # plot if requested
-                if cl_opts.rt_process_options["plot"]:
-                    rt_core.plot()
+                if read_opts.plot:
+                    rtcore.plot()
 
                 # def open pymol viewer
-                if cl_opts.rt_process_options["pymol"]:
-                    rt_core.display_pymol()
+                if read_opts.pymol:
+                    rtcore.display_pymol()
 
                 # write out molecules if requested
-                if cl_opts.rt_process_options["export_sdf_path"]:
-                    rt_core.write_molecule_sdfs()
+                if read_opts.export_sdf_path:
+                    rtcore.write_molecule_sdfs()
 
                 # write out requested CSVs
-                if cl_opts.rt_process_options["export_bookmark_csv"]:
-                    rt_core.export_csv(
-                        cl_opts.rt_process_options["export_bookmark_csv"],
-                        cl_opts.rt_process_options["export_bookmark_csv"] + ".csv",
-                        table=True,
-                    )
-                if cl_opts.rt_process_options["export_query_csv"]:
-                    rt_core.export_csv(cl_opts.rt_process_options["export_query_csv"], "query.csv")
-                if cl_opts.rt_process_options["export_bookmark_db"]:
+                if read_opts.export_bookmark_csv:
+                    rtcore.export_csv(
+                        read_opts.export_bookmark_csv,
+                        read_opts.export_bookmark_csv + ".csv",
+                        table=True,)
+
+                if read_opts.export_query_csv:
+                    rtcore.export_csv(read_opts.export_query_csv, "query.csv")
+
+                if read_opts.export_bookmark_db:
                     bookmark_name = (
-                        rt_core.storageman.db_file.rstrip(".db")
+                        rtcore.storageman.db_file.rstrip(".db")
                         + "_"
-                        + rt_core.storageman.results_view_name
+                        + rtcore.storageman.results_view_name
                         + ".db"
                     )
-                    rt_core.export_bookmark_db(bookmark_name)
+                    rtcore.export_bookmark_db(bookmark_name)
 
-                if cl_opts.rt_process_options["export_receptor"]:
-                    rt_core.export_receptors()
+                if read_opts.export_receptor:
+                    rtcore.export_receptors()
+        rtcore.close_storage()
 
     except Exception as e:
         tb = traceback.format_exc()
@@ -122,4 +129,4 @@ if __name__ == "__main__":
     logging.info(
         "Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds "
     )
-    logging.info(cl_opts.parser.epilog)
+    logging.info(cmdinput.parser.epilog)

@@ -28,7 +28,7 @@ class OutputManager:
 
     """
 
-    def __init__(self, log_file="output_log.txt", export_sdf_path="", _stop_at_defaults=False):
+    def __init__(self, log_file="output_log.txt", export_sdf_path=".", _stop_at_defaults=False):
         """Initialize OutputManager object and create log file
 
         Args:
@@ -205,6 +205,7 @@ class OutputManager:
         """
         try:
             filename = self.export_sdf_path + ligname + ".sdf"
+            print(f'this is the file directory it is trying to write to: {self.export_sdf_path}')
             mol_flexres_list = [mol]
             mol_flexres_list += flexres_mols
             mol = RDKitMolCreate.combine_rdkit_mols(mol_flexres_list)

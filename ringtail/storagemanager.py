@@ -115,6 +115,21 @@ class StorageManager:
         self.closed_connection = False        
         self.conflict_opt = None
         #NOTE should I have file sources here? 
+
+        self.order_options = {
+            "e",
+            "le",
+            "delta",
+            "ref_rmsd",
+            "e_inter",
+            "e_vdw",
+            "e_elec",
+            "e_intra",
+            "n_interact",
+            "rank",
+            "run",
+            "hb",
+        }
    
     
     # I don't think I need these with a new format
@@ -142,19 +157,10 @@ class StorageManager:
 
         raise NotImplementedError
     
+    #NOTE Don't think I need this one
     def __enter__(self):
         self.open_storage()
         return self
-    
-    def open_storage(self):
-        """Create connection to db. Then, check if db needs to be written.
-        If so, (if self.overwrite drop existing tables and )
-        initialize the tables
-
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
 
     def __exit__(self, exc_type, exc_value, traceback):
         if not self.closed_connection:
@@ -223,6 +229,7 @@ class StorageManager:
         # close db itself
         self._close_connection()
         self.closed_connection = True
+        print("\n\n connection closed \n\n")
 
     def _add_unique_interactions(self, interactions_list):
         """takes list of interaction tuple lists. Examines
@@ -276,16 +283,19 @@ class StorageManager:
         self._create_view(
             self.current_view_name, view_query
         )  # make sure we keep Pose_ID in view
+        
         self._insert_bookmark_info(self.current_view_name, view_query, all_filters)
+        
         # perform filtering
+
         if suppress_output:
             return None
-
+        
         logging.debug("Running filtering query...")
         time0 = time.perf_counter()
+
         filtered_results = self._run_query(filter_results_str)
         logging.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
-
         # get number of passing ligands
         return filtered_results
 
@@ -351,6 +361,20 @@ class StorageManager:
 
         return temp_name, num_passing
     
+    def _run_query(self, query):
+        """Executes provided SQLite query. Returns cursor for results
+
+        Args:
+            query (string): Formated SQLite query as string
+
+        No Longer Returned:
+            DB cursor: Contains results of query
+
+        Raises:
+            NotImplementedError: Description
+        """
+        raise NotImplementedError
+
     # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
     def implemented_parser_managers(self):
         return {
@@ -370,8 +394,18 @@ class StorageManagerSQLite(StorageManager):
 
     """
 
-    #NOTE needed
-    def __init__(self, db_file: str = "output.db", overwrite=False, append_results=False):
+    def __init__(self, db_file: str = "output.db", 
+                 overwrite=False, 
+                 append_results=False,
+                 order_results: str = None,
+                 outfields: str = "Ligand_name,e",
+                 filter_bookmark: str = None,
+                 output_all_poses: bool = None,
+                 mfpt_cluster: float = None,
+                 interaction_cluster: float = None,
+                 results_view_name: str = "passing_results",
+                 conflict_opt: str = None,
+                 _stop_at_defaults=False,):
         """Initialize superclass and subclass-specific instance variables
         Args:
             db_file (str): database file name"""
@@ -379,10 +413,32 @@ class StorageManagerSQLite(StorageManager):
         self.db_file = db_file
         self.overwrite = overwrite
         self.append_results = append_results
+        self.order_results = order_results
+        if "Ligand_name" not in outfields:  # make sure we are outputting the ligand name
+            outfields = "Ligand_name," + outfields
+        self.outfields = outfields
+        self.output_all_poses = output_all_poses
+        self.mfpt_cluster = mfpt_cluster
+        self.interaction_cluster = interaction_cluster
+        self.filter_bookmark = filter_bookmark
+        self.results_view_name = results_view_name
+        self.conflict_opt = conflict_opt
+
+        if _stop_at_defaults:
+            return
 
 
         super().__init__()
 
+
+        """Initialize superclass and subclass-specific instance variables
+
+        Args:
+            db_file (str): database file name
+            opts (dict, optional): Dictionary of database options
+            # TODO update this
+        """
+        
 #TODO these are all specific conversions to use with sqlite, can probably be abstracted to multiple tables as they 
 # are not specific to a database, but rather how the data is written (i.e., no sql)
         self.outfield_options = [
@@ -404,20 +460,7 @@ class StorageManagerSQLite(StorageManager):
             "hb",
             "source_file",
         ]
-        self.order_options = {
-            "e",
-            "le",
-            "delta",
-            "ref_rmsd",
-            "e_inter",
-            "e_vdw",
-            "e_elec",
-            "e_intra",
-            "n_interact",
-            "rank",
-            "run",
-            "hb",
-        }
+        
 
         self.field_to_column_name = {
             "Ligand_name": "LigName",
@@ -974,6 +1017,17 @@ class StorageManagerSQLite(StorageManager):
         )
         return str(cursor.fetchone()[0])
 
+    def set_view_suffix(self, suffix):
+        """Sets internal view_suffix variable
+
+        Args:
+            suffix(str): suffix to attached to view-related queries or creation
+        """
+        if not isinstance(suffix, str):
+            self.view_suffix = str(suffix)
+        else:
+            self.view_suffix = suffix
+
     #TODO might not be in use
     def fetch_receptor_objects(self):
         """Returns all Receptor objects from database
@@ -1441,11 +1495,8 @@ class StorageManagerSQLite(StorageManager):
         """Create connection to db. Then, check if db needs to be written.
         If self.overwrite drop existing tables and initialize new tables
         """
-        
         self.conn = self._create_connection()
-
         signal(SIGINT, self._sigint_handler)            # signal handler to catch keyboard interupts
-            
         if self._db_empty() or self.overwrite:          # write and drop tables as necessary
             if not self._db_empty(): 
                 self._drop_existing_tables()
@@ -1572,6 +1623,7 @@ class StorageManagerSQLite(StorageManager):
     def create_indices(self):
         """Create index containing possible filter and order by columns
         """
+        
         try:
             cur = self.conn.cursor()
             logging.debug("Creating columns index...")
@@ -2093,12 +2145,17 @@ class StorageManagerSQLite(StorageManager):
                 raise OptionError(
                     "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
                 )
+            if (
+                filters_dict["score_percentile"] is not None
+                or filters_dict["le_percentile"] is not None):
+                raise OptionError(
+                    "Cannot use --score_percentile or --le_percentile with --filter_bookmark."
+                )
             self.filtering_window = self.filter_bookmark
 
         # write energy filters and compile list of interactions to search for
         queries = []
-        interaction_filters = []
-
+        interaction_filters = []    
         for filter_key, filter_value in filters_dict.items():
             if filter_value is None:
                 continue
