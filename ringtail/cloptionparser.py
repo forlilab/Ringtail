@@ -755,6 +755,7 @@ class CLOptionParser:
                         continue
                     interactions_count.append((pool, c))
 
+                self.filters.interactions_count = interactions_count
 
                 # make dictionary for ligand filters
                 ligand_filters_kw = [("name", "ligand_name"), ("smarts", "ligand_substruct"), ("smarts_idxyz", "ligand_substruct_pos"), ("max_nr_atoms", "ligand_max_atoms")]
