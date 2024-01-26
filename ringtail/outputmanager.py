@@ -7,7 +7,7 @@
 from .filters import Filters
 from .receptormanager import ReceptorManager
 from .exceptions import OutputError
-import logging
+from .logmanager import logger
 import typing
 import json
 import numpy as np
@@ -139,13 +139,13 @@ class OutputManager:
             time0 = time.perf_counter()
             num_passing = 0
             for line in lines:
-                logging.info(line)
+                logger.info(line)
                 self._write_log_line(
                     str(line).replace("(", "").replace(")", "")
                 )  # strip parens from line, which is natively a tuple
                 num_passing += 1
             self._write_log_line("***************\n")
-            logging.debug(f"Time to write log: {time.perf_counter() - time0:.2f} seconds")
+            logger.debug(f"Time to write log: {time.perf_counter() - time0:.2f} seconds")
             return num_passing
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
@@ -205,7 +205,6 @@ class OutputManager:
         """
         try:
             filename = self.export_sdf_path + ligname + ".sdf"
-            print(f'this is the file directory it is trying to write to: {self.export_sdf_path}')
             mol_flexres_list = [mol]
             mol_flexres_list += flexres_mols
             mol = RDKitMolCreate.combine_rdkit_mols(mol_flexres_list)

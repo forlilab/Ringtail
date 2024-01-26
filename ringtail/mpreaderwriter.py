@@ -7,7 +7,7 @@
 import platform
 import time
 import sys
-import logging
+from .logmanager import logger
 import traceback
 import queue
 from .parsers import parse_single_dlg, parse_vina_pdbqt
@@ -92,7 +92,7 @@ class DockingFileReader(multiprocessing.Process):
             try:
                 # retrieve from the queue in the next task to be done
                 next_task = self.queueIn.get()
-                # logging.debug("Next Task: " + str(next_task))
+                logger.debug("Next Task: " + str(next_task))
                 # if a poison pill is received, this worker's job is done, quit
                 if next_task is None:
                     # before leaving, pass the poison pill back in the queue
@@ -183,7 +183,7 @@ class DockingFileReader(multiprocessing.Process):
                 self.queueOut.put(obj, block=True, timeout=timeout)
                 break
             except queue.Full:
-                # logging.debug(f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
+                logger.debug(f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
                 attempts += 1
 
     def _find_poses_to_save(self, ligand_dict: dict) -> list:
@@ -269,7 +269,7 @@ class Writer(multiprocessing.Process):
                 if next_task is None:
                     # if a poison pill is found, it means one of the workers quit
                     self.num_readers -= 1
-                    logging.info(
+                    logger.info(
                         "Closing process. Remaining open processes: "
                         + str(self.num_readers)
                     )
@@ -294,11 +294,11 @@ class Writer(multiprocessing.Process):
                     self.process_file(next_task)
                 if self.num_readers == 0:
                     # received as many poison pills as workers
-                    logging.info("Performing final database write")
+                    logger.info("Performing final database write")
                     # perform final storage write
                     self.write_to_storage(final=True)
                     # no workers left, no job to do
-                    logging.info("File processing completed")
+                    logger.info("File processing completed")
                     self.close()
                     break
         except Exception:

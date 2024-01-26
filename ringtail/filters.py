@@ -7,7 +7,7 @@
 from dataclasses import dataclass, field, fields, asdict, astuple
 import typing
 from .exceptions import OptionError
-import logging
+from .logmanager import logger
 
 
 @dataclass
@@ -43,11 +43,11 @@ class Filters:
         and is only set a limited number of times per ringtail core. I don't think it is a performance issue, but maybe a performance curiosity.'''
 
         if (self.eworst is not None and self.score_percentile is not None):
-            logging.warning("Cannot use --eworst cutoff with --score_percentile. Overiding score_percentile with eworst.")
+            logger.warning("Cannot use --eworst cutoff with --score_percentile. Overiding score_percentile with eworst.")
             self.score_percentile = None
         
         if (self.leworst is not None and self.le_percentile is not None):
-            logging.warning("Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst.")
+            logger.warning("Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst.")
             self.le_percentile = None  
 
         if self.score_percentile is not None and (self.score_percentile < 0 or self.score_percentile > 100):

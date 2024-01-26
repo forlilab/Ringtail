@@ -16,8 +16,8 @@ from .filters import Filters
 from .exceptions import RTCoreError, OutputError
 from rdkit import Chem
 import itertools
-import logging
 import os
+from .logmanager import logger
 
 class RingtailCore:
     """Core class for coordinating different actions on virtual screening
@@ -40,7 +40,9 @@ class RingtailCore:
     """
 
     def __init__(self, db_file = "output.db", storage_type = "sqlite", readonly=True):
-        """Initialize RingtailCore object."""
+        """Initialize RingtailCore object and global logger."""
+        logger.initialize()
+        logger.info("This is an informational string")
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
@@ -429,7 +431,7 @@ class RingtailCore:
         
         # warn if max_miss greater than number of interactions
         if max_miss > len(all_interactions):
-            logging.warning(
+            logger.warning(
                 "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
             )
             max_miss = len(all_interactions)
@@ -480,7 +482,6 @@ class RingtailCore:
         """Methods that opens db connection through storagemanager"""
         self.storageman.open_storage()
         self.storageopen = True
-        self.set_general_options(process_mode)
     
     def add_options_from_config_file(self, config_file: str =None):
         replace_filter_keys = {
@@ -503,7 +504,7 @@ class RingtailCore:
             configs[k] = v
 
         if config_file is not None:
-            logging.info("Reading options from config file")
+            logger.info("Reading options from config file")
             with open(config_file) as f:
                 c = json.load(f)
                 configs.update(c)
@@ -532,7 +533,7 @@ class RingtailCore:
         and optional options for how to process the files in the multiprocessor.
         """
 
-        self.set_general_options("write")
+        self.general_options.process_mode = "write"
 
         if file_source_object is not None:
             files = file_source_object
@@ -572,7 +573,7 @@ class RingtailCore:
                 if v is not None:
                     setattr(self.rman, k, v)
             self.storageman.check_storage_ready()
-            logging.info("Adding results...")
+            logger.info("Adding results...")
 
             self.rman.process_results() 
             self.storageman.set_ringtaildb_version()   
@@ -609,18 +610,18 @@ class RingtailCore:
         """
         ### Initial checks on values
 
-        self.set_general_options("read")
+        self.general_options.process_mode = "read"
 
         if not hasattr(self, "filterobj"):
-            logging.debug("ERROR No filters have been set, using default values (can be found in Filters class)") 
+            logger.debug("ERROR No filters have been set, using default values (can be found in Filters class)") 
             self.set_filters()
 
         if not hasattr(self, "storageopts"):
-            logging.debug("No storage options have been set, using default values can be found in 'set_storage_options'") 
+            logger.debug("No storage options have been set, using default values can be found in 'set_storage_options'") 
             self.set_storage_options()
 
         if not hasattr(self, "readopts"):
-            logging.debug("No read options have been set, using default values can be found in 'set_read_options'") 
+            logger.debug("No read options have been set, using default values can be found in 'set_read_options'") 
             self.set_read_options()
             print(f'\n\n log file name is {self.readopts.log_file}\n\n')
         
@@ -630,12 +631,12 @@ class RingtailCore:
 
         # guard against unsing percentile filter with all_poses
         if self.storageopts.output_all_poses and (self.filterobj.score_percentile is not None or self.filterobj.le_percentile is not None):
-            logging.warning(
+            logger.warning(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             self.storageopts.output_all_poses = False
 
-        logging.info("Filtering results...")
+        logger.info("Filtering results...")
         self.output_manager.create_log_file() #TODO
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(
@@ -664,7 +665,7 @@ class RingtailCore:
                 print("\n\n\nNumber passing:", number_passing)
                 ligands_passed = number_passing
             else:
-                logging.warning("WARNING: No ligands found passing filters")
+                logger.warning("WARNING: No ligands found passing filters")
 
         if len(interaction_combs) > 1:
             maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
@@ -804,7 +805,7 @@ class RingtailCore:
                     max_miss=0,):
         
         if self.general_options.docking_mode == "vina" and react_any:
-            logging.warning("Cannot use reaction filters with Vina mode. Removing react_any filter.")
+            logger.warning("Cannot use reaction filters with Vina mode. Removing react_any filter.")
             react_any = False
             
         self.filterobj = Filters(eworst=eworst, 
@@ -848,7 +849,7 @@ class RingtailCore:
         if self.filter.max_miss > 0:
             raise OptionError("Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name.")
         
-        logging.info("Creating plot of results")
+        logger.info("Creating plot of results")
         # get data from storageMan
         all_data, passing_data = self.storageman.get_plot_data()
         all_plot_data_binned = dict()
@@ -884,10 +885,10 @@ class RingtailCore:
         """
 
         if self.filterobj.max_miss > 0:
-            logging.warning("WARNING: Requested --export_sdf_path with --max_miss. Exported SDFs will be for union of interaction combinations.")
+            logger.warning("WARNING: Requested --export_sdf_path with --max_miss. Exported SDFs will be for union of interaction combinations.")
             self.storageman.results_view_name = self.storageman.results_view_name + "_union"
         if not self.storageman.check_passing_view_exists():
-            logging.warning(
+            logger.warning(
                 "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
             )
             return None
@@ -900,10 +901,10 @@ class RingtailCore:
             flexres_atomnames = json.loads(flexres_atomnames)
         all_mols = {}
         for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
-            logging.info("Writing " + ligname.split(".")[0] + ".sdf")
+            logger.info("Writing " + ligname.split(".")[0] + ".sdf")
             # create rdkit ligand molecule and flexible residue container
             if smiles == "":
-                logging.warning(
+                logger.warning(
                     f"No SMILES found for {ligname}. Cannot create SDF."
                 )
                 continue
@@ -953,7 +954,7 @@ class RingtailCore:
             line = event.artist
             coords = tuple([c[0] for c in line.get_data()])
             chosen_pose = poseIDs[coords]
-            logging.info(f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}")
+            logger.info(f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}")
 
             # make rdkit mol for poseid
             ligname, ligand_smile, atom_index_map, hydrogen_parents = self.storageman.fetch_single_ligand_output_info(chosen_pose[1])
@@ -963,7 +964,7 @@ class RingtailCore:
                 flexres_atomnames = json.loads(flexres_atomnames)
 
             mol, flexres_mols, _ = self.create_ligand_rdkit_mol(ligname, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames, pose_ID=chosen_pose[0])
-            logging.debug(Chem.MolToSmiles(mol))
+            logger.debug(Chem.MolToSmiles(mol))
             pymol.ShowMol(mol, name=ligname, showOnly=False)
             for idx, resmol in enumerate(flexres_mols):
                 pymol.ShowMol(resmol, name=ligname + "_" + flexible_residues[idx], showOnly=False)
@@ -983,9 +984,9 @@ class RingtailCore:
         Args:
             bookmark_db_name (str): name for bookmark_db
         """
-        logging.info("Exporting bookmark database")
+        logger.info("Exporting bookmark database")
         if os.path.exists(bookmark_db_name):
-            logging.warning(
+            logger.warning(
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
@@ -1000,7 +1001,7 @@ class RingtailCore:
         receptor_tuples = self.storageman.fetch_receptor_objects()
         for recname, recblob in receptor_tuples:
             if recblob is None:
-                logging.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
+                logger.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
                 continue
             self.output_manager.write_receptor_pdbqt(recname, recblob)
 

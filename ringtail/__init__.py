@@ -13,6 +13,7 @@ from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .ringtailcore import RingtailCore
 from .ringtailoptions import *
+from .logmanager import logger
 from .outputmanager import OutputManager
 from .filters import Filters
 from .interactions import InteractionFinder
@@ -57,4 +58,5 @@ __all__ = [
     "ResultsProcessingError",
     "DatabaseViewCreationError",
     "OutputError",
+    "logger",
 ]

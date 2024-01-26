@@ -9,7 +9,7 @@ import time
 import json
 from types import SimpleNamespace
 import pandas as pd
-import logging
+from .logmanager import logger
 import typing
 import sys
 from signal import signal, SIGINT
@@ -167,7 +167,7 @@ class StorageManager:
             self.close_storage()
 
     def _sigint_handler(self, signal_received, frame):
-        logging.critical("Ctrl + C pressed, keyboard interupt initiated")
+        logger.critical("Ctrl + C pressed, keyboard interupt initiated")
         self.__exit__(None, None, None)
         sys.exit(0)
 
@@ -229,7 +229,6 @@ class StorageManager:
         # close db itself
         self._close_connection()
         self.closed_connection = True
-        print("\n\n connection closed \n\n")
 
     def _add_unique_interactions(self, interactions_list):
         """takes list of interaction tuple lists. Examines
@@ -273,7 +272,7 @@ class StorageManager:
         filter_results_str, view_query = self._generate_result_filtering_query(
             all_filters
         )
-        logging.debug(filter_results_str)
+        logger.debug(filter_results_str)
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.results_view_name
         if self.view_suffix is not None:
             self.current_view_name = self.results_view_name + "_" + self.view_suffix
@@ -291,11 +290,11 @@ class StorageManager:
         if suppress_output:
             return None
         
-        logging.debug("Running filtering query...")
+        logger.debug("Running filtering query...")
         time0 = time.perf_counter()
 
         filtered_results = self._run_query(filter_results_str)
-        logging.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
+        logger.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
         # get number of passing ligands
         return filtered_results
 
@@ -1068,13 +1067,13 @@ class StorageManagerSQLite(StorageManager):
         cur = self.conn.cursor()
         # get views and drop them
         if not consent:
-            logging.warning("WARNING: All existing bookmarks in database will be dropped during database update!")
+            logger.warning("WARNING: All existing bookmarks in database will be dropped during database update!")
             consent = input("Type 'yes' if you wish to continue: ") == 'yes'
         if not consent:
-            logging.critical("Consent not given for database update. Cancelling...")
+            logger.critical("Consent not given for database update. Cancelling...")
             sys.exit(1)
 
-        logging.info(f"Updating {self.db_file}...")
+        logger.info(f"Updating {self.db_file}...")
         views = cur.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall()
         for v in views:
             cur.execute(f"DROP VIEW IF EXISTS {v[0]}")
@@ -1126,10 +1125,10 @@ class StorageManagerSQLite(StorageManager):
             view_strs.append(f"SELECT * FROM {self.results_view_name + '_' + str(i)}")
 
         view_name = f"{self.results_view_name}_union"
-        logging.debug("Saving union bookmark...")
+        logger.debug("Saving union bookmark...")
         self._create_view(view_name, " UNION ".join(view_strs))
         self._insert_bookmark_info(view_name, " UNION ".join(view_strs))
-        logging.debug("Running union query...")
+        logger.debug("Running union query...")
         return self._run_query(" UNION ".join(selection_strs))
 
     def fetch_summary_data(self, columns=["docking_score", "leff"], percentiles=[1,10]) -> dict:
@@ -1230,7 +1229,7 @@ class StorageManagerSQLite(StorageManager):
         Args:
             ligname (str): ligname for ligand to find similarity with
         """
-        logging.warning("N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters.")
+        logger.warning("N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters.")
         cur = self.conn.cursor()
 
         ligand_cluster_columns = self._fetch_ligand_cluster_columns()
@@ -1450,7 +1449,7 @@ class StorageManagerSQLite(StorageManager):
                 con.load_extension("chemicalite")
                 con.enable_load_extension(False)
             except sqlite3.OperationalError as e:
-                logging.critical("Failed to load chemicalite cartridge. Please ensure chemicalite is installed with `conda install -c conda-forge chemicalite`.")
+                logger.critical("Failed to load chemicalite cartridge. Please ensure chemicalite is installed with `conda install -c conda-forge chemicalite`.")
                 raise e
             cursor = con.execute("PRAGMA synchronous = OFF")
             cursor.execute("PRAGMA journal_mode = MEMORY")
@@ -1463,7 +1462,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _close_connection(self):
         """Closes connection to database"""
-        logging.info("Closing database")
+        logger.info("Closing database")
         self.conn.close()
 
     def _close_open_cursors(self):
@@ -1626,7 +1625,7 @@ class StorageManagerSQLite(StorageManager):
         
         try:
             cur = self.conn.cursor()
-            logging.debug("Creating columns index...")
+            logger.debug("Creating columns index...")
             cur.execute("CREATE INDEX allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)")
             self.conn.commit()
             cur.close()
@@ -1662,7 +1661,7 @@ class StorageManagerSQLite(StorageManager):
         cur = self.conn.cursor()
         if add_poseID:
             query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
-        logging.info("Creating bookmark...")
+        logger.info("Creating bookmark...")
         # drop old view if there is one
         try:
             if temp:
@@ -1675,7 +1674,7 @@ class StorageManagerSQLite(StorageManager):
                     name=name, query=query, temp_flag=temp_flag
                 )
             )
-            logging.debug(
+            logger.debug(
                 "CREATE {temp_flag}VIEW {name} AS {query}".format(
                     name=name, query=query, temp_flag=temp_flag
                 )
@@ -2139,7 +2138,7 @@ class StorageManagerSQLite(StorageManager):
 
         if self.filter_bookmark is not None:
             if self.filter_bookmark == self.results_view_name:
-                logging.error(
+                logger.error(
                     f"Specified filter_bookmark and bookmark_name are the same: {self.results_view_name}"
                 )
                 raise OptionError(
@@ -2214,11 +2213,11 @@ class StorageManagerSQLite(StorageManager):
             # catch if interaction not found in results
             if interaction_filter_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
-                    logging.warning(
+                    logger.warning(
                         "Given --react_any filter, no reactive interactions found. Excluded from filtering."
                     )
                 else:
-                    logging.warning(
+                    logger.warning(
                         "Interaction {i} not found in results, excluded from filtering".format(
                             i=":".join(interaction[:4])
                         )
@@ -2356,7 +2355,7 @@ class StorageManagerSQLite(StorageManager):
             return cs
 
         if self.interaction_cluster is not None:
-            logging.warning("WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
+            logger.warning("WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
             cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_id WHERE Results.Pose_ID IN ({unclustered_query})"
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
@@ -2373,7 +2372,7 @@ class StorageManagerSQLite(StorageManager):
                 return bs
 
             bclusters = clusterFps([DataStructs.CreateFromBitString(make_bitstring(pose[2:])) for pose in leff_poseid_ifps], self.interaction_cluster)
-            logging.info(f"Number of interaction fingerprint butina clusters: {len(bclusters)}")
+            logger.info(f"Number of interaction fingerprint butina clusters: {len(bclusters)}")
 
             # select ligand from each cluster with best ligand efficiency
             int_rep_poseids = []
@@ -2386,7 +2385,7 @@ class StorageManagerSQLite(StorageManager):
 
             # catch if no pose_ids returned
             if int_rep_poseids == []:
-                logging.warning("No passing results prior to clustering. Clustering not performed.")
+                logger.warning("No passing results prior to clustering. Clustering not performed.")
             else:
                 if self.mfpt_cluster is None:
                     sql_string = output_str + "Pose_ID=" + " OR Pose_ID=".join(int_rep_poseids)
@@ -2394,14 +2393,14 @@ class StorageManagerSQLite(StorageManager):
                     unclustered_query = f"SELECT Pose_ID FROM Results WHERE {'Pose_ID=' + ' OR Pose_ID='.join(int_rep_poseids)}"
 
         if self.mfpt_cluster is not None:
-            logging.warning("WARNING: Ligand morgan fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
-            logging.warning("N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering.")
+            logger.warning("WARNING: Ligand morgan fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
+            logger.warning("N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering.")
             cluster_query = f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({unclustered_query})"
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
             poseid_leff_mfps = self._run_query(cluster_query).fetchall()
             bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps], self.mfpt_cluster)
-            logging.info(f"Number of Morgan fingerprint butina clusters: {len(bclusters)}")
+            logger.info(f"Number of Morgan fingerprint butina clusters: {len(bclusters)}")
             
             # select ligand from each cluster with best ligand efficiency
             fp_rep_poseids = []
@@ -2414,7 +2413,7 @@ class StorageManagerSQLite(StorageManager):
 
             # catch if no pose_ids returned
             if fp_rep_poseids == []:
-                logging.warning("No passing results prior to clustering. Clustering not performed.")
+                logger.warning("No passing results prior to clustering. Clustering not performed.")
             else:
                 sql_string = output_str + "Pose_ID=" + " OR Pose_ID=".join(fp_rep_poseids)
 
@@ -2637,7 +2636,7 @@ class StorageManagerSQLite(StorageManager):
         """
         # get total number of ligands
         try:
-            logging.debug(f"Generating percentile filter query for {column}")
+            logger.debug(f"Generating percentile filter query for {column}")
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(LigName) FROM Ligands")
             n_ligands = int(cur.fetchone()[0])
@@ -2651,7 +2650,7 @@ class StorageManagerSQLite(StorageManager):
                     cutoff = i[0]
                     break
                 counter += 1
-            logging.debug(f"{column} percentile cutoff is {cutoff}")
+            logger.debug(f"{column} percentile cutoff is {cutoff}")
             return cutoff
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
