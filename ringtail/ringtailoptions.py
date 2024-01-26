@@ -2,7 +2,7 @@
 
 import os
 from .exceptions import OptionError
-import logging
+from .logmanager import logger
 from .storagemanager import StorageManager as sman
 
 
@@ -175,10 +175,10 @@ class WriteOptions(RTOptions):
         self.docking_mode = docking_mode
         # Check interaction_tolerance compatibilities 
         if self.docking_mode == "vina" and interaction_tolerance is not None:
-            logging.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
+            logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
             self.interaction_tolerance = None
         elif store_all_poses is True and interaction_tolerance is not None:
-            logging.warning("Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance.")
+            logger.warning("Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance.")
             self.interaction_tolerance = None
         else:
             self.interaction_tolerance = interaction_tolerance            
@@ -272,7 +272,7 @@ class StorageOptions(RTOptions):
         if duplicate_handling is not None:
             self.conflict_handling = duplicate_handling.upper()
             if self.conflict_handling not in conflict_options:
-                logging.warning(
+                logger.warning(
                     f"--conflict_handing option {duplicate_handling} not allowed. Reverting to default behavior."
                 )
                 self.conflict_handling = None

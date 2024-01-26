@@ -6,17 +6,14 @@
 
 import sys
 import argparse
-import json
 from glob import glob
 import os
-import fnmatch
-import logging
+from .logmanager import logger
 from .exceptions import OptionError
 import __main__
 from .ringtailcore import RingtailCore
 from .ringtailoptions import *
 from .filters import Filters
-from .storagemanager import StorageManager as sman
 
 
 def cmdline_parser(defaults={}):
@@ -622,7 +619,7 @@ class CLOptionParser:
             ) = cmdline_parser()
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
-            logging.error("\n")
+            logger.error("\n")
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
@@ -633,13 +630,13 @@ class CLOptionParser:
                 elif self.process_mode == "read":
                     self.read_parser.print_help()
             finally:
-                logging.error("\n")
+                logger.error("\n")
                 raise e
 
     def process_options(self, parsed_opts):
         """convert command line options to the dict of ringtail options and filters"""
         if parsed_opts.debug:
-            logging.getLogger().setLevel(logging.DEBUG)
+            logger.setLevel("DEBUG")
 
         if parsed_opts.process_mode is None:
             raise OptionError(
@@ -661,12 +658,12 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
 
-        self.rtopts = GeneralOptions(process_mode, 
-                           docking_mode, 
-                           parsed_opts.summary, 
-                           parsed_opts.verbose,
-                           parsed_opts.debug,
-                           db_file)
+        self.rtopts = GeneralOptions(process_mode=process_mode, 
+                           docking_mode=docking_mode, 
+                           summary=parsed_opts.summary, 
+                           verbose=parsed_opts.verbose,
+                           debug=parsed_opts.debug,
+                           db_file=db_file)
 
         if process_mode == "write":
             # set read-only rt_process options to None to prevent errors

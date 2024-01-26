@@ -6,7 +6,6 @@
 
 import platform
 from time import sleep
-import logging
 import queue
 import fnmatch
 import os
@@ -15,6 +14,7 @@ from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .ringtailoptions import *
+from .logmanager import logger
 from .exceptions import MultiprocessingError
 import traceback
 from datetime import datetime
@@ -83,7 +83,7 @@ class MPManager:
         # start the workers in background
         self.workers = []
         self.p_conn, self.c_conn = multiprocessing.Pipe(True)
-        logging.info("Starting {0} file readers".format(self.num_readers))
+        logger.info("Starting {0} file readers".format(self.num_readers))
         for i in range(self.num_readers):
             # one worker is started for each processor to be used
             s = DockingFileReader(
@@ -135,7 +135,7 @@ class MPManager:
 
         w.join()
 
-        logging.info("Wrote {0} files to database".format(self.num_files))
+        logger.info("Wrote {0} files to database".format(self.num_files))
 
     def _process_sources(self):
         # add individual file(s)
@@ -184,27 +184,26 @@ class MPManager:
                 self._check_for_worker_exceptions()
                 break
             except queue.Full:
-                # logging.debug(f"Queue full: queueIn.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
                 attempts += 1
                 self._check_for_worker_exceptions()
 
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
             error, tb, filename = self.p_conn.recv()
-            logging.error(f"Caught error in multiprocessing from {filename}")
+            logger.error(f"Caught error in multiprocessing from {filename}")
             # don't kill parser errors, only database error
             if filename == "Database":
                 self._kill_all_workers(error, filename, tb)
             else:
                 with open("ringtail_failed_files.log", 'a') as f:
                     f.write(str(datetime.now()) + f"\tRingtail failed to parse {filename}\n")
-                    logging.debug(tb)
+                    logger.debug(tb)
 
     def _kill_all_workers(self, error, filename, tb):
         for s in self.workers:
             s.kill()
-        logging.debug(f"Error encountered while handling {filename}")
-        logging.debug(tb)
+        logger.debug(f"Error encountered while handling {filename}")
+        logger.debug(tb)
         raise error
 
     def _scan_dir(self, path, pattern, recursive=False):
@@ -212,7 +211,7 @@ class MPManager:
         the pattern is used to glob files
         optionally, a recursive search is performed
         """
-        logging.info(
+        logger.info(
             "-Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern)
         )
         if recursive:
@@ -238,12 +237,12 @@ class MPManager:
                     if line.endswith(pattern) or line.endswith(pattern + ".gz"):
                         lig_accepted.append(line)
                 else:
-                    logging.warning("Warning! file |%s| does not exist" % line)
+                    logger.warning("Warning! file |%s| does not exist" % line)
         if len(lig_accepted) == 0:
             raise MultiprocessingError(
                 "*ERROR* No valid files were found when reading from |%s|" % filename
             )
-        logging.info(
+        logger.info(
             "# [ %5.3f%% files in list accepted (%d) ]"
             % ((len(lig_accepted) / c * 100, c))
         )
