@@ -11,6 +11,9 @@ class RTLogger:
         self.logger.setLevel(level)
         self.fileHandler = logging.FileHandler(path)
         self.logger.addHandler(self.fileHandler) 
+        self.streamHandler = logging.StreamHandler()
+        self.streamHandler.setLevel("WARNING")
+        self.logger.addHandler(self.streamHandler) 
 
     def setLevel(self, level: str):
         self.logger.setLevel(level.upper())
