@@ -23,24 +23,26 @@ class RingtailCore:
     """Core class for coordinating different actions on virtual screening
     i.e. adding results to storage, filtering, output options
 
+    #TODO
     Attributes:
-        storageman (storageManager): Interface module with database
-        eworst (float): The worst scoring energy filter value requested by user
-        filter_file (string): Name of file containing filters provided by user
-        filtered_results (storage cursor object): Cursor object
-            containing results passing requested filters (iterable)
-        filters (dictionary): Dictionary containing user-specified filters
-        out_opts (dictionary): Specified output options including data fields
-            to output, export_sdf_path, log file name
-        output_manager (OutputManager object): Manager for output tasks of
-            log-writting, plotting, ligand SDF writing
-        results_filters_list (List): List of tuples of filter option and value
-        results_man (ResultsManager object): Manager for processing result
-            files for insertion into database
+        generaloptions (GeneralOptions object): sets logging level and general processing options, including read/write, and outputting summary to console
+        db_file (str): name of database file being operated on
+        storageman (StorageManager object): Interface module with database
+        storageopen (bool): whether or not access to database is open
+        storageopts (StorageOptions object): options for storageman
+        file_sources (InputFiles object): object containing all specified ligand result filtes and receptor file
+        rman (ResultsManager object): Module to deal with result file processing before adding to databae
+        rmanopts (WriteOptions object): settings for processing result files
+        outputman (OutputManager object): Manager for output tasks of log-writting, plotting, ligand SDF writing
+        readopts (ReadOptions object): options for outputman
+        filterobj (Filters object): object holding all numerical filters
     """
 
     def __init__(self, db_file = "output.db", storage_type = "sqlite", readonly=True):
-        """Initialize RingtailCore object and global logger."""
+        """
+        Initialize RingtailCore object and create a storageman object with the db file.
+        Does not open access to the storage. Future option will include opening database as readonly.
+        """
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
@@ -281,23 +283,6 @@ class RingtailCore:
             )
 
         return mol, flexres_mols, properties
-    
-    #TODO I think maybe this should be a hidden method, and expose two methods
-    # to deal with each csv export option (see rt process vs)
-    def export_csv(self, requested_data: str, csv_name: str, table=False):
-        """Get requested data from database, export as CSV
-
-        Args:
-            requested_data (string): Table name or SQL-formatted query
-            csv_name (string): Name for exported CSV file
-            table (bool): flag indicating is requested data is a table name
-        """
-        df = self.storageman.to_dataframe(requested_data, table=table)
-        df.to_csv(csv_name)
-    
-    def close_storage(self):
-        """Tell database we are done and it can close the connection"""
-        self.storageman.close_storage()
 
     def _add_poses(
         self,
@@ -366,6 +351,7 @@ class RingtailCore:
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
 
     def update_database(self, consent=False):
+        # Method to update database version
         return self.storageman.update_database(consent)
     
     def _produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
@@ -475,13 +461,29 @@ class RingtailCore:
         return mode
     
 #-#-#- API -#-#-#
-    #-#- General processing methods -#-# 
+    #-#- Processing methods -#-# 
     def open(self, process_mode = "read"):
-        """Methods that opens db connection through storagemanager"""
+        """
+        Opens db connection through storagemanager
+        Args:
+            process_mode: not currently in use
+        """
+
         self.storageman.open_storage()
         self.storageopen = True
-    
+        
+    def close_storage(self):
+        """Tell database we are done and it can close the connection"""
+        self.storageman.close_storage()
+        
+    #TODO
     def add_options_from_config_file(self, config_file: str =None):
+        """
+        Provide ringtail options from file, *not currently in use
+        Args:
+            config_file: json formatted file containing ringtail and filter options
+        """
+        
         replace_filter_keys = {
             "vdw_interactions": "van_der_waals",
             "hb_interactions": "hydrogen_bond",
@@ -508,6 +510,7 @@ class RingtailCore:
                 configs.update(c)
         return configs
 
+    #TODO Can files be added as lists and as single paths? 
     def add_results_from_files(self,
                                file = None, 
                                file_path = None, 
@@ -527,9 +530,28 @@ class RingtailCore:
                                ):
         """
         Call storage manager to process result files and add to database.
-        It takes input as one or more sources of files, optional source of a receptor file,
-        and optional options for how to process the files in the multiprocessor.
+        Options can be provided as a dict or as individual options.
+        Creates a database, or adds to an existing one if using "append_results" in storageman_opts
+
+        Args:
+            file (str): ligand result file
+            file_path (list(str)): list of folders containing one or more result files
+            file_list (list(str)): list of ligand result file(s)
+            file_pattern (str): file pattern to use with recursive search in a file_path, "*.dlg*" for AutoDock-GDP and "*.pdbqt*" for vina
+            recursive (bool): used to recursively search file_path for folders inside folders
+            receptor_file (str): string containing the receptor .pdbqt
+            save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
+                optional: file_source_object (InputFiles): file sources already as an object
+            store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
+            max_poses (int): how many poses to save (ordered by soem score?)
+            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            interaction_tolerance (float): longest ångström distance that is considered interaction?
+            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
+            max_proc (int): max number of computer processors to use for file reading
+                optional: writeopts (WriteOptions): write options already as an object
+
         """
+
         if not hasattr(self, "general_options"):
             self.general_options = GeneralOptions(process_mode="write")
         else: self.general_options.process_mode = "write"
@@ -583,11 +605,12 @@ class RingtailCore:
             self.save_receptor(files.receptor_file)
  
     def save_receptor(self, receptor_file):
-            ### Good option for context manager
-            """Add receptor to database
+            """
+            Add receptor to database
 
             Args:
                 receptors (list): list of receptor blobs to add to database
+                * currently only one receptor allowed per database
             """
             receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
             for rec, rec_name in receptor_list:
@@ -606,30 +629,33 @@ class RingtailCore:
         """
         Prepare list of filters, then hand it off to storageManager to
             perform filtering. Create log of passing results.
+        Args:
+            enumerate_interaction_combs (bool): inherently handled atm, might need to be depreceated?
         """
-        ### Initial checks on values
 
-        self.general_options.process_mode = "read"
+        #NOTE This is clunky for now, but sets options to default if they have not yet been set.
+        if not hasattr(self, "general_options"):
+            self.general_options = GeneralOptions(process_mode="read")
+        else: self.general_options.process_mode = "read"
 
         if not hasattr(self, "filterobj"):
-            logger.debug("ERROR No filters have been set, using default values (can be found in Filters class)") 
+            logger.debug("No filters have been set, using default values found in Filters class") 
             self.set_filters()
 
         if not hasattr(self, "storageopts"):
-            logger.debug("No storage options have been set, using default values can be found in 'set_storage_options'") 
+            logger.debug("No storage options have been set, using default values found in 'set_storage_options'") 
             self.set_storage_options()
 
         if not hasattr(self, "readopts"):
-            logger.debug("No read options have been set, using default values can be found in 'set_read_options'") 
+            logger.debug("No read options have been set, using default values found in 'set_read_options'") 
             self.set_read_options()
-            print(f'\n\n log file name is {self.readopts.log_file}\n\n')
         
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
         if self.filterobj.max_miss == 0:
             self.readopts.enumerate_interaction_combs = True
 
         # guard against unsing percentile filter with all_poses
-        if self.storageopts.output_all_poses and (self.filterobj.score_percentile is not None or self.filterobj.le_percentile is not None):
+        if self.storageopts.output_all_poses and not (self.filterobj.score_percentile is None or self.filterobj.le_percentile is None):
             logger.warning(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
@@ -639,8 +665,7 @@ class RingtailCore:
         self.output_manager.create_log_file() #TODO
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(
-            self.filterobj.max_miss
-        )
+                            self.filterobj.max_miss)
         ligands_passed = 0
         '''This for comprehension takes all combinations represented in one union of one or multiple, and filters, and goes around until all combinations have been used to filter'''
         for ic_idx, combination in enumerate(interaction_combs):
@@ -684,7 +709,17 @@ class RingtailCore:
                                 verbose=False,
                                 debug=False,
                                 rtopts=None):
-        
+        """
+        Settings for ringtail
+
+        Args:
+            process_mode (str): write or read
+            docking_mode (str): dlg (autodock-gpu) or vina 
+            summary (bool): print database summary to terminal
+            verbose (bool): set logging level to "info" (second lowest level)
+            debug (bool): set logging level to "debug" (lowest level)
+                optional: rtopts (GeneralOptions): provide options as object
+        """
         if rtopts is not None:self.general_options = rtopts
         else: self.general_options =GeneralOptions(process_mode=process_mode, docking_mode=docking_mode, summary=summary, verbose=verbose, debug=debug)
         for k,v in self.general_options.todict().items():  
@@ -703,8 +738,51 @@ class RingtailCore:
                             interaction_cluster = None,
                             results_view_name = "passing_results",
                             storageopts=None):
-        '''Currently, if the method is given a storageopts object, values in it will overwrite individual values assigned during this call'''
+        """
+        Options or storagemanager, used both in read and write.
 
+        Args:
+            filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
+            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
+            duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
+            overwrite_logfile (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
+            order_results_by (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
+                    "available fields are:  "
+                    '"e" (docking_score), '
+                    '"le" (ligand efficiency), '
+                    '"delta" (delta energy from best pose), '
+                    '"ref_rmsd" (RMSD to reference pose), '
+                    '"e_inter" (intermolecular energy), '
+                    '"e_vdw" (van der waals energy), '
+                    '"e_elec" (electrostatic energy), '
+                    '"e_intra" (intermolecular energy), '
+                    '"n_interact" (number of interactions), '
+                    '"rank" (rank of ligand pose), '
+                    '"run" (run number for ligand pose), '
+                    '"hb" (hydrogen bonds); '
+            outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
+                    '"Ligand_name" (Ligand name), '
+                    '"e" (docking_score), '
+                    '"le" (ligand efficiency), '
+                    '"delta" (delta energy from best pose), '
+                    '"ref_rmsd" (RMSD to reference pose), '
+                    '"e_inter" (intermolecular energy), '
+                    '"e_vdw" (van der waals energy), '
+                    '"e_elec" (electrostatic energy), '
+                    '"e_intra" (intermolecular energy), '
+                    '"n_interact" (number of interactions), '
+                    '"ligand_smile" , '
+                    '"rank" (rank of ligand pose), '
+                    '"run" (run number for ligand pose), '
+                    '"hb" (hydrogen bonds), '
+                    '"receptor" (receptor name); '
+                    "Fields are printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified.
+            output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
+            mfpt_cluster (float): Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
+            interaction_cluster (float): Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
+            results_view_name (str): name for resulting book mark file. Default value is "passing_results"
+        """
+        #NOTE Passing an object to the method will overwrite individually set options
         if storageopts is None:
             self.storageopts = StorageOptions(filter_bookmark,
                                         append_results,
@@ -730,6 +808,18 @@ class RingtailCore:
                                 interaction_cutoffs = None,
                                 max_proc = None,
                                 writeopts=None):
+        """
+        Create resultmanager/writeoptions object if needed and set options.
+
+        Args:
+            docking_mode (str): autodockk-gpu or vina
+            store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
+            max_poses (int): how many poses to save (ordered by soem score?)
+            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            interaction_tolerance (float): longest ångström distance that is considered interaction?
+            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
+            max_proc (int): max number of computer processors to use for file reading
+        """
         if writeopts is not None:
             self.rmanopts = writeopts
         elif not hasattr(self, "rmanopts"):
@@ -764,6 +854,25 @@ class RingtailCore:
                          export_sdf_path = None,
                          readopts: ReadOptions=None):
         
+        """ Class that holds options related to reading from the database, including format for
+        result export and alternate ways of displaying the data (plotting),
+
+        Args:
+            filtering (bool): implicit argument set if there are any optional filters present
+            plot (bool): Makes scatterplot of LE vs Best Energy, saves as scatter.png.
+            find_similar_ligands (str): Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.
+            export_bookmark_csv (str): Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables
+            export_bookmark_db (bool): Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db
+            export_query_csv (str): Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]
+            export_receptor (bool): Export stored receptor pdbqt. Will write to current directory.
+            data_from_bookmark (bool): Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.
+            pymol (bool): Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.
+            enumerate_interaction_combs (bool): #TODO
+            log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
+            export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
+                optional: readopts (ReadOptions): provide options as object, will overwrite other options
+        """
+
         if readopts is not None:
             self.readopts = readopts
         else: self.readopts = ReadOptions(filtering,
@@ -784,6 +893,7 @@ class RingtailCore:
             
         else: self.output_manager = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
 
+    #TODO Write doc once I have evaluated current structure
     def set_filters(self,
                     eworst=None, 
                     ebest=None, 
@@ -802,7 +912,9 @@ class RingtailCore:
                     hb_count=[],
                     react_any=None,
                     max_miss=0,):
-        
+        """
+        Object holding all specific filters, options, types, and defaults can be found in the Filters.py
+        """
         if self.general_options.docking_mode == "vina" and react_any:
             logger.warning("Cannot use reaction filters with Vina mode. Removing react_any filter.")
             react_any = False
@@ -825,7 +937,6 @@ class RingtailCore:
                                 react_any=react_any,
                                 max_miss=max_miss,)
     
-       
     # write "log" with new data for previous filtering results
             # =as long as there are no filters, it takes data from bookmark
         
@@ -876,7 +987,8 @@ class RingtailCore:
             plt.show()
 
     def write_molecule_sdfs(self, write_nonpassing=False, return_rdmol_dict=False):
-        """have output manager write sdf molecules for passing results in given results bookmark
+        """
+        Have output manager write sdf molecules for passing results in given results bookmark
 
         Args:
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
@@ -921,7 +1033,8 @@ class RingtailCore:
             return all_mols
 
     def display_pymol(self):
-        """launch pymol session and plot of LE vs docking score. Displays molecules when clicked
+        """
+        Launch pymol session and plot of LE vs docking score. Displays molecules when clicked
         """
 
         import subprocess
@@ -972,11 +1085,20 @@ class RingtailCore:
         cid = fig.canvas.mpl_connect('pick_event', onpick)
         plt.show()
 
-        
     # export bookmark csv
-        
+    def export_csv(self, requested_data: str, csv_name: str, table=False):
+        """Get requested data from database, export as CSV
+
+        Args:
+            requested_data (string): Table name or SQL-formatted query
+            csv_name (string): Name for exported CSV file
+            table (bool): flag indicating is requested data is a table name
+        """
+        df = self.storageman.to_dataframe(requested_data, table=table)
+        df.to_csv(csv_name)
     # export query csv
         
+    #TODO this method has not been updated
     def export_bookmark_db(self, bookmark_db_name: str):
         """Export database containing data from bookmark
 
@@ -997,6 +1119,9 @@ class RingtailCore:
             db_clone.close_storage(vacuum=True)
 
     def export_receptors(self):
+        """
+        Export receptor to pdbqt
+        """
         receptor_tuples = self.storageman.fetch_receptor_objects()
         for recname, recblob in receptor_tuples:
             if recblob is None:

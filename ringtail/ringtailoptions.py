@@ -1,5 +1,3 @@
-#TODO the interface needs to host the logger
-
 import os
 from .exceptions import OptionError
 from .logmanager import logger
@@ -7,9 +5,11 @@ from .storagemanager import StorageManager as sman
 
 
 class TypeSafe:
-    """Class that handles safe typesetting of values in the other option classes. 
+    """
+    Class that handles safe typesetting of values in the other option classes. 
     It creates internal attribtues that are get/set according to the type that 
-    is specified. """
+    is specified. Raises error if wrong type is attempted. 
+    """
     def __init__(self, attr, attrtype):                        
         self.attrpublic = attr
         self.attrprivate = "_" + attr
@@ -27,7 +27,10 @@ class TypeSafe:
             raise OptionError(f'{self.attrpublic} can only be of type {self.type}, but was attempted set as {type(value)} which is invalid.')
 
 class TypeDirectory(TypeSafe):
-    """Class that handles safe directory typesetting and adds a final backslash. """
+    """
+    Class that handles safe directory typesetting and adds a final backslash. 
+    ***Currently not in use
+    """
     def __init__(self, attr):                        
         self.attrpublic = attr
         self.attrprivate = "_" + attr
@@ -46,6 +49,7 @@ class TypeDirectory(TypeSafe):
                 )    
   
 class RTOptions:
+    """ Holds standard methods for the ringtail option child classes."""
     @classmethod
     def is_valid_path(self, path):
         if os.path.exists(path):
@@ -195,10 +199,10 @@ class StorageOptions(RTOptions):
     conflict handling and result clustering and ordering.
 
     Args:
-    filter_bookmark: Perform filtering over specified bookmark. (in output group in CLI)
+    filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
     append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
     duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
-    overwrite_logfile: by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
+    overwrite_logfile (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
     order_results_by (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
             "available fields are:  "
             '"e" (docking_score), '
@@ -233,13 +237,13 @@ class StorageOptions(RTOptions):
     output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
     mfpt_cluster (float): Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
     interaction_cluster (float): Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-    results_view_name: #TODO
+    results_view_name (str): name for resulting book mark file. Default value is "passing_results"
 
     """
 
     filter_bookmark = TypeSafe("filter_bookmark", str)
     append_results = TypeSafe("append_results", bool)
-    duplicate_handling = TypeSafe("duplicate_handling", str) # can only be 'ignore' or 'replace'
+    duplicate_handling = TypeSafe("duplicate_handling", str) 
     overwrite = TypeSafe("overwrite", bool)
     order_results = TypeSafe("order_results", str)
     outfields = TypeSafe("outfields", str)

@@ -26,8 +26,7 @@ def cmdline_parser(defaults={}):
     conf_parser.add_argument("-c", "--config")
     confargs, remaining_argv = conf_parser.parse_known_args()
 
-    # This won't work anymore
-
+    #TODO Need to fix handling of config file
     config = RingtailCore.add_options_from_config_file(confargs.config)
     
     parser = argparse.ArgumentParser(
@@ -634,7 +633,9 @@ class CLOptionParser:
                 raise e
 
     def process_options(self, parsed_opts):
-        """convert command line options to the dict of ringtail options and filters"""
+        """
+        Convert command line options to ringtail options and filter objects (ringtailoptions)
+        """
         if parsed_opts.debug:
             logger.setLevel("DEBUG")
 
@@ -809,7 +810,8 @@ class CLOptionParser:
                                     parsed_opts.enumerate_interaction_combs,
                                     parsed_opts.log_file,
                                     parsed_opts.export_sdf_path)
-        #TODO this is a fix, hopefully duplicate_handling can be moved so it is only invoked on write
+        
+        #TODO this is a poor fix, hopefully duplicate_handling can be moved so it is only invoked on write
         if not hasattr(parsed_opts, "duplicate_handling"):
             parsed_opts.duplicate_handling = None
         
