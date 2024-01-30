@@ -530,8 +530,9 @@ class RingtailCore:
         It takes input as one or more sources of files, optional source of a receptor file,
         and optional options for how to process the files in the multiprocessor.
         """
-
-        self.general_options.process_mode = "write"
+        if not hasattr(self, "general_options"):
+            self.general_options = GeneralOptions(process_mode="write")
+        else: self.general_options.process_mode = "write"
 
         if file_source_object is not None:
             files = file_source_object
