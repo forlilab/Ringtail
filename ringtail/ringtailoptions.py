@@ -22,6 +22,7 @@ class TypeSafe:
     def __set__(self, obj, value):
         if type(value) in (self.type, type(None)):
             setattr(obj, self.attrprivate, value) 
+            logger.info(f'{self.attrpublic} was set to {value}.')
         else:
             raise OptionError(f'{self.attrpublic} can only be of type {self.type}, but was attempted set as {type(value)} which is invalid.')
 

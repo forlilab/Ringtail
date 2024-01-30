@@ -4,54 +4,68 @@
 # Ringtail custom exceptions
 #
 
+from .logmanager import logger
 
 class StorageError(Exception):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class DatabaseInsertionError(StorageError):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class DatabaseConnectionError(StorageError):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class DatabaseTableCreationError(StorageError):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class DatabaseQueryError(StorageError):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class DatabaseViewCreationError(StorageError):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class RTCoreError(Exception):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class OptionError(Exception):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class FileParsingError(Exception):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class WriteToStorageError(Exception):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class MultiprocessingError(Exception):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class ResultsProcessingError(Exception):
-    pass
+    def __init__(self, e):
+        logger.error(e)
 
 
 class OutputError(Exception):
-    pass
+    def __init__(self, e):
+        logger.error(e)
