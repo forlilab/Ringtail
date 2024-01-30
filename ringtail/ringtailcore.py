@@ -41,8 +41,6 @@ class RingtailCore:
 
     def __init__(self, db_file = "output.db", storage_type = "sqlite", readonly=True):
         """Initialize RingtailCore object and global logger."""
-        logger.initialize()
-        logger.info("This is an informational string")
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)

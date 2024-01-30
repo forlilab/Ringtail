@@ -269,7 +269,7 @@ class Writer(multiprocessing.Process):
                 if next_task is None:
                     # if a poison pill is found, it means one of the workers quit
                     self.num_readers -= 1
-                    logger.info(
+                    logger.debug(
                         "Closing process. Remaining open processes: "
                         + str(self.num_readers)
                     )
