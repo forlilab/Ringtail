@@ -48,15 +48,15 @@ class RTLogger:
 
     def debug(self, message):
         stacktrace = self.st_formatted(inspect.stack())
-        self.logger.debug(stacktrace + ": " + message)
+        self.logger.debug(message)
 
     def info(self, message):
         stacktrace = self.st_formatted(inspect.stack())
-        self.logger.info(stacktrace + ": " + message)
+        self.logger.info(message)
 
     def warning(self, message):
         stacktrace = self.st_formatted(inspect.stack())
-        self.logger.warning(stacktrace + ": " + message)
+        self.logger.warning(message)
 
     def error(self, message):
         stacktrace = self.st_formatted(inspect.stack())
@@ -65,9 +65,6 @@ class RTLogger:
     def critical(self, message):
         stacktrace = self.st_formatted(inspect.stack())
         self.logger.critical(stacktrace + ": " + message)
-
-    def st_formatted(self, stack):
-        stacktrace=""
         
     def st_formatted(self, stack):
         stacktrace=""
