@@ -1,5 +1,3 @@
-#   This module will handle any operational logging in Ringtail
-
 import logging
 import inspect
 import traceback
@@ -7,9 +5,22 @@ import traceback
 
 
 class RTLogger:
-    _instance = None
+    """
+    RTLogger is a global singleton class for code in Ringtail. A new header is written 
+    each time a new ringtail sore object is started. It is based on the python logging 
+    library. Different log levels have different treatment, e.g., error level logs includes
+    a complete and readable stack trace. 
 
+    The log is written to "rt_process_log.txt", and the file will be saved to current directory.
+
+    Future #TODO s:
+        - only log to base directory
+        - cycle the log file regularly 
+    """
+
+    _instance = None
     def __new__(cls):
+        #Ensures class is only instantiated once
         if cls._instance is None:
             cls._instance = super(RTLogger, cls).__new__(cls)
             # Put any initialization here.
@@ -17,6 +28,9 @@ class RTLogger:
         return cls._instance
     
     def initialization(self, level = "WARNING", path = "rt_process_log.txt"):
+        """ 
+        Options for instantiation of the logger. 
+        """
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
         self.fileHandler = logging.FileHandler(path)
@@ -29,6 +43,7 @@ class RTLogger:
         self.fileHandler.setFormatter(self.streamFmt)
 
     def setLevel(self, level: str):
+        """ Sets level of the logger and prints to log (if debug)."""
         self.logger.setLevel(level.upper())
         self.logger.debug("Log level changed to " + str(level))
 
@@ -47,15 +62,12 @@ class RTLogger:
         self.fileHandler.setFormatter(self.streamFmt)
 
     def debug(self, message):
-        stacktrace = self.st_formatted(inspect.stack())
         self.logger.debug(message)
 
     def info(self, message):
-        stacktrace = self.st_formatted(inspect.stack())
         self.logger.info(message)
 
     def warning(self, message):
-        stacktrace = self.st_formatted(inspect.stack())
         self.logger.warning(message)
 
     def error(self, message):
@@ -67,9 +79,16 @@ class RTLogger:
         self.logger.critical(stacktrace + ": " + message)
         
     def st_formatted(self, stack):
+        """
+        Method to format python FrameInfo object to this format:
+        file[lineno]:file[lineno]file[lineno]: (first file is last in the stack)
+
+        #TODO s
+            - make print true to direction of stack trace
+        """
         stacktrace=""
         for i in stack:
-            fn = i.filename
+            fn: str = i.filename
             if fn.startswith("<frozen"):
                 pass
             else:
@@ -80,6 +99,5 @@ class RTLogger:
                 else:
                     stacktrace += fn + "[" + str(lineno) + "]:"
         return stacktrace 
-
 
 logger = RTLogger()
