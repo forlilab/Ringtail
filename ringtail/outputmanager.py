@@ -28,7 +28,7 @@ class OutputManager:
 
     """
 
-    def __init__(self, log_file="output_log.txt", export_sdf_path=".", _stop_at_defaults=False):
+    def __init__(self, log_file="output_log.txt", export_sdf_path="", _stop_at_defaults=False):
         """Initialize OutputManager object and create log file
 
         Args:
