@@ -2,6 +2,7 @@ import logging
 import logging.handlers
 import inspect
 from os import path
+import os
 
 
 
@@ -12,7 +13,7 @@ class RTLogger:
     library. Different log levels have different treatment, e.g., error level logs includes
     a complete and readable stack trace. 
 
-    The log is written to "rt_process_log.txt", and the file will be saved to current directory.
+    The log is written to "rt_process_log.txt", and the file will be saved to "Ringtail/logfiles/".
 
     """
 
@@ -30,7 +31,10 @@ class RTLogger:
         Options for instantiation of the logger. 
         """
         logfilefolder = path.abspath(__file__ + "/../../logfiles/")
+        if not os.path.exists(logfilefolder):
+            os.makedirs(logfilefolder) 
         fullpath = logfilefolder + "/" + filename
+
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
         self.fileHandler = logging.handlers.RotatingFileHandler(filename=fullpath, maxBytes=5000, backupCount=10)
