@@ -1,4 +1,5 @@
 import logging
+import logging.handlers
 import inspect
 import traceback
 
@@ -27,13 +28,13 @@ class RTLogger:
             cls.initialization(cls)
         return cls._instance
     
-    def initialization(self, level = "WARNING", path = "rt_process_log.txt"):
+    def initialization(self, level = "WARNING", path = "../logfiles/rt_process_log.txt"):
         """ 
         Options for instantiation of the logger. 
         """
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
-        self.fileHandler = logging.FileHandler(path)
+        self.fileHandler = logging.handlers.RotatingFileHandler(filename=path, maxBytes=5000, backupCount=10)
         self.logger.addHandler(self.fileHandler) 
         self.streamHandler = logging.StreamHandler()
         self.streamHandler.setLevel("WARNING")
