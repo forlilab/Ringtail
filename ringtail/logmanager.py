@@ -37,7 +37,7 @@ class RTLogger:
 
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
-        self.fileHandler = logging.handlers.RotatingFileHandler(filename=fullpath, maxBytes=5000, backupCount=10)
+        self.fileHandler = logging.handlers.RotatingFileHandler(filename=fullpath, maxBytes=5e6, backupCount=10)
         self.logger.addHandler(self.fileHandler) 
         self.streamHandler = logging.StreamHandler()
         self.streamHandler.setLevel("WARNING")
