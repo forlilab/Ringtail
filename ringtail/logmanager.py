@@ -1,7 +1,7 @@
 import logging
 import logging.handlers
 import inspect
-import os
+from os import path
 
 
 
@@ -14,8 +14,6 @@ class RTLogger:
 
     The log is written to "rt_process_log.txt", and the file will be saved to current directory.
 
-    #TODO s
-    - add absolute folder for log files
     """
 
     _instance = None
@@ -27,13 +25,15 @@ class RTLogger:
             cls.initialization(cls)
         return cls._instance
     
-    def initialization(self, level = "WARNING", path = "rt_process_log.txt"):
+    def initialization(self, level = "WARNING", filename = "rt_process_log.txt"):
         """ 
         Options for instantiation of the logger. 
         """
+        logfilefolder = path.abspath(__file__ + "/../../logfiles/")
+        fullpath = logfilefolder + "/" + filename
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
-        self.fileHandler = logging.handlers.RotatingFileHandler(filename=path, maxBytes=5000, backupCount=10)
+        self.fileHandler = logging.handlers.RotatingFileHandler(filename=fullpath, maxBytes=5000, backupCount=10)
         self.logger.addHandler(self.fileHandler) 
         self.streamHandler = logging.StreamHandler()
         self.streamHandler.setLevel("WARNING")
