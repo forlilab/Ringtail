@@ -44,7 +44,6 @@ if __name__ == "__main__":
         #-#-#- Universal/shared options
         rtcore.set_storage_options(storageopts = cmdinput.storageman_opts)
         rtcore.set_general_options(process_mode=rtopts.process_mode, rtopts = rtopts)
-        rtcore.open()
         if rtopts.process_mode == "write":
             logger.debug("Starting write process")
             #-#-#- Set write options to the write managers, and processes results
@@ -104,7 +103,6 @@ if __name__ == "__main__":
 
                 if read_opts.export_receptor:
                     rtcore.export_receptors()
-        rtcore.close_storage()
 
     #TODO can depreciate use of traceback in this file
     except Exception as e:
