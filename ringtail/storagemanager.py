@@ -131,8 +131,6 @@ class StorageManager:
             "hb",
         }
    
-    
-    # I don't think I need these with a new format
     @classmethod
     def get_defaults(cls, storage_type):
         storage_types = {
@@ -157,7 +155,6 @@ class StorageManager:
 
         raise NotImplementedError
     
-    #NOTE Don't think I need this one
     def __enter__(self):
         self.open_storage()
         return self
@@ -973,7 +970,6 @@ class StorageManagerSQLite(StorageManager):
             self._generate_interaction_bitvectors(interactions_list)
         )
 
-    #NOTE needed
     def save_receptor(self, receptor):
         """Takes object of Receptor class, updates the column in Receptor table
 
@@ -1001,7 +997,6 @@ class StorageManagerSQLite(StorageManager):
                 "Error while adding receptor blob to database"
             ) from e
 
-    #TODO might not be in use
     def fetch_receptor_object_by_name(self, rec_name):
         """Returns Receptor object from database for given rec_name
 
@@ -1027,7 +1022,6 @@ class StorageManagerSQLite(StorageManager):
         else:
             self.view_suffix = suffix
 
-    #TODO might not be in use
     def fetch_receptor_objects(self):
         """Returns all Receptor objects from database
 
@@ -1040,7 +1034,6 @@ class StorageManagerSQLite(StorageManager):
         )
         return cursor.fetchall()
 
-    #TODO here comes the important db methods
     def clone(self, backup_name=None):
         """Creates a copy of the db"""
         if backup_name is None:
@@ -1063,7 +1056,7 @@ class StorageManagerSQLite(StorageManager):
         cur.close()
         return db_version == version("ringtail").replace(".", ""), db_version 
 
-    def update_database(self, consent=False):
+    def update_database_version(self, consent=False):
         cur = self.conn.cursor()
         # get views and drop them
         if not consent:
@@ -1349,7 +1342,6 @@ class StorageManagerSQLite(StorageManager):
         """
         return self.current_view_name
 
-    #NOTE needed
     def count_receptors_in_db(self):
         """returns number of rows in Receptors table where receptor_object already has blob
 
@@ -1431,7 +1423,6 @@ class StorageManagerSQLite(StorageManager):
     # # # # #Private methods # # # # #
     # # # # # # # # # # # # # # # # #
 
-    #NOTE needed
     def _create_connection(self):
         """Creates database connection to self.db_file
 
@@ -1474,14 +1465,12 @@ class StorageManagerSQLite(StorageManager):
 
         self.open_cursors = []
 
-    #NOTE needed
     def _db_empty(self):
         cur = self.conn.execute("SELECT COUNT(*) name FROM sqlite_master WHERE type='table';")
         tablecount = cur.fetchone()[0]
         cur.close()
         return True if tablecount == 0 else False
     
-    #NOTE needed
     def _create_tables(self):
         self._create_results_table()
         self._create_ligands_table()
@@ -1489,7 +1478,6 @@ class StorageManagerSQLite(StorageManager):
         self._create_interaction_index_table()
         self._create_bookmark_table()
 
-    #NOTE needed
     def open_storage(self):
         """Create connection to db. Then, check if db needs to be written.
         If self.overwrite drop existing tables and initialize new tables
@@ -1501,8 +1489,7 @@ class StorageManagerSQLite(StorageManager):
                 self._drop_existing_tables()
             self._create_tables()  
             self.set_ringtaildb_version()
-        
-    #NOTE needed
+
     def check_storage_ready(self):
         """Check that storage is ready before proceeding.
 
