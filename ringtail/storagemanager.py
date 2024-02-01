@@ -19,13 +19,8 @@ from rdkit.ML.Cluster import Butina
 import numpy as np
 import time
 from importlib.metadata import version  
-
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
-
 from .filters import Filters
+from .mpmanager import MPManager
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
