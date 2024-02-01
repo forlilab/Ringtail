@@ -21,18 +21,6 @@ def countrows():
         return count
     return __dbconnect
 
-# @pytest.fixture
-# def cur():
-#     def __dbconnect():
-#         conn = sqlite3.connect("output.db")
-#         curs = conn.cursor()
-#         yield curs
-#         curs.close()
-#         conn.close()
-#         #os.system("rm output.db")
-#     return __dbconnect
-
-
 class TestInputs:
     os.system("rm output.db")
     
@@ -210,7 +198,6 @@ class TestOutputs:
         assert status_notol == 0
         assert status_tol == 0
         assert status_tol2 == 0
-        print(count_notol, count_tol, count_tol2)
         assert (
             count_notol != count_tol
             or count_tol2 != count_tol
@@ -259,7 +246,6 @@ class TestOutputs:
         conn.close()
 
         os.system("rm output.db")
-        print(count1, count3, count5)
 
         assert status1 == 0
         assert status3 == 0
@@ -287,7 +273,6 @@ class TestOutputs:
         assert status == 0
         assert count == ligcount * 20
 
-
 class TestFilters:
 
     def test_eworst(self):
@@ -299,7 +284,6 @@ class TestFilters:
         )
 
         os.system("rm output.db")
-        print(f"\n\n {status1} is status 1 \n\n")
         assert status1 == status2 == 0
 
     def test_ebest(self):
@@ -576,7 +560,6 @@ class TestFilters:
 
         import glob
         sdf_files = glob.glob("*.sdf")
-        print(sdf_files)
         expected = ['127458.sdf', '100729.sdf', '173101.sdf']
         assert len(sdf_files) == len(expected)
         for f in sdf_files:
@@ -584,3 +567,4 @@ class TestFilters:
             os.remove(f)
 
         assert status2 == 0
+    

@@ -20,7 +20,6 @@ import numpy as np
 import time
 from importlib.metadata import version  
 from .filters import Filters
-from .mpmanager import MPManager
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -152,11 +151,14 @@ class StorageManager:
     
     def __enter__(self):
         self.open_storage()
+        print("storage opened")
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if not self.closed_connection:
             self.close_storage()
+            print("storage closed")
+        return self
 
     def _sigint_handler(self, signal_received, frame):
         logger.critical("Ctrl + C pressed, keyboard interupt initiated")
