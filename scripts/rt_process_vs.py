@@ -36,9 +36,9 @@ if __name__ == "__main__":
 
     # create manager object for virtual screening. Will make database if needed
     try:
-        defaults = rtcore.get_defaults()
+        defaults = RingtailCore.get_defaults()
         logger.debug("Getting default values from ringtail core")
-        rtcore.db_file = (rtopts.db_file)
+        rtcore = RingtailCore(rtopts.db_file)
         read_opts = cmdinput.read_opts
 
         #-#-#- Universal/shared options
@@ -106,6 +106,7 @@ if __name__ == "__main__":
                     rtcore.export_receptors()
         rtcore.close_storage()
 
+    #TODO can depreciate use of traceback in this file
     except Exception as e:
         tb = traceback.format_exc()
         logger.debug(tb)
