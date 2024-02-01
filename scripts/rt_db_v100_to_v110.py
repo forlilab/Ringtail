@@ -28,4 +28,4 @@ if __name__ == "__main__":
         defaults["storage_opts"]["values"]["db_file"] = db
 
         with RingtailCore("sqlite", defaults) as rtcore:
-            consent = rtcore.update_database(consent)
+            consent = rtcore.update_database_version(consent)
