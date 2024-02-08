@@ -47,7 +47,6 @@ class RingtailCore:
         self.set_general_options(process_mode=process_mode)
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
-        #self.outputman = OutputManager() #TODO I would like to move this to where it is needed
              
     def update_database_version(self, consent=False):
         # Method to update database version
@@ -251,10 +250,14 @@ class RingtailCore:
             "storageopts": self.set_storage_options,
             "readopts": self.set_read_options,
             "filterobj": self.set_filters,
+            "fileobj": self.set_file_sources
         }
         for k, v in options.items():
             optmap[k](dict=v)
             logger.debug(f'{optmap[k]} was ran with these options: {v}')
+
+        # if options.get("fileobj"):
+        #     self.set_file_sources(dict = options["fileobj"])
     
     def add_results_from_files(self,
                                file = None, 
@@ -302,7 +305,10 @@ class RingtailCore:
 
         if file_source_object is not None:
             files = file_source_object
-        else: files = self.set_file_sources(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor)
+        else: 
+            self.set_file_sources(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor)
+            files = self.files
+    
 
         results_files_given = (files.file is not None or files.file_path is not None or files.file_list is not None)
 
@@ -345,6 +351,7 @@ class RingtailCore:
         
         if files.save_receptor: 
             self.save_receptor(files.receptor_file)
+    
     def save_receptor(self, receptor_file):
             """
             Add receptor to database. Context managed by self.storageman
@@ -740,7 +747,7 @@ class RingtailCore:
         for k,v in indiv_options.items():
             if v is not None: setattr(files, k, v)
         
-        return files
+        self.files = files
 
     #-#-#- Output API -#-#-#
     def create_ligand_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
