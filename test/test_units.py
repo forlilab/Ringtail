@@ -26,9 +26,9 @@ class Test_StorageManSQLite:
         rtcore.add_results_from_files(file_path=[["test_data/"]], recursive=True)
 
         rtcore.set_filters(eworst = -3, 
-                           van_der_waals=[('A:ARG:123:', True), ('A:VAL:124:', True)],
-                           hydrogen_bond=[('A:ARG:123:', True)],
-                           smarts_join='OR')
+                           vdw_interactions=[('A:ARG:123:', True), ('A:VAL:124:', True)],
+                           hb_interactions=[('A:ARG:123:', True)],
+                           ligand_operator='OR')
         rtcore.filter()
 
         conn = sqlite3.connect("output.db")
@@ -58,10 +58,9 @@ class Test_RingtailCore:
         test_filters = []
         rtc = RingtailCore()
         rtc.set_general_options("read", "dlg")
-        rtc.set_filters(hydrogen_bond=[("A:ARG:123:", True), ("A:VAL:124:", True)], van_der_waals=[("A:ARG:123:", True), ("A:VAL:124:", True)])
+        rtc.set_filters(hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)], vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)])
         interaction_combs = rtc._generate_interaction_combinations(1)
         for ic in interaction_combs:
-            print(f'\n {ic} \n')
             nufilter=rtc._prepare_filters_for_storageman(ic)
             test_filters.append(nufilter)
 
@@ -75,5 +74,8 @@ class Test_RingtailCore:
 
         assert {'eworst': None, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'} in test_filters
 
+
+
         assert len(test_filters) == 5
     
+    os.system("rm output_log.txt output.db")

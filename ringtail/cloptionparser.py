@@ -7,13 +7,13 @@
 import sys
 import argparse
 from glob import glob
+import json
 import os
 from .logmanager import logger
 from .exceptions import OptionError
 import __main__
 from .ringtailcore import RingtailCore
 from .ringtailoptions import *
-from .filters import Filters
 
 
 def cmdline_parser(defaults={}):
@@ -27,7 +27,10 @@ def cmdline_parser(defaults={}):
     confargs, remaining_argv = conf_parser.parse_known_args()
 
     #TODO Need to fix handling of config file
-    config = RingtailCore.add_options_from_config_file(confargs.config)
+    default_dicts = RingtailCore().get_defaults()
+    config = {}
+    for section, subdict in default_dicts.items():
+        config.update(subdict)
     
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -84,6 +87,8 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[dlg] or [vina]",
+        default="dlg",
+        dest="docking_mode"
     )
     write_parser.add_argument(
         "-su",
@@ -261,6 +266,8 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[dlg] or [vina]",
+        default="dlg",
+        dest="docking_mode"
     )
     read_parser.add_argument(
         "-su",
@@ -606,7 +613,7 @@ def cmdline_parser(defaults={}):
 
 
 class CLOptionParser:
-    def __init__(self):
+    def __init__(self, rtcore: RingtailCore):
         # create parser
         try:
             (
@@ -616,6 +623,7 @@ class CLOptionParser:
                 self.write_parser,
                 self.read_parser,
             ) = cmdline_parser()
+            self.rtcore = rtcore
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
             logger.error("\n")
@@ -624,9 +632,9 @@ class CLOptionParser:
             ) from e
         except Exception as e:
             try: 
-                if self.process_mode == "write":
+                if parsed_opts.process_mode == "write":
                     self.write_parser.print_help()
-                elif self.process_mode == "read":
+                elif parsed_opts.process_mode == "read":
                     self.read_parser.print_help()
             finally:
                 logger.error("\n")
@@ -645,7 +653,7 @@ class CLOptionParser:
             )
         process_mode = parsed_opts.process_mode.lower()
         filter_flag = False  # set flag indicating if any filters given
-        docking_mode = parsed_opts.mode.lower()
+        docking_mode = parsed_opts.docking_mode.lower()
 
         #Check database options
         if parsed_opts.input_db is not None:
@@ -658,13 +666,13 @@ class CLOptionParser:
                 )
         else:
             db_file = parsed_opts.output_db
-
-        self.rtopts = GeneralOptions(process_mode=process_mode, 
-                           docking_mode=docking_mode, 
-                           summary=parsed_opts.summary, 
-                           verbose=parsed_opts.verbose,
-                           debug=parsed_opts.debug,
-                           db_file=db_file)
+            
+        self.rtcore.db_file = db_file
+        self.rtcore.set_general_options(process_mode=process_mode, 
+                                docking_mode=docking_mode, 
+                                summary=parsed_opts.summary, 
+                                verbose=parsed_opts.verbose,
+                                debug=parsed_opts.debug)
 
         if process_mode == "write":
             # set read-only rt_process options to None to prevent errors
@@ -680,7 +688,7 @@ class CLOptionParser:
             parsed_opts.export_sdf_path = None
             parsed_opts.enumerate_interaction_combs = None
             
-            self.file_sources = InputFiles(file = parsed_opts.file, 
+            self.file_sources = self.rtcore.set_file_sources(file = parsed_opts.file, 
                                     file_path= parsed_opts.file_path,
                                     file_pattern= parsed_opts.file_pattern,
                                     recursive= parsed_opts.recursive,
@@ -700,6 +708,8 @@ class CLOptionParser:
                     filter_flag = True
             
             if filter_flag:
+                #TODO
+                #   - move the filter specifics to rt options? 
                 # property filters
                 property_list = ["eworst", "ebest", "leworst","lebest","score_percentile", "le_percentile"]
                 for kw in property_list:
@@ -790,15 +800,14 @@ class CLOptionParser:
                 float(val) for val in parsed_opts.interaction_cutoffs.split(",")
             ]
 
-        self.write_opts = WriteOptions(docking_mode, 
-                                    parsed_opts.store_all_poses, 
-                                    parsed_opts.max_poses,
-                                    parsed_opts.add_interactions,
-                                    parsed_opts.interaction_tolerance,
-                                    parsed_opts.interaction_cutoffs,
-                                    parsed_opts.max_proc,)
+        self.rtcore.set_results_processing_options(parsed_opts.store_all_poses, 
+                                        parsed_opts.max_poses,
+                                        parsed_opts.add_interactions,
+                                        parsed_opts.interaction_tolerance,
+                                        parsed_opts.interaction_cutoffs,
+                                        parsed_opts.max_proc,)
 
-        self.read_opts = ReadOptions(filter_flag,
+        self.rtcore.set_read_options(filter_flag,
                                     parsed_opts.plot,
                                     parsed_opts.find_similar_ligands,
                                     parsed_opts.export_bookmark_csv,
@@ -815,7 +824,7 @@ class CLOptionParser:
         if not hasattr(parsed_opts, "duplicate_handling"):
             parsed_opts.duplicate_handling = None
         
-        self.storageman_opts = StorageOptions(parsed_opts.filter_bookmark,
+        self.rtcore.set_storage_options(parsed_opts.filter_bookmark,
                                     parsed_opts.append_results,
                                     parsed_opts.duplicate_handling,
                                     parsed_opts.overwrite,

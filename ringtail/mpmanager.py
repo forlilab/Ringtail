@@ -10,10 +10,8 @@ import queue
 import fnmatch
 import os
 import glob
-from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
-from .ringtailoptions import *
 from .logmanager import logger
 from .exceptions import MultiprocessingError
 import traceback
@@ -30,25 +28,18 @@ class MPManager:
     def __init__(
         self,
         storageman,
-        storageman_class=StorageManagerSQLite,
-        mode="dlg",
-        chunk_size=1,
-        max_poses=3,
+        storageman_class=None,
+        mode=None,
+        chunk_size=None,
+        max_poses=None,
         interaction_tolerance=None,
-        store_all_poses=False,
+        store_all_poses=None,
         target=None,
-        add_interactions=False,
-        interaction_cutoffs=[3.7, 4.0],
+        add_interactions=None,
+        interaction_cutoffs=None,
         receptor_file=None,
-        file_sources=InputFiles,
-        # {
-        #     "file": None , #[[]]
-        #     "file_path": None, #[[]] 
-        #     "file_pattern": "*.dlg*", 
-        #     "recursive": None,
-        #     "file_list": None ,#[[]],
-        # },
-        file_pattern="*.dlg*",
+        file_sources=None,
+        file_pattern=None,
         max_proc=None,
     ):
 

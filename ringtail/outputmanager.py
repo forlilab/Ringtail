@@ -4,11 +4,11 @@
 # Ringtail output manager
 #
 
-from .filters import Filters
 from .receptormanager import ReceptorManager
 from .exceptions import OutputError
+from .ringtailoptions import Filters
 from .logmanager import logger
-import typing
+import os
 import json
 import numpy as np
 import time
@@ -30,7 +30,9 @@ class OutputManager:
 
     """
 
-    def __init__(self, log_file="output_log.txt", export_sdf_path="", _stop_at_defaults=False):
+    def __init__(self, 
+                 log_file=None, 
+                 export_sdf_path=None):
         """Initialize OutputManager object and create log file
 
         Args:
@@ -40,8 +42,6 @@ class OutputManager:
 
         self.log_file = log_file
         self.export_sdf_path = export_sdf_path
-        if _stop_at_defaults:
-            return
         self._log_open = False
 
     def __enter__(self):
@@ -49,14 +49,6 @@ class OutputManager:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close_logfile()
-
-    @classmethod
-    def get_defaults(cls):
-        return cls(_stop_at_defaults=True).__dict__
-
-    @classmethod
-    def get_default_types(cls):
-        return typing.get_type_hints(cls.__init__)
 
     #-#-#- Log file methods -#-#-#
     def open_logfile(self, write_filters_header=True):
@@ -77,6 +69,7 @@ class OutputManager:
     def close_logfile(self):
         if self._log_open:
             self.log_file.close()
+            self.log_file = os.path.basename(self.log_file.name)
             self._log_open = False
 
     def write_log(self, lines):
@@ -154,7 +147,7 @@ class OutputManager:
         """
         try:
             buff = [additional_info, "##### PROPERTIES"]
-            for k in Filters.get_property_filter_keys():
+            for k in Filters.get_filter_keys("property"):
                 v = filters_dict.pop(k)
                 if v is not None:
                     v = "%2.3f" % v
@@ -162,7 +155,7 @@ class OutputManager:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### LIGAND FILTERS")
-            for k in Filters.get_ligand_filter_keys():
+            for k in Filters.get_filter_keys("ligand"):
                 v = filters_dict.pop(k)
                 if v is not None:
                     if isinstance(v, list):
@@ -172,7 +165,7 @@ class OutputManager:
                 buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### INTERACTIONS")
             labels = ["~", ""]
-            for _type in Filters.get_interaction_filter_keys():
+            for _type in Filters.get_filter_keys("interaction"):
                 info = filters_dict.pop(_type)
                 kept_interactions = []
                 if len(info) == 0:

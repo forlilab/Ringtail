@@ -6,51 +6,45 @@
 
 from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
-from .ringtailoptions import *
-from .storagemanager import StorageManager, StorageManagerSQLite
-import typing
+from .storagemanager import StorageManager
 from .logmanager import logger
 
 
 class ResultsManager:
     def __init__(
         self,
-        storageman: StorageManager,
-        storageman_class = StorageManagerSQLite,
-        parser_manager: str = "multiprocessing",
-        mode: str = "dlg",
-        chunk_size: int = 1, # what is this
-        max_poses: int = 3,
+        mode: str = None,
+        max_poses: int = None,
         interaction_tolerance: float = None,
-        store_all_poses: bool = False,
-        add_interactions: bool = False,
-        interaction_cutoffs: list = [3.7, 4.0],
-        file_sources = InputFiles(),
+        store_all_poses: bool = None,
+        add_interactions: bool = None,
+        interaction_cutoffs: list = None,
+        file_sources = None,
         max_proc: int = None,
-        _stop_at_defaults=False,
+        storageman: StorageManager = None,
+        storageman_class = None,
+        chunk_size: int = 1, 
+        parser_manager: str = "multiprocessing",
     ):
-        self.parser_manager = parser_manager ### set to default
+        self.parser_manager = parser_manager
         self.mode = mode
-        self.chunk_size = chunk_size ### set to default
+        self.chunk_size = chunk_size
         self.max_poses = max_poses
         self.store_all_poses = store_all_poses
         self.interaction_tolerance = interaction_tolerance
-        self.target = None
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
         self.file_sources = file_sources
+        self.target = None
         self.receptor_file = None
         self.file_pattern = None
         self.max_proc = max_proc
-        if _stop_at_defaults:
-            return
         self.storageman_class = storageman_class
         self.storageman = storageman
         if file_sources is not None:
             self.file_pattern = file_sources.file_pattern
             self.target = file_sources.target
             self.receptor_file = file_sources.receptor_file
-        
 
     def process_results(self):
         # check that we have file source(s)
@@ -67,7 +61,7 @@ class ResultsManager:
                     "Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_file.")
         
         # start MP process
-        logger.debug(str(self.file_sources.todict()))
+        logger.debug(f'These are the files being procesed: {str(self.file_sources.todict())}.')
 
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {
@@ -80,11 +74,3 @@ class ResultsManager:
             parser_opts[k] = v
         self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
         self.parser.process_files()
-
-    @classmethod
-    def get_defaults(cls):
-        return cls(None, _stop_at_defaults=True).__dict__
-
-    @classmethod
-    def get_default_types(cls):
-        return typing.get_type_hints(cls.__init__)

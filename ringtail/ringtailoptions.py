@@ -1,7 +1,8 @@
 import os
+
 from .exceptions import OptionError
 from .logmanager import logger
-from .storagemanager import StorageManager as sman
+import copy
 
 """ Ringtail options contains objects for holding all ringtail options, 
 and ensures safe type enforcement."""
@@ -11,6 +12,7 @@ class TypeSafe:
     Class that handles safe typesetting of values in the other option classes. 
     It creates internal attribtues that are get/set according to the type that 
     is specified. Raises error if wrong type is attempted. 
+
     """
     def __init__(self, attr, attrtype):                        
         self.attrpublic = attr
@@ -24,32 +26,33 @@ class TypeSafe:
     def __set__(self, obj, value):
         if type(value) in (self.type, type(None)):
             setattr(obj, self.attrprivate, value) 
-            logger.info(f'{self.attrpublic} was set to {value}.')
+            logger.debug(f'{self.attrpublic} was set to {value}.')
         else:
             raise OptionError(f'{self.attrpublic} can only be of type {self.type}, but was attempted set as {type(value)} which is invalid.')
 
-class TypeDirectory(TypeSafe):
-    """
-    Class that handles safe directory typesetting and adds a final backslash. 
-    ***Currently not in use
-    """
-    def __init__(self, attr):                        
-        self.attrpublic = attr
-        self.attrprivate = "_" + attr
-    
-    #TODO pathlib
+class NumberSafe(TypeSafe):
+    def __init__(self, attr, attrtype):
+        super().__init__(attr, attrtype)
+
+    def __set__(self, obj, value):
+        if type(value) in (float, int, type(None)):
+            setattr(obj, self.attrprivate, value) 
+            logger.debug(f'{self.attrpublic} was set to {value}.')
+        else:
+            raise OptionError(f'{self.attrpublic} can only be of type {self.type}, but was attempted set as {type(value)} which is invalid.')
+
+class DirSafe(TypeSafe):
+    def __init__(self, attr, attrtype):
+        super().__init__(attr, attrtype)
+
     def __set__(self, obj, value: str):
-        if value in (type(str), type(None)):
-            print(f'value is {value}')
-            if not value.endswith("/"): value += "/"
-            if os.path.isdir(value):
-                print(f'value has been changed to {value} and is a dir')
-                setattr(obj, self.attrprivate, value) 
-            else:
-                raise OptionError(
-                    f'The provided {self.attrpublic} directory does not exist. Please create directory first'
-                )    
-  
+        if type(value) in (str, type(None)):
+            if value is not None and not value == "" and not value.endswith("/"): value += "/"
+            setattr(obj, self.attrprivate, value) 
+            logger.debug(f'{self.attrpublic} was set to {value}.')
+        else:
+            raise OptionError(f'{self.attrpublic} can only be of type {self.type}, but was attempted set as {type(value)} which is invalid.')
+
 class RTOptions:
     """ Holds standard methods for the ringtail option child classes."""
     @classmethod
@@ -60,12 +63,14 @@ class RTOptions:
             return False
     
     def todict(self) -> dict:
-        returndict = {}
+        dict = {}
         attributes = [attr for attr in vars(self) 
                 if (not attr.startswith('__')
                 )]
         for attribute in attributes:
-            returndict[attribute.strip('_')] = getattr(self, attribute)
+            dict[attribute.strip('_')] = getattr(self, attribute)
+        returndict = copy.deepcopy(dict)
+        
         return returndict
 
 class GeneralOptions(RTOptions):
@@ -82,21 +87,18 @@ class GeneralOptions(RTOptions):
     summary = TypeSafe("summary", bool)
     verbose = TypeSafe("verbose", bool)
     debug = TypeSafe("debug", bool)
-    db_file = TypeSafe("db_file", str)
 
     def __init__(self,
                  process_mode=None,
                  docking_mode="dlg",
                  summary=False,
                  verbose=False,
-                 debug=False,
-                 db_file="output.db"):
+                 debug=False,):
         self.process_mode = process_mode                
         self.docking_mode = docking_mode                        
         self.summary = summary                          
         self.verbose = verbose         
         self.debug = debug
-        self.db_file = db_file
 
 class InputFiles(RTOptions):
     """ Class that handles sources of data to be written including ligand data paths and how 
@@ -129,8 +131,7 @@ class InputFiles(RTOptions):
                  file_pattern='*.dlg*', 
                  recursive=None, 
                  receptor_file=None,
-                 save_receptor=None, 
-                 __docking_mode="dlg"):
+                 save_receptor=None,):
         if receptor_file is None:
             pass
         elif receptor_file is not None and self.is_valid_path(receptor_file):
@@ -141,15 +142,11 @@ class InputFiles(RTOptions):
         self.file_path=file_path 
         self.file_list=file_list
         self.file_pattern=file_pattern
-        if __docking_mode=="dlg":
-            self.file_pattern = "*.dlg*"
-        else:
-            self.file_pattern = "*.pdbqt*"
         self.recursive=recursive
         self.receptor_file=receptor_file
         self.save_receptor=save_receptor
         
-class WriteOptions(RTOptions):
+class ResultsProcessingOptions(RTOptions):
     """ Class that holds database write options that affects write time, such as how to 
     break up data files, number of computer processes to use, and and how many poses to store.
     
@@ -166,25 +163,20 @@ class WriteOptions(RTOptions):
     store_all_poses = TypeSafe("store_all_poses", bool)
     max_poses = TypeSafe("max_poses", int)
     add_interactions = TypeSafe("add_interactions", bool)
-    interaction_tolerance = TypeSafe("interaction_tolerance", float)
+    interaction_tolerance = NumberSafe("interaction_tolerance", float)
     interaction_cutoffs = TypeSafe("interaction_cutoffs", list)
     max_proc = TypeSafe("max_proc", int)
 
     def __init__(self,
-                 docking_mode: str = None,
-                 store_all_poses = None,
-                 max_poses = None,
-                 add_interactions = None,
+                 store_all_poses = False,
+                 max_poses = 3,
+                 add_interactions = False,
                  interaction_tolerance = None,
-                 interaction_cutoffs = None,
+                 interaction_cutoffs = [3.7, 4.0],
                  max_proc = None,):
-        
-        self.docking_mode = docking_mode
+
         # Check interaction_tolerance compatibilities 
-        if self.docking_mode == "vina" and interaction_tolerance is not None:
-            logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
-            self.interaction_tolerance = None
-        elif store_all_poses is True and interaction_tolerance is not None:
+        if store_all_poses is True and interaction_tolerance is not None:
             logger.warning("Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance.")
             self.interaction_tolerance = None
         else:
@@ -250,21 +242,21 @@ class StorageOptions(RTOptions):
     order_results = TypeSafe("order_results", str)
     outfields = TypeSafe("outfields", str)
     output_all_poses = TypeSafe("output_all_poses", bool)
-    mfpt_cluster = TypeSafe("mfpt_cluster", float)
-    interaction_cluster = TypeSafe("interaction_cluster", float)
+    mfpt_cluster = NumberSafe("mfpt_cluster", float)
+    interaction_cluster = NumberSafe("interaction_cluster", float)
     results_view_name = TypeSafe("results_view_name", str)
 
     def __init__(self,
                  filter_bookmark = None,
-                 append_results = None,
+                 append_results = False,
                  duplicate_handling = None,
                  overwrite_log_file = None,
                  order_results_by = None,
-                 outfields = None,
+                 outfields = "Ligand_name,e",
                  output_all_poses = None,
                  mfpt_cluster = None,
                  interaction_cluster = None,
-                 results_view_name = None,):
+                 results_view_name = "passing_results",):
         self.filter_bookmark = filter_bookmark
         self.append_results = append_results
         self.order_results = order_results_by
@@ -284,10 +276,25 @@ class StorageOptions(RTOptions):
                 )
                 self.conflict_handling = None
 
-        if self.order_results is not None and self.order_results not in sman.order_options:
+        if self.order_results is not None and self.order_results not in self.order_options:
             raise OptionError(
                 "Requested ording option that is not available. Please see --help for available options."
             )
+        
+    order_options = {
+            "e",
+            "le",
+            "delta",
+            "ref_rmsd",
+            "e_inter",
+            "e_vdw",
+            "e_elec",
+            "e_intra",
+            "n_interact",
+            "rank",
+            "run",
+            "hb",
+        }
 
 class ReadOptions(RTOptions):
     """ Class that holds options related to reading from the database, including format for
@@ -319,7 +326,7 @@ class ReadOptions(RTOptions):
     pymol = TypeSafe("pymol", bool)
     enumerate_interaction_combs = TypeSafe("enumerate_interaction_combs", bool)
     log_file = TypeSafe("log_file", str)
-    export_sdf_path = TypeSafe("export_sdf_path", str)
+    export_sdf_path = DirSafe("export_sdf_path", str)
     def __init__(self,
                  filtering = None,
                  plot = None,
@@ -331,8 +338,8 @@ class ReadOptions(RTOptions):
                  data_from_bookmark =  None,
                  pymol =  None,
                  enumerate_interaction_combs =  None,
-                 log_file=None,
-                 export_sdf_path=None):
+                 log_file="output_log.txt",
+                 export_sdf_path=""):
         self.filtering = filtering
         self.plot = plot
         self.find_similar_ligands = find_similar_ligands
@@ -344,5 +351,168 @@ class ReadOptions(RTOptions):
         self.pymol = pymol
         self.enumerate_interaction_combs = enumerate_interaction_combs
         self.log_file = log_file
-        if export_sdf_path is not None and not export_sdf_path == "" and not export_sdf_path.endswith("/"): export_sdf_path += "/"
+        #if export_sdf_path is not None and not export_sdf_path == "" and not export_sdf_path.endswith("/"): export_sdf_path += "/"
         self.export_sdf_path = export_sdf_path
+    
+class Filters(RTOptions):
+    """
+    Object that holds all optional filters.
+    
+    Args:
+        eworst (float): 
+        ebest (float): 
+        leworst (float): 
+        score_percentile (float):
+        le_percentile (float):
+        vdw_interactions (list[tuple]): e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+        hb_interactions (list[tuple]): e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+        reactive_interactions (list[tuple]): e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+        interactions_count (list[tuple]): e.g. [('hb_count', 5)]
+        react_any (bool): 
+        max_miss (int): 
+        ligand_name (list[str]): e.g. ["lig1", "lig2"]
+        ligand_substruct (list[str]): e.g. ["ccc", "CN"]
+        ligand_substruct_pos (list[str]): e.g. ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
+        ligand_max_atoms (int): 
+        ligand_operator (str): AND or OR
+        """
+    
+    eworst = NumberSafe("eworst", float)
+    ebest = NumberSafe("ebest", float)
+    leworst = NumberSafe("leworst", float)
+    lebest = NumberSafe("lebest", float)
+    score_percentile = NumberSafe("score_percentile", float)
+    le_percentile = NumberSafe("le_percentile", float)
+    vdw_interactions = TypeSafe("vdw_interactions", list) #of tuple
+    hb_interactions = TypeSafe("hb_interactions", list) #of tuple
+    reactive_interactions = TypeSafe("reactive_interactions", list) #of tuple
+    interactions_count = TypeSafe("interactions_count", list) #of tuple
+    react_any = TypeSafe("react_any", bool)
+    max_miss = TypeSafe("max_miss", int)
+    ligand_name = TypeSafe("ligand_name", list) #of str
+    ligand_substruct = TypeSafe("ligand_substruct", list) #of str
+    ligand_substruct_pos = TypeSafe("ligand_substruct_pos", list) #of str
+    ligand_max_atoms = TypeSafe("ligand_max_atoms", int)
+    ligand_operator = TypeSafe("ligand_operator", str)
+
+    def __init__(self,
+                 eworst = None,
+                 ebest = None,
+                 leworst = None,
+                 lebest = None,
+                 score_percentile = None,
+                 le_percentile = None,
+                 vdw_interactions = [],
+                 hb_interactions = [],
+                 reactive_interactions = [],
+                 interactions_count = [],
+                 react_any = None,
+                 max_miss = 0,
+                 ligand_name = [],
+                 ligand_substruct = [],
+                 ligand_substruct_pos = [],
+                 ligand_max_atoms = None,
+                 ligand_operator = "OR"):
+
+        self.eworst = eworst
+        self.ebest = ebest
+        self.leworst = leworst
+        self.lebest = lebest
+        self.score_percentile = score_percentile
+        self.le_percentile = le_percentile
+        self.vdw_interactions = vdw_interactions
+        self.hb_interactions = hb_interactions
+        self.reactive_interactions = reactive_interactions
+        self.interactions_count = interactions_count
+        self.react_any = react_any
+        self.max_miss = max_miss
+        self.ligand_name = ligand_name
+        self.ligand_substruct = ligand_substruct
+        self.ligand_substruct_pos = ligand_substruct_pos
+        self.ligand_max_atoms = ligand_max_atoms
+        self.ligand_operator = ligand_operator
+    
+    def __setattr__(self, name, value):
+        """ Overloaded setattr method so value compatibility check can be ran"""
+        super().__setattr__(name, value)
+        if hasattr(self, "ligand_operator"):
+            # ligand_operator is value to be set during init, ensures all values present before first check
+            self._compatibility_checks()
+    
+    def __getattr__(self, obj, objtype=None):  
+        privname = "_" + obj.__name__
+        value = obj.__get__(obj, privname)
+        print('\n\n getattr involed \n\n')
+        return value
+        
+    def _compatibility_checks(self):
+        """
+        Ensures all values are internally consistent and valid. Runs once after all values are set initially,
+        then every time a value is changed.
+        
+        #TODO:
+            - some of these should probably be warnings, and maintain the object but giving you a chance to correct the bad filter
+        """
+        
+        if (self.eworst is not None and self.score_percentile is not None):
+            logger.warning("Cannot use --eworst cutoff with --score_percentile. Overiding score_percentile with eworst.")
+            self.score_percentile = None
+        
+        if (self.leworst is not None and self.le_percentile is not None):
+            logger.warning("Cannot use --leworst cutoff with --le_percentile. Overiding le_percentile with leworst.")
+            self.le_percentile = None  
+
+        if self.score_percentile is not None and (self.score_percentile < 0 or self.score_percentile > 100):
+            raise OptionError(f"Given score_percentile {self.score_percentile} not allowed. Should be within percentile range of 0-100.")
+        
+        if self.le_percentile is not None and (self.le_percentile < 0 or self.le_percentile > 100):
+            raise OptionError(f"Given score_percentile {self.le_percentile} not allowed. Should be within percentile range of 0-100.")
+
+        if self.ligand_operator not in ["OR", "AND"]:
+            raise OptionError(f"Given ligand_operator {self.ligand_operator} not allowed. Must be 'OR' or 'AND'.")
+        
+        if self.max_miss < 0:
+            raise OptionError("--max_miss must be greater than or equal to 0")
+    
+    def filters_in_group(self, group: str) -> dict:
+        """
+        Makes a dict of filter kv based on given group. 
+        Args:
+            group (str): either "property", "interactions", or "ligand"
+        """
+        filterlist = self.get_filter_keys(group)       
+
+        filters = {}
+        for i in filterlist:
+            filters[i] = getattr(self, i)
+
+        return filters
+    
+    @classmethod
+    def get_filter_keys(self, group) -> list:
+        if group.lower() not in ["property", "interaction", "ligand"]:
+            raise OptionError(f'{group.lower()} is not a valid filter group. Please use "property", "interactions", or "ligand"')
+
+        filter_groups = {
+        "property": [
+            "eworst",
+            "ebest",
+            "leworst",
+            "lebest",
+            "score_percentile",
+            "le_percentile"
+            ],
+        "interaction": [
+            "vdw_interactions",
+            "hb_interactions",
+            "reactive_interactions"
+        ],
+        "ligand": [
+            "ligand_name",
+            "ligand_substruct",
+            "ligand_substruct_pos",
+            "ligand_max_atoms",
+            "ligand_operator"
+        ]}
+        return filter_groups[group.lower()]
+    

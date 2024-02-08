@@ -4,13 +4,12 @@
 # Ringtail storage adaptors
 #
 
+from traceback import format_exc
 import sqlite3
 import time
 import json
-from types import SimpleNamespace
 import pandas as pd
 from .logmanager import logger
-import typing
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
@@ -19,7 +18,7 @@ from rdkit.ML.Cluster import Butina
 import numpy as np
 import time
 from importlib.metadata import version  
-from .filters import Filters
+from .ringtailoptions import Filters
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -108,37 +107,7 @@ class StorageManager:
         self.interactions_initialized_flag = False
         self.closed_connection = False        
         self.conflict_opt = None
-        #NOTE should I have file sources here? 
-
-        self.order_options = {
-            "e",
-            "le",
-            "delta",
-            "ref_rmsd",
-            "e_inter",
-            "e_vdw",
-            "e_elec",
-            "e_intra",
-            "n_interact",
-            "rank",
-            "run",
-            "hb",
-        }
    
-    @classmethod
-    def get_defaults(cls, storage_type):
-        storage_types = {
-            "sqlite": StorageManagerSQLite,
-        }
-        return storage_types[storage_type].get_defaults()
-
-    @classmethod
-    def get_default_types(cls, storage_type):
-        storage_types = {
-            "sqlite": StorageManagerSQLite,
-        }
-        return typing.get_type_hints(storage_types[storage_type].__init__)
-    
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> tuple:
         """takes file dictionary from the file parser, formats required storage format
@@ -151,13 +120,12 @@ class StorageManager:
     
     def __enter__(self):
         self.open_storage()
-        print("storage opened")
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, tb):
         if not self.closed_connection:
             self.close_storage()
-            print("storage closed")
+        if exc_type == Exception:logger.error(str(exc_value))
         return self
 
     def _sigint_handler(self, signal_received, frame):
@@ -256,7 +224,7 @@ class StorageManager:
         """Generate and execute database queries from given filters.
 
         Args:
-            all_filters (dict): dict containing all filters. Expects format and keys corresponding to ringtail.Filters().to_dict()
+            all_filters (dict): dict containing all filters. Expects format and keys corresponding to ringtail.Filters().todict()
 
 
         Returns:
@@ -368,12 +336,6 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
-    def implemented_parser_managers(self):
-        return {
-            "multiprocessing": MPManager,
-        }
-
 class StorageManagerSQLite(StorageManager):
     """SQLite-specific StorageManager subclass
 
@@ -387,18 +349,17 @@ class StorageManagerSQLite(StorageManager):
 
     """
 
-    def __init__(self, db_file: str = "output.db", 
-                 overwrite=False, 
-                 append_results=False,
+    def __init__(self, db_file: str = None, 
+                 overwrite=None, 
+                 append_results=None,
                  order_results: str = None,
-                 outfields: str = "Ligand_name,e",
+                 outfields: str = None,
                  filter_bookmark: str = None,
                  output_all_poses: bool = None,
                  mfpt_cluster: float = None,
                  interaction_cluster: float = None,
-                 results_view_name: str = "passing_results",
-                 conflict_opt: str = None,
-                 _stop_at_defaults=False,):
+                 results_view_name: str = None,
+                 conflict_opt: str = None,):
         """Initialize superclass and subclass-specific instance variables
         Args:
             db_file (str): database file name"""
@@ -407,7 +368,7 @@ class StorageManagerSQLite(StorageManager):
         self.overwrite = overwrite
         self.append_results = append_results
         self.order_results = order_results
-        if "Ligand_name" not in outfields:  # make sure we are outputting the ligand name
+        if outfields is not None and "Ligand_name" not in outfields:  # make sure we are outputting the ligand name
             outfields = "Ligand_name," + outfields
         self.outfields = outfields
         self.output_all_poses = output_all_poses
@@ -416,10 +377,6 @@ class StorageManagerSQLite(StorageManager):
         self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
         self.conflict_opt = conflict_opt
-
-        if _stop_at_defaults:
-            return
-
 
         super().__init__()
 
@@ -504,14 +461,6 @@ class StorageManagerSQLite(StorageManager):
             "score_percentile": "docking_score",
             "le_percentile": "leff",
         }
-
-    @classmethod
-    def get_defaults(cls):
-        return cls(_stop_at_defaults=True).__dict__
-
-    @classmethod
-    def get_default_types(cls):
-        return typing.get_type_hints(cls.__init__)
 
     # # # # # # # # # # # # # # # # #
     # # # # #Public methods # # # # #
@@ -1133,6 +1082,7 @@ class StorageManagerSQLite(StorageManager):
             summary_data = {}
             cur = self.conn.cursor()
             summary_data["num_ligands"] = cur.execute("SELECT COUNT(*) FROM Ligands").fetchone()[0]
+            print(f'summary data ligand num is {summary_data["num_ligands"]}')
             summary_data["num_poses"] = cur.execute("SELECT COUNT(*) FROM Results").fetchone()[0]
             summary_data["num_unique_interactions"] = cur.execute("SELECT COUNT(*) FROM Interaction_indices").fetchone()[0]
             summary_data["num_interacting_residues"] = cur.execute("SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)").fetchone()[0]
@@ -2169,7 +2119,7 @@ class StorageManagerSQLite(StorageManager):
                         queries.append("num_hb <= {value}".format(value=-1 * v))
 
             # reformat interaction filters as list
-            if filter_key in Filters.get_interaction_filter_keys():
+            if filter_key in Filters.get_filter_keys("interaction"):
                 for interact in filter_value:
                     interaction_string = filter_key + ":" + interact[0]
                     interaction_filters.append(
@@ -2227,7 +2177,7 @@ class StorageManagerSQLite(StorageManager):
             )
 
         # add ligand filters
-        ligand_filters_dict = {k:v for k, v in filters_dict.items() if k in Filters.get_ligand_filter_keys()}
+        ligand_filters_dict = {k:v for k, v in filters_dict.items() if k in Filters.get_filter_keys("ligand")}
         if filters_dict["ligand_substruct"] != [] or filters_dict["ligand_name"] != []:
             ligand_query_str = self._generate_ligand_filtering_query(
                         ligand_filters_dict

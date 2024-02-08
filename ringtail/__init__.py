@@ -15,7 +15,6 @@ from .ringtailcore import RingtailCore
 from .ringtailoptions import *
 from .logmanager import logger
 from .outputmanager import OutputManager
-from .filters import Filters
 from .interactions import InteractionFinder
 from .exceptions import (
     StorageError,
@@ -43,7 +42,6 @@ __all__ = [
     "ResultsManager",
     "RingtailCore",
     "OutputManager",
-    "Filters",
     "InteractionFinder",
     "StorageError",
     "DatabaseInsertionError",
@@ -59,4 +57,5 @@ __all__ = [
     "DatabaseViewCreationError",
     "OutputError",
     "logger",
+    "Filters"
 ]
