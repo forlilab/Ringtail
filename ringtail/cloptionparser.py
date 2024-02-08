@@ -26,12 +26,11 @@ def cmdline_parser(defaults={}):
     conf_parser.add_argument("-c", "--config")
     confargs, remaining_argv = conf_parser.parse_known_args()
 
-    #TODO Need to fix handling of config file
     default_dicts = RingtailCore().get_defaults()
     config = {}
     for section, subdict in default_dicts.items():
         config.update(subdict)
-    
+
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         usage="""rt_process_vs.py [-c CONFIG] write|read OPTS  \n
@@ -609,7 +608,7 @@ def cmdline_parser(defaults={}):
     read_parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
 
-    return args, parser, conf_parser, write_parser, read_parser
+    return args, parser, confargs, write_parser, read_parser
 
 
 class CLOptionParser:
@@ -619,7 +618,7 @@ class CLOptionParser:
             (
                 parsed_opts,
                 self.parser,
-                self.conf_parser,
+                self.confargs,
                 self.write_parser,
                 self.read_parser,
             ) = cmdline_parser()
@@ -651,6 +650,13 @@ class CLOptionParser:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
+        
+        # Read config file first, and let individual options overwrite it
+        if self.confargs.config is not None:
+            logger.info("Reading options from config file")
+            self.rtcore.add_options_from_file(self.confargs.config)
+            print("reading from config file")
+
         process_mode = parsed_opts.process_mode.lower()
         filter_flag = False  # set flag indicating if any filters given
         docking_mode = parsed_opts.docking_mode.lower()
@@ -688,7 +694,7 @@ class CLOptionParser:
             parsed_opts.export_sdf_path = None
             parsed_opts.enumerate_interaction_combs = None
             
-            self.file_sources = self.rtcore.set_file_sources(file = parsed_opts.file, 
+            self.rtcore.set_file_sources(file = parsed_opts.file, 
                                     file_path= parsed_opts.file_path,
                                     file_pattern= parsed_opts.file_pattern,
                                     recursive= parsed_opts.recursive,
