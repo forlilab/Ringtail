@@ -351,7 +351,6 @@ class ReadOptions(RTOptions):
         self.pymol = pymol
         self.enumerate_interaction_combs = enumerate_interaction_combs
         self.log_file = log_file
-        #if export_sdf_path is not None and not export_sdf_path == "" and not export_sdf_path.endswith("/"): export_sdf_path += "/"
         self.export_sdf_path = export_sdf_path
     
 class Filters(RTOptions):
