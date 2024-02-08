@@ -26,10 +26,7 @@ def cmdline_parser(defaults={}):
     conf_parser.add_argument("-c", "--config")
     confargs, remaining_argv = conf_parser.parse_known_args()
 
-    default_dicts = RingtailCore().get_defaults()
-    config = {}
-    for section, subdict in default_dicts.items():
-        config.update(subdict)
+    
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -86,8 +83,8 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[dlg] or [vina]",
-        default="dlg",
-        dest="docking_mode"
+        dest="docking_mode",
+        default="dlg"
     )
     write_parser.add_argument(
         "-su",
@@ -142,7 +139,6 @@ def cmdline_parser(defaults={}):
         type=str,
         metavar="PATTERN",
         dest="file_pattern",
-        default="*.dlg*"
     )
     write_parser.add_argument(
         "-r",
@@ -163,7 +159,6 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="'ignore' or 'replace'",
-        default="ignore"
     )
     write_parser.add_argument(
         "-sr",
@@ -178,7 +173,6 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[FILE_NAME].DB",
-        default="output.db",
     )
     write_parser.add_argument(
         "-ov",
@@ -265,8 +259,8 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[dlg] or [vina]",
-        default="dlg",
-        dest="docking_mode"
+        dest="docking_mode",
+        default="dlg"
     )
     read_parser.add_argument(
         "-su",
@@ -535,7 +529,6 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="STRING",
-        default="OR"
     )
 
     interaction_group = read_parser.add_argument_group(
@@ -603,9 +596,9 @@ def cmdline_parser(defaults={}):
         parser.print_help()
         raise OptionError("Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details.")
 
-    parser.set_defaults(**config)
-    write_parser.set_defaults(**config)
-    read_parser.set_defaults(**config)
+    parser.set_defaults(**defaults)
+    write_parser.set_defaults(**defaults)
+    read_parser.set_defaults(**defaults)
     args = parser.parse_args(remaining_argv)
 
     return args, parser, confargs, write_parser, read_parser
@@ -615,13 +608,19 @@ class CLOptionParser:
     def __init__(self, rtcore: RingtailCore):
         # create parser
         try:
+            # add default values from ringtail
+            defaults_dict = RingtailCore().get_defaults()
+            default_values = {}
+            for section, subdict in defaults_dict.items():
+                default_values.update(subdict)
             (
                 parsed_opts,
                 self.parser,
                 self.confargs,
                 self.write_parser,
                 self.read_parser,
-            ) = cmdline_parser()
+            ) = cmdline_parser(default_values)
+
             self.rtcore = rtcore
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
@@ -655,7 +654,6 @@ class CLOptionParser:
         if self.confargs.config is not None:
             logger.info("Reading options from config file")
             self.rtcore.add_options_from_file(self.confargs.config)
-            print("reading from config file")
 
         process_mode = parsed_opts.process_mode.lower()
         filter_flag = False  # set flag indicating if any filters given
@@ -826,7 +824,7 @@ class CLOptionParser:
                                     parsed_opts.log_file,
                                     parsed_opts.export_sdf_path)
         
-        #TODO this is a poor fix, hopefully duplicate_handling can be moved so it is only invoked on write
+        #TODO this is a poor fix, ideally default value is set in parser
         if not hasattr(parsed_opts, "duplicate_handling"):
             parsed_opts.duplicate_handling = None
         
