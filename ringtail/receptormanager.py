@@ -23,9 +23,11 @@ class ReceptorManager:
             else:
                 with open(rec_file, "r") as r:
                     receptors.append((gzip.compress(r.read().encode()), rec_name))
-        logger.debug("Receptor blob made successfully.")
+        logger.debug("Receptor blob parepared successfully.")
         return receptors
 
     @staticmethod
     def blob2str(receptor_blob):
         return gzip.decompress(receptor_blob).decode()
+    
+    #TODO add b2z method too? 

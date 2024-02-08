@@ -568,3 +568,4 @@ class TestFilters:
 
         assert status2 == 0
     
+    os.system("rm output_log.txt output.db")

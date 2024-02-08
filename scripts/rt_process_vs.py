@@ -18,8 +18,8 @@ if __name__ == "__main__":
 
     try:
         # parse command line options and filters file (if given)
-        cmdinput = CLOptionParser()
-        rtopts = cmdinput.rtopts
+        cmdinput = CLOptionParser(rtcore)
+        rtopts = rtcore.generalopts
         # Set logging level
         if rtopts.debug:
             logger.setLevel("DEBUG")
@@ -36,63 +36,52 @@ if __name__ == "__main__":
 
     # create manager object for virtual screening. Will make database if needed
     try:
-        defaults = RingtailCore.get_defaults()
-        logger.debug("Getting default values from ringtail core")
-        rtcore = RingtailCore(rtopts.db_file)
-        read_opts = cmdinput.read_opts
-
-        #-#-#- Universal/shared options
-        rtcore.set_storage_options(storageopts = cmdinput.storageman_opts)
-        rtcore.set_general_options(process_mode=rtopts.process_mode, rtopts = rtopts)
-        if rtopts.process_mode == "write":
+        readopts = rtcore.readopts
+        if rtcore.generalopts.process_mode == "write":
             logger.debug("Starting write process")
-            #-#-#- Set write options to the write managers, and processes results
-            #-#-#- Will add receptor if "save_receptor" is true
-            rtcore.add_results_from_files(file_source_object=cmdinput.file_sources, 
-                                          writeopts=cmdinput.write_opts)
+            #-#-#- Processes results, will add receptor if "save_receptor" is true
+            rtcore.add_results_from_files(file_source_object=cmdinput.file_sources)
 
         time1 = time.perf_counter()
-        if rtopts.process_mode == "read":
+        if  rtcore.generalopts.process_mode == "read":
                 logger.debug("Starting read process")
-                #-#-#- Set read options to the read managers, inc result and output man right? 
-                # perform filtering
-                if rtcore.summary:
+                #-#-#- Perform filtering
+                if rtcore.generalopts.summary:
                     rtcore._produce_summary()
                     
-                rtcore.set_read_options(readopts=read_opts)
                 rtcore.filterobj = cmdinput.filters
-                if read_opts.filtering:
-                    rtcore.filter(read_opts.enumerate_interaction_combs)
+                if readopts.filtering:
+                    rtcore.filter(readopts.enumerate_interaction_combs)
                 # Write log with new data for previous filtering results
-                if read_opts.data_from_bookmark and not read_opts.filtering:
+                if readopts.data_from_bookmark and not readopts.filtering:
                     rtcore.get_previous_filter_data()
                 
-                if read_opts.find_similar_ligands:
-                    rtcore.find_similar_ligands(read_opts.find_similar_ligands)
+                if readopts.find_similar_ligands:
+                    rtcore.find_similar_ligands(readopts.find_similar_ligands)
 
                 # plot if requested
-                if read_opts.plot:
+                if readopts.plot:
                     rtcore.plot()
 
                 # def open pymol viewer
-                if read_opts.pymol:
+                if readopts.pymol:
                     rtcore.display_pymol()
 
                 # write out molecules if requested
-                if read_opts.export_sdf_path:
+                if readopts.export_sdf_path:
                     rtcore.write_molecule_sdfs()
 
                 # write out requested CSVs
-                if read_opts.export_bookmark_csv:
+                if readopts.export_bookmark_csv:
                     rtcore.export_csv(
-                        read_opts.export_bookmark_csv,
-                        read_opts.export_bookmark_csv + ".csv",
+                        readopts.export_bookmark_csv,
+                        readopts.export_bookmark_csv + ".csv",
                         table=True,)
 
-                if read_opts.export_query_csv:
-                    rtcore.export_csv(read_opts.export_query_csv, "query.csv")
+                if readopts.export_query_csv:
+                    rtcore.export_csv(readopts.export_query_csv, "query.csv")
 
-                if read_opts.export_bookmark_db:
+                if readopts.export_bookmark_db:
                     bookmark_name = (
                         rtcore.storageman.db_file.rstrip(".db")
                         + "_"
@@ -101,7 +90,7 @@ if __name__ == "__main__":
                     )
                     rtcore.export_bookmark_db(bookmark_name)
 
-                if read_opts.export_receptor:
+                if readopts.export_receptor:
                     rtcore.export_receptors()
 
     #TODO can depreciate use of traceback in this file
