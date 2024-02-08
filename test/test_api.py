@@ -92,7 +92,7 @@ class TestOptionsFile:
     data["filterobj"]["max_miss"] = 1
 
     with open(filepath, "w") as f:
-        json.dump(data, f)
+        f.write(json.dumps(data, indent=4))
     rtcore.add_options_from_file()
 
     def test_adding_results(self, dbquery):
