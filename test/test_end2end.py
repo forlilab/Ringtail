@@ -375,7 +375,7 @@ class TestFilters:
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input output.db --name 127458"
+            "python ../scripts/rt_process_vs.py read -d --input output.db --ligand_name 127458"
         )
 
         os.system("rm output.db")
@@ -401,49 +401,49 @@ class TestFilters:
 
     def test_react1(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_res A:TYR:169:"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions A:TYR:169:"
         )
 
         assert status == 0
 
     def test_react2(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_res :TYR:169:"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions :TYR:169:"
         )
 
         assert status == 0
 
     def test_react3(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_res :TYR::"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions :TYR::"
         )
 
         assert status == 0
 
     def test_react4(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_res A:TYR::"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:TYR::"
         )
 
         assert status == 0
 
     def test_react5(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_res A::169:"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A::169:"
         )
 
         assert status == 0
 
     def test_react6(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_res A:::"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:::"
         )
 
         assert status == 0
 
     def test_react7(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_res ::169:"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions ::169:"
         )
 
         assert status == 0"""
@@ -548,7 +548,7 @@ class TestFilters:
     
     def test_all_filters(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279: --reactive_res A:TYR:169:"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --ligand_name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279: --reactive_interactions A:TYR:169:"
         )
 
         assert status == 0

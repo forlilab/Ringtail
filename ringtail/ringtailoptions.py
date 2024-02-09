@@ -489,8 +489,8 @@ class Filters(RTOptions):
     
     @classmethod
     def get_filter_keys(self, group) -> list:
-        if group.lower() not in ["property", "interaction", "ligand"]:
-            raise OptionError(f'{group.lower()} is not a valid filter group. Please use "property", "interactions", or "ligand"')
+        if group.lower() not in ["property", "interaction", "ligand", "all"]:
+            raise OptionError(f'{group.lower()} is not a valid filter group. Please use "property", "interactions", "ligand", or "all')
 
         filter_groups = {
         "property": [
@@ -513,5 +513,12 @@ class Filters(RTOptions):
             "ligand_max_atoms",
             "ligand_operator"
         ]}
-        return filter_groups[group.lower()]
+        if group.lower() == "all":
+            list = []
+            for i in filter_groups:
+                list.extend(filter_groups[i])
+            return list
+        else:
+            list = filter_groups[group.lower()]
+        return list
     
