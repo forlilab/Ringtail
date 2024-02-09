@@ -1,10 +1,7 @@
 import logging
 import logging.handlers
 import inspect
-from os import path
-import os
-
-
+import pathlib
 
 class RTLogger:
     """
@@ -30,14 +27,14 @@ class RTLogger:
         """ 
         Options for instantiation of the logger. 
         """
-        logfilefolder = path.abspath(__file__ + "/../../logfiles/")
-        if not os.path.exists(logfilefolder):
-            os.makedirs(logfilefolder) 
-        fullpath = logfilefolder + "/" + filename
+        logfilefolder = pathlib.Path(__file__ + "/../../logfiles/").resolve()
+        folderpath = pathlib.Path(logfilefolder)
+        folderpath.mkdir(exist_ok=True) 
+        filepath = logfilefolder / filename
 
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
-        self.fileHandler = logging.handlers.RotatingFileHandler(filename=fullpath, maxBytes=5e6, backupCount=10)
+        self.fileHandler = logging.handlers.RotatingFileHandler(filename=filepath, maxBytes=5e6, backupCount=10)
         self.logger.addHandler(self.fileHandler) 
         self.streamHandler = logging.StreamHandler()
         self.streamHandler.setLevel("WARNING")
