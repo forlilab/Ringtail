@@ -538,7 +538,7 @@ def cmdline_parser(defaults={}):
     )
     interaction_group.add_argument(
         "-vdw",
-        "--vdw_interactions",
+        "--van_der_waals",
         help="define van der Waals interactions with residue",
         action="append",
         type=str,
@@ -546,7 +546,7 @@ def cmdline_parser(defaults={}):
     )
     interaction_group.add_argument(
         "-hb",
-        "--hb_interactions",
+        "--hydrogen_bond",
         help="define HB (ligand acceptor or donor) interaction",
         action="append",
         type=str,
@@ -554,7 +554,7 @@ def cmdline_parser(defaults={}):
     )
     interaction_group.add_argument(
         "-r",
-        "--reactive_interactions",
+        "--reactive_res",
         help="check if ligand reacted with specified residue",
         action="append",
         type=str,
