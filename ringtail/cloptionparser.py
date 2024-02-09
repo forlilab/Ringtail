@@ -491,7 +491,7 @@ def cmdline_parser(defaults={}):
     )
     ligand_group.add_argument(
         "-n",
-        "--name",
+        "--ligand_name",
         help="specify ligand name(s). Will combine name filters with OR",
         action="store",
         type=str,
@@ -500,14 +500,14 @@ def cmdline_parser(defaults={}):
     )
     ligand_group.add_argument(
         "-mna",
-        "--max_nr_atoms",
+        "--ligand_max_atoms",
         help="Maximum number of heavy atoms a ligand may have",
         action="store",
         type=int,
         metavar="INT",
     )
     ligand_group.add_argument(
-        "--smarts",
+        "--ligand_substruct",
         help="SMARTS pattern(s) for substructure matching",
         action="store",
         type=str,
@@ -515,7 +515,7 @@ def cmdline_parser(defaults={}):
         nargs="+",
     )
     ligand_group.add_argument(
-        "--smarts_idxyz",
+        "--ligand_substruct_pos",
         help="SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords",
         action="store",
         type=str,
@@ -524,9 +524,9 @@ def cmdline_parser(defaults={}):
     )
     ligand_group.add_argument(
         "-sj",
-        "--smarts_join",
+        "--ligand_operator",
         choices=["AND", "OR"],
-        help="logical operator for multiple SMARTS (default: OR)",
+        help="logical join operator for multiple SMARTS (default: OR)",
         action="store",
         type=str,
         metavar="STRING",
@@ -538,7 +538,7 @@ def cmdline_parser(defaults={}):
     )
     interaction_group.add_argument(
         "-vdw",
-        "--van_der_waals",
+        "--vdw_interactions",
         help="define van der Waals interactions with residue",
         action="append",
         type=str,
@@ -546,7 +546,7 @@ def cmdline_parser(defaults={}):
     )
     interaction_group.add_argument(
         "-hb",
-        "--hydrogen_bond",
+        "--hb_interactions",
         help="define HB (ligand acceptor or donor) interaction",
         action="append",
         type=str,
@@ -554,7 +554,7 @@ def cmdline_parser(defaults={}):
     )
     interaction_group.add_argument(
         "-r",
-        "--reactive_res",
+        "--reactive_interactions",
         help="check if ligand reacted with specified residue",
         action="append",
         type=str,
@@ -703,29 +703,23 @@ class CLOptionParser:
             parsed_opts.save_receptor = None
             self.filters = Filters()
             # # # filters
-            optional_filters = ["eworst", "ebest", "leworst", "lebest", "score_percentile", "le_percentile", "vdw_interactions", "hb_interactions", "reactive_interactions", "name", "smarts", "smarts_idxyz", "max_nr_atoms"]
+            optional_filters = self.filters.get_filter_keys("all") 
             for f in optional_filters:
                 if getattr(parsed_opts, f) is not None:
                     filter_flag = True
             
             if filter_flag:
-                #TODO
-                #   - move the filter specifics to rt options? 
                 # property filters
-                property_list = ["eworst", "ebest", "leworst","lebest","score_percentile", "le_percentile"]
+                property_list = self.filters.get_filter_keys("property") 
                 for kw in property_list:
                     setattr(self.filters, kw, getattr(parsed_opts, kw))
 
                 # interaction filters (residues)
                 interactions = {}
-                res_interactions_kw = [
-                    ("van_der_waals", "vdw_interactions"),
-                    ("hydrogen_bond", "hb_interactions"),
-                    ("reactive_res", "reactive_interactions"),
-                ]
-                for opt, _type in res_interactions_kw:
+                interactions_kw = self.filters.get_filter_keys("interaction") 
+                for _type in interactions_kw:
                     interactions[_type] = []
-                    res_list = getattr(parsed_opts, opt)
+                    res_list = getattr(parsed_opts, _type)
                     if res_list is None:
                         continue
                     found_res = []
@@ -765,36 +759,37 @@ class CLOptionParser:
                     interactions_count.append((pool, c))
 
                 self.filters.interactions_count = interactions_count
-
                 # make dictionary for ligand filters
-                ligand_filters_kw = [("name", "ligand_name"), ("smarts", "ligand_substruct"), ("smarts_idxyz", "ligand_substruct_pos"), ("max_nr_atoms", "ligand_max_atoms")]
+                ligand_kw = self.filters.get_filter_keys("ligand")
                 ligand_filters = {}
-                ligand_filter_list = []
-                for kw, _type in ligand_filters_kw:
-                    ligand_filter_list = getattr(parsed_opts, kw)
-                    if kw == "max_nr_atoms":
-                        ligand_filters[_type] = ligand_filter_list
+                for _type in ligand_kw:
+                    ligand_filter_value = getattr(parsed_opts, _type)
+                    if _type == ("ligand_max_atoms"): # values that aren't lists
+                        ligand_filters[_type] = ligand_filter_value
+                        continue
+                    if ligand_filter_value is (None):
                         continue
                     ligand_filters[_type] = []
-                    if ligand_filter_list is None:
-                        continue
-                    for fil in ligand_filter_list:
-                        ligand_filters[_type].append(fil)
+                    for filter in ligand_filter_value: # this part will get skipped if value is None or not a list
+                        ligand_filters[_type].append(filter) # this is now a dict , but shouldn't it be a list? 
+
+                ligand_filters["ligand_operator"] = parsed_opts.ligand_operator
                 if ligand_filters["ligand_max_atoms"] is not None and len(ligand_filters["ligand_max_atoms"]) % 6 != 0:
-                    msg = "--smarts_idxyz needs groups of 6 values:\n"
-                    msg += "  1. SMARTS\n"
-                    msg += "  2. index of atom in SMARTS (0 based)\n"
+                    msg = "--ligand_substruct_pos needs groups of 6 values:\n"
+                    msg += "  1. Ligand SMARTS\n"
+                    msg += "  2. index of atom in ligand SMARTS (0 based)\n"
                     msg += "  3. distance cutoff\n"
                     msg += "  4. X\n"
                     msg += "  5. Y\n"
                     msg += "  6. Z\n"
-                    msg += "For example --smarts_idxyz \"[C][Oh]\" 1 1.5 -20. 42. -7.1"
+                    msg += "For example --ligand_substruct_pos \"[C][Oh]\" 1 1.5 -20. 42. -7.1"
                     raise OptionError(msg)
                 
                 for k, v in ligand_filters.items():
                     setattr(self.filters, k, v)
                 self.filters.max_miss = parsed_opts.max_miss
                 self.filters.react_any = parsed_opts.react_any
+                print(f'filters now: {self.filters.todict()}')
 
         if isinstance(parsed_opts.interaction_tolerance, str):
             parsed_opts.interaction_tolerance = [
