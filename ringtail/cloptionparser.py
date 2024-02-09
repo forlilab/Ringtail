@@ -173,6 +173,7 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="[FILE_NAME].DB",
+        default="output.db"
     )
     write_parser.add_argument(
         "-ov",
@@ -537,30 +538,27 @@ def cmdline_parser(defaults={}):
     )
     interaction_group.add_argument(
         "-vdw",
-        "--van_der_waals",
+        "--vdw_interactions",
         help="define van der Waals interactions with residue",
         action="append",
         type=str,
         metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
-        #dest="vdw_interactions"
     )
     interaction_group.add_argument(
         "-hb",
-        "--hydrogen_bond",
+        "--hb_interactions",
         help="define HB (ligand acceptor or donor) interaction",
         action="append",
         type=str,
         metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
-        #dest="hb_interactions"
     )
     interaction_group.add_argument(
         "-r",
-        "--reactive_res",
+        "--reactive_interactions",
         help="check if ligand reacted with specified residue",
         action="append",
         type=str,
         metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
-        #dest="reactive_interactions",
     )
     interaction_group.add_argument(
         "-hc",
@@ -600,7 +598,6 @@ def cmdline_parser(defaults={}):
     write_parser.set_defaults(**defaults)
     read_parser.set_defaults(**defaults)
     args = parser.parse_args(remaining_argv)
-    print(json.dumps(defaults, indent=4))
     return args, parser, confargs, write_parser, read_parser
 
 
@@ -706,7 +703,7 @@ class CLOptionParser:
             parsed_opts.save_receptor = None
             self.filters = Filters()
             # # # filters
-            optional_filters = ["eworst", "ebest", "leworst", "lebest", "score_percentile", "le_percentile", "van_der_waals", "hydrogen_bond", "reactive_res", "name", "smarts", "smarts_idxyz", "max_nr_atoms"]
+            optional_filters = ["eworst", "ebest", "leworst", "lebest", "score_percentile", "le_percentile", "vdw_interactions", "hb_interactions", "reactive_interactions", "name", "smarts", "smarts_idxyz", "max_nr_atoms"]
             for f in optional_filters:
                 if getattr(parsed_opts, f) is not None:
                     filter_flag = True
