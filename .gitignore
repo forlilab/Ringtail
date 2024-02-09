@@ -171,3 +171,7 @@ HanselHarris\&_2023.pdf
 HanselHarris\&_2023_suppl.pdf
 ringtail/scraptest.py 
 logfiles/
+util_files/
+.DS_STORE
+GUI/.DS_Store
+test/.DS_Store

@@ -267,14 +267,14 @@ class StorageOptions(RTOptions):
         self.interaction_cluster = interaction_cluster
         self.results_view_name = results_view_name
 
-        conflict_options = {"IGNORE", "REPLACE"}
         if duplicate_handling is not None:
-            self.conflict_handling = duplicate_handling.upper()
-            if self.conflict_handling not in conflict_options:
+            self.duplicate_handling = duplicate_handling.upper()
+            if self.duplicate_handling not in {"IGNORE", "REPLACE"}:
                 logger.warning(
-                    f"--conflict_handing option {duplicate_handling} not allowed. Reverting to default behavior."
+                    f"--duplicate_handling option {duplicate_handling} not allowed. Reverting to default behavior."
                 )
-                self.conflict_handling = None
+                self.duplicate_handling = None
+        else: self.duplicate_handling = duplicate_handling
 
         if self.order_results is not None and self.order_results not in self.order_options:
             raise OptionError(
