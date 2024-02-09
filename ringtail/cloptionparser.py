@@ -600,7 +600,7 @@ def cmdline_parser(defaults={}):
     write_parser.set_defaults(**defaults)
     read_parser.set_defaults(**defaults)
     args = parser.parse_args(remaining_argv)
-
+    print(json.dumps(defaults, indent=4))
     return args, parser, confargs, write_parser, read_parser
 
 
@@ -652,7 +652,7 @@ class CLOptionParser:
         
         # Read config file first, and let individual options overwrite it
         if self.confargs.config is not None:
-            logger.info("Reading options from config file")
+            logger.info("Reading options from config/options file")
             self.rtcore.add_options_from_file(self.confargs.config)
 
         process_mode = parsed_opts.process_mode.lower()
@@ -671,7 +671,7 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
             
-        self.rtcore.db_file = db_file
+        self.rtcore.__init__(db_file)
         self.rtcore.set_general_options(process_mode=process_mode, 
                                 docking_mode=docking_mode, 
                                 summary=parsed_opts.summary, 
@@ -823,11 +823,7 @@ class CLOptionParser:
                                     parsed_opts.enumerate_interaction_combs,
                                     parsed_opts.log_file,
                                     parsed_opts.export_sdf_path)
-        
-        #TODO this is a poor fix, ideally default value is set in parser
-        if not hasattr(parsed_opts, "duplicate_handling"):
-            parsed_opts.duplicate_handling = None
-        
+
         self.rtcore.set_storage_options(parsed_opts.filter_bookmark,
                                     parsed_opts.append_results,
                                     parsed_opts.duplicate_handling,
