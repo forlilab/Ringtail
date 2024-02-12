@@ -136,7 +136,7 @@ The `--recursive` option tells Ringtail to scan the directories specified with `
 
 Now that we have created the databases, we can filter them to pull out compounds of interest. Before we do that, let's find out a little more about the data contained within the database. For this, we can use the `-s/--summary` option:
 ```
-$rt_process_vs.py read --input_db all_groups.db -s
+$rt_process_vs.py read --input_db all_groups.db -su
 
 Total Stored Poses: 645
 Total Unique Interactions: 183
