@@ -13,12 +13,12 @@ if __name__ == "__main__":
     ''' The altered rt_process_vs now makes use of the new ringtail api. The CLOptionParser just makes the option objects, 
     and this script assigns the objects to the relevant managers then runs the ringtail methods with the new API.
     I am not using ringtail core as a context anymore'''
-    rtcore = RingtailCore()
     time0 = time.perf_counter()
 
     try:
         # parse command line options and filters file (if given)
-        cmdinput = CLOptionParser(rtcore)
+        cmdinput = CLOptionParser()
+        rtcore: RingtailCore = cmdinput.rtcore
         rtopts = rtcore.generalopts
         # Set logging level
         if rtopts.debug:
@@ -37,19 +37,18 @@ if __name__ == "__main__":
     # create manager object for virtual screening. Will make database if needed
     try:
         readopts = rtcore.readopts
-        if rtcore.generalopts.process_mode == "write":
+        if rtcore.process_mode == "write":
             logger.debug("Starting write process")
             #-#-#- Processes results, will add receptor if "save_receptor" is true
             rtcore.add_results_from_files(file_source_object=rtcore.files)
 
         time1 = time.perf_counter()
-        if  rtcore.generalopts.process_mode == "read":
+        if  rtcore.process_mode == "read":
                 logger.debug("Starting read process")
                 #-#-#- Perform filtering
                 if rtcore.generalopts.summary:
                     rtcore._produce_summary()
                     
-                rtcore.filterobj = cmdinput.filters
                 if readopts.filtering:
                     rtcore.filter(readopts.enumerate_interaction_combs)
                 # Write log with new data for previous filtering results

@@ -84,7 +84,6 @@ def cmdline_parser(defaults={}):
         type=str,
         metavar="[dlg] or [vina]",
         dest="docking_mode",
-        default="dlg"
     )
     write_parser.add_argument(
         "-su",
@@ -261,7 +260,6 @@ def cmdline_parser(defaults={}):
         type=str,
         metavar="[dlg] or [vina]",
         dest="docking_mode",
-        default="dlg"
     )
     read_parser.add_argument(
         "-su",
@@ -602,11 +600,12 @@ def cmdline_parser(defaults={}):
 
 
 class CLOptionParser:
-    def __init__(self, rtcore: RingtailCore):
+    def __init__(self):
         # create parser
         try:
             # add default values from ringtail
-            defaults_dict = RingtailCore().get_defaults()
+            print("")
+            defaults_dict = RingtailCore.get_defaults()
             default_values = {}
             for section, subdict in defaults_dict.items():
                 default_values.update(subdict)
@@ -617,8 +616,6 @@ class CLOptionParser:
                 self.write_parser,
                 self.read_parser,
             ) = cmdline_parser(default_values)
-
-            self.rtcore = rtcore
             self.process_options(parsed_opts)
         except argparse.ArgumentError as e:
             logger.error("\n")
@@ -646,12 +643,6 @@ class CLOptionParser:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
-        
-        # Read config file first, and let individual options overwrite it
-        if self.confargs.config is not None:
-            logger.info("Reading options from config/options file")
-            self.rtcore.add_options_from_file(self.confargs.config)
-
         process_mode = parsed_opts.process_mode.lower()
         filter_flag = False  # set flag indicating if any filters given
         docking_mode = parsed_opts.docking_mode.lower()
@@ -668,9 +659,15 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
             
-        self.rtcore.__init__(db_file)
-        self.rtcore.set_general_options(process_mode=process_mode, 
-                                docking_mode=docking_mode, 
+        self.rtcore = RingtailCore(db_file)
+        
+        # Read config file first, and let individual options overwrite it
+        if self.confargs.config is not None:
+            logger.info("Reading options from config/options file")
+            self.rtcore.add_options_from_file(self.confargs.config)
+        
+        self.rtcore.process_mode = parsed_opts.process_mode
+        self.rtcore.set_general_options(docking_mode=docking_mode, 
                                 summary=parsed_opts.summary, 
                                 verbose=parsed_opts.verbose,
                                 debug=parsed_opts.debug)
@@ -701,22 +698,22 @@ class CLOptionParser:
             # set write-only rt_process options to None to prevent errors
             parsed_opts.receptor_file = None
             parsed_opts.save_receptor = None
-            self.filters = Filters()
+            filters = Filters()
             # # # filters
-            optional_filters = self.filters.get_filter_keys("all") 
+            optional_filters = filters.get_filter_keys("all") 
             for f in optional_filters:
                 if getattr(parsed_opts, f) is not None:
                     filter_flag = True
             
             if filter_flag:
                 # property filters
-                property_list = self.filters.get_filter_keys("property") 
+                property_list = filters.get_filter_keys("property") 
                 for kw in property_list:
-                    setattr(self.filters, kw, getattr(parsed_opts, kw))
+                    setattr(filters, kw, getattr(parsed_opts, kw))
 
                 # interaction filters (residues)
                 interactions = {}
-                interactions_kw = self.filters.get_filter_keys("interaction") 
+                interactions_kw = filters.get_filter_keys("interaction") 
                 for _type in interactions_kw:
                     interactions[_type] = []
                     res_list = getattr(parsed_opts, _type)
@@ -747,7 +744,7 @@ class CLOptionParser:
                         interactions[_type].append((res, wanted))
 
                 for k, v in interactions.items():
-                    setattr(self.filters, k, v)
+                    setattr(filters, k, v)
 
                 # count interactions
                 interactions_count = []
@@ -758,9 +755,9 @@ class CLOptionParser:
                         continue
                     interactions_count.append((pool, c))
 
-                self.filters.interactions_count = interactions_count
+                filters.interactions_count = interactions_count
                 # make dictionary for ligand filters
-                ligand_kw = self.filters.get_filter_keys("ligand")
+                ligand_kw = filters.get_filter_keys("ligand")
                 ligand_filters = {}
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
@@ -786,15 +783,15 @@ class CLOptionParser:
                     raise OptionError(msg)
                 
                 for k, v in ligand_filters.items():
-                    setattr(self.filters, k, v)
-                self.filters.max_miss = parsed_opts.max_miss
-                self.filters.react_any = parsed_opts.react_any
-                print(f'filters now: {self.filters.todict()}')
+                    setattr(filters, k, v)
+                filters.max_miss = parsed_opts.max_miss
+                filters.react_any = parsed_opts.react_any
 
         if isinstance(parsed_opts.interaction_tolerance, str):
             parsed_opts.interaction_tolerance = [
                 float(val) for val in parsed_opts.interaction_cutoffs.split(",")
             ]
+        if filter_flag: self.rtcore.set_filters(dict=filters.todict())
 
         self.rtcore.set_results_processing_options(parsed_opts.store_all_poses, 
                                         parsed_opts.max_poses,
