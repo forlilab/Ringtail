@@ -38,7 +38,8 @@ def dbquery():
 class TestAPI:
     # Setup
     rtstorage = RingtailCore(db_file="outputapi.db")
-    rtstorage.set_general_options(process_mode="write", summary=False, debug=True)
+
+    rtstorage.set_general_options(summary=False, debug=True)
     rtstorage.add_results_from_files(file_path = [['test_data/']],
                                      recursive = True,
                                      receptor_file="test_data/4j8m.pdbqt",

@@ -134,7 +134,7 @@ $ rt_process_vs.py write --file_path . --recursive --output_db all_groups.db
 ```
 The `--recursive` option tells Ringtail to scan the directories specified with `--file_path` for subdirectories containing output files (in this case, DLGs). This allowed all three group directories to be added to the database with a single --file_path option.
 
-Now that we have created the databases, we can filter them to pull out compounds of interest. Before we do that, let's find out a little more about the data contained within the database. For this, we can use the `-s/--summary` option:
+Now that we have created the databases, we can filter them to pull out compounds of interest. Before we do that, let's find out a little more about the data contained within the database. For this, we can use the `-su/--summary` option:
 ```
 $rt_process_vs.py read --input_db all_groups.db -su
 

@@ -44,9 +44,10 @@ class RingtailCore:
         Does not open access to the storage. Future option will include opening database as readonly.
         """
         self.db_file = db_file
-        self.set_general_options(process_mode=process_mode)
+        self.process_mode = process_mode
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
+        self.set_general_options()
              
     def update_database_version(self, consent=False):
         # Method to update database version
@@ -123,7 +124,7 @@ class RingtailCore:
     def _produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
         """Print summary of data in storage
         """
-        summary_data = self.storageman.fetch_summary_data(columns, percentiles)
+        with self.storageman: summary_data = self.storageman.fetch_summary_data(columns, percentiles)
         print("Total Stored Ligands          :", summary_data.pop("num_ligands"))
         print("Total Stored Poses            :", summary_data.pop("num_poses"))
         print("Total Unique Interactions     :", summary_data.pop("num_unique_interactions"))
@@ -255,9 +256,6 @@ class RingtailCore:
         for k, v in options.items():
             optmap[k](dict=v)
             logger.debug(f'{optmap[k]} was ran with these options: {v}')
-
-        # if options.get("fileobj"):
-        #     self.set_file_sources(dict = options["fileobj"])
     
     def add_results_from_files(self,
                                file = None, 
@@ -301,7 +299,7 @@ class RingtailCore:
 
         """
 
-        self.generalopts.process_mode = "write"
+        self.process_mode = "write"
 
         if file_source_object is not None:
             files = file_source_object
@@ -383,7 +381,7 @@ class RingtailCore:
             enumerate_interaction_combs (bool): inherently handled atm, might need to be depreceated?
         """
         #NOTE This is clunky for now, but sets options to default if they have not yet been set.
-        self.generalopts.process_mode = "read"
+        self.process_mode = "read"
 
         if not hasattr(self, "filterobj"):
             logger.debug("No filters have been set, using default values found in Filters class") 
@@ -395,7 +393,6 @@ class RingtailCore:
         if not hasattr(self, "readopts"):
             logger.debug("No read options have been set, using default values found in 'set_read_options'") 
             self.set_read_options()
-        
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
         if self.filterobj.max_miss == 0:
             self.readopts.enumerate_interaction_combs = True
@@ -451,8 +448,7 @@ class RingtailCore:
         return ligands_passed
 
     #-#-#- Methods to set ringtail options explicitly -#-#-#
-    def set_general_options(self, process_mode=None,
-                                docking_mode=None,
+    def set_general_options(self, docking_mode=None,
                                 summary=None,
                                 verbose=None,
                                 debug=None,
@@ -462,7 +458,6 @@ class RingtailCore:
         Settings for ringtail
 
         Args:
-            process_mode (str): write or read
             docking_mode (str): dlg (autodock-gpu) or vina 
             summary (bool): print database summary to terminal
             verbose (bool): set logging level to "info" (second lowest level)
@@ -699,12 +694,13 @@ class RingtailCore:
         del indiv_options["self"]; del indiv_options["dict"]
 
         # Create option object with default values if needed
-        if not hasattr(self, "filterobj"): self.filterobj = Filters()
+        if not hasattr(self, "filterobj"):
+            self.filterobj = Filters()
             
         # Set options from dict if provided
         if dict is not None:
             for k,v in dict.items():
-                setattr(self.filterobj, k, v) 
+                if v is not None: setattr(self.filterobj, k, v) 
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
@@ -1087,8 +1083,8 @@ class RingtailCore:
         with self.storageman: new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman: self.outputman.write_log(new_data)
     
-    @classmethod
-    def generate_options_json_template(cls, to_file=True):
+    @staticmethod
+    def generate_options_json_template(to_file=True):
         """
         Creates a dict of all Ringtail option classes, and their 
         key-default value pairs. Outputs to options.json in 
@@ -1098,20 +1094,20 @@ class RingtailCore:
             to_file (bool): if true writes file to standard options json path, if false returns a json string with values
         """
         readopts = ReadOptions().todict()
-        #generalopts = GeneralOptions().todict()
+        generalopts = GeneralOptions().todict()
         fileobj = InputFiles().todict()
         writeopts = ResultsProcessingOptions().todict()
         storageopts = StorageOptions().todict()
         filterobj = Filters().todict()
 
-        json_string = {#"generalopts": generalopts,
+        json_string = {"generalopts": generalopts,
                        "writeopts": writeopts,
                        "storageopts": storageopts,
                        "readopts": readopts,
                        "filterobj": filterobj,
                        "fileobj": fileobj}
         if to_file:
-            filepath= cls._options_file_path()
+            filepath= RingtailCore._options_file_path()
             with open(filepath, 'w') as f: 
                 f.write(json.dumps(json_string, indent=4))
             logger.debug(f"Default ringtail option values written to file {filepath}")
@@ -1120,16 +1116,16 @@ class RingtailCore:
             logger.debug("Default ringtail option values prepared as a string.")
             return json_string
 
-    @classmethod       
-    def get_defaults(self, object="all") -> dict:
+    @staticmethod       
+    def get_defaults(object="all") -> dict:
         """
-        Gets default values from RingtailOtions and returns dict of all,
-        or specific object.
+        Gets default values from RingtailOptions and returns dict of all,
+        or specific object. 
         
         Args:
             object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]
         """
-        all_defaults = self.generate_options_json_template(to_file=False)
+        all_defaults = RingtailCore.generate_options_json_template(to_file=False)
 
         if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]:
             raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]')
@@ -1141,8 +1137,8 @@ class RingtailCore:
             logger.debug(f"Ringtail default values for {object} have been fetched.")
             return all_defaults[object.lower()]
 
-    @classmethod
-    def _options_file_path(self, filename="options.json"):
+    @staticmethod
+    def _options_file_path(filename="options.json"):
         utilfolder = path.abspath(__file__ + "/../../util_files/")
         if not os.path.exists(utilfolder):
             os.makedirs(utilfolder) 

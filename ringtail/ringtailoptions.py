@@ -76,25 +76,21 @@ class RTOptions:
 class GeneralOptions(RTOptions):
     """Creates a class with general options relevant to any Ringtail process, including:
     Args:
-        process_mode: read or write from the database
         docking_mode: specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt
         summary: prints summary information about stored data to STDOUT.
         verbose: Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
         debug: Print additional error information to STDOUT
         """
-    process_mode = TypeSafe("process_mode", str)
     docking_mode = TypeSafe("docking_mode", str)
     summary = TypeSafe("summary", bool)
     verbose = TypeSafe("verbose", bool)
     debug = TypeSafe("debug", bool)
 
     def __init__(self,
-                 process_mode=None,
                  docking_mode="dlg",
                  summary=False,
                  verbose=False,
-                 debug=False,):
-        self.process_mode = process_mode                
+                 debug=False,):              
         self.docking_mode = docking_mode                        
         self.summary = summary                          
         self.verbose = verbose         

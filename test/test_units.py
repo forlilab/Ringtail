@@ -57,7 +57,8 @@ class Test_RingtailCore:
     def test_prepare_filters_for_storageman(self):
         test_filters = []
         rtc = RingtailCore()
-        rtc.set_general_options("read", "dlg")
+        rtc.process_mode = "read"
+        rtc.set_general_options(docking_mode="dlg")
         rtc.set_filters(hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)], vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)])
         interaction_combs = rtc._generate_interaction_combinations(1)
         for ic in interaction_combs:
