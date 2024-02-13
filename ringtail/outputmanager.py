@@ -83,7 +83,6 @@ class OutputManager:
             time0 = time.perf_counter()
             num_passing = 0
             for line in lines:
-                logger.info(line)
                 self._write_log_line(
                     str(line).replace("(", "").replace(")", "")
                 )  # strip parens from line, which is natively a tuple
