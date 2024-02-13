@@ -437,7 +437,6 @@ class Filters(RTOptions):
     def __getattr__(self, obj, objtype=None):  
         privname = "_" + obj.__name__
         value = obj.__get__(obj, privname)
-        print('\n\n getattr involed \n\n')
         return value
         
     def _compatibility_checks(self):
@@ -468,20 +467,6 @@ class Filters(RTOptions):
         
         if self.max_miss < 0:
             raise OptionError("--max_miss must be greater than or equal to 0")
-    
-    def filters_in_group(self, group: str) -> dict:
-        """
-        Makes a dict of filter kv based on given group. 
-        Args:
-            group (str): either "property", "interactions", or "ligand"
-        """
-        filterlist = self.get_filter_keys(group)       
-
-        filters = {}
-        for i in filterlist:
-            filters[i] = getattr(self, i)
-
-        return filters
     
     @classmethod
     def get_filter_keys(self, group) -> list:
