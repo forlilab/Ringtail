@@ -203,7 +203,7 @@ class MPManager:
         optionally, a recursive search is performed
         """
         logger.info(
-            "-Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern)
+            "Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern)
         )
         if recursive:
             path = os.path.normpath(path)
