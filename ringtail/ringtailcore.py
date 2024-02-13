@@ -23,7 +23,6 @@ class RingtailCore:
     """Core class for coordinating different actions on virtual screening
     i.e. adding results to storage, filtering, output options
 
-    #TODO
     Attributes:
         generaloptions (GeneralOptions object): sets logging level and general processing options, including read/write, and outputting summary to console
         db_file (str): name of database file being operated on
@@ -226,8 +225,15 @@ class RingtailCore:
             raise OptionError(f'{file_pattern} is not a valid docking file format for ringtail.')
         return mode
     
+    @staticmethod
+    def _options_file_path(filename="options.json"):
+        utilfolder = path.abspath(__file__ + "/../../util_files/")
+        if not os.path.exists(utilfolder):
+            os.makedirs(utilfolder) 
+        return utilfolder + "/" + filename
+    
 #-#-#- API -#-#-#
-    #-#- Processing methods -#-# 
+    #-#-#- Processing methods -#-#-#
 
     def add_options_from_file(self, options_file: str ="options.json"):
         """
@@ -274,7 +280,6 @@ class RingtailCore:
                                max_proc: int = None,
                                optionsdict=None
                                ):
-        #TODO Can files be added as lists and as single paths? 
         """
         Call storage manager to process result files and add to database.
         Options can be provided as a dict or as individual options.
@@ -288,7 +293,7 @@ class RingtailCore:
             recursive (bool): used to recursively search file_path for folders inside folders
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-                optional: file_source_object (InputFiles): file sources already as an object #TODO how do I handle file objects in all of this
+            optional: file_source_object (InputFiles): file sources already as an object 
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
             max_poses (int): how many poses to save (ordered by soem score?)
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
@@ -577,7 +582,6 @@ class RingtailCore:
                                             max_proc = None,
                                             dict: dict =None):
             
-        #TODO problem with how options are assigned to manager
         """
         Create resultsmanager object if needed and set options.
 
@@ -1083,6 +1087,7 @@ class RingtailCore:
         with self.storageman: new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman: self.outputman.write_log(new_data)
     
+    #-#-#- Util method -#-#-#
     @staticmethod
     def generate_options_json_template(to_file=True):
         """
@@ -1136,11 +1141,4 @@ class RingtailCore:
         else:
             logger.debug(f"Ringtail default values for {object} have been fetched.")
             return all_defaults[object.lower()]
-
-    @staticmethod
-    def _options_file_path(filename="options.json"):
-        utilfolder = path.abspath(__file__ + "/../../util_files/")
-        if not os.path.exists(utilfolder):
-            os.makedirs(utilfolder) 
-        return utilfolder + "/" + filename
 
