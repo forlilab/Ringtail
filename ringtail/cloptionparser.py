@@ -603,11 +603,10 @@ class CLOptionParser:
     def __init__(self):
         # create parser
         try:
-            # add default values from ringtail
-            print("")
+            # add default values from ringtailoptions
             defaults_dict = RingtailCore.get_defaults()
             default_values = {}
-            for section, subdict in defaults_dict.items():
+            for _, subdict in defaults_dict.items():
                 default_values.update(subdict)
             (
                 parsed_opts,
@@ -644,7 +643,7 @@ class CLOptionParser:
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
         process_mode = parsed_opts.process_mode.lower()
-        filter_flag = False  # set flag indicating if any filters given
+        filters_present = False  # set flag indicating if any filters given
         docking_mode = parsed_opts.docking_mode.lower()
 
         #Check database options
@@ -698,14 +697,15 @@ class CLOptionParser:
             # set write-only rt_process options to None to prevent errors
             parsed_opts.receptor_file = None
             parsed_opts.save_receptor = None
+            
+            # set up filters
             filters = Filters()
-            # # # filters
             optional_filters = filters.get_filter_keys("all") 
             for f in optional_filters:
                 if getattr(parsed_opts, f) is not None:
-                    filter_flag = True
+                    filters_present = True
             
-            if filter_flag:
+            if filters_present:
                 # property filters
                 property_list = filters.get_filter_keys("property") 
                 for kw in property_list:
@@ -742,7 +742,6 @@ class CLOptionParser:
                             res = res[1:]
                             wanted = False
                         interactions[_type].append((res, wanted))
-
                 for k, v in interactions.items():
                     setattr(filters, k, v)
 
@@ -754,21 +753,21 @@ class CLOptionParser:
                     if c is None:
                         continue
                     interactions_count.append((pool, c))
-
                 filters.interactions_count = interactions_count
+
                 # make dictionary for ligand filters
                 ligand_kw = filters.get_filter_keys("ligand")
                 ligand_filters = {}
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
-                    if _type == ("ligand_max_atoms"): # values that aren't lists
+                    if _type == ("ligand_max_atoms"): 
                         ligand_filters[_type] = ligand_filter_value
                         continue
                     if ligand_filter_value is (None):
                         continue
                     ligand_filters[_type] = []
-                    for filter in ligand_filter_value: # this part will get skipped if value is None or not a list
-                        ligand_filters[_type].append(filter) # this is now a dict , but shouldn't it be a list? 
+                    for filter in ligand_filter_value: 
+                        ligand_filters[_type].append(filter) 
 
                 ligand_filters["ligand_operator"] = parsed_opts.ligand_operator
                 if ligand_filters["ligand_max_atoms"] is not None and len(ligand_filters["ligand_max_atoms"]) % 6 != 0:
@@ -787,12 +786,13 @@ class CLOptionParser:
                 filters.max_miss = parsed_opts.max_miss
                 filters.react_any = parsed_opts.react_any
 
+            if filters_present: self.rtcore.set_filters(dict=filters.todict())
+
         if isinstance(parsed_opts.interaction_tolerance, str):
             parsed_opts.interaction_tolerance = [
                 float(val) for val in parsed_opts.interaction_cutoffs.split(",")
             ]
-        if filter_flag: self.rtcore.set_filters(dict=filters.todict())
-
+        
         self.rtcore.set_results_processing_options(parsed_opts.store_all_poses, 
                                         parsed_opts.max_poses,
                                         parsed_opts.add_interactions,
@@ -800,7 +800,7 @@ class CLOptionParser:
                                         parsed_opts.interaction_cutoffs,
                                         parsed_opts.max_proc,)
 
-        self.rtcore.set_read_options(filter_flag,
+        self.rtcore.set_read_options(filters_present,
                                     parsed_opts.plot,
                                     parsed_opts.find_similar_ligands,
                                     parsed_opts.export_bookmark_csv,
