@@ -175,3 +175,4 @@ util_files/
 .DS_STORE
 GUI/.DS_Store
 test/.DS_Store
+*_ringtail-process-log.txt
