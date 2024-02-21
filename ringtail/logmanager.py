@@ -1,7 +1,7 @@
 import logging
 import logging.handlers
 import inspect
-import pathlib
+import datetime
 
 class RTLogger:
     """
@@ -20,21 +20,18 @@ class RTLogger:
         if cls._instance is None:
             cls._instance = super(RTLogger, cls).__new__(cls)
             # Put any initialization here.
-            cls.initialization(cls)
+            dt = datetime.datetime.now()
+            filename = dt.strftime("%Y%m%d-%H%M%S") + "_ringtail-process-log.txt"
+            cls.initialization(cls, filename=filename)
         return cls._instance
     
     def initialization(self, level = "WARNING", filename = "rt_process_log.txt"):
         """ 
         Options for instantiation of the logger. 
         """
-        logfilefolder = pathlib.Path(__file__ + "/../../logfiles/").resolve()
-        folderpath = pathlib.Path(logfilefolder)
-        folderpath.mkdir(exist_ok=True) 
-        filepath = logfilefolder / filename
-
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
-        self.fileHandler = logging.handlers.RotatingFileHandler(filename=filepath, maxBytes=5e6, backupCount=10)
+        self.fileHandler = logging.FileHandler(filename)
         self.logger.addHandler(self.fileHandler) 
         self.streamHandler = logging.StreamHandler()
         self.streamHandler.setLevel("WARNING")
