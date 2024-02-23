@@ -3,6 +3,7 @@ import os
 from .exceptions import OptionError
 from .logmanager import logger
 import copy
+import json
 
 """ Ringtail options contains objects for holding all ringtail options, 
 and ensures safe type enforcement."""
@@ -62,6 +63,16 @@ class RTOptions:
         else:
             return False
     
+    #TODO method to get values types names/keywords etc
+        
+    @classmethod
+    def get_all_options_types(self):
+        """
+        This needs to be a method that grabs attributes from each class, and figures out what type they are as a TypeSafe object
+        Also grab their default values
+        """
+        pass
+
     def todict(self) -> dict:
         dict = {}
         attributes = [attr for attr in vars(self) 
@@ -81,6 +92,25 @@ class GeneralOptions(RTOptions):
         verbose: Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
         debug: Print additional error information to STDOUT
         """
+    options = {
+        "docking_mode":{
+            "type": str,
+            "default": "dlg"
+        },
+        "summary":{
+            "type": bool,
+            "default": False
+        },  
+        "verbose":{
+            "type": bool,
+            "default": False
+        },  
+        "debug":{
+            "type": bool,
+            "default": False
+        },  
+    }
+    
     docking_mode = TypeSafe("docking_mode", str)
     summary = TypeSafe("summary", bool)
     verbose = TypeSafe("verbose", bool)
@@ -141,6 +171,8 @@ class InputFiles(RTOptions):
         self.recursive=recursive
         self.receptor_file=receptor_file
         self.save_receptor=save_receptor
+    
+    #TODO on change need to add files
         
 class ResultsProcessingOptions(RTOptions):
     """ Class that holds database write options that affects write time, such as how to 
@@ -183,6 +215,8 @@ class ResultsProcessingOptions(RTOptions):
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
         self.max_proc = max_proc
+
+    #TODO need onchange
 
 class StorageOptions(RTOptions):
     """ Class that handles options for the storage (database) manager class, including
@@ -291,6 +325,7 @@ class StorageOptions(RTOptions):
             "run",
             "hb",
         }
+    #TODO on change need to add files
 
 class ReadOptions(RTOptions):
     """ Class that holds options related to reading from the database, including format for
