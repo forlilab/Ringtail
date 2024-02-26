@@ -659,6 +659,7 @@ class CLOptionParser:
             db_file = parsed_opts.output_db
             
         self.rtcore = RingtailCore(db_file)
+        self.rtcore._run_mode = "cmd"
         
         # Read config file first, and let individual options overwrite it
         if self.confargs.config is not None:
