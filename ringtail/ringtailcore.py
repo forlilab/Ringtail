@@ -41,12 +41,16 @@ class RingtailCore:
         """
         Initialize RingtailCore object and create a storageman object with the db file.
         Does not open access to the storage. Future option will include opening database as readonly.
+
+        _run_mode refers to whether ringtail is ran from the command line or through direct API use, 
+        where the former is more restrictive. 
         """
         self.db_file = db_file
         self.process_mode = process_mode
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
         self.set_general_options()
+        self._run_mode = "api"
              
     def update_database_version(self, consent=False):
         # Method to update database version
@@ -326,7 +330,7 @@ class RingtailCore:
             with self.storageman:
                 if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
                     raise OptionError("The provided --input_db is not a valid path, please check the provided path.")
-                
+
                 self.set_results_processing_options(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, optionsdict)
                 
                 # Docking mode compatibility check
@@ -344,11 +348,11 @@ class RingtailCore:
                 logger.debug("Results manager object has been initialized.")
 
                 # Process results files and handle database versioning 
-                self.storageman.check_storage_ready()
+                self.storageman.check_storage_ready(self._run_mode, self.generalopts.docking_mode, self.resultsmanopts.store_all_poses, self.resultsmanopts.max_poses)
+                #TODO need to check what docking mode and num of poses is, if db has data (check table with this info, first entry)
                 logger.info("Adding results...")
                 self.resultsman.process_results() 
-                self.storageman.set_ringtaildb_version()
-                #-#-#- I get this far
+                self.storageman.set_ringtaildb_version() #TODO write to table what settings was used on this date/time, check query table setup
                 if self.generalopts.summary: self._produce_summary()
 
         

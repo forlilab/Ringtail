@@ -1424,6 +1424,7 @@ class StorageManagerSQLite(StorageManager):
         self._create_receptors_table()
         self._create_interaction_index_table()
         self._create_bookmark_table()
+        self._create_db_properties_table()
 
     def open_storage(self):
         """Create connection to db. Then, check if db needs to be written.
@@ -1437,7 +1438,7 @@ class StorageManagerSQLite(StorageManager):
             self._create_tables()  
             self.set_ringtaildb_version()
 
-    def check_storage_ready(self):
+    def check_storage_ready(self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int):
         """Check that storage is ready before proceeding.
 
         Raises:
@@ -1454,6 +1455,37 @@ class StorageManagerSQLite(StorageManager):
                 raise e
             finally:
                 cur.close()
+        elif self.append_results:
+            compatible = True
+            compatibility_string = "The following database properties do not agree with the properties last usedfor this database: \n"
+            try: 
+                cur = self.conn.execute("SELECT * FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1")
+                (row_id, last_docking_mode, num_of_poses) = cur.fetchone()
+                if docking_mode != last_docking_mode:
+                    compatible = False
+                    compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
+                if num_of_poses=="all" != store_all_poses:
+                    compatible = False
+                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to 'store_all_poses'.\n" 
+                elif int(num_of_poses) != max_poses:
+                    compatible = False
+                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to {num_of_poses}."
+        
+            except Exception as e:
+                raise e
+            finally:
+                cur.close()
+
+            if not compatible:
+                if run_mode == "cmd":
+                    raise OptionError(compatibility_string)
+                elif run_mode == "api":
+                    logger.warning(compatibility_string)
+        
+        if store_all_poses: number_of_poses = "all"
+        else: number_of_poses = str(max_poses)
+        self._insert_db_properties(docking_mode, number_of_poses)
+        logger.info("Storage compatibility has been checked.")
 
     def _fetch_existing_table_names(self):
         """Returns list of all tables in database
@@ -1990,6 +2022,56 @@ class StorageManagerSQLite(StorageManager):
                 "Error adding column for Interaction_{num} to interaction bitvector table".format(
                     num=str(column_number)
                 )
+            ) from e
+
+    def _create_db_properties_table(self):
+        """Create table of database properties used during write session to the database. Columns are:
+        DB_write_session int (primary key)
+        docking_mode (vina or dlg)
+        num_of_poses ("all" or int)
+
+
+        Raises:
+            DatabaseTableCreationError: Description
+        """
+        sql_str = """CREATE TABLE IF NOT EXISTS DB_properties (
+        DB_write_session    INTEGER PRIMARY KEY AUTOINCREMENT,
+        docking_mode        VARCHAR[],
+        number_of_poses     VARCHAR[])"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(sql_str)
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
+                "Error while creating db properties table. If database already exists, use --overwrite to drop existing tables"
+            ) from e
+
+    def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
+        """Insert db properties into database properties table
+
+        Args:
+            docking_mode (str): docking mode for the current dataset being written
+            number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
+
+        Raises:
+            DatabaseInsertionError: Description
+        """
+        sql_insert = """INSERT INTO DB_properties (
+        docking_mode,
+        number_of_poses
+        ) VALUES (?,?)"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(sql_insert, [docking_mode, number_of_poses])
+            self.conn.commit()
+            cur.close()
+
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(
+                "Error while inserting database properties info into DB_properties table"
             ) from e
 
     #TODO combine functions here
