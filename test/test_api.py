@@ -73,11 +73,11 @@ class TestAPI:
         assert count_ligands_passing == 51 
         os.system("rm outputapi.db output_log.txt")
 
-class TestOptionsFile:
+class TestConfigFile:
     # Setup
     rtcore = RingtailCore(db_file="outputapi.db")
-    rtcore.generate_options_json_template()
-    filepath = rtcore._options_file_path()
+    rtcore.generate_config_json_template()
+    filepath = rtcore._config_file_path()
 
     with open(filepath, "r") as f:
         data = json.load(f)
@@ -94,7 +94,7 @@ class TestOptionsFile:
 
     with open(filepath, "w") as f:
         f.write(json.dumps(data, indent=4))
-    rtcore.add_options_from_file()
+    rtcore.add_config_from_file()
 
     def test_adding_results(self, dbquery):
         self.rtcore.add_results_from_files(file_source_object= self.rtcore.files)
@@ -109,4 +109,13 @@ class TestOptionsFile:
         assert count_ligands_passing == 51 
         os.system("rm outputapi.db")
 
-        
+class TestOptionsHandling:
+    pass
+    # Test the order of operations, single options overwrite passing through a dict
+
+    # Test that type is checked even if you set a value later on
+
+    # Test that you can set an individual value on an object after it has been set
+        # Using the method of course, but type must be checked. Can test this by seeing what is written to the output log or something? 
+
+    # Test that any values in an options object can be accessed without error (and issues with _ referencing etc)
