@@ -230,7 +230,7 @@ class RingtailCore:
         return mode
     
     @staticmethod
-    def _options_file_path(filename="options.json"):
+    def _config_file_path(filename="options.json"):
         utilfolder = path.abspath(__file__ + "/../../util_files/")
         if not os.path.exists(utilfolder):
             os.makedirs(utilfolder) 
@@ -239,7 +239,7 @@ class RingtailCore:
 #-#-#- API -#-#-#
     #-#-#- Processing methods -#-#-#
 
-    def add_options_from_file(self, options_file: str ="options.json"):
+    def add_config_from_file(self, options_file: str ="options.json"):
         """
         Provide ringtail options from file, *not currently in use
         Args:
@@ -249,7 +249,7 @@ class RingtailCore:
         if options_file is None: #or not json compatible
             raise OptionError("No option file was found in the Ringtail/util_files directory.")
         
-        filepath = self._options_file_path(options_file)
+        filepath = self._config_file_path(options_file)
         with open(filepath, "r") as f:
             logger.info("Reading Ringtail options from options file")
             options: dict = json.load(f)
@@ -352,10 +352,9 @@ class RingtailCore:
                 #TODO need to check what docking mode and num of poses is, if db has data (check table with this info, first entry)
                 logger.info("Adding results...")
                 self.resultsman.process_results() 
-                self.storageman.set_ringtaildb_version() #TODO write to table what settings was used on this date/time, check query table setup
+                self.storageman.set_ringtaildb_version()
                 if self.generalopts.summary: self._produce_summary()
 
-        
         if files.save_receptor: 
             self.save_receptor(files.receptor_file)
     
@@ -504,8 +503,8 @@ class RingtailCore:
                             filter_bookmark = None,
                             append_results = None,
                             duplicate_handling = None,
-                            overwrite_log_file = None,
-                            order_results_by = None,
+                            overwrite = None,
+                            order_results = None,
                             outfields = None,
                             output_all_poses = None,
                             mfpt_cluster = None,
@@ -519,8 +518,8 @@ class RingtailCore:
             filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
             append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
-            overwrite_logfile (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
-            order_results_by (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
+            overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
+            order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
                     "available fields are:  "
                     '"e" (docking_score), '
                     '"le" (ligand efficiency), '
@@ -1093,7 +1092,7 @@ class RingtailCore:
     
     #-#-#- Util method -#-#-#
     @staticmethod
-    def generate_options_json_template(to_file=True):
+    def generate_config_json_template(to_file=True):
         """
         Creates a dict of all Ringtail option classes, and their 
         key-default value pairs. Outputs to options.json in 
@@ -1116,7 +1115,7 @@ class RingtailCore:
                        "filterobj": filterobj,
                        "fileobj": fileobj}
         if to_file:
-            filepath= RingtailCore._options_file_path()
+            filepath= RingtailCore._config_file_path()
             with open(filepath, 'w') as f: 
                 f.write(json.dumps(json_string, indent=4))
             logger.debug(f"Default ringtail option values written to file {filepath}")
@@ -1134,7 +1133,7 @@ class RingtailCore:
         Args:
             object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]
         """
-        all_defaults = RingtailCore.generate_options_json_template(to_file=False)
+        all_defaults = RingtailCore.generate_config_json_template(to_file=False)
 
         if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]:
             raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]')
