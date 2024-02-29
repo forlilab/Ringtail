@@ -119,3 +119,6 @@ class TestOptionsHandling:
         # Using the method of course, but type must be checked. Can test this by seeing what is written to the output log or something? 
 
     # Test that any values in an options object can be accessed without error (and issues with _ referencing etc)
+
+    # Test that if you set an invalid option (including None) it reverts to the default value
+        # So I really need to have type and default and name in one space

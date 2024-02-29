@@ -498,8 +498,8 @@ class RingtailCore:
                             filter_bookmark = None,
                             append_results = None,
                             duplicate_handling = None,
-                            overwrite_log_file = None,
-                            order_results_by = None,
+                            overwrite = None,
+                            order_results = None,
                             outfields = None,
                             output_all_poses = None,
                             mfpt_cluster = None,
@@ -513,8 +513,8 @@ class RingtailCore:
             filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
             append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
-            overwrite_logfile (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
-            order_results_by (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
+            overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
+            order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
                     "available fields are:  "
                     '"e" (docking_score), '
                     '"le" (ligand efficiency), '
