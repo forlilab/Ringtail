@@ -230,7 +230,7 @@ class RingtailCore:
         return mode
     
     @staticmethod
-    def _config_file_path(filename="options.json"):
+    def _config_file_path(filename="config.json"):
         utilfolder = path.abspath(__file__ + "/../../util_files/")
         if not os.path.exists(utilfolder):
             os.makedirs(utilfolder) 
@@ -239,19 +239,19 @@ class RingtailCore:
 #-#-#- API -#-#-#
     #-#-#- Processing methods -#-#-#
 
-    def add_config_from_file(self, options_file: str ="options.json"):
+    def add_config_from_file(self, config_file: str ="config.json"):
         """
-        Provide ringtail options from file, *not currently in use
+        Provide ringtail config from file, *not currently in use
         Args:
             config_file: json formatted file containing ringtail and filter options
         """
         
-        if options_file is None: #or not json compatible
-            raise OptionError("No option file was found in the Ringtail/util_files directory.")
+        if config_file is None: #or not json compatible
+            raise OptionError("No config file was found in the Ringtail/util_files directory.")
         
-        filepath = self._config_file_path(options_file)
+        filepath = self._config_file_path(config_file)
         with open(filepath, "r") as f:
-            logger.info("Reading Ringtail options from options file")
+            logger.info("Reading Ringtail options from config file")
             options: dict = json.load(f)
 
         # Set each given object option to dict to respective class or manager
