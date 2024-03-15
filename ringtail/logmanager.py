@@ -43,7 +43,7 @@ class RTLogger:
     def setLevel(self, level: str):
         """ Sets level of the logger and prints to log (if debug)."""
         self.logger.setLevel(level.upper())
-        self.logger.info("Log level changed to " + str(level))
+        self.logger.debug("Log level changed to " + str(level))
 
     def level(self):
         levels ={10: "DEBUG",

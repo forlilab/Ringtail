@@ -19,15 +19,7 @@ if __name__ == "__main__":
         # parse command line options and filters file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
-        rtopts = rtcore.generalopts
-        # Set logging level
-        if rtopts.debug:
-            logger.setLevel("DEBUG")
-        elif rtopts.verbose:
-            logger.setLevel("INFO")
-        else:
-            logger.setLevel("WARNING")
-        logger.warning(f"Logger set to level {logger.level()}")
+        rtcore._set_general_options(dict=cmdinput.generalopts)
     except Exception as e:
         tb = traceback.format_exc()
         logger.debug(tb)
@@ -36,25 +28,33 @@ if __name__ == "__main__":
 
     # create manager object for virtual screening. Will make database if needed
     try:
-        readopts = rtcore.readopts
+        rtcore._set_read_options(dict=cmdinput.readopts)
+        readopts = rtcore.readopts 
         if rtcore.process_mode == "write":
             logger.debug("Starting write process")
             #-#-#- Processes results, will add receptor if "save_receptor" is true
-            rtcore.add_results_from_files(file_source_object=rtcore.files)
-
+            rtcore.add_results_from_files(filesources_dict=cmdinput.file_sources, 
+                                          options_dict=cmdinput.writeopts, 
+                                          summary=rtcore.generalopts.summary)
+            
         time1 = time.perf_counter()
         if  rtcore.process_mode == "read":
                 logger.debug("Starting read process")
-                #-#-#- Perform filtering
+                
+                #-#-#- Print database summary
                 if rtcore.generalopts.summary:
-                    rtcore._produce_summary()
-                    
+                    rtcore.produce_summary()
+                
+                #-#-#- Perform filtering
                 if readopts.filtering:
-                    rtcore.filter(readopts.enumerate_interaction_combs)
+                    rtcore.filter(filters_dict=cmdinput.filters,
+                                  enumerate_interaction_combs=readopts.enumerate_interaction_combs)
+
                 # Write log with new data for previous filtering results
                 if readopts.data_from_bookmark and not readopts.filtering:
                     rtcore.get_previous_filter_data()
                 
+                # find similar ligands to that specified, if specified (i.e., not None)
                 if readopts.find_similar_ligands:
                     rtcore.find_similar_ligands(readopts.find_similar_ligands)
 
@@ -109,4 +109,4 @@ if __name__ == "__main__":
     logger.info(
         "Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds "
     )
-    if rtopts.debug or rtopts.verbose: print(cmdinput.parser.epilog)
+    if logger.level in ["DEBUG", "INFO"]: print(cmdinput.parser.epilog)
