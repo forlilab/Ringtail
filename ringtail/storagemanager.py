@@ -350,8 +350,8 @@ class StorageManagerSQLite(StorageManager):
     """
 
     def __init__(self, db_file: str = None, 
-                 overwrite=None, 
-                 append_results=None,
+                 overwrite: bool=None, 
+                 append_results: bool=None,
                  order_results: str = None,
                  outfields: str = None,
                  filter_bookmark: str = None,
@@ -363,13 +363,13 @@ class StorageManagerSQLite(StorageManager):
         """Initialize superclass and subclass-specific instance variables
         Args:
             db_file (str): database file name"""
-
+        locals().keys()
         self.db_file = db_file
         self.overwrite = overwrite
         self.append_results = append_results
         self.order_results = order_results
-        if outfields is not None and "Ligand_name" not in outfields:  # make sure we are outputting the ligand name
-            outfields = "Ligand_name," + outfields
+        # if outfields is not None and "Ligand_name" not in outfields:  # make sure we are outputting the ligand name
+        #     outfields = "Ligand_name," + outfields
         self.outfields = outfields
         self.output_all_poses = output_all_poses
         self.mfpt_cluster = mfpt_cluster
@@ -377,7 +377,6 @@ class StorageManagerSQLite(StorageManager):
         self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
         self.conflict_opt = conflict_opt
-
         super().__init__()
 
 
@@ -391,6 +390,8 @@ class StorageManagerSQLite(StorageManager):
         
 #TODO these are all specific conversions to use with sqlite, can probably be abstracted to multiple tables as they 
 # are not specific to a database, but rather how the data is written (i.e., no sql)
+        
+        #TODO these options are found other places too, needs to be in just one place
         self.outfield_options = [
             "Ligand_name",
             "e",
@@ -932,7 +933,6 @@ class StorageManagerSQLite(StorageManager):
         sql_update = (
             """UPDATE Receptors SET receptor_object = ? WHERE Receptor_ID == 1"""
         )
-
         try:
             cur = self.conn.execute(sql_update, (receptor,))
             self.conn.commit()
@@ -1456,8 +1456,9 @@ class StorageManagerSQLite(StorageManager):
             finally:
                 cur.close()
         elif self.append_results:
+            print("\n\nappending to database\n\n")
             compatible = True
-            compatibility_string = "The following database properties do not agree with the properties last usedfor this database: \n"
+            compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
             try: 
                 cur = self.conn.execute("SELECT * FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1")
                 (row_id, last_docking_mode, num_of_poses) = cur.fetchone()
@@ -1589,6 +1590,7 @@ class StorageManagerSQLite(StorageManager):
         """Create index containing possible filter and order by columns
         """
         
+        print(f'\n\n currently overwrite is {self.overwrite} and append is {self.append_results}\n\n')
         try:
             cur = self.conn.cursor()
             logger.debug("Creating columns index...")

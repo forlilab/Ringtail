@@ -107,7 +107,7 @@ class TestConfigFile:
         count_ligands_passing = self.rtcore.filter()
 
         assert count_ligands_passing == 51 
-        os.system("rm outputapi.db")
+        os.system("rm output_log.txt output.db")
 
 class TestOptionsHandling:
     pass

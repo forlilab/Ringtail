@@ -28,27 +28,15 @@ class TypeSafe:
         if name == "value":
             if type(value) == self.type:
                 self.__dict__["value"] = value
-                logger.info ("value updated in TypeSafe")
+                logger.debug(f"{name} updated in TypeSafe")
             elif self.type == float and type(value) in [float, int]: 
                 self.__dict__["value"] = float(value)
-                logger.info ("value updated in TypeSafe")
+                logger.debug(f"{name} updated in TypeSafe")
             else:
                 self.__dict__["value"] = self.default
-                logger.info ("value reset to default in TypeSafe")
+                logger.debug(f"{name} reset to default in TypeSafe")
         else:
             self.__dict__[name] = value
-
-
-class NumberSafe(TypeSafe):
-    def __init__(self, attr, attrtype):
-        super().__init__(attr, attrtype)
-
-    def __set__(self, obj, value):
-        if type(value) in (float, int, type(None)):
-            setattr(obj, self.attrprivate, value) 
-            logger.debug(f'{self.attrpublic} was set to {value}.')
-        else:
-            raise OptionError(f'{self.attrpublic} can only be of type {self.type}, but was attempted set as {type(value)} which is invalid.')
 
 class RTOptions:
     """ Holds standard methods for the ringtail option child classes.
@@ -124,15 +112,14 @@ class GeneralOptions(RTOptions):
             "default": False,
             "description":"prints summary information about stored data to STDOUT."
         },  
-        "verbose":{
-            "type": bool,
-            "default": False,
-            "description": "Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used"
-        },  
-        "debug":{
-            "type": bool,
-            "default": False,
-            "description":"Print additional error information to STDOUT"
+        "logging_level":{
+            "type": str,
+            "default": "warning",
+            "description": '''
+                            "WARNING": Prints errors and warnings to stout only. 
+                            "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
+                            "DEBUG": Print additional error information to STDOUT
+                            '''
         },  
     }
     
@@ -222,17 +209,8 @@ class InputFiles(RTOptions):
         
 class ResultsProcessingOptions(RTOptions):
     """ Class that holds database write options that affects write time, such as how to 
-    break up data files, number of computer processes to use, and and how many poses to store.
-    
-    Args:
-        store_all_poses (bool): Store all poses from input files. Overrides --max_poses
-        max_poses (int): n: Store top pose for top n clusters
-        add_interactions (bool): Find interactions between ligand poses and receptor and save to database. Requires receptor PDBQT to be given with input files (all modes) and --receptor_file to be specified with Vina mode. SIGNIFICANTLY INCREASES DATBASE WRITE TIME.
-        interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired. Only compatible with ADGPU mode
-        interaction_cutoffs (list): Use with --add_interactions, specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. These are the default cutoffs.
-        max_proc (int): Maximum number of processes to create during parallel file parsing. Defaults to number of CPU processors.
-        
-        """
+    break up data files, number of computer processes to use, and and how many poses to store."""
+
     options = {
         "store_all_poses":{
             "default":False,
@@ -275,103 +253,90 @@ class ResultsProcessingOptions(RTOptions):
             if self.store_all_poses is True and self.interaction_tolerance is not None:
                 logger.warning("Cannot use interaction_tolerance with store_all_poses. Removing interaction_tolerance.")
                 self.interaction_tolerance = None       
-
+        
 class StorageOptions(RTOptions):
     """ Class that handles options for the storage (database) manager class, including
     conflict handling and result clustering and ordering.
-
-    Args:
-    filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
-    append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
-    duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
-    overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
-    order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
-            "available fields are:  "
-            '"e" (docking_score), '
-            '"le" (ligand efficiency), '
-            '"delta" (delta energy from best pose), '
-            '"ref_rmsd" (RMSD to reference pose), '
-            '"e_inter" (intermolecular energy), '
-            '"e_vdw" (van der waals energy), '
-            '"e_elec" (electrostatic energy), '
-            '"e_intra" (intermolecular energy), '
-            '"n_interact" (number of interactions), '
-            '"rank" (rank of ligand pose), '
-            '"run" (run number for ligand pose), '
-            '"hb" (hydrogen bonds); '
-    outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
-            '"Ligand_name" (Ligand name), '
-            '"e" (docking_score), '
-            '"le" (ligand efficiency), '
-            '"delta" (delta energy from best pose), '
-            '"ref_rmsd" (RMSD to reference pose), '
-            '"e_inter" (intermolecular energy), '
-            '"e_vdw" (van der waals energy), '
-            '"e_elec" (electrostatic energy), '
-            '"e_intra" (intermolecular energy), '
-            '"n_interact" (number of interactions), '
-            '"ligand_smile" , '
-            '"rank" (rank of ligand pose), '
-            '"run" (run number for ligand pose), '
-            '"hb" (hydrogen bonds), '
-            '"receptor" (receptor name); '
-            "Fields are printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified.
-    output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
-    mfpt_cluster (float): Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
-    interaction_cluster (float): Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-    results_view_name (str): name for resulting book mark file. Default value is "passing_results"
-
     """
+
     options = {
-        "filter_bookmark":{
-            "default":None,
-            "type":str,
-            "description": ""
-        },
         "append_results":{
-            "default":False,
+            "default":None,
             "type":bool,
-            "description": ""
+            "description": "Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli."
         },
         "duplicate_handling":{
             "default":None,
             "type":str,
-            "description": ""
+            "description": "specify how duplicate Results rows should be handled when inserting into database. Options are 'ignore' or 'replace'. Default behavior will allow duplicate entries."
+        },
+        "filter_bookmark":{
+            "default":None,
+            "type":str,
+            "description": "Perform filtering over specified bookmark. (in output group in CLI)"
         },
         "overwrite":{
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database"
         },
         "order_results":{
             "default":None,
             "type":str,
-            "description": ""
+            "description": '''Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION.
+                            available fields are:  
+                            "e" (docking_score), 
+                            "le" (ligand efficiency), 
+                            "delta" (delta energy from best pose), 
+                            "ref_rmsd" (RMSD to reference pose), 
+                            "e_inter" (intermolecular energy), 
+                            "e_vdw" (van der waals energy), 
+                            "e_elec" (electrostatic energy), 
+                            "e_intra" (intermolecular energy), 
+                            "n_interact" (number of interactions), 
+                            "rank" (rank of ligand pose), 
+                            "run" (run number for ligand pose), 
+                            "hb" (hydrogen bonds); '''
         },
         "outfields":{
             "default":"Ligand_name,e",
             "type":str,
-            "description": ""
+            "description": '''defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are: \n
+                            "Ligand_name" (Ligand name), 
+                            "e" (docking_score), 
+                            "le" (ligand efficiency), 
+                            "delta" (delta energy from best pose), 
+                            "ref_rmsd" (RMSD to reference pose), 
+                            "e_inter" (intermolecular energy), 
+                            "e_vdw" (van der waals energy), 
+                            "e_elec" (electrostatic energy), 
+                            "e_intra" (intermolecular energy), 
+                            "n_interact" (number of interactions), 
+                            "ligand_smile" , 
+                            "rank" (rank of ligand pose), 
+                            "run" (run number for ligand pose), 
+                            "hb" (hydrogen bonds), 
+                            "receptor" (receptor name); '''
         },
         "output_all_poses":{
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged."
         },
         "mfpt_cluster":{
             "default":None,
             "type":float,
-            "description": ""
+            "description": "Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands."
         },
         "interaction_cluster":{
             "default":None,
             "type":float,
-            "description": ""
+            "description": "Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions."
         },
         "results_view_name":{
             "default":"passing_results",
             "type":str,
-            "description": ""
+            "description": "name for resulting book mark file. Default value is 'passing_results'"
         },
     }
 
@@ -379,7 +344,9 @@ class StorageOptions(RTOptions):
         super().initialize_from_dict(self.options)
 
     def checks(self):
+        
         if hasattr(self, "results_view_name"):
+            # Make sure results are ordered after valid fields
             if self.duplicate_handling is not None:
                 self.duplicate_handling = self.duplicate_handling.upper()
                 if self.duplicate_handling not in {"IGNORE", "REPLACE"}:
@@ -387,11 +354,14 @@ class StorageOptions(RTOptions):
                         f"--duplicate_handling option {self.duplicate_handling} not allowed. Reverting to default behavior."
                     )
                     self.duplicate_handling = None
-
             if self.order_results is not None and self.order_results not in self.order_options:
                 raise OptionError(
                     "Requested ording option that is not available. Please see --help for available options."
                 )
+            # Make sure we include ligand name in output columnds
+            if self.outfields is not None and "ligand_name" not in self.outfields:
+                self.outfields = "ligand_name," + self.outfields
+
         
     order_options = {
             "e",
@@ -427,62 +397,62 @@ class ReadOptions(RTOptions):
         export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
     """
     options = {
-        "filtering":{
+        "filtering":{                   # this is essentially filter method
             "default":None,
             "type":bool,
             "description": ""
         },
-        "plot":{
+        "plot":{                        # this is a method to plot
             "default":None,
             "type":bool,
             "description": ""
         },
-        "find_similar_ligands":{
+        "find_similar_ligands":{        # this is a method to filter and output
             "default":None,
             "type":str,
             "description": ""
         },
-        "export_bookmark_csv":{
+        "export_bookmark_csv":{         # this is an export method
             "default":None,
             "type":str,
             "description": ""
         },
-        "export_bookmark_db":{
+        "export_bookmark_db":{          # this is an export method
             "default":None,
             "type":bool,
             "description": ""
         },
-        "export_query_csv":{
+        "export_query_csv":{            # this is an export method
             "default":None,
             "type":str,
             "description": ""
         },
-        "export_receptor":{
+        "export_receptor":{             # this is an export method
             "default":None,
             "type":bool,
             "description": ""
         },
-        "data_from_bookmark":{
+        "data_from_bookmark":{          # this could be a read option
             "default":None,
             "type":bool,
             "description": ""
         },
-        "pymol":{
+        "pymol":{                       # IDevenK
             "default":None,
             "type":bool,
             "description": ""
         },
-        "enumerate_interaction_combs":{
+        "enumerate_interaction_combs":{ # gotta figure out this one, I think it is an option
             "default":None,
             "type":bool,
             "description": ""
         },
-        "log_file":{
+        "log_file":{                    # this is the log file name, so an option
             "default":"output_log.txt",
             "type":str,
             "description": ""
         },
-        "export_sdf_path":{
+    "export_sdf_path":{                 # this is an export method 
             "default":"",
             "type":str,
             "description": ""
