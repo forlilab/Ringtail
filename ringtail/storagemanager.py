@@ -1456,7 +1456,6 @@ class StorageManagerSQLite(StorageManager):
             finally:
                 cur.close()
         elif self.append_results:
-            print("\n\nappending to database\n\n")
             compatible = True
             compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
             try: 
@@ -1589,8 +1588,6 @@ class StorageManagerSQLite(StorageManager):
     def create_indices(self):
         """Create index containing possible filter and order by columns
         """
-        
-        print(f'\n\n currently overwrite is {self.overwrite} and append is {self.append_results}\n\n')
         try:
             cur = self.conn.cursor()
             logger.debug("Creating columns index...")

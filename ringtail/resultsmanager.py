@@ -73,5 +73,4 @@ class ResultsManager:
                 continue
             parser_opts[k] = v
         self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
-        print(f'\n\n storageman append {self.storageman.append_results}\n\n')
         self.parser.process_files()

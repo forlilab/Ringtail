@@ -189,7 +189,7 @@ class TestOutputs:
             "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
         )
         count_tol2 = sum([1 for interaction in cur.fetchone() if interaction == 1])
-
+        
         cur.close()
         conn.close()
 
@@ -554,6 +554,9 @@ class TestFilters:
         assert status == 0
     
     def test_export_sdf(self):
+        status1 = os.system(
+            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+        )
         status2 = os.system(
             "python ../scripts/rt_process_vs.py read --input_db output.db -e -4 -sdf . -d "
         )
