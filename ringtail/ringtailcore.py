@@ -38,7 +38,7 @@ class RingtailCore:
     """
 #-#-#- Base methods -#-#-#
     
-    def __init__(self, db_file = "output.db", storage_type = "sqlite", process_mode="read", logging_level="WARNING"):
+    def __init__(self, db_file = "output.db", storage_type = "sqlite", process_mode="read", logging_level=None):
         """
         Initialize RingtailCore object and create a storageman object with the db file.
         Does not open access to the storage. Future option will include opening database as readonly.
@@ -47,11 +47,12 @@ class RingtailCore:
         where the former is more restrictive. 
         """
         logger.setLevel(logging_level)
-        self._set_general_options()
         self.db_file = db_file
         self.process_mode = process_mode
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
+        self._set_storageman_attributes()
+        self._set_general_options()
         self._run_mode = "api"
              
     def update_database_version(self, consent=False):
@@ -189,37 +190,44 @@ class RingtailCore:
     #-#-#- Processing methods -#-#-#
 
     def add_config_from_file(self, config_file: str ="config.json"):
-        #TODO right now the options cannot be added unless a method has created all the objects. For example writeopts needs file sources to operate at all
-        #NOTE currently not working, needs redesign
         """
         Provide ringtail config from file, *not currently in use
         Args:
             config_file: json formatted file containing ringtail and filter options
         """
-        
-        if config_file is None: #or not json compatible
-            raise OptionError("No config file was found in the Ringtail/util_files directory.")
-        
-        filepath = "config.json"
-        with open(filepath, "r") as f:
-            logger.info("Reading Ringtail options from config file")
-            options: dict = json.load(f)
+        try: 
+            if config_file is None: 
+                raise OptionError("No config file was found in the Ringtail/util_files directory.")
+            
+            filepath = "config.json"
+            with open(filepath, "r") as f:
+                logger.info("Reading Ringtail options from config file")
+                options: dict = json.load(f)
 
-        # Set each given object option to dict to respective class or manager
-        optmap = {
-            "generalopts": self.set_general_options,
-            "writeopts": self._set_resultsman_attributes,
-            "storageopts": self._set_storageman_attributes,
-            "readopts": self.set_read_options,
-            "filters": self.set_filters,
-            "fileobj": self._set_file_sources
-        }
-        for k, v in options.items():
-            optmap[k](dict=v)
-            logger.debug(f'{optmap[k]} was ran with these options: {v}')
+            file_dict = options["fileobj"]
+            logger.info("A dictionary containing results files was extracted from config file.")
+            write_dict = {**options["resultsmanopts"], 
+                        "append_results": options["storageopts"]["append_results"], 
+                        "duplicate_handling":options["storageopts"]["duplicate_handling"], 
+                        "overwrite":options["storageopts"]["overwrite"]}
+            logger.info("A dictionary containing write options was extracted from config file.")
+
+            self._set_storageman_attributes(dict= options["storageopts"])
+            logger.info("A dictionary containing storage options was extracted from config file.")
+
+            read_dict = options["readopts"]
+            logger.info("A dictionary containing database read options was extracted from config file.")
+
+            filters_dict = options["filters"]
+            logger.info("A dictionary containing filters was extracted from config file.")
+ 
+            return (file_dict, write_dict, read_dict, filters_dict)
         
-        logger.info("Options were added from a config file")
-    
+        except FileNotFoundError:
+            logger.error("Please ensure config file is in the working directory.")
+        except Exception as e:
+            OptionError(f"There were issues with the configuration file: {e}")
+
     def add_results_from_files(self,
                                file = None, 
                                file_path = None, 
@@ -231,6 +239,7 @@ class RingtailCore:
                                filesources_dict: dict = None,
                                append_results: bool = None,
                                duplicate_handling: str = None,
+                               overwrite: bool = None,
                                store_all_poses: bool = None,
                                max_poses: int = None,
                                add_interactions: bool = None,
@@ -266,16 +275,11 @@ class RingtailCore:
             options_dict (dict): write options as a dict
 
         """
-
+        
         self.process_mode = "write"
 
-        if filesources_dict is not None:
-            files = self._set_file_sources(dict=filesources_dict)
-        else: 
-            files = self._set_file_sources(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor)
-    
+        files = self._set_file_sources(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor, filesources_dict)
         results_files_given = (files.file is not None or files.file_path is not None or files.file_list is not None)
-
         if not results_files_given and not files.save_receptor:
             raise OptionError("At least one input option needs to be used: --file, --file_path, --file_list, or --input_db and --save_receptor")
 
@@ -284,31 +288,29 @@ class RingtailCore:
         else:
             storage_dict = None
             results_dict = None
-        self._set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, dict=storage_dict)
+        self._set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
 
         # If there are any ligand files, process ligand data
         if results_files_given: 
             with self.storageman:
                 if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
                     raise OptionError("The provided --input_db is not a valid path, please check the provided path.")
-                
                 # Prepare the results manager 
-                self.resultsman = self._create_resultsmanager(file_sources=files)
+                self._create_resultsmanager(file_sources=files)
                 self.resultsman.storageman = self.storageman               
                 self.resultsman.storageman_class = self.storageman.__class__
                 self._set_resultsman_attributes(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, results_dict)
+
                 # Docking mode compatibility check
                 if self.generalopts.docking_mode == "vina" and self.resultsman.interaction_tolerance is not None:
                     logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
                     self.resultsman.interaction_tolerance = None
-                self.resultsman.mode = self.generalopts.docking_mode
-                
-                # Process results files and handle database versioning 
-                self.storageman.check_storage_ready(self._run_mode, self.generalopts.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
+                self.resultsman.mode = self.docking_mode
 
+                # Process results files and handle database versioning 
+                self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
                 logger.info("Adding results...")
                 self.resultsman.process_results() 
-                print(f'\n\n storageman append {self.storageman.append_results}\n\n')
                 self.storageman.set_ringtaildb_version()
                 if summary: self.produce_summary()
 
@@ -414,25 +416,34 @@ class RingtailCore:
         """
 
         self.process_mode = "read"
-
-        if not hasattr(self, "filters"):
-            #TODO should this be an error
-            logger.debug("No filters have been set, using default values found in Filters class") 
-            self.set_filters()
+        
+        self.set_filters(eworst=eworst, 
+                        ebest=ebest, 
+                        leworst=leworst, 
+                        lebest=lebest, 
+                        score_percentile=score_percentile,
+                        le_percentile=le_percentile,
+                        vdw_interactions=vdw_interactions,
+                        hb_interactions=hb_interactions,
+                        reactive_interactions=reactive_interactions,
+                        interactions_count=interactions_count,
+                        react_any=react_any,
+                        max_miss=max_miss,
+                        ligand_name=ligand_name,
+                        ligand_substruct=ligand_substruct,
+                        ligand_substruct_pos=ligand_substruct_pos,
+                        ligand_max_atoms=ligand_max_atoms,
+                        ligand_operator=ligand_operator,     
+                        dict = filters_dict)
 
         # Compatibility check with docking mode
-        if self.generalopts.docking_mode == "vina" and self.filters.react_any:
+        if self.docking_mode == "vina" and self.filters.react_any:
             logger.warning("Cannot use reaction filters with Vina mode. Removing react_any filter.")
             self.filters.react_any = False
 
-        if not hasattr(self, "storageopts"):
-            logger.debug("No storage options have been set, using default values found in 'RingtailOptions>StorageOptions'") 
-            self._set_storageman_attributes()
-
         if not hasattr(self, "readopts"):
-            #TODO change this method
             logger.debug("No read options have been set, using default values found in 'RingtailOptions>ReadOptions'") 
-            self.set_read_options()
+            self._set_read_options(enumerate_interaction_combs=enumerate_interaction_combs)
 
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
         if self.filters.max_miss == 0:
@@ -444,7 +455,7 @@ class RingtailCore:
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             self.storageopts.output_all_poses = False
-
+            
         logger.info("Filtering results...")
 
         # get possible permutations of interaction with max_miss excluded
@@ -500,10 +511,10 @@ class RingtailCore:
         Args:
             docking_mode (str): dlg (autodock-gpu) or vina 
             summary (bool): print database summary to terminal
-            #TODO change
-            verbose (bool): set logging level to "info" (second lowest level)
-            debug (bool): set logging level to "debug" (lowest level)
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+            logging_level (str):"WARNING": Prints errors and warnings to stout only. 
+                                "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
+                                "DEBUG": Print additional error information to STDOUT
+                dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
         # Dict of individual arguments
         indiv_options: dict = vars(); 
@@ -511,7 +522,6 @@ class RingtailCore:
 
         # Create option object with default values if needed
         if not hasattr(self, "generalopts"): self.generalopts = GeneralOptions()
-            
         # Set options from dict if provided
         if dict is not None:
             for k,v in dict.items():
@@ -523,11 +533,11 @@ class RingtailCore:
             if v is not None: setattr(self.generalopts, k, v)
 
         # Assign attributes to ringtail core
-        for k,v in self.generalopts.todict().items():
-            setattr(self, k, v)
+        self.print_summary = self.generalopts.print_summary
+        self.docking_mode = self.generalopts.docking_mode
 
-        # Set logger level
-        if logging_level is not None: logger.setLevel(self.generalopts.logging_level)
+        if logging_level is not None:   
+            logger.setLevel(self.generalopts.logging_level.upper())
 
     def _set_storageman_attributes(self, 
                             filter_bookmark = None,
@@ -586,6 +596,7 @@ class RingtailCore:
             results_view_name (str): name for resulting book mark file. Default value is "passing_results"
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
+        
         # Dict of individual arguments
         indiv_options: dict = vars(); 
         del indiv_options["self"]; del indiv_options["dict"]
@@ -643,22 +654,15 @@ class RingtailCore:
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
-            setattr(self.resultsmanopts, k, v)
+            if v is not None: setattr(self.resultsmanopts, k, v)
 
         for k,v in self.resultsmanopts.todict().items():  
-                    setattr(self.resultsman, k, v)        
- 
-    def _create_storagemanager(self, db_file) -> StorageManager:
-        storageman = StorageManager(db_file=db_file)
-        logger.debug("Storage manager object has been initialized.")
-
-        return storageman        
+            if v is not None: setattr(self.resultsman, k, v)           
     
     def _create_resultsmanager(self, file_sources) -> ResultsManager:
-        resultsman = ResultsManager(file_sources=file_sources)
+        self.resultsman = ResultsManager(file_sources=file_sources)
         logger.debug("Results manager object has been initialized.")
-
-        return resultsman
+        self._set_resultsman_attributes()
 
     def _set_read_options(self, 
                          filtering = None,
@@ -712,10 +716,7 @@ class RingtailCore:
             if v is not None: setattr(self.readopts, k, v)
 
         # Creates output man with attributes if needed
-        if hasattr(self, "outputman"):
-            self.outputman.export_sdf_path = self.readopts.export_sdf_path
-            self.outputman.log_file = self.readopts.log_file
-        else: self.outputman = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
+        self.outputman = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
 
     def set_filters(self,
                     eworst=None, 
@@ -746,9 +747,8 @@ class RingtailCore:
         indiv_options: dict = vars(); 
         del indiv_options["self"]; del indiv_options["dict"]
 
-        # Create option object with default values if needed
-        if not hasattr(self, "filters"):
-            self.filters = Filters()
+        # Create a filter object
+        self.filters = Filters()
             
         # Set options from dict if provided
         if dict is not None:
@@ -779,7 +779,7 @@ class RingtailCore:
         del indiv_options["self"]; del indiv_options["dict"]
 
         # Create option object with default values if needed
-        if not hasattr(self, "file"): files = InputFiles()
+        files = InputFiles()
             
         # Set options from dict if provided
         if dict is not None:
@@ -1163,19 +1163,13 @@ class RingtailCore:
         Return:
             filename or json string with options
         """
-        readopts = ReadOptions().todict()
-        generalopts = GeneralOptions().todict()
-        fileobj = InputFiles().todict()
-        writeopts = ResultsProcessingOptions().todict()
-        storageopts = StorageOptions().todict()
-        filters = Filters().todict()
         
-        json_string = {"generalopts": generalopts,
-                       "writeopts": writeopts,
-                       "storageopts": storageopts,
-                       "readopts": readopts,
-                       "filters": filters,
-                       "fileobj": fileobj}
+        json_string = {"readopts":ReadOptions().todict(),
+                       "generalopts":GeneralOptions().todict(),
+                       "resultsmanopts":ResultsProcessingOptions().todict(),
+                       "storageopts":StorageOptions().todict(),
+                       "filters":Filters().todict(),
+                       "fileobj": InputFiles().todict()}
         if to_file:
             filename="config.json"
             with open(filename, 'w') as f: 
@@ -1195,11 +1189,11 @@ class RingtailCore:
         Args:
             object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]
         """
-        
+
         all_defaults = RingtailCore.generate_config_json_template(to_file=False)
-        
-        if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]:
-            raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]')
+
+        if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]:
+            raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]')
         
         if object.lower() == "all":
             logger.debug("All ringtail default values have been fetched.")
@@ -1207,4 +1201,30 @@ class RingtailCore:
         else:
             logger.debug(f"Ringtail default values for {object} have been fetched.")
             return all_defaults[object.lower()]
+        
+    @staticmethod       
+    def get_options_info(object="all") -> dict:
+        """
+        Gets default values from RingtailOptions and returns dict of all,
+        or specific object. 
+        
+        Args:
+            object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]
+        """
+        all_info = {"readopts": ReadOptions.options,
+                    "generalopts": GeneralOptions.options,
+                    "fileobj": InputFiles.options,
+                    "writeopts": ResultsProcessingOptions.options,
+                    "storageopts": StorageOptions.options,
+                    "filters":Filters.options,}
+        
+        if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]:
+            raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]')
+        
+        if object.lower() == "all":
+            logger.debug("All ringtail default values have been fetched.")
+            return all_info
+        else:
+            logger.debug(f"Ringtail default values for {object} have been fetched.")
+            return all_info[object.lower()]
 

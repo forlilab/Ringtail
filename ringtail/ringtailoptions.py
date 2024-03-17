@@ -19,22 +19,24 @@ class TypeSafe:
 
     
     """
-    def __init__(self, default, type):
+    def __init__(self, default, type, object_name):
+        self.object_name = object_name
         self.type = type
         self.default = default
         self.value = self.default
+        
     
     def __setattr__(self, name, value):
         if name == "value":
             if type(value) == self.type:
                 self.__dict__["value"] = value
-                logger.debug(f"{name} updated in TypeSafe")
+                logger.debug(f"{self.object_name} updated to {value} in TypeSafe")
             elif self.type == float and type(value) in [float, int]: 
                 self.__dict__["value"] = float(value)
-                logger.debug(f"{name} updated in TypeSafe")
+                logger.debug(f"{self.object_name} updated to {value} in TypeSafe")
             else:
                 self.__dict__["value"] = self.default
-                logger.debug(f"{name} reset to default in TypeSafe")
+                logger.debug(f"{self.object_name} reset to default in TypeSafe")
         else:
             self.__dict__[name] = value
 
@@ -65,10 +67,12 @@ class RTOptions:
 
         return self.options
 
-    def initialize_from_dict(self, dict: dict):
+    def initialize_from_dict(self, dict: dict, name):
         for item, info in dict.items(): 
-            setattr(self, item, TypeSafe(info["default"], info["type"]))
-            logger.info(f'{item} has been initialized to {info["default"]}')
+            setattr(self, item, TypeSafe(default=info["default"], 
+                                         type=info["type"], 
+                                         object_name=item))
+        logger.info(f'All options for {name} have been initialized to default values.')
 
     def todict(self):
         dict = {}
@@ -107,14 +111,14 @@ class GeneralOptions(RTOptions):
             "default": "dlg",
             "description": 'specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt'
         },
-        "summary":{
+        "print_summary":{
             "type": bool,
             "default": False,
             "description":"prints summary information about stored data to STDOUT."
         },  
         "logging_level":{
             "type": str,
-            "default": "warning",
+            "default": None,
             "description": '''
                             "WARNING": Prints errors and warnings to stout only. 
                             "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
@@ -124,14 +128,11 @@ class GeneralOptions(RTOptions):
     }
     
     def __init__(self):
-        super().initialize_from_dict(self.options)
+        super().initialize_from_dict(self.options, self.__class__.__name__)
     
     def checks(self):
-        if self.docking_mode in ["dlg", "vina"]:
-            logger.debug(f' docking mode {self.docking_mode} is supported')
-        else:
-            logger.warning(f' docking mode {self.docking_mode} is not supported')
-            self.docking_mode = None # setting a value to "None" will revert to default, even if default is "None"
+        if self.docking_mode not in ["dlg", "vina"]:
+            logger.error(f'Docking mode {self.docking_mode} is not supported. Please choose between "dlg" and "vina".')
 
 class InputFiles(RTOptions):
     """ Class that handles sources of data to be written including ligand data paths and how 
@@ -191,7 +192,7 @@ class InputFiles(RTOptions):
     }
 
     def __init__(self):
-        super().initialize_from_dict(self.options)
+        super().initialize_from_dict(self.options, self.__class__.__name__)
 
     def checks(self):
         if hasattr(self, "target"):
@@ -245,7 +246,7 @@ class ResultsProcessingOptions(RTOptions):
     }
 
     def __init__(self):
-        super().initialize_from_dict(self.options)
+        super().initialize_from_dict(self.options, self.__class__.__name__)
 
     def checks(self):
         # Check interaction_tolerance compatibilities 
@@ -341,7 +342,7 @@ class StorageOptions(RTOptions):
     }
 
     def __init__(self):
-        super().initialize_from_dict(self.options)
+        super().initialize_from_dict(self.options, self.__class__.__name__)
 
     def checks(self):
         
@@ -359,9 +360,8 @@ class StorageOptions(RTOptions):
                     "Requested ording option that is not available. Please see --help for available options."
                 )
             # Make sure we include ligand name in output columnds
-            if self.outfields is not None and "ligand_name" not in self.outfields:
-                self.outfields = "ligand_name," + self.outfields
-
+            if self.outfields is not None and "Ligand_name" not in self.outfields:
+                self.outfields = "Ligand_name," + self.outfields
         
     order_options = {
             "e",
@@ -452,7 +452,7 @@ class ReadOptions(RTOptions):
             "type":str,
             "description": ""
         },
-    "export_sdf_path":{                 # this is an export method 
+        "export_sdf_path":{                 # this is an export method 
             "default":"",
             "type":str,
             "description": ""
@@ -460,7 +460,7 @@ class ReadOptions(RTOptions):
     }
 
     def __init__(self):
-        super().initialize_from_dict(self.options)
+        super().initialize_from_dict(self.options, self.__class__.__name__)
 
     def checks(self):
         if hasattr(self, "export_sdf_path"):
@@ -578,7 +578,7 @@ class Filters(RTOptions):
         },
     }
     def __init__(self):
-        super().initialize_from_dict(self.options)
+        super().initialize_from_dict(self.options, self.__class__.__name__)
 
     def checks(self):
         """

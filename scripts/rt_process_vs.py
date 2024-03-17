@@ -35,14 +35,13 @@ if __name__ == "__main__":
             #-#-#- Processes results, will add receptor if "save_receptor" is true
             rtcore.add_results_from_files(filesources_dict=cmdinput.file_sources, 
                                           options_dict=cmdinput.writeopts, 
-                                          summary=rtcore.generalopts.summary)
-            
+                                          summary=rtcore.print_summary)
         time1 = time.perf_counter()
         if  rtcore.process_mode == "read":
                 logger.debug("Starting read process")
                 
                 #-#-#- Print database summary
-                if rtcore.generalopts.summary:
+                if rtcore.print_summary:
                     rtcore.produce_summary()
                 
                 #-#-#- Perform filtering
@@ -109,4 +108,4 @@ if __name__ == "__main__":
     logger.info(
         "Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds "
     )
-    if logger.level in ["DEBUG", "INFO"]: print(cmdinput.parser.epilog)
+    if logger.level() in ["DEBUG", "INFO"]: print(cmdinput.parser.epilog)

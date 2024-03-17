@@ -661,19 +661,21 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
             
-        self.rtcore = RingtailCore(db_file, logging_level=logging_level)
+        self.rtcore = RingtailCore(db_file)
+        print(f'ringtail core {self.rtcore} created')
         self.rtcore._run_mode = "cmd"
         # Read config file first, and let individual options overwrite it
+        #TODO not working
         if self.confargs.config is not None:
             logger.info("Reading options from config/options file")
             self.rtcore.add_options_from_file(self.confargs.config)
         
         self.rtcore.process_mode = parsed_opts.process_mode
-        
+
         self.generalopts = {
-            "docking_mode":docking_mode,
-            "summary":parsed_opts.summary,
-            "logging_level": logging_level
+            "docking_mode": docking_mode,
+            "print_summary": parsed_opts.summary,
+            "logging_level":logging_level
         }
 
         if process_mode == "write":
@@ -692,7 +694,7 @@ class CLOptionParser:
             
             # Create dictionary of all file sources
             self.file_sources = {
-                "file" : parsed_opts.file, 
+                "file": parsed_opts.file, 
                 "file_path": parsed_opts.file_path,
                 "file_pattern": parsed_opts.file_pattern,
                 "recursive": parsed_opts.recursive,
@@ -707,21 +709,22 @@ class CLOptionParser:
             parsed_opts.save_receptor = None
             
             # set up filters
-            filters = Filters()
-            optional_filters = filters.get_filter_keys("all") 
+            filters = {} #Filters()
+            optional_filters = Filters.get_filter_keys("all") 
             for f in optional_filters:
                 if getattr(parsed_opts, f) is not None:
                     filters_present = True
             
             if filters_present:
                 # property filters
-                property_list = filters.get_filter_keys("property") 
+                property_list = Filters.get_filter_keys("property") 
                 for kw in property_list:
-                    setattr(filters, kw, getattr(parsed_opts, kw))
+                    filters[kw] = getattr(parsed_opts, kw)
+                    #setattr(filters, kw, getattr(parsed_opts, kw))
 
                 # interaction filters (residues)
                 interactions = {}
-                interactions_kw = filters.get_filter_keys("interaction") 
+                interactions_kw = Filters.get_filter_keys("interaction") 
                 for _type in interactions_kw:
                     interactions[_type] = []
                     res_list = getattr(parsed_opts, _type)
@@ -751,7 +754,8 @@ class CLOptionParser:
                             wanted = False
                         interactions[_type].append((res, wanted))
                 for k, v in interactions.items():
-                    setattr(filters, k, v)
+                    filters[k] = v
+                    #setattr(filters, k, v)
 
                 # count interactions
                 interactions_count = []
@@ -761,10 +765,10 @@ class CLOptionParser:
                     if c is None:
                         continue
                     interactions_count.append((pool, c))
-                filters.interactions_count = interactions_count
+                filters["interactions_count"] = interactions_count
 
                 # make dictionary for ligand filters
-                ligand_kw = filters.get_filter_keys("ligand")
+                ligand_kw = Filters.get_filter_keys("ligand")
                 ligand_filters = {}
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
@@ -790,11 +794,12 @@ class CLOptionParser:
                     raise OptionError(msg)
                 
                 for k, v in ligand_filters.items():
-                    setattr(filters, k, v)
-                filters.max_miss = parsed_opts.max_miss
-                filters.react_any = parsed_opts.react_any
+                    filters[k] = v
+                    #setattr(filters, k, v)
+                filters["max_miss"] = parsed_opts.max_miss
+                filters["react_any"] = parsed_opts.react_any
 
-            if filters_present: self.filters = filters.todict()
+            if filters_present: self.filters = filters
 
         if isinstance(parsed_opts.interaction_tolerance, str):
             parsed_opts.interaction_tolerance = [
