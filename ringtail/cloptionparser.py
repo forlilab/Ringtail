@@ -605,6 +605,7 @@ class CLOptionParser:
             # add default values from ringtailoptions
             
             defaults_dict = RingtailCore.get_defaults()
+            # if I put the config here it should make config values the default values
             default_values = {}
             for _, subdict in defaults_dict.items():
                 default_values.update(subdict)
@@ -662,7 +663,6 @@ class CLOptionParser:
             db_file = parsed_opts.output_db
             
         self.rtcore = RingtailCore(db_file)
-        print(f'ringtail core {self.rtcore} created')
         self.rtcore._run_mode = "cmd"
         # Read config file first, and let individual options overwrite it
         #TODO not working
