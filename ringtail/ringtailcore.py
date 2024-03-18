@@ -177,57 +177,300 @@ class RingtailCore:
 
         return filters_dict
 
-    def _docking_mode_from_file_extension(self, file_pattern: str) -> str:
-        if file_pattern.lower() == "*.dlg*":
-            mode = "dlg"
-        elif file_pattern.lower() == "*.pdbqt*":
-            mode = "vina"
-        else:
-            raise OptionError(f'{file_pattern} is not a valid docking file format for ringtail.')
-        return mode
-    
-#-#-#- API -#-#-#
-    #-#-#- Processing methods -#-#-#
-
-    def add_config_from_file(self, config_file: str ="config.json"):
+    def _set_general_options(self, 
+                            docking_mode=None,
+                            summary=None,
+                            logging_level=None,
+                            dict: dict=None):
         """
-        Provide ringtail config from file, *not currently in use
+        Settings for ringtail
+
         Args:
-            config_file: json formatted file containing ringtail and filter options
+            docking_mode (str): dlg (autodock-gpu) or vina 
+            summary (bool): print database summary to terminal
+            logging_level (str):"WARNING": Prints errors and warnings to stout only. 
+                                "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
+                                "DEBUG": Print additional error information to STDOUT
+                dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
-        try: 
-            if config_file is None: 
-                raise OptionError("No config file was found in the Ringtail/util_files directory.")
-            
-            filepath = "config.json"
-            with open(filepath, "r") as f:
-                logger.info("Reading Ringtail options from config file")
-                options: dict = json.load(f)
+        # Dict of individual arguments
+        indiv_options: dict = vars(); 
+        del indiv_options["self"]; del indiv_options["dict"]
 
-            file_dict = options["fileobj"]
-            logger.info("A dictionary containing results files was extracted from config file.")
-            write_dict = {**options["resultsmanopts"], 
-                        "append_results": options["storageopts"]["append_results"], 
-                        "duplicate_handling":options["storageopts"]["duplicate_handling"], 
-                        "overwrite":options["storageopts"]["overwrite"]}
-            logger.info("A dictionary containing write options was extracted from config file.")
+        # Create option object with default values if needed
+        if not hasattr(self, "generalopts"): self.generalopts = GeneralOptions()
+        # Set options from dict if provided
+        if dict is not None:
+            for k,v in dict.items():
+                setattr(self.generalopts, k, v) 
 
-            self._set_storageman_attributes(dict= options["storageopts"])
-            logger.info("A dictionary containing storage options was extracted from config file.")
+        # Set additional options from individual arguments
+        #NOTE Will overwrite config file
+        for k,v in indiv_options.items():
+            if v is not None: setattr(self.generalopts, k, v)
 
-            read_dict = options["readopts"]
-            logger.info("A dictionary containing database read options was extracted from config file.")
+        # Assign attributes to ringtail core
+        self.print_summary = self.generalopts.print_summary
+        self.docking_mode = self.generalopts.docking_mode
 
-            filters_dict = options["filters"]
-            logger.info("A dictionary containing filters was extracted from config file.")
- 
-            return (file_dict, write_dict, read_dict, filters_dict)
+        if logging_level is not None:   
+            logger.setLevel(self.generalopts.logging_level.upper())
+
+    def _set_storageman_attributes(self, 
+                            filter_bookmark = None,
+                            append_results = None,
+                            duplicate_handling = None,
+                            overwrite = None,
+                            order_results = None,
+                            outfields = None,
+                            output_all_poses = None,
+                            mfpt_cluster = None,
+                            interaction_cluster = None,
+                            results_view_name =None,
+                            dict=None):
+        """
+        Options or storagemanager, used both in read and write.
+
+        Args:
+            filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
+            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
+            duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
+            overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
+            order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
+                    "available fields are:  "
+                    '"e" (docking_score), '
+                    '"le" (ligand efficiency), '
+                    '"delta" (delta energy from best pose), '
+                    '"ref_rmsd" (RMSD to reference pose), '
+                    '"e_inter" (intermolecular energy), '
+                    '"e_vdw" (van der waals energy), '
+                    '"e_elec" (electrostatic energy), '
+                    '"e_intra" (intermolecular energy), '
+                    '"n_interact" (number of interactions), '
+                    '"rank" (rank of ligand pose), '
+                    '"run" (run number for ligand pose), '
+                    '"hb" (hydrogen bonds); '
+            outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
+                    '"Ligand_name" (Ligand name), '
+                    '"e" (docking_score), '
+                    '"le" (ligand efficiency), '
+                    '"delta" (delta energy from best pose), '
+                    '"ref_rmsd" (RMSD to reference pose), '
+                    '"e_inter" (intermolecular energy), '
+                    '"e_vdw" (van der waals energy), '
+                    '"e_elec" (electrostatic energy), '
+                    '"e_intra" (intermolecular energy), '
+                    '"n_interact" (number of interactions), '
+                    '"ligand_smile" , '
+                    '"rank" (rank of ligand pose), '
+                    '"run" (run number for ligand pose), '
+                    '"hb" (hydrogen bonds), '
+                    '"receptor" (receptor name); '
+                    "Fields are printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified.
+            output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
+            mfpt_cluster (float): Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
+            interaction_cluster (float): Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
+            results_view_name (str): name for resulting book mark file. Default value is "passing_results"
+            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+        """
         
-        except FileNotFoundError:
-            logger.error("Please ensure config file is in the working directory.")
-        except Exception as e:
-            OptionError(f"There were issues with the configuration file: {e}")
+        # Dict of individual arguments
+        indiv_options: dict = vars(); 
+        del indiv_options["self"]; del indiv_options["dict"]
 
+        # Create option object with default values if needed
+        if not hasattr(self, "storageopts"): self.storageopts = StorageOptions()
+            
+        # Set options from dict if provided
+        if dict is not None:
+            for k,v in dict.items():
+                if v is not None: setattr(self.storageopts, k, v) 
+
+        # Set additional options from individual arguments
+        #NOTE Will overwrite config file
+        for k,v in indiv_options.items():
+            if v is not None: setattr(self.storageopts, k, v)
+
+        # Assign attributes to storage manager
+        for k,v in self.storageopts.todict().items():
+            setattr(self.storageman, k, v)
+
+    def _set_resultsman_attributes(self,
+                                    store_all_poses: bool = None,
+                                    max_poses: int = None,
+                                    add_interactions: bool = None,
+                                    interaction_tolerance: float = None,
+                                    interaction_cutoffs = None,
+                                    max_proc: int = None,
+                                    dict: dict =None):
+            
+        """
+        Create resultsmanager object if needed and set options.
+
+        Args:
+            store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
+            max_poses (int): how many poses to save (ordered by soem score?)
+            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            interaction_tolerance (float): longest ångström distance that is considered interaction?
+            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
+            max_proc (int): max number of computer processors to use for file reading
+            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+        """
+        # Dict of individual arguments
+        indiv_options: dict = vars(); 
+        del indiv_options["self"]; del indiv_options["dict"]
+
+        # Create option object with default values if needed
+        if not hasattr(self, "resultsmanopts"): self.resultsmanopts = ResultsProcessingOptions()
+            
+        # Set options from dict if provided
+        if dict is not None:
+            for k,v in dict.items():
+                setattr(self.resultsmanopts, k, v)
+
+        # Set additional options from individual arguments
+        #NOTE Will overwrite config file
+        for k,v in indiv_options.items():
+            if v is not None: setattr(self.resultsmanopts, k, v)
+
+        for k,v in self.resultsmanopts.todict().items():  
+            if v is not None: setattr(self.resultsman, k, v)           
+    
+    def _create_resultsmanager(self, file_sources) -> ResultsManager:
+        self.resultsman = ResultsManager(file_sources=file_sources)
+        logger.debug("Results manager object has been initialized.")
+        self._set_resultsman_attributes()
+
+    def set_read_options(self, 
+                         filtering = None,
+                         plot = None,
+                         find_similar_ligands = None,
+                         export_bookmark_csv =  None,
+                         export_bookmark_db =  None,
+                         export_query_csv =  None,
+                         export_receptor =  None,
+                         data_from_bookmark =  None,
+                         pymol =  None,
+                         enumerate_interaction_combs =  None,
+                         log_file = None,
+                         export_sdf_path = None,
+                         dict: dict =None):
+        #TODO this requires some work because some of these options are really used to call functions
+        """ Class that holds options related to reading from the database, including format for
+        result export and alternate ways of displaying the data (plotting),
+
+        Args:
+            filtering (bool): implicit argument set if there are any optional filters present
+            plot (bool): Makes scatterplot of LE vs Best Energy, saves as scatter.png.
+            find_similar_ligands (str): Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.
+            export_bookmark_csv (str): Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables
+            export_bookmark_db (bool): Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db
+            export_query_csv (str): Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]
+            export_receptor (bool): Export stored receptor pdbqt. Will write to current directory.
+            data_from_bookmark (bool): Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.
+            pymol (bool): Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.
+            enumerate_interaction_combs (bool): #TODO
+            log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
+            export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
+                optional: readopts (ReadOptions): provide options as object, will overwrite other options
+            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+        """
+        # Dict of individual arguments
+        indiv_options: dict = vars(); 
+        del indiv_options["self"]; del indiv_options["dict"]
+
+        # Create option object with default values if needed
+        if not hasattr(self, "readopts"): self.readopts = ReadOptions()
+            
+        # Set options from dict if provided
+        if dict is not None:
+            for k,v in dict.items():
+                if v is not None: setattr(self.readopts, k, v)
+
+        # Set additional options from individual arguments
+        #NOTE Will overwrite config file
+        for k,v in indiv_options.items():
+            if v is not None: setattr(self.readopts, k, v)
+
+        # Creates output man with attributes if needed
+        self.outputman = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
+
+    def set_filters(self,
+                    eworst=None, 
+                    ebest=None, 
+                    leworst=None, 
+                    lebest=None, 
+                    score_percentile=None,
+                    le_percentile=None,
+                    vdw_interactions=None,
+                    hb_interactions=None,
+                    reactive_interactions=None,
+                    interactions_count=None,
+                    react_any=None,
+                    max_miss=None,
+                    ligand_name=None,
+                    ligand_substruct=None,
+                    ligand_substruct_pos=None,
+                    ligand_max_atoms=None,
+                    ligand_operator=None,     
+                    dict: dict = None):
+        """
+        Object holding all specific filters, options, types.
+        Args:
+            #TODO
+            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+        """
+        # Dict of individual arguments
+        indiv_options: dict = vars(); 
+        del indiv_options["self"]; del indiv_options["dict"]
+
+        # Create a filter object
+        self.filters = Filters()
+            
+        # Set options from dict if provided
+        if dict is not None:
+            for k,v in dict.items():
+                if v is not None: setattr(self.filters, k, v) 
+
+        # Set additional options from individual arguments
+        #NOTE Will overwrite config file
+        for k,v in indiv_options.items():
+            if v is not None: setattr(self.filters, k, v)
+    
+    def _set_file_sources(self,
+                    file=None, 
+                    file_path=None, 
+                    file_list=None, 
+                    file_pattern=None, 
+                    recursive=None, 
+                    receptor_file=None,
+                    save_receptor=None,
+                    dict: dict = None) -> InputFiles:
+        """
+        Object holding all ligand docking results files.
+        Args:
+            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+        """
+        # Dict of individual arguments
+        indiv_options: dict = vars(); 
+        del indiv_options["self"]; del indiv_options["dict"]
+
+        # Create option object with default values if needed
+        files = InputFiles()
+            
+        # Set options from dict if provided
+        if dict is not None:
+            for k,v in dict.items():
+                setattr(files, k, v) 
+
+        # Set additional options from individual arguments
+        #NOTE Will overwrite config file
+        for k,v in indiv_options.items():
+            if v is not None: setattr(files, k, v)
+        
+        return files
+
+    #-#-#- API -#-#-#
     def add_results_from_files(self,
                                file = None, 
                                file_path = None, 
@@ -238,6 +481,7 @@ class RingtailCore:
                                save_receptor: bool = None,
                                filesources_dict: dict = None,
                                append_results: bool = None,
+                               # result processing options
                                duplicate_handling: str = None,
                                overwrite: bool = None,
                                store_all_poses: bool = None,
@@ -407,12 +651,21 @@ class RingtailCore:
                filters_dict: dict = None,
                # not filters: 
                enumerate_interaction_combs=False, 
+               output_all_poses: bool = None, 
+               mfpt_cluster = None, 
+               interaction_cluster = None, 
+               log_file: str = None, 
+               overwrite: bool = None, 
+               order_results: str = None, 
+               outfields: str = None, 
+               results_view_name: str =None, 
+               options_dict: dict = None,
                return_iter=False):
         """
         Prepare list of filters, then hand it off to storageManager to
             perform filtering. Create log of passing results.
         Args:
-            enumerate_interaction_combs (bool): inherently handled atm, might need to be depreceated?
+            enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
         """
 
         self.process_mode = "read"
@@ -436,14 +689,25 @@ class RingtailCore:
                         ligand_operator=ligand_operator,     
                         dict = filters_dict)
 
+        if options_dict is not None:
+            storage_dict, read_dict = RingtailCore.split_dict(options_dict, ["log_file", "enumerate_interaction_combs"])
+        else:
+            storage_dict = None
+            read_dict = None
+        self._set_storageman_attributes(output_all_poses = output_all_poses, 
+                                        mfpt_cluster = mfpt_cluster, 
+                                        interaction_cluster = interaction_cluster, 
+                                        overwrite = overwrite, 
+                                        order_results = order_results, 
+                                        outfields = outfields, 
+                                        results_view_name = results_view_name,
+                                        dict=storage_dict)
+        self.set_read_options(log_file=log_file,enumerate_interaction_combs=enumerate_interaction_combs, dict = read_dict)
+
         # Compatibility check with docking mode
         if self.docking_mode == "vina" and self.filters.react_any:
             logger.warning("Cannot use reaction filters with Vina mode. Removing react_any filter.")
             self.filters.react_any = False
-
-        if not hasattr(self, "readopts"):
-            logger.debug("No read options have been set, using default values found in 'RingtailOptions>ReadOptions'") 
-            self.set_read_options(enumerate_interaction_combs=enumerate_interaction_combs)
 
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
         if self.filters.max_miss == 0:
@@ -499,301 +763,45 @@ class RingtailCore:
             
         return ligands_passed
 
-    #-#-#- Methods to set ringtail options explicitly -#-#-#
-    def _set_general_options(self, 
-                            docking_mode=None,
-                            summary=None,
-                            logging_level=None,
-                            dict: dict=None):
+    def add_config_from_file(self, config_file: str ="config.json"):
         """
-        Settings for ringtail
-
+        Provide ringtail config from file, *not currently in use
         Args:
-            docking_mode (str): dlg (autodock-gpu) or vina 
-            summary (bool): print database summary to terminal
-            logging_level (str):"WARNING": Prints errors and warnings to stout only. 
-                                "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
-                                "DEBUG": Print additional error information to STDOUT
-                dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+            config_file: json formatted file containing ringtail and filter options
         """
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
+        try: 
+            if config_file is None: 
+                raise OptionError("No config file was found in the Ringtail/util_files directory.")
+            
+            filepath = "config.json"
+            with open(filepath, "r") as f:
+                logger.info("Reading Ringtail options from config file")
+                options: dict = json.load(f)
 
-        # Create option object with default values if needed
-        if not hasattr(self, "generalopts"): self.generalopts = GeneralOptions()
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                setattr(self.generalopts, k, v) 
+            file_dict = options["fileobj"]
+            logger.info("A dictionary containing results files was extracted from config file.")
+            write_dict = {**options["resultsmanopts"], 
+                        "append_results": options["storageopts"]["append_results"], 
+                        "duplicate_handling":options["storageopts"]["duplicate_handling"], 
+                        "overwrite":options["storageopts"]["overwrite"]}
+            logger.info("A dictionary containing write options was extracted from config file.")
 
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(self.generalopts, k, v)
+            self._set_storageman_attributes(dict= options["storageopts"])
+            logger.info("A dictionary containing storage options was extracted from config file.")
 
-        # Assign attributes to ringtail core
-        self.print_summary = self.generalopts.print_summary
-        self.docking_mode = self.generalopts.docking_mode
+            read_dict = options["readopts"]
+            logger.info("A dictionary containing database read options was extracted from config file.")
 
-        if logging_level is not None:   
-            logger.setLevel(self.generalopts.logging_level.upper())
-
-    def _set_storageman_attributes(self, 
-                            filter_bookmark = None,
-                            append_results = None,
-                            duplicate_handling = None,
-                            overwrite = None,
-                            order_results = None,
-                            outfields = None,
-                            output_all_poses = None,
-                            mfpt_cluster = None,
-                            interaction_cluster = None,
-                            results_view_name =None,
-                            dict=None):
-        """
-        Options or storagemanager, used both in read and write.
-
-        Args:
-            filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
-            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
-            duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
-            overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
-            order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
-                    "available fields are:  "
-                    '"e" (docking_score), '
-                    '"le" (ligand efficiency), '
-                    '"delta" (delta energy from best pose), '
-                    '"ref_rmsd" (RMSD to reference pose), '
-                    '"e_inter" (intermolecular energy), '
-                    '"e_vdw" (van der waals energy), '
-                    '"e_elec" (electrostatic energy), '
-                    '"e_intra" (intermolecular energy), '
-                    '"n_interact" (number of interactions), '
-                    '"rank" (rank of ligand pose), '
-                    '"run" (run number for ligand pose), '
-                    '"hb" (hydrogen bonds); '
-            outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
-                    '"Ligand_name" (Ligand name), '
-                    '"e" (docking_score), '
-                    '"le" (ligand efficiency), '
-                    '"delta" (delta energy from best pose), '
-                    '"ref_rmsd" (RMSD to reference pose), '
-                    '"e_inter" (intermolecular energy), '
-                    '"e_vdw" (van der waals energy), '
-                    '"e_elec" (electrostatic energy), '
-                    '"e_intra" (intermolecular energy), '
-                    '"n_interact" (number of interactions), '
-                    '"ligand_smile" , '
-                    '"rank" (rank of ligand pose), '
-                    '"run" (run number for ligand pose), '
-                    '"hb" (hydrogen bonds), '
-                    '"receptor" (receptor name); '
-                    "Fields are printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified.
-            output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
-            mfpt_cluster (float): Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
-            interaction_cluster (float): Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-            results_view_name (str): name for resulting book mark file. Default value is "passing_results"
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
+            filters_dict = options["filters"]
+            logger.info("A dictionary containing filters was extracted from config file.")
+ 
+            return (file_dict, write_dict, read_dict, filters_dict)
         
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
+        except FileNotFoundError:
+            logger.error("Please ensure config file is in the working directory.")
+        except Exception as e:
+            OptionError(f"There were issues with the configuration file: {e}")
 
-        # Create option object with default values if needed
-        if not hasattr(self, "storageopts"): self.storageopts = StorageOptions()
-            
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                setattr(self.storageopts, k, v) 
-
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(self.storageopts, k, v)
-
-        # Assign attributes to storage manager
-        for k,v in self.storageopts.todict().items():
-            setattr(self.storageman, k, v)
-
-    def _set_resultsman_attributes(self,
-                                    store_all_poses: bool = None,
-                                    max_poses: int = None,
-                                    add_interactions: bool = None,
-                                    interaction_tolerance: float = None,
-                                    interaction_cutoffs = None,
-                                    max_proc: int = None,
-                                    dict: dict =None):
-            
-        """
-        Create resultsmanager object if needed and set options.
-
-        Args:
-            store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
-            max_poses (int): how many poses to save (ordered by soem score?)
-            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
-            interaction_tolerance (float): longest ångström distance that is considered interaction?
-            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
-            max_proc (int): max number of computer processors to use for file reading
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
-
-        # Create option object with default values if needed
-        if not hasattr(self, "resultsmanopts"): self.resultsmanopts = ResultsProcessingOptions()
-            
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                setattr(self.resultsmanopts, k, v)
-
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(self.resultsmanopts, k, v)
-
-        for k,v in self.resultsmanopts.todict().items():  
-            if v is not None: setattr(self.resultsman, k, v)           
-    
-    def _create_resultsmanager(self, file_sources) -> ResultsManager:
-        self.resultsman = ResultsManager(file_sources=file_sources)
-        logger.debug("Results manager object has been initialized.")
-        self._set_resultsman_attributes()
-
-    def set_read_options(self, 
-                         filtering = None,
-                         plot = None,
-                         find_similar_ligands = None,
-                         export_bookmark_csv =  None,
-                         export_bookmark_db =  None,
-                         export_query_csv =  None,
-                         export_receptor =  None,
-                         data_from_bookmark =  None,
-                         pymol =  None,
-                         enumerate_interaction_combs =  None,
-                         log_file = None,
-                         export_sdf_path = None,
-                         dict: dict =None):
-        #TODO this requires some work because some of these options are really used to call functions
-        """ Class that holds options related to reading from the database, including format for
-        result export and alternate ways of displaying the data (plotting),
-
-        Args:
-            filtering (bool): implicit argument set if there are any optional filters present
-            plot (bool): Makes scatterplot of LE vs Best Energy, saves as scatter.png.
-            find_similar_ligands (str): Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.
-            export_bookmark_csv (str): Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables
-            export_bookmark_db (bool): Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db
-            export_query_csv (str): Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]
-            export_receptor (bool): Export stored receptor pdbqt. Will write to current directory.
-            data_from_bookmark (bool): Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.
-            pymol (bool): Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.
-            enumerate_interaction_combs (bool): #TODO
-            log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
-            export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
-                optional: readopts (ReadOptions): provide options as object, will overwrite other options
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
-
-        # Create option object with default values if needed
-        if not hasattr(self, "readopts"): self.readopts = ReadOptions()
-            
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                setattr(self.readopts, k, v)
-
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(self.readopts, k, v)
-
-        # Creates output man with attributes if needed
-        self.outputman = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
-
-    def set_filters(self,
-                    eworst=None, 
-                    ebest=None, 
-                    leworst=None, 
-                    lebest=None, 
-                    score_percentile=None,
-                    le_percentile=None,
-                    vdw_interactions=None,
-                    hb_interactions=None,
-                    reactive_interactions=None,
-                    interactions_count=None,
-                    react_any=None,
-                    max_miss=None,
-                    ligand_name=None,
-                    ligand_substruct=None,
-                    ligand_substruct_pos=None,
-                    ligand_max_atoms=None,
-                    ligand_operator=None,     
-                    dict: dict = None):
-        """
-        Object holding all specific filters, options, types.
-        Args:
-            #TODO
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
-
-        # Create a filter object
-        self.filters = Filters()
-            
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                if v is not None: setattr(self.filters, k, v) 
-
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(self.filters, k, v)
-    
-    def _set_file_sources(self,
-                    file=None, 
-                    file_path=None, 
-                    file_list=None, 
-                    file_pattern=None, 
-                    recursive=None, 
-                    receptor_file=None,
-                    save_receptor=None,
-                    dict: dict = None) -> InputFiles:
-        """
-        Object holding all ligand docking results files.
-        Args:
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
-
-        # Create option object with default values if needed
-        files = InputFiles()
-            
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                setattr(files, k, v) 
-
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(files, k, v)
-        
-        return files
-
-    #-#-#- Output API -#-#-#
     def create_ligand_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
         """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
 
@@ -938,13 +946,6 @@ class RingtailCore:
                 self.outputman.log_num_passing_ligands(number_similar)
                 print("Number similar ligands:", number_similar)
 
-    def get_previous_filter_data(self):
-        """Get data requested in self.out_opts['outfields'] from the
-        results view of a previous filtering
-        """
-        with self.storageman: new_data = self.storageman.fetch_data_for_passing_results()
-        with self.outputman: self.outputman.write_log(new_data)
-
     def plot(self, save=True):
         """
         Get data needed for creating Ligand Efficiency vs
@@ -962,7 +963,6 @@ class RingtailCore:
             # add to dictionary as bin of energy and le
             if None in line:
                 continue
-                #raise OutputError("Detected empty data line when plotting. Please check that database and bookmarks are not empty.")
             data_bin = (round(line[0], 3), round(line[1], 3))
             if data_bin not in all_plot_data_binned:
                 all_plot_data_binned[data_bin] = 1
@@ -980,7 +980,7 @@ class RingtailCore:
         else:
             plt.show()
 
-    def write_molecule_sdfs(self, write_nonpassing=False, return_rdmol_dict=False):
+    def write_molecule_sdfs(self, sdf_path = None, bookmark_name = None, write_nonpassing=False, return_rdmol_dict=False):
         """
         Have output manager write sdf molecules for passing results in given results bookmark
 
@@ -988,6 +988,12 @@ class RingtailCore:
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
             return_rdmol_dict (bool, optional): Suppresses SDF file writing, returns dictionary of rdkit mols
         """
+
+        # Create sdf directory if requested
+        if sdf_path is not None:
+            self.set_read_options(export_sdf_path=sdf_path)
+        if bookmark_name is not None:
+            self._set_storageman_attributes(results_view_name=bookmark_name)
 
         with self.storageman:
             if self.filters.max_miss > 0:
@@ -1028,7 +1034,7 @@ class RingtailCore:
         if return_rdmol_dict:
             return all_mols
 
-    def display_pymol(self):
+    def display_pymol(self, bookmark_name = None):
         """
         Launch pymol session and plot of LE vs docking score. Displays molecules when clicked
         """
@@ -1041,7 +1047,9 @@ class RingtailCore:
         ["pymol", "-R"],
         stdout=subprocess.PIPE,
         )
-
+        if bookmark_name is not None:
+            self._set_storageman_attributes(results_view_name=bookmark_name)
+            
         poseIDs = {}
         with self.storageman:
             # fetch data for passing ligands
@@ -1093,13 +1101,21 @@ class RingtailCore:
             df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
         
-    def export_bookmark_db(self, bookmark_db_name: str):
+    def export_bookmark_db(self, bookmark_name: str = None):
         """Export database containing data from bookmark
 
         Args:
             bookmark_db_name (str): name for bookmark_db
         """
-        
+        if bookmark_name is not None:
+            self._set_storageman_attributes(results_view_name=bookmark_name)
+
+        bookmark_db_name = (
+                        self.db_file.rstrip(".db")
+                        + "_"
+                        + self.storageman.results_view_name
+                        + ".db"
+                    )
         logger.info("Exporting bookmark database")
         if os.path.exists(bookmark_db_name):
             logger.warning(
@@ -1124,15 +1140,19 @@ class RingtailCore:
                 continue
             self.outputman.write_receptor_pdbqt(recname, recblob)
 
-    def get_previous_filter_data(self):
+    def get_previous_filter_data(self, outfields = None, bookmark_name = None):
         """Get data requested in self.out_opts['outfields'] from the
         results view of a previous filtering
         """
+        if bookmark_name is not None:
+            self._set_storageman_attributes(results_view_name=bookmark_name)
+        if outfields is not None:
+            self._set_storageman_attributes(outfields=outfields)
+
         with self.storageman: new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman: self.outputman.write_log(new_data)
-    
-    #-#-#- Util method -#-#-#
-    
+
+    #-#-#- Util method -#-#-# 
     @staticmethod
     def split_dict(dict: dict, items: list) -> tuple:
         """ Utility method that takes one dictionary and splits it into two based on the listed keys 
