@@ -61,7 +61,7 @@ class ResultsManager:
                     "Gave --add_interactions with Vina mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_file.")
         
         # start MP process
-        logger.debug(f'These are the files being procesed: {str(self.file_sources.todict())}.')
+        logger.debug(f'These are the file options being procesed: {str(self.file_sources.todict())}.')
 
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {

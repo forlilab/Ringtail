@@ -24,6 +24,7 @@ if __name__ == "__main__":
     consent = False
 
     for db in args.database:
+        #TODO MLP has changed the default method so need to change these lines as well
         defaults = RingtailCore.get_defaults()
         defaults["storage_opts"]["values"]["db_file"] = db
 

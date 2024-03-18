@@ -24,7 +24,8 @@ class RingtailCore:
     i.e. adding results to storage, filtering, output options
 
     Attributes:
-        generaloptions (GeneralOptions object): sets logging level and general processing options, including read/write, and outputting summary to console
+        generaloptions (GeneralOptions object): sets logging level and general processing options, including read/write, 
+                                                and outputting summary to console each time database is accessed
         db_file (str): name of database file being operated on
         storageman (StorageManager object): Interface module with database
         storageopts (StorageOptions object): options for storageman
@@ -33,11 +34,11 @@ class RingtailCore:
         resultsmanopts (ResultsProcessingOptions object): settings for processing result files
         outputman (OutputManager object): Manager for output tasks of log-writting, plotting, ligand SDF writing
         readopts (ReadOptions object): options for outputman and methods to process data with
-        filterobj (Filters object): object holding all optional filters
+        filters (Filters object): object holding all optional filters
     """
 #-#-#- Base methods -#-#-#
     
-    def __init__(self, db_file = "output.db", storage_type = "sqlite", process_mode="read"):
+    def __init__(self, db_file = "output.db", storage_type = "sqlite", process_mode="read", logging_level=None):
         """
         Initialize RingtailCore object and create a storageman object with the db file.
         Does not open access to the storage. Future option will include opening database as readonly.
@@ -45,11 +46,13 @@ class RingtailCore:
         _run_mode refers to whether ringtail is ran from the command line or through direct API use, 
         where the former is more restrictive. 
         """
+        logger.setLevel(logging_level)
         self.db_file = db_file
         self.process_mode = process_mode
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
-        self.set_general_options()
+        self._set_storageman_attributes()
+        self._set_general_options()
         self._run_mode = "api"
              
     def update_database_version(self, consent=False):
@@ -124,7 +127,220 @@ class RingtailCore:
             ligand_saved_coords.append(ligand_pose)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
 
-    def _produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
+    def _generate_interaction_combinations(self, max_miss=0):
+        """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
+
+        Args:
+            max_miss (int): Maximum number of interactions to be excluded
+        """
+
+        all_interactions = []
+        for _type in Filters.get_filter_keys("interaction"):
+            interactions = getattr(self.filters, _type)
+            for interact in interactions:
+                all_interactions.append(_type + "-" + interact[0])
+        # warn if max_miss greater than number of interactions
+        if max_miss > len(all_interactions):
+            logger.warning(
+                "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
+            )
+            max_miss = len(all_interactions)
+
+        # BASE CASE:
+        if max_miss == 0:
+            return [tuple(all_interactions)]
+        else:
+            combinations = list(
+                itertools.combinations(
+                    all_interactions, len(all_interactions) - max_miss
+                )
+            )
+            return combinations + self._generate_interaction_combinations(
+                max_miss=max_miss - 1
+            )
+
+    def _prepare_filters_for_storageman(self, interaction_combination):
+        """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
+
+        Args:
+            interaction_combination (list): list of interactions to be included in this round of filtering
+        Returns:
+            dict: dictionary of filters for storageman
+        """
+
+        filters_dict = self.filters.todict()
+        for itype in Filters.get_filter_keys("interaction"):
+            itype_interactions = filters_dict[itype]
+            for interaction in itype_interactions:
+                if itype + "-" + interaction[0] not in interaction_combination:
+                    filters_dict[itype].remove(interaction)
+
+        return filters_dict
+
+    def _docking_mode_from_file_extension(self, file_pattern: str) -> str:
+        if file_pattern.lower() == "*.dlg*":
+            mode = "dlg"
+        elif file_pattern.lower() == "*.pdbqt*":
+            mode = "vina"
+        else:
+            raise OptionError(f'{file_pattern} is not a valid docking file format for ringtail.')
+        return mode
+    
+#-#-#- API -#-#-#
+    #-#-#- Processing methods -#-#-#
+
+    def add_config_from_file(self, config_file: str ="config.json"):
+        """
+        Provide ringtail config from file, *not currently in use
+        Args:
+            config_file: json formatted file containing ringtail and filter options
+        """
+        try: 
+            if config_file is None: 
+                raise OptionError("No config file was found in the Ringtail/util_files directory.")
+            
+            filepath = "config.json"
+            with open(filepath, "r") as f:
+                logger.info("Reading Ringtail options from config file")
+                options: dict = json.load(f)
+
+            file_dict = options["fileobj"]
+            logger.info("A dictionary containing results files was extracted from config file.")
+            write_dict = {**options["resultsmanopts"], 
+                        "append_results": options["storageopts"]["append_results"], 
+                        "duplicate_handling":options["storageopts"]["duplicate_handling"], 
+                        "overwrite":options["storageopts"]["overwrite"]}
+            logger.info("A dictionary containing write options was extracted from config file.")
+
+            self._set_storageman_attributes(dict= options["storageopts"])
+            logger.info("A dictionary containing storage options was extracted from config file.")
+
+            read_dict = options["readopts"]
+            logger.info("A dictionary containing database read options was extracted from config file.")
+
+            filters_dict = options["filters"]
+            logger.info("A dictionary containing filters was extracted from config file.")
+ 
+            return (file_dict, write_dict, read_dict, filters_dict)
+        
+        except FileNotFoundError:
+            logger.error("Please ensure config file is in the working directory.")
+        except Exception as e:
+            OptionError(f"There were issues with the configuration file: {e}")
+
+    def add_results_from_files(self,
+                               file = None, 
+                               file_path = None, 
+                               file_list = None, 
+                               file_pattern: str = None, 
+                               recursive: bool = None, 
+                               receptor_file: str = None,
+                               save_receptor: bool = None,
+                               filesources_dict: dict = None,
+                               append_results: bool = None,
+                               duplicate_handling: str = None,
+                               overwrite: bool = None,
+                               store_all_poses: bool = None,
+                               max_poses: int = None,
+                               add_interactions: bool = None,
+                               interaction_tolerance: float = None,
+                               interaction_cutoffs: list = None,
+                               max_proc: int = None,
+                               summary: bool = None,
+                               options_dict=None
+                               ):
+        """
+        Call storage manager to process result files and add to database.
+        Options can be provided as a dict or as individual options.
+        Creates a database, or adds to an existing one if using "append_results" in storageman_opts
+
+        Args:
+            file (str): ligand result file
+            file_path (list(str)): list of folders containing one or more result files
+            file_list (list(str)): list of ligand result file(s)
+            file_pattern (str): file pattern to use with recursive search in a file_path, "*.dlg*" for AutoDock-GDP and "*.pdbqt*" for vina
+            recursive (bool): used to recursively search file_path for folders inside folders
+            receptor_file (str): string containing the receptor .pdbqt
+            save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
+            filesources_dict (InputFiles): file sources already as an object 
+
+            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
+            duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
+            store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
+            max_poses (int): how many poses to save (ordered by soem score?)
+            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            interaction_tolerance (float): longest ångström distance that is considered interaction?
+            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
+            max_proc (int): max number of computer processors to use for file reading
+            options_dict (dict): write options as a dict
+
+        """
+        
+        self.process_mode = "write"
+
+        files = self._set_file_sources(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor, filesources_dict)
+        results_files_given = (files.file is not None or files.file_path is not None or files.file_list is not None)
+        if not results_files_given and not files.save_receptor:
+            raise OptionError("At least one input option needs to be used: --file, --file_path, --file_list, or --input_db and --save_receptor")
+
+        if options_dict is not None:
+            results_dict, storage_dict = RingtailCore.split_dict(options_dict, ["append_results", "duplicate_handling", "overwrite"])
+        else:
+            storage_dict = None
+            results_dict = None
+        self._set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
+
+        # If there are any ligand files, process ligand data
+        if results_files_given: 
+            with self.storageman:
+                if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
+                    raise OptionError("The provided --input_db is not a valid path, please check the provided path.")
+                # Prepare the results manager 
+                self._create_resultsmanager(file_sources=files)
+                self.resultsman.storageman = self.storageman               
+                self.resultsman.storageman_class = self.storageman.__class__
+                self._set_resultsman_attributes(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, results_dict)
+
+                # Docking mode compatibility check
+                if self.generalopts.docking_mode == "vina" and self.resultsman.interaction_tolerance is not None:
+                    logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
+                    self.resultsman.interaction_tolerance = None
+                self.resultsman.mode = self.docking_mode
+
+                # Process results files and handle database versioning 
+                self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
+                logger.info("Adding results...")
+                self.resultsman.process_results() 
+                self.storageman.set_ringtaildb_version()
+                if summary: self.produce_summary()
+
+        if files.save_receptor: 
+            self.save_receptor(files.receptor_file)
+    
+    def save_receptor(self, receptor_file):
+            """
+            Add receptor to database. Context managed by self.storageman
+
+            Args:
+                receptors (list): list of receptor blobs to add to database
+                * currently only one receptor allowed per database
+            """
+            receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
+            with self.storageman:
+                for rec, rec_name in receptor_list:
+                    # NOTE: in current implementation, only one receptor allowed per database
+                    # Check that any receptor row is incomplete (needs receptor blob) before inserting
+                    filled_receptor_rows = self.storageman.count_receptors_in_db()
+                    if filled_receptor_rows != 0:
+                        raise RTCoreError(
+                            "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
+                                filled_receptor_rows
+                            )
+                        )
+                    self.storageman.save_receptor(rec)
+                    logger.info("Receptor data was added to the database.")
+    
+    def produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
         """Print summary of data in storage
         """
         with self.storageman: summary_data = self.storageman.fetch_summary_data(columns, percentiles)
@@ -170,253 +386,81 @@ class RingtailCore:
                         p_string += ' ' * (colon_col - len(p_string))
                         print(f"{p_string}: {summary_data[f'{p}%_{col}']:.2f}")
 
-    def _generate_interaction_combinations(self, max_miss=0):
-        """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
-
-        Args:
-            max_miss (int): Maximum number of interactions to be excluded
-        """
-
-        all_interactions = []
-        for _type in Filters.get_filter_keys("interaction"):
-            interactions = getattr(self.filterobj, _type)
-            for interact in interactions:
-                all_interactions.append(_type + "-" + interact[0])
-        # warn if max_miss greater than number of interactions
-        if max_miss > len(all_interactions):
-            logger.warning(
-                "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
-            )
-            max_miss = len(all_interactions)
-
-        # BASE CASE:
-        if max_miss == 0:
-            return [tuple(all_interactions)]
-        else:
-            combinations = list(
-                itertools.combinations(
-                    all_interactions, len(all_interactions) - max_miss
-                )
-            )
-            return combinations + self._generate_interaction_combinations(
-                max_miss=max_miss - 1
-            )
-
-    def _prepare_filters_for_storageman(self, interaction_combination):
-        """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
-
-        Args:
-            interaction_combination (list): list of interactions to be included in this round of filtering
-        Returns:
-            dict: dictionary of filters for storageman
-        """
-
-        filters_dict = self.filterobj.todict()
-        for itype in Filters.get_filter_keys("interaction"):
-            itype_interactions = filters_dict[itype]
-            for interaction in itype_interactions:
-                if itype + "-" + interaction[0] not in interaction_combination:
-                    filters_dict[itype].remove(interaction)
-
-        return filters_dict
-
-    def _docking_mode_from_file_extension(self, file_pattern: str) -> str:
-        if file_pattern.lower() == "*.dlg*":
-            mode = "dlg"
-        elif file_pattern.lower() == "*.pdbqt*":
-            mode = "vina"
-        else:
-            raise OptionError(f'{file_pattern} is not a valid docking file format for ringtail.')
-        return mode
-    
-    @staticmethod
-    def _config_file_path(filename="config.json"):
-        utilfolder = path.abspath(__file__ + "/../../util_files/")
-        if not os.path.exists(utilfolder):
-            os.makedirs(utilfolder) 
-        return utilfolder + "/" + filename
-    
-#-#-#- API -#-#-#
-    #-#-#- Processing methods -#-#-#
-
-    def add_config_from_file(self, config_file: str ="config.json"):
-        """
-        Provide ringtail config from file, *not currently in use
-        Args:
-            config_file: json formatted file containing ringtail and filter options
-        """
-        
-        if config_file is None: #or not json compatible
-            raise OptionError("No config file was found in the Ringtail/util_files directory.")
-        
-        filepath = self._config_file_path(config_file)
-        with open(filepath, "r") as f:
-            logger.info("Reading Ringtail options from config file")
-            options: dict = json.load(f)
-
-        # Set each given object option to dict to respective class or manager
-        optmap = {
-            "generalopts": self.set_general_options,
-            "writeopts": self.set_results_processing_options,
-            "storageopts": self.set_storage_options,
-            "readopts": self.set_read_options,
-            "filterobj": self.set_filters,
-            "fileobj": self.set_file_sources
-        }
-        for k, v in options.items():
-            optmap[k](dict=v)
-            logger.debug(f'{optmap[k]} was ran with these options: {v}')
-    
-    def add_results_from_files(self,
-                               file = None, 
-                               file_path = None, 
-                               file_list = None, 
-                               file_pattern = None, 
-                               recursive = None, 
-                               receptor_file=None,
-                               save_receptor = None,
-                               file_source_object = None,
-                               store_all_poses: bool = None,
-                               max_poses: int = None,
-                               add_interactions: bool = None,
-                               interaction_tolerance: float = None,
-                               interaction_cutoffs: list = None,
-                               max_proc: int = None,
-                               optionsdict=None
-                               ):
-        """
-        Call storage manager to process result files and add to database.
-        Options can be provided as a dict or as individual options.
-        Creates a database, or adds to an existing one if using "append_results" in storageman_opts
-
-        Args:
-            file (str): ligand result file
-            file_path (list(str)): list of folders containing one or more result files
-            file_list (list(str)): list of ligand result file(s)
-            file_pattern (str): file pattern to use with recursive search in a file_path, "*.dlg*" for AutoDock-GDP and "*.pdbqt*" for vina
-            recursive (bool): used to recursively search file_path for folders inside folders
-            receptor_file (str): string containing the receptor .pdbqt
-            save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            optional: file_source_object (InputFiles): file sources already as an object 
-            store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
-            max_poses (int): how many poses to save (ordered by soem score?)
-            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
-            interaction_tolerance (float): longest ångström distance that is considered interaction?
-            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
-            max_proc (int): max number of computer processors to use for file reading
-            optionsdict (dict): write options as a dict
-
-        """
-
-        self.process_mode = "write"
-
-        if file_source_object is not None:
-            files = file_source_object
-        else: 
-            self.set_file_sources(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor)
-            files = self.files
-    
-
-        results_files_given = (files.file is not None or files.file_path is not None or files.file_list is not None)
-
-        if not results_files_given and not files.save_receptor:
-            raise OptionError("At least one input option needs to be used: --file, --file_path, --file_list, or --input_db and --save_receptor")
-
-        if not hasattr(self, "storageopts"):
-            self.set_storage_options()
-
-        # If there are any ligand files, process ligand data
-        if results_files_given: 
-            with self.storageman:
-                if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
-                    raise OptionError("The provided --input_db is not a valid path, please check the provided path.")
-
-                self.set_results_processing_options(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, optionsdict)
-                
-                # Docking mode compatibility check
-                if self.generalopts.docking_mode == "vina" and self.resultsmanopts.interaction_tolerance is not None:
-                    logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
-                    self.interaction_tolerance = None
-
-                # Prepare the results manager object
-                if not hasattr(self, "resultsman"):self.resultsman = ResultsManager(file_sources=files)
-                self.resultsman.storageman = self.storageman
-                self.resultsman.storageman_class = self.storageman.__class__
-                for k,v in self.resultsmanopts.todict().items():  
-                    setattr(self.resultsman, k, v)
-                self.resultsman.mode = self.generalopts.docking_mode
-                logger.debug("Results manager object has been initialized.")
-
-                # Process results files and handle database versioning 
-                self.storageman.check_storage_ready(self._run_mode, self.generalopts.docking_mode, self.resultsmanopts.store_all_poses, self.resultsmanopts.max_poses)
-                #TODO need to check what docking mode and num of poses is, if db has data (check table with this info, first entry)
-                logger.info("Adding results...")
-                self.resultsman.process_results() 
-                self.storageman.set_ringtaildb_version()
-                if self.generalopts.summary: self._produce_summary()
-
-        if files.save_receptor: 
-            self.save_receptor(files.receptor_file)
-    
-    def save_receptor(self, receptor_file):
-            """
-            Add receptor to database. Context managed by self.storageman
-
-            Args:
-                receptors (list): list of receptor blobs to add to database
-                * currently only one receptor allowed per database
-            """
-            receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
-            with self.storageman:
-                for rec, rec_name in receptor_list:
-                    # NOTE: in current implementation, only one receptor allowed per database
-                    # Check that any receptor row is incomplete (needs receptor blob) before inserting
-                    filled_receptor_rows = self.storageman.count_receptors_in_db()
-                    if filled_receptor_rows != 0:
-                        raise RTCoreError(
-                            "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
-                                filled_receptor_rows
-                            )
-                        )
-                    self.storageman.save_receptor(rec)
-                    logger.info("Receptor data was added to the database.")
-
-    def filter(self, enumerate_interaction_combs=False, return_iter=False):
+    def filter(self, 
+               eworst=None, 
+               ebest=None, 
+               leworst=None, 
+               lebest=None, 
+               score_percentile=None,
+               le_percentile=None,
+               vdw_interactions=None,
+               hb_interactions=None,
+               reactive_interactions=None,
+               interactions_count=None,
+               react_any=None,
+               max_miss=None,
+               ligand_name=None,
+               ligand_substruct=None,
+               ligand_substruct_pos=None,
+               ligand_max_atoms=None,
+               ligand_operator=None,
+               filters_dict: dict = None,
+               # not filters: 
+               enumerate_interaction_combs=False, 
+               return_iter=False):
         """
         Prepare list of filters, then hand it off to storageManager to
             perform filtering. Create log of passing results.
         Args:
             enumerate_interaction_combs (bool): inherently handled atm, might need to be depreceated?
         """
-        #NOTE This is clunky for now, but sets options to default if they have not yet been set.
-        self.process_mode = "read"
 
-        if not hasattr(self, "filterobj"):
-            logger.debug("No filters have been set, using default values found in Filters class") 
-            self.set_filters()
-        if not hasattr(self, "storageopts"):
-            logger.debug("No storage options have been set, using default values found in 'set_storage_options'") 
-            self.set_storage_options()
+        self.process_mode = "read"
+        
+        self.set_filters(eworst=eworst, 
+                        ebest=ebest, 
+                        leworst=leworst, 
+                        lebest=lebest, 
+                        score_percentile=score_percentile,
+                        le_percentile=le_percentile,
+                        vdw_interactions=vdw_interactions,
+                        hb_interactions=hb_interactions,
+                        reactive_interactions=reactive_interactions,
+                        interactions_count=interactions_count,
+                        react_any=react_any,
+                        max_miss=max_miss,
+                        ligand_name=ligand_name,
+                        ligand_substruct=ligand_substruct,
+                        ligand_substruct_pos=ligand_substruct_pos,
+                        ligand_max_atoms=ligand_max_atoms,
+                        ligand_operator=ligand_operator,     
+                        dict = filters_dict)
+
+        # Compatibility check with docking mode
+        if self.docking_mode == "vina" and self.filters.react_any:
+            logger.warning("Cannot use reaction filters with Vina mode. Removing react_any filter.")
+            self.filters.react_any = False
 
         if not hasattr(self, "readopts"):
-            logger.debug("No read options have been set, using default values found in 'set_read_options'") 
-            self.set_read_options()
+            logger.debug("No read options have been set, using default values found in 'RingtailOptions>ReadOptions'") 
+            self.set_read_options(enumerate_interaction_combs=enumerate_interaction_combs)
+
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
-        if self.filterobj.max_miss == 0:
+        if self.filters.max_miss == 0:
             self.readopts.enumerate_interaction_combs = True
 
         # guard against unsing percentile filter with all_poses
-        if self.storageopts.output_all_poses and not (self.filterobj.score_percentile is None or self.filterobj.le_percentile is None):
+        if self.storageopts.output_all_poses and not (self.filters.score_percentile is None or self.filters.le_percentile is None):
             logger.warning(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             self.storageopts.output_all_poses = False
-
+            
         logger.info("Filtering results...")
 
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(
-                            self.filterobj.max_miss)
+                            self.filters.max_miss)
         ligands_passed = 0
         '''This for comprehension takes all combinations represented in one union of one or multiple, and filters, and goes around until all combinations have been used to filter'''
         with self.storageman:
@@ -435,7 +479,7 @@ class RingtailCore:
                         return filtered_results
                     result_bookmark_name = self.storageman.get_current_view_name()
                     with self.outputman: 
-                        self.outputman.write_filters_to_log(self.filterobj.todict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
+                        self.outputman.write_filters_to_log(self.filters.todict(), combination, f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}")
                         self.outputman.write_results_bookmark_to_log(result_bookmark_name)
                         number_passing = self.outputman.write_log(filtered_results)
                         self.outputman.log_num_passing_ligands(number_passing)
@@ -456,21 +500,21 @@ class RingtailCore:
         return ligands_passed
 
     #-#-#- Methods to set ringtail options explicitly -#-#-#
-    def set_general_options(self, docking_mode=None,
-                                summary=None,
-                                verbose=None,
-                                debug=None,
-                                rtopts=None,
-                                dict: dict=None):
+    def _set_general_options(self, 
+                            docking_mode=None,
+                            summary=None,
+                            logging_level=None,
+                            dict: dict=None):
         """
         Settings for ringtail
 
         Args:
             docking_mode (str): dlg (autodock-gpu) or vina 
             summary (bool): print database summary to terminal
-            verbose (bool): set logging level to "info" (second lowest level)
-            debug (bool): set logging level to "debug" (lowest level)
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+            logging_level (str):"WARNING": Prints errors and warnings to stout only. 
+                                "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
+                                "DEBUG": Print additional error information to STDOUT
+                dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
         # Dict of individual arguments
         indiv_options: dict = vars(); 
@@ -478,7 +522,6 @@ class RingtailCore:
 
         # Create option object with default values if needed
         if not hasattr(self, "generalopts"): self.generalopts = GeneralOptions()
-            
         # Set options from dict if provided
         if dict is not None:
             for k,v in dict.items():
@@ -489,17 +532,14 @@ class RingtailCore:
         for k,v in indiv_options.items():
             if v is not None: setattr(self.generalopts, k, v)
 
-        # Assign attributes to storage manager
-        for k,v in self.generalopts.todict().items():
-            setattr(self, k, v)
+        # Assign attributes to ringtail core
+        self.print_summary = self.generalopts.print_summary
+        self.docking_mode = self.generalopts.docking_mode
 
-        # Set logger level
-        if self.generalopts.debug:
-            logger.setLevel("DEBUG")
-        elif self.generalopts.verbose:
-            logger.setLevel("INFO")
+        if logging_level is not None:   
+            logger.setLevel(self.generalopts.logging_level.upper())
 
-    def set_storage_options(self, 
+    def _set_storageman_attributes(self, 
                             filter_bookmark = None,
                             append_results = None,
                             duplicate_handling = None,
@@ -556,6 +596,7 @@ class RingtailCore:
             results_view_name (str): name for resulting book mark file. Default value is "passing_results"
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
+        
         # Dict of individual arguments
         indiv_options: dict = vars(); 
         del indiv_options["self"]; del indiv_options["dict"]
@@ -577,13 +618,14 @@ class RingtailCore:
         for k,v in self.storageopts.todict().items():
             setattr(self.storageman, k, v)
 
-    def set_results_processing_options(self, store_all_poses = None,
-                                            max_poses = None,
-                                            add_interactions = None,
-                                            interaction_tolerance = None,
-                                            interaction_cutoffs = None,
-                                            max_proc = None,
-                                            dict: dict =None):
+    def _set_resultsman_attributes(self,
+                                    store_all_poses: bool = None,
+                                    max_poses: int = None,
+                                    add_interactions: bool = None,
+                                    interaction_tolerance: float = None,
+                                    interaction_cutoffs = None,
+                                    max_proc: int = None,
+                                    dict: dict =None):
             
         """
         Create resultsmanager object if needed and set options.
@@ -613,7 +655,15 @@ class RingtailCore:
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(self.resultsmanopts, k, v)
-        
+
+        for k,v in self.resultsmanopts.todict().items():  
+            if v is not None: setattr(self.resultsman, k, v)           
+    
+    def _create_resultsmanager(self, file_sources) -> ResultsManager:
+        self.resultsman = ResultsManager(file_sources=file_sources)
+        logger.debug("Results manager object has been initialized.")
+        self._set_resultsman_attributes()
+
     def set_read_options(self, 
                          filtering = None,
                          plot = None,
@@ -666,10 +716,7 @@ class RingtailCore:
             if v is not None: setattr(self.readopts, k, v)
 
         # Creates output man with attributes if needed
-        if hasattr(self, "outputman"):
-            self.outputman.export_sdf_path = self.readopts.export_sdf_path
-            self.outputman.log_file = self.readopts.log_file
-        else: self.outputman = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
+        self.outputman = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
 
     def set_filters(self,
                     eworst=None, 
@@ -700,26 +747,20 @@ class RingtailCore:
         indiv_options: dict = vars(); 
         del indiv_options["self"]; del indiv_options["dict"]
 
-        # Create option object with default values if needed
-        if not hasattr(self, "filterobj"):
-            self.filterobj = Filters()
+        # Create a filter object
+        self.filters = Filters()
             
         # Set options from dict if provided
         if dict is not None:
             for k,v in dict.items():
-                if v is not None: setattr(self.filterobj, k, v) 
+                if v is not None: setattr(self.filters, k, v) 
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
-            if v is not None: setattr(self.filterobj, k, v)
-
-        # Compatibility check with docking mode
-        if self.generalopts.docking_mode == "vina" and self.filterobj.react_any:
-            logger.warning("Cannot use reaction filters with Vina mode. Removing react_any filter.")
-            self.filterobj.react_any = False
+            if v is not None: setattr(self.filters, k, v)
     
-    def set_file_sources(self,
+    def _set_file_sources(self,
                     file=None, 
                     file_path=None, 
                     file_list=None, 
@@ -727,7 +768,7 @@ class RingtailCore:
                     recursive=None, 
                     receptor_file=None,
                     save_receptor=None,
-                    dict: dict = None):
+                    dict: dict = None) -> InputFiles:
         """
         Object holding all ligand docking results files.
         Args:
@@ -738,7 +779,7 @@ class RingtailCore:
         del indiv_options["self"]; del indiv_options["dict"]
 
         # Create option object with default values if needed
-        if not hasattr(self, "file"): files = InputFiles()
+        files = InputFiles()
             
         # Set options from dict if provided
         if dict is not None:
@@ -750,7 +791,7 @@ class RingtailCore:
         for k,v in indiv_options.items():
             if v is not None: setattr(files, k, v)
         
-        self.files = files
+        return files
 
     #-#-#- Output API -#-#-#
     def create_ligand_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
@@ -949,7 +990,7 @@ class RingtailCore:
         """
 
         with self.storageman:
-            if self.filterobj.max_miss > 0:
+            if self.filters.max_miss > 0:
                 logger.warning("WARNING: Requested --export_sdf_path with --max_miss. Exported SDFs will be for union of interaction combinations.")
                 self.storageman.results_view_name = self.storageman.results_view_name + "_union"
             if not self.storageman.check_passing_view_exists():
@@ -1091,8 +1132,27 @@ class RingtailCore:
         with self.outputman: self.outputman.write_log(new_data)
     
     #-#-#- Util method -#-#-#
+    
     @staticmethod
-    def generate_config_json_template(to_file=True):
+    def split_dict(dict: dict, items: list) -> tuple:
+        """ Utility method that takes one dictionary and splits it into two based on the listed keys 
+            Args: 
+                dict (dict): original dictionary
+                items (list): list of keys to use for separation
+            Returns:
+                tuple of:
+                    dict (dict): original dict minus the removed items
+                    new_dict (dict): dict containing the items removed from the original dict
+        """
+        new_dict = {}
+
+        for key in items:
+            new_dict[key] = dict.pop(key)
+        
+        return dict, new_dict
+
+    @staticmethod
+    def generate_config_json_template(to_file=True) -> str:
         """
         Creates a dict of all Ringtail option classes, and their 
         key-default value pairs. Outputs to options.json in 
@@ -1100,26 +1160,22 @@ class RingtailCore:
         of default option values.
         Args:
             to_file (bool): if true writes file to standard options json path, if false returns a json string with values
+        Return:
+            filename or json string with options
         """
-        readopts = ReadOptions().todict()
-        generalopts = GeneralOptions().todict()
-        fileobj = InputFiles().todict()
-        writeopts = ResultsProcessingOptions().todict()
-        storageopts = StorageOptions().todict()
-        filterobj = Filters().todict()
-
-        json_string = {"generalopts": generalopts,
-                       "writeopts": writeopts,
-                       "storageopts": storageopts,
-                       "readopts": readopts,
-                       "filterobj": filterobj,
-                       "fileobj": fileobj}
+        
+        json_string = {"readopts":ReadOptions().todict(),
+                       "generalopts":GeneralOptions().todict(),
+                       "resultsmanopts":ResultsProcessingOptions().todict(),
+                       "storageopts":StorageOptions().todict(),
+                       "filters":Filters().todict(),
+                       "fileobj": InputFiles().todict()}
         if to_file:
-            filepath= RingtailCore._config_file_path()
-            with open(filepath, 'w') as f: 
+            filename="config.json"
+            with open(filename, 'w') as f: 
                 f.write(json.dumps(json_string, indent=4))
-            logger.debug(f"Default ringtail option values written to file {filepath}")
-            return filepath
+            logger.debug(f"Default ringtail option values written to file {filename}")
+            return filename
         else:
             logger.debug("Default ringtail option values prepared as a string.")
             return json_string
@@ -1127,12 +1183,13 @@ class RingtailCore:
     @staticmethod       
     def get_defaults(object="all") -> dict:
         """
-        Gets default values from RingtailOptions and returns dict of all,
-        or specific object. 
+        Gets default values from RingtailOptions and returns dict of all options,
+        or options belonging to a specific group. 
         
         Args:
-            object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]
+            object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]
         """
+
         all_defaults = RingtailCore.generate_config_json_template(to_file=False)
 
         if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]:
@@ -1144,4 +1201,32 @@ class RingtailCore:
         else:
             logger.debug(f"Ringtail default values for {object} have been fetched.")
             return all_defaults[object.lower()]
+        
+    @staticmethod       
+    def get_options_info(object="all") -> dict:
+        """
+        Gets default values from RingtailOptions and returns dict of all,
+        or specific object. 
+        
+        Args:
+            object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]
+        """
+        all_info = {"readopts": ReadOptions.options,
+                    "generalopts": GeneralOptions.options,
+                    "fileobj": InputFiles.options,
+                    "writeopts": ResultsProcessingOptions.options,
+                    "storageopts": StorageOptions.options,
+                    "filters":Filters.options,}
+        
+        if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]:
+            raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]')
+        if object.lower() == "all":
+            all_info_one_dict = {}
+            for _,v in all_info.items():
+                all_info_one_dict.update(v)
+            logger.debug("All ringtail default values have been fetched.")
+            return all_info_one_dict
+        else:
+            logger.debug(f"Ringtail default values for {object} have been fetched.")
+            return all_info[object.lower()]
 

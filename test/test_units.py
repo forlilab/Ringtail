@@ -25,17 +25,15 @@ class Test_StorageManSQLite:
         rtcore = RingtailCore("output.db")
         rtcore.add_results_from_files(file_path=[["test_data/"]], recursive=True)
 
-        rtcore.set_filters(eworst = -3, 
-                           vdw_interactions=[('A:ARG:123:', True), ('A:VAL:124:', True)],
-                           hb_interactions=[('A:ARG:123:', True)],
-                           ligand_operator='OR')
-        rtcore.filter()
+        rtcore.filter(eworst = -3, 
+                    vdw_interactions=[('A:ARG:123:', True), ('A:VAL:124:', True)],
+                    hb_interactions=[('A:ARG:123:', True)],
+                    ligand_operator='OR')
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         bookmark = cur.execute("SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'")
         bookmark_filters_db_str = bookmark.fetchone()[0]
-        print(bookmark_filters_db_str)
         filters = {'eworst': -3.0, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'}
         assert bookmark_filters_db_str == json.dumps(filters)
         cur.close()
@@ -58,7 +56,7 @@ class Test_RingtailCore:
         test_filters = []
         rtc = RingtailCore()
         rtc.process_mode = "read"
-        rtc.set_general_options(docking_mode="dlg", debug = True)
+        rtc._set_general_options(docking_mode="dlg", logging_level="DEBUG")
         rtc.set_filters(hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)], vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)])
         interaction_combs = rtc._generate_interaction_combinations(1)
         for ic in interaction_combs:

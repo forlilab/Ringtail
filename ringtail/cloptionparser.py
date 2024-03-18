@@ -6,14 +6,13 @@
 
 import sys
 import argparse
-from glob import glob
-import json
+#from glob import glob
 import os
 from .logmanager import logger
 from .exceptions import OptionError
 import __main__
 from .ringtailcore import RingtailCore
-from .ringtailoptions import *
+from .ringtailoptions import Filters
 
 
 def cmdline_parser(defaults={}):
@@ -604,7 +603,9 @@ class CLOptionParser:
         # create parser
         try:
             # add default values from ringtailoptions
+            
             defaults_dict = RingtailCore.get_defaults()
+            # if I put the config here it should make config values the default values
             default_values = {}
             for _, subdict in defaults_dict.items():
                 default_values.update(subdict)
@@ -637,7 +638,10 @@ class CLOptionParser:
         """
         if parsed_opts.debug:
             logger.setLevel("DEBUG")
-
+        if parsed_opts.verbose:
+            logger.setLevel("INFO")
+        logging_level= logger.level()
+        
         if parsed_opts.process_mode is None:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
@@ -660,17 +664,19 @@ class CLOptionParser:
             
         self.rtcore = RingtailCore(db_file)
         self.rtcore._run_mode = "cmd"
-        
         # Read config file first, and let individual options overwrite it
+        #TODO not working
         if self.confargs.config is not None:
             logger.info("Reading options from config/options file")
             self.rtcore.add_options_from_file(self.confargs.config)
         
         self.rtcore.process_mode = parsed_opts.process_mode
-        self.rtcore.set_general_options(docking_mode=docking_mode, 
-                                summary=parsed_opts.summary, 
-                                verbose=parsed_opts.verbose,
-                                debug=parsed_opts.debug)
+
+        self.generalopts = {
+            "docking_mode": docking_mode,
+            "print_summary": parsed_opts.summary,
+            "logging_level":logging_level
+        }
 
         if process_mode == "write":
             # set read-only rt_process options to None to prevent errors
@@ -686,35 +692,39 @@ class CLOptionParser:
             parsed_opts.export_sdf_path = None
             parsed_opts.enumerate_interaction_combs = None
             
-            self.rtcore.set_file_sources(file = parsed_opts.file, 
-                                    file_path= parsed_opts.file_path,
-                                    file_pattern= parsed_opts.file_pattern,
-                                    recursive= parsed_opts.recursive,
-                                    file_list= parsed_opts.file_list,
-                                    receptor_file= parsed_opts.receptor_file,
-                                    save_receptor= parsed_opts.save_receptor)
-
+            # Create dictionary of all file sources
+            self.file_sources = {
+                "file": parsed_opts.file, 
+                "file_path": parsed_opts.file_path,
+                "file_pattern": parsed_opts.file_pattern,
+                "recursive": parsed_opts.recursive,
+                "file_list": parsed_opts.file_list,
+                "receptor_file": parsed_opts.receptor_file,
+                "save_receptor": parsed_opts.save_receptor
+            }
+        
         elif process_mode == "read":
             # set write-only rt_process options to None to prevent errors
             parsed_opts.receptor_file = None
             parsed_opts.save_receptor = None
             
             # set up filters
-            filters = Filters()
-            optional_filters = filters.get_filter_keys("all") 
+            filters = {} #Filters()
+            optional_filters = Filters.get_filter_keys("all") 
             for f in optional_filters:
                 if getattr(parsed_opts, f) is not None:
                     filters_present = True
             
             if filters_present:
                 # property filters
-                property_list = filters.get_filter_keys("property") 
+                property_list = Filters.get_filter_keys("property") 
                 for kw in property_list:
-                    setattr(filters, kw, getattr(parsed_opts, kw))
+                    filters[kw] = getattr(parsed_opts, kw)
+                    #setattr(filters, kw, getattr(parsed_opts, kw))
 
                 # interaction filters (residues)
                 interactions = {}
-                interactions_kw = filters.get_filter_keys("interaction") 
+                interactions_kw = Filters.get_filter_keys("interaction") 
                 for _type in interactions_kw:
                     interactions[_type] = []
                     res_list = getattr(parsed_opts, _type)
@@ -744,7 +754,8 @@ class CLOptionParser:
                             wanted = False
                         interactions[_type].append((res, wanted))
                 for k, v in interactions.items():
-                    setattr(filters, k, v)
+                    filters[k] = v
+                    #setattr(filters, k, v)
 
                 # count interactions
                 interactions_count = []
@@ -754,10 +765,10 @@ class CLOptionParser:
                     if c is None:
                         continue
                     interactions_count.append((pool, c))
-                filters.interactions_count = interactions_count
+                filters["interactions_count"] = interactions_count
 
                 # make dictionary for ligand filters
-                ligand_kw = filters.get_filter_keys("ligand")
+                ligand_kw = Filters.get_filter_keys("ligand")
                 ligand_filters = {}
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
@@ -783,45 +794,55 @@ class CLOptionParser:
                     raise OptionError(msg)
                 
                 for k, v in ligand_filters.items():
-                    setattr(filters, k, v)
-                filters.max_miss = parsed_opts.max_miss
-                filters.react_any = parsed_opts.react_any
+                    filters[k] = v
+                    #setattr(filters, k, v)
+                filters["max_miss"] = parsed_opts.max_miss
+                filters["react_any"] = parsed_opts.react_any
 
-            if filters_present: self.rtcore.set_filters(dict=filters.todict())
+            if filters_present: self.filters = filters
 
         if isinstance(parsed_opts.interaction_tolerance, str):
             parsed_opts.interaction_tolerance = [
                 float(val) for val in parsed_opts.interaction_cutoffs.split(",")
             ]
-        
-        self.rtcore.set_results_processing_options(parsed_opts.store_all_poses, 
-                                        parsed_opts.max_poses,
-                                        parsed_opts.add_interactions,
-                                        parsed_opts.interaction_tolerance,
-                                        parsed_opts.interaction_cutoffs,
-                                        parsed_opts.max_proc,)
 
-        self.rtcore.set_read_options(filters_present,
-                                    parsed_opts.plot,
-                                    parsed_opts.find_similar_ligands,
-                                    parsed_opts.export_bookmark_csv,
-                                    parsed_opts.export_bookmark_db,
-                                    parsed_opts.export_query_csv,
-                                    parsed_opts.export_receptor,
-                                    parsed_opts.data_from_bookmark,
-                                    parsed_opts.pymol,
-                                    parsed_opts.enumerate_interaction_combs,
-                                    parsed_opts.log_file,
-                                    parsed_opts.export_sdf_path)
+        # combine all options used in write mode 
+        self.writeopts = {
+            "append_results":parsed_opts.append_results,
+            "duplicate_handling":parsed_opts.duplicate_handling,
+            "overwrite":parsed_opts.overwrite,
+            "store_all_poses":parsed_opts.store_all_poses, 
+            "max_poses":parsed_opts.max_poses,
+            "add_interactions":parsed_opts.add_interactions,
+            "interaction_tolerance":parsed_opts.interaction_tolerance,
+            "interaction_cutoffs":parsed_opts.interaction_cutoffs,
+            "max_proc":parsed_opts.max_proc
+        }
+        # combine all options used in read mode
+        self.readopts = {
+            "filtering":filters_present,
+            "plot":parsed_opts.plot,
+            "find_similar_ligands":parsed_opts.find_similar_ligands,
+            "export_bookmark_csv":parsed_opts.export_bookmark_csv,
+            "export_bookmark_db":parsed_opts.export_bookmark_db,
+            "export_query_csv":parsed_opts.export_query_csv,
+            "export_receptor":parsed_opts.export_receptor,
+            "data_from_bookmark":parsed_opts.data_from_bookmark,
+            "pymol":parsed_opts.pymol,
+            "enumerate_interaction_combs":parsed_opts.enumerate_interaction_combs,
+            "log_file":parsed_opts.log_file,
+            "export_sdf_path":parsed_opts.export_sdf_path
+        }
 
-        self.rtcore.set_storage_options(parsed_opts.filter_bookmark,
-                                    parsed_opts.append_results,
-                                    parsed_opts.duplicate_handling,
-                                    parsed_opts.overwrite,
-                                    parsed_opts.order_results,
-                                    parsed_opts.outfields,
-                                    parsed_opts.output_all_poses,
-                                    parsed_opts.mfpt_cluster,
-                                    parsed_opts.interaction_cluster,
-                                    parsed_opts.results_view_name,)
-
+        self.storageopts = {
+            "filter_bookmark":parsed_opts.filter_bookmark,
+            "append_results":parsed_opts.append_results,
+            "duplicate_handling":parsed_opts.duplicate_handling,
+            "overwrite":parsed_opts.overwrite,
+            "order_results":parsed_opts.order_results,
+            "outfields":parsed_opts.outfields,
+            "output_all_poses":parsed_opts.output_all_poses,
+            "mfpt_cluster":parsed_opts.mfpt_cluster,
+            "interaction_cluster":parsed_opts.interaction_cluster,
+            "results_view_name":parsed_opts.results_view_name
+        }

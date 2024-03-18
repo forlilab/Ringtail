@@ -26,6 +26,7 @@ class RTLogger:
         return cls._instance
     
     def initialization(self, level = "WARNING", filename = "rt_process_log.txt"):
+        #TODO get log level default from options
         """ 
         Options for instantiation of the logger. 
         """
@@ -42,8 +43,13 @@ class RTLogger:
 
     def setLevel(self, level: str):
         """ Sets level of the logger and prints to log (if debug)."""
-        self.logger.setLevel(level.upper())
-        self.logger.info("Log level changed to " + str(level))
+        if level is None:
+            return
+        elif level not in ["DEBUG", "INFO", "WARNING","ERROR","CRITICAL"]:
+            logger.error(f"{level} is not a valid logging level option. Logger level reverted to {self.level()}.")
+        elif level != self.logger.level:
+            self.logger.setLevel(level.upper())
+            self.logger.debug("Log level changed to " + str(level))
 
     def level(self):
         levels ={10: "DEBUG",
