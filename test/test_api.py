@@ -39,7 +39,7 @@ class TestAPI:
     # Setup
     rtstorage = RingtailCore(db_file="outputapi.db")
 
-    rtstorage.set_general_options(summary=False, debug=True)
+    rtstorage._set_general_options(summary=False, logging_level="debug")
     rtstorage.add_results_from_files(file_path = [['test_data/']],
                                      recursive = True,
                                      receptor_file="test_data/4j8m.pdbqt",
@@ -56,29 +56,26 @@ class TestAPI:
         assert count == 645
 
     def test_one_filter(self):
-        self.rtstorage.set_filters(eworst = -6)
-        count_ligands_passing = self.rtstorage.filter()
+        count_ligands_passing = self.rtstorage.filter(eworst = -6)
         assert count_ligands_passing == 65
         os.system("rm output_log.txt ")
 
     def test_two_filters(self):
-        self.rtstorage.set_filters(eworst = -6, hb_interactions= [('A:VAL:279:', True), ('A:LYS:162:', True)])
-        count_ligands_passing = self.rtstorage.filter()
+        count_ligands_passing = self.rtstorage.filter(eworst = -6, hb_interactions= [('A:VAL:279:', True), ('A:LYS:162:', True)])
         assert count_ligands_passing == 18
         os.system("rm output_log.txt")
 
     def test_three_filters(self, dbquery):
-        self.rtstorage.set_filters(eworst = -6, hb_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)], vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)], max_miss = 1)
-        count_ligands_passing = self.rtstorage.filter()
-        assert count_ligands_passing == 51 
+        count_ligands_passing = self.rtstorage.filter(eworst = -6, hb_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)], vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)], max_miss = 1)
         os.system("rm outputapi.db output_log.txt")
+        assert count_ligands_passing == 51 
+        
 
 class TestConfigFile:
     # Setup
-    rtcore = RingtailCore(db_file="outputapi.db")
+    rtcore = RingtailCore(db_file="outputapi.db", logging_level = "DEBUG")
     rtcore.generate_config_json_template()
-    filepath = rtcore._config_file_path()
-
+    filepath = "config.json"
     with open(filepath, "r") as f:
         data = json.load(f)
     # all fields I want to change
@@ -87,27 +84,28 @@ class TestConfigFile:
     data["fileobj"]["recursive"] = True
     data["fileobj"]["receptor_file"] = "test_data/4j8m.pdbqt"
     data["fileobj"]["save_receptor"] = True
-    data["filterobj"]["eworst"] = -6
-    data["filterobj"]["vdw_interactions"] = [('A:VAL:279:', True), ('A:LYS:162:', True)]
-    data["filterobj"]["hb_interactions"] = [('A:VAL:279:', True), ('A:LYS:162:', True)]
-    data["filterobj"]["max_miss"] = 1
+    data["filters"]["eworst"] = -6
+    data["filters"]["vdw_interactions"] = [('A:VAL:279:', True), ('A:LYS:162:', True)]
+    data["filters"]["hb_interactions"] = [('A:VAL:279:', True), ('A:LYS:162:', True)]
+    data["filters"]["max_miss"] = 1
 
     with open(filepath, "w") as f:
         f.write(json.dumps(data, indent=4))
-    rtcore.add_config_from_file()
+    
+    (file_dict, write_dict, _, filters_dict) = rtcore.add_config_from_file()
 
     def test_adding_results(self, dbquery):
-        self.rtcore.add_results_from_files(file_source_object= self.rtcore.files)
+        self.rtcore.add_results_from_files(filesources_dict= self.file_dict, options_dict=self.write_dict)
         curs = dbquery("""SELECT COUNT(*) FROM Results;""" )
         count = curs.fetchone()[0]
 
         assert count == 645
         
     def test_filter(self):
-        count_ligands_passing = self.rtcore.filter()
-
+        count_ligands_passing = self.rtcore.filter(filters_dict=self.filters_dict)
+        os.system("rm output_log.txt outputapi.db")
         assert count_ligands_passing == 51 
-        os.system("rm outputapi.db")
+        
 
 class TestOptionsHandling:
     pass
