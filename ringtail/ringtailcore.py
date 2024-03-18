@@ -443,7 +443,7 @@ class RingtailCore:
 
         if not hasattr(self, "readopts"):
             logger.debug("No read options have been set, using default values found in 'RingtailOptions>ReadOptions'") 
-            self._set_read_options(enumerate_interaction_combs=enumerate_interaction_combs)
+            self.set_read_options(enumerate_interaction_combs=enumerate_interaction_combs)
 
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
         if self.filters.max_miss == 0:
@@ -664,7 +664,7 @@ class RingtailCore:
         logger.debug("Results manager object has been initialized.")
         self._set_resultsman_attributes()
 
-    def _set_read_options(self, 
+    def set_read_options(self, 
                          filtering = None,
                          plot = None,
                          find_similar_ligands = None,
@@ -1183,8 +1183,8 @@ class RingtailCore:
     @staticmethod       
     def get_defaults(object="all") -> dict:
         """
-        Gets default values from RingtailOptions and returns dict of all,
-        or specific object. 
+        Gets default values from RingtailOptions and returns dict of all options,
+        or options belonging to a specific group. 
         
         Args:
             object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]
@@ -1220,10 +1220,12 @@ class RingtailCore:
         
         if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]:
             raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]')
-        
         if object.lower() == "all":
+            all_info_one_dict = {}
+            for _,v in all_info.items():
+                all_info_one_dict.update(v)
             logger.debug("All ringtail default values have been fetched.")
-            return all_info
+            return all_info_one_dict
         else:
             logger.debug(f"Ringtail default values for {object} have been fetched.")
             return all_info[object.lower()]
