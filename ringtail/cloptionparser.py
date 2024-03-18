@@ -86,7 +86,7 @@ def cmdline_parser(defaults={}):
     )
     write_parser.add_argument(
         "-su",
-        "--summary",
+        "--print_summary",
         help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1%% (percentile) and 10%% (percentile) energy and ligand efficiency.',
         action="store_true",
     )
@@ -262,7 +262,7 @@ def cmdline_parser(defaults={}):
     )
     read_parser.add_argument(
         "-su",
-        "--summary",
+        "--print_summary",
         help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1%% (percentile) and 10%% (percentile) energy and ligand efficiency.',
         action="store_true",
     )
@@ -674,7 +674,7 @@ class CLOptionParser:
 
         self.generalopts = {
             "docking_mode": docking_mode,
-            "print_summary": parsed_opts.summary,
+            "print_summary": parsed_opts.print_summary,
             "logging_level":logging_level
         }
 

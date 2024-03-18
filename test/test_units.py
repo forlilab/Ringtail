@@ -78,4 +78,4 @@ class Test_RingtailCore:
 
         assert len(test_filters) == 5
     
-    os.system("rm output_log.txt output.db")
+        os.system("rm output_log.txt output.db")

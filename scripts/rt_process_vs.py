@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     # create manager object for virtual screening. Will make database if needed
     try:
-        rtcore._set_read_options(dict=cmdinput.readopts)
+        rtcore.set_read_options(dict=cmdinput.readopts)
         readopts = rtcore.readopts 
         if rtcore.process_mode == "write":
             logger.debug("Starting write process")
@@ -80,13 +80,7 @@ if __name__ == "__main__":
                     rtcore.export_csv(readopts.export_query_csv, "query.csv")
 
                 if readopts.export_bookmark_db:
-                    bookmark_name = (
-                        rtcore.storageman.db_file.rstrip(".db")
-                        + "_"
-                        + rtcore.storageman.results_view_name
-                        + ".db"
-                    )
-                    rtcore.export_bookmark_db(bookmark_name)
+                    rtcore.export_bookmark_db(rtcore.storageman.results_view_name)
 
                 if readopts.export_receptor:
                     rtcore.export_receptors()
