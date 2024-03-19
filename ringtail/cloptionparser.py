@@ -6,7 +6,6 @@
 
 import sys
 import argparse
-#from glob import glob
 import os
 from .logmanager import logger
 from .exceptions import OptionError
@@ -603,12 +602,13 @@ class CLOptionParser:
         # create parser
         try:
             # add default values from ringtailoptions
-            
             defaults_dict = RingtailCore.get_defaults()
-            # if I put the config here it should make config values the default values
             default_values = {}
             for _, subdict in defaults_dict.items():
                 default_values.update(subdict)
+                
+            #TODO if using a config file it should overwrite the defaults
+            
             (
                 parsed_opts,
                 self.parser,
