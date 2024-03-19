@@ -7,6 +7,7 @@ from ringtail import StorageManagerSQLite, RingtailCore, Filters
 import sqlite3
 import os
 import json
+import pytest
 
 class Test_StorageManSQLite:
     #TODO rewrite tests to go better with API update? 
@@ -86,17 +87,31 @@ class Test_RingtailCore:
     
         os.system("rm output_log.txt output.db")
 
-#TODO
 class Test_logger:
     def test_set_log_level(self):
-        # set log level and read it
-        # set illegal log level and read what happens
-        assert True
+        from ringtail import logger
+        logger.setLevel("info")
+        log1 = logger.level()
+        logger.setLevel(50)
+        log2 = logger.level()
+        assert log1 == log2 == "INFO" 
     
-    def test_logfile_format(self):
-        # cause an error and print to log file
-        # check if output and traceback signature is what it should be
-        assert True 
+    def test_loggerfile_format(self):
+        from ringtail import logger, exceptions
+        try:
+            raise(exceptions.OptionError("This is a test error."))
+        except Exception as e:
+            pass
+
+        with open(logger.filename()) as f:
+            for line in f:
+                pass
+        last_line = line
+        keywords = ["ERROR", "test_units.py[", "ringtail.exceptions:This is a test error."]
+        assert all(x in last_line for x in keywords)
+        
+        
+        
 
 #TODO
 class Test_exceptions:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail end-to-end testing
+# Ringtail command line tool end-to-end testing
 #
 
 import sqlite3

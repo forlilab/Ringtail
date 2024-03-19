@@ -120,7 +120,7 @@ class GeneralOptions(RTOptions):
         },  
         "logging_level":{
             "type": str,
-            "default": None,
+            "default": "WARNING",
             "description": '''
                             "WARNING": Prints errors and warnings to stout only. 
                             "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
@@ -199,7 +199,7 @@ class InputFiles(RTOptions):
         super().initialize_from_dict(self.options, self.__class__.__name__)
 
     def checks(self):
-        if hasattr(self, "target"):
+        if hasattr(self, "target"): # ensures last item in the option dictionary has been
             if type(self.target) != str:
                 if self.receptor_file is None:
                     pass
@@ -207,6 +207,7 @@ class InputFiles(RTOptions):
                     self.target = (os.path.basename(self.receptor_file).split(".")[0])
                 else:
                     raise OptionError("The receptor PDBQT file path is not valid. Please check location of receptor file and --receptor_file option")
+
         # This object needs an onchange method (they all do). That way initialization is just initialization, and 
         # option setting is always checked and not done in init
         
