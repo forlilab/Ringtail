@@ -43,10 +43,15 @@ class RTLogger:
 
     def setLevel(self, level: str):
         """ Sets level of the logger and prints to log (if debug)."""
-        if level is None:
+        if type(level) == str:
+            level = level.upper()
+        else:
+            logger.warning(f"{level} is not a a string. Please use one of the following options: debug, info, or warning. Logger level reverted to {self.level()}.")
             return
-        elif level not in ["DEBUG", "INFO", "WARNING","ERROR","CRITICAL"]:
-            logger.error(f"{level} is not a valid logging level option. Logger level reverted to {self.level()}.")
+        
+        if level.upper() not in ["DEBUG", "INFO", "WARNING","ERROR","CRITICAL"]:
+            logger.warning(f"{level} is not a valid logging level option. Logger level reverted to {self.level()}.")
+            return
         elif level != self.logger.level:
             self.logger.setLevel(level.upper())
             self.logger.debug("Log level changed to " + str(level))
@@ -59,6 +64,9 @@ class RTLogger:
                  50: "CRITICAL"}
         return levels[self.logger.level]
 
+    def filename(self):
+        return self.fileHandler.baseFilename
+    
     def header(self, header):
         headFmt = logging.Formatter("%(asctime)30s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
         self.fileHandler.setFormatter(headFmt)
@@ -86,14 +94,14 @@ class RTLogger:
         """
         Method to format python FrameInfo object to this format:
         file[lineno]:file[lineno]file[lineno]: (first file is last in the stack)
-
-        #TODO s
-            - make print true to direction of stack trace
         """
         stacktrace=""
         for i in stack:
+            
             fn: str = i.filename
             if fn.startswith("<frozen"):
+                pass
+            elif "site-packages" in fn:
                 pass
             else:
                 fn = fn.rsplit("/", 1)[1]

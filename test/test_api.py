@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail API testing
+#
+
 import sqlite3
 import os
 import pytest
@@ -37,9 +43,8 @@ def dbquery():
 
 class TestAPI:
     # Setup
-    rtstorage = RingtailCore(db_file="outputapi.db")
+    rtstorage = RingtailCore(db_file="outputapi.db", logging_level="debug")
 
-    rtstorage._set_general_options(summary=False, logging_level="debug")
     rtstorage.add_results_from_files(file_path = [['test_data/']],
                                      recursive = True,
                                      receptor_file="test_data/4j8m.pdbqt",
@@ -104,14 +109,19 @@ class TestConfigFile:
         
     def test_filter(self):
         count_ligands_passing = self.rtcore.filter(filters_dict=self.filters_dict)
-        os.system("rm output_log.txt outputapi.db")
+        os.system("rm output_log.txt outputapi.db config.json")
         assert count_ligands_passing == 51 
         
 
 class TestOptionsHandling:
-    pass
-    # Test the order of operations, single options overwrite passing through a dict
+    # setup
+    rtcore = RingtailCore(db_file="outputapi.db", logging_level = "DEBUG")
 
+    def test_type_checking(self):
+        pass
+    
+    # Test the order of operations, single options overwrite passing through a dict
+    
     # Test that type is checked even if you set a value later on
 
     # Test that you can set an individual value on an object after it has been set

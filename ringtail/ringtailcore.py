@@ -203,17 +203,21 @@ class RingtailCore:
         if dict is not None:
             for k,v in dict.items():
                 setattr(self.generalopts, k, v) 
+            print(self.generalopts.todict())
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(self.generalopts, k, v)
+        print(self.generalopts.todict())
 
         # Assign attributes to ringtail core
         self.print_summary = self.generalopts.print_summary
         self.docking_mode = self.generalopts.docking_mode
 
-        if logging_level is not None:   
+        if self.generalopts.logging_level is not None:  
+            print(self.generalopts.logging_level.upper())
+            self.generalopts.logging_level=self.generalopts.logging_level.upper() 
             logger.setLevel(self.generalopts.logging_level.upper())
 
     def _set_storageman_attributes(self, 
@@ -454,6 +458,8 @@ class RingtailCore:
         # Dict of individual arguments
         indiv_options: dict = vars(); 
         del indiv_options["self"]; del indiv_options["dict"]
+        print(indiv_options["file_list"])
+        print("printed from inside set file sources")
 
         # Create option object with default values if needed
         files = InputFiles()
