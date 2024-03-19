@@ -21,9 +21,33 @@ def countrows():
         return count
     return __dbconnect
 
+#TODO
+# rename commandline tests
+
 class TestInputs:
     os.system("rm output.db")
+
+    #TODO
+    def test_cmdline_default(self):
+        # run command line with minimal stuff, and read parsed opts
+        assert True
     
+    #TODO
+    def test_cmdline_config_file(self):
+        # run command line with config file only and it should pass (may need read or write), and read parsed_opts
+        assert True
+    
+    #TODO
+    def test_organization_of_parsed_opts(self):
+        # print parsed dictionaries and assert composition
+        assert True
+
+    #TODO
+    def test_db_file(self):
+        # add file that exists, check for append
+        # if append, check poses and docking mode consistent (read error message)
+        assert True
+
     def test_multiple_files1(self, countrows):
         os.system(
                 "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
@@ -274,7 +298,17 @@ class TestOutputs:
         assert count == ligcount * 20
 
 class TestFilters:
-
+    #TODO
+    def test_complex_filters_error(self):
+        # check that filters are parsed right
+        # check that wrong filter formats causes the correct error
+        assert True
+    
+    #TODO
+    def test_interaction_count(self):
+        # this was not tested before, and was not working
+        assert True
+    
     def test_eworst(self):
         status1 = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"

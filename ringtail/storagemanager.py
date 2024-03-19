@@ -368,8 +368,6 @@ class StorageManagerSQLite(StorageManager):
         self.overwrite = overwrite
         self.append_results = append_results
         self.order_results = order_results
-        # if outfields is not None and "Ligand_name" not in outfields:  # make sure we are outputting the ligand name
-        #     outfields = "Ligand_name," + outfields
         self.outfields = outfields
         self.output_all_poses = output_all_poses
         self.mfpt_cluster = mfpt_cluster

@@ -1,12 +1,14 @@
 import os
-
 from .exceptions import OptionError
 from .logmanager import logger
 import copy
-import json
 
 """ Ringtail options contains objects for holding all ringtail options, 
 and ensures safe type enforcement."""
+
+#TODO update options description
+#TODO re-do object description so more succinct
+#TODO add better title? model after other managers/classes
 
 class TypeSafe:
     """
@@ -190,6 +192,8 @@ class InputFiles(RTOptions):
             "description": "name of receptor"
         },
     }
+    
+    #TODO ensure files does not have to be just lists
 
     def __init__(self):
         super().initialize_from_dict(self.options, self.__class__.__name__)
@@ -205,8 +209,6 @@ class InputFiles(RTOptions):
                     raise OptionError("The receptor PDBQT file path is not valid. Please check location of receptor file and --receptor_file option")
         # This object needs an onchange method (they all do). That way initialization is just initialization, and 
         # option setting is always checked and not done in init
-
-        #TODO add a check if something is already populated, add it to the list? for the file attributes
         
 class ResultsProcessingOptions(RTOptions):
     """ Class that holds database write options that affects write time, such as how to 

@@ -9,7 +9,7 @@ import os
 import json
 
 class Test_StorageManSQLite:
-
+    #TODO rewrite tests to go better with API update? 
     def test_fetch_summary_data(self):
         
         status1 = os.system(
@@ -50,6 +50,12 @@ class Test_StorageManSQLite:
         assert int(version) == 110  # NOTE: update for new versions
         os.system("rm output.db")
 
+    #TODO
+    def test_context_manager(self):
+        # ensure database open correctly
+        # ensure database closes correctly
+        assert True
+
 class Test_RingtailCore:
 
     def test_prepare_filters_for_storageman(self):
@@ -79,3 +85,52 @@ class Test_RingtailCore:
         assert len(test_filters) == 5
     
         os.system("rm output_log.txt output.db")
+
+#TODO
+class Test_logger:
+    def test_set_log_level(self):
+        # set log level and read it
+        # set illegal log level and read what happens
+        assert True
+    
+    def test_logfile_format(self):
+        # cause an error and print to log file
+        # check if output and traceback signature is what it should be
+        assert True 
+
+#TODO
+class Test_exceptions:
+    def test_option_error(self):
+        # make sure errors are caught and surfaced properly
+            # in command line
+            # in API
+            # write to stout when necessary
+        assert True
+
+#TODO 
+class Test_outputmanager:
+    def test_logfile_write(self):
+        # if making new
+        # if overwriting
+        # is there an option to add?
+        assert True
+
+#TODO
+class Test_options:
+    def test_options_type_check(self):
+        # if corrrect type
+        # if wrong type
+        # if re-assigning
+        # does it initialize right? 
+        # does it re-initialize and default right?
+        assert True
+    
+    def test_file_format(self):
+        # that files are double lists ready for results manager
+        # file extension is correct
+        # folders are proper directories
+        assert True
+    
+    def test_object_checks(self):
+        # take one object or two and make sure checks are performed when appropriate
+        assert True

@@ -70,6 +70,7 @@ class TestAPI:
         os.system("rm outputapi.db output_log.txt")
         assert count_ligands_passing == 51 
         
+    #TODO complete tests for all public api methods
 
 class TestConfigFile:
     # Setup

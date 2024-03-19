@@ -88,8 +88,8 @@ rtc.print_summary()
 To filter results in a database the method `filter` is called on the ringtail core. Filter values can be set directly in the method call:
 
 ```
-rtc.filter( eworst=-2, 
-            vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)])
+num_ligands_passing_filters = rtc.filter( eworst=-2, 
+                                        vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)])
 ```
 
 You can also create a dictionary of filters, and pass this to the `filter` method:
@@ -100,16 +100,16 @@ filters = {
     "max_miss": 1
 }
 
-rtc.filter( filters_dict = filters)
+num_ligands_passing_filters = rtc.filter( filters_dict = filters)
 ```
 
 Storage and read settings can also be set directly in the method call, for example:
 ```
-rtc.filter( eworst=-2, 
-            vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)],
-            log_file = "experiment424_log.txt",
-            overwrite = False,
-            output_all_poses = True)
+num_ligands_passing_filters = rtc.filter( eworst=-2, 
+                                        vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)],
+                                        log_file = "experiment424_log.txt",
+                                        overwrite = False,
+                                        output_all_poses = True)
 
 ```
 
@@ -127,7 +127,7 @@ options = {
     "output_all_poses": True
 }
 
-rtc.filter( filters_dict = filters, options_dict = options)
+num_ligands_passing_filters = rtc.filter( filters_dict = filters, options_dict = options)
 ```
 
 Available filter and options are:
