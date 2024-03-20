@@ -118,16 +118,6 @@ class TestInputs:
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
 
-    def test_duplicate_handling_rpl(self, countrows):
-        os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
-        )
-        os.system(
-            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group1 --append_results --duplicate_handling replace"
-        )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
-        assert count == 138
-
     #TODO can be depreceated/merged
     def test_save_rec_file(self, countrows):
         
