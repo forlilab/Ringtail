@@ -3,63 +3,149 @@
 #
 # Ringtail unit testing
 #
-from ringtail import StorageManagerSQLite, RingtailCore, Filters
+from ringtail import RingtailCore
 import sqlite3
 import os
 import json
 import pytest
 
+@pytest.fixture
+def countrows():
+    def __dbconnect(query):
+        conn = sqlite3.connect("output.db")
+        curs = conn.cursor()
+        curs.execute(query)
+        count = curs.fetchone()[0]
+        curs.close()
+        conn.close()
+        return count
+    return __dbconnect
+
+@pytest.fixture(scope='class')
+def dbquery():
+    conn = sqlite3.connect("output.db")
+    curs = conn.cursor()
+    def __dbconnect(query):
+        curs.execute(query)
+        return curs
+    yield __dbconnect
+    curs.close()
+    conn.close()
+
 class Test_StorageManSQLite:
-    #TODO rewrite tests to go better with API update? 
+    # Common setup of ringtail core
+    rtcore = RingtailCore("output.db")
+    rtcore.add_results_from_files(file_list = [['filelist1.txt']],
+                                     recursive = True,
+                                     receptor_file="test_data/4j8m.pdbqt",
+                                     save_receptor=True)
+
     def test_fetch_summary_data(self):
-        
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        rtcore = RingtailCore("output.db")
-        with rtcore.storageman: summ_dict = rtcore.storageman.fetch_summary_data()
+        with self.rtcore.storageman: summ_dict = self.rtcore.storageman.fetch_summary_data()
         assert summ_dict == {'num_ligands': 3, 'num_poses': 7, 'num_unique_interactions': 57, 'num_interacting_residues': 30, 'min_docking_score': -6.66, 'max_docking_score': -4.98, '1%_docking_score': -6.66, '10%_docking_score': -6.66, 'min_leff': -0.444, 'max_leff': -0.35000000000000003, '1%_leff': -0.444, '10%_leff': -0.444}
-        
-        os.system("rm output.db")
 
     def test_bookmark_info(self):
-        rtcore = RingtailCore("output.db")
-        rtcore.add_results_from_files(file_path=[["test_data/"]], recursive=True)
-
-        rtcore.filter(eworst = -3, 
+        self.rtcore.filter(eworst = -3, 
                     vdw_interactions=[('A:ARG:123:', True), ('A:VAL:124:', True)],
                     hb_interactions=[('A:ARG:123:', True)],
-                    ligand_operator='OR')
-
+                    ligand_operator='OR',)
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         bookmark = cur.execute("SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'")
         bookmark_filters_db_str = bookmark.fetchone()[0]
-        filters = {'eworst': -3.0, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'}
+        filters = {"eworst": -3.0, "ebest": None, "leworst": None, "lebest": None, "score_percentile": None, "le_percentile": None, "vdw_interactions": [["A:ARG:123:", True], ["A:VAL:124:", True]], "hb_interactions": [["A:ARG:123:", True]], "reactive_interactions": [], "interactions_count": [], "react_any": None, "max_miss": 0, "ligand_name": [], "ligand_substruct": [], "ligand_substruct_pos": [], "ligand_max_atoms": None, "ligand_operator": "OR"}
         assert bookmark_filters_db_str == json.dumps(filters)
         cur.close()
         conn.close()
 
-        os.system("rm output.db")   
-
     def test_version_info(self):
-        rtcore = RingtailCore("output.db")
-        rtcore.add_results_from_files(file_path=[["test_data/"]], recursive=True)
-        with rtcore.storageman: versionmatch, version = rtcore.storageman.check_ringtaildb_version()
-        
+        with self.rtcore.storageman: versionmatch, version = self.rtcore.storageman.check_ringtaildb_version()
+        os.system("rm output.db")
         assert versionmatch
         assert int(version) == 110  # NOTE: update for new versions
-        os.system("rm output.db")
-
-    #TODO
-    def test_context_manager(self):
-        # ensure database open correctly
-        # ensure database closes correctly
-        assert True
 
 class Test_RingtailCore:
 
-    def test_prepare_filters_for_storageman(self):
+    def test_get_defaults(self):
+        from ringtail import ringtailoptions
+        defaults = RingtailCore.get_defaults("resultsmanopts")
+        object_dict = ringtailoptions.ResultsProcessingOptions().todict()
+        assert defaults == object_dict
+
+    def test_db_setup(self):
+        RingtailCore(db_file="output.db", logging_level="debug")
+        assert os.path.isfile("output.db")
+    
+    def test_save_receptor(self, countrows):
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(receptor_file="test_data/4j8m.pdbqt.gz",
+                                        save_receptor=True)
+        count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        assert count == 1
+
+    def test_folder1(self, countrows):
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(file_path = [['test_data/group1']],
+                                            append_results=True)
+        count = countrows("SELECT COUNT(*) FROM Ligands")
+        assert count == 138
+
+    def test_produce_summary(self):        
+        import sys
+        class ListStream:
+            def __init__(self):
+                self.data = []
+            def write(self, s):
+                self.data.append(s)
+
+        sys.stdout = summary_items = ListStream()
+        rtc = RingtailCore(db_file="output.db")
+        rtc.produce_summary()
+        sys.stdout = sys.__stdout__
+
+        assert len(summary_items.data) == 40
+
+    def test_create_rdkitmol(self):
+        pass
+
+    def test_append_to_database(self, countrows):
+        rtc = RingtailCore(db_file="output.db")
+        status = rtc.add_results_from_files(file_path=[['test_data/group2/']], append_results=True)
+        count = countrows("SELECT COUNT(*) FROM Ligands")
+        print(count)
+        print(status)
+        assert count == 217
+
+    def test_similar_ligands(self):
+        rtc = RingtailCore(db_file="output.db")
+        num_of_ligands_passed = rtc.filter(ebest = -6, mfpt_cluster=0.5)
+        print(num_of_ligands_passed)
+        # self.rtc.find_similar_ligands("23225")
+        pass
+
+    def test_plot(self):
+        pass
+
+    def test_write_sdfs(self):
+        pass
+
+    def test_pymol(self):
+        pass
+
+    def test_export_csv(self):
+        # this has two options
+        pass
+
+    def test_export_bookmark_db(self):
+        pass
+
+    def export_receptor(self):
+        pass
+
+    def test_get_filterdata(self):
+        pass
+
+    def test_generate_interactions_prepare_filters(self):
         test_filters = []
         rtc = RingtailCore()
         rtc.process_mode = "read"
@@ -85,7 +171,8 @@ class Test_RingtailCore:
 
         assert len(test_filters) == 5
     
-        os.system("rm output_log.txt output.db")
+        #os.system("rm output_log.txt output.db")
+
 
 class Test_logger:
     def test_set_log_level(self):
@@ -109,8 +196,6 @@ class Test_logger:
         last_line = line
         keywords = ["ERROR", "test_units.py[", "ringtail.exceptions:This is a test error."]
         assert all(x in last_line for x in keywords)
-        
-        
         
 
 #TODO

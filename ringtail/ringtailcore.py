@@ -46,7 +46,7 @@ class RingtailCore:
         _run_mode refers to whether ringtail is ran from the command line or through direct API use, 
         where the former is more restrictive. 
         """
-        logger.setLevel(logging_level)
+        if logging_level is not None: logger.setLevel(logging_level)
         self.db_file = db_file
         self.process_mode = process_mode
         storageman = StorageManager.check_storage_compatibility(storage_type) 
@@ -203,20 +203,17 @@ class RingtailCore:
         if dict is not None:
             for k,v in dict.items():
                 setattr(self.generalopts, k, v) 
-            print(self.generalopts.todict())
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(self.generalopts, k, v)
-        print(self.generalopts.todict())
 
         # Assign attributes to ringtail core
         self.print_summary = self.generalopts.print_summary
         self.docking_mode = self.generalopts.docking_mode
 
         if self.generalopts.logging_level is not None:  
-            print(self.generalopts.logging_level.upper())
             self.generalopts.logging_level=self.generalopts.logging_level.upper() 
             logger.setLevel(self.generalopts.logging_level.upper())
 
@@ -458,8 +455,6 @@ class RingtailCore:
         # Dict of individual arguments
         indiv_options: dict = vars(); 
         del indiv_options["self"]; del indiv_options["dict"]
-        print(indiv_options["file_list"])
-        print("printed from inside set file sources")
 
         # Create option object with default values if needed
         files = InputFiles()
@@ -1213,12 +1208,12 @@ class RingtailCore:
         or options belonging to a specific group. 
         
         Args:
-            object (str): ["all", "generalopts", "writeopts", "storageopts", "readopts", "filters", "fileobj"]
+            object (str): ["all", "generalopts", "resultsmanopts", "storageopts", "readopts", "filters", "fileobj"]
         """
 
         all_defaults = RingtailCore.generate_config_json_template(to_file=False)
 
-        if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]:
+        if object.lower() not in ["all", "generalopts", "resultsmanopts", "storageopts", "readopts", "filterobj", "fileobj"]:
             raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "readopts", "filterobj", "fileobj"]')
         
         if object.lower() == "all":
