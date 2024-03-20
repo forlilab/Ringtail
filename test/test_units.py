@@ -60,7 +60,7 @@ class Test_StorageManSQLite:
 
     def test_version_info(self):
         with self.rtcore.storageman: versionmatch, version = self.rtcore.storageman.check_ringtaildb_version()
-        os.system("rm output.db")
+        
         assert versionmatch
         assert int(version) == 110  # NOTE: update for new versions
 
@@ -71,10 +71,10 @@ class Test_RingtailCore:
         defaults = RingtailCore.get_defaults("resultsmanopts")
         object_dict = ringtailoptions.ResultsProcessingOptions().todict()
         assert defaults == object_dict
-
+    
     def test_db_setup(self):
         RingtailCore(db_file="output.db", logging_level="debug")
-        assert os.path.isfile("output.db")
+        assert os.path.isfile("output.db") == True
     
     def test_save_receptor(self, countrows):
         rtc = RingtailCore(db_file="output.db")
@@ -110,18 +110,25 @@ class Test_RingtailCore:
 
     def test_append_to_database(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        status = rtc.add_results_from_files(file_path=[['test_data/group2/']], append_results=True)
+        rtc.add_results_from_files(file_path=[['test_data/group2/']], append_results=True)
         count = countrows("SELECT COUNT(*) FROM Ligands")
-        print(count)
-        print(status)
+
         assert count == 217
 
-    def test_similar_ligands(self):
+    def test_filter(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        num_of_ligands_passed = rtc.filter(ebest = -6, mfpt_cluster=0.5)
-        print(num_of_ligands_passed)
-        # self.rtc.find_similar_ligands("23225")
-        pass
+        count_ligands_passing = rtc.filter(eworst = -6, hb_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)], vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)], max_miss = 1)
+
+        assert count_ligands_passing == 36
+
+    def test_similar_ligands(self, monkeypatch):
+        rtc = RingtailCore(db_file="output.db")
+        ligand_name = "287065"
+        rtc.filter(ebest = -6, mfpt_cluster=0.5)
+        monkeypatch.setattr('builtins.input', lambda _: 0) # provide terminal input
+        number_similar = rtc.find_similar_ligands(ligand_name)
+
+        assert number_similar == 8
 
     def test_plot(self):
         pass
@@ -156,7 +163,6 @@ class Test_RingtailCore:
             nufilter=rtc._prepare_filters_for_storageman(ic)
             test_filters.append(nufilter)
 
-
         assert {'eworst': None, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'} in test_filters
 
         assert {'eworst': None, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:VAL:124:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'} in test_filters
@@ -167,12 +173,8 @@ class Test_RingtailCore:
 
         assert {'eworst': None, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'} in test_filters
 
-
-
+        os.system("rm output_log.txt output.db")
         assert len(test_filters) == 5
-    
-        #os.system("rm output_log.txt output.db")
-
 
 class Test_logger:
     def test_set_log_level(self):

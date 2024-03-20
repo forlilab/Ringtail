@@ -936,7 +936,7 @@ class RingtailCore:
     def find_similar_ligands(self, query_ligname: str):
         """Find ligands in cluster with query_ligname
         """
-        
+        number_similar = 0
         with self.storageman: similar_ligands, bookmark_name, cluster_name = self.storageman.fetch_clustered_similars(query_ligname)
 
         if similar_ligands is not None:
@@ -946,6 +946,8 @@ class RingtailCore:
                 number_similar = self.outputman.write_log(similar_ligands)
                 self.outputman.log_num_passing_ligands(number_similar)
                 print("Number similar ligands:", number_similar)
+        return number_similar
+        
 
     def plot(self, save=True):
         """
