@@ -97,6 +97,7 @@ class TestInputs:
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 75
 
+    #TODO this is a biggie
     def test_append_results(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
@@ -127,13 +128,16 @@ class TestInputs:
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
 
+    #TODO can be depreceated/merged
     def test_save_rec_file(self, countrows):
+        
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt --save_receptor"
         )
         count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         assert count == 1
-
+    
+    #TODO can be depreceated/merged
     def test_save_rec_file_gz(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor"

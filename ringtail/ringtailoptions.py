@@ -270,7 +270,7 @@ class StorageOptions(RTOptions):
             "description": "Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli."
         },
         "duplicate_handling":{
-            "default":None,
+            "default":"IGNORE",
             "type":str,
             "description": "specify how duplicate Results rows should be handled when inserting into database. Options are 'ignore' or 'replace'. Default behavior will allow duplicate entries."
         },
@@ -330,12 +330,12 @@ class StorageOptions(RTOptions):
         "mfpt_cluster":{
             "default":None,
             "type":float,
-            "description": "Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands."
+            "description": "Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands."
         },
         "interaction_cluster":{
             "default":None,
             "type":float,
-            "description": "Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions."
+            "description": "Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions."
         },
         "results_view_name":{
             "default":"passing_results",
@@ -352,12 +352,11 @@ class StorageOptions(RTOptions):
         if hasattr(self, "results_view_name"):
             # Make sure results are ordered after valid fields
             if self.duplicate_handling is not None:
-                self.duplicate_handling = self.duplicate_handling.upper()
-                if self.duplicate_handling not in {"IGNORE", "REPLACE"}:
+                if self.duplicate_handling.upper() not in ["IGNORE", "REPLACE"]:
                     logger.warning(
                         f"--duplicate_handling option {self.duplicate_handling} not allowed. Reverting to default behavior."
                     )
-                    self.duplicate_handling = None
+                    self.duplicate_handling = "IGNORE"
             if self.order_results is not None and self.order_results not in self.order_options:
                 raise OptionError(
                     "Requested ording option that is not available. Please see --help for available options."
