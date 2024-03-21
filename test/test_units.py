@@ -130,11 +130,30 @@ class Test_RingtailCore:
 
         assert number_similar == 8
 
+    #TODO not working
     def test_plot(self):
-        pass
+        return
+        
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(file_path = [['test_data/group3']],
+                                            append_results=True)
+        rtc.filter(ebest = -6)
+        rtc.plot()
+
+        assert os.path.isfile("scatter.png") == True
 
     def test_write_sdfs(self):
-        pass
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(eworst = -7)
+        rtc.write_molecule_sdfs(".")
+
+        import glob
+        sdf_files = glob.glob("*.sdf")
+        expected = ['3961.sdf', '5995.sdf', '11128.sdf', '11991.sdf', '13974.sdf', '15776.sdf', '136065.sdf']
+        assert len(sdf_files) == len(expected)
+        for f in sdf_files:
+            assert f in expected
+            os.remove(f)
 
     def test_pymol(self):
         pass
