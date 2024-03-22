@@ -159,8 +159,12 @@ class Test_RingtailCore:
         pass
 
     def test_export_csv(self):
-        # this has two options
-        pass
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(eworst = -7)
+        rtc.export_csv("Ligands", "Ligands.csv", True)
+        
+        assert os.path.exists("Ligands.csv")
+        os.system("rm Ligands.csv")
 
     def test_export_bookmark_db(self):
         pass
