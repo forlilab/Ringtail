@@ -32,38 +32,6 @@ def dbquery():
     curs.close()
     conn.close()
 
-class Test_StorageManSQLite:
-    # Common setup of ringtail core
-    rtcore = RingtailCore("output.db")
-    rtcore.add_results_from_files(file_list = [['filelist1.txt']],
-                                     recursive = True,
-                                     receptor_file="test_data/4j8m.pdbqt",
-                                     save_receptor=True)
-
-    def test_fetch_summary_data(self):
-        with self.rtcore.storageman: summ_dict = self.rtcore.storageman.fetch_summary_data()
-        assert summ_dict == {'num_ligands': 3, 'num_poses': 7, 'num_unique_interactions': 57, 'num_interacting_residues': 30, 'min_docking_score': -6.66, 'max_docking_score': -4.98, '1%_docking_score': -6.66, '10%_docking_score': -6.66, 'min_leff': -0.444, 'max_leff': -0.35000000000000003, '1%_leff': -0.444, '10%_leff': -0.444}
-
-    def test_bookmark_info(self):
-        self.rtcore.filter(eworst = -3, 
-                    vdw_interactions=[('A:ARG:123:', True), ('A:VAL:124:', True)],
-                    hb_interactions=[('A:ARG:123:', True)],
-                    ligand_operator='OR',)
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        bookmark = cur.execute("SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'")
-        bookmark_filters_db_str = bookmark.fetchone()[0]
-        filters = {"eworst": -3.0, "ebest": None, "leworst": None, "lebest": None, "score_percentile": None, "le_percentile": None, "vdw_interactions": [["A:ARG:123:", True], ["A:VAL:124:", True]], "hb_interactions": [["A:ARG:123:", True]], "reactive_interactions": [], "interactions_count": [], "react_any": None, "max_miss": 0, "ligand_name": [], "ligand_substruct": [], "ligand_substruct_pos": [], "ligand_max_atoms": None, "ligand_operator": "OR"}
-        assert bookmark_filters_db_str == json.dumps(filters)
-        cur.close()
-        conn.close()
-
-    def test_version_info(self):
-        with self.rtcore.storageman: versionmatch, version = self.rtcore.storageman.check_ringtaildb_version()
-        
-        assert versionmatch
-        assert int(version) == 110  # NOTE: update for new versions
-
 class Test_RingtailCore:
 
     def test_get_defaults(self):
@@ -71,25 +39,24 @@ class Test_RingtailCore:
         defaults = RingtailCore.get_defaults("resultsmanopts")
         object_dict = ringtailoptions.ResultsProcessingOptions().todict()
         assert defaults == object_dict
-    
-    def test_db_setup(self):
-        RingtailCore(db_file="output.db", logging_level="debug")
-        assert os.path.isfile("output.db") == True
-    
-    def test_save_receptor(self, countrows):
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(receptor_file="test_data/4j8m.pdbqt.gz",
-                                        save_receptor=True)
-        count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
-        assert count == 1
 
     def test_folder1(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path = [['test_data/group1']],
-                                            append_results=True)
+        rtc.add_results_from_files(file_path = [['test_data/group1']])
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
-
+    
+    def test_save_receptor(self, countrows):
+        rtc = RingtailCore(db_file="output.db", logging_level="debug")
+        count0 = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        
+        assert count0 == 0
+        
+        rtc.save_receptor(receptor_file="test_data/4j8m.pdbqt")
+        count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        
+        assert count == 1
+    
     def test_produce_summary(self):        
         import sys
         class ListStream:
@@ -115,7 +82,7 @@ class Test_RingtailCore:
 
         assert count == 217
 
-    def test_filter(self, countrows):
+    def test_filter(self):
         rtc = RingtailCore(db_file="output.db")
         count_ligands_passing = rtc.filter(eworst = -6, hb_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)], vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)], max_miss = 1)
 
@@ -125,7 +92,7 @@ class Test_RingtailCore:
         rtc = RingtailCore(db_file="output.db")
         ligand_name = "287065"
         rtc.filter(ebest = -6, mfpt_cluster=0.5)
-        monkeypatch.setattr('builtins.input', lambda _: 0) # provide terminal input
+        monkeypatch.setattr('builtins.input', lambda _: 0) # provides terminal input
         number_similar = rtc.find_similar_ligands(ligand_name)
 
         assert number_similar == 8
@@ -166,15 +133,33 @@ class Test_RingtailCore:
         assert os.path.exists("Ligands.csv")
         os.system("rm Ligands.csv")
 
+    #TODO not working, issues with storageman object
     def test_export_bookmark_db(self):
-        pass
+        return
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(eworst = -7)
+        rtc.export_bookmark_db()
+        bookmark_name = rtc.storageman.results_view_name
+        new_db_name = rtc.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+        assert os.path.exists(new_db_name)
+        os.system("rm " + new_db_name)
 
-    def export_receptor(self):
-        pass
-
+    def export_receptor(self, dbquery):
+        rtc = RingtailCore(db_file="output.db")
+        rtc.export_receptors()
+        receptor_name = dbquery()
+        receptor_file = receptor_name + ".pdbqt"
+        
+        assert os.path.exists(receptor_file)
+    
+    #TODO does not fetch data with/through storageman
     def test_get_filterdata(self):
-        pass
-
+        
+        return
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(eworst = -7)
+        rtc.get_previous_filter_data("delta, ref_rmsd")
+    
     def test_generate_interactions_prepare_filters(self):
         test_filters = []
         rtc = RingtailCore()
@@ -199,7 +184,89 @@ class Test_RingtailCore:
         os.system("rm output_log.txt output.db")
         assert len(test_filters) == 5
 
+    def test_duplicate_handling(self):
+        os.system("rm output.db")
+        #TODO this is not working quite right
+        pass
+
+class Test_StorageManSQLite:
+   
+    def test_storageman_setup(self):
+        rtc = RingtailCore("output.db")
+        rtc.add_results_from_files(file_list = [['filelist1.txt']],
+                                    recursive = True,
+                                    receptor_file="test_data/4j8m.pdbqt",
+                                    save_receptor=True)
+        
+        # get storage man defaults, and check that the object and the dict have same values?
+        #TODO this will make me fix storageman dupl/conflict stuff, so get to later
+        assert os.path.exists("output.db")
+
+    def test_fetch_summary_data(self):
+        rtc = RingtailCore("output.db")
+        with rtc.storageman: summ_dict = rtc.storageman.fetch_summary_data()
+        assert summ_dict == {'num_ligands': 3, 'num_poses': 7, 'num_unique_interactions': 57, 'num_interacting_residues': 30, 'min_docking_score': -6.66, 'max_docking_score': -4.98, '1%_docking_score': -6.66, '10%_docking_score': -6.66, 'min_leff': -0.444, 'max_leff': -0.35000000000000003, '1%_leff': -0.444, '10%_leff': -0.444}
+
+    def test_bookmark_info(self, dbquery):
+        rtc = RingtailCore("output.db")
+        rtc.filter(eworst = -3, 
+                    vdw_interactions=[('A:ARG:123:', True), ('A:VAL:124:', True)],
+                    hb_interactions=[('A:ARG:123:', True)],
+                    ligand_operator='OR',)
+        curs = dbquery("SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'")
+        bookmark_filters_db_str = curs.fetchone()[0]
+        filters = {"eworst": -3.0, "ebest": None, "leworst": None, "lebest": None, "score_percentile": None, "le_percentile": None, "vdw_interactions": [["A:ARG:123:", True], ["A:VAL:124:", True]], "hb_interactions": [["A:ARG:123:", True]], "reactive_interactions": [], "interactions_count": [], "react_any": None, "max_miss": 0, "ligand_name": [], "ligand_substruct": [], "ligand_substruct_pos": [], "ligand_max_atoms": None, "ligand_operator": "OR"}
+        assert bookmark_filters_db_str == json.dumps(filters)
+
+    def test_version_info(self):
+        rtc = RingtailCore("output.db")
+        with rtc.storageman: versionmatch, version = rtc.storageman.check_ringtaildb_version()
+        os.system("rm output.db output_log.txt")
+        assert versionmatch
+        assert int(version) == 110  # NOTE: update for new versions
+
+class TestConfigFile:
+
+    def test_generate_config_file(self):
+        RingtailCore.generate_config_json_template()
+        filepath = "config.json"
+
+        assert os.path.exists(filepath)
+
+        # Assure file is created, and populate it with non-default values
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        # all fields I want to change
+        data["fileobj"]["file_path"] = [['test_data/']]
+        data["fileobj"]["file_path"]
+        data["fileobj"]["recursive"] = True
+        data["fileobj"]["receptor_file"] = "test_data/4j8m.pdbqt"
+        data["fileobj"]["save_receptor"] = True
+        data["filters"]["eworst"] = -6
+        data["filters"]["vdw_interactions"] = [('A:VAL:279:', True), ('A:LYS:162:', True)]
+        data["filters"]["hb_interactions"] = [('A:VAL:279:', True), ('A:LYS:162:', True)]
+        data["filters"]["max_miss"] = 1
+        with open(filepath, "w") as f:
+            f.write(json.dumps(data, indent=4))
+
+    def test_adding_results(self, dbquery):
+        rtcore = RingtailCore(db_file="output.db", logging_level = "DEBUG")
+        (file_dict, write_dict, _, _) = rtcore.add_config_from_file()
+        rtcore.add_results_from_files(filesources_dict= file_dict, options_dict=write_dict)
+        curs = dbquery("""SELECT COUNT(*) FROM Results;""")
+        count = curs.fetchone()[0]
+
+        assert count == 645
+        
+    def test_filter(self):
+        rtcore = RingtailCore(db_file="output.db", logging_level = "DEBUG")
+        (_, _, _, filters_dict) = rtcore.add_config_from_file()
+        count_ligands_passing = rtcore.filter(filters_dict=filters_dict)
+        os.system("rm output_log.txt output.db config.json")
+        assert count_ligands_passing == 51 
+
 class Test_logger:
+
     def test_set_log_level(self):
         from ringtail import logger
         logger.setLevel("info")
@@ -222,7 +289,6 @@ class Test_logger:
         keywords = ["ERROR", "test_units.py[", "ringtail.exceptions:This is a test error."]
         assert all(x in last_line for x in keywords)
         
-
 #TODO
 class Test_exceptions:
     def test_option_error(self):
@@ -230,7 +296,7 @@ class Test_exceptions:
             # in command line
             # in API
             # write to stout when necessary
-        assert True
+        pass
 
 #TODO 
 class Test_outputmanager:
@@ -238,7 +304,7 @@ class Test_outputmanager:
         # if making new
         # if overwriting
         # is there an option to add?
-        assert True
+        pass
 
 #TODO
 class Test_options:
@@ -248,14 +314,29 @@ class Test_options:
         # if re-assigning
         # does it initialize right? 
         # does it re-initialize and default right?
-        assert True
+        pass
     
     def test_file_format(self):
         # that files are double lists ready for results manager
         # file extension is correct
         # folders are proper directories
-        assert True
+        pass
     
     def test_object_checks(self):
         # take one object or two and make sure checks are performed when appropriate
-        assert True
+        pass
+
+    def test_type_checking(self):
+        pass
+    
+    # Test the order of operations, single options overwrite passing through a dict
+    
+    # Test that type is checked even if you set a value later on
+
+    # Test that you can set an individual value on an object after it has been set
+        # Using the method of course, but type must be checked. Can test this by seeing what is written to the output log or something? 
+
+    # Test that any values in an options object can be accessed without error (and issues with _ referencing etc)
+
+    # Test that if you set an invalid option (including None) it reverts to the default value
+        # So I really need to have type and default and name in one space

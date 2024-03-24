@@ -315,7 +315,7 @@ class StorageOptions(RTOptions):
                             "e_vdw" (van der waals energy), 
                             "e_elec" (electrostatic energy), 
                             "e_intra" (intermolecular energy), 
-                            "n_interact" (number of interactions), 
+                            "n_interact" (number of iteractions), 
                             "ligand_smile" , 
                             "rank" (rank of ligand pose), 
                             "run" (run number for ligand pose), 
