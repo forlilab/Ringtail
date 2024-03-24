@@ -507,7 +507,7 @@ class RingtailCore:
             recursive (bool): used to recursively search file_path for folders inside folders
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            filesources_dict (InputFiles): file sources already as an object 
+            filesources_dict (dict): file sources already as an object 
 
             append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
@@ -661,10 +661,69 @@ class RingtailCore:
                options_dict: dict = None,
                return_iter=False):
         """
-        Prepare list of filters, then hand it off to storageManager to
+        Prepare list of filters, then hand it off to storageman to
             perform filtering. Create log of passing results.
         Args:
-            enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
+            Filters:
+                eworst (float): specify the worst energy value accepted
+                ebest (float): specify the best energy value accepted
+                leworst (float): specify the worst ligand efficiency value accepted
+                lebest (float): specify the best ligand efficiency value accepted
+                score_percentile (float): specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.
+                le_percentile (float): specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.
+                vdw_interactions (list[tuple]): define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+                hb_interactions (list[tuple]): define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+                reactive_interactions (list[tuple]): check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+                interactions_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
+                react_any (bool): check if ligand reacted with any residue
+                max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
+                ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., ["lig1", "lig2"]
+                ligand_substruct (list[str]): MARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., ["ccc", "CN"]
+                ligand_substruct_pos (list[str]): SMARTS pattern(s) for substructure matching, e.g., ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
+                ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
+                ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
+                filters_dict (dict): provide filters as a dictionary
+            Options:
+                enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
+                output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
+                mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
+                interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
+                log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
+                overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
+                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION.
+                                        available fields are:  
+                                        "e" (docking_score), 
+                                        "le" (ligand efficiency), 
+                                        "delta" (delta energy from best pose), 
+                                        "ref_rmsd" (RMSD to reference pose), 
+                                        "e_inter" (intermolecular energy), 
+                                        "e_vdw" (van der waals energy), 
+                                        "e_elec" (electrostatic energy), 
+                                        "e_intra" (intermolecular energy), 
+                                        "n_interact" (number of interactions), 
+                                        "rank" (rank of ligand pose), 
+                                        "run" (run number for ligand pose), 
+                                        "hb" (hydrogen bonds); 
+                outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are: \n
+                                    "Ligand_name" (Ligand name), 
+                                    "e" (docking_score), 
+                                    "le" (ligand efficiency), 
+                                    "delta" (delta energy from best pose), 
+                                    "ref_rmsd" (RMSD to reference pose), 
+                                    "e_inter" (intermolecular energy), 
+                                    "e_vdw" (van der waals energy), 
+                                    "e_elec" (electrostatic energy), 
+                                    "e_intra" (intermolecular energy), 
+                                    "n_interact" (number of iteractions), 
+                                    "ligand_smile" , 
+                                    "rank" (rank of ligand pose), 
+                                    "run" (run number for ligand pose), 
+                                    "hb" (hydrogen bonds), 
+                                    "receptor" (receptor name)
+                results_view_name (str): name for resulting book mark file. Default value is 'passing_results'
+                options_dict (dict): write options as a dict
+        Returns:
+            number of ligands passing filter
         """
 
         self.process_mode = "read"
@@ -764,10 +823,18 @@ class RingtailCore:
 
     def add_config_from_file(self, config_file: str ="config.json"):
         """
-        Provide ringtail config from file, *not currently in use
+        Provide ringtail config from file, will direclty set storage manager settings, 
+        and return dictionaries for the remaining options. 
         Args:
             config_file: json formatted file containing ringtail and filter options
+        Returns:
+            file_dict: dictionary of files to use in add results
+            write_dict: dictionary of options to use in add results
+            read_dict: dictionary of options to use for filtering
+            filters_dict: dictionary of files containing filters
         """
+        #TODO Still not working for command line I think
+
         try: 
             if config_file is None: 
                 raise OptionError("No config file was found in the Ringtail/util_files directory.")
@@ -932,8 +999,14 @@ class RingtailCore:
         return mol, flexres_mols, properties
 
     def find_similar_ligands(self, query_ligname: str):
-        """Find ligands in cluster with query_ligname
         """
+        Find ligands in cluster with query_ligname
+        Args:
+            query_ligname (str): name of the ligand in the ligand table
+        Returns:
+            number of ligands that are similar
+        """
+
         number_similar = 0
         with self.storageman: similar_ligands, bookmark_name, cluster_name = self.storageman.fetch_clustered_similars(query_ligname)
 
@@ -946,7 +1019,7 @@ class RingtailCore:
                 print("Number similar ligands:", number_similar)
         return number_similar
         
-
+    #TODO not sure if this is working
     def plot(self, save=True):
         """
         Get data needed for creating Ligand Efficiency vs
@@ -1037,7 +1110,9 @@ class RingtailCore:
 
     def display_pymol(self, bookmark_name = None):
         """
-        Launch pymol session and plot of LE vs docking score. Displays molecules when clicked
+        Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
+        Args:
+            bookmark_name (str): bookmark name to use in pymol. 'None' uses the whole db? 
         """
 
         import subprocess
@@ -1136,7 +1211,7 @@ class RingtailCore:
 
     def export_receptors(self):
         """
-        Export receptor to pdbqt
+        Export receptor in database to pdbqt
         """
         with self.storageman: receptor_tuples = self.storageman.fetch_receptor_objects()
         for recname, recblob in receptor_tuples:
@@ -1148,6 +1223,9 @@ class RingtailCore:
     def get_previous_filter_data(self, outfields = None, bookmark_name = None):
         """Get data requested in self.out_opts['outfields'] from the
         results view of a previous filtering
+        Args:
+            outfields (str): use outfields as described in RingtailOptions > StorageOptions
+            bookmark_name (str): bookmark for which the filters were used
         """
         if bookmark_name is not None:
             self._set_storageman_attributes(results_view_name=bookmark_name)
