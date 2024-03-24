@@ -106,7 +106,7 @@ class StorageManager:
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
         self.closed_connection = False        
-        self.conflict_opt = None
+        self.conflict_op = None
    
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> tuple:
@@ -374,7 +374,7 @@ class StorageManagerSQLite(StorageManager):
         self.interaction_cluster = interaction_cluster
         self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
-        self.conflict_opt = conflict_opt
+        self.conflict_op = conflict_opt
         super().__init__()
 
 
@@ -927,6 +927,13 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseInsertionError: Description
         """
+        # Check if there is already a row for the receptor
+        cur = self.conn.execute("SELECT COUNT(*) FROM Results")
+        count = cur.fetchone()[0]
+        if count == 0:
+            raise DatabaseInsertionError(
+                "Cannot add a receptor without adding docking results first."
+            ) from e
 
         sql_update = (
             """UPDATE Receptors SET receptor_object = ? WHERE Receptor_ID == 1"""
@@ -935,7 +942,6 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.execute(sql_update, (receptor,))
             self.conn.commit()
             cur.close()
-
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error while adding receptor blob to database"
@@ -1690,12 +1696,12 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError: Description
         """
         unique_string = ""
-        if self.conflict_opt is not None:
+        if self.conflict_op is not None:
             unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
                    trans_x, trans_y, trans_z,
                    axisangle_x, axisangle_y, axisangle_z, axisangle_w,
                    dihedrals, flexible_residues) ON CONFLICT {0}""".format(
-                self.conflict_opt
+                self.conflict_op
             )
 
         sql_results_table = """CREATE TABLE IF NOT EXISTS Results (
@@ -2561,7 +2567,6 @@ class StorageManagerSQLite(StorageManager):
         outfield_string = "LigName, " + ", ".join(
             [self.field_to_column_name[field] for field in output_fields]
         )
-
         return (
             "SELECT "
             + outfield_string

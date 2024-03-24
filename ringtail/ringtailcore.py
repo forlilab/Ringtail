@@ -534,7 +534,6 @@ class RingtailCore:
             storage_dict = None
             results_dict = None
         self._set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
-
         # If there are any ligand files, process ligand data
         if results_files_given: 
             with self.storageman:
@@ -558,7 +557,6 @@ class RingtailCore:
                 self.resultsman.process_results() 
                 self.storageman.set_ringtaildb_version()
                 if summary: self.produce_summary()
-
         if files.save_receptor: 
             self.save_receptor(files.receptor_file)
     
@@ -954,7 +952,7 @@ class RingtailCore:
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
         """
-        if self.filter.max_miss > 0:
+        if self.filters.max_miss > 0:
             raise OptionError("Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name.")
         
         logger.info("Creating plot of results")
@@ -1128,7 +1126,11 @@ class RingtailCore:
         with self.storageman: self.storageman.clone(bookmark_db_name)
         # connect to cloned database
         self.db_file = bookmark_db_name
-        with StorageManagerSQLite(**self.storageopts) as db_clone:
+        #TODO not sure if this works, getting an error and should not use sqlite directly anyways
+        #TODO I think I have to rewrite this, and pass only pertinent options
+            # and then use the db type specified in rtingtail core, basically create a new storageman 
+            # object
+        with StorageManagerSQLite(**self.storageopts.todict()) as db_clone:
             db_clone.prune()
             db_clone.close_storage(vacuum=True)
 
