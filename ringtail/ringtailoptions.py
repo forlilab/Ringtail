@@ -6,10 +6,6 @@ import copy
 """ Ringtail options contains objects for holding all ringtail options, 
 and ensures safe type enforcement."""
 
-#TODO update options description
-#TODO re-do object description so more succinct
-#TODO add better title? model after other managers/classes
-
 class TypeSafe:
     """
     Class that handles safe typesetting of values of a specified built-in type. 
@@ -17,9 +13,7 @@ class TypeSafe:
     of the object. 
     It is the hope to extend this to work with custom types, such as "percentage" (float with a max and min value),
     and direcotry (string that must end with '/'). 
-    Raises OptionError if wrong type is attempted. 
-
-    
+    Raises OptionError if wrong type is attempted.     
     """
     def __init__(self, default, type, object_name):
         self.object_name = object_name
@@ -100,13 +94,8 @@ class RTOptions:
             self.checks()
 
 class GeneralOptions(RTOptions):
-    """Creates a class with general options relevant to any Ringtail process, including:
-    Args:
-        docking_mode: specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt
-        summary: prints summary information about stored data to STDOUT.
-        verbose: Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
-        debug: Print additional error information to STDOUT
-        """
+    """Creates a class with general options relevant to any Ringtail process.
+    """
     options = {
         "docking_mode":{
             "type": str,
@@ -139,17 +128,7 @@ class GeneralOptions(RTOptions):
 class InputFiles(RTOptions):
     """ Class that handles sources of data to be written including ligand data paths and how 
     to traverse them, and options to store receptor.
-    
-    Args:
-        file(list): ligand docking output file to save. Compressed (.gz) files allowed. Only 1 receptor allowed.
-        file_path (list): directory(s) containing docking output files to save. Compressed (.gz) files allowed
-        file_list (list): file(s) containing the list of docking output files to save; relative or absolute paths are allowed. Compressed (.gz) files allowed
-        file_pattern (str): specify which pattern to use when searching for result files to process [only with "--file_path"]
-        recursive (bool): enable recursive directory scan when --file_path is used
-        receptor_file (str): Use with Vina mode. Give file for receptor PDBQT.
-        save_receptor (bool): Saves receptor PDBQT to database. Receptor location must be specied with in --file, --file_path directory or --file_list file
-        target (str): name of receptor
-        """
+    """
     options = {
         "file":{
             "default":None,
@@ -383,81 +362,67 @@ class StorageOptions(RTOptions):
 class ReadOptions(RTOptions):
     """ Class that holds options related to reading from the database, including format for
     result export and alternate ways of displaying the data (plotting),
-
-    Args:
-        filtering (bool): implicit argument set if there are any optional filters present
-        plot (bool): Makes scatterplot of LE vs Best Energy, saves as scatter.png.
-        find_similar_ligands (str): Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.
-        export_bookmark_csv (str): Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables
-        export_bookmark_db (bool): Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db
-        export_query_csv (str): Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]
-        export_receptor (bool): Export stored receptor pdbqt. Will write to current directory.
-        data_from_bookmark (bool): Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.
-        pymol (bool): Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.
-        enumerate_interaction_combs (bool): #TODO
-        log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
-        export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
     """
     options = {
         "filtering":{                   # this is essentially filter method
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "switch for whether or not filtering is to be performed, to accommodate cmdline tools."
         },
         "plot":{                        # this is a method to plot
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "Makes scatterplot of LE vs Best Energy, saves as scatter.png."
         },
         "find_similar_ligands":{        # this is a method to filter and output
             "default":None,
             "type":str,
-            "description": ""
+            "description": "Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering."
         },
         "export_bookmark_csv":{         # this is an export method
             "default":None,
             "type":str,
-            "description": ""
+            "description": "Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables"
         },
         "export_bookmark_db":{          # this is an export method
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db"
         },
         "export_query_csv":{            # this is an export method
             "default":None,
             "type":str,
-            "description": ""
+            "description": "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]"
         },
         "export_receptor":{             # this is an export method
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "Export stored receptor pdbqt. Will write to current directory."
         },
         "data_from_bookmark":{          # this could be a read option
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters."
         },
         "pymol":{                       # IDevenK
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given."
         },
-        "enumerate_interaction_combs":{ # gotta figure out this one, I think it is an option
-            "default":None,
+        "enumerate_interaction_combs":{ # gotta figure out this one, I think it is an option, 
+            "default":None,             #TODO does this belong in filters?
             "type":bool,
-            "description": ""
+            "description": "When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime."
         },
         "log_file":{                    # this is the log file name, so an option
             "default":"output_log.txt",
             "type":str,
-            "description": ""
+            "description": "by default, results are saved in 'output_log.txt'; if this option is used, ligands and requested info passing the filters will be written to specified file"
         },
         "export_sdf_path":{                 # this is an export method 
             "default":"",
             "type":str,
-            "description": ""
+            "description": "specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified."
         },
     }
 
@@ -472,111 +437,93 @@ class ReadOptions(RTOptions):
 class Filters(RTOptions):
     """
     Object that holds all optional filters.
-    
-    Args:
-        eworst (float): 
-        ebest (float): 
-        leworst (float): 
-        score_percentile (float):
-        le_percentile (float):
-        vdw_interactions (list[tuple]): e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-        hb_interactions (list[tuple]): e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-        reactive_interactions (list[tuple]): e.g. [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-        interactions_count (list[tuple]): e.g. [('hb_count', 5)]
-        react_any (bool): 
-        max_miss (int): 
-        ligand_name (list[str]): e.g. ["lig1", "lig2"]
-        ligand_substruct (list[str]): e.g. ["ccc", "CN"]
-        ligand_substruct_pos (list[str]): e.g. ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
-        ligand_max_atoms (int): 
-        ligand_operator (str): AND or OR
-        """
+    """
 
     options = {
         "eworst":{
             "default":None,
             "type":float,
-            "description": ""
+            "description": "specify the worst energy value accepted"
         },
         "ebest":{
             "default":None,
             "type":float,
-            "description": ""
+            "description": "specify the best energy value accepted"
         },
         "leworst":{
             "default":None,
             "type":float,
-            "description": ""
+            "description": "specify the worst ligand efficiency value accepted"
         },
         "lebest":{
             "default":None,
             "type":'',
-            "description": ""
+            "description": "specify the best ligand efficiency value accepted"
         },
         "score_percentile":{
             "default":None,
             "type":float,
-            "description": ""
+            "description": "specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent."
         },
         "le_percentile":{
             "default":None,
             "type":float,
-            "description": ""
+            "description": "specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent."
         },
         "vdw_interactions":{
             "default":[],
             "type": list,
-            "description": ""
+            "description": "define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]"
         },
         "hb_interactions":{
             "default":[],
             "type":list,
-            "description": ""
+            "description": "define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]"
         },
         "reactive_interactions":{
             "default":[],
             "type":list,
-            "description": ""
+            "description": "check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]"
         },
         "interactions_count":{
             "default":[],
             "type":list,
-            "description": ""
+            "description": "accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]"
         },
         "react_any":{
             "default":None,
             "type":bool,
-            "description": ""
+            "description": "check if ligand reacted with any residue"
         },
         "max_miss":{
             "default":0,
             "type":int,
-            "description": ""
+            "description": "Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters."
         },
         "ligand_name":{
             "default":[],
             "type":list,
-            "description": ""
+            "description": "specify ligand name(s). Will combine name filters with OR"
         },
         "ligand_substruct":{
             "default":[],
             "type":list,
-            "description": ""
+            "description": "SMARTS pattern(s) for substructure matching"
         },
         "ligand_substruct_pos":{
             "default":[],
             "type":list,
-            "description": ""
+            "description": "SMARTS pattern(s) for substructure matching, e.g., [''[Oh]C' 0 1.2 -5.5 10.0 15.5'] -> ['smart_string index_of_positioned_atom cutoff_distance x y z']"
         },
         "ligand_max_atoms":{
             "default":None,
             "type":int,
-            "description": ""
+            "description": "Maximum number of heavy atoms a ligand may have"
         },
         "ligand_operator":{
             "default":"OR",
             "type":str,
-            "description": ""
+            "description": "logical join operator for multiple SMARTS (default: OR)"
         },
     }
     def __init__(self):
