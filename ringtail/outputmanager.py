@@ -317,8 +317,8 @@ class OutputManager:
             ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax)
             fig.colorbar(
                 mappable=cm.ScalarMappable(
-                    colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts))
-                ),
+                    colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts)),),
+                cax=self.ax.inset_axes([0.85, 0.1, 0.05, 0.8]), #TODO dimensions not quite right 
                 label="Scatterplot bin count",
             )
             self.ax.set_xlabel("Best docking score / kcal/mol")

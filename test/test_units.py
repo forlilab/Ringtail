@@ -97,18 +97,6 @@ class Test_RingtailCore:
 
         assert number_similar == 8
 
-    #TODO not working
-    def test_plot(self):
-        return
-        
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path = [['test_data/group3']],
-                                            append_results=True)
-        rtc.filter(ebest = -6)
-        rtc.plot()
-
-        assert os.path.isfile("scatter.png") == True
-
     def test_write_sdfs(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst = -7)
@@ -133,17 +121,6 @@ class Test_RingtailCore:
         assert os.path.exists("Ligands.csv")
         os.system("rm Ligands.csv")
 
-    #TODO not working, issues with storageman object
-    def test_export_bookmark_db(self):
-        return
-        rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst = -7)
-        rtc.export_bookmark_db()
-        bookmark_name = rtc.storageman.results_view_name
-        new_db_name = rtc.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
-        assert os.path.exists(new_db_name)
-        os.system("rm " + new_db_name)
-
     def export_receptor(self, dbquery):
         rtc = RingtailCore(db_file="output.db")
         rtc.export_receptors()
@@ -151,14 +128,6 @@ class Test_RingtailCore:
         receptor_file = receptor_name + ".pdbqt"
         
         assert os.path.exists(receptor_file)
-    
-    #TODO does not fetch data with/through storageman
-    def test_get_filterdata(self):
-        
-        return
-        rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst = -7)
-        rtc.get_previous_filter_data("delta, ref_rmsd")
     
     def test_generate_interactions_prepare_filters(self):
         test_filters = []
@@ -184,9 +153,42 @@ class Test_RingtailCore:
         os.system("rm output_log.txt output.db")
         assert len(test_filters) == 5
 
+
+
+        #TODO not working
+    
+    def test_plot(self):     
+        rtcore = RingtailCore(db_file="output_plot.db")
+        rtcore.add_results_from_files(file_path = [['test_data/']], 
+                                   recursive=True,)
+        rtcore.filter(eworst = -7)
+        rtcore.plot()
+        assert os.path.isfile("scatter.png") == True
+        #os.system("rm output_plot.db scatter.png")
+
+    #TODO does not fetch data with/through storageman
+    def test_get_filterdata(self):
+        
+        return
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(eworst = -7)
+        rtc.get_previous_filter_data("delta, ref_rmsd")
+
+    #TODO not working, issues with storageman object
+    def test_export_bookmark_db(self):
+        return
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(eworst = -7)
+        rtc.export_bookmark_db()
+        bookmark_name = rtc.storageman.results_view_name
+        new_db_name = rtc.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+        assert os.path.exists(new_db_name)
+        os.system("rm " + new_db_name)
+
+    #TODO this is not working quite right, for now it just removes the db file
     def test_duplicate_handling(self):
-        os.system("rm output.db")
-        #TODO this is not working quite right
+        os.system("rm output.db output_log.txt")
+        
         pass
 
 class Test_StorageManSQLite:
