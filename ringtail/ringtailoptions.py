@@ -109,7 +109,7 @@ class GeneralOptions(RTOptions):
         },  
         "logging_level":{
             "type": str,
-            "default": "WARNING",
+            "default": "DEBUG",
             "description": '''
                             "WARNING": Prints errors and warnings to stout only. 
                             "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used

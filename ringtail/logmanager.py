@@ -25,7 +25,8 @@ class RTLogger:
             cls.initialization(cls, filename=filename)
         return cls._instance
     
-    def initialization(self, level = "WARNING", filename = "rt_process_log.txt"):
+    #NOTE default log level set to debug during testing
+    def initialization(self, level = "DEBUG", filename = "rt_process_log.txt"):
         #TODO get log level default from options
         """ 
         Options for instantiation of the logger. 

@@ -2555,7 +2555,7 @@ class StorageManagerSQLite(StorageManager):
         
         return sql_ligand_string
 
-    def _generate_results_data_query(self, output_fields):
+    def _generate_results_data_query(self, output_fields: str):
         """Generates SQLite-formatted query string to select outfields data for ligands in self.results_view_name
 
         Args:
@@ -2564,9 +2564,17 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: string to select data from passing results view
         """
+        if type(output_fields) == str:
+            output_fields = output_fields.replace(" ","")
+            output_fields_list = output_fields.split(",")
+        elif type(output_fields) == list:
+            output_fields_list = output_fields
+        else:
+            raise OptionError(f'The output fields {outfield_string} were provided in the wrong format {type(output_fields)}. Please provide a string or a list.')
         outfield_string = "LigName, " + ", ".join(
-            [self.field_to_column_name[field] for field in output_fields]
+            [self.field_to_column_name[field] for field in output_fields_list]
         )
+
         return (
             "SELECT "
             + outfield_string
