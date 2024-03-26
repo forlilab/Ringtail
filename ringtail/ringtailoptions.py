@@ -249,7 +249,7 @@ class StorageOptions(RTOptions):
             "description": "Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli."
         },
         "duplicate_handling":{
-            "default":"IGNORE",
+            "default":None,
             "type":str,
             "description": "specify how duplicate Results rows should be handled when inserting into database. Options are 'ignore' or 'replace'. Default behavior will allow duplicate entries."
         },
@@ -335,7 +335,7 @@ class StorageOptions(RTOptions):
                     logger.warning(
                         f"--duplicate_handling option {self.duplicate_handling} not allowed. Reverting to default behavior."
                     )
-                    self.duplicate_handling = "IGNORE"
+                    self.duplicate_handling = None
             if self.order_results is not None and self.order_results not in self.order_options:
                 raise OptionError(
                     "Requested ording option that is not available. Please see --help for available options."
