@@ -709,11 +709,15 @@ class CLOptionParser:
             parsed_opts.save_receptor = None
             
             # set up filters
-            filters = {} #Filters()
+            filters = {} 
+            # empty lists are counted as filters, and the default keyword "OR" too
             optional_filters = Filters.get_filter_keys("all") 
             for f in optional_filters:
-                if getattr(parsed_opts, f) is not None:
-                    filters_present = True
+                if getattr(parsed_opts, f) is not None and getattr(parsed_opts, f) != []:
+                    if f == "ligand_operator":
+                        pass
+                    else:
+                        filters_present = True
             
             if filters_present:
                 # property filters
