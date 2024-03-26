@@ -1696,7 +1696,6 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError: Description
         """
         unique_string = ""
-        self.duplicate_handling = None
         if self.duplicate_handling is not None:
             unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
                    trans_x, trans_y, trans_z,
