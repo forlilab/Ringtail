@@ -150,13 +150,14 @@ class Test_RingtailCore:
 
         assert {'eworst': None, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'} in test_filters
 
-        os.system("rm output_log.txt output.db")
+        #os.system("rm output_log.txt output.db")
         assert len(test_filters) == 5
 
 
 
         #TODO not working
     
+    #TODO figure out why I fail when using same db
     def test_plot(self):     
         rtcore = RingtailCore(db_file="output_plot.db")
         rtcore.add_results_from_files(file_path = [['test_data/']], 
@@ -164,15 +165,21 @@ class Test_RingtailCore:
         rtcore.filter(eworst = -7)
         rtcore.plot()
         assert os.path.isfile("scatter.png") == True
-        #os.system("rm output_plot.db scatter.png")
+        os.system("rm output_plot.db scatter.png")
 
-    #TODO does not fetch data with/through storageman
     def test_get_filterdata(self):
-        
-        return
-        rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst = -7)
-        rtc.get_previous_filter_data("delta, ref_rmsd")
+        rtcore = RingtailCore(db_file="output.db")
+        rtcore.filter(eworst = -7)
+        rtcore.get_previous_filter_data("delta, ref_rmsd")
+
+        import linecache
+        first_entry = linecache.getline("output_log.txt", 3)
+        last_entry = linecache.getline("output_log.txt", 9)
+        final_line = linecache.getline("output_log.txt", 10)
+
+        assert first_entry == "'11991', '11991', 0.0, 226.06\n"
+        assert last_entry == "'3961', '3961', 0.0, 215.96\n"
+        assert final_line == "***************\n"
 
     #TODO not working, issues with storageman object
     def test_export_bookmark_db(self):

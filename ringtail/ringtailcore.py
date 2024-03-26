@@ -1233,6 +1233,7 @@ class RingtailCore:
             self._set_storageman_attributes(outfields=outfields)
 
         with self.storageman: new_data = self.storageman.fetch_data_for_passing_results()
+        print(f'\n\n {new_data}\n\n')
         with self.outputman: self.outputman.write_log(new_data)
 
     #-#-#- Util method -#-#-# 
