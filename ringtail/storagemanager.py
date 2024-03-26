@@ -35,7 +35,7 @@ class StorageManager:
     which will implement their own functions to return the data requested
 
     Attributes:
-        conflict_op (str): string indicating how conficting entries should be handled
+        duplicate_handling (str): string indicating how conficting entries should be handled
         current_view_name (str): name of current results view
         db_file (string): Name of file containing database
         field_to_column_name (dictionary): Dictionary for
@@ -106,7 +106,7 @@ class StorageManager:
         self.next_unique_interaction_idx = 1
         self.interactions_initialized_flag = False
         self.closed_connection = False        
-        self.conflict_op = None
+        self.duplicate_handling = None
    
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> tuple:
@@ -359,7 +359,7 @@ class StorageManagerSQLite(StorageManager):
                  mfpt_cluster: float = None,
                  interaction_cluster: float = None,
                  results_view_name: str = None,
-                 conflict_op: str = None,): 
+                 duplicate_handling: str = None,): 
         """Initialize superclass and subclass-specific instance variables
         Args:
             db_file (str): database file name"""
@@ -374,7 +374,7 @@ class StorageManagerSQLite(StorageManager):
         self.interaction_cluster = interaction_cluster
         self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
-        self.conflict_op = conflict_op 
+        self.duplicate_handling = duplicate_handling 
         super().__init__()
 
 
@@ -1696,12 +1696,13 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError: Description
         """
         unique_string = ""
-        if self.conflict_op is not None:
+        self.duplicate_handling = None
+        if self.duplicate_handling is not None:
             unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
                    trans_x, trans_y, trans_z,
                    axisangle_x, axisangle_y, axisangle_z, axisangle_w,
                    dihedrals, flexible_residues) ON CONFLICT {0}""".format(
-                self.conflict_op
+                self.duplicate_handling
             )
 
         sql_results_table = """CREATE TABLE IF NOT EXISTS Results (

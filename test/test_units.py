@@ -150,13 +150,8 @@ class Test_RingtailCore:
 
         assert {'eworst': None, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'} in test_filters
 
-        #os.system("rm output_log.txt output.db")
         assert len(test_filters) == 5
 
-
-
-        #TODO not working
-    
     #TODO figure out why I fail when using same db
     def test_plot(self):     
         rtcore = RingtailCore(db_file="output_plot.db")
@@ -168,7 +163,10 @@ class Test_RingtailCore:
         os.system("rm output_plot.db scatter.png")
 
     def test_get_filterdata(self):
+        os.system("rm output.db")
         rtcore = RingtailCore(db_file="output.db")
+        rtcore.add_results_from_files(file_path=[['test_data/group1/']])
+        rtcore.add_results_from_files(file_path=[['test_data/group2/']], append_results=True)
         rtcore.filter(eworst = -7)
         rtcore.get_previous_filter_data("delta, ref_rmsd")
 
