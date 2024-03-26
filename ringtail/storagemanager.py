@@ -35,7 +35,7 @@ class StorageManager:
     which will implement their own functions to return the data requested
 
     Attributes:
-        conflict_opt (str): string indicating how conficting entries should be handled
+        conflict_op (str): string indicating how conficting entries should be handled
         current_view_name (str): name of current results view
         db_file (string): Name of file containing database
         field_to_column_name (dictionary): Dictionary for
@@ -359,7 +359,7 @@ class StorageManagerSQLite(StorageManager):
                  mfpt_cluster: float = None,
                  interaction_cluster: float = None,
                  results_view_name: str = None,
-                 conflict_opt: str = None,):
+                 conflict_op: str = None,): 
         """Initialize superclass and subclass-specific instance variables
         Args:
             db_file (str): database file name"""
@@ -374,7 +374,7 @@ class StorageManagerSQLite(StorageManager):
         self.interaction_cluster = interaction_cluster
         self.filter_bookmark = filter_bookmark
         self.results_view_name = results_view_name
-        self.conflict_op = conflict_opt
+        self.conflict_op = conflict_op 
         super().__init__()
 
 
