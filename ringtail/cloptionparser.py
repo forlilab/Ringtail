@@ -66,14 +66,14 @@ def cmdline_parser(defaults={}):
         type=str,
         metavar="DATABASE",
     )
-    write_parser.add_argument(
-        "-s",
-        "--bookmark_name",
-        help="Specify name for db view of passing results to create (write mode) or export from (read mode)",
-        action="store",
-        type=str,
-        metavar="STRING",
-    )
+    # write_parser.add_argument(
+    #     "-s",
+    #     "--bookmark_name",
+    #     help="Specify name for db view of passing results to create (write mode) or export from (read mode)",
+    #     action="store",
+    #     type=str,
+    #     metavar="STRING",
+    # )
     write_parser.add_argument(
         "-m",
         "--mode",
@@ -248,7 +248,7 @@ def cmdline_parser(defaults={}):
         action="store",
         type=str,
         metavar="STRING",
-        dest="results_view_name",
+        # dest="results_view_name",
     )
     read_parser.add_argument(
         "-m",
@@ -848,5 +848,5 @@ class CLOptionParser:
             "output_all_poses":parsed_opts.output_all_poses,
             "mfpt_cluster":parsed_opts.mfpt_cluster,
             "interaction_cluster":parsed_opts.interaction_cluster,
-            "results_view_name":parsed_opts.results_view_name
+            "bookmark_name":parsed_opts.bookmark_name
         }

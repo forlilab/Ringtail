@@ -316,7 +316,7 @@ class StorageOptions(RTOptions):
             "type":float,
             "description": "Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions."
         },
-        "results_view_name":{
+        "bookmark_name":{
             "default":"passing_results",
             "type":str,
             "description": "name for resulting book mark file. Default value is 'passing_results'"
@@ -328,7 +328,7 @@ class StorageOptions(RTOptions):
 
     def checks(self):
         
-        if hasattr(self, "results_view_name"):
+        if hasattr(self, "bookmark_name"):
             # Make sure results are ordered after valid fields
             if self.duplicate_handling is not None:
                 if self.duplicate_handling.upper() not in ["IGNORE", "REPLACE"]:

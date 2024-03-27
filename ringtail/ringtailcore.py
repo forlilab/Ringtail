@@ -227,7 +227,7 @@ class RingtailCore:
                             output_all_poses = None,
                             mfpt_cluster = None,
                             interaction_cluster = None,
-                            results_view_name =None,
+                            bookmark_name =None,
                             dict=None):
         """
         Options or storagemanager, used both in read and write.
@@ -271,7 +271,7 @@ class RingtailCore:
             output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
             mfpt_cluster (float): Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
             interaction_cluster (float): Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-            results_view_name (str): name for resulting book mark file. Default value is "passing_results"
+            bookmark_name (str): name for resulting book mark file. Default value is "passing_results"
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
         
@@ -657,7 +657,7 @@ class RingtailCore:
                overwrite: bool = None, 
                order_results: str = None, 
                outfields: str = None, 
-               results_view_name: str =None, 
+               bookmark_name: str =None, 
                options_dict: dict = None,
                return_iter=False):
         """
@@ -720,7 +720,7 @@ class RingtailCore:
                                     "run" (run number for ligand pose), 
                                     "hb" (hydrogen bonds), 
                                     "receptor" (receptor name)
-                results_view_name (str): name for resulting book mark file. Default value is 'passing_results'
+                bookmark_name (str): name for resulting book mark file. Default value is 'passing_results'
                 options_dict (dict): write options as a dict
         Returns:
             number of ligands passing filter
@@ -758,7 +758,7 @@ class RingtailCore:
                                         overwrite = overwrite, 
                                         order_results = order_results, 
                                         outfields = outfields, 
-                                        results_view_name = results_view_name,
+                                        bookmark_name = bookmark_name,
                                         dict=storage_dict)
         self.set_read_options(log_file=log_file,enumerate_interaction_combs=enumerate_interaction_combs, dict = read_dict)
 
@@ -813,7 +813,7 @@ class RingtailCore:
                 maxmiss_union_results = self.storageman.get_maxmiss_union(len(interaction_combs))
                 with self.outputman:
                     self.outputman.write_maxmiss_union_header()
-                    self.outputman.write_results_bookmark_to_log(self.storageman.results_view_name + "_union")
+                    self.outputman.write_results_bookmark_to_log(self.storageman.bookmark_name + "_union")
                     number_passing_union = self.outputman.write_log(maxmiss_union_results)
                     self.outputman.log_num_passing_ligands(number_passing_union)
                     print("\nNumber passing ligands in max_miss union:", number_passing_union)
@@ -1067,12 +1067,12 @@ class RingtailCore:
         if sdf_path is not None:
             self.set_read_options(export_sdf_path=sdf_path)
         if bookmark_name is not None:
-            self._set_storageman_attributes(results_view_name=bookmark_name)
+            self._set_storageman_attributes(bookmark_name=bookmark_name)
 
         with self.storageman:
             if self.filters.max_miss > 0:
                 logger.warning("WARNING: Requested --export_sdf_path with --max_miss. Exported SDFs will be for union of interaction combinations.")
-                self.storageman.results_view_name = self.storageman.results_view_name + "_union"
+                self.storageman.bookmark_name = self.storageman.bookmark_name + "_union"
             if not self.storageman.check_passing_view_exists():
                 logger.warning(
                     "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
@@ -1124,7 +1124,7 @@ class RingtailCore:
         stdout=subprocess.PIPE,
         )
         if bookmark_name is not None:
-            self._set_storageman_attributes(results_view_name=bookmark_name)
+            self._set_storageman_attributes(bookmark_name=bookmark_name)
             
         poseIDs = {}
         with self.storageman:
@@ -1184,12 +1184,12 @@ class RingtailCore:
             bookmark_db_name (str): name for bookmark_db
         """
         if bookmark_name is not None:
-            self._set_storageman_attributes(results_view_name=bookmark_name)
+            self._set_storageman_attributes(bookmark_name=bookmark_name)
 
         bookmark_db_name = (
                         self.db_file.rstrip(".db")
                         + "_"
-                        + self.storageman.results_view_name
+                        + self.storageman.bookmark_name
                         + ".db"
                     )
         logger.info("Exporting bookmark database")
@@ -1228,7 +1228,7 @@ class RingtailCore:
             bookmark_name (str): bookmark for which the filters were used
         """
         if bookmark_name is not None:
-            self._set_storageman_attributes(results_view_name=bookmark_name)
+            self._set_storageman_attributes(bookmark_name=bookmark_name)
         if outfields is not None:
             self._set_storageman_attributes(outfields=outfields)
 

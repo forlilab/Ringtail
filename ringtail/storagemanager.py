@@ -54,7 +54,7 @@ class StorageManager:
             results should be ordered by in log.
         overwrite_flag (boolean): Flag indictating that Storage should drop
             all existing tables and add nes data
-        passing_results_view_name (string): Name for the view of passing
+        bookmark_name (string): Name for the view of passing
             results to be created after filtering
         temptable_suffix (int): suffix number for temp table
         unique_interactions (dict): Dictionary for storing unique interactions
@@ -163,12 +163,12 @@ class StorageManager:
         self._delete_from_interactions()
 
     def check_passing_view_exists(self):
-        """Return if self.results_view_name in database
+        """Return if self.bookmark_name in database
 
         Returns:
-            Bool: indicates if self.results_view_name exists
+            Bool: indicates if self.bookmark_name exists
         """
-        return self.results_view_name in [
+        return self.bookmark_name in [
             name[0] for name in self._fetch_view_names().fetchall()
         ]
 
@@ -235,11 +235,11 @@ class StorageManager:
             all_filters
         )
         logger.debug(filter_results_str)
-        # if max_miss is not 0, we want to give each passing view a new name by changing the self.results_view_name
+        # if max_miss is not 0, we want to give each passing view a new name by changing the self.bookmark_name
         if self.view_suffix is not None:
-            self.current_view_name = self.results_view_name + "_" + self.view_suffix
+            self.current_view_name = self.bookmark_name + "_" + self.view_suffix
         else:
-            self.current_view_name = self.results_view_name
+            self.current_view_name = self.bookmark_name
 
         self._create_view(
             self.current_view_name, view_query
@@ -261,7 +261,7 @@ class StorageManager:
         return filtered_results
 
     def fetch_data_for_passing_results(self) -> iter:
-        """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.results_view_name
+        """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.bookmark_name
 
         Returns:
             sqlite cursor: cursor of data from passing data
@@ -358,7 +358,7 @@ class StorageManagerSQLite(StorageManager):
                  output_all_poses: bool = None,
                  mfpt_cluster: float = None,
                  interaction_cluster: float = None,
-                 results_view_name: str = None,
+                 bookmark_name: str = None,
                  duplicate_handling: str = None,): 
         """Initialize superclass and subclass-specific instance variables
         Args:
@@ -373,7 +373,7 @@ class StorageManagerSQLite(StorageManager):
         self.mfpt_cluster = mfpt_cluster
         self.interaction_cluster = interaction_cluster
         self.filter_bookmark = filter_bookmark
-        self.results_view_name = results_view_name
+        self.bookmark_name = bookmark_name
         self.duplicate_handling = duplicate_handling 
         super().__init__()
 
@@ -1055,7 +1055,7 @@ class StorageManagerSQLite(StorageManager):
         """
         # check if we have previously filtered and saved view
         return self._run_query(
-            "SELECT * FROM {passing_view}".format(passing_view=self.results_view_name)
+            "SELECT * FROM {passing_view}".format(passing_view=self.bookmark_name)
         )
 
     def get_maxmiss_union(self, total_combinations: int):
@@ -1064,10 +1064,10 @@ class StorageManagerSQLite(StorageManager):
         view_strs = []
         outfield_str = self._generate_outfield_string()
         for i in range(total_combinations):
-            selection_strs.append(f"SELECT {outfield_str} FROM {self.results_view_name + '_' + str(i)}")
-            view_strs.append(f"SELECT * FROM {self.results_view_name + '_' + str(i)}")
+            selection_strs.append(f"SELECT {outfield_str} FROM {self.bookmark_name + '_' + str(i)}")
+            view_strs.append(f"SELECT * FROM {self.bookmark_name + '_' + str(i)}")
 
-        view_name = f"{self.results_view_name}_union"
+        view_name = f"{self.bookmark_name}_union"
         logger.debug("Saving union bookmark...")
         self._create_view(view_name, " UNION ".join(view_strs))
         self._insert_bookmark_info(view_name, " UNION ".join(view_strs))
@@ -1201,13 +1201,13 @@ class StorageManagerSQLite(StorageManager):
         self._create_view(view_name, view_query)
         self._insert_bookmark_info(name=view_name, sqlite_query=sql_query)
 
-        self.results_view_name = view_name
+        self.bookmark_name = view_name
 
         return self._run_query(sql_query), view_name, cluster_col_choice
 
     def create_temp_passing_table(self):
         cur = self.conn.cursor()
-        cur.execute(f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {self.results_view_name}")
+        cur.execute(f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {self.bookmark_name}")
         cur.close()
 
     def fetch_passing_pose_properties(self, ligname):
@@ -1695,6 +1695,7 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseTableCreationError: Description
         """
+        #NOTE not entirely sure this works
         unique_string = ""
         if self.duplicate_handling is not None:
             unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
@@ -2114,7 +2115,7 @@ class StorageManagerSQLite(StorageManager):
             String: SQLite-formatted query string
         """
         return "SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
-            results_view=self.results_view_name
+            results_view=self.bookmark_name
         )
 
     def _generate_outfield_string(self):
@@ -2156,9 +2157,9 @@ class StorageManagerSQLite(StorageManager):
         outfield_string = self._generate_outfield_string()
 
         if self.filter_bookmark is not None:
-            if self.filter_bookmark == self.results_view_name:
+            if self.filter_bookmark == self.bookmark_name:
                 logger.error(
-                    f"Specified filter_bookmark and bookmark_name are the same: {self.results_view_name}"
+                    f"Specified filter_bookmark and bookmark_name are the same: {self.bookmark_name}"
                 )
                 raise OptionError(
                     "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
@@ -2450,7 +2451,7 @@ class StorageManagerSQLite(StorageManager):
         cur = self.conn.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)")
         ligand_cluster_columns = self._fetch_ligand_cluster_columns()
-        column_name = f"{self.results_view_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
+        column_name = f"{self.bookmark_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
         if column_name not in ligand_cluster_columns:
             cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
         for ci, cl in enumerate(clusters):
@@ -2556,7 +2557,7 @@ class StorageManagerSQLite(StorageManager):
         return sql_ligand_string
 
     def _generate_results_data_query(self, output_fields: str):
-        """Generates SQLite-formatted query string to select outfields data for ligands in self.results_view_name
+        """Generates SQLite-formatted query string to select outfields data for ligands in self.bookmark_name
 
         Args:
             output_fields (List): List of result column data for output
@@ -2579,7 +2580,7 @@ class StorageManagerSQLite(StorageManager):
             "SELECT "
             + outfield_string
             + " FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {0})".format(
-                self.results_view_name
+                self.bookmark_name
             )
         )
 
@@ -2710,14 +2711,14 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Results WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
-                    view=self.results_view_name
+                    view=self.bookmark_name
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError(
-                f"Error occured while pruning Results not in {self.results_view_name}"
+                f"Error occured while pruning Results not in {self.bookmark_name}"
             ) from e
 
     def _delete_from_ligands(self):
@@ -2730,14 +2731,14 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Ligands WHERE LigName NOT IN (SELECT LigName from Results WHERE Pose_ID IN (SELECT Pose_ID FROM {view}))".format(
-                    view=self.results_view_name
+                    view=self.bookmark_name
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError(
-                f"Error occured while pruning Ligands not in {self.results_view_name}"
+                f"Error occured while pruning Ligands not in {self.bookmark_name}"
             ) from e
 
     def _delete_from_interactions(self):
@@ -2751,14 +2752,14 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
-                    view=self.results_view_name
+                    view=self.bookmark_name
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError(
-                f"Error occured while pruning Interaction_bitvectors not in {self.results_view_name}"
+                f"Error occured while pruning Interaction_bitvectors not in {self.bookmark_name}"
             ) from e
 
     def _generate_view_names_query(self):

@@ -80,7 +80,7 @@ if __name__ == "__main__":
                     rtcore.export_csv(readopts.export_query_csv, "query.csv")
 
                 if readopts.export_bookmark_db:
-                    rtcore.export_bookmark_db(rtcore.storageman.results_view_name)
+                    rtcore.export_bookmark_db(rtcore.storageman.bookmark_name)
 
                 if readopts.export_receptor:
                     rtcore.export_receptors()
