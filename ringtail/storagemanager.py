@@ -1036,7 +1036,6 @@ class StorageManagerSQLite(StorageManager):
         return consent
 
     def remake_bookmarks(self):
-        #TODO why?
         """Reads all views from Bookmarks table and remakes them"""
         try:
             bookmark_info = self._run_query("SELECT * from Bookmarks")
