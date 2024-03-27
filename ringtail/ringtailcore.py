@@ -660,8 +660,7 @@ class RingtailCore:
                bookmark_name: str =None, 
                options_dict: dict = None,
                return_iter=False):
-        """
-        Prepare list of filters, then hand it off to storageman to
+        """Prepare list of filters, then hand it off to storageman to
             perform filtering. Create log of passing results.
         Args:
             Filters:
@@ -821,19 +820,21 @@ class RingtailCore:
             
         return ligands_passed
 
-    def add_config_from_file(self, config_file: str ="config.json"):
+    @staticmethod
+    def read_config_file(config_file: str ="config.json", return_as_string = False):
         """
-        Provide ringtail config from file, will direclty set storage manager settings, 
-        and return dictionaries for the remaining options. 
+        Will read and parse a file containing ringtail options following the format 
+        given from RingtailCore.generate_config_json_template
         Args:
-            config_file: json formatted file containing ringtail and filter options
+            config_file (str, file name in cd): json formatted file containing ringtail and filter options
+            return_as_string (bool): will return all dictionaries as dict without sections if true
         Returns:
             file_dict: dictionary of files to use in add results
             write_dict: dictionary of options to use in add results
             read_dict: dictionary of options to use for filtering
             filters_dict: dictionary of files containing filters
+            storageman_dict: dictionary of storage manager options
         """
-        #TODO Still not working for command line I think
 
         try: 
             if config_file is None: 
@@ -852,7 +853,7 @@ class RingtailCore:
                         "overwrite":options["storageopts"]["overwrite"]}
             logger.info("A dictionary containing write options was extracted from config file.")
 
-            self._set_storageman_attributes(dict= options["storageopts"])
+            storageman_dict = options["storageopts"]
             logger.info("A dictionary containing storage options was extracted from config file.")
 
             read_dict = options["readopts"]
@@ -860,14 +861,36 @@ class RingtailCore:
 
             filters_dict = options["filters"]
             logger.info("A dictionary containing filters was extracted from config file.")
- 
-            return (file_dict, write_dict, read_dict, filters_dict)
-        
+
+            if return_as_string:
+                return file_dict | write_dict | read_dict | filters_dict | storageman_dict
+            else:
+                return (file_dict, write_dict, read_dict, filters_dict, storageman_dict)
+            
         except FileNotFoundError:
             logger.error("Please ensure config file is in the working directory.")
         except Exception as e:
             OptionError(f"There were issues with the configuration file: {e}")
 
+    def add_config_from_file(self, config_file: str ="config.json"):
+        """
+        Provide ringtail config from file, will directly set storage manager settings, 
+        and return dictionaries for the remaining options. 
+        Args:
+            config_file: json formatted file containing ringtail and filter options
+        Returns:
+            file_dict: dictionary of files to use in add results
+            write_dict: dictionary of options to use in add results
+            read_dict: dictionary of options to use for filtering
+            filters_dict: dictionary of files containing filters
+        """
+        (file_dict, write_dict, read_dict, filters_dict, storageman_dict) = RingtailCore.read_config_file(config_file=config_file)
+
+        self._set_storageman_attributes(dict= storageman_dict)
+        logger.info("A dictionary containing storage options was extracted from config file and assigned storagemanager.")
+
+        return (file_dict, write_dict, read_dict, filters_dict)
+        
     def create_ligand_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
         """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
 
@@ -1019,7 +1042,6 @@ class RingtailCore:
                 print("Number similar ligands:", number_similar)
         return number_similar
         
-    #TODO not sure if this is working
     def plot(self, save=True):
         """
         Get data needed for creating Ligand Efficiency vs
@@ -1242,6 +1264,7 @@ class RingtailCore:
     def drop_bookmark(self, bookmark_name: str):
         with self.storageman: self.storageman._drop_bookmark(bookmark_name=bookmark_name)
         logger.info("Bookmark {0} was dropped from the database {1}".format(bookmark_name, self.storageman.db_file))
+   
     #-#-#- Util method -#-#-# 
     @staticmethod
     def split_dict(dict: dict, items: list) -> tuple:
