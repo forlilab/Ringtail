@@ -36,7 +36,7 @@ class RTLogger:
         self.fileHandler = logging.FileHandler(filename)
         self.logger.addHandler(self.fileHandler) 
         self.streamHandler = logging.StreamHandler()
-        self.streamHandler.setLevel("WARNING")
+        self.streamHandler.setLevel("INFO")
         self.logger.addHandler(self.streamHandler) 
         self.streamFmt = logging.Formatter("%(levelname)-10s %(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
         self.header(self, header="Starting a new Ringtail Process")
