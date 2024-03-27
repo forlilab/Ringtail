@@ -16,7 +16,7 @@ if __name__ == "__main__":
     time0 = time.perf_counter()
 
     try:
-        # parse command line options and filters file (if given)
+        # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
         rtcore._set_general_options(dict=cmdinput.generalopts)
@@ -61,7 +61,7 @@ if __name__ == "__main__":
                 if readopts.plot:
                     rtcore.plot()
 
-                # def open pymol viewer
+                # open pymol viewer
                 if readopts.pymol:
                     rtcore.display_pymol()
 
@@ -76,12 +76,15 @@ if __name__ == "__main__":
                         readopts.export_bookmark_csv + ".csv",
                         table=True,)
 
+                # export query as csv
                 if readopts.export_query_csv:
                     rtcore.export_csv(readopts.export_query_csv, "query.csv")
 
+                # export bookmark as database
                 if readopts.export_bookmark_db:
                     rtcore.export_bookmark_db(rtcore.storageman.bookmark_name)
 
+                # export receptor as .pdbqt
                 if readopts.export_receptor:
                     rtcore.export_receptors()
 
