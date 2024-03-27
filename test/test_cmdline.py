@@ -21,9 +21,6 @@ def countrows():
         return count
     return __dbconnect
 
-#TODO
-# rename commandline tests
-
 class TestInputs:
     os.system("rm output.db")
 
@@ -47,54 +44,52 @@ class TestInputs:
         # add file that exists, check for append
         # if append, check poses and docking mode consistent (read error message)
         assert True
-
-    def test_multiple_files1(self, countrows):
+       
+    def test_files(self, countrows):
         os.system(
                 "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
             )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
-        assert count == 3
-       
-    def test_multiple_files2(self, countrows):
+        count1 = countrows("SELECT COUNT(*) FROM Ligands")
+        
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
         )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
-        assert count == 3
+        count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
-    def test_multiple_paths1(self, countrows):
+        assert count1 == count2 == 3
+
+    def test_file_paths(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 --file_path test_data/group2"
         )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
-        assert count == 217
+        count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
-    def test_multiple_paths2(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 test_data/group2"
         )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
-        assert count == 217
+        count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
-    def test_filelist1(self, countrows):
+        assert count1 == count2 == 217
+
+    def test_file_list(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --file_list filelist2.txt"
         )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
-        assert count == 5
+        count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
-    def test_filelist2(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt filelist2.txt"
         )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
-        assert count == 5
+        count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
-    def test_all_input_opts(self, countrows):
+        assert count1 == count2 == 5
+
+    def test_all_file_inputs(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --file test_data/group2/361056.dlg.gz test_data/group2/53506.dlg.gz --file_path test_data/group3"
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
+
         assert count == 75
 
     #TODO this is a biggie
@@ -106,6 +101,7 @@ class TestInputs:
             "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group2 --append_results"
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
+
         assert count == 217
 
     def test_duplicate_handling(self, countrows):
@@ -118,7 +114,6 @@ class TestInputs:
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
 
-    #TODO can be depreceated/merged
     def test_save_rec_file(self, countrows):
         
         os.system(
@@ -127,7 +122,6 @@ class TestInputs:
         count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
         assert count == 1
     
-    #TODO can be depreceated/merged
     def test_save_rec_file_gz(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor"
