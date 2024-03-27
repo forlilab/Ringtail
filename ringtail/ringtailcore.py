@@ -1239,6 +1239,9 @@ class RingtailCore:
         with self.storageman: new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman: self.outputman.write_log(new_data)
 
+    def drop_bookmark(self, bookmark_name: str):
+        with self.storageman: self.storageman._drop_bookmark(bookmark_name=bookmark_name)
+        logger.info("Bookmark {0} was dropped from the database {1}".format(bookmark_name, self.storageman.db_file))
     #-#-#- Util method -#-#-# 
     @staticmethod
     def split_dict(dict: dict, items: list) -> tuple:
