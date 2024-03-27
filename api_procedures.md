@@ -153,7 +153,7 @@ Available filter and options are:
 |max_miss         | Will filter given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Will log and output union of combinations unless used with `enumerate_interaction_combs`. | 0  | <tr><td colspan="5">***Storage and read options***</td></tr>Yes |
 |log_file              | Name for log of filtered results                      | output_log.txt   ||
 |overwrite        | Flag to overwrite existing logfile of same name           | FALSE       ||
-|results_view_name      | Name for bookmark view in database                      | passing_results  ||
+|bookmark_name      | Name for bookmark view in database                      | passing_results  ||
 |outfields       | Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
 |order_results    | String for field by which the passing results should be ordered in log file. | no default ||
 |output_all_poses        | Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||

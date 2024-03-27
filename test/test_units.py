@@ -40,7 +40,7 @@ class Test_RingtailCore:
         object_dict = ringtailoptions.ResultsProcessingOptions().todict()
         assert defaults == object_dict
 
-    def test_folder1(self, countrows):
+    def test_add_folder(self, countrows):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file_path = [['test_data/group1']])
         count = countrows("SELECT COUNT(*) FROM Ligands")
@@ -161,27 +161,29 @@ class Test_RingtailCore:
 
     def test_get_filterdata(self):
         os.system("rm output_log.txt")
-        rtcore = RingtailCore(db_file="output.db")
-        rtcore.filter(eworst = -7)
-        rtcore.get_previous_filter_data("delta, ref_rmsd")
+        rtc1 = RingtailCore(db_file="output.db")
+        rtc1.filter(eworst = -7)
+        rtc1.get_previous_filter_data("delta, ref_rmsd")
 
         import linecache
         first_entry = linecache.getline("output_log.txt", 3)
         last_entry = linecache.getline("output_log.txt", 9)
         final_line = linecache.getline("output_log.txt", 10)
         
+        os.system("rm output_log.txt output.db")
+
         assert first_entry == "'11991', '11991', 0.0, 226.06\n"
         assert last_entry == "'3961', '3961', 0.0, 215.96\n"
         assert final_line == "***************\n"
 
-    #TODO not working, issues with storageman object
+    #TODO not working, maybe issue with bookmark name? need function 
     def test_export_bookmark_db(self):
-        return
-        rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst = -7)
-        rtc.export_bookmark_db()
-        bookmark_name = rtc.storageman.results_view_name
-        new_db_name = rtc.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+        rtc2 = RingtailCore(db_file="output.db")
+        rtc2.add_results_from_files(file_path=[['/test_data']], recursive=True)
+        rtc2.filter(eworst = -7)
+        rtc2.export_bookmark_db("passing_results")
+        bookmark_name = rtc2.storageman.bookmark_name
+        new_db_name = rtc2.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
         assert os.path.exists(new_db_name)
         os.system("rm " + new_db_name)
 
