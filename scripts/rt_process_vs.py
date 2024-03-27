@@ -29,6 +29,7 @@ if __name__ == "__main__":
     # create manager object for virtual screening. Will make database if needed
     try:
         rtcore.set_read_options(dict=cmdinput.readopts)
+        rtcore.set_storageman_attributes(dict=cmdinput.storageopts)
         readopts = rtcore.readopts 
         if rtcore.process_mode == "write":
             logger.debug("Starting write process")
