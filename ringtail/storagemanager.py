@@ -349,7 +349,8 @@ class StorageManagerSQLite(StorageManager):
 
     """
 
-    def __init__(self, db_file: str = None, 
+    def __init__(self, 
+                 db_file: str = None, 
                  overwrite: bool=None, 
                  append_results: bool=None,
                  order_results: str = None,
@@ -2073,6 +2074,17 @@ class StorageManagerSQLite(StorageManager):
             self.conn.commit()
             cur.close()
 
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(
+                "Error while inserting database properties info into DB_properties table"
+            ) from e
+
+    def _drop_bookmark(self, bookmark_name: str):
+
+        query = "DROP VIEW IF EXISTS {0}".format(bookmark_name)
+        
+        try:
+            self._run_query(query)
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error while inserting database properties info into DB_properties table"
