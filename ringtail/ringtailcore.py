@@ -1185,7 +1185,6 @@ class RingtailCore:
         """
         if bookmark_name is not None:
             self._set_storageman_attributes(bookmark_name=bookmark_name)
-
         bookmark_db_name = (
                         self.db_file.rstrip(".db")
                         + "_"
@@ -1205,7 +1204,10 @@ class RingtailCore:
         #TODO I think I have to rewrite this, and pass only pertinent options
             # and then use the db type specified in rtingtail core, basically create a new storageman 
             # object
-        with StorageManagerSQLite(**self.storageopts.todict()) as db_clone:
+        dictionary = self.storageopts.todict()
+        dictionary["db_file"] = self.db_file
+        #TODO this makes ringtailcore set db_file to the new self.db_file I think
+        with StorageManagerSQLite(**dictionary) as db_clone:
             db_clone.prune()
             db_clone.close_storage(vacuum=True)
 
