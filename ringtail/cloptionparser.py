@@ -14,7 +14,14 @@ from .ringtailcore import RingtailCore
 from .ringtailoptions import Filters
 
 
-def cmdline_parser(defaults={}):
+def cmdline_parser(defaults: dict={}):
+    ''' Parses options provided using the command line.
+    All arguments are first populated with default values. 
+    If a config file is provided, these will overwrite default values.
+    Any single arguments provided using the argument parser will overwrite
+    default and config file values.
+
+    The default values can be found in the file ringtailoptions.'''
 
     conf_parser = argparse.ArgumentParser(
         description=__doc__,
@@ -23,8 +30,6 @@ def cmdline_parser(defaults={}):
     )
     conf_parser.add_argument("-c", "--config")
     confargs, remaining_argv = conf_parser.parse_known_args()
-
-    
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -66,14 +71,7 @@ def cmdline_parser(defaults={}):
         type=str,
         metavar="DATABASE",
     )
-    # write_parser.add_argument(
-    #     "-s",
-    #     "--bookmark_name",
-    #     help="Specify name for db view of passing results to create (write mode) or export from (read mode)",
-    #     action="store",
-    #     type=str,
-    #     metavar="STRING",
-    # )
+
     write_parser.add_argument(
         "-m",
         "--mode",
@@ -590,6 +588,17 @@ def cmdline_parser(defaults={}):
         parser.print_help()
         raise OptionError("Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details.")
 
+    if confargs.config is not None:
+        # update default values with those given in the config file
+        logger.info("Reading options from config file")
+        try:
+            with open(confargs.config) as f:
+                c = RingtailCore.read_config_file(f, return_as_string=True)
+                defaults.update(c)
+                logger.debug("Arguments successfully extracted from config file.")
+        except FileNotFoundError as e:
+            raise OptionError ("Config file not found in current directory.") from e
+
     parser.set_defaults(**defaults)
     write_parser.set_defaults(**defaults)
     read_parser.set_defaults(**defaults)
@@ -606,8 +615,6 @@ class CLOptionParser:
             default_values = {}
             for _, subdict in defaults_dict.items():
                 default_values.update(subdict)
-                
-            #TODO if using a config file it should overwrite the defaults
             
             (
                 parsed_opts,
@@ -641,7 +648,6 @@ class CLOptionParser:
         if parsed_opts.verbose:
             logger.setLevel("INFO")
         logging_level= logger.level()
-        
         if parsed_opts.process_mode is None:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
@@ -649,7 +655,6 @@ class CLOptionParser:
         process_mode = parsed_opts.process_mode.lower()
         filters_present = False  # set flag indicating if any filters given
         docking_mode = parsed_opts.docking_mode.lower()
-
         #Check database options
         if parsed_opts.input_db is not None:
             if not os.path.exists(parsed_opts.input_db):
@@ -663,13 +668,7 @@ class CLOptionParser:
             db_file = parsed_opts.output_db
             
         self.rtcore = RingtailCore(db_file)
-        self.rtcore._run_mode = "cmd"
-        # Read config file first, and let individual options overwrite it
-        #TODO not working
-        if self.confargs.config is not None:
-            logger.info("Reading options from config/options file")
-            self.rtcore.add_options_from_file(self.confargs.config)
-        
+        self.rtcore._run_mode = "cmd" # tag for command line processing, changes how certain errors are handled
         self.rtcore.process_mode = parsed_opts.process_mode
 
         self.generalopts = {
@@ -724,7 +723,6 @@ class CLOptionParser:
                 property_list = Filters.get_filter_keys("property") 
                 for kw in property_list:
                     filters[kw] = getattr(parsed_opts, kw)
-                    #setattr(filters, kw, getattr(parsed_opts, kw))
 
                 # interaction filters (residues)
                 interactions = {}
@@ -741,25 +739,41 @@ class CLOptionParser:
                                 found_res.append(r)
                         else:
                             found_res.append(res)
+                    print(found_res)
                     for res in found_res:
-                        wanted = True
-                        if not res.count(":") == 3:
-                            raise OptionError(
-                                (
-                                    "[%s]: to specify a residue use "
-                                    "the format CHAIN:RES:NUM:ATOM_NAME. Any item can be omitted, "
-                                    "as long as the number of semicolons is always 3 "
-                                    "(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)"
+                        if type(res) == str:
+                            logger.debug("interaction provided as string")
+                            wanted = True
+                            if not res.count(":") == 3:
+                                raise OptionError(
+                                    (
+                                        "[%s]: to specify a residue use "
+                                        "the format CHAIN:RES:NUM:ATOM_NAME. Any item can be omitted, "
+                                        "as long as the number of semicolons is always 3 "
+                                        "(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)"
+                                    )
+                                    % res
                                 )
-                                % res
-                            )
-                        if res[0] == "~":
-                            res = res[1:]
-                            wanted = False
-                        interactions[_type].append((res, wanted))
+                            if res[0] == "~":
+                                res = res[1:]
+                                wanted = False
+                            interactions[_type].append((res, wanted))
+                        else:
+                            logger.debug("interaction provided as list")
+                            if not res[0].count(":") == 3: #first element of list is the interaction
+                                raise OptionError(
+                                    (
+                                        "[%s]: to specify a residue use "
+                                        "the format CHAIN:RES:NUM:ATOM_NAME. Any item can be omitted, "
+                                        "as long as the number of semicolons is always 3 "
+                                        "(e.g.: CHAIN:::, :RES::, CHAIN::NUM:, etc.)"
+                                    )
+                                    % res
+                                )
+                            interactions[_type].append(res)
+
                 for k, v in interactions.items():
                     filters[k] = v
-                    #setattr(filters, k, v)
 
                 # count interactions
                 interactions_count = []
@@ -799,7 +813,6 @@ class CLOptionParser:
                 
                 for k, v in ligand_filters.items():
                     filters[k] = v
-                    #setattr(filters, k, v)
                 filters["max_miss"] = parsed_opts.max_miss
                 filters["react_any"] = parsed_opts.react_any
 
