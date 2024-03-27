@@ -1220,6 +1220,8 @@ class RingtailCore:
             if recblob is None:
                 logger.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
                 continue
+            if not hasattr(self, "outputman"):
+                self.set_read_options()
             self.outputman.write_receptor_pdbqt(recname, recblob)
 
     def get_previous_filter_data(self, outfields = None, bookmark_name = None):

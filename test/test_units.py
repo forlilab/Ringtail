@@ -89,9 +89,9 @@ class Test_RingtailCore:
         assert count_ligands_passing == 36
 
     def test_get_filterdata(self):
-        os.system("rm output_log.txt")
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst = -7)
+        os.system("rm output_log.txt")
         rtc.get_previous_filter_data("delta, ref_rmsd", bookmark_name="passing_results")
 
         import linecache
@@ -136,13 +136,16 @@ class Test_RingtailCore:
         assert os.path.exists("Ligands.csv")
         os.system("rm Ligands.csv")
 
-    def export_receptor(self, dbquery):
+    def test_export_receptor(self, dbquery):
         rtc = RingtailCore(db_file="output.db")
         rtc.export_receptors()
-        receptor_name = dbquery()
+        curs = dbquery("SELECT RecName FROM Receptors;")
+        receptor_name = curs.fetchone()[0]
         receptor_file = receptor_name + ".pdbqt"
         
         assert os.path.exists(receptor_file)
+
+        os.system("rm " + receptor_file)
     
     def test_generate_interactions_prepare_filters(self):
         test_filters = []
@@ -173,8 +176,6 @@ class Test_RingtailCore:
         rtcore.plot()
         assert os.path.isfile("scatter.png") == True
         os.system("rm scatter.png")
-
-
 
     def test_export_bookmark_db(self):
         rtc = RingtailCore(db_file="output.db")
