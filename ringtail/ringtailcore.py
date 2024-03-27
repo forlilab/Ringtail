@@ -370,7 +370,7 @@ class RingtailCore:
             export_receptor (bool): Export stored receptor pdbqt. Will write to current directory.
             data_from_bookmark (bool): Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.
             pymol (bool): Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.
-            enumerate_interaction_combs (bool): #TODO
+            enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
             log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
             export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
                 optional: readopts (ReadOptions): provide options as object, will overwrite other options
@@ -417,10 +417,8 @@ class RingtailCore:
                     dict: dict = None):
         """
         Object holding all specific filters, options, types.
-        Args:
-            #TODO
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
+
         # Dict of individual arguments
         indiv_options: dict = vars(); 
         del indiv_options["self"]; del indiv_options["dict"]
@@ -1222,13 +1220,9 @@ class RingtailCore:
         with self.storageman: self.storageman.clone(bookmark_db_name)
         # connect to cloned database
         self.db_file = bookmark_db_name
-        #TODO not sure if this works, getting an error and should not use sqlite directly anyways
-        #TODO I think I have to rewrite this, and pass only pertinent options
-            # and then use the db type specified in rtingtail core, basically create a new storageman 
-            # object
+        #TODO needs rejiggering so agnostic to db engine. It also rewires core to new db, is that ok? 
         dictionary = self.storageopts.todict()
         dictionary["db_file"] = self.db_file
-        #TODO this makes ringtailcore set db_file to the new self.db_file I think
         with StorageManagerSQLite(**dictionary) as db_clone:
             db_clone.prune()
             db_clone.close_storage(vacuum=True)

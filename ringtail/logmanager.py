@@ -19,15 +19,12 @@ class RTLogger:
         #Ensures class is only instantiated once
         if cls._instance is None:
             cls._instance = super(RTLogger, cls).__new__(cls)
-            # Put any initialization here.
             dt = datetime.datetime.now()
             filename = dt.strftime("%Y%m%d-%H%M%S") + "_ringtail-process-log.txt"
             cls.initialization(cls, filename=filename)
         return cls._instance
     
-    #NOTE default log level set to debug during testing
-    def initialization(self, level = "DEBUG", filename = "rt_process_log.txt"):
-        #TODO get log level default from options
+    def initialization(self, level = "WARNING", filename = "rt_process_log.txt"):
         """ 
         Options for instantiation of the logger. 
         """

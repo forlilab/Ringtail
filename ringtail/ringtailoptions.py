@@ -171,8 +171,6 @@ class InputFiles(RTOptions):
             "description": "name of receptor"
         },
     }
-    
-    #TODO ensure files does not have to be just lists
 
     def __init__(self):
         super().initialize_from_dict(self.options, self.__class__.__name__)
@@ -186,9 +184,6 @@ class InputFiles(RTOptions):
                     self.target = (os.path.basename(self.receptor_file).split(".")[0])
                 else:
                     raise OptionError("The receptor PDBQT file path is not valid. Please check location of receptor file and --receptor_file option")
-
-        # This object needs an onchange method (they all do). That way initialization is just initialization, and 
-        # option setting is always checked and not done in init
         
 class ResultsProcessingOptions(RTOptions):
     """ Class that holds database write options that affects write time, such as how to 
@@ -329,7 +324,7 @@ class StorageOptions(RTOptions):
     def checks(self):
         
         if hasattr(self, "bookmark_name"):
-            # Make sure results are ordered after valid fields
+            # Makes sure all default values have been set once, so comparisons can start
             if self.duplicate_handling is not None:
                 if self.duplicate_handling.upper() not in ["IGNORE", "REPLACE"]:
                     logger.warning(
@@ -364,62 +359,62 @@ class ReadOptions(RTOptions):
     result export and alternate ways of displaying the data (plotting),
     """
     options = {
-        "filtering":{                   # this is essentially filter method
+        "filtering":{
             "default":None,
             "type":bool,
             "description": "switch for whether or not filtering is to be performed, to accommodate cmdline tools."
         },
-        "plot":{                        # this is a method to plot
+        "plot":{
             "default":None,
             "type":bool,
             "description": "Makes scatterplot of LE vs Best Energy, saves as scatter.png."
         },
-        "find_similar_ligands":{        # this is a method to filter and output
+        "find_similar_ligands":{
             "default":None,
             "type":str,
             "description": "Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering."
         },
-        "export_bookmark_csv":{         # this is an export method
+        "export_bookmark_csv":{
             "default":None,
             "type":str,
             "description": "Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables"
         },
-        "export_bookmark_db":{          # this is an export method
+        "export_bookmark_db":{
             "default":None,
             "type":bool,
             "description": "Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db"
         },
-        "export_query_csv":{            # this is an export method
+        "export_query_csv":{
             "default":None,
             "type":str,
             "description": "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]"
         },
-        "export_receptor":{             # this is an export method
+        "export_receptor":{
             "default":None,
             "type":bool,
             "description": "Export stored receptor pdbqt. Will write to current directory."
         },
-        "data_from_bookmark":{          # this could be a read option
+        "data_from_bookmark":{
             "default":None,
             "type":bool,
             "description": "Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters."
         },
-        "pymol":{                       # IDevenK
+        "pymol":{
             "default":None,
             "type":bool,
             "description": "Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given."
         },
-        "enumerate_interaction_combs":{ # gotta figure out this one, I think it is an option, 
-            "default":None,             #TODO does this belong in filters?
+        "enumerate_interaction_combs":{ #TODO does this belong in filters?
+            "default":None,
             "type":bool,
             "description": "When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime."
         },
-        "log_file":{                    # this is the log file name, so an option
+        "log_file":{
             "default":"output_log.txt",
             "type":str,
             "description": "by default, results are saved in 'output_log.txt'; if this option is used, ligands and requested info passing the filters will be written to specified file"
         },
-        "export_sdf_path":{                 # this is an export method 
+        "export_sdf_path":{
             "default":"",
             "type":str,
             "description": "specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified."
