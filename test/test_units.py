@@ -88,6 +88,21 @@ class Test_RingtailCore:
 
         assert count_ligands_passing == 36
 
+    def test_get_filterdata(self):
+        os.system("rm output_log.txt")
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(eworst = -7)
+        rtc.get_previous_filter_data("delta, ref_rmsd", bookmark_name="passing_results")
+
+        import linecache
+        first_entry = linecache.getline("output_log.txt", 3)
+        last_entry = linecache.getline("output_log.txt", 9)
+        final_line = linecache.getline("output_log.txt", 10)
+
+        assert first_entry == "'11991', '11991', 0.0, 226.06\n"
+        assert last_entry == "'3961', '3961', 0.0, 215.96\n"
+        assert final_line == "***************\n"
+
     def test_similar_ligands(self, monkeypatch):
         rtc = RingtailCore(db_file="output.db")
         ligand_name = "287065"
@@ -159,33 +174,25 @@ class Test_RingtailCore:
         assert os.path.isfile("scatter.png") == True
         os.system("rm scatter.png")
 
-    def test_get_filterdata(self):
-        os.system("rm output_log.txt")
-        rtc1 = RingtailCore(db_file="output.db")
-        rtc1.filter(eworst = -7)
-        rtc1.get_previous_filter_data("delta, ref_rmsd")
 
-        import linecache
-        first_entry = linecache.getline("output_log.txt", 3)
-        last_entry = linecache.getline("output_log.txt", 9)
-        final_line = linecache.getline("output_log.txt", 10)
-        
-        os.system("rm output_log.txt output.db")
 
-        assert first_entry == "'11991', '11991', 0.0, 226.06\n"
-        assert last_entry == "'3961', '3961', 0.0, 215.96\n"
-        assert final_line == "***************\n"
-
-    #TODO not working, maybe issue with bookmark name? need function 
     def test_export_bookmark_db(self):
-        rtc2 = RingtailCore(db_file="output.db")
-        rtc2.add_results_from_files(file_path=[['/test_data']], recursive=True)
-        rtc2.filter(eworst = -7)
-        rtc2.export_bookmark_db("passing_results")
-        bookmark_name = rtc2.storageman.bookmark_name
-        new_db_name = rtc2.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
-        assert os.path.exists(new_db_name)
-        os.system("rm " + new_db_name)
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(eworst = -7)
+        rtc.export_bookmark_db()
+        
+        assert os.path.exists(rtc.db_file)
+
+        conn = sqlite3.connect(rtc.db_file)
+        curs = conn.cursor()
+        curs.execute("SELECT COUNT(*) FROM Results")
+        count = curs.fetchone()[0]
+        curs.close()
+        conn.close()
+
+        assert count == 7
+
+        os.system("rm " + rtc.db_file)
 
     #TODO this is not working quite right, for now it just removes the db file
     def test_duplicate_handling(self):
