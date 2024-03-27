@@ -51,7 +51,7 @@ class RingtailCore:
         self.process_mode = process_mode
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
-        self._set_storageman_attributes()
+        self.set_storageman_attributes()
         self._set_general_options()
         self._run_mode = "api"
              
@@ -217,7 +217,7 @@ class RingtailCore:
             self.generalopts.logging_level=self.generalopts.logging_level.upper() 
             logger.setLevel(self.generalopts.logging_level.upper())
 
-    def _set_storageman_attributes(self, 
+    def set_storageman_attributes(self, 
                             filter_bookmark = None,
                             append_results = None,
                             duplicate_handling = None,
@@ -531,7 +531,7 @@ class RingtailCore:
         else:
             storage_dict = None
             results_dict = None
-        self._set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
+        self.set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
         # If there are any ligand files, process ligand data
         if results_files_given: 
             with self.storageman:
@@ -749,7 +749,7 @@ class RingtailCore:
         else:
             storage_dict = None
             read_dict = None
-        self._set_storageman_attributes(output_all_poses = output_all_poses, 
+        self.set_storageman_attributes(output_all_poses = output_all_poses, 
                                         mfpt_cluster = mfpt_cluster, 
                                         interaction_cluster = interaction_cluster, 
                                         overwrite = overwrite, 
@@ -884,7 +884,7 @@ class RingtailCore:
         """
         (file_dict, write_dict, read_dict, filters_dict, storageman_dict) = RingtailCore.read_config_file(config_file=config_file)
 
-        self._set_storageman_attributes(dict= storageman_dict)
+        self.set_storageman_attributes(dict= storageman_dict)
         logger.info("A dictionary containing storage options was extracted from config file and assigned storagemanager.")
 
         return (file_dict, write_dict, read_dict, filters_dict)
@@ -1087,7 +1087,7 @@ class RingtailCore:
         if sdf_path is not None:
             self.set_read_options(export_sdf_path=sdf_path)
         if bookmark_name is not None:
-            self._set_storageman_attributes(bookmark_name=bookmark_name)
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
 
         with self.storageman:
             if self.filters.max_miss > 0:
@@ -1144,7 +1144,7 @@ class RingtailCore:
         stdout=subprocess.PIPE,
         )
         if bookmark_name is not None:
-            self._set_storageman_attributes(bookmark_name=bookmark_name)
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
             
         poseIDs = {}
         with self.storageman:
@@ -1204,7 +1204,7 @@ class RingtailCore:
             bookmark_db_name (str): name for bookmark_db
         """
         if bookmark_name is not None:
-            self._set_storageman_attributes(bookmark_name=bookmark_name)
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
         bookmark_db_name = (
                         self.db_file.rstrip(".db")
                         + "_"
@@ -1248,9 +1248,9 @@ class RingtailCore:
             bookmark_name (str): bookmark for which the filters were used
         """
         if bookmark_name is not None:
-            self._set_storageman_attributes(bookmark_name=bookmark_name)
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
         if outfields is not None:
-            self._set_storageman_attributes(outfields=outfields)
+            self.set_storageman_attributes(outfields=outfields)
 
         with self.storageman: new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman: self.outputman.write_log(new_data)

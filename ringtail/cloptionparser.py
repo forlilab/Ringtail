@@ -739,7 +739,6 @@ class CLOptionParser:
                                 found_res.append(r)
                         else:
                             found_res.append(res)
-                    print(found_res)
                     for res in found_res:
                         if type(res) == str:
                             logger.debug("interaction provided as string")
