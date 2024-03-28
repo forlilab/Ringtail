@@ -91,17 +91,21 @@ class Test_RingtailCore:
     def test_get_filterdata(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst = -7)
-        os.system("rm output_log.txt")
+        # os.system("rm output_log.txt")
+        log_file_name = "output_log_test.txt"
+        rtc.set_read_options(log_file=log_file_name)
         rtc.get_previous_filter_data("delta, ref_rmsd", bookmark_name="passing_results")
-
+  
         import linecache
-        first_entry = linecache.getline("output_log.txt", 3)
-        last_entry = linecache.getline("output_log.txt", 9)
-        final_line = linecache.getline("output_log.txt", 10)
+        first_entry = linecache.getline(log_file_name, 3)
+        last_entry = linecache.getline(log_file_name, 9)
+        final_line = linecache.getline(log_file_name, 10)
 
         assert first_entry == "'11991', '11991', 0.0, 226.06\n"
         assert last_entry == "'3961', '3961', 0.0, 215.96\n"
         assert final_line == "***************\n"
+
+        os.system(("rm " + log_file_name))
 
     def test_similar_ligands(self, monkeypatch):
         rtc = RingtailCore(db_file="output.db")

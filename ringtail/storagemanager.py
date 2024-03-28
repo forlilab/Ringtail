@@ -1339,6 +1339,17 @@ class StorageManagerSQLite(StorageManager):
             sqlite3.Cursor: cursor of requested view
         """
         return self._run_query(f"SELECT * FROM {viewname}")
+    
+    def create_indices(self):
+        """Create indices for columns in self.index_columns
+
+        Args:
+            index_lignames (bool, optional): flag indicating that index should be created over ligand names
+
+        Raises:
+            StorageError: Description
+        """
+        raise NotImplementedError
 
     def save_temp_table(
         self,
