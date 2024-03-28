@@ -1606,9 +1606,10 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             logger.debug("Creating columns index...")
-            cur.execute("CREATE INDEX allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)")
+            cur.execute("CREATE INDEX IF NOT EXISTS allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)")
             self.conn.commit()
             cur.close()
+            logger.info("Indicies were created for specified Results columns.")
         except sqlite3.OperationalError as e:
             raise StorageError("Error occurred while indexing") from e
 
@@ -1619,6 +1620,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute("DROP INDEX IF EXISTS idx_filter_cols")
             cur.execute("DROP INDEX IF EXISTS idx_ligname")
             cur.close()
+            logger.info("Existing indicies were dropped")
         except sqlite3.OperationalError as e:
             raise StorageError("Error while dropping indices") from e
 
