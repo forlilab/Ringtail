@@ -54,7 +54,13 @@ class RTOptions:
             return True
         else:
             return False
-        
+    
+    @staticmethod
+    def valid_bookmark_name(name) -> bool:
+        import re
+        regex = "^[A-Za-z0-9_]*$"
+        return re.match(regex, name)
+
     def get_all_options_types(self):
         """
         This needs to be a method that grabs attributes from each class, and figures out what type they are as a TypeSafe object
@@ -325,6 +331,10 @@ class StorageOptions(RTOptions):
         
         if hasattr(self, "bookmark_name"):
             # Makes sure all default values have been set once, so comparisons can start
+            if self.bookmark_name is not None and not RTOptions.valid_bookmark_name(self.bookmark_name):
+                raise OptionError(
+                    "The chosen bookmark name {0} is not valid, as it contains symbols other than letters, numbers, and underscore (_)".format(self.bookmark_name)
+                )
             if self.duplicate_handling is not None:
                 if self.duplicate_handling.upper() not in ["IGNORE", "REPLACE"]:
                     logger.warning(
@@ -338,6 +348,8 @@ class StorageOptions(RTOptions):
             # Make sure we include ligand name in output columnds
             if self.outfields is not None and "Ligand_name" not in self.outfields:
                 self.outfields = "Ligand_name," + self.outfields
+
+            
         
     order_options = {
             "e",
@@ -428,6 +440,10 @@ class ReadOptions(RTOptions):
         if hasattr(self, "export_sdf_path"):
             if self.export_sdf_path is not None and not self.export_sdf_path == "" and not self.export_sdf_path.endswith("/"): 
                 self.export_sdf_path += "/"
+            if self.export_bookmark_csv is not None and not RTOptions.valid_bookmark_name(self.export_bookmark_csv):
+                raise OptionError(
+                    "The chosen bookmark name {0} is not valid, as it contains symbols other than letters, numbers, and underscore (_)".format(self.bookmark_name)
+                )
 
 class Filters(RTOptions):
     """
