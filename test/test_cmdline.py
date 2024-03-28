@@ -92,7 +92,6 @@ class TestInputs:
 
         assert count == 75
 
-    #TODO this is a biggie
     def test_append_results(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
@@ -140,6 +139,7 @@ class TestOutputs:
 
         assert status1 == status2 == 0
         assert os.path.exists("Ligands.csv")
+
         os.system("rm output.db")
         os.system("rm Ligands.csv")
 
