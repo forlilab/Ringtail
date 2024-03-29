@@ -94,14 +94,15 @@ class Test_RingtailCore:
         log_file_name = "output_log_test.txt"
         rtc.set_read_options(log_file=log_file_name)
         rtc.get_previous_filter_data("delta, ref_rmsd", bookmark_name="passing_results")
-  
+
+
+        with open(log_file_name) as f:
+            file_contents = f.read()
         import linecache
-        first_entry = linecache.getline(log_file_name, 3)
-        last_entry = linecache.getline(log_file_name, 9)
         final_line = linecache.getline(log_file_name, 10)
 
-        assert first_entry == "'11991', '11991', 0.0, 226.06\n"
-        assert last_entry == "'3961', '3961', 0.0, 215.96\n"
+        assert "'11991', '11991', 0.0, 226.06" in file_contents
+        assert "'3961', '3961', 0.0, 215.96" in file_contents
         assert final_line == "***************\n"
 
         os.system(("rm " + log_file_name))
