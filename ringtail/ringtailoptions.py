@@ -141,6 +141,49 @@ class GeneralOptions(RTOptions):
         if self.docking_mode not in ["dlg", "vina"]:
             logger.error(f'Docking mode {self.docking_mode} is not supported. Please choose between "dlg" and "vina".')
 
+class InputStrings(RTOptions):
+    """ Class that handles docking results strings from vina docking, with options to store receptor."""
+    options = {
+        "results_string_list":{
+            "default":None,
+            "type":list,
+            "description": "A list of ligand docking output results. Currently only valid for vina docking"
+        },
+        "receptor_file":{
+            "default":None,
+            "type":str,
+            "description": "Use with Vina mode. Give file for receptor PDBQT."
+        },
+        "save_receptor":{
+            "default":None,
+            "type":bool,
+            "description": "Saves receptor PDBQT to database. Receptor location must be specied with in 'receptor_file'."
+        },
+        "target":{
+            "default":None,
+            "type":str,
+            "description": "Name of receptor. This field is autopopulated if 'receptor_file' is supplied."
+        },
+    }
+
+    def __init__(self):
+        super().initialize_from_dict(self.options, self.__class__.__name__)
+
+    def checks(self):
+        """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
+        then every time a value is changed."""
+        if hasattr(self, "target"): # ensures last item in the option dictionary has been
+            if type(self.results_string_list) == str: #TODO this one might get recursive
+                pass
+                self.results_string_list = list(self.results_string_list)
+            if type(self.target) != str:
+                if self.receptor_file is None:
+                    pass
+                elif self.receptor_file is not None and self.is_valid_path(self.receptor_file):
+                    self.target = (os.path.basename(self.receptor_file).split(".")[0])
+                else:
+                    raise OptionError("The receptor PDBQT file path is not valid. Please check location of receptor file and 'receptor_file' option.")
+
 class InputFiles(RTOptions):
     """ Class that handles sources of data to be written including ligand data paths and how 
     to traverse them, and options to store receptor.

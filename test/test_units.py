@@ -204,6 +204,11 @@ class Test_RingtailCore:
         os.system("rm output.db output_log.txt")
         
         pass
+    
+    #TODO
+    def test_db_setup(self):
+        # test that docking mode and poses stored is checked when appending to database
+        pass
 
 class Test_StorageManSQLite:
    
@@ -357,3 +362,12 @@ class Test_options:
 
     # Test that if you set an invalid option (including None) it reverts to the default value
         # So I really need to have type and default and name in one space
+    
+#TODO
+class TestVINA:
+    # make sure string and file produces the same db setup
+    def test_add_file(self):
+        pass
+
+    def test_add_string(self):
+        pass
