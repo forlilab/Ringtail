@@ -19,7 +19,8 @@ class ResultsManager:
         store_all_poses: bool = None,
         add_interactions: bool = None,
         interaction_cutoffs: list = None,
-        file_sources = None,
+        file_sources = None, #TODO needs to accommodate results strings
+        string_sources = None,
         max_proc: int = None,
         storageman: StorageManager = None,
         storageman_class = None,
@@ -34,19 +35,25 @@ class ResultsManager:
         self.interaction_tolerance = interaction_tolerance
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
-        self.file_sources = file_sources
         self.target = None
         self.receptor_file = None
         self.file_pattern = None
         self.max_proc = max_proc
         self.storageman_class = storageman_class
         self.storageman = storageman
+
+        self.file_sources = file_sources
         if file_sources is not None:
             self.file_pattern = file_sources.file_pattern
             self.target = file_sources.target
             self.receptor_file = file_sources.receptor_file
 
-    def process_results(self):
+        self.string_sources = string_sources
+        if string_sources is not None:
+             self.results_string_list = string_sources.results_string_list
+             self.target = string_sources.target
+
+    def process_files(self):
         # check that we have file source(s)
         if (
             self.file_sources.file == (None and [[]])
@@ -74,3 +81,29 @@ class ResultsManager:
             parser_opts[k] = v
         self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
         self.parser.process_files()
+
+    def process_strings(self):
+        # check that we have file source(s)
+        if not self.string_sources:
+            raise ResultsProcessingError(
+                "No string sources given. String sources must be given for writing results to database."
+            )
+        if self.mode == "vina" and self.add_interactions and self.receptor_file is None:
+                raise ResultsProcessingError(
+                    "Gave 'add_interactions' with Vina mode but did not specify receptor name. Please give receptor pdbqt name with 'receptor_file'.")
+        
+        # start MP process
+        logger.debug(f'These are the file options being procesed: {str(self.string_sources.todict())}.')
+
+        # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
+        implemented_parser_managers = {
+            "multiprocessing": MPManager,
+        }
+        parser_opts = {}
+        for k, v in self.__dict__.items():
+            if k == "parser_manager":
+                continue
+            parser_opts[k] = v
+        self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
+        self.parser.process_strings()
+

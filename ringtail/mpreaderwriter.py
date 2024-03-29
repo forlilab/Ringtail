@@ -107,6 +107,7 @@ class DockingFileReader(multiprocessing.Process):
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 elif self.mode == "vina":
                     parsed_file_dict = parse_vina_pdbqt(next_task)
+                    #TODO !!! this is where I need to include something different. Task handed must be string from list and not filename 
                 # Example code for calling user-implemented mode
                 # elif self.mode == "my_mode":
                 #     parsed_file_dict = myparser(next_task)
