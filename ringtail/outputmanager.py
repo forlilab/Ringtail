@@ -57,7 +57,7 @@ class OutputManager:
         Args:
             write_filters_header (bool): only used because one method does not take the same headers
         """
-        self.log_file = open(self.log_file, 'w')
+        self.log_file = open(self.log_file, 'w') # makes log_file attribute a file pointer from the string path name
         self._log_open = True
         try:
             if write_filters_header:
@@ -67,9 +67,10 @@ class OutputManager:
             raise OutputError("Error while creating log file") from e
         
     def close_logfile(self):
+        """Closes the log file properly"""
         if self._log_open:
             self.log_file.close()
-            self.log_file = os.path.basename(self.log_file.name)
+            self.log_file = os.path.basename(self.log_file.name) # returns log_file attribute from file pointer to string path name
             self._log_open = False
 
     def write_log(self, lines):
