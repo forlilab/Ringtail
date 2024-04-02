@@ -591,7 +591,8 @@ def parse_vina_pdbqt(fname):
     }
 
 def parse_vina_string(docking_data: dict):
-    #TODO this method parses the string, does the same as pdbqt reader but without the file opening
+    """Method that parses a vina string, does the same as pdbqt reader but without the file opening"""
+    #TODO merge with vina file reader
     logger.debug("About to parse vina result string")
 
     ligname = list(docking_data.keys())[0] # get the first (and only, probably not optimal) key which should be the ligand name
@@ -687,7 +688,6 @@ def parse_vina_string(docking_data: dict):
     # calculate ligand efficiency and deltas from the best pose
     leff = [x / num_heavy_atoms for x in scores]
     delta = [x - scores[0] for x in scores]
-    print("\n\n data was parsed, hhoray!\n\n")
     return {
         "ligname": ligname,  # string
         "receptor": "",

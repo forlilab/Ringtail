@@ -13,9 +13,10 @@ import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .logmanager import logger
-from .exceptions import MultiprocessingError
+from .exceptions import MultiprocessingError, RTCoreError
 import traceback
 from datetime import datetime
+from .ringtailoptions import InputStrings
 
 os_string = platform.system()
 if os_string == "Darwin":  # mac
@@ -43,9 +44,9 @@ class MPManager:
         string_sources=None,
         max_proc=None,
     ):
-        print(f'\n\n initializing mpmanafger with mode: {mode}\n\n')
+  
         # confirm that requested parser mode is implemented
-        self.implemented_modes = ["dlg", "vina", "vina_string"]
+        self.implemented_modes = ["dlg", "vina"]
         if mode not in self.implemented_modes:
             raise NotImplementedError(
                 f"Requested file parsing mode {mode} not yet implemented"
@@ -66,7 +67,6 @@ class MPManager:
         self.storageman_class = storageman_class
         self.num_files = 0
         self.max_proc = max_proc
-        print(f'\n\n mpmanager initialized\n\n')
 
 
     def process_files(self):
@@ -134,7 +134,7 @@ class MPManager:
 
     def process_strings(self):
         #TODO this is the new method to process string inputs from vina
-        print(f'\n\ninside process strings right at the top\n\n')
+        string_processing = True
         if self.max_proc is None:
             self.max_proc = multiprocessing.cpu_count()
         self.num_readers = self.max_proc - 1
@@ -145,8 +145,7 @@ class MPManager:
         self.p_conn, self.c_conn = multiprocessing.Pipe(True)
         logger.info("Starting {0} string readers".format(self.num_readers))
         for i in range(self.num_readers):
-            #TODO here needs work, cannot use the file reader obviously
-            # one worker is started for each processor to be used
+            #TODO if files are fewer, intialize only needed? 
             s = DockingFileReader(
                 self.queueIn,
                 self.queueOut,
@@ -161,6 +160,7 @@ class MPManager:
                 self.add_interactions,
                 self.interaction_cutoffs,
                 self.receptor_file,
+                string_processing=string_processing
             )
             # this method calls .run() internally
             s.start()
@@ -178,10 +178,9 @@ class MPManager:
 
         w.start()
         self.workers.append(w)
-        print(f'\n\n docking reader and writer were initialized\n\n')
         # process items in the queue
         try:
-            self._add_string_to_queue(string_sources=self.string_sources)
+            self._process_string_sources()
         except Exception as e:
             tb = traceback.format_exc()
             self._kill_all_workers(e, "file sources", tb)
@@ -225,25 +224,32 @@ class MPManager:
                 for filelist in filelist_list:
                     self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
 
-    def _add_string_to_queue(self, string_sources):
+    def _process_string_sources(self):
+        if self.string_sources != None:
+            for ligand_name, docking_result in self.string_sources.results_strings.items():
+                string_data = {ligand_name: docking_result}
+                self._add_string_to_queue(string_data)
+        else:
+            raise RTCoreError("There was an error while reading the results string input.")
+
+    def _add_string_to_queue(self, string_data):
         max_attempts = 750
         timeout = 0.5  # seconds
+
         attempts = 0
         while True:
             if attempts >= max_attempts:
                 raise MultiprocessingError(
-                    "Something is blocking the progressing of string reading. Exiting program."
+                    "Something is blocking the progressing of file reading. Exiting program."
                 ) from queue.Full
             try:
-                for ligand_name, docking_result in string_sources["results_strings"].items():
-                    print(f'\n\nligand name: {ligand_name} about to be processed in add_string_to_queue\n\n')
-                    self.queueIn.put({ligand_name: docking_result}, block=True, timeout=timeout) #TODO where the file is added to the queue, maybe make a separate method to add_results_string_to_queue?
-                    self.num_files += 1 # should not be files but keeping until changing names throughout
-                    self._check_for_worker_exceptions()
-                    break
+                self.queueIn.put(string_data, block=True, timeout=timeout) 
+                self.num_files += 1
+                self._check_for_worker_exceptions()
+                break
             except queue.Full:
                 attempts += 1
-                self._check_for_worker_exceptions()
+                self._check_for_worker_exceptions()       
 
     def _add_to_queue(self, file):
         max_attempts = 750
