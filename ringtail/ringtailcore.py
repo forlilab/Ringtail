@@ -483,7 +483,7 @@ class RingtailCore:
         return files
     
     def set_results_sources(self,
-                           results_string_list: str = None,
+                           results_strings: str = None,
                            receptor_file=None,
                            save_receptor=None,
                            dict: dict = None) -> InputStrings:
@@ -601,7 +601,7 @@ class RingtailCore:
             self.save_receptor(files.receptor_file)
     
     def add_results_from_vina_string(self,
-                                    results_string_list: str = None,
+                                    results_strings: dict = None,
                                     receptor_file: str = None,
                                     save_receptor: bool = None,
                                     resultsources_dict: dict = None,
@@ -642,10 +642,11 @@ class RingtailCore:
         self.process_mode = "write"
         self.docking_mode = "vina"
 
-        results = self.set_results_sources(results_string_list, receptor_file, save_receptor, resultsources_dict)
-        results_strings_given = bool(results.results_string_list)
+        results = self.set_results_sources(results_strings, receptor_file, save_receptor, resultsources_dict)
+        results_strings_given = bool(results.results_strings)
+        print(f'\n\n there are results: {results_strings_given}\n\n')
         if not results_strings_given and not results.save_receptor:
-            raise OptionError("At least one input option needs to be used: 'results_string_list', or 'save_receptor'")
+            raise OptionError("At least one input option needs to be used: 'results_strings', or 'save_receptor'")
 
         if options_dict is not None:
             results_dict, storage_dict = RingtailCore.split_dict(options_dict, ["append_results", "duplicate_handling", "overwrite"])

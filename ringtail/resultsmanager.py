@@ -49,9 +49,6 @@ class ResultsManager:
             self.receptor_file = file_sources.receptor_file
 
         self.string_sources = string_sources
-        if string_sources is not None:
-             self.results_string_list = string_sources.results_string_list
-             self.target = string_sources.target
 
     def process_files(self):
         # check that we have file source(s)
@@ -88,22 +85,25 @@ class ResultsManager:
             raise ResultsProcessingError(
                 "No string sources given. String sources must be given for writing results to database."
             )
-        if self.mode == "vina" and self.add_interactions and self.receptor_file is None:
+        if self.mode == "vina_string" and self.add_interactions and self.receptor_file is None:
                 raise ResultsProcessingError(
                     "Gave 'add_interactions' with Vina mode but did not specify receptor name. Please give receptor pdbqt name with 'receptor_file'.")
-        
+        self.mode = "vina_string" # quick and dirty way to reroute mpreaderwriter, change it in here so no negative effects elsewhere
         # start MP process
-        logger.debug(f'These are the file options being procesed: {str(self.string_sources.todict())}.')
-
+        logger.debug(f'These are the strings options being procesed: {self.string_sources}.') 
+        print(f'\n\n past log msg\n\n')
+        #NOTE get this far
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {
             "multiprocessing": MPManager,
         }
+        print(f'\n\n setting up parsed options\n\n')
         parser_opts = {}
         for k, v in self.__dict__.items():
             if k == "parser_manager":
                 continue
             parser_opts[k] = v
         self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
+        print(f'\n\n next up is processing strings, and I have a parser: {self.parser}\n\n')
         self.parser.process_strings()
 

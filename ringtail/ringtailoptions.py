@@ -144,10 +144,10 @@ class GeneralOptions(RTOptions):
 class InputStrings(RTOptions):
     """ Class that handles docking results strings from vina docking, with options to store receptor."""
     options = {
-        "results_string_list":{
+        "results_strings":{
             "default":None,
-            "type":list,
-            "description": "A list of ligand docking output results. Currently only valid for vina docking"
+            "type":dict,
+            "description": "A dictionary of ligand names and ligand docking output results. Currently only valid for vina docking"
         },
         "receptor_file":{
             "default":None,
@@ -173,9 +173,9 @@ class InputStrings(RTOptions):
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
         if hasattr(self, "target"): # ensures last item in the option dictionary has been
-            if type(self.results_string_list) == str: #TODO this one might get recursive
+            if type(self.results_strings) == str: #TODO this one might get recursive
                 pass
-                self.results_string_list = list(self.results_string_list)
+                self.results_strings = list(self.results_strings)
             if type(self.target) != str:
                 if self.receptor_file is None:
                     pass
