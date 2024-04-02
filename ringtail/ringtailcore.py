@@ -480,6 +480,11 @@ class RingtailCore:
         for k,v in indiv_options.items():
             if v is not None: setattr(files, k, v)
         
+        if files.file_pattern != None: 
+            if "pdbqt" in files.file_pattern.lower(): self._set_general_options(docking_mode="vina")
+            elif "dlg" in files.file_pattern.lower(): self._set_general_options(docking_mode="dlg")
+            logger.debug(f"Docking mode set to {self.docking_mode} from given file pattern {files.file_pattern.lower()}")
+
         return files
     
     def set_results_sources(self,
@@ -644,7 +649,6 @@ class RingtailCore:
 
         results = self.set_results_sources(results_strings, receptor_file, save_receptor, resultsources_dict)
         results_strings_given = bool(results.results_strings)
-        print(f'\n\n there are results: {results_strings_given}\n\n')
         if not results_strings_given and not results.save_receptor:
             raise OptionError("At least one input option needs to be used: 'results_strings', or 'save_receptor'")
 
@@ -671,7 +675,7 @@ class RingtailCore:
                 # Process results files and handle database versioning 
                 self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
                 logger.info("Adding results...")
-                self.resultsman.process_strings()  #TODO
+                self.resultsman.process_strings()
                 self.storageman.set_ringtaildb_version()
                 if summary: self.produce_summary()
 
