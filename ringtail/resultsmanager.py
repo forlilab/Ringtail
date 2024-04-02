@@ -49,6 +49,9 @@ class ResultsManager:
             self.receptor_file = file_sources.receptor_file
 
         self.string_sources = string_sources
+        if self.string_sources is not None:
+            self.target = self.string_sources.target
+            self.receptor_file = self.string_sources.receptor_file
 
     def process_files(self):
         # check that we have file source(s)
