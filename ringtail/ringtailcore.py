@@ -463,9 +463,33 @@ class RingtailCore:
         Args:
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
+
+        def ensure_double_list(object) -> list:
+            """Most of ringtail is set up to handle files, file paths, and file lists as double lists [[items]].
+            Instead of changing that for now, the input is checked to ensure they are presented as, or can be 
+            converted to a double list. Really only matters for using API."""
+            if type(object)==list:
+                if type(object[0])==list: 
+                    if type(object[0][0])==str: pass
+                    else: raise OptionError( f"error, object is more than two encapsulated lists: '{object[0][0]}' should be a string.")
+                elif type(object[0])==str:
+                    object=[object]
+                    logger.debug(f"Object {object[0]} was converted to a double list from a single list.")
+                else: logger.error("Unable to parse file input.")
+            elif type(object)==str:
+                object=[[object]]
+                logger.debug(f"Object {object[0][0]} was converted to a double list from a string.")
+            else: logger.error("Unable to parse file input.")
+            
+            return object
+        
+        if file is not None: file = ensure_double_list(file)
+        if file_path is not None: file_path = ensure_double_list(file_path)
+        if file_list is not None: file_list = ensure_double_list(file_list)
+
         # Dict of individual arguments
         indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
+        del indiv_options["self"]; del indiv_options["dict"]; del indiv_options["ensure_double_list"]
 
         # Create option object with default values if needed
         files = InputFiles()
@@ -480,7 +504,7 @@ class RingtailCore:
         for k,v in indiv_options.items():
             if v is not None: setattr(files, k, v)
         
-        if files.file_pattern != None: 
+        if files.file_pattern != None: #BUG file pattern will default to dlg although it should only be set if using file_path. I wonder if I can add that to check/init values
             if "pdbqt" in files.file_pattern.lower(): self.set_general_options(docking_mode="vina")
             elif "dlg" in files.file_pattern.lower(): self.set_general_options(docking_mode="dlg")
             logger.debug(f"Docking mode set to {self.docking_mode} from given file pattern {files.file_pattern.lower()}")
