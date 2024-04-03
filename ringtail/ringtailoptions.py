@@ -205,7 +205,7 @@ class InputFiles(RTOptions):
             "description": "Text file(s) containing the list of docking output files to save; relative or absolute paths are allowed. Compressed (.gz) files allowed."
         },
         "file_pattern":{
-            "default":"*.dlg*",
+            "default":None,
             "type":str,
             "description": "Specify which pattern to use when searching for result files to process (only with 'file_path')."
         },
@@ -233,17 +233,18 @@ class InputFiles(RTOptions):
 
     def __init__(self):
         super().initialize_from_dict(self.options, self.__class__.__name__)
-
-        # make receptor target name the same as name from receptor file
-        if self.receptor_file is None:
-            pass
-        elif self.receptor_file is not None and self.is_valid_path(self.receptor_file):
-            self.target = (os.path.basename(self.receptor_file).split(".")[0])
-        else:
-            raise OptionError("The receptor PDBQT file path is not valid. Please check location of receptor file and 'receptor_file' option.")
-
+    
     def checks(self):
-        pass
+        """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
+        then every time a value is changed."""
+        if hasattr(self, "target"): # ensures last item in the option dictionary has been
+            if type(self.target) != str:
+                if self.receptor_file is None:
+                    pass
+                elif self.receptor_file is not None and self.is_valid_path(self.receptor_file):
+                    self.target = (os.path.basename(self.receptor_file).split(".")[0])
+                else:
+                    raise OptionError("The receptor PDBQT file path is not valid. Please check location of receptor file and 'receptor_file' option.")
         
 class ResultsProcessingOptions(RTOptions):
     """ Class that holds database write options that affects write time, such as how to 

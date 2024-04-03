@@ -73,6 +73,7 @@ class TestRingtailCore:
         assert len(summary_items.data) == 40
 
     def test_create_rdkitmol(self):
+        #TODO
         pass
 
     def test_append_to_database(self, countrows):
@@ -205,10 +206,21 @@ class TestRingtailCore:
         
         pass
     
-    #TODO
-    def test_db_setup(self):
-        # test that docking mode and poses stored is checked when appending to database
-        pass
+    def test_db_num_poses_warning(self):
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(file = [['test_data/group1/1451.dlg.gz']], max_poses=1)
+        rtc.add_results_from_files(file = [['test_data/group1/1620.dlg.gz']], max_poses=4, append_results=True)
+        from ringtail import logger
+        warning_string = 'The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1.'
+        with open(logger.filename(), "r") as f:
+            if warning_string in f.read():
+                warning_worked = True
+            else:
+                warning_worked = False
+                
+        os.system("rm output.db")
+
+        assert warning_worked
 
 class TestVinaHandling:
 
@@ -239,11 +251,28 @@ class TestVinaHandling:
         vina_path = 'test_data/vina'
         rtc = RingtailCore("output.db")
         rtc.set_general_options(docking_mode="vina")
-        rtc.add_results_from_files(file_path=[[vina_path]], file_pattern = "*.pdbqt*", receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True, add_interactions=True)
+        rtc.add_results_from_files(file_path=vina_path, file_pattern = "*.pdbqt*", receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True, add_interactions=True)
         count = countrows("SELECT COUNT(*) FROM Interaction_indices")
         os.system("rm output.db")
 
         assert count == 45
+
+    def test_db_dockingmode_warning(self):
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(file = 'test_data/group1/1451.dlg.gz')
+        rtc.add_results_from_files(file = 'test_data/vina/sample-result.pdbqt', append_results=True)
+        
+        from ringtail import logger
+        warning_string = 'The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is dlg.'
+        with open(logger.filename(), "r") as f:
+            if warning_string in f.read():
+                warning_worked = True
+            else:
+                warning_worked = False
+                
+        os.system("rm output.db")
+
+        assert warning_worked
 
 class Test_StorageManSQLite:
    
