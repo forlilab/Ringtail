@@ -35,9 +35,11 @@ class RTLogger:
         self.streamHandler = logging.StreamHandler()
         self.streamHandler.setLevel("INFO")
         self.logger.addHandler(self.streamHandler) 
-        self.streamFmt = logging.Formatter("%(levelname)-10s %(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        self.streamFmt = logging.Formatter("%(levelname)-10s %(message)s")
+        self.fileFmt = logging.Formatter("%(levelname)-10s %(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
         self.header(self, header="Starting a new Ringtail Process")
-        self.fileHandler.setFormatter(self.streamFmt)
+        self.fileHandler.setFormatter(self.fileFmt)
+        self.streamHandler.setFormatter(self.streamFmt)
 
     def setLevel(self, level: str):
         """ Sets level of the logger and prints to log (if debug)."""
@@ -69,7 +71,7 @@ class RTLogger:
         headFmt = logging.Formatter("%(asctime)30s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
         self.fileHandler.setFormatter(headFmt)
         self.logger.critical("--------- " + header + " ---------")
-        self.fileHandler.setFormatter(self.streamFmt)
+        self.fileHandler.setFormatter(self.fileFmt)
 
     def debug(self, message):
         self.logger.debug(message)
