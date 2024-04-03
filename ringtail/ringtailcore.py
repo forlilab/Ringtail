@@ -52,7 +52,7 @@ class RingtailCore:
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
         self.set_storageman_attributes()
-        self._set_general_options()
+        self.set_general_options()
         self._run_mode = "api"
              
     def update_database_version(self, consent=False):
@@ -177,7 +177,7 @@ class RingtailCore:
 
         return filters_dict
 
-    def _set_general_options(self, 
+    def set_general_options(self, 
                             docking_mode=None,
                             summary=None,
                             logging_level=None,
@@ -481,8 +481,8 @@ class RingtailCore:
             if v is not None: setattr(files, k, v)
         
         if files.file_pattern != None: 
-            if "pdbqt" in files.file_pattern.lower(): self._set_general_options(docking_mode="vina")
-            elif "dlg" in files.file_pattern.lower(): self._set_general_options(docking_mode="dlg")
+            if "pdbqt" in files.file_pattern.lower(): self.set_general_options(docking_mode="vina")
+            elif "dlg" in files.file_pattern.lower(): self.set_general_options(docking_mode="dlg")
             logger.debug(f"Docking mode set to {self.docking_mode} from given file pattern {files.file_pattern.lower()}")
 
         return files

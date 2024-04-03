@@ -155,7 +155,7 @@ class TestRingtailCore:
         test_filters = []
         rtc = RingtailCore()
         rtc.process_mode = "read"
-        rtc._set_general_options(docking_mode="dlg", logging_level="DEBUG")
+        rtc.set_general_options(docking_mode="dlg", logging_level="DEBUG")
         rtc.set_filters(hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)], vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)])
         interaction_combs = rtc._generate_interaction_combinations(1)
         for ic in interaction_combs:
@@ -210,26 +210,40 @@ class TestRingtailCore:
         # test that docking mode and poses stored is checked when appending to database
         pass
 
+class TestVinaHandling:
 
-    def test_vina_input(self, countrows):
-        # test adding results from file
-        vina_sample_file = 'test_data/vina/sample.pdbqt'
+    def test_vina_file_add(self, countrows):
+        vina_path = 'test_data/vina'
         rtc = RingtailCore("output.db")
-        rtc._set_general_options(docking_mode="vina")
-        rtc.add_results_from_files(file=[[vina_sample_file]], file_pattern = "*.pdbqt*")
-        count1 = countrows("SELECT COUNT(*) FROM Results")
+        rtc.set_general_options(docking_mode="vina")
+        rtc.add_results_from_files(file_path=[[vina_path]], file_pattern = "*.pdbqt*", receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True),
+        count = countrows("SELECT COUNT(*) FROM Results")
         os.system("rm output.db")
 
-        # test adding results from string
-        with open(vina_sample_file) as f:
-            docking_result = f.read()
+        assert count == 6
+
+    def test_vina_string_add(self, countrows):
+        vina_path = 'test_data/vina'
+        with open('test_data/vina/sample-result.pdbqt') as f:
+            sample1 = f.read()
+        with open('test_data/vina/sample-result-2.pdbqt') as f:
+            sample2 = f.read()
         rtc = RingtailCore("output.db")
-        rtc.add_results_from_vina_string(results_strings={"ligand1":docking_result})
-        count2 = countrows("SELECT COUNT(*) FROM Results")
+        rtc.add_results_from_vina_string(results_strings={"sample1":sample1, "sample2": sample2}, receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True)
+        count = countrows("SELECT COUNT(*) FROM Results")
         os.system("rm output.db")
 
-        assert count1 == count2 == 3
-        pass
+        assert count == 6
+
+    def test_add_interactions(self, countrows):
+        vina_path = 'test_data/vina'
+        rtc = RingtailCore("output.db")
+        rtc.set_general_options(docking_mode="vina")
+        rtc.add_results_from_files(file_path=[[vina_path]], file_pattern = "*.pdbqt*", receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True, add_interactions=True)
+        count = countrows("SELECT COUNT(*) FROM Interaction_indices")
+        os.system("rm output.db")
+
+        assert count == 45
 
 class Test_StorageManSQLite:
    
