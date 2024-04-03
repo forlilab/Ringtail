@@ -13,9 +13,10 @@ import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .logmanager import logger
-from .exceptions import MultiprocessingError
+from .exceptions import MultiprocessingError, RTCoreError
 import traceback
 from datetime import datetime
+from .ringtailoptions import InputStrings
 
 os_string = platform.system()
 if os_string == "Darwin":  # mac
@@ -40,9 +41,10 @@ class MPManager:
         receptor_file=None,
         file_sources=None,
         file_pattern=None,
+        string_sources=None,
         max_proc=None,
     ):
-
+  
         # confirm that requested parser mode is implemented
         self.implemented_modes = ["dlg", "vina"]
         if mode not in self.implemented_modes:
@@ -60,10 +62,12 @@ class MPManager:
         self.receptor_file = receptor_file
         self.file_sources = file_sources
         self.file_pattern = file_pattern
+        self.string_sources = string_sources
         self.storageman = storageman
         self.storageman_class = storageman_class
         self.num_files = 0
         self.max_proc = max_proc
+
 
     def process_files(self):
         if self.max_proc is None:
@@ -128,6 +132,71 @@ class MPManager:
 
         logger.info("Wrote {0} files to database".format(self.num_files))
 
+    def process_strings(self):
+        #TODO this is the new method to process string inputs from vina
+        string_processing = True
+        if self.max_proc is None:
+            self.max_proc = multiprocessing.cpu_count()
+        self.num_readers = self.max_proc - 1
+        self.queueIn = multiprocessing.Queue(maxsize=2 * self.max_proc)
+        self.queueOut = multiprocessing.Queue(maxsize=2 * self.max_proc)
+        # start the workers in background
+        self.workers = []
+        self.p_conn, self.c_conn = multiprocessing.Pipe(True)
+        logger.info("Starting {0} string readers".format(self.num_readers))
+        for i in range(self.num_readers):
+            #TODO if files are fewer, intialize only needed? 
+            s = DockingFileReader(
+                self.queueIn,
+                self.queueOut,
+                self.c_conn,
+                self.storageman,
+                self.storageman_class,
+                self.mode,
+                self.max_poses,
+                self.interaction_tolerance,
+                self.store_all_poses,
+                self.target,
+                self.add_interactions,
+                self.interaction_cutoffs,
+                self.receptor_file,
+                string_processing=string_processing
+            )
+            # this method calls .run() internally
+            s.start()
+            self.workers.append(s)
+
+        # start the writer to process the data from the workers
+        w = Writer(
+            self.queueOut,
+            self.num_readers,
+            self.c_conn,
+            self.chunk_size,
+            self.storageman,
+            self.mode,
+        )
+
+        w.start()
+        self.workers.append(w)
+        # process items in the queue
+        try:
+            self._process_string_sources()
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._kill_all_workers(e, "file sources", tb)
+        # put as many poison pills in the queue as there are workers
+        for i in range(self.num_readers):
+            self.queueIn.put(None)
+
+        # check for exceptions
+        while w.is_alive():
+            sleep(0.5)
+            self._check_for_worker_exceptions()
+
+        w.join()
+
+        logger.info("Wrote {0} files to database".format(self.num_files))
+
     def _process_sources(self):
         # add individual file(s)
         if self.file_sources.file != (None and [[]]):
@@ -155,6 +224,33 @@ class MPManager:
                 for filelist in filelist_list:
                     self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
 
+    def _process_string_sources(self):
+        if self.string_sources != None:
+            for ligand_name, docking_result in self.string_sources.results_strings.items():
+                string_data = {ligand_name: docking_result}
+                self._add_string_to_queue(string_data)
+        else:
+            raise RTCoreError("There was an error while reading the results string input.")
+
+    def _add_string_to_queue(self, string_data):
+        max_attempts = 750
+        timeout = 0.5  # seconds
+
+        attempts = 0
+        while True:
+            if attempts >= max_attempts:
+                raise MultiprocessingError(
+                    "Something is blocking the progressing of file reading. Exiting program."
+                ) from queue.Full
+            try:
+                self.queueIn.put(string_data, block=True, timeout=timeout) 
+                self.num_files += 1
+                self._check_for_worker_exceptions()
+                break
+            except queue.Full:
+                attempts += 1
+                self._check_for_worker_exceptions()       
+
     def _add_to_queue(self, file):
         max_attempts = 750
         timeout = 0.5  # seconds
@@ -170,7 +266,7 @@ class MPManager:
                     "Something is blocking the progressing of file reading. Exiting program."
                 ) from queue.Full
             try:
-                self.queueIn.put(file, block=True, timeout=timeout)
+                self.queueIn.put(file, block=True, timeout=timeout) 
                 self.num_files += 1
                 self._check_for_worker_exceptions()
                 break

@@ -10,7 +10,7 @@ import sys
 from .logmanager import logger
 import traceback
 import queue
-from .parsers import parse_single_dlg, parse_vina_pdbqt
+from .parsers import parse_single_dlg, parse_vina_pdbqt, parse_vina_string
 from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError
 from .interactions import InteractionFinder
 
@@ -39,8 +39,9 @@ class DockingFileReader(multiprocessing.Process):
         add_interactions,
         interaction_cutoffs,
         receptor_file,
+        string_processing=False
     ):
-        # set mode for which file parser to use
+        # set mode for which file parser to use (and for vina, '_string' if parsing string output directly)
         self.mode = mode
         # set number of clusters to write
         self.max_poses = max_poses
@@ -64,10 +65,10 @@ class DockingFileReader(multiprocessing.Process):
         self.queueOut = queueOut
         # ...and a pipe to the parent
         self.pipe = pipe_conn
-
         self.interaction_finder = None
-
         self.exception = None
+        # if the results being processed comes as a string instead of a file (currently only implemented for vina)
+        self.string_processing = string_processing
 
     def _find_best_cluster_poses(self, ligand_dict):
         """takes input ligand dictionary, reads run pose clusters,
@@ -81,17 +82,17 @@ class DockingFileReader(multiprocessing.Process):
         return ligand_dict
 
     def run(self):
-        # method overload from parent class
-        #
-        # this is where the task of this class is performed
-        #
-        # each multiprocessing.Process class must have a "run" method which
-        # is called by the initialization (see below) with start()
-        #
+        """method overload from parent class
+        
+        this is where the task of this class is performed
+        
+        each multiprocessing.Process class must have a "run" method which
+        is called by the initialization (see below) with start()
+        """
         while True:
             try:
                 # retrieve from the queue in the next task to be done
-                next_task = self.queueIn.get()
+                next_task = self.queueIn.get() 
                 logger.debug("Next Task: " + str(next_task))
                 # if a poison pill is received, this worker's job is done, quit
                 if next_task is None:
@@ -105,14 +106,16 @@ class DockingFileReader(multiprocessing.Process):
                     parsed_file_dict = parse_single_dlg(next_task)
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
-                elif self.mode == "vina":
+                elif self.mode == "vina" and self.string_processing == False:
                     parsed_file_dict = parse_vina_pdbqt(next_task)
+                elif self.mode == "vina" and self.string_processing == True:
+                    parsed_file_dict = parse_vina_string(next_task) # for this special case next_task is {ligname: docking_result}
+                
                 # Example code for calling user-implemented mode
                 # elif self.mode == "my_mode":
                 #     parsed_file_dict = myparser(next_task)
                 else:
                     raise NotImplementedError(f"Parser for input file mode {self.mode} not implemented!")
-
                 # check receptor name from file against that which we expect
                 if (
                     parsed_file_dict["receptor"] != self.target
@@ -163,7 +166,7 @@ class DockingFileReader(multiprocessing.Process):
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 # put the result in the out queue
                 data_packet = self.storageman_class.format_for_storage(parsed_file_dict)
-                self._add_to_queueout(data_packet)
+                self._add_to_queueout(data_packet) 
             except Exception:
                 tb = traceback.format_exc()
                 self.pipe.send(
@@ -231,7 +234,7 @@ class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
     def __init__(
-        self, queue, num_readers, pipe_conn, chunksize, storageman, mode="dlg"
+        self, queue, num_readers, pipe_conn, chunksize, storageman, mode="dlg" #TODO don't think it needs default mode
     ):
         multiprocessing.Process.__init__(self)
         self.queue = queue

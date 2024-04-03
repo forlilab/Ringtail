@@ -32,7 +32,7 @@ def dbquery():
     curs.close()
     conn.close()
 
-class Test_RingtailCore:
+class TestRingtailCore:
 
     def test_get_defaults(self):
         from ringtail import ringtailoptions
@@ -204,6 +204,32 @@ class Test_RingtailCore:
         os.system("rm output.db output_log.txt")
         
         pass
+    
+    #TODO
+    def test_db_setup(self):
+        # test that docking mode and poses stored is checked when appending to database
+        pass
+
+
+    def test_vina_input(self, countrows):
+        # test adding results from file
+        vina_sample_file = 'test_data/vina/sample.pdbqt'
+        rtc = RingtailCore("output.db")
+        rtc._set_general_options(docking_mode="vina")
+        rtc.add_results_from_files(file=[[vina_sample_file]], file_pattern = "*.pdbqt*")
+        count1 = countrows("SELECT COUNT(*) FROM Results")
+        os.system("rm output.db")
+
+        # test adding results from string
+        with open(vina_sample_file) as f:
+            docking_result = f.read()
+        rtc = RingtailCore("output.db")
+        rtc.add_results_from_vina_string(results_strings={"ligand1":docking_result})
+        count2 = countrows("SELECT COUNT(*) FROM Results")
+        os.system("rm output.db")
+
+        assert count1 == count2 == 3
+        pass
 
 class Test_StorageManSQLite:
    
@@ -357,3 +383,12 @@ class Test_options:
 
     # Test that if you set an invalid option (including None) it reverts to the default value
         # So I really need to have type and default and name in one space
+    
+#TODO
+class TestVINA:
+    # make sure string and file produces the same db setup
+    def test_add_file(self):
+        pass
+
+    def test_add_string(self):
+        pass
