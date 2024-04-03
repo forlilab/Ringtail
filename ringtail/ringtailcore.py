@@ -483,9 +483,19 @@ class RingtailCore:
             
             return object
         
+        # Ensure files are in current writeable format
         if file is not None: file = ensure_double_list(file)
         if file_path is not None: file_path = ensure_double_list(file_path)
         if file_list is not None: file_list = ensure_double_list(file_list)
+
+        # Set file format 
+        if file_pattern is None:
+            if file is not None and "pdbqt" in file[0][0]:
+                print(file[0][0])
+                file_pattern = "*.pdbqt*"
+            else:
+                file_pattern = "*.dlg*"
+                logger.warning("File pattern was not specified, set to default '*.dlg*'.")
 
         # Dict of individual arguments
         indiv_options: dict = vars(); 
@@ -504,7 +514,7 @@ class RingtailCore:
         for k,v in indiv_options.items():
             if v is not None: setattr(files, k, v)
         
-        if files.file_pattern != None: #BUG file pattern will default to dlg although it should only be set if using file_path. I wonder if I can add that to check/init values
+        if files.file_pattern != None: 
             if "pdbqt" in files.file_pattern.lower(): self.set_general_options(docking_mode="vina")
             elif "dlg" in files.file_pattern.lower(): self.set_general_options(docking_mode="dlg")
             logger.debug(f"Docking mode set to {self.docking_mode} from given file pattern {files.file_pattern.lower()}")
