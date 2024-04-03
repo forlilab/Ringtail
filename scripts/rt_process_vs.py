@@ -19,7 +19,7 @@ if __name__ == "__main__":
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
-        rtcore._set_general_options(dict=cmdinput.generalopts)
+        rtcore.set_general_options(dict=cmdinput.generalopts)
     except Exception as e:
         tb = traceback.format_exc()
         logger.debug(tb)
