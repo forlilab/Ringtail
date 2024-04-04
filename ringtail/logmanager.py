@@ -24,7 +24,7 @@ class RTLogger:
             cls.initialization(cls, filename=filename)
         return cls._instance
     
-    def initialization(self, level = "WARNING", filename = "rt_process_log.txt"):
+    def initialization(self, level = "DEBUG", filename = "rt_process_log.txt"):
         """ 
         Options for instantiation of the logger. 
         """
