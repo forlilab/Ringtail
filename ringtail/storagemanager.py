@@ -1584,7 +1584,6 @@ class StorageManagerSQLite(StorageManager):
             SQLite cursor: Contains results of query
         """
         try:
-            logger.debug("Attempting to run the following query: {0}".format(query))
             cur = self.conn.cursor()
             cur.execute(query)
             self.open_cursors.append(cur)

@@ -1046,8 +1046,79 @@ class RingtailCore:
         logger.info("A dictionary containing storage options was extracted from config file and assigned storagemanager.")
 
         return (file_dict, write_dict, read_dict, filters_dict)
+   
+    def write_molecule_sdfs(self, sdf_path = None, bookmark_name = None,  write_nonpassing = None, return_rdmol_dict=False):
+        """
+        Have output manager write sdf molecules for passing results in given results bookmark
+
+        Args:
+            sdf_path (str, optional): Optional path existing or to be created in cd where SDF files will be saved
+            bookmark_name (str, optional): Option to run over specified bookmark other than that just used for filtering
+            write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
+            return_rdmol_dict (bool, optional): Suppresses SDF file writing, returns dictionary of rdkit mols
+        """
+
+        if sdf_path is not None:
+            self.set_read_options(export_sdf_path=sdf_path)
         
-    def create_ligand_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
+        all_mols = self.ligands_rdkit_mol(bookmark_name=bookmark_name, write_nonpassing=write_nonpassing)
+        
+        for ligname, info in all_mols.items():
+            logger.info("Writing " + ligname + ".sdf")
+            self.outputman.write_out_mol(
+                ligname, info["ligand"], info["flex_residues"], info["properties"]
+            )
+        
+    def ligands_rdkit_mol(self, bookmark_name = None, write_nonpassing=False) -> dict:
+        """
+        Creates a dictionary of RDKit mols of all ligands specified from a bookmark, either excluding (default) or including 
+        those ligands that did not pass the filter(s).
+        
+        Args:
+            bookmark_name (str, optional): Option to run over specified bookmark other than that just used for filtering
+            write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
+        Returns:
+            all_mols (dict): containing ligand names, RDKit mols, flexible residue bols, and other ligand properties
+        """
+        if bookmark_name is not None:
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
+
+        with self.storageman:        
+            if self.filters.max_miss > 0:
+                logger.warning("WARNING: Requested 'export_sdf_path' with 'max_miss'. Exported SDFs will be for union of interaction combinations.")
+                self.storageman.bookmark_name = self.storageman.bookmark_name + "_union"
+            if not self.storageman.check_passing_view_exists():
+                logger.warning(
+                    "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
+                )
+                return None
+            
+            # make temp table 
+            self.storageman.create_temp_passing_table()
+            passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
+            flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
+
+            if flexible_residues != []:
+                flexible_residues = json.loads(flexible_residues)
+                flexres_atomnames = json.loads(flexres_atomnames)
+
+            all_mols = {}
+            for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
+                logger.info("Creating an RDKIT mol for ligand: " + ligname + ".")
+                # create rdkit ligand molecule and flexible residue container
+                if smiles == "":
+                    logger.warning(
+                        f"No SMILES found for {ligname}. Cannot create SDF."
+                    )
+                    continue
+                # some work needed bc of info needed for creating rd kit, can I remove more than flex stuff? 
+                mol, flexres_mols, properties = self._create_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, write_nonpassing=write_nonpassing)
+                
+                all_mols[ligname] = {"ligand": mol, "flex_residues": flexres_mols, "properties": properties}
+        
+        return all_mols
+
+    def _create_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
         """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
 
         Args:
@@ -1065,7 +1136,10 @@ class RingtailCore:
 
         Returns:
             tuple: (ligand rdkit mol, [flexres rdkit mols], {properties for ligand})
+        
+        Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
         """        
+
         mol = Chem.MolFromSmiles(smiles)
         flexres_mols = []
         flexres_info = []
@@ -1100,52 +1174,34 @@ class RingtailCore:
             "Ligand effiencies": [],
             "Interactions": [],
         }
-        with self.storageman:
-            if pose_ID is None:  # get all passing and nonpassing poses (if requested)
-                passing_properties = self.storageman.fetch_passing_pose_properties(
-                    ligname
-                )
-                (
-                    mol,
-                    flexres_mols,
-                    ligand_saved_coords,
-                    flexres_saved_coords,
-                    properties,
-                ) = self._add_poses(
-                    atom_indices,
-                    passing_properties,
-                    mol,
-                    flexres_mols,
-                    flexres_info,
-                    ligand_saved_coords,
-                    flexres_saved_coords,
-                    properties,
-                )
 
-                # fetch coordinates for non-passing poses
-                # and add to ligand mol, flexible residue mols
-                if write_nonpassing:
-                    nonpassing_properties = (
-                        self.storageman.fetch_nonpassing_pose_properties(ligname)
-                    )
-                    (
-                        mol,
-                        flexres_mols,
-                        ligand_saved_coords,
-                        flexres_saved_coords,
-                        properties,
-                    ) = self._add_poses(
-                        atom_indices,
-                        nonpassing_properties,
-                        mol,
-                        flexres_mols,
-                        flexres_info,
-                        ligand_saved_coords,
-                        flexres_saved_coords,
-                        properties,
-                    )
-            else:
-                pose_properties = (self.storageman.fetch_single_pose_properties(pose_ID))
+        if pose_ID is None:  # get all passing and nonpassing poses (if requested)
+            passing_properties = self.storageman.fetch_passing_pose_properties(
+                ligname
+            )
+            (
+                mol,
+                flexres_mols,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            ) = self._add_poses(
+                atom_indices,
+                passing_properties,
+                mol,
+                flexres_mols,
+                flexres_info,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            )
+        
+            # fetch coordinates for non-passing poses
+            # and add to ligand mol, flexible residue mols
+            if write_nonpassing:
+                nonpassing_properties = (
+                    self.storageman.fetch_nonpassing_pose_properties(ligname)
+                )
                 (
                     mol,
                     flexres_mols,
@@ -1154,7 +1210,7 @@ class RingtailCore:
                     properties,
                 ) = self._add_poses(
                     atom_indices,
-                    pose_properties,
+                    nonpassing_properties,
                     mol,
                     flexres_mols,
                     flexres_info,
@@ -1162,6 +1218,24 @@ class RingtailCore:
                     flexres_saved_coords,
                     properties,
                 )
+        else:
+            pose_properties = (self.storageman.fetch_single_pose_properties(pose_ID))
+            (
+                mol,
+                flexres_mols,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            ) = self._add_poses(
+                atom_indices,
+                pose_properties,
+                mol,
+                flexres_mols,
+                flexres_info,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            )
 
         # add hydrogens to mols
         lig_h_parents = [int(idx) for idx in json.loads(h_parent_line)]
@@ -1231,60 +1305,6 @@ class RingtailCore:
             self.outputman.save_scatterplot()
         else:
             plt.show()
-
-    def write_molecule_sdfs(self, sdf_path = None, bookmark_name = None, write_nonpassing=False, return_rdmol_dict=False):
-        """
-        Have output manager write sdf molecules for passing results in given results bookmark
-
-        Args:
-            write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
-            return_rdmol_dict (bool, optional): Suppresses SDF file writing, returns dictionary of rdkit mols
-        """
-
-        # Create sdf directory if requested
-        if sdf_path is not None:
-            self.set_read_options(export_sdf_path=sdf_path)
-        if bookmark_name is not None:
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
-
-        with self.storageman:
-            if self.filters.max_miss > 0:
-                logger.warning("WARNING: Requested --export_sdf_path with --max_miss. Exported SDFs will be for union of interaction combinations.")
-                self.storageman.bookmark_name = self.storageman.bookmark_name + "_union"
-            if not self.storageman.check_passing_view_exists():
-                logger.warning(
-                    "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
-                )
-                return None
-            # make temp table for SDF writing
-            self.storageman.create_temp_passing_table()
-            passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
-            flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-
-        if flexible_residues != []:
-            flexible_residues = json.loads(flexible_residues)
-            flexres_atomnames = json.loads(flexres_atomnames)
-        all_mols = {}
-        for (ligname, smiles, atom_indices, h_parent_line) in passing_molecule_info:
-            logger.info("Writing " + ligname.split(".")[0] + ".sdf")
-            # create rdkit ligand molecule and flexible residue container
-            if smiles == "":
-                logger.warning(
-                    f"No SMILES found for {ligname}. Cannot create SDF."
-                )
-                continue
-            mol, flexres_mols, properties = self.create_ligand_rdkit_mol(ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, write_nonpassing=write_nonpassing)
-
-            # write out mol
-            if not return_rdmol_dict:
-                self.outputman.write_out_mol(
-                    ligname, mol, flexres_mols, properties
-                )
-            else:
-                all_mols[ligname] = {"ligand": mol, "flex_residues": flexres_mols}
-
-        if return_rdmol_dict:
-            return all_mols
 
     def display_pymol(self, bookmark_name = None):
         """

@@ -74,6 +74,7 @@ class TestRingtailCore:
 
     def test_create_rdkitmol(self):
         #TODO
+        # and this method actually will create rdkit mols now
         pass
 
     def test_append_to_database(self, countrows):
@@ -118,17 +119,26 @@ class TestRingtailCore:
         assert number_similar == 8
 
     def test_write_sdfs(self):
+        sdf_path = "sdf_files"
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst = -7)
-        rtc.write_molecule_sdfs(".")
+        rtc.write_molecule_sdfs(sdf_path)
 
-        import glob
-        sdf_files = glob.glob("*.sdf")
+        sdf_files = os.listdir(sdf_path)
         expected = ['3961.sdf', '5995.sdf', '11128.sdf', '11991.sdf', '13974.sdf', '15776.sdf', '136065.sdf']
         assert len(sdf_files) == len(expected)
+
+        with open('sdf_files/136065.sdf') as sdf:
+            sdf.readline()
+            sdf.readline()
+            sdf.readline()
+            fourth_line = sdf.readline()
+        assert fourth_line == " 27 28  0  0  0  0  0  0  0  0999 V2000\n"
+        
         for f in sdf_files:
             assert f in expected
-            os.remove(f)
+            os.remove(sdf_path + "/" + f)
+        os.rmdir(sdf_path)
 
     def test_pymol(self):
         pass
