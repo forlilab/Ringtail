@@ -215,6 +215,10 @@ class OutputManager:
             flexres_mols (list): dictionary of rdkit molecules for flexible residues
             properties (dict): dictionary of list of properties to add to mol before writing
         """
+        if not os.path.isdir(self.export_sdf_path):
+            os.makedirs(self.export_sdf_path)
+            logger.info("Specified directory for SDF files was created in current working directory.")
+            #TODO test this method
         try:
             filename = self.export_sdf_path + ligname + ".sdf"
             mol_flexres_list = [mol]
@@ -224,6 +228,7 @@ class OutputManager:
             for k, v in properties.items():
                 if isinstance(v, list):
                     v = json.dumps(v)
+                    print(f'stuff being printed to sdf: {v}')
                 elif not isinstance(v, str):
                     v = str(v)
                 mol.SetProp(k, v)
