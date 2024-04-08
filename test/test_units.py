@@ -72,11 +72,6 @@ class TestRingtailCore:
 
         assert len(summary_items.data) == 40
 
-    def test_create_rdkitmol(self):
-        #TODO
-        # and this method actually will create rdkit mols now
-        pass
-
     def test_append_to_database(self, countrows):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file_path=[['test_data/group2/']], append_results=True)
@@ -118,16 +113,28 @@ class TestRingtailCore:
 
         assert number_similar == 8
 
+    def test_create_rdkitmol(self):
+        bookmark_name = "rdkit_test"
+        rtc = RingtailCore(db_file="output.db")
+        rtc.filter(ebest = -3, bookmark_name=bookmark_name)
+        rdkit_dict = rtc.ligands_rdkit_mol(bookmark_name=bookmark_name)
+        assert len(rdkit_dict) == 8
+        # grab one molecule from bookmark and check number of atoms
+        num_of_atoms = rdkit_dict["14303"]["ligand"].GetNumAtoms()
+        assert num_of_atoms == 10
+
     def test_write_sdfs(self):
         sdf_path = "sdf_files"
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst = -7)
         rtc.write_molecule_sdfs(sdf_path)
 
+        # ensure correct number of files written
         sdf_files = os.listdir(sdf_path)
         expected = ['3961.sdf', '5995.sdf', '11128.sdf', '11991.sdf', '13974.sdf', '15776.sdf', '136065.sdf']
         assert len(sdf_files) == len(expected)
 
+        # ensure contents is correct
         with open('sdf_files/136065.sdf') as sdf:
             sdf.readline()
             sdf.readline()
@@ -135,6 +142,7 @@ class TestRingtailCore:
             fourth_line = sdf.readline()
         assert fourth_line == " 27 28  0  0  0  0  0  0  0  0999 V2000\n"
         
+        # ensure the correct files were written
         for f in sdf_files:
             assert f in expected
             os.remove(sdf_path + "/" + f)
