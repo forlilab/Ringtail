@@ -168,9 +168,10 @@ class StorageManager:
         Returns:
             Bool: indicates if self.bookmark_name exists
         """
-        return self.bookmark_name in [
+        view_exists = self.bookmark_name in [
             name[0] for name in self._fetch_view_names().fetchall()
         ]
+        return view_exists
 
     def close_storage(self, attached_db=None, vacuum=False):
         """close connection to database
@@ -1209,6 +1210,7 @@ class StorageManagerSQLite(StorageManager):
         cur = self.conn.cursor()
         cur.execute(f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {self.bookmark_name}")
         cur.close()
+        logger.debug("Creating a temporary table of passing ligands named 'passing_temp.")
 
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
@@ -1582,6 +1584,7 @@ class StorageManagerSQLite(StorageManager):
             SQLite cursor: Contains results of query
         """
         try:
+            logger.debug("Attempting to run the following query: {0}".format(query))
             cur = self.conn.cursor()
             cur.execute(query)
             self.open_cursors.append(cur)
