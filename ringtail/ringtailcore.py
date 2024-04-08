@@ -177,6 +177,139 @@ class RingtailCore:
 
         return filters_dict
 
+    def _create_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
+        """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
+
+        Args:
+            ligname (string): ligand name
+            smiles (string): ligand smiles string
+            atom_indices (list): list of atom indices converting pdbqt to rdkit mol
+            h_parent_line (list): list of atom indices for heteroatoms with attached hydrogens
+            flexible_residues (list): list of flexible residue names
+            flexres_atomnames (list): list of atomtypes in flexible residue
+            pose_ID (int, optional): pose_ID for single pose to return. Defaults to None.
+            write_nonpassing (bool, optional): _description_. Defaults to False.
+
+        Raises:
+            OutputError: raises error if there is an issue with determining a flexible residue identity
+
+        Returns:
+            tuple: (ligand rdkit mol, [flexres rdkit mols], {properties for ligand})
+        
+        Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
+        """        
+
+        mol = Chem.MolFromSmiles(smiles)
+        flexres_mols = []
+        flexres_info = []
+        atom_indices = json.loads(atom_indices)
+        ligand_saved_coords = []
+        flexres_saved_coords = []
+        # make flexible residue molecules
+        for res, res_ats in zip(flexible_residues, flexres_atomnames):
+            flexres_saved_coords.append([])
+            resname = res[:3]
+            res_ats = [
+                at.strip() for at in res_ats
+            ]  # strip out whitespace around atom names
+            (
+                res_smiles,
+                res_index_map,
+                res_h_parents,
+            ) = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
+            if res_smiles is None:  # catch error in guessing smiles
+                raise OutputError(
+                    f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes"
+                )
+            frm = Chem.MolFromSmiles(res_smiles)
+            frm.SetProp("resinfo", res)
+            flexres_mols.append(frm)
+            flexres_info.append((res_smiles, res_index_map, res_h_parents))
+
+        # fetch coordinates for passing poses and add to
+        # rdkit ligand mol, add flexible residues
+        properties = {
+            "Binding energies": [],
+            "Ligand effiencies": [],
+            "Interactions": [],
+        }
+
+        if pose_ID is None:  # get all passing and nonpassing poses (if requested)
+            passing_properties = self.storageman.fetch_passing_pose_properties(
+                ligname
+            )
+            (
+                mol,
+                flexres_mols,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            ) = self._add_poses(
+                atom_indices,
+                passing_properties,
+                mol,
+                flexres_mols,
+                flexres_info,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            )
+        
+            # fetch coordinates for non-passing poses
+            # and add to ligand mol, flexible residue mols
+            if write_nonpassing:
+                nonpassing_properties = (
+                    self.storageman.fetch_nonpassing_pose_properties(ligname)
+                )
+                (
+                    mol,
+                    flexres_mols,
+                    ligand_saved_coords,
+                    flexres_saved_coords,
+                    properties,
+                ) = self._add_poses(
+                    atom_indices,
+                    nonpassing_properties,
+                    mol,
+                    flexres_mols,
+                    flexres_info,
+                    ligand_saved_coords,
+                    flexres_saved_coords,
+                    properties,
+                )
+        else:
+            pose_properties = (self.storageman.fetch_single_pose_properties(pose_ID))
+            (
+                mol,
+                flexres_mols,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            ) = self._add_poses(
+                atom_indices,
+                pose_properties,
+                mol,
+                flexres_mols,
+                flexres_info,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            )
+
+        # add hydrogens to mols
+        lig_h_parents = [int(idx) for idx in json.loads(h_parent_line)]
+        mol = RDKitMolCreate.add_hydrogens(
+            mol, ligand_saved_coords, lig_h_parents
+        )
+        flexres_hparents = []
+        for idx, res in enumerate(flexres_mols):
+            flexres_hparents = flexres_info[idx][2]
+            flexres_mols[idx] = RDKitMolCreate.add_hydrogens(
+                res, flexres_saved_coords[idx], flexres_hparents
+            )
+
+        return mol, flexres_mols, properties
+
     def set_general_options(self, 
                             docking_mode=None,
                             summary=None,
@@ -1117,139 +1250,6 @@ class RingtailCore:
                 all_mols[ligname] = {"ligand": mol, "flex_residues": flexres_mols, "properties": properties}
         
         return all_mols
-
-    def _create_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
-        """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
-
-        Args:
-            ligname (string): ligand name
-            smiles (string): ligand smiles string
-            atom_indices (list): list of atom indices converting pdbqt to rdkit mol
-            h_parent_line (list): list of atom indices for heteroatoms with attached hydrogens
-            flexible_residues (list): list of flexible residue names
-            flexres_atomnames (list): list of atomtypes in flexible residue
-            pose_ID (int, optional): pose_ID for single pose to return. Defaults to None.
-            write_nonpassing (bool, optional): _description_. Defaults to False.
-
-        Raises:
-            OutputError: raises error if there is an issue with determining a flexible residue identity
-
-        Returns:
-            tuple: (ligand rdkit mol, [flexres rdkit mols], {properties for ligand})
-        
-        Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
-        """        
-
-        mol = Chem.MolFromSmiles(smiles)
-        flexres_mols = []
-        flexres_info = []
-        atom_indices = json.loads(atom_indices)
-        ligand_saved_coords = []
-        flexres_saved_coords = []
-        # make flexible residue molecules
-        for res, res_ats in zip(flexible_residues, flexres_atomnames):
-            flexres_saved_coords.append([])
-            resname = res[:3]
-            res_ats = [
-                at.strip() for at in res_ats
-            ]  # strip out whitespace around atom names
-            (
-                res_smiles,
-                res_index_map,
-                res_h_parents,
-            ) = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
-            if res_smiles is None:  # catch error in guessing smiles
-                raise OutputError(
-                    f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes"
-                )
-            frm = Chem.MolFromSmiles(res_smiles)
-            frm.SetProp("resinfo", res)
-            flexres_mols.append(frm)
-            flexres_info.append((res_smiles, res_index_map, res_h_parents))
-
-        # fetch coordinates for passing poses and add to
-        # rdkit ligand mol, add flexible residues
-        properties = {
-            "Binding energies": [],
-            "Ligand effiencies": [],
-            "Interactions": [],
-        }
-
-        if pose_ID is None:  # get all passing and nonpassing poses (if requested)
-            passing_properties = self.storageman.fetch_passing_pose_properties(
-                ligname
-            )
-            (
-                mol,
-                flexres_mols,
-                ligand_saved_coords,
-                flexres_saved_coords,
-                properties,
-            ) = self._add_poses(
-                atom_indices,
-                passing_properties,
-                mol,
-                flexres_mols,
-                flexres_info,
-                ligand_saved_coords,
-                flexres_saved_coords,
-                properties,
-            )
-        
-            # fetch coordinates for non-passing poses
-            # and add to ligand mol, flexible residue mols
-            if write_nonpassing:
-                nonpassing_properties = (
-                    self.storageman.fetch_nonpassing_pose_properties(ligname)
-                )
-                (
-                    mol,
-                    flexres_mols,
-                    ligand_saved_coords,
-                    flexres_saved_coords,
-                    properties,
-                ) = self._add_poses(
-                    atom_indices,
-                    nonpassing_properties,
-                    mol,
-                    flexres_mols,
-                    flexres_info,
-                    ligand_saved_coords,
-                    flexres_saved_coords,
-                    properties,
-                )
-        else:
-            pose_properties = (self.storageman.fetch_single_pose_properties(pose_ID))
-            (
-                mol,
-                flexres_mols,
-                ligand_saved_coords,
-                flexres_saved_coords,
-                properties,
-            ) = self._add_poses(
-                atom_indices,
-                pose_properties,
-                mol,
-                flexres_mols,
-                flexres_info,
-                ligand_saved_coords,
-                flexres_saved_coords,
-                properties,
-            )
-
-        # add hydrogens to mols
-        lig_h_parents = [int(idx) for idx in json.loads(h_parent_line)]
-        mol = RDKitMolCreate.add_hydrogens(
-            mol, ligand_saved_coords, lig_h_parents
-        )
-        flexres_hparents = []
-        for idx, res in enumerate(flexres_mols):
-            flexres_hparents = flexres_info[idx][2]
-            flexres_mols[idx] = RDKitMolCreate.add_hydrogens(
-                res, flexres_saved_coords[idx], flexres_hparents
-            )
-
-        return mol, flexres_mols, properties
 
     def find_similar_ligands(self, query_ligname: str):
         """
