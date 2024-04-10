@@ -685,9 +685,9 @@ class RingtailCore:
 
     #-#-#- API -#-#-#
     def add_results_from_files(self,
-                               file = None, 
-                               file_path = None, 
-                               file_list = None, 
+                               file: str = None, 
+                               file_path: str = None, 
+                               file_list: str = None, 
                                file_pattern: str = None, 
                                recursive: bool = None, 
                                receptor_file: str = None,
@@ -712,9 +712,9 @@ class RingtailCore:
         Creates a database, or adds to an existing one if using "append_results".
 
         Args:
-            file (str): ligand result file
-            file_path (list(str)): list of folders containing one or more result files
-            file_list (list(str)): list of ligand result file(s)
+            file (str, optional: list(str)): ligand result file
+            file_path (str, optional: list(str)): list of folders containing one or more result files
+            file_list (str, optional: list(str)): list of ligand result file(s)
             file_pattern (str): file pattern to use with recursive search in a file_path, "*.dlg*" for AutoDock-GDP and "*.pdbqt*" for vina
             recursive (bool): used to recursively search file_path for folders inside folders
             receptor_file (str): string containing the receptor .pdbqt
