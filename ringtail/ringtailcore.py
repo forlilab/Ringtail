@@ -1321,6 +1321,9 @@ class RingtailCore:
         ["pymol", "-R"],
         stdout=subprocess.PIPE,
         )
+        # ensure 
+        import time
+        time.sleep(2)
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
             
