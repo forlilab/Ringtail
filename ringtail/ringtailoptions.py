@@ -37,7 +37,7 @@ class TypeSafe:
             else:
                 self.__dict__["value"] = self.default
                 if value is not None:
-                    OptionError(f"Object {self.object_name} was assigned a value of type {type(value).__name__} but is only allowed as type {self.type.__name__}.")
+                    OptionError(f"Object {self.object_name} was assigned a value of type {type(value)} but is only allowed as type {self.type}.")
                 logger.debug(f"{self.object_name} reset to default {self.default}.")
         else:
             self.__dict__[name] = value
