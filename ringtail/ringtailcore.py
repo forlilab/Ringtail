@@ -1353,7 +1353,7 @@ class RingtailCore:
                     flexible_residues = json.loads(flexible_residues)
                     flexres_atomnames = json.loads(flexres_atomnames)
 
-                mol, flexres_mols, _ = self.create_ligand_rdkit_mol(ligname, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames, pose_ID=chosen_pose[0])
+                mol, flexres_mols, _ = self._create_rdkit_mol(ligname, ligand_smile, atom_index_map, hydrogen_parents, flexible_residues, flexres_atomnames, pose_ID=chosen_pose[0])
                 logger.debug(Chem.MolToSmiles(mol))
                 pymol.ShowMol(mol, name=ligname, showOnly=False)
                 for idx, resmol in enumerate(flexres_mols):
