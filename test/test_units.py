@@ -58,6 +58,14 @@ class TestRingtailCore:
         assert count == 1
     
     def test_produce_summary(self):        
+        
+        # Ensure storage error thrown if no data in database
+        from ringtail import exceptions as e
+        with pytest.raises(e.RTCoreError):
+            fake_rtc = RingtailCore("nodata.db")
+            fake_rtc.produce_summary()
+        os.system("rm nodata.db")
+        
         import sys
         class ListStream:
             def __init__(self):
@@ -174,7 +182,7 @@ class TestRingtailCore:
     def test_generate_interactions_prepare_filters(self):
         test_filters = []
         rtc = RingtailCore()
-        rtc.process_mode = "read"
+        #rtc.process_mode = "read"
         rtc.set_general_options(docking_mode="dlg", logging_level="DEBUG")
         rtc.set_filters(hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)], vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)])
         interaction_combs = rtc._generate_interaction_combinations(1)
@@ -193,6 +201,17 @@ class TestRingtailCore:
         assert {'eworst': None, 'ebest': None, 'leworst': None, 'lebest': None, 'score_percentile': None, 'le_percentile': None, 'vdw_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'hb_interactions': [('A:ARG:123:', True), ('A:VAL:124:', True)], 'reactive_interactions': [], 'interactions_count': [], 'react_any': None, 'max_miss': 0, 'ligand_name': [], 'ligand_substruct': [], 'ligand_substruct_pos': [], 'ligand_max_atoms': None, 'ligand_operator': 'OR'} in test_filters
 
         assert len(test_filters) == 5
+
+    def test_logfile_write(self):
+        rtc = RingtailCore("output.db")
+        assert os.path.exists("output_log.txt")
+
+        with open("output_log.txt") as f:
+            for line_no, line_content in enumerate(f):
+                if line_no == 28:
+                    return line_content
+
+        assert line_content == "'11128', -7.25"
 
     def test_plot(self):     
         rtcore = RingtailCore(db_file="output.db")
@@ -317,6 +336,11 @@ class TestVinaHandling:
 
         assert warning_worked
 
+#TODO when re-writing storageman: should have the actual storage "api"s 
+class TestStorageMan:
+    pass
+
+#TODO when re-writing storageman: clean to just include sqlite specific stuff, connection, querying, etc
 class TestStorageManSQLite:
    
     def test_storageman_setup(self):
@@ -428,55 +452,34 @@ class TestLogger:
         keywords = ["ERROR", "test_units.py[", "ringtail.exceptions:This is a test error."]
         assert all(x in last_line for x in keywords)
         
-#TODO
-class Test_exceptions:
+class TestOptions:
     def test_option_error(self):
-        # make sure errors are caught and surfaced properly
-            # in command line
-            # in API
-            # write to stout when necessary
-        pass
+        from ringtail import exceptions as e
+        with pytest.raises(e.OptionError):
+            RingtailCore.get_defaults("not_a_ringtail_object")
 
-#TODO 
-class Test_outputmanager:
-    def test_logfile_write(self):
-        # if making new
-        # if overwriting
-        # is there an option to add?
-        pass
-
-#TODO
-class Test_options:
     def test_options_type_check(self):
-        # if corrrect type
-        # if wrong type
-        # if re-assigning
-        # does it initialize right? 
-        # does it re-initialize and default right?
-        pass
-    
-    def test_file_format(self):
-        # that files are double lists ready for results manager
-        # file extension is correct
-        # folders are proper directories
-        pass
+        rtc = RingtailCore()
+        # set to wrong type, ensure reset to default value
+        rtc.set_storageman_attributes(outfields=5)
+        assert rtc.storageman.outfields == "Ligand_name,e"
     
     def test_object_checks(self):
-        # take one object or two and make sure checks are performed when appropriate
-        pass
+        # checking that incompatible options are handled
+        rtc = RingtailCore()
+        rtc.set_filters(score_percentile = 20)
+        assert rtc.filters.eworst == None
+        assert rtc.filters.score_percentile == 20
 
-    def test_type_checking(self):
-        pass
-    
-    # Test the order of operations, single options overwrite passing through a dict
-    
-    # Test that type is checked even if you set a value later on
+        # conflicting options, score percentile should be set to none
+        rtc.set_filters(eworst =-6)
+        assert rtc.filters.eworst == -6
+        assert rtc.filters.score_percentile == None
 
-    # Test that you can set an individual value on an object after it has been set
-        # Using the method of course, but type must be checked. Can test this by seeing what is written to the output log or something? 
-
-    # Test that any values in an options object can be accessed without error (and issues with _ referencing etc)
-
-    # Test that if you set an invalid option (including None) it reverts to the default value
-        # So I really need to have type and default and name in one space
-    
+    def test_set_order(self):
+        rtc = RingtailCore()
+        rtc.set_filters(dict = {"eworst": -5})
+        assert rtc.filters.eworst == -5
+        # ensure single options overwrite dict options
+        rtc.set_filters(eworst =-6, dict = {"eworst": -5})
+        assert rtc.filters.eworst == -6
