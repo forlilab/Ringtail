@@ -1087,7 +1087,9 @@ class StorageManagerSQLite(StorageManager):
             summary_data = {}
             cur = self.conn.cursor()
             summary_data["num_ligands"] = cur.execute("SELECT COUNT(*) FROM Ligands").fetchone()[0]
-            print(f'summary data ligand num is {summary_data["num_ligands"]}')
+            if (summary_data["num_ligands"] == 0):
+                raise StorageError("There is no ligand data in the database. ")
+            print("is it going further?")
             summary_data["num_poses"] = cur.execute("SELECT COUNT(*) FROM Results").fetchone()[0]
             summary_data["num_unique_interactions"] = cur.execute("SELECT COUNT(*) FROM Interaction_indices").fetchone()[0]
             summary_data["num_interacting_residues"] = cur.execute("SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)").fetchone()[0]
