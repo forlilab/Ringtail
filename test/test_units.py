@@ -219,7 +219,6 @@ class TestRingtailCore:
 
         os.system("rm " + rtc.db_file)
 
-    #TODO this is not working quite right, for now it just removes the db file
     def test_duplicate_handling(self, countrows):
         os.system("rm output.db output_log.txt")
 
@@ -250,7 +249,6 @@ class TestRingtailCore:
 
         os.system("rm output.db")
         
-    
     def test_db_num_poses_warning(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file = [['test_data/group1/1451.dlg.gz']], max_poses=1)
@@ -319,18 +317,28 @@ class TestVinaHandling:
 
         assert warning_worked
 
-class Test_StorageManSQLite:
+class TestStorageManSQLite:
    
     def test_storageman_setup(self):
         rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(file_list = [['filelist1.txt']],
+        rtc.add_results_from_files(file_list = 'filelist1.txt',
                                     recursive = True,
                                     receptor_file="test_data/4j8m.pdbqt",
                                     save_receptor=True)
         
-        # get storage man defaults, and check that the object and the dict have same values?
-        #TODO this will make me fix storageman dupl/conflict stuff, so get to later
-        assert os.path.exists("output.db")
+        storageman_attributes = {'append_results': rtc.storageman.append_results, 
+                                 'duplicate_handling': rtc.storageman.duplicate_handling, 
+                                 'filter_bookmark': rtc.storageman.filter_bookmark, 
+                                 'overwrite': rtc.storageman.overwrite, 
+                                 'order_results': rtc.storageman.order_results, 
+                                 'outfields': rtc.storageman.outfields, 
+                                 'output_all_poses': rtc.storageman.output_all_poses, 
+                                 'mfpt_cluster': rtc.storageman.mfpt_cluster, 
+                                 'interaction_cluster': rtc.storageman.interaction_cluster, 
+                                 'bookmark_name': rtc.storageman.bookmark_name}
+        storageman_attributes_defaults = RingtailCore.get_defaults("storageopts")
+        # ensure defaults values are set correctly and do not change during processing
+        assert storageman_attributes == storageman_attributes_defaults
 
     def test_fetch_summary_data(self):
         rtc = RingtailCore("output.db")
@@ -396,7 +404,7 @@ class TestConfigFile:
         os.system("rm output_log.txt output.db config.json")
         assert count_ligands_passing == 51 
 
-class Test_logger:
+class TestLogger:
 
     def test_set_log_level(self):
         from ringtail import logger
