@@ -876,6 +876,8 @@ class RingtailCore:
         """Print summary of data in storage
         """
         with self.storageman: summary_data = self.storageman.fetch_summary_data(columns, percentiles)
+        if 'summary_data' not in locals():
+            raise RTCoreError(f'Summary data is empty, please check the database.')
         print("Total Stored Ligands          :", summary_data.pop("num_ligands"))
         print("Total Stored Poses            :", summary_data.pop("num_poses"))
         print("Total Unique Interactions     :", summary_data.pop("num_unique_interactions"))
