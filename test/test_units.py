@@ -149,8 +149,9 @@ class TestRingtailCore:
         os.rmdir(sdf_path)
 
     def test_pymol(self):
+        # will not add a test for now, as I cannot figure out an unambiguous, lightweight way to test
         pass
-
+        
     def test_export_csv(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst = -7)
@@ -219,10 +220,36 @@ class TestRingtailCore:
         os.system("rm " + rtc.db_file)
 
     #TODO this is not working quite right, for now it just removes the db file
-    def test_duplicate_handling(self):
+    def test_duplicate_handling(self, countrows):
         os.system("rm output.db output_log.txt")
+
+        rtc = RingtailCore(db_file="output.db")
+        file = 'test_data/group1/1451.dlg.gz'
+        rtc.add_results_from_files(file = file, duplicate_handling="replace")
+        # ensure three results rows were added
+        count = countrows("SELECT COUNT(*) FROM Results")
+
+        # add same file but ignore the duplicate
+        rtc.add_results_from_files(file = file, append_results=True, duplicate_handling="replace")
+        count_replace = countrows("SELECT COUNT(*) FROM Results")
+
+        os.system("rm output.db")
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(file = file, duplicate_handling="ignore")
+        # add same file but replace the duplicate
+        rtc.add_results_from_files(file = file, append_results=True)
+        count_ignore = countrows("SELECT COUNT(*) FROM Results")
+
+        os.system("rm output.db")
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(file = file)
+        # add same file but allow the duplicate
+        rtc.add_results_from_files(file = file, append_results=True)
+        count_dupl = countrows("SELECT COUNT(*) FROM Results")
+        assert count == count_replace == count_ignore == count_dupl/2
+
+        os.system("rm output.db")
         
-        pass
     
     def test_db_num_poses_warning(self):
         rtc = RingtailCore(db_file="output.db")
@@ -445,11 +472,3 @@ class Test_options:
     # Test that if you set an invalid option (including None) it reverts to the default value
         # So I really need to have type and default and name in one space
     
-#TODO
-class TestVINA:
-    # make sure string and file produces the same db setup
-    def test_add_file(self):
-        pass
-
-    def test_add_string(self):
-        pass
