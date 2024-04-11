@@ -1704,7 +1704,6 @@ class StorageManagerSQLite(StorageManager):
         axisangle_w         FLOAT(4),
         dihedrals           VARCHAR[],
         ligand_coordinates         VARCHAR[],
-        flexible_residues   VARCHAR[],
         flexible_res_coordinates   VARCHAR[]
 
         Raises:
@@ -1716,10 +1715,9 @@ class StorageManagerSQLite(StorageManager):
             unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
                    trans_x, trans_y, trans_z,
                    axisangle_x, axisangle_y, axisangle_z, axisangle_w,
-                   dihedrals, flexible_residues) ON CONFLICT {0}""".format(
-                self.duplicate_handling
+                   dihedrals) ON CONFLICT {0}""".format(
+                self.duplicate_handling.upper()
             )
-
         sql_results_table = """CREATE TABLE IF NOT EXISTS Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
