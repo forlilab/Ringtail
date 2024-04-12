@@ -26,7 +26,12 @@ from .exceptions import (
     DatabaseTableCreationError,
 )
 from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError, ResultsProcessingError
-
+import platform
+os_string = platform.system()
+if os_string == "Darwin":  # mac
+    import multiprocess as multiprocessing
+else:
+    import multiprocessing
 
 class StorageManager:
     _db_schema_ver = "1.1.0"
@@ -36,6 +41,7 @@ class StorageManager:
         "1.0.0":["1.0.0"],
         "1.1.0":["1.1.0", "2.0.0"]
     }
+
     """Prototype class for a generic VS database object
     this class defines the API of each
     StorageManager class (including sub-classess)
@@ -756,7 +762,7 @@ class StorageManagerSQLite(StorageManager):
             receptor_array (list): list of data to be stored in Receptors table
             insert_receptor (bool, optional): flag indicating that receptor info should inserted
         """
-        self.insert_results(results_array)
+        self.insert_results(results_array) #TODO could add a flag in this method, if the unique is invoked, and with which keyword, and then and only then will it add statement with unique? 
         self.insert_ligands(ligands_array)
         if insert_receptor and receptor_array != []:
             self.insert_receptors(receptor_array)
@@ -2409,14 +2415,30 @@ class StorageManagerSQLite(StorageManager):
 
         # if clustering is requested, do that before saving view or filtering results for output
         #Define clustering setup
-        def clusterFps(fps, cutoff):  #https://www.macinchem.org/reviews/clustering/clustering.php
+        def clusterFps(fps, cutoff):  #https://macinchem.org/2023/03/05/options-for-clustering-large-datasets-of-molecules/ 
+            """
+            fps (): fingerprints
+            cutoff distance (float): 
+            """
 
             # first generate the distance matrix:
             dists = []
             nfps = len(fps)
-            for i in range(1,nfps):
-                sims = DataStructs.BulkTanimotoSimilarity(fps[i],fps[:i])
-                dists.extend([1-x for x in sims])
+            inputs = []
+
+            def gen(fps):
+                for i in range(1, len(fps)):
+                    yield (i, fps)
+
+            def mp_wrapper(input_tpl):
+                print()
+                i, fps = input_tpl
+                return DataStructs.BulkTanimotoSimilarity(fps[i],fps[:i])
+            
+            with multiprocessing.Pool() as p:
+                inputs = gen(fps)
+                for sims in p.imap(mp_wrapper, inputs):
+                    dists.extend([1-x for x in sims])
 
             # now cluster the data:
             cs = Butina.ClusterData(dists,nfps,cutoff,isDistData=True)
@@ -2467,7 +2489,9 @@ class StorageManagerSQLite(StorageManager):
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
             poseid_leff_mfps = self._run_query(cluster_query).fetchall()
+            print("\n\n about to run the cluster method \n\n")
             bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps], self.mfpt_cluster)
+            print(f"\n\n size of clusters: {len(bclusters)}")
             logger.info(f"Number of Morgan fingerprint butina clusters: {len(bclusters)}")
             
             # select ligand from each cluster with best ligand efficiency
@@ -2488,7 +2512,9 @@ class StorageManagerSQLite(StorageManager):
         return sql_string, sql_string.replace("""SELECT {out_columns} FROM {window}""".format(
             out_columns=outfield_string, window=self.filtering_window
         ), f"SELECT * FROM {self.filtering_window}")  # sql_query, view_query
-
+    
+    
+    
     def _fetch_ligand_cluster_columns(self):
         try:
             return [c[1] for c in self._run_query("PRAGMA table_info(Ligand_clusters)").fetchall()][1:]
@@ -2672,6 +2698,8 @@ class StorageManagerSQLite(StorageManager):
             filler_str += "?,"
         column_str = column_str.rstrip(", ")
         filler_str = filler_str.rstrip(",")
+
+        #TODO here: if you are adding duplicates in results, and ignore/replace, they also need to be ignored or replaced here
 
         # make sure we have unique interactions, otherwise insert empty rows for those poses
         if self.unique_interactions == {}:
