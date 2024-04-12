@@ -209,9 +209,9 @@ class TestRingtailCore:
         with open("output_log.txt") as f:
             for line_no, line_content in enumerate(f):
                 if line_no == 28:
-                    return line_content
+                    break
 
-        assert line_content == "'11128', -7.25"
+        assert line_content == "'11128', -7.25\n"
 
     def test_plot(self):     
         rtcore = RingtailCore(db_file="output.db")
