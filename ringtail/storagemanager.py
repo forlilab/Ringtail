@@ -2431,7 +2431,6 @@ class StorageManagerSQLite(StorageManager):
                     yield (i, fps)
 
             def mp_wrapper(input_tpl):
-                print()
                 i, fps = input_tpl
                 return DataStructs.BulkTanimotoSimilarity(fps[i],fps[:i])
             
@@ -2489,9 +2488,7 @@ class StorageManagerSQLite(StorageManager):
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
             poseid_leff_mfps = self._run_query(cluster_query).fetchall()
-            print("\n\n about to run the cluster method \n\n")
             bclusters = clusterFps([DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps], self.mfpt_cluster)
-            print(f"\n\n size of clusters: {len(bclusters)}")
             logger.info(f"Number of Morgan fingerprint butina clusters: {len(bclusters)}")
             
             # select ligand from each cluster with best ligand efficiency
