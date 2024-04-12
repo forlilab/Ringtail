@@ -767,7 +767,7 @@ class RingtailCore:
                 self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
                 logger.info("Adding results...")
                 self.resultsman.process_files() 
-                self.storageman.set_ringtaildb_version()
+                self.storageman.set_ringtail_db_schema_version()
                 if summary: self.produce_summary()
         if files.save_receptor: 
             self.save_receptor(files.receptor_file)
@@ -843,7 +843,7 @@ class RingtailCore:
                 self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
                 logger.info("Adding results...")
                 self.resultsman.process_strings()
-                self.storageman.set_ringtaildb_version()
+                self.storageman.set_ringtail_db_schema_version()
                 if summary: self.produce_summary()
 
         if results.save_receptor: 

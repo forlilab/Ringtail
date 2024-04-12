@@ -29,6 +29,13 @@ from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionErr
 
 
 class StorageManager:
+    _db_schema_ver = "1.1.0"
+    
+    # "db_schema_ver":list("code_versions")
+    _db_schema_code_compatibility = {
+        "1.0.0":["1.0.0"],
+        "1.1.0":["1.1.0", "2.0.0"]
+    }
     """Prototype class for a generic VS database object
     this class defines the API of each
     StorageManager class (including sub-classess)
@@ -995,18 +1002,33 @@ class StorageManagerSQLite(StorageManager):
             self.conn.backup(bck, pages=1)
         bck.close()
 
-    def set_ringtaildb_version(self):
-        rt_version = version("ringtail").replace(".", "") 
-        cur = self.conn.cursor()
-        cur.execute(f"PRAGMA user_version = {rt_version}")
-        self.conn.commit()
-        cur.close()
+    def set_ringtail_db_schema_version(self):
+        """ Will check current stoarge manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail))."""
+        # check that code base is compatible with db schema version
+        code_version = version("ringtail")
+        if code_version in self._db_schema_code_compatibility[self._db_schema_ver]:
+            rtdb_version = self._db_schema_ver.replace(".", "") 
+            # if so, proceed to set db schema version
+            cur = self.conn.cursor()
+            cur.execute(f"PRAGMA user_version = {rtdb_version}")
+            self.conn.commit()
+            cur.close()
+            logger.info("Database version set to {0}".format(rtdb_version))
+        else:
+            raise StorageError(f'Code base version {code_version} is not compatible with database schema version {self._db_schema_ver}.')
 
     def check_ringtaildb_version(self):
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
+        db_schema_ver = ".".join([*db_version])
+        if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
+            is_compatible = True
+            logger.debug("Database version {0} is compatible with code base version {1}".format(db_schema_ver, version("ringtail")))
+        else:
+            is_compatible = False
+            logger.warning("Database version {0} is NOT compatible with code base version {1}".format(db_schema_ver, version("ringtail")))
         cur.close()
-        return db_version == version("ringtail").replace(".", ""), db_version 
+        return is_compatible, db_version 
 
     def update_database_version(self, consent=False):
         cur = self.conn.cursor()
@@ -1032,7 +1054,7 @@ class StorageManagerSQLite(StorageManager):
         self.conn.commit()
         cur.close()
 
-        self.set_ringtaildb_version()
+        self.set_ringtail_db_schema_version()
 
         return consent
 
@@ -1455,7 +1477,7 @@ class StorageManagerSQLite(StorageManager):
             if not self._db_empty(): 
                 self._drop_existing_tables()
             self._create_tables()  
-            self.set_ringtaildb_version()
+            self.set_ringtail_db_schema_version()
 
     def check_storage_ready(self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int):
         """Check that storage is ready before proceeding.

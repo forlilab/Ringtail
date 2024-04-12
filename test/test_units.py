@@ -385,7 +385,7 @@ class TestStorageManSQLite:
         with rtc.storageman: versionmatch, version = rtc.storageman.check_ringtaildb_version()
         os.system("rm output.db output_log.txt")
         assert versionmatch
-        assert int(version) == 110  # NOTE: update for new versions
+        assert int(version) == 110  # NOTE: update for new database schema versions
 
 class TestConfigFile:
 
