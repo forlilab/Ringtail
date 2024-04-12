@@ -47,6 +47,9 @@ $ rt_db_v100_to_v110.py -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (o
 
 Multiple databases may be specified at once. The update may take a few minutes per database.
 
+### Code base updated from v1.1.0 to 2.0.0 to support scripting and circumvent file system for results (vina)
+database schema 1.1.0 is supported both by ringtail 1.1.0 and 2.0.0
+
 ## README Outline
 - [Installation](https://github.com/forlilab/Ringtail#installation)
 - [Definitions](https://github.com/forlilab/Ringtail#definitions)
