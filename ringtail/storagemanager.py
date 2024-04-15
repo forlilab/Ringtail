@@ -1484,6 +1484,7 @@ class StorageManagerSQLite(StorageManager):
                 self._drop_existing_tables()
             self._create_tables()  
             self.set_ringtail_db_schema_version()
+        logger.info(f'Ringtail connected to database {self.db_file}.')
 
     def check_storage_ready(self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int):
         """Check that storage is ready before proceeding.
