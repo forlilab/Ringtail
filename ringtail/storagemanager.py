@@ -132,8 +132,12 @@ class StorageManager:
         raise NotImplementedError
     
     def __enter__(self):
-        self.open_storage()
-        return self
+        try:
+            self.open_storage()
+        except StorageError as e: 
+            raise e
+        else:
+            return self
 
     def __exit__(self, exc_type, exc_value, tb):
         if not self.closed_connection:
@@ -1477,14 +1481,17 @@ class StorageManagerSQLite(StorageManager):
         """Create connection to db. Then, check if db needs to be written.
         If self.overwrite drop existing tables and initialize new tables
         """
-        self.conn = self._create_connection()
-        signal(SIGINT, self._sigint_handler)            # signal handler to catch keyboard interupts
-        if self._db_empty() or self.overwrite:          # write and drop tables as necessary
-            if not self._db_empty(): 
-                self._drop_existing_tables()
-            self._create_tables()  
-            self.set_ringtail_db_schema_version()
-        logger.info(f'Ringtail connected to database {self.db_file}.')
+        try:
+            self.conn = self._create_connection()
+            signal(SIGINT, self._sigint_handler)            # signal handler to catch keyboard interupts
+            if self._db_empty() or self.overwrite:          # write and drop tables as necessary
+                if not self._db_empty(): 
+                    self._drop_existing_tables()
+                self._create_tables()  
+                self.set_ringtail_db_schema_version()
+            logger.info(f'Ringtail connected to database {self.db_file}.')
+        except Exception as e:
+            raise StorageError(f"Errow while creating or connecting to database: {e}.")
 
     def check_storage_ready(self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int):
         """Check that storage is ready before proceeding.
