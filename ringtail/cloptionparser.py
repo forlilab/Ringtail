@@ -599,6 +599,8 @@ def cmdline_parser(defaults: dict={}):
         except FileNotFoundError as e:
             raise OptionError ("Config file not found in current directory.") from e
 
+    logger.info(f'Command line prompt: {str(sys.argv)}')
+
     parser.set_defaults(**defaults)
     write_parser.set_defaults(**defaults)
     read_parser.set_defaults(**defaults)
