@@ -182,7 +182,6 @@ class TestRingtailCore:
     def test_generate_interactions_prepare_filters(self):
         test_filters = []
         rtc = RingtailCore()
-        #rtc.process_mode = "read"
         rtc.set_general_options(docking_mode="dlg", logging_level="DEBUG")
         rtc.set_filters(hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)], vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)])
         interaction_combs = rtc._generate_interaction_combinations(1)

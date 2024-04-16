@@ -31,18 +31,18 @@ if __name__ == "__main__":
         rtcore.set_read_options(dict=cmdinput.readopts)
         rtcore.set_storageman_attributes(dict=cmdinput.storageopts)
         readopts = rtcore.readopts 
-        if rtcore.process_mode == "write":
+        if cmdinput.process_mode == "write":
             logger.debug("Starting write process")
             #-#-#- Processes results, will add receptor if "save_receptor" is true
             rtcore.add_results_from_files(filesources_dict=cmdinput.file_sources, 
                                           options_dict=cmdinput.writeopts, 
-                                          summary=rtcore.print_summary)
+                                          summary=cmdinput.print_summary)
         time1 = time.perf_counter()
-        if  rtcore.process_mode == "read":
+        if  cmdinput.process_mode == "read":
                 logger.debug("Starting read process")
                 
                 #-#-#- Print database summary
-                if rtcore.print_summary:
+                if cmdinput.print_summary:
                     rtcore.produce_summary()
                 
                 #-#-#- Perform filtering

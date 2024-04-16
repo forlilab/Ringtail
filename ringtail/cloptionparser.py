@@ -654,7 +654,7 @@ class CLOptionParser:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
-        process_mode = parsed_opts.process_mode.lower()
+        self.process_mode = parsed_opts.process_mode.lower()
         filters_present = False  # set flag indicating if any filters given
         docking_mode = parsed_opts.docking_mode.lower()
         #Check database options
@@ -662,7 +662,7 @@ class CLOptionParser:
             if not os.path.exists(parsed_opts.input_db):
                 raise OptionError("WARNING: input database does not exist!")
             db_file = parsed_opts.input_db
-        elif process_mode == "read" and parsed_opts.input_db is None:
+        elif self.process_mode == "read" and parsed_opts.input_db is None:
             raise OptionError(
                     "No input database specified in read mode. Please specify database with --input_db"
                 )
@@ -671,15 +671,14 @@ class CLOptionParser:
             
         self.rtcore = RingtailCore(db_file)
         self.rtcore._run_mode = "cmd" # tag for command line processing, changes how certain errors are handled
-        self.rtcore.process_mode = parsed_opts.process_mode
-
+        self.print_summary = parsed_opts.print_summary
+        
         self.generalopts = {
             "docking_mode": docking_mode,
-            "print_summary": parsed_opts.print_summary,
             "logging_level":logging_level
         }
 
-        if process_mode == "write":
+        if self.process_mode == "write":
             # set read-only rt_process options to None to prevent errors
             parsed_opts.plot = None
             parsed_opts.find_similar_ligands=None
@@ -704,7 +703,7 @@ class CLOptionParser:
                 "save_receptor": parsed_opts.save_receptor
             }
         
-        elif process_mode == "read":
+        elif self.process_mode == "read":
             # set write-only rt_process options to None to prevent errors
             parsed_opts.receptor_file = None
             parsed_opts.save_receptor = None
@@ -851,7 +850,7 @@ class CLOptionParser:
             "log_file":parsed_opts.log_file,
             "export_sdf_path":parsed_opts.export_sdf_path
         }
-
+        # combine all options for the storage manager
         self.storageopts = {
             "filter_bookmark":parsed_opts.filter_bookmark,
             "append_results":parsed_opts.append_results,

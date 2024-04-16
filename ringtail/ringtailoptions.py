@@ -30,15 +30,13 @@ class TypeSafe:
         if name == "value":
             if type(value) == self.type:
                 self.__dict__["value"] = value
-                logger.debug(f"{self.object_name} updated to {self.value}.")
             elif self.type == float and type(value) in [float, int]: 
                 self.__dict__["value"] = float(value)
-                logger.debug(f"{self.object_name} updated to {self.value}.")
             else:
                 self.__dict__["value"] = self.default
                 if value is not None:
                     OptionError(f"Object {self.object_name} was assigned a value of type {type(value)} but is only allowed as type {self.type}.")
-                logger.debug(f"{self.object_name} reset to default {self.default}.")
+                    logger.debug(f"{self.object_name} reset to default {self.default}.")
         else:
             self.__dict__[name] = value
 
@@ -118,11 +116,6 @@ class GeneralOptions(RTOptions):
             "default": "dlg",
             "description": "Specify AutoDock program used to generate results. Available options are 'dlg' and 'vina'. Vina mode will automatically change 'file_pattern' to '*.pdbqt'."
         },
-        "print_summary":{
-            "type": bool,
-            "default": False,
-            "description":"Prints summary information about stored data to STDOUT."
-        },  
         "logging_level":{
             "type": str,
             "default": "DEBUG",
