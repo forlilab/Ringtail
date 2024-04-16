@@ -59,7 +59,7 @@ rtc.save_receptor(receptor_file = "realistic_receptor_name.pdbqt")
 
 If at any point you wish to print a summary of the database, the method can be called directly:
 ```
-rtc.print_summary()
+rtc.produce_summary()
 ```
 
 ##### Available options for writing to the database include:

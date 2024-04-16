@@ -38,7 +38,7 @@ class RingtailCore:
     """
 #-#-#- Base methods -#-#-#
     
-    def __init__(self, db_file = "output.db", storage_type = "sqlite", process_mode="read", logging_level=None):
+    def __init__(self, db_file = "output.db", storage_type = "sqlite", logging_level=None):
         """
         Initialize RingtailCore object and create a storageman object with the db file.
         Does not open access to the storage. Future option will include opening database as readonly.
@@ -48,7 +48,6 @@ class RingtailCore:
         """
         if logging_level is not None: logger.setLevel(logging_level)
         self.db_file = db_file
-        self.process_mode = process_mode
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
         self.set_storageman_attributes()
@@ -310,17 +309,143 @@ class RingtailCore:
 
         return mol, flexres_mols, properties
 
+    def _set_file_sources(self,
+                    file=None, 
+                    file_path=None, 
+                    file_list=None, 
+                    file_pattern=None, 
+                    recursive=None, 
+                    receptor_file=None,
+                    save_receptor=None,
+                    dict: dict = None) -> InputFiles:
+        """
+        Object holding all ligand docking results files.
+        Args:
+            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+        """
+
+        def ensure_double_list(object) -> list:
+            """Most of ringtail is set up to handle files, file paths, and file lists as double lists [[items]].
+            Instead of changing that for now, the input is checked to ensure they are presented as, or can be 
+            converted to a double list. Really only matters for using API."""
+            if type(object)==list:
+                if type(object[0])==list: 
+                    if type(object[0][0])==str: pass
+                    else: raise OptionError( f"error, object is more than two encapsulated lists: '{object[0][0]}' should be a string.")
+                elif type(object[0])==str:
+                    object=[object]
+                else: logger.error("Unable to parse file input.")
+            elif type(object)==str:
+                object=[[object]]
+            else: logger.error("Unable to parse file input.")
+            
+            return object
+        
+        # Ensure files are in current writeable format
+        if file is not None: file = ensure_double_list(file)
+        if file_path is not None: file_path = ensure_double_list(file_path)
+        if file_list is not None: file_list = ensure_double_list(file_list)
+
+        # Set file format 
+        if file_pattern is None:
+            if file is not None and "pdbqt" in file[0][0]:
+                file_pattern = "*.pdbqt*"
+            else:
+                file_pattern = "*.dlg*"
+                logger.warning("File pattern was not specified, set to default '*.dlg*'.")
+
+        # Dict of individual arguments
+        indiv_options: dict = vars(); 
+        del indiv_options["self"]; del indiv_options["dict"]; del indiv_options["ensure_double_list"]
+
+        # Create option object with default values if needed
+        files = InputFiles()
+            
+        # Set options from dict if provided
+        if dict is not None:
+            for k,v in dict.items():
+                setattr(files, k, v) 
+                logger.debug(f'File attribute {k} was set to {v}.')
+
+        # Set additional options from individual arguments
+        #NOTE Will overwrite config file
+        for k,v in indiv_options.items():
+            if v is not None: 
+                setattr(files, k, v)
+                logger.debug(f'File attribute {k} was set to {v}.')
+        
+        if files.file_pattern != None: 
+            if "pdbqt" in files.file_pattern.lower(): self.set_general_options(docking_mode="vina")
+            elif "dlg" in files.file_pattern.lower(): self.set_general_options(docking_mode="dlg")
+            logger.debug(f"Docking mode set to {self.docking_mode} from given file pattern {files.file_pattern.lower()}")
+
+        return files
+    
+    def _set_results_sources(self,
+                           results_strings: str = None,
+                           receptor_file=None,
+                           save_receptor=None,
+                           dict: dict = None) -> InputStrings:
+        """
+        Object holding all ligand vina docking results string and corresponding receptor.
+        Args:
+            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+        """
+        # Dict of individual arguments
+        indiv_options: dict = vars(); 
+        del indiv_options["self"]; del indiv_options["dict"]
+
+        # Create option object with default values if needed
+        strings = InputStrings()
+            
+        # Set options from dict if provided
+        if dict is not None:
+            for k,v in dict.items():
+                setattr(strings, k, v) 
+                logger.debug(f'Docking string results attribute {k} was set to {v}.')
+
+        # Set additional options from individual arguments
+        #NOTE Will overwrite config file
+        for k,v in indiv_options.items():
+            if v is not None: setattr(strings, k, v)
+            logger.debug(f'Docking string results attribute {k} was set to {v}.')
+        
+        return strings
+
+    def _create_resultsmanager(self, file_sources: InputFiles = None, string_sources: InputStrings = None) -> ResultsManager:
+        """Creates a results manager object based on results provided either as files or as strings (currently only for vina).
+        Will create a new object each time results are added.
+        In its current state it assumes only one source of results will be provided. 
+        If both are provided, it will only process the strings. 
+        Args:
+            file_sources (InputFiles): used if docking results are provided through files
+            string_sources (InputStrings): used if docking results are provided through strings
+        """
+        if file_sources is not None:
+            self.resultsman = ResultsManager(file_sources=file_sources)
+            logger.debug("Results manager object has been created with results files.")
+        elif string_sources is not None:
+            self.resultsman = ResultsManager(string_sources=string_sources)
+            logger.debug("Results manager object has been created with results strings.")
+        else:
+            raise RTCoreError("No results sources were provided, a results manager object could not be created.")
+
+
+#-#-#- Core attribute setting methods -#-#-#
+    """ These methods are used internally to assing values to all ringtail options. 
+    This ensures:   - that all options are set to specific types through RingtailOptions
+                    - that internal consistency checks are performed on a group of options
+                    - these methods ensure options are assigned to the appropriate ringtail manager classes""" 
+    
     def set_general_options(self, 
-                            docking_mode=None,
-                            summary=None,
-                            logging_level=None,
+                            docking_mode: str=None,
+                            logging_level: str=None,
                             dict: dict=None):
         """
-        Settings for ringtail
+        General ringtail core attributes that are independent of action. 
 
         Args:
             docking_mode (str): dlg (autodock-gpu) or vina 
-            summary (bool): print database summary to terminal
             logging_level (str):"WARNING": Prints errors and warnings to stout only. 
                                 "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
                                 "DEBUG": Print additional error information to STDOUT
@@ -336,14 +461,15 @@ class RingtailCore:
         if dict is not None:
             for k,v in dict.items():
                 setattr(self.generalopts, k, v) 
+                logger.debug(f'Ringtail core attribute {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(self.generalopts, k, v)
+            logger.debug(f'Ringtail core attribute {k} was set to {v}.')
 
         # Assign attributes to ringtail core
-        self.print_summary = self.generalopts.print_summary
         self.docking_mode = self.generalopts.docking_mode
 
         if self.generalopts.logging_level is not None:  
@@ -351,19 +477,19 @@ class RingtailCore:
             logger.setLevel(self.generalopts.logging_level.upper())
 
     def set_storageman_attributes(self, 
-                            filter_bookmark = None,
-                            append_results = None,
-                            duplicate_handling = None,
-                            overwrite = None,
-                            order_results = None,
-                            outfields = None,
-                            output_all_poses = None,
-                            mfpt_cluster = None,
-                            interaction_cluster = None,
-                            bookmark_name =None,
+                            filter_bookmark: str = None,
+                            append_results: bool = None,
+                            duplicate_handling: str = None,
+                            overwrite: bool = None,
+                            order_results: str = None,
+                            outfields: str = None,
+                            output_all_poses: str = None,
+                            mfpt_cluster: float = None,
+                            interaction_cluster: float = None,
+                            bookmark_name: str = None,
                             dict=None):
         """
-        Options or storagemanager, used both in read and write.
+        Create storage_manager_options object if needed, sets options, and assigns them to the storage manager object.
 
         Args:
             filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
@@ -419,17 +545,20 @@ class RingtailCore:
         if dict is not None:
             for k,v in dict.items():
                 if v is not None: setattr(self.storageopts, k, v) 
+                logger.debug(f'Storage manager attribute {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(self.storageopts, k, v)
+            logger.debug(f'Storage manager attribute {k} was set to {v}.')
 
         # Assign attributes to storage manager
         for k,v in self.storageopts.todict().items():
             setattr(self.storageman, k, v)
+        logger.debug("Options for storage manager have been changed.")      
 
-    def _set_resultsman_attributes(self,
+    def set_resultsman_attributes(self,
                                     store_all_poses: bool = None,
                                     max_poses: int = None,
                                     add_interactions: bool = None,
@@ -439,7 +568,7 @@ class RingtailCore:
                                     dict: dict =None):
             
         """
-        Create resultsmanager object if needed and set options.
+        Create results_manager_options object if needed, sets options, and assigns them to the results manager object.
 
         Args:
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
@@ -461,34 +590,23 @@ class RingtailCore:
         if dict is not None:
             for k,v in dict.items():
                 setattr(self.resultsmanopts, k, v)
+                logger.debug(f'Results manager attribute {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
-            if v is not None: setattr(self.resultsmanopts, k, v)
+            if v is not None: 
+                setattr(self.resultsmanopts, k, v)
+            logger.debug(f'Results manager attribute {k} was set to {v}.')
 
+        # Assigns options to the results manager object
         for k,v in self.resultsmanopts.todict().items():  
-            if v is not None: setattr(self.resultsman, k, v)           
+            if v is not None: setattr(self.resultsman, k, v)    
+        logger.debug("Options for results manager have been changed.")       
     
-    def _create_resultsmanager(self, file_sources: InputFiles = None, string_sources: InputStrings = None) -> ResultsManager:
-        """Creates a results manager object based on results provided either as files or as strings.
-        Will create a new object each time results are added.
-        In its current state it assumes only one source of results will be provided. 
-        If both are provided, it will only process the strings. 
-        Args:
-            file_sources (InputFiles): 
-            string_sources (InputStrings): 
-        """
-        if file_sources is not None:
-            self.resultsman = ResultsManager(file_sources=file_sources)
-            logger.debug("Results manager object has been created with results files.")
-        elif string_sources is not None:
-            self.resultsman = ResultsManager(string_sources=string_sources)
-            logger.debug("Results manager object has been created with results strings.")
-        else:
-            raise RTCoreError("No results sources were provided, a results manager object could not be created.")
-
     def set_read_options(self, 
+                         log_file = None,
+                         export_sdf_path = None,
                          filtering = None,
                          plot = None,
                          find_similar_ligands = None,
@@ -499,14 +617,14 @@ class RingtailCore:
                          data_from_bookmark =  None,
                          pymol =  None,
                          enumerate_interaction_combs =  None,
-                         log_file = None,
-                         export_sdf_path = None,
                          dict: dict =None):
         #TODO this requires some work because some of these options are really used to call functions
-        """ Class that holds options related to reading from the database, including format for
-        result export and alternate ways of displaying the data (plotting),
+        """ Creates read_options object that holds attributes related to reading and outputting results.
+        Will assign log_file name and export_sdf_path to the output_manager object.
 
         Args:
+            log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
+            export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
             filtering (bool): implicit argument set if there are any optional filters present
             plot (bool): Makes scatterplot of LE vs Best Energy, saves as scatter.png.
             find_similar_ligands (str): Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.
@@ -517,9 +635,6 @@ class RingtailCore:
             data_from_bookmark (bool): Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.
             pymol (bool): Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.
             enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
-            log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
-            export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
-                optional: readopts (ReadOptions): provide options as object, will overwrite other options
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
         # Dict of individual arguments
@@ -533,14 +648,17 @@ class RingtailCore:
         if dict is not None:
             for k,v in dict.items():
                 if v is not None: setattr(self.readopts, k, v)
+                logger.debug(f'Read options {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(self.readopts, k, v)
+            logger.debug(f'Read options {k} was set to {v}.')
 
         # Creates output man with attributes if needed
         self.outputman = OutputManager(self.readopts.log_file, self.readopts.export_sdf_path)
+        logger.debug("Options for output manager have been changed.")   
 
     def set_filters(self,
                     eworst=None, 
@@ -562,7 +680,7 @@ class RingtailCore:
                     ligand_operator=None,     
                     dict: dict = None):
         """
-        Object holding all specific filters, options, types.
+        Create a filter object containing all numerical and string filters. 
         """
 
         # Dict of individual arguments
@@ -576,112 +694,14 @@ class RingtailCore:
         if dict is not None:
             for k,v in dict.items():
                 if v is not None: setattr(self.filters, k, v) 
+                logger.debug(f'Filter {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(self.filters, k, v)
+            logger.debug(f'Filter {k} was set to {v}.')
     
-    def _set_file_sources(self,
-                    file=None, 
-                    file_path=None, 
-                    file_list=None, 
-                    file_pattern=None, 
-                    recursive=None, 
-                    receptor_file=None,
-                    save_receptor=None,
-                    dict: dict = None) -> InputFiles:
-        """
-        Object holding all ligand docking results files.
-        Args:
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-
-        def ensure_double_list(object) -> list:
-            """Most of ringtail is set up to handle files, file paths, and file lists as double lists [[items]].
-            Instead of changing that for now, the input is checked to ensure they are presented as, or can be 
-            converted to a double list. Really only matters for using API."""
-            if type(object)==list:
-                if type(object[0])==list: 
-                    if type(object[0][0])==str: pass
-                    else: raise OptionError( f"error, object is more than two encapsulated lists: '{object[0][0]}' should be a string.")
-                elif type(object[0])==str:
-                    object=[object]
-                    logger.debug(f"Object {object[0]} was converted to a double list from a single list.")
-                else: logger.error("Unable to parse file input.")
-            elif type(object)==str:
-                object=[[object]]
-                logger.debug(f"Object {object[0][0]} was converted to a double list from a string.")
-            else: logger.error("Unable to parse file input.")
-            
-            return object
-        
-        # Ensure files are in current writeable format
-        if file is not None: file = ensure_double_list(file)
-        if file_path is not None: file_path = ensure_double_list(file_path)
-        if file_list is not None: file_list = ensure_double_list(file_list)
-
-        # Set file format 
-        if file_pattern is None:
-            if file is not None and "pdbqt" in file[0][0]:
-                print(file[0][0])
-                file_pattern = "*.pdbqt*"
-            else:
-                file_pattern = "*.dlg*"
-                logger.warning("File pattern was not specified, set to default '*.dlg*'.")
-
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]; del indiv_options["ensure_double_list"]
-
-        # Create option object with default values if needed
-        files = InputFiles()
-            
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                setattr(files, k, v) 
-
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(files, k, v)
-        
-        if files.file_pattern != None: 
-            if "pdbqt" in files.file_pattern.lower(): self.set_general_options(docking_mode="vina")
-            elif "dlg" in files.file_pattern.lower(): self.set_general_options(docking_mode="dlg")
-            logger.debug(f"Docking mode set to {self.docking_mode} from given file pattern {files.file_pattern.lower()}")
-
-        return files
-    
-    def set_results_sources(self,
-                           results_strings: str = None,
-                           receptor_file=None,
-                           save_receptor=None,
-                           dict: dict = None) -> InputStrings:
-        """
-        Object holding all ligand vina docking results string and corresponding receptor.
-        Args:
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
-
-        # Create option object with default values if needed
-        strings = InputStrings()
-            
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                setattr(strings, k, v) 
-
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(strings, k, v)
-        
-        return strings
 
     #-#-#- API -#-#-#
     def add_results_from_files(self,
@@ -694,7 +714,7 @@ class RingtailCore:
                                save_receptor: bool = None,
                                filesources_dict: dict = None,
                                append_results: bool = None,
-                               # result processing options
+                               # results processing options
                                duplicate_handling: str = None,
                                overwrite: bool = None,
                                store_all_poses: bool = None,
@@ -704,12 +724,11 @@ class RingtailCore:
                                interaction_cutoffs: list = None,
                                max_proc: int = None,
                                summary: bool = None,
-                               options_dict=None
+                               options_dict: dict =None
                                ):
         """
-        Call storage manager to process result files and add to database.
-        Options can be provided as a dict or as individual options.
-        Creates a database, or adds to an existing one if using "append_results".
+        Call storage manager to process result files and add to database. Creates a database, or adds to an existing one if using "append_results".
+        Options can be provided as a dict or as individual options. If both are provided, individual options will overwrite those from the dictionary. 
 
         Args:
             file (str, optional: list(str)): ligand result file
@@ -730,10 +749,7 @@ class RingtailCore:
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
             options_dict (dict): write options as a dict
-
         """
-        
-        self.process_mode = "write"
 
         files = self._set_file_sources(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor, filesources_dict)
         results_files_given = (files.file is not None or files.file_path is not None or files.file_list is not None)
@@ -755,7 +771,7 @@ class RingtailCore:
                 self._create_resultsmanager(file_sources=files)
                 self.resultsman.storageman = self.storageman               
                 self.resultsman.storageman_class = self.storageman.__class__
-                self._set_resultsman_attributes(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, results_dict)
+                self.set_resultsman_attributes(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, results_dict)
 
                 # Docking mode compatibility check
                 if self.generalopts.docking_mode == "vina" and self.resultsman.interaction_tolerance is not None:
@@ -810,11 +826,10 @@ class RingtailCore:
             options_dict (dict): write options as a dict
 
         """
-        
-        self.process_mode = "write"
+        # Method currently only works with vina output, set automatically
         self.docking_mode = "vina"
 
-        results = self.set_results_sources(results_strings, receptor_file, save_receptor, resultsources_dict)
+        results = self._set_results_sources(results_strings, receptor_file, save_receptor, resultsources_dict)
         results_strings_given = bool(results.results_strings)
         if not results_strings_given and not results.save_receptor:
             raise OptionError("At least one input option needs to be used: 'results_strings', or 'save_receptor'")
@@ -835,7 +850,7 @@ class RingtailCore:
                 self._create_resultsmanager(string_sources=results)
                 self.resultsman.storageman = self.storageman               
                 self.resultsman.storageman_class = self.storageman.__class__
-                self._set_resultsman_attributes(store_all_poses, max_poses, add_interactions, None, interaction_cutoffs, max_proc, results_dict)
+                self.set_resultsman_attributes(store_all_poses, max_poses, add_interactions, None, interaction_cutoffs, max_proc, results_dict)
 
                 self.resultsman.mode = self.docking_mode
 
@@ -1015,8 +1030,6 @@ class RingtailCore:
         Returns:
             number of ligands passing filter
         """
-
-        self.process_mode = "read"
         
         self.set_filters(eworst=eworst, 
                         ebest=ebest, 
