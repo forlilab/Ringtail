@@ -107,6 +107,7 @@ class StorageManager:
             "sqlite": StorageManagerSQLite,
         }
         if storage_type in storage_types:
+            logger.debug(f"Storage type {storage_type} is implemented and will be used for the database.")
             return storage_types[storage_type]
         else:
             raise NotImplementedError(f"Given storage type {storage_type} is not implemented.")
