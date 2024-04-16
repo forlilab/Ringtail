@@ -413,19 +413,24 @@ class StorageOptions(RTOptions):
             "hb",
         }
 
-class ReadOptions(RTOptions):
+class OutputOptions(RTOptions):
     """ Class that holds options related to reading from the database, including format for
     result export and alternate ways of displaying the data (plotting)."""
     options = {
-        "filtering":{
-            "default":None,
-            "type":bool,
-            "description": "Internal switch for whether or not filtering is to be performed, to accommodate cmdline tools."
+        "log_file":{
+            "default":"output_log.txt",
+            "type":str,
+            "description": "By default, read and filtering results are saved in 'output_log.txt'; if this option is used, ligands and requested info passing the filters will be written to specified file."
         },
-        "plot":{
+        "export_sdf_path":{
+            "default":"",
+            "type":str,
+            "description": "Specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the 'overwrite' is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified."
+        },
+        "enumerate_interaction_combs":{
             "default":None,
             "type":bool,
-            "description": "Makes scatterplot of LE vs Best Energy, saves as scatter.png."
+            "description": "When used with 'max_miss' > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime."
         },
         "find_similar_ligands":{
             "default":None,
@@ -437,46 +442,11 @@ class ReadOptions(RTOptions):
             "type":str,
             "description": "Create csv of the bookmark given with 'bookmark_name'. Output as '<bookmark_name>.csv'. Can also export full database tables."
         },
-        "export_bookmark_db":{
-            "default":None,
-            "type":bool,
-            "description": "Export a database containing only the results found in the bookmark specified by 'bookmark_name'. Will save as '<input_db>_<bookmark_name>.db'."
-        },
         "export_query_csv":{
             "default":None,
             "type":str,
-            "description": "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. 'SELECT [columns] FROM [table] WHERE [conditions]'."
-        },
-        "export_receptor":{
-            "default":None,
-            "type":bool,
-            "description": "Export stored receptor pdbqt. Will write to current directory."
-        },
-        "data_from_bookmark":{
-            "default":None,
-            "type":bool,
-            "description": "Write log of 'outfields' data for bookmark specified by 'bookmark_name'. Must use without any filters."
-        },
-        "pymol":{
-            "default":None,
-            "type":bool,
-            "description": "Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with 'bookmark_name'. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given."
-        },
-        "enumerate_interaction_combs":{ #TODO does this belong more in filters?
-            "default":None,
-            "type":bool,
-            "description": "When used with 'max_miss' > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime."
-        },
-        "log_file":{
-            "default":"output_log.txt",
-            "type":str,
-            "description": "By default, read and filtering results are saved in 'output_log.txt'; if this option is used, ligands and requested info passing the filters will be written to specified file."
-        },
-        "export_sdf_path":{
-            "default":"",
-            "type":str,
-            "description": "Specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the 'overwrite' is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified."
-        },
+            "description": "Create csv of the results from the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. 'SELECT [columns] FROM [table] WHERE [conditions]'."
+        }
     }
 
     def __init__(self):
@@ -485,7 +455,7 @@ class ReadOptions(RTOptions):
     def checks(self):
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
-        if hasattr(self, "export_sdf_path"):
+        if hasattr(self, "export_query_csv"):
             if self.export_sdf_path is not None and not self.export_sdf_path == "" and not self.export_sdf_path.endswith("/"): 
                 self.export_sdf_path += "/"
             if self.export_bookmark_csv is not None and not RTOptions.valid_bookmark_name(self.export_bookmark_csv):

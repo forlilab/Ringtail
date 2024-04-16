@@ -35,6 +35,7 @@ def dbquery():
 class TestRingtailCore:
 
     def test_get_defaults(self):
+        os.system("rm output.db output_log.txt")
         from ringtail import ringtailoptions
         defaults = RingtailCore.get_defaults("resultsmanopts")
         object_dict = ringtailoptions.ResultsProcessingOptions().todict()
@@ -97,7 +98,7 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst = -7) 
         log_file_name = "output_log_test.txt"
-        rtc.set_read_options(log_file=log_file_name)
+        rtc.set_output_options(log_file=log_file_name)
         rtc.get_previous_filter_data("delta, ref_rmsd", bookmark_name="passing_results")
 
 

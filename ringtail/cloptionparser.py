@@ -655,7 +655,7 @@ class CLOptionParser:
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
         self.process_mode = parsed_opts.process_mode.lower()
-        filters_present = False  # set flag indicating if any filters given
+        self.filtering = False  # set flag indicating if any filters given
         docking_mode = parsed_opts.docking_mode.lower()
         #Check database options
         if parsed_opts.input_db is not None:
@@ -717,9 +717,9 @@ class CLOptionParser:
                     if f == "ligand_operator":
                         pass
                     else:
-                        filters_present = True
+                        self.filtering = True
             
-            if filters_present:
+            if self.filtering:
                 # property filters
                 property_list = Filters.get_filter_keys("property") 
                 for kw in property_list:
@@ -816,7 +816,7 @@ class CLOptionParser:
                 filters["max_miss"] = parsed_opts.max_miss
                 filters["react_any"] = parsed_opts.react_any
 
-            if filters_present: self.filters = filters
+            if self.filtering: self.filters = filters
 
         if isinstance(parsed_opts.interaction_tolerance, str):
             parsed_opts.interaction_tolerance = [
@@ -835,20 +835,20 @@ class CLOptionParser:
             "interaction_cutoffs":parsed_opts.interaction_cutoffs,
             "max_proc":parsed_opts.max_proc
         }
-        # combine all options used in read mode
-        self.readopts = {
-            "filtering":filters_present,
-            "plot":parsed_opts.plot,
+        # parse read methods 
+        self.plot = parsed_opts.plot
+        self.export_bookmark_db = parsed_opts.export_bookmark_db
+        self.export_receptor = parsed_opts.export_receptor
+        self.pymol = parsed_opts.pymol
+        self.data_from_bookmark = parsed_opts.data_from_bookmark 
+        # parse read and output options
+        self.outputopts = {
+            "log_file":parsed_opts.log_file,
+            "export_sdf_path":parsed_opts.export_sdf_path,
+            "enumerate_interaction_combs":parsed_opts.enumerate_interaction_combs,
+            "export_query_csv": parsed_opts.export_query_csv,
             "find_similar_ligands":parsed_opts.find_similar_ligands,
             "export_bookmark_csv":parsed_opts.export_bookmark_csv,
-            "export_bookmark_db":parsed_opts.export_bookmark_db,
-            "export_query_csv":parsed_opts.export_query_csv,
-            "export_receptor":parsed_opts.export_receptor,
-            "data_from_bookmark":parsed_opts.data_from_bookmark,
-            "pymol":parsed_opts.pymol,
-            "enumerate_interaction_combs":parsed_opts.enumerate_interaction_combs,
-            "log_file":parsed_opts.log_file,
-            "export_sdf_path":parsed_opts.export_sdf_path
         }
         # combine all options for the storage manager
         self.storageopts = {
