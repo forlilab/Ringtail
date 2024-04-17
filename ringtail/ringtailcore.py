@@ -71,7 +71,7 @@ class RingtailCore:
             logger.warning('The given docking mode was not given as a string, it will be set to default value "dlg".')
             self._docking_mode = "dlg"
         elif docking_mode.lower() not in ["dlg", "vina"]:
-            raise RTCoreError(f'Docking mode {docking_mode} is not supported. Please choose between "dlg" and "vina".')
+            raise NotImplementedError(f'Docking mode {docking_mode} is not supported. Please choose between "dlg" and "vina".')
         else:
             self._docking_mode = docking_mode.lower()
             logger.debug(f"Docking mode set to {self.docking_mode}.")

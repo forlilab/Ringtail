@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail file parsers
+# Ringtail results parsers
 #
 
 import os
@@ -11,7 +11,7 @@ import numpy as np
 from .exceptions import FileParsingError
 from .logmanager import logger
 
-#-#-#- I need to add a second zip method here (bz2), and there is some duplication between dlg and pdbqt
+#TODO add a second zip method (bz2), clean up duplication between dlg and pdbqt
 def parse_single_dlg(fname):
     """parse an ADGPU DLG file uncompressed or gzipped"""
     STD_END = "DOCKED: ENDMDL"
@@ -592,7 +592,7 @@ def parse_vina_pdbqt(fname):
 
 def parse_vina_string(docking_data: dict):
     """Method that parses a vina string, does the same as pdbqt reader but without the file opening"""
-    #TODO merge with vina file reader
+    #TODO clean up duplication between this and vina file parser
     logger.debug("About to parse vina result string")
 
     ligname = list(docking_data.keys())[0] # get the first (and only, probably not optimal) key which should be the ligand name

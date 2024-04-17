@@ -11,6 +11,7 @@ from .logmanager import logger
 
 
 class ResultsManager:
+    """Class that handles the processing of the results, including passing on the docking results to the appropriate paralell/multi-processing unit"""
     def __init__(
         self,
         mode: str = None,
@@ -41,13 +42,13 @@ class ResultsManager:
         self.max_proc = max_proc
         self.storageman_class = storageman_class
         self.storageman = storageman
-
+        # if results are provided as files
         self.file_sources = file_sources
         if file_sources is not None:
             self.file_pattern = file_sources.file_pattern
             self.target = file_sources.target
             self.receptor_file = file_sources.receptor_file
-
+        # if results are provided as strings
         self.string_sources = string_sources
         if self.string_sources is not None:
             self.target = self.string_sources.target
@@ -81,7 +82,8 @@ class ResultsManager:
             parser_opts[k] = v
         self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
         self.parser.process_files()
-
+    
+    #TODO a lot of redundancies here
     def process_strings(self):
         # check that we have file source(s)
         if not self.string_sources:
@@ -91,11 +93,8 @@ class ResultsManager:
         if self.mode == "vina" and self.add_interactions and self.receptor_file is None:
                 raise ResultsProcessingError(
                     "Gave 'add_interactions' with Vina mode but did not specify receptor name. Please give receptor pdbqt name with 'receptor_file'.")
-        #self.mode = "vina_string" # quick and dirty way to reroute mpreaderwriter, change it in here so no negative effects elsewhere
         # start MP process
         logger.debug(f'These are the strings options being procesed: {self.string_sources}.') 
-        #NOTE get this far
-        # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {
             "multiprocessing": MPManager,
         }

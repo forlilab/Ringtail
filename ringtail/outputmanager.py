@@ -18,9 +18,6 @@ from matplotlib import colors
 from rdkit.Chem import SDWriter
 from meeko import RDKitMolCreate
 
-#TODO Could clean up how the file is written to, and when different header methods are invoked. Not critical. 
-
-
 class OutputManager:
     """Class for creating outputs, can be a context manager to handle log files
 
