@@ -10,7 +10,7 @@ class RTLogger:
     library. Different log levels have different treatment, e.g., error level logs includes
     a complete and readable stack trace. 
 
-    The log is written to "rt_process_log.txt", and the file will be saved to "Ringtail/logfiles/".
+    The log is written to "YYYYMMDD-hhmmss_ringtail-process-log.txt", and the file will be saved to current working directory.
 
     """
 
@@ -24,9 +24,10 @@ class RTLogger:
             cls.initialization(cls, filename=filename)
         return cls._instance
     
-    def initialization(self, level = "DEBUG", filename = "rt_process_log.txt"):
+    def initialization(self, level = "DEBUG", filename = "ringtail-process-log.txt"):
         """ 
         Options for instantiation of the logger. 
+        Starts a file handler and a stream handler that prints to stdout
         """
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
