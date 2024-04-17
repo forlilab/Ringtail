@@ -827,8 +827,12 @@ class CLOptionParser:
                     filters[k] = v
                 filters["max_miss"] = parsed_opts.max_miss
                 filters["react_any"] = parsed_opts.react_any
-
-            if self.filtering: self.filters = filters
+            
+            self.filters = filters
+            
+            # another form of filtering is clustering, which can in theory be performed without filtering (such as clustering over a filtered bookmark)
+            if parsed_opts.mfpt_cluster or parsed_opts.interaction_cluster:
+                self.filtering = True
 
         if isinstance(parsed_opts.interaction_tolerance, str):
             parsed_opts.interaction_tolerance = [

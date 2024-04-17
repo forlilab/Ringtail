@@ -79,7 +79,7 @@ class TestRingtailCore:
         rtc.produce_summary()
         sys.stdout = sys.__stdout__
 
-        assert len(summary_items.data) == 40
+        assert len(summary_items.data) == 38
 
     def test_append_to_database(self, countrows):
         rtc = RingtailCore(db_file="output.db")

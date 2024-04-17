@@ -15,6 +15,10 @@ Default logging level is "WARNING", and a different logger level can be set at t
 ```
 rtc = RingtailCore(db_file="output.db", logging_level="DEBUG)
 ```
+It is also possible to change logging level by accessing the logger object level attribute:
+```
+logger.setLevel("INFO")
+```
 
 The default docking mode is "dlg", and can be changed to "vina" by accessing the ringtail core attribute `docking_mode`:
 ```
