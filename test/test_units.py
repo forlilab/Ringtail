@@ -183,7 +183,7 @@ class TestRingtailCore:
     def test_generate_interactions_prepare_filters(self):
         test_filters = []
         rtc = RingtailCore()
-        rtc.set_general_options(docking_mode="dlg", logging_level="DEBUG")
+        rtc.docking_mode="dlg"
         rtc.set_filters(hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)], vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)])
         interaction_combs = rtc._generate_interaction_combinations(1)
         for ic in interaction_combs:
@@ -289,7 +289,7 @@ class TestVinaHandling:
     def test_vina_file_add(self, countrows):
         vina_path = 'test_data/vina'
         rtc = RingtailCore("output.db")
-        rtc.set_general_options(docking_mode="vina")
+        rtc.docking_mode="vina"
         rtc.add_results_from_files(file_path=[[vina_path]], file_pattern = "*.pdbqt*", receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True),
         count = countrows("SELECT COUNT(*) FROM Results")
         os.system("rm output.db")
@@ -312,7 +312,7 @@ class TestVinaHandling:
     def test_add_interactions(self, countrows):
         vina_path = 'test_data/vina'
         rtc = RingtailCore("output.db")
-        rtc.set_general_options(docking_mode="vina")
+        rtc.docking_mode="vina"
         rtc.add_results_from_files(file_path=vina_path, file_pattern = "*.pdbqt*", receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True, add_interactions=True)
         count = countrows("SELECT COUNT(*) FROM Interaction_indices")
         os.system("rm output.db")

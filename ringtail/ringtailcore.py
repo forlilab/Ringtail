@@ -34,7 +34,10 @@ class RingtailCore:
     """
 #-#-#- Base methods -#-#-#
     
-    def __init__(self, db_file = "output.db", storage_type = "sqlite", logging_level=None):
+    def __init__(self, 
+                 db_file: str = "output.db", 
+                 storage_type: str = "sqlite", 
+                 logging_level: str = None):
         """
         Initialize RingtailCore object and create a storageman object with the db file.
         Does not open access to the storage. Future option will include opening database as readonly.
@@ -47,9 +50,9 @@ class RingtailCore:
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
         self.set_storageman_attributes()
-        self.set_general_options() #TODO do I need this now
         self._run_mode = "api"
-             
+        self._docking_mode = "dlg"
+
     def update_database_version(self, consent=False):
         # Method to update database version from 1.0.0 to 1.1.0
         return self.storageman.update_database_version(consent)
@@ -57,6 +60,27 @@ class RingtailCore:
 
 #-#-#- Private methods -#-#-#
     
+    def _validate_docking_mode(self, docking_mode: str):
+        """ Method that validates specified AutoDock program used to generate results.
+        Args:
+            docking_mode (str): string that describes docking mode
+        Raises:
+            RTCoreError if docking_mode is not supported
+        """
+        if type(docking_mode) is not str:
+            logger.warning('The given docking mode was not given as a string, it will be set to default value "dlg".')
+            self._docking_mode = "dlg"
+        elif docking_mode.lower() not in ["dlg", "vina"]:
+            raise RTCoreError(f'Docking mode {docking_mode} is not supported. Please choose between "dlg" and "vina".')
+        else:
+            self._docking_mode = docking_mode.lower()
+            logger.debug(f"Docking mode set to {self.docking_mode}.")
+    
+    def _get_docking_mode(self):
+        return self._docking_mode
+
+    docking_mode = property(fget = _get_docking_mode, fset = _validate_docking_mode)
+
     def _add_poses(
         self,
         atom_indices,
@@ -383,9 +407,8 @@ class RingtailCore:
         
         # set docking mode based on file pattern
         if files.file_pattern != None: 
-            if "pdbqt" in files.file_pattern.lower(): self.set_general_options(docking_mode="vina")
-            elif "dlg" in files.file_pattern.lower(): self.set_general_options(docking_mode="dlg")
-            logger.debug(f"Docking mode set to {self.docking_mode} from given file pattern {files.file_pattern.lower()}")
+            if "pdbqt" in files.file_pattern.lower() and self.docking_mode != "vina": self.docking_mode = "vina"
+            elif "dlg" in files.file_pattern.lower() and self.docking_mode != "dlg": self.docking_mode = "dlg"
 
         return files
     
@@ -451,45 +474,6 @@ class RingtailCore:
                     - that internal consistency checks are performed on a group of options
                     - these methods ensure options are assigned to the appropriate ringtail manager classes""" 
     
-    def set_general_options(self, 
-                            docking_mode: str = None,
-                            logging_level: str = None,
-                            dict: dict = None):
-        """
-        General ringtail core attributes that are independent of action. 
-
-        Args:
-            docking_mode (str): dlg (autodock-gpu) or vina 
-            logging_level (str):"WARNING": Prints errors and warnings to stout only. 
-                                "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
-                                "DEBUG": Print additional error information to STDOUT
-                dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-        # Dict of individual arguments
-        indiv_options: dict = vars(); 
-        del indiv_options["self"]; del indiv_options["dict"]
-
-        # Create option object with default values if needed
-        if not hasattr(self, "generalopts"): self.generalopts = GeneralOptions()
-        # Set options from dict if provided
-        if dict is not None:
-            for k,v in dict.items():
-                setattr(self.generalopts, k, v) 
-                logger.debug(f'Ringtail core attribute {k} was set to {v}.')
-
-        # Set additional options from individual arguments
-        #NOTE Will overwrite config file
-        for k,v in indiv_options.items():
-            if v is not None: setattr(self.generalopts, k, v)
-            logger.debug(f'Ringtail core attribute {k} was set to {v}.')
-
-        # Assign attributes to ringtail core
-        self.docking_mode = self.generalopts.docking_mode
-
-        if self.generalopts.logging_level is not None:  
-            self.generalopts.logging_level=self.generalopts.logging_level.upper() 
-            logger.setLevel(self.generalopts.logging_level.upper())
-
     def set_storageman_attributes(self, 
                             filter_bookmark: str = None,
                             append_results: bool = None,
@@ -779,7 +763,7 @@ class RingtailCore:
                 self.set_resultsman_attributes(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, results_dict)
 
                 # Docking mode compatibility check
-                if self.generalopts.docking_mode == "vina" and self.resultsman.interaction_tolerance is not None:
+                if self.docking_mode == "vina" and self.resultsman.interaction_tolerance is not None:
                     logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
                     self.resultsman.interaction_tolerance = None
                 self.resultsman.mode = self.docking_mode
@@ -1433,7 +1417,6 @@ class RingtailCore:
         """
         
         json_string = {"outputopts":OutputOptions().todict(),
-                       "generalopts":GeneralOptions().todict(),
                        "resultsmanopts":ResultsProcessingOptions().todict(),
                        "storageopts":StorageOptions().todict(),
                        "filters":Filters().todict(),
@@ -1507,13 +1490,13 @@ class RingtailCore:
         or options belonging to a specific group. 
         
         Args:
-            object (str): ["all", "generalopts", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj"]
+            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj"]
         """
 
         all_defaults = RingtailCore.generate_config_json_template(to_file=False)
 
-        if object.lower() not in ["all", "generalopts", "resultsmanopts", "storageopts", "outputopts", "filterobj", "fileobj"]:
-            raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj"]')
+        if object.lower() not in ["all", "resultsmanopts", "storageopts", "outputopts", "filterobj", "fileobj"]:
+            raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj"]')
         
         if object.lower() == "all":
             logger.debug("All ringtail default values have been fetched.")
@@ -1529,17 +1512,16 @@ class RingtailCore:
         or specific object. 
         
         Args:
-            object (str): ["all", "generalopts", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]
+            object (str): ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]
         """
         all_info = {"outputopts": OutputOptions.options,
-                    "generalopts": GeneralOptions.options,
                     "fileobj": InputFiles.options,
                     "writeopts": ResultsProcessingOptions.options,
                     "storageopts": StorageOptions.options,
                     "filters":Filters.options,}
         
-        if object.lower() not in ["all", "generalopts", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]:
-            raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "generalopts", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]')
+        if object.lower() not in ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]:
+            raise OptionError(f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]')
         if object.lower() == "all":
             all_info_one_dict = {}
             for _,v in all_info.items():
