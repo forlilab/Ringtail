@@ -10,9 +10,10 @@ from ringtail import RingtailCore, logger
 import traceback
 
 if __name__ == "__main__":
-    ''' The altered rt_process_vs now makes use of the new ringtail api. The CLOptionParser just makes the option objects, 
-    and this script assigns the objects to the relevant managers then runs the ringtail methods with the new API.
-    I am not using ringtail core as a context anymore'''
+    ''' Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries 
+    and options that are then used with the ringtail core api. 
+    This script will allow either a write or a read session at the time.
+    Available database operations are described in the readme.md document of this codebase.'''
     time0 = time.perf_counter()
 
     try:
@@ -37,6 +38,7 @@ if __name__ == "__main__":
                                           options_dict=cmdinput.writeopts, 
                                           summary=cmdinput.print_summary)
         time1 = time.perf_counter()
+
         if  cmdinput.process_mode == "read":
                 logger.debug("Starting read process")
                 
@@ -88,7 +90,6 @@ if __name__ == "__main__":
                 if cmdinput.export_receptor:
                     rtcore.export_receptors()
 
-    #TODO can depreciate use of traceback in this file
     except Exception as e:
         tb = traceback.format_exc()
         logger.debug(tb)
