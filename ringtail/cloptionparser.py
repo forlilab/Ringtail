@@ -649,14 +649,13 @@ class CLOptionParser:
             logger.setLevel("DEBUG")
         if parsed_opts.verbose:
             logger.setLevel("INFO")
-        logging_level= logger.level()
         if parsed_opts.process_mode is None:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
         self.process_mode = parsed_opts.process_mode.lower()
         self.filtering = False  # set flag indicating if any filters given
-        docking_mode = parsed_opts.docking_mode.lower()
+
         #Check database options
         if parsed_opts.input_db is not None:
             if not os.path.exists(parsed_opts.input_db):
@@ -671,12 +670,8 @@ class CLOptionParser:
             
         self.rtcore = RingtailCore(db_file)
         self.rtcore._run_mode = "cmd" # tag for command line processing, changes how certain errors are handled
+        self.rtcore.docking_mode = parsed_opts.docking_mode
         self.print_summary = parsed_opts.print_summary
-        
-        self.generalopts = {
-            "docking_mode": docking_mode,
-            "logging_level":logging_level
-        }
 
         if self.process_mode == "write":
             # set read-only rt_process options to None to prevent errors

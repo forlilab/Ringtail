@@ -49,7 +49,7 @@ class RTLogger:
             logger.warning(f"{level} is not a a string. Please use one of the following options: debug, info, or warning. Logger level reverted to {self.level()}.")
             return
         
-        if level.upper() not in ["DEBUG", "INFO", "WARNING","ERROR","CRITICAL"]:
+        if level.upper() not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             logger.warning(f"{level} is not a valid logging level option. Logger level reverted to {self.level()}.")
             return
         elif level != self.logger.level:

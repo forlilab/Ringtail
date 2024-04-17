@@ -108,34 +108,6 @@ class RTOptions:
                 dataobject.__setattr__("value", value)
             self.checks()
 
-class GeneralOptions(RTOptions):
-    """Creates a class with general options relevant to any Ringtail process."""
-    options = {
-        "docking_mode":{
-            "type": str,
-            "default": "dlg",
-            "description": "Specify AutoDock program used to generate results. Available options are 'dlg' and 'vina'. Vina mode will automatically change 'file_pattern' to '*.pdbqt'."
-        },
-        "logging_level":{
-            "type": str,
-            "default": "DEBUG",
-            "description": '''
-                            "WARNING": Prints errors and warnings to stout only. 
-                            "INFO": Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used
-                            "DEBUG": Print additional error information to STDOUT
-                            '''
-        },  
-    }
-    
-    def __init__(self):
-        super().initialize_from_dict(self.options, self.__class__.__name__)
-    
-    def checks(self):
-        """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
-        then every time a value is changed."""
-        if self.docking_mode not in ["dlg", "vina"]:
-            logger.error(f'Docking mode {self.docking_mode} is not supported. Please choose between "dlg" and "vina".')
-
 class InputStrings(RTOptions):
     """ Class that handles docking results strings from vina docking, with options to store receptor."""
     options = {
