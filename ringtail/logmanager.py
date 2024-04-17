@@ -59,7 +59,7 @@ class RTLogger:
         if level.upper() not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             logger.warning(f"{level} is not a valid logging level option. Logger level reverted to {self.level()}.")
             return
-        elif level != self.logger.level:
+        elif level.upper() != self.logger.level:
             self.logger.setLevel(level.upper())
             self.logger.debug("Log level changed to " + str(level))
 
