@@ -90,7 +90,7 @@ class RTOptions:
             setattr(self, item, TypeSafe(default=info["default"], 
                                          type=info["type"], 
                                          object_name=item))
-        logger.info(f'All options for {name} have been initialized to default values.')
+        logger.info(f"A {name} object was created with default values for all attributes.")
 
     def todict(self):
         """Custom method to each child object is returend as a dict of native types and not as objects (which they are if they are type checked using TypeSafe)."""

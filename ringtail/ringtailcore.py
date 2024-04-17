@@ -542,19 +542,21 @@ class RingtailCore:
         # Set options from dict if provided
         if dict is not None:
             for k,v in dict.items():
-                if v is not None: setattr(self.storageopts, k, v) 
-                logger.debug(f'Storage manager attribute {k} was set to {v}.')
+                if v is not None: 
+                    setattr(self.storageopts, k, v) 
+                    logger.debug(f'Storage manager attribute {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
-            if v is not None: setattr(self.storageopts, k, v)
-            logger.debug(f'Storage manager attribute {k} was set to {v}.')
+            if v is not None: 
+                setattr(self.storageopts, k, v)
+                logger.debug(f'Storage manager attribute {k} was set to {v}.')
 
         # Assign attributes to storage manager
         for k,v in self.storageopts.todict().items():
             setattr(self.storageman, k, v)
-        logger.debug("Options for storage manager have been changed.")      
+        logger.info("Options for storage manager have been changed.")      
 
     def set_resultsman_attributes(self,
                                     store_all_poses: bool = None,
@@ -587,20 +589,21 @@ class RingtailCore:
         # Set options from dict if provided
         if dict is not None:
             for k,v in dict.items():
-                setattr(self.resultsmanopts, k, v)
-                logger.debug(f'Results manager attribute {k} was set to {v}.')
+                if v is not None: 
+                    setattr(self.resultsmanopts, k, v)
+                    logger.debug(f'Results manager attribute {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: 
                 setattr(self.resultsmanopts, k, v)
-            logger.debug(f'Results manager attribute {k} was set to {v}.')
+                logger.debug(f'Results manager attribute {k} was set to {v}.')
 
         # Assigns options to the results manager object
         for k,v in self.resultsmanopts.todict().items():  
             if v is not None: setattr(self.resultsman, k, v)    
-        logger.debug("Options for results manager have been changed.")       
+        logger.info("Options for results manager have been changed.")       
     
     def set_output_options(self, 
                          log_file: str = None,
@@ -632,18 +635,20 @@ class RingtailCore:
         # Set options from dict if provided
         if dict is not None:
             for k,v in dict.items():
-                if v is not None: setattr(self.outputopts, k, v)
-                logger.debug(f'Output options {k} was set to {v}.')
+                if v is not None: 
+                    setattr(self.outputopts, k, v)
+                    logger.debug(f'Output options {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
-            if v is not None: setattr(self.outputopts, k, v)
-            logger.debug(f'Output options {k} was set to {v}.')
+            if v is not None:
+                setattr(self.outputopts, k, v)
+                logger.debug(f'Output options {k} was set to {v}.')
 
         # Creates output man with attributes if needed
         self.outputman = OutputManager(self.outputopts.log_file, self.outputopts.export_sdf_path)
-        logger.debug("Options for output manager have been changed.")   
+        logger.info("Options for output manager have been changed.")   
 
     def set_filters(self,
                     eworst=None, 
@@ -678,14 +683,17 @@ class RingtailCore:
         # Set options from dict if provided
         if dict is not None:
             for k,v in dict.items():
-                if v is not None: setattr(self.filters, k, v) 
-                logger.debug(f'Filter {k} was set to {v}.')
+                if v is not None: 
+                    setattr(self.filters, k, v) 
+                    logger.debug(f'Filter {k} was set to {v}.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
-            if v is not None: setattr(self.filters, k, v)
-            logger.debug(f'Filter {k} was set to {v}.')
+            if v is not None: 
+                setattr(self.filters, k, v)
+                logger.debug(f'Filter {k} was set to {v}.')
+        logger.info("A filter object has been prepared.")
     
 
     #-#-#- API -#-#-#
