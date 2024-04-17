@@ -1,9 +1,15 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail output manager
+#
+
 import os
 from .exceptions import OptionError
 from .logmanager import logger
 import copy
 
-""" Ringtail options contains objects for holding all ringtail options, 
+""" ringtailoptions contains objects for holding all ringtail options, 
 and ensures safe type enforcement."""
 
 class TypeSafe:
@@ -14,7 +20,11 @@ class TypeSafe:
 
     It is the hope to extend this to work with custom types, such as "percentage" (float with a max and min value),
     and direcotry (string that must end with '/'). 
-
+    Args:
+        object_name (str): name of type safe instance
+        type (type): any of the native types in python that the instance must adhere to
+        default (any): default value of the object, can be any including None
+        value (any): value of type type assigned to instance, can be same or different than default
     Raises:
         OptionError if wrong type is attempted.     
     """
@@ -106,6 +116,7 @@ class RTOptions:
             else:
                 dataobject = object.__getattribute__(self, attribute)
                 dataobject.__setattr__("value", value)
+            # runs internal (consistency) checks specified in each child class
             self.checks()
 
 class InputStrings(RTOptions):
@@ -140,7 +151,7 @@ class InputStrings(RTOptions):
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
         if hasattr(self, "target"): # ensures last item in the option dictionary has been
-            if type(self.results_strings) == str: #TODO this one might get recursive
+            if type(self.results_strings) == str: 
                 pass
                 self.results_strings = list(self.results_strings)
             if type(self.target) != str:
@@ -516,7 +527,7 @@ class Filters(RTOptions):
         "ligand_max_atoms":{
             "default":None,
             "type":int,
-            "description": "Maximum number of heavy atoms a ligand may have." #TODO do everyone know what constitutes a heavy atom
+            "description": "Maximum number of heavy atoms a ligand may have." 
         },
         "ligand_operator":{
             "default":"OR",
@@ -553,7 +564,12 @@ class Filters(RTOptions):
     
     @classmethod
     def get_filter_keys(self, group) -> list:
-        """Provide keys associated with each of the filter groups."""
+        """Provide keys associated with each of the filter groups.
+        Args: 
+            group (str): includese property filters, interaction filters, ligand filters, or all filters
+        Returns:
+            list of filter keywords associated with the specified group(s)
+        """
 
         if group.lower() not in ["property", "interaction", "ligand", "all"]:
             raise OptionError(f'{group.lower()} is not a valid filter group. Please use "property", "interactions", "ligand", or "all')
