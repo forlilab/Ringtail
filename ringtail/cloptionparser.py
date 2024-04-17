@@ -246,7 +246,6 @@ def cmdline_parser(defaults: dict={}):
         action="store",
         type=str,
         metavar="STRING",
-        # dest="results_view_name",
     )
     read_parser.add_argument(
         "-m",
@@ -254,7 +253,7 @@ def cmdline_parser(defaults: dict={}):
         help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
-        metavar="[dlg] or [vina]",
+        metavar="'dlg' or 'vina'",
         dest="docking_mode",
     )
     read_parser.add_argument(
@@ -609,6 +608,23 @@ def cmdline_parser(defaults: dict={}):
 
 
 class CLOptionParser:
+    """Command line option/argument parser. Options and switches are utilized in the script 'rt_process_vs.py'.
+    Attributes:
+        process_mode (str): operating in 'write' or 'read' mode
+        rtcore (RingtailCore): ringtail core object initialized with the provided db_file
+        filters (dict): filters parsed and organized 
+        file_sources (dict): docking results and receptor files
+        writeopts (dict): arguments/options related to database writing
+        storageopts (dict): arguments/options related to how the storage system behaves
+        outputopts (dict): arguments/options related to output and reading from the database
+        print_summary (bool): switch to print database summary
+        filtering (bool): switch to run filtering method
+        plot (bool): switch to plot the data
+        export_bookmark_db (bool): switch to export bookmark as a new database
+        export_receptor (bool): switch to export receptor information to pdbqt
+        pymol (bool): switch to visualize ligands in pymol
+        data_from_bookmark (bool): switch to write bookmark data to the output log file
+        """
     def __init__(self):
         # create parser
         try:
@@ -626,6 +642,7 @@ class CLOptionParser:
                 self.read_parser,
             ) = cmdline_parser(default_values)
             self.process_options(parsed_opts)
+            
         except argparse.ArgumentError as e:
             logger.error("\n")
             raise OptionError(
@@ -643,7 +660,7 @@ class CLOptionParser:
 
     def process_options(self, parsed_opts):
         """
-        Convert command line options to ringtail options and filter objects (ringtailoptions)
+        Process and organize command line options to into ringtail options and filter dictionaries and ringtail core attributes
         """
         if parsed_opts.debug:
             logger.setLevel("DEBUG")
@@ -737,7 +754,7 @@ class CLOptionParser:
                             found_res.append(res)
                     for res in found_res:
                         if type(res) == str:
-                            logger.debug("interaction provided as string")
+                            logger.debug("cloptionparser: interaction filters provided as string")
                             wanted = True
                             if not res.count(":") == 3:
                                 raise OptionError(
@@ -754,7 +771,7 @@ class CLOptionParser:
                                 wanted = False
                             interactions[_type].append((res, wanted))
                         else:
-                            logger.debug("interaction provided as list")
+                            logger.debug("cloptionparser: interaction filters provided as list")
                             if not res[0].count(":") == 3: #first element of list is the interaction
                                 raise OptionError(
                                     (
