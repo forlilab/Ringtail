@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail multiprocessing manager
+# Ringtail logging manager
 #
 
 import logging

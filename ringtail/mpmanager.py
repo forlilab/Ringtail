@@ -16,7 +16,6 @@ from .logmanager import logger
 from .exceptions import MultiprocessingError, RTCoreError
 import traceback
 from datetime import datetime
-from .ringtailoptions import InputStrings
 
 os_string = platform.system()
 if os_string == "Darwin":  # mac
@@ -44,13 +43,6 @@ class MPManager:
         string_sources=None,
         max_proc=None,
     ):
-  
-        # confirm that requested parser mode is implemented
-        self.implemented_modes = ["dlg", "vina"]
-        if mode not in self.implemented_modes:
-            raise NotImplementedError(
-                f"Requested file parsing mode {mode} not yet implemented"
-            )
         self.mode = mode
         self.chunk_size = chunk_size
         self.max_poses = max_poses
@@ -70,6 +62,7 @@ class MPManager:
 
 
     def process_files(self):
+        # Processes results files by adding them to the queue and starting their processing in multiprocessing
         if self.max_proc is None:
             self.max_proc = multiprocessing.cpu_count()
         self.num_readers = self.max_proc - 1
@@ -133,7 +126,9 @@ class MPManager:
         logger.info("Wrote {0} files to database".format(self.num_files))
 
     def process_strings(self):
-        #TODO this is the new method to process string inputs from vina
+        """Method that processes string inputs from the dicking engine vina.
+        #TODO there is duplicate code here that should be combined with the process_files method
+        """
         string_processing = True
         if self.max_proc is None:
             self.max_proc = multiprocessing.cpu_count()
@@ -145,7 +140,6 @@ class MPManager:
         self.p_conn, self.c_conn = multiprocessing.Pipe(True)
         logger.info("Starting {0} string readers".format(self.num_readers))
         for i in range(self.num_readers):
-            #TODO if files are fewer, intialize only needed? 
             s = DockingFileReader(
                 self.queueIn,
                 self.queueOut,
@@ -225,6 +219,7 @@ class MPManager:
                     self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
 
     def _process_string_sources(self):
+        # Method to add results strings to the processing queue
         if self.string_sources != None:
             for ligand_name, docking_result in self.string_sources.results_strings.items():
                 string_data = {ligand_name: docking_result}
@@ -233,6 +228,7 @@ class MPManager:
             raise RTCoreError("There was an error while reading the results string input.")
 
     def _add_string_to_queue(self, string_data):
+        # adds result string_data to multiprocessing queue
         max_attempts = 750
         timeout = 0.5  # seconds
 
@@ -252,6 +248,7 @@ class MPManager:
                 self._check_for_worker_exceptions()       
 
     def _add_to_queue(self, file):
+        # adds result file to the multiprocessing queue
         max_attempts = 750
         timeout = 0.5  # seconds
         if self.receptor_file is not None:
@@ -312,7 +309,7 @@ class MPManager:
         else:
             yield glob(os.path.join(path, pattern))  # <----
 
-    def _scan_file_list(self, filename, pattern=".dlg"):
+    def _scan_file_list(self, filename, pattern):
         """read file names from file list"""
         lig_accepted = []
         c = 0

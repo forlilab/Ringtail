@@ -22,7 +22,7 @@ else:
 
 
 class DockingFileReader(multiprocessing.Process):
-    """this class is the individual worker for processing dlgs"""
+    """this class is the individual worker for processing docking results"""
 
     def __init__(
         self,
@@ -234,7 +234,7 @@ class Writer(multiprocessing.Process):
     # this class is a listener that retrieves data from the queue and writes it
     # into datbase
     def __init__(
-        self, queue, num_readers, pipe_conn, chunksize, storageman, mode="dlg" #TODO don't think it needs default mode
+        self, queue, num_readers, pipe_conn, chunksize, storageman, mode
     ):
         multiprocessing.Process.__init__(self)
         self.queue = queue

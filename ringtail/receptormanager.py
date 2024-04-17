@@ -9,6 +9,8 @@ from .logmanager import logger
 
 
 class ReceptorManager:
+    #TODO add b2z method too? 
+    """Class with methods dealing with formatting of receptor information"""
     @staticmethod
     def make_receptor_blobs(file_list):
         receptors = []
@@ -30,4 +32,4 @@ class ReceptorManager:
     def blob2str(receptor_blob):
         return gzip.decompress(receptor_blob).decode()
     
-    #TODO add b2z method too? 
+    
