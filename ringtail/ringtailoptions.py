@@ -414,7 +414,7 @@ class StorageOptions(RTOptions):
         }
 
 class OutputOptions(RTOptions):
-    """ Class that holds options related to reading from the database, including format for
+    """ Class that holds options related to reading and output from the database, including format for
     result export and alternate ways of displaying the data (plotting)."""
     options = {
         "log_file":{

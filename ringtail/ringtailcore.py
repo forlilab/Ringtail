@@ -621,10 +621,10 @@ class RingtailCore:
     def set_output_options(self, 
                          log_file: str = None,
                          export_sdf_path: str = None,
-                         enumerate_interaction_combs =  None,
-                         find_similar_ligands_to = None,
-                         export_bookmark_csv =  None,
-                         export_query_csv =  None,
+                         enumerate_interaction_combs: bool =  None,
+                         find_similar_ligands: str = None,
+                         export_bookmark_csv: str =  None,
+                         export_query_csv: str =  None,
                          dict: dict =None):
         """ Creates output options object that holds attributes related to reading and outputting results.
         Will assign log_file name and export_sdf_path to the output_manager object.
@@ -633,7 +633,7 @@ class RingtailCore:
             log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
             export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
             enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
-            find_similar_ligands_to(str): Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.
+            find_similar_ligands (str): Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.
             export_bookmark_csv (str): Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables
             export_query_csv (str): Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
@@ -756,17 +756,22 @@ class RingtailCore:
         if not results_files_given and not files.save_receptor:
             raise OptionError("At least one input option needs to be used: --file, --file_path, --file_list, or --input_db and --save_receptor")
 
+        # if dictionary of options provided, attribute to appropriate managers
         if options_dict is not None:
             results_dict, storage_dict = RingtailCore.split_dict(options_dict, ["append_results", "duplicate_handling", "overwrite"])
         else:
             storage_dict = None
             results_dict = None
         self.set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
-        # If there are any ligand files, process ligand data
+
+        # If there are ligand files present, process ligand data
         if results_files_given: 
             with self.storageman:
+
+                # check storage exist and can be appended to if specified
                 if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
                     raise OptionError("The provided --input_db is not a valid path, please check the provided path.")
+                
                 # Prepare the results manager 
                 self._create_resultsmanager(file_sources=files)
                 self.resultsman.storageman = self.storageman               
@@ -782,9 +787,10 @@ class RingtailCore:
                 # Process results files and handle database versioning 
                 self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
                 logger.info("Adding results...")
-                self.resultsman.process_files() 
+                self.resultsman.process_files()
                 self.storageman.set_ringtail_db_schema_version()
                 if summary: self.produce_summary()
+
         if files.save_receptor: 
             self.save_receptor(files.receptor_file)
     
@@ -809,7 +815,7 @@ class RingtailCore:
         Call storage manager to process the given vina output string and add to database.
         Options can be provided as a dict or as individual options.
         Creates a database, or adds to an existing one if using "append_results".
-
+        #TODO a lot of overlap with add_results_from_files
         Args:
             results_string (dict): string containing the ligand identified and docking results as a dictionary
             receptor_file (str): string containing the receptor .pdbqt
@@ -829,11 +835,13 @@ class RingtailCore:
         # Method currently only works with vina output, set automatically
         self.docking_mode = "vina"
 
+        # create results string object
         results = self._set_results_sources(results_strings, receptor_file, save_receptor, resultsources_dict)
         results_strings_given = bool(results.results_strings)
         if not results_strings_given and not results.save_receptor:
             raise OptionError("At least one input option needs to be used: 'results_strings', or 'save_receptor'")
 
+        # if dictionary of options provided, attribute to appropriate managers
         if options_dict is not None:
             results_dict, storage_dict = RingtailCore.split_dict(options_dict, ["append_results", "duplicate_handling", "overwrite"])
         else:
@@ -1385,6 +1393,10 @@ class RingtailCore:
         with self.outputman: self.outputman.write_log(new_data)
 
     def drop_bookmark(self, bookmark_name: str):
+        """Drops specified bookmark from the database
+        Args:
+            bookmark_name (str): name of bookmark to be dropped."""
+        
         with self.storageman: self.storageman._drop_bookmark(bookmark_name=bookmark_name)
         logger.info("Bookmark {0} was dropped from the database {1}".format(bookmark_name, self.storageman.db_file))
 
@@ -1408,7 +1420,7 @@ class RingtailCore:
         return (file_dict, write_dict, output_dict, filters_dict)
 
     @staticmethod
-    def generate_config_json_template(to_file=True) -> str:
+    def generate_config_json_template(to_file: bool = True) -> str:
         """
         Creates a dict of all Ringtail option classes, and their 
         key-default value pairs. Outputs to options.json in 
@@ -1417,7 +1429,7 @@ class RingtailCore:
         Args:
             to_file (bool): if true writes file to standard options json path, if false returns a json string with values
         Return:
-            filename or json string with options
+            str: filename or json string with options
         """
         
         json_string = {"outputopts":OutputOptions().todict(),
@@ -1437,7 +1449,7 @@ class RingtailCore:
             return json_string
 
     @staticmethod
-    def read_config_file(config_file: str ="config.json", return_as_string = False):
+    def read_config_file(config_file: str = "config.json", return_as_string = False):
         """
         Will read and parse a file containing ringtail options following the format 
         given from RingtailCore.generate_config_json_template
@@ -1489,7 +1501,7 @@ class RingtailCore:
             OptionError(f"There were issues with the configuration file: {e}")
 
     @staticmethod       
-    def get_defaults(object="all") -> dict:
+    def get_defaults(object: str = "all") -> dict:
         """
         Gets default values from RingtailOptions and returns dict of all options,
         or options belonging to a specific group. 
@@ -1511,7 +1523,7 @@ class RingtailCore:
             return all_defaults[object.lower()]
         
     @staticmethod       
-    def get_options_info(object="all") -> dict:
+    def get_options_info(object: str = "all") -> dict:
         """
         Gets default values from RingtailOptions and returns dict of all,
         or specific object. 
