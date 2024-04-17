@@ -958,10 +958,10 @@ class RingtailCore:
                ligand_operator=None,
                filters_dict: dict = None,
                # other processing options: 
-               enumerate_interaction_combs=False, 
+               enumerate_interaction_combs: bool =False, 
                output_all_poses: bool = None, 
-               mfpt_cluster = None, 
-               interaction_cluster = None, 
+               mfpt_cluster: float = None, 
+               interaction_cluster: float = None, 
                log_file: str = None, 
                overwrite: bool = None, 
                order_results: str = None, 

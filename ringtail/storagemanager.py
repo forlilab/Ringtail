@@ -1122,7 +1122,6 @@ class StorageManagerSQLite(StorageManager):
             summary_data["num_ligands"] = cur.execute("SELECT COUNT(*) FROM Ligands").fetchone()[0]
             if (summary_data["num_ligands"] == 0):
                 raise StorageError("There is no ligand data in the database. ")
-            print("is it going further?")
             summary_data["num_poses"] = cur.execute("SELECT COUNT(*) FROM Results").fetchone()[0]
             summary_data["num_unique_interactions"] = cur.execute("SELECT COUNT(*) FROM Interaction_indices").fetchone()[0]
             summary_data["num_interacting_residues"] = cur.execute("SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)").fetchone()[0]
@@ -2386,18 +2385,22 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
         # format query string
         # raise error if query string is empty
-        if queries == [] and interaction_queries == []:
+        clustering = bool(self.mfpt_cluster or self.interaction_cluster)
+        if queries == [] and interaction_queries == [] and not clustering:
             raise DatabaseQueryError(
                 "Query strings are empty. Please check filter options and ensure requested interactions are present."
             )
-
         sql_string = output_str = """SELECT {out_columns} FROM {window} WHERE """.format(
             out_columns=outfield_string, window=self.filtering_window
         )
-        if interaction_queries == []:
+        if interaction_queries == [] and queries != []:
             joined_queries = " AND ".join(queries)
             sql_string = sql_string + joined_queries
             unclustered_query = f"SELECT Pose_id FROM {self.filtering_window} WHERE " + joined_queries
+        elif queries == [] and interaction_queries == [] and clustering:
+            # allows for clustering without filtering
+            unclustered_query = f"SELECT Pose_id FROM {self.filtering_window}"
+            logger.info("Preparing to cluster results without any filters...")
         else:
             with_stmt = f"WITH subq as (SELECT Pose_id FROM {self.filtering_window}) "
             if queries != []:

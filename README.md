@@ -28,6 +28,19 @@ Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
 
+#TODO table of contents
+- versions: description, upgrading db schema version
+- 
+
+
+### New in version 2.0.0:
+#TODO 
+extended api
+vina string parsing
+database v1.1.0 is compatible with ringtail code base 2.0.0
+tested in python 10, 11, and 12
+
+
 ### New in version 1.1:
 - [Significant filtering runtime improvements vs v1.0](https://github.com/forlilab/Ringtail/#example-filtering-timings-m1pro-macbook-2-million-ligands)
 - `--summary` option for getting quick overview of data across entire dataset
@@ -47,7 +60,7 @@ $ rt_db_v100_to_v110.py -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (o
 
 Multiple databases may be specified at once. The update may take a few minutes per database.
 
-### Code base updated from v1.1.0 to 2.0.0 to support scripting and circumvent file system for results (vina)
+### Code base updated from v1.1.0 to v2.0.0 to support scripting and circumvent file system for results (vina)
 database schema 1.1.0 is supported both by ringtail 1.1.0 and 2.0.0
 
 ## README Outline
@@ -119,7 +132,7 @@ The compounds used for the testing dataset were taken from the [NCI Diversity Se
 - __Ringtail__: 
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
-## Getting Started
+## Getting Started with the command line interface
 
 Ringtail offers a wealth of database creation and filtering options. They are detailed at length below. This section will provide a quick overview of the basic usage of Ringtail from the command line. We will you the provided test data to create a database with default storage options and perform basic filtering of it.
 
@@ -184,6 +197,10 @@ Now we have our filtered molecules as SDF files ready for visual inspection!
 ## Example Filtering Timings (M1Pro MacBook, ~2 million ligands)
 ![rt_v11_timings](https://github.com/forlilab/Ringtail/assets/41704502/eac373fc-1324-45df-b845-6697dc9d1465)
 
+## Advanced usage with the application programming interface
+- available api methods
+- how to use
+- vina strings how to and example
 
 # Extended documentation
 
@@ -485,6 +502,7 @@ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --export_csv
 |--export_csv| -x| Save final selective bookmark as csv. Saved as [save_bookmark].csv or 'crossref.csv' if --save_bookmark not used.| FALSE|
 
 ---
+#TODO this will not work anymore, here is basically the old api
 ## Brief python tutorials
 #### Make sqlite database from current directory
 ```python
