@@ -33,6 +33,7 @@ class RTLogger:
         """ 
         Options for instantiation of the logger. 
         Starts a file handler and a stream handler that prints to stdout
+
         Args:
             level (str): logger level
             filename (str): filename of the log file
@@ -52,8 +53,11 @@ class RTLogger:
 
     def setLevel(self, level: str):
         """ Sets level of the logger, and if debug will print level change to log.
+
         Args:
-            level (str): lowest level the logger will record, either debug, info, warning, error, or critical"""
+            level (str): lowest level the logger will record, either debug, info, warning, error, or critical
+        """
+        
         if type(level) == str:
             level = level.upper()
         else:
@@ -71,7 +75,7 @@ class RTLogger:
         """
         Returns:
             str: current level of the logger
-            """
+        """
         levels ={10: "DEBUG",
                  20: "INFO",
                  30: "WARNING",
@@ -89,6 +93,7 @@ class RTLogger:
     def header(self, header):
         """
         Formats header for the log file
+
         Args:
             header (str): header string to get formatted
         """
@@ -118,6 +123,7 @@ class RTLogger:
         """
         Method to format python FrameInfo object to this format:
         file[lineno]:file[lineno]file[lineno]: (first file is last in the stack)
+
         Args:
             stack (traceback): stack to be formatted to custom traceback
         """
