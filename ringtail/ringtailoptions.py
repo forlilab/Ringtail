@@ -26,7 +26,7 @@ class TypeSafe:
         default (any): default value of the object, can be any including None
         value (any): value of type type assigned to instance, can be same or different than default
     Raises:
-        OptionError if wrong type is attempted.     
+        OptionError: if wrong type is attempted.     
     """
     def __init__(self, default, type, object_name):
         self.object_name = object_name
@@ -35,8 +35,13 @@ class TypeSafe:
         self.value = self.default
         
     def __setattr__(self, name, value):
-        """Method that does the type checking, using native data types in python. 
-        The only 'exception' is allows float numbers to be written as a float or as an integer (but integers must always be integers). """
+        """set attribute method that does the type checking, using native data types in python. 
+        The only 'exception' is allows float numbers to be written as a float or as an integer (but integers must always be integers). 
+        If a value of the wrong type is attempted set, the attribute value will be reset to the default value. 
+        Args:
+            name (str): name of the attribute
+            value (any): value to assign to the attribute"""
+        
         if name == "value":
             if type(value) == self.type:
                 self.__dict__["value"] = value
@@ -77,13 +82,6 @@ class RTOptions:
         regex = "^[A-Za-z0-9_]*$"
         return re.match(regex, name)
 
-    def get_all_options_types(self):
-        #TODO
-        """This needs to be a method that grabs attributes from each class, and figures out what type they are as a TypeSafe object
-        Also grab their default values"""
-
-        return self.options
-
     def initialize_from_dict(self, dict: dict, name):
         """Initializes a child objects using the values available in their option dictionary."""
         for item, info in dict.items(): 
@@ -93,7 +91,7 @@ class RTOptions:
         logger.info(f"A {name} object was created with default values for all attributes.")
 
     def todict(self):
-        """Custom method to each child object is returend as a dict of native types and not as objects (which they are if they are type checked using TypeSafe)."""
+        """Return class and its attributes as a dict of native types and not as objects (which they are if they are type checked using TypeSafe)."""
         dict = {}
         for item in self.options.keys():
             dict[item] = getattr(self, item)
@@ -110,7 +108,7 @@ class RTOptions:
         return value
     
     def __setattr__(self, attribute, value):
-            """Ensures attribute is type checked during setting."""
+            """Overloaded set attribute method that ensures attribute is type checked during setting."""
             if not hasattr(self, attribute):
                 object.__setattr__(self, attribute, value)
             else:
@@ -120,7 +118,9 @@ class RTOptions:
             self.checks()
 
 class InputStrings(RTOptions):
-    """ Class that handles docking results strings from vina docking, with options to store receptor."""
+    """ Class that handles docking results strings from vina docking, with options to store receptor.
+    Takes docking results string as a dictionary of:
+    {ligand_name: docking_result}"""
     options = {
         "results_strings":{
             "default":None,
@@ -273,7 +273,7 @@ class ResultsProcessingOptions(RTOptions):
         
 class StorageOptions(RTOptions):
     """ Class that handles options for the storage (database) manager class, including
-    conflict handling and result clustering and ordering."""
+    conflict handling, and results clustering and ordering."""
     options = {
         "append_results":{
             "default":None,
