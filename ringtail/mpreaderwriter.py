@@ -135,7 +135,7 @@ class DockingFileReader(multiprocessing.Process):
                 # Calculate interactions if requested
                 if self.add_interactions:
                     if self.interaction_finder is None:
-                        self.interaction_finder = InteractionFinder(self.receptor_file)
+                        self.interaction_finder = InteractionFinder(self.receptor_file, self.interaction_cutoffs)
                     if parsed_file_dict["interactions"] == []:
                         for pose in parsed_file_dict["pose_coordinates"]:
                             parsed_file_dict["interactions"].append(
