@@ -15,13 +15,16 @@ from .ringtailoptions import Filters
 
 
 def cmdline_parser(defaults: dict={}):
-    ''' Parses options provided using the command line.
+    """ Parses options provided using the command line.
     All arguments are first populated with default values. 
     If a config file is provided, these will overwrite default values.
     Any single arguments provided using the argument parser will overwrite
     default and config file values.
 
-    The default values can be found in the file ringtailoptions.'''
+    Args:
+        defaults (dict): default argument values
+
+    """
 
     conf_parser = argparse.ArgumentParser(
         description=__doc__,
@@ -608,15 +611,17 @@ def cmdline_parser(defaults: dict={}):
 
 
 class CLOptionParser:
-    """Command line option/argument parser. Options and switches are utilized in the script 'rt_process_vs.py'.
+    """Command line option/argument parser. Options and switches are utilized in the script 
+    'rt_process_vs.py'.
+
     Attributes:
         process_mode (str): operating in 'write' or 'read' mode
         rtcore (RingtailCore): ringtail core object initialized with the provided db_file
-        filters (dict): filters parsed and organized 
-        file_sources (dict): docking results and receptor files
-        writeopts (dict): arguments/options related to database writing
-        storageopts (dict): arguments/options related to how the storage system behaves
-        outputopts (dict): arguments/options related to output and reading from the database
+        filters (dict): fully parsed and organied optional filters
+        file_sources (dict): fully parsed docking results and receptor files
+        writeopts (dict): fully parsed arguments related to database writing
+        storageopts (dict): fully parsed arguments related to how the storage system behaves
+        outputopts (dict): fully parsed arguments related to output and reading from the database
         print_summary (bool): switch to print database summary
         filtering (bool): switch to run filtering method
         plot (bool): switch to plot the data
@@ -624,7 +629,11 @@ class CLOptionParser:
         export_receptor (bool): switch to export receptor information to pdbqt
         pymol (bool): switch to visualize ligands in pymol
         data_from_bookmark (bool): switch to write bookmark data to the output log file
-        """
+
+    Raises:
+        OptionError: Error when an option cannot be parsed correctly 
+    """
+
     def __init__(self):
         # create parser
         try:
@@ -661,6 +670,10 @@ class CLOptionParser:
     def process_options(self, parsed_opts):
         """
         Process and organize command line options to into ringtail options and filter dictionaries and ringtail core attributes
+        
+        Args:
+            parsed_opts (argparse.Namespace): arguments provided through the cmdline_parser method.
+            
         """
         if parsed_opts.debug:
             logger.setLevel("DEBUG")
