@@ -9,8 +9,14 @@ from meeko import PDBQTReceptor
 
 
 class InteractionFinder:
-    def __init__(self, rec_file, interaction_cutoff_radii=[3.7, 4.0]):
+    """Class for handling and calculating ligand-receptor interactions.
 
+    Attributes:
+        rec_file (str): name of receptor file
+        interaction_cutoff_radii (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
+    """
+
+    def __init__(self, rec_file, interaction_cutoff_radii):
         self.rec_file = rec_file
 
         self.pdb = PDBQTReceptor(rec_file)
@@ -18,13 +24,15 @@ class InteractionFinder:
 
     def find_pose_interactions(
         self, lig_atomtype_list: list, lig_coordinates: list
-    ) -> tuple:
-        """Summary
+    ) -> dict:
+        """Method that identifies interactions for a pose within th given cutoff distances in the main class.
 
         Args:
-            ligand_smile (string): Description
-            smile_idx_map (list): Description
-            lig_coords (list): Description
+            lig_atomtype_list (list): list of atoms in the ligand
+            lig_coordinates (list): coordinates for the atoms in the ligand
+
+        Returns:
+            dict: all interaction details for a given ligand pose 
         """
 
         def append_rec_atom_info(rec_at):
