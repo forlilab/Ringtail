@@ -82,7 +82,6 @@ class MPManager:
         self.num_files = 0
         self.max_proc = max_proc
 
-
     def process_results(self, string_sources=False):
         # Processes results files by adding them to the queue and starting their processing in multiprocessing
         if self.max_proc is None:
@@ -93,7 +92,7 @@ class MPManager:
         # start the workers in background
         self.workers = []
         self.p_conn, self.c_conn = multiprocessing.Pipe(True)
-        logger.info("Starting {0} file readers".format(self.num_readers))
+        logger.info("Starting {0} docking results readers".format(self.num_readers))
         for i in range(self.num_readers):
             # one worker is started for each processor to be used
             s = DockingFileReader(
@@ -183,47 +182,47 @@ class MPManager:
         if self.string_sources != None:
             for ligand_name, docking_result in self.string_sources.results_strings.items():
                 string_data = {ligand_name: docking_result}
-                self._add_string_to_queue(string_data)
+                self._add_to_queue(string_data, string=True)
         else:
             raise RTCoreError("There was an error while reading the results string input.")
 
-    def _add_string_to_queue(self, string_data):
-        # adds result string_data to multiprocessing queue
-        max_attempts = 750
-        timeout = 0.5  # seconds
+    # def _add_string_to_queue(self, string_data):
+    #     # adds result string_data to multiprocessing queue
+    #     max_attempts = 750
+    #     timeout = 0.5  # seconds
 
-        attempts = 0
-        while True:
-            if attempts >= max_attempts:
-                raise MultiprocessingError(
-                    "Something is blocking the progressing of file reading. Exiting program."
-                ) from queue.Full
-            try:
-                self.queueIn.put(string_data, block=True, timeout=timeout) 
-                self.num_files += 1
-                self._check_for_worker_exceptions()
-                break
-            except queue.Full:
-                attempts += 1
-                self._check_for_worker_exceptions()       
+    #     attempts = 0
+    #     while True:
+    #         if attempts >= max_attempts:
+    #             raise MultiprocessingError(
+    #                 "Something is blocking the progressing of file reading. Exiting program."
+    #             ) from queue.Full
+    #         try:
+    #             self.queueIn.put(string_data, block=True, timeout=timeout) 
+    #             self.num_files += 1
+    #             self._check_for_worker_exceptions()
+    #             break
+    #         except queue.Full:
+    #             attempts += 1
+    #             self._check_for_worker_exceptions()       
 
-    def _add_to_queue(self, file):
+    def _add_to_queue(self, results_data, string=False):
         # adds result file to the multiprocessing queue
         max_attempts = 750
         timeout = 0.5  # seconds
-        if self.receptor_file is not None:
+        if string == False and self.receptor_file is not None:
             if (
-                os.path.split(file)[-1] == os.path.split(self.receptor_file)[-1]
+                os.path.split(results_data)[-1] == os.path.split(self.receptor_file)[-1]
             ):  # check that we don't try to add the receptor
                 return
         attempts = 0
         while True:
             if attempts >= max_attempts:
                 raise MultiprocessingError(
-                    "Something is blocking the progressing of file reading. Exiting program."
+                    "Something is blocking the progressing of results data reading. Exiting program."
                 ) from queue.Full
             try:
-                self.queueIn.put(file, block=True, timeout=timeout) 
+                self.queueIn.put(results_data, block=True, timeout=timeout) 
                 self.num_files += 1
                 self._check_for_worker_exceptions()
                 break
