@@ -83,7 +83,13 @@ class MPManager:
         self.max_proc = max_proc
 
     def process_results(self, string_sources=False):
-        # Processes results files by adding them to the queue and starting their processing in multiprocessing
+        """Processes results data (files or string sources) by adding them to the queue 
+        and starting their processing in multiprocessing.
+
+        Args:
+            string_sources (bool, optional): Switch for processing results that are provided as strings instead of files. 
+        """
+        # 
         if self.max_proc is None:
             self.max_proc = multiprocessing.cpu_count()
         self.num_readers = self.max_proc - 1
@@ -151,6 +157,9 @@ class MPManager:
         logger.info("Wrote {0} docking results to the database".format(self.num_files)) 
 
     def _process_file_sources(self):
+        """Adds each results file item to the queue, and processes lists of files,
+        recursively traveresed filepaths, and individually listed file paths.
+        """
         # add individual file(s)
         if self.file_sources.file != (None and [[]]):
             for file_list in self.file_sources.file:
@@ -178,7 +187,11 @@ class MPManager:
                     self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
 
     def _process_string_sources(self):
-        # Method to add results strings to the processing queue
+        """Adds each results string dictionary item to the queue
+
+        Raises:
+            RTCoreError
+        """
         if self.string_sources != None:
             for ligand_name, docking_result in self.string_sources.results_strings.items():
                 string_data = {ligand_name: docking_result}
@@ -186,27 +199,16 @@ class MPManager:
         else:
             raise RTCoreError("There was an error while reading the results string input.")
 
-    # def _add_string_to_queue(self, string_data):
-    #     # adds result string_data to multiprocessing queue
-    #     max_attempts = 750
-    #     timeout = 0.5  # seconds
-
-    #     attempts = 0
-    #     while True:
-    #         if attempts >= max_attempts:
-    #             raise MultiprocessingError(
-    #                 "Something is blocking the progressing of file reading. Exiting program."
-    #             ) from queue.Full
-    #         try:
-    #             self.queueIn.put(string_data, block=True, timeout=timeout) 
-    #             self.num_files += 1
-    #             self._check_for_worker_exceptions()
-    #             break
-    #         except queue.Full:
-    #             attempts += 1
-    #             self._check_for_worker_exceptions()       
-
     def _add_to_queue(self, results_data, string=False):
+        """_summary_
+
+        Args:
+            results_data (string or dict): results data provided as a file path or a dictionary kw pair
+            string (bool, optional): switch if results provided as a string
+
+        Raises:
+            MultiprocessingError
+        """
         # adds result file to the multiprocessing queue
         max_attempts = 750
         timeout = 0.5  # seconds
@@ -250,9 +252,16 @@ class MPManager:
         raise error
 
     def _scan_dir(self, path, pattern, recursive=False):
-        """scan for valid output files in a directory
-        the pattern is used to glob files
-        optionally, a recursive search is performed
+        """scan for valid output files in a directory the pattern is used 
+        to glob files optionally, a recursive search is performed
+
+        Args:
+            path (str): folder path
+            pattern (str): file extension
+            recursive (bool, optional): look for files and folders recursively
+
+        Yields:
+            list: of file paths found in the search
         """
         logger.info(
             "Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern)
@@ -269,7 +278,17 @@ class MPManager:
             yield glob(os.path.join(path, pattern))  # <----
 
     def _scan_file_list(self, filename, pattern):
-        """read file names from file list"""
+        """read file names from file list and ensures they exist, 
+        then adding them to the list of files to be processed
+
+        Args:
+            filename (str): filename provided in list
+            pattern (str): file extension
+
+        Raises:
+            MultiprocessingError
+        """
+        
         lig_accepted = []
         c = 0
         with open(filename, "r") as fp:
@@ -277,7 +296,7 @@ class MPManager:
                 line = line.strip()
                 c += 1
                 if os.path.isfile(line):
-                    if line.endswith(pattern) or line.endswith(pattern + ".gz"):
+                    if line.endswith(pattern) or line.endswith(pattern + ".gz"): #TODO if adding zip option change here
                         lig_accepted.append(line)
                 else:
                     logger.warning("Warning! file |%s| does not exist" % line)
