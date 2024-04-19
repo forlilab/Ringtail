@@ -22,7 +22,25 @@ else:
 
 
 class DockingFileReader(multiprocessing.Process):
-    """this class is the individual worker for processing docking results"""
+    """This class is the individual worker for processing docking results.
+    One instance of this class is instantiated for each available processor. 
+
+    Attributes:
+        queueIn (multiprocessing.Queue): current queue for the processor/file reader
+        queueOut (multiprocessing.Queue): queue for the processor/file reader after adding or removing an item
+        pipe_conn (multiprocessing.Pipe): pipe connection to the reader
+        storageman (StorageManager): storageman object
+        storageman_class (StorageManager): storagemanager child class/database type
+        docking_mode (str): describes what docking engine was used to produce the results
+        max_poses (int): max number of poses to store for each ligand
+        interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
+        store_all_poses (bool): Store all poses from docking results
+        add_interactions (bool): find and save interactions between ligand poses and receptor
+        interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
+        target (str): receptor name
+        receptor_file (str): path to receptor file
+        string_processing (bool, optional): switch for processing result strings
+    """
 
     def __init__(
         self,
@@ -31,7 +49,7 @@ class DockingFileReader(multiprocessing.Process):
         pipe_conn,
         storageman,
         storageman_class,
-        mode,
+        docking_mode,
         max_poses,
         interaction_tolerance,
         store_all_poses,
@@ -41,8 +59,8 @@ class DockingFileReader(multiprocessing.Process):
         receptor_file,
         string_processing=False
     ):
-        # set mode for which file parser to use (and for vina, '_string' if parsing string output directly)
-        self.mode = mode
+        # set docking_mode for which file parser to use (and for vina, '_string' if parsing string output directly)
+        self.docking_mode = docking_mode
         # set number of clusters to write
         self.max_poses = max_poses
         self.store_all_poses_flag = store_all_poses
@@ -71,9 +89,16 @@ class DockingFileReader(multiprocessing.Process):
         self.string_processing = string_processing
 
     def _find_best_cluster_poses(self, ligand_dict):
-        """takes input ligand dictionary, reads run pose clusters,
-        adds "cluster_best_run" entry with the top scoring
-        run for each cluster"""
+        """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run" 
+        entry with the top scoring run for each cluster
+
+        Args:
+            ligand_dict (dict): dictionary of ligands
+
+        Returns:
+            dict: top poses in cluster for each ligand
+        """
+        
         top_poses = []
         cluster_dict = ligand_dict["clusters"]
         for cluster in cluster_dict:
@@ -82,13 +107,16 @@ class DockingFileReader(multiprocessing.Process):
         return ligand_dict
 
     def run(self):
-        """method overload from parent class
-        
-        this is where the task of this class is performed
-        
-        each multiprocessing.Process class must have a "run" method which
-        is called by the initialization (see below) with start()
+        """Method overload from parent class .This is where the task of this class is performed.
+        Each multiprocessing.Process class must have a "run" method which is called by the 
+        initialization (see below) with start()
+
+        Raises:
+            NotImplementedError: if parser for specific docking result type is not implemented
+            FileParsingError
         """
+        
+
         while True:
             try:
                 # retrieve from the queue in the next task to be done
@@ -101,26 +129,26 @@ class DockingFileReader(multiprocessing.Process):
                     break
 
                 # generate CPU LOAD
-                # parser depends on requested mode
-                if self.mode == "dlg":
+                # parser depends on requested docking_mode
+                if self.docking_mode == "dlg":
                     parsed_file_dict = parse_single_dlg(next_task)
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
-                elif self.mode == "vina" and self.string_processing == False:
+                elif self.docking_mode == "vina" and self.string_processing == False:
                     parsed_file_dict = parse_vina_pdbqt(next_task)
-                elif self.mode == "vina" and self.string_processing == True:
+                elif self.docking_mode == "vina" and self.string_processing == True:
                     parsed_file_dict = parse_vina_string(next_task) # for this special case next_task is {ligname: docking_result}
                 
-                # Example code for calling user-implemented mode
-                # elif self.mode == "my_mode":
+                # Example code for calling user-implemented docking_mode
+                # elif self.docking_mode == "my_docking_mode":
                 #     parsed_file_dict = myparser(next_task)
                 else:
-                    raise NotImplementedError(f"Parser for input file mode {self.mode} not implemented!")
+                    raise NotImplementedError(f"Parser for input file docking_mode {self.docking_mode} not implemented!")
                 # check receptor name from file against that which we expect
                 if (
                     parsed_file_dict["receptor"] != self.target
                     and self.target is not None
-                    and self.mode == "dlg"
+                    and self.docking_mode == "dlg"
                 ):
                     raise FileParsingError(
                         "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
@@ -190,18 +218,18 @@ class DockingFileReader(multiprocessing.Process):
                 attempts += 1
 
     def _find_poses_to_save(self, ligand_dict: dict) -> list:
-        """returns list of the run numbers for the top run in the
+        """Returns list of the run numbers for the top run in the
         top self.max_pose clusters (ADGPU) or just the top poses overall
 
         Args:
-            ligand_dict (Dictionary): Dictionary of ligand data from parser
+            ligand_dict (dict): Dictionary of ligand data from parser
 
         Returns:
-            List: List of run numbers to save
+            list: List of run numbers to save
         """
         if self.store_all_poses_flag:
             poses_to_save = ligand_dict["sorted_runs"]
-        elif self.mode == "dlg":
+        elif self.docking_mode == "dlg":
             # will only select top n clusters. Default 3
             poses_to_save = ligand_dict["cluster_top_poses"][: self.max_poses]
         # if not adgpu, save top n poses
@@ -211,17 +239,17 @@ class DockingFileReader(multiprocessing.Process):
         return poses_to_save
 
     def _find_tolerated_interactions(self, ligand_dict):
-        """take ligand dict and finds which poses we should save the
+        """Take ligand dict and finds which poses we should save the
         interactions for as tolerated interactions for the top pose
         of the cluster. These runs are within the
         <self.interaction_tolerance> angstroms RMSD of the top pose
         for a given cluster. All data for the cluster's top pose is saved.
 
         Args:
-            ligand_dict (Dictionary): Dictionary of ligand data from parser
+            ligand_dict (dict): Dictionary of ligand data from parser
 
         Returns:
-            List: List of run numbers of tolerated runs
+            list: run numbers of tolerated runs
         """
         tolerated_runs = []
         for idx, run in enumerate(ligand_dict["sorted_runs"]):
@@ -229,12 +257,11 @@ class DockingFileReader(multiprocessing.Process):
                 tolerated_runs.append(run)
         return tolerated_runs
 
-
 class Writer(multiprocessing.Process):
-    # this class is a listener that retrieves data from the queue and writes it
-    # into datbase
+    """This class is a listener that retrieves data from the queue and writes it
+    into datbase"""
     def __init__(
-        self, queue, num_readers, pipe_conn, chunksize, storageman, mode
+        self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
     ):
         multiprocessing.Process.__init__(self)
         self.queue = queue
@@ -242,7 +269,7 @@ class Writer(multiprocessing.Process):
         self.num_readers = num_readers
         self.pipe = pipe_conn
         # assign pointer to storage object, set chunksize
-        self.mode = mode
+        self.docking_mode = docking_mode
         self.storageman = storageman
         self.chunksize = chunksize
         # initialize data array (stack of dictionaries)
@@ -258,13 +285,14 @@ class Writer(multiprocessing.Process):
         self.last_write_time = 0
 
     def run(self):
-        # method overload from parent class
-        #
-        # this is where the task of this class is performed
-        #
-        # each multiprocessing.Process class must have a "run" method which
-        # is called by the initialization (see below) with start()
-        #
+        """Method overload from parent class. This is where the task of this class 
+        is performed. Each multiprocessing.Process class must have a "run" method which
+        is called by the initialization (see below) with start()
+
+        Raises:
+            WriteToStorageError
+        """
+
         try:
             while True:
                 # retrieve the next task from the queue
@@ -315,6 +343,11 @@ class Writer(multiprocessing.Process):
             )
 
     def write_to_storage(self, final=False):
+        """Inserting data to the database through the designated storagemanager.
+
+        Args:
+            final (bool): if last data entry, finalize database
+        """
         # insert result, ligand, and receptor data
         self.storageman.insert_data(
             self.results_array,
@@ -344,6 +377,12 @@ class Writer(multiprocessing.Process):
             self.storageman.set_ringtail_db_schema_version()
 
     def process_file(self, file_packet):
+        """Breaks up the data in the file_packet to distribute between 
+        the different arrays to be inserted in the database.
+
+        Args:
+            file_packet (any): File packet to be processed
+        """
         results_rows, ligand_row, interaction_rows, receptor_row = file_packet
         for pose in results_rows:
             self.results_array.append(pose)
