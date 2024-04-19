@@ -82,14 +82,13 @@ class MPManager:
         self.num_files = 0
         self.max_proc = max_proc
 
-    def process_results(self, string_sources=False):
+    def process_results(self, string_processing=False):
         """Processes results data (files or string sources) by adding them to the queue 
         and starting their processing in multiprocessing.
 
         Args:
             string_sources (bool, optional): Switch for processing results that are provided as strings instead of files. 
         """
-        # 
         if self.max_proc is None:
             self.max_proc = multiprocessing.cpu_count()
         self.num_readers = self.max_proc - 1
@@ -115,7 +114,7 @@ class MPManager:
                 self.add_interactions,
                 self.interaction_cutoffs,
                 self.receptor_file,
-                string_processing=string_sources
+                string_processing=string_processing
             )
             # this method calls .run() internally
             s.start()
@@ -136,7 +135,7 @@ class MPManager:
 
         # process items in the queue
         try:
-            if string_sources == True:
+            if string_processing == True:
                 self._process_string_sources()
             else:
                 self._process_file_sources() 
