@@ -25,25 +25,47 @@ else:
 
 
 class MPManager:
+    """Manager that orchestrates paralell processing of docking results data, using one of the supported 
+    multiprocessors.
+
+    Attributes:
+        docking_mode (str): describes what docking engine was used to produce the results
+        max_poses (int): max number of poses to store for each ligand
+        interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
+        store_all_poses (bool): Store all poses from docking results
+        add_interactions (bool): find and save interactions between ligand poses and receptor
+        interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
+        max_proc (int): Maximum number of processes to create during parallel file parsing.
+        storageman (StorageManager): storageman object
+        storageman_class (StorageManager): storagemanager child class/database type
+        chunk_size (int): how many tasks ot send to a processor at the time
+        target (str): name of receptor
+        receptor_file (str): file path to receptor
+        file_pattern (str, optional): file pattern to look for if recursively finding results files to process
+        file_sources (InputFiles, optional): RingtailOption object that holds all attributes related to results files
+        string_sources (InputStrings, optional): RingtailOption object that holds all attributes related to results strings
+        num_files (int): number of files processed at any given time
+
+    """
     def __init__(
         self,
+        docking_mode,
+        max_poses,
+        interaction_tolerance,
+        store_all_poses,
+        add_interactions,
+        interaction_cutoffs,
+        max_proc,
         storageman,
-        storageman_class=None,
-        mode=None,
-        chunk_size=None,
-        max_poses=None,
-        interaction_tolerance=None,
-        store_all_poses=None,
-        target=None,
-        add_interactions=None,
-        interaction_cutoffs=None,
-        receptor_file=None,
-        file_sources=None,
-        file_pattern=None,
-        string_sources=None,
-        max_proc=None,
+        storageman_class,
+        chunk_size, 
+        target,
+        receptor_file,
+        file_pattern = None,
+        file_sources = None, 
+        string_sources = None,
     ):
-        self.mode = mode
+        self.docking_mode = docking_mode
         self.chunk_size = chunk_size
         self.max_poses = max_poses
         self.store_all_poses = store_all_poses
@@ -61,7 +83,7 @@ class MPManager:
         self.max_proc = max_proc
 
 
-    def process_files(self):
+    def process_results(self, string_sources=False):
         # Processes results files by adding them to the queue and starting their processing in multiprocessing
         if self.max_proc is None:
             self.max_proc = multiprocessing.cpu_count()
@@ -80,7 +102,7 @@ class MPManager:
                 self.c_conn,
                 self.storageman,
                 self.storageman_class,
-                self.mode,
+                self.docking_mode,
                 self.max_poses,
                 self.interaction_tolerance,
                 self.store_all_poses,
@@ -88,6 +110,7 @@ class MPManager:
                 self.add_interactions,
                 self.interaction_cutoffs,
                 self.receptor_file,
+                string_processing=string_sources
             )
             # this method calls .run() internally
             s.start()
@@ -100,7 +123,7 @@ class MPManager:
             self.c_conn,
             self.chunk_size,
             self.storageman,
-            self.mode,
+            self.docking_mode,
         )
 
         w.start()
@@ -108,10 +131,13 @@ class MPManager:
 
         # process items in the queue
         try:
-            self._process_sources()
+            if string_sources == True:
+                self._process_string_sources()
+            else:
+                self._process_file_sources() 
         except Exception as e:
             tb = traceback.format_exc()
-            self._kill_all_workers(e, "file sources", tb)
+            self._kill_all_workers(e, "results sources processing", tb) 
         # put as many poison pills in the queue as there are workers
         for i in range(self.num_readers):
             self.queueIn.put(None)
@@ -123,75 +149,9 @@ class MPManager:
 
         w.join()
 
-        logger.info("Wrote {0} files to database".format(self.num_files))
+        logger.info("Wrote {0} docking results to the database".format(self.num_files)) 
 
-    def process_strings(self):
-        """Method that processes string inputs from the dicking engine vina.
-        #TODO there is duplicate code here that should be combined with the process_files method
-        """
-        string_processing = True
-        if self.max_proc is None:
-            self.max_proc = multiprocessing.cpu_count()
-        self.num_readers = self.max_proc - 1
-        self.queueIn = multiprocessing.Queue(maxsize=2 * self.max_proc)
-        self.queueOut = multiprocessing.Queue(maxsize=2 * self.max_proc)
-        # start the workers in background
-        self.workers = []
-        self.p_conn, self.c_conn = multiprocessing.Pipe(True)
-        logger.info("Starting {0} string readers".format(self.num_readers))
-        for i in range(self.num_readers):
-            s = DockingFileReader(
-                self.queueIn,
-                self.queueOut,
-                self.c_conn,
-                self.storageman,
-                self.storageman_class,
-                self.mode,
-                self.max_poses,
-                self.interaction_tolerance,
-                self.store_all_poses,
-                self.target,
-                self.add_interactions,
-                self.interaction_cutoffs,
-                self.receptor_file,
-                string_processing=string_processing
-            )
-            # this method calls .run() internally
-            s.start()
-            self.workers.append(s)
-
-        # start the writer to process the data from the workers
-        w = Writer(
-            self.queueOut,
-            self.num_readers,
-            self.c_conn,
-            self.chunk_size,
-            self.storageman,
-            self.mode,
-        )
-
-        w.start()
-        self.workers.append(w)
-        # process items in the queue
-        try:
-            self._process_string_sources()
-        except Exception as e:
-            tb = traceback.format_exc()
-            self._kill_all_workers(e, "file sources", tb)
-        # put as many poison pills in the queue as there are workers
-        for i in range(self.num_readers):
-            self.queueIn.put(None)
-
-        # check for exceptions
-        while w.is_alive():
-            sleep(0.5)
-            self._check_for_worker_exceptions()
-
-        w.join()
-
-        logger.info("Wrote {0} files to database".format(self.num_files))
-
-    def _process_sources(self):
+    def _process_file_sources(self):
         # add individual file(s)
         if self.file_sources.file != (None and [[]]):
             for file_list in self.file_sources.file:
