@@ -13,7 +13,18 @@ from .logmanager import logger
 
 #TODO add a second zip method (bz2), clean up duplication between dlg and pdbqt
 def parse_single_dlg(fname):
-    """parse an ADGPU DLG file uncompressed or gzipped"""
+    """Parse an ADGPU DLG file uncompressed or gzipped
+
+    Args:
+        fname (str): ligand docking result file name
+
+    Raises:
+        ValueError
+        FileParsingError
+
+    Returns:
+        dict: parsed results ready to be inserted in database
+    """
     STD_END = "DOCKED: ENDMDL"
     STD_KW = "DOCKED: "
 
@@ -440,49 +451,61 @@ def parse_single_dlg(fname):
         "flexres_atomnames": flexres_atomnames,
     }
 
+def parse_vina_result(data_pointer, string=False) -> dict:
+    """Parser for vina docking results, supporting either pdbqt or gzipped (.gz) files, or with the
+    docking results provided as a string.
 
-def parse_vina_pdbqt(fname):
+    Args:
+        data_pointer (any): either filename or dictionary of string docking results
+        string (bool): switch if dat apointer is provided as string
 
-    # split the first name/extension
-    fname_clean = os.path.basename(fname)
-    name, ext = os.path.splitext(fname_clean)
-    ext = ext[1:].lower()
-    if ext == "gz":
-        open_fn = gzip.open
-        # split the second name/extension
-        name, ext = os.path.splitext(name)
-        ext = ext[1:].lower()
-    else:
-        open_fn = open
+    Returns:
+        dict: parsed results ready to be inserted in database
+    """
 
-    ligname = fname.split(".pdbqt")[0].split("/")[-1]
-    pose_coordinates = []
-    scores = []
-    sorted_runs = []
-    leff = []
-    delta = []
-    intermolecular_energy = []
-    internal_energy = []
-    unbound_energy = []
-    num_heavy_atoms = 0
-    smile_string = ""
-    flexible_res_coords = []
-    inside_res = False
-    flexible_residues = []
-    ligand_atomtypes = []
-    flexres_atomnames = []
-    first_model = True
-    cluster = 1  # treat every pose in vina like new cluster
-    cluster_list = []
-    clusters = {}
-    cluster_sizes = {}
-    cluster_rmsds = []
-    smile_idx_map = []
-    ligand_h_parents = []
+    def _read_vina_results_lines(data_object, name, string) -> dict:
+        """Reads vina docking results line by line
 
-    with open_fn(fname, "rb") as fp:
-        for line in fp.readlines():
-            line = line.decode("utf-8")
+        Args:
+            data_object (any): filename or dict containing docking results
+            name (str): given ligand name/file name
+            string (bool): string or file
+
+        Raises:
+            ValueError: if a line cannot be parsed 
+
+        Returns:
+            dict: parsed results ready to be inserted in database
+        """
+        logger.debug("Inside line reading method")
+        pose_coordinates = []
+        scores = []
+        sorted_runs = []
+        leff = []
+        delta = []
+        intermolecular_energy = []
+        internal_energy = []
+        unbound_energy = []
+        num_heavy_atoms = 0
+        smile_string = ""
+        flexible_res_coords = []
+        inside_res = False
+        flexible_residues = []
+        ligand_atomtypes = []
+        flexres_atomnames = []
+        first_model = True
+        cluster = 1  # treat every pose in vina like new cluster
+        cluster_list = []
+        clusters = {}
+        cluster_sizes = {}
+        cluster_rmsds = []
+        smile_idx_map = []
+        ligand_h_parents = []
+        logger.debug("Inside method that reads results")
+
+        for line in data_object.readlines():
+            if string==False:
+                line = line.decode("utf-8")
             try:
                 if line.startswith("MODEL"):
                     cluster_list.append(cluster)
@@ -542,194 +565,80 @@ def parse_vina_pdbqt(fname):
                     res_string = "%s:%s%s" % (res, chain, resnum)
                     flexible_residues.append(res_string)
             except ValueError:
-                raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, fname))
+                raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, name))
+            
+        # calculate ligand efficiency and deltas from the best pose
+        leff = [x / num_heavy_atoms for x in scores]
+        delta = [x - scores[0] for x in scores]
 
-    # calculate ligand efficiency and deltas from the best pose
-    leff = [x / num_heavy_atoms for x in scores]
-    delta = [x - scores[0] for x in scores]
+        return {
+                "ligname": ligname,  # string
+                "receptor": "",
+                "grid_center": "",
+                "grid_dim": "",
+                "grid_spacing": "",
+                "ligand_input_model": "",
+                "ligand_index_map": smile_idx_map,
+                "ligand_h_parents": ligand_h_parents,
+                "pose_coordinates": pose_coordinates,  # list
+                "flexible_res_coordinates": flexible_res_coords,
+                "flexible_residues": flexible_residues,
+                "flexres_atomnames": flexres_atomnames,
+                "ligand_smile_string": smile_string,
+                "clusters": clusters,
+                "cluster_rmsds": cluster_rmsds,
+                "cluster_sizes": cluster_sizes,
+                "cluster_list": cluster_list,
+                "ref_rmsds": [],
+                "scores": scores,  # list
+                "leff": leff,  # list
+                "delta": delta,  # list
+                "intermolecular_energy": intermolecular_energy,  # list
+                "vdw_hb_desolv": [],
+                "electrostatics": [],
+                "flex_ligand": [],
+                "flexLigand_flexReceptor": [],
+                "internal_energy": internal_energy,  # list
+                "torsional_energy": [],
+                "unbound_energy": unbound_energy,  # list
+                "interactions": [],  # list of dictionaries
+                "num_interactions": [],
+                "num_hb": [],
+                "sorted_runs": sorted_runs,
+                "pose_about": [],
+                "pose_translations": [],
+                "pose_quarternions": [],
+                "pose_dihedrals": [],
+                "fname": name,
+                "ligand_atomtypes": ligand_atomtypes,
+            }
 
-    return {
-        "ligname": ligname,  # string
-        "receptor": "",
-        "grid_center": "",
-        "grid_dim": "",
-        "grid_spacing": "",
-        "ligand_input_model": "",
-        "ligand_index_map": smile_idx_map,
-        "ligand_h_parents": ligand_h_parents,
-        "pose_coordinates": pose_coordinates,  # list
-        "flexible_res_coordinates": flexible_res_coords,
-        "flexible_residues": flexible_residues,
-        "flexres_atomnames": flexres_atomnames,
-        "ligand_smile_string": smile_string,
-        "clusters": clusters,
-        "cluster_rmsds": cluster_rmsds,
-        "cluster_sizes": cluster_sizes,
-        "cluster_list": cluster_list,
-        "ref_rmsds": [],
-        "scores": scores,  # list
-        "leff": leff,  # list
-        "delta": delta,  # list
-        "intermolecular_energy": intermolecular_energy,  # list
-        "vdw_hb_desolv": [],
-        "electrostatics": [],
-        "flex_ligand": [],
-        "flexLigand_flexReceptor": [],
-        "internal_energy": internal_energy,  # list
-        "torsional_energy": [],
-        "unbound_energy": unbound_energy,  # list
-        "interactions": [],  # list of dictionaries
-        "num_interactions": [],
-        "num_hb": [],
-        "sorted_runs": sorted_runs,
-        "pose_about": [],
-        "pose_translations": [],
-        "pose_quarternions": [],
-        "pose_dihedrals": [],
-        "fname": fname,
-        "ligand_atomtypes": ligand_atomtypes,
-    }
+    if string == False:
+        # split the first name/extension
+        fname_clean = os.path.basename(data_pointer)
+        name, ext = os.path.splitext(fname_clean) 
+        ext = ext[1:].lower()
+        if ext == "gz":
+            open_fn = gzip.open
+            # split the second name/extension
+            name, ext = os.path.splitext(name)
+            ext = ext[1:].lower()
+        else:
+            open_fn = open
+        ligname = data_pointer.split(".pdbqt")[0].split("/")[-1]
+        logger.debug("Parsing vina docking file")
+        with open_fn(data_pointer, "rb") as fp:
+            parsed_results = _read_vina_results_lines(fp, ligname, False)
 
-def parse_vina_string(docking_data: dict):
-    """Method that parses a vina string, does the same as pdbqt reader but without the file opening"""
-    #TODO clean up duplication between this and vina file parser
-    logger.debug("About to parse vina result string")
+    elif string == True:
+        import io
+        lines = list(data_pointer.values())[0]
+        data_object = io.StringIO(lines)
+        ligname = list(data_pointer.keys())[0] # get the first (and only, probably not optimal) key which should be the ligand name
+        logger.debug("Parsing vina docking string")
+        parsed_results = _read_vina_results_lines(data_object, ligname, True)
 
-    ligname = list(docking_data.keys())[0] # get the first (and only, probably not optimal) key which should be the ligand name
-    docking_result = list(docking_data.values())[0]
-    pose_coordinates = []
-    scores = []
-    sorted_runs = []
-    leff = []
-    delta = []
-    intermolecular_energy = []
-    internal_energy = []
-    unbound_energy = []
-    num_heavy_atoms = 0
-    smile_string = ""
-    flexible_res_coords = []
-    inside_res = False
-    flexible_residues = []
-    ligand_atomtypes = []
-    flexres_atomnames = []
-    first_model = True
-    cluster = 1  # treat every pose in vina like new cluster
-    cluster_list = []
-    clusters = {}
-    cluster_sizes = {}
-    cluster_rmsds = []
-    smile_idx_map = []
-    ligand_h_parents = []
-    import io
-    dr = io.StringIO(docking_result)
-    logger.debug("input string opened using I/O string IO")
-    for line in dr.readlines():
-        try:
-            if line.startswith("MODEL"):
-                cluster_list.append(cluster)
-                clusters[cluster] = [cluster]
-                cluster_sizes[cluster] = 1
-                cluster_rmsds.append(0.0)
-                cluster += 1
-                pose_coordinates.append([])
-                flexible_res_coords.append([])
-                sorted_runs.append(line.split()[1])
-            if line.startswith("REMARK VINA RESULT:"):
-                scores.append(float(line.split()[3]))
-            if line.startswith("REMARK INTER:"):
-                intermolecular_energy.append(float(line.split()[2]))
-            if line.startswith("REMARK INTRA:"):
-                internal_energy.append(float(line.split()[2]))
-            if line.startswith("REMARK UNBOUND:"):
-                unbound_energy.append(float(line.split()[2]))
-            if line.startswith("HETATM") or line.startswith("ATOM"):
-                if inside_res:
-                    flexible_res_coords[-1][-1].append([line[30:38], line[38:46], line[46:54]])
-                    if first_model:
-                        flexres_atomnames[-1].append(line[12:16].strip())
-                else:
-                    pose_coordinates[-1].append(
-                        [line[30:38], line[38:46], line[46:54]]
-                    )
-                    if first_model:
-                        ligand_atomtypes.append(line[77:].strip())
-                        if line[13] != "H":
-                            num_heavy_atoms += 1
-            if line.startswith("REMARK SMILES IDX") and first_model:
-                smile_idx_map += (
-                    line.lstrip("REMARK SMILES IDX").rstrip("\n").split()
-                )
-            elif line.startswith("REMARK SMILES") and first_model:
-                smile_string = line.split()[2]
-            if line.startswith("REMARK H PARENT") and first_model:
-                ligand_h_parents += (
-                    line.lstrip("REMARK H PARENT").rstrip("\n").split()
-                )
-            if line.startswith("ENDMDL") and first_model:
-                first_model = False
-            # make new flexible residue list if in the coordinates for a flexible residue
-            if line.startswith("BEGIN_RES"):
-                flexible_res_coords[-1].append([])
-                if first_model:
-                    flexres_atomnames.append([])
-                inside_res = True
-            if line.startswith("END_RES"):
-                inside_res = False
-            # store flexible residue identities
-            if line.startswith("BEGIN_RES") and first_model:
-                res = line[10:13].strip()
-                chain = line[14].strip()
-                resnum = line[15:19].strip()
-                res_string = "%s:%s%s" % (res, chain, resnum)
-                flexible_residues.append(res_string)
-        except ValueError:
-            raise ValueError("ERROR! Cannot parse {0} in the docking results for ligand {1}".format(line, ligname))
-
-    # calculate ligand efficiency and deltas from the best pose
-    leff = [x / num_heavy_atoms for x in scores]
-    delta = [x - scores[0] for x in scores]
-    return {
-        "ligname": ligname,  # string
-        "receptor": "",
-        "grid_center": "",
-        "grid_dim": "",
-        "grid_spacing": "",
-        "ligand_input_model": "",
-        "ligand_index_map": smile_idx_map,
-        "ligand_h_parents": ligand_h_parents,
-        "pose_coordinates": pose_coordinates,  # list
-        "flexible_res_coordinates": flexible_res_coords,
-        "flexible_residues": flexible_residues,
-        "flexres_atomnames": flexres_atomnames,
-        "ligand_smile_string": smile_string,
-        "clusters": clusters,
-        "cluster_rmsds": cluster_rmsds,
-        "cluster_sizes": cluster_sizes,
-        "cluster_list": cluster_list,
-        "ref_rmsds": [],
-        "scores": scores,  # list
-        "leff": leff,  # list
-        "delta": delta,  # list
-        "intermolecular_energy": intermolecular_energy,  # list
-        "vdw_hb_desolv": [],
-        "electrostatics": [],
-        "flex_ligand": [],
-        "flexLigand_flexReceptor": [],
-        "internal_energy": internal_energy,  # list
-        "torsional_energy": [],
-        "unbound_energy": unbound_energy,  # list
-        "interactions": [],  # list of dictionaries
-        "num_interactions": [],
-        "num_hb": [],
-        "sorted_runs": sorted_runs,
-        "pose_about": [],
-        "pose_translations": [],
-        "pose_quarternions": [],
-        "pose_dihedrals": [],
-        "fname": None, # did not read from a file
-        "ligand_atomtypes": ligand_atomtypes,
-    }
-
+    return parsed_results
 
 def receptor_pdbqt_parser(fname):
     """Parse receptor PDBQT file into list of dictionary with dictionary containing data for a single atom line

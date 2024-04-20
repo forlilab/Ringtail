@@ -10,7 +10,7 @@ import sys
 from .logmanager import logger
 import traceback
 import queue
-from .parsers import parse_single_dlg, parse_vina_pdbqt, parse_vina_string
+from .parsers import parse_single_dlg, parse_vina_result
 from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError
 from .interactions import InteractionFinder
 
@@ -134,11 +134,11 @@ class DockingFileReader(multiprocessing.Process):
                     parsed_file_dict = parse_single_dlg(next_task)
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
-                elif self.docking_mode == "vina" and self.string_processing == False:
-                    parsed_file_dict = parse_vina_pdbqt(next_task)
-                elif self.docking_mode == "vina" and self.string_processing == True:
-                    parsed_file_dict = parse_vina_string(next_task) # for this special case next_task is {ligname: docking_result}
-                
+                elif self.docking_mode == "vina":
+                    print("\n\n docking in vina")
+                    logger.debug(f'nest task is {next_task}')
+                    parsed_file_dict = parse_vina_result(next_task, self.string_processing)
+
                 # Example code for calling user-implemented docking_mode
                 # elif self.docking_mode == "my_docking_mode":
                 #     parsed_file_dict = myparser(next_task)
