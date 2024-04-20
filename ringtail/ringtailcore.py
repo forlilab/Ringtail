@@ -483,8 +483,77 @@ class RingtailCore:
             logger.debug("Results manager object has been created with results strings.")
         else:
             raise RTCoreError("No results sources were provided, a results manager object could not be created.")
+ 
+    def _add_results(self, 
+                     results_sources,
+                     strings = False,
+                     append_results: bool = None,
+                     duplicate_handling: str = None,
+                     overwrite: bool = None,
+                     store_all_poses: bool = None,
+                     max_poses: int = None,
+                     add_interactions: bool = None,
+                     interaction_tolerance: float = None,
+                     interaction_cutoffs: list = None,
+                     max_proc: int = None,
+                     summary: bool = None,
+                     options_dict: dict =None):
+        
+        """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database. 
 
+        Args:
+            results_sources(InputFiles or InputStrings): type checked and validated results object
+            strings (bool): whether or not results are provided as strings or files
+            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
+            duplicate_handling (str): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
+            store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
+            max_poses (int): how many poses to save (ordered by soem score?)
+            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            interaction_tolerance (float): longest ångström distance that is considered interaction?
+            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
+            max_proc (int): max number of computer processors to use for file reading
+            options_dict (dict): write options as a dict
 
+        Raises:
+            OptionError
+        """
+        # if dictionary of options provided, attribute to appropriate managers
+        if options_dict is not None:
+            write_dict, storage_dict = RingtailCore.split_dict(options_dict, ["append_results", "duplicate_handling", "overwrite"])
+        else:
+            storage_dict = None
+            write_dict = None
+        self.set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
+
+        with self.storageman:
+            # check storage exist and can be appended to if specified
+            if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
+                raise OptionError("The provided database is not a valid path, please check the provided path.")
+            
+            # Prepare the results manager with the provided docking results sources
+            if strings == False:
+                self._create_resultsmanager(file_sources=results_sources) 
+            elif strings == True:
+                self._create_resultsmanager(string_sources=results_sources)
+            self.resultsman.storageman = self.storageman               
+            self.resultsman.storageman_class = self.storageman.__class__
+            self.set_resultsman_attributes(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, write_dict)
+
+            # Docking mode compatibility check
+            if self.docking_mode == "vina" and self.resultsman.interaction_tolerance is not None:
+                logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
+                self.resultsman.interaction_tolerance = None
+
+            # Process results files and handle database versioning 
+            self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
+            logger.info("Adding results...")
+            self.resultsman.process_docking_data()
+            self.storageman.set_ringtail_db_schema_version()
+            if summary: self.produce_summary()
+
+        if results_sources.save_receptor: 
+            self.save_receptor(results_sources.receptor_file)
+   
 #-#-#- Core attribute setting methods -#-#-#
     """ These methods are used internally to assing values to all ringtail options. 
     This ensures:   - that all options are set to specific types through RingtailOptions
@@ -731,8 +800,7 @@ class RingtailCore:
                 setattr(self.filters, k, v)
                 logger.debug(f'Filter {k} was set to {v}.')
         logger.info("A filter object has been prepared.")
-    
-
+        
     #-#-#- API -#-#-#
     def add_results_from_files(self,
                                file: str = None, 
@@ -744,7 +812,6 @@ class RingtailCore:
                                save_receptor: bool = None,
                                filesources_dict: dict = None,
                                append_results: bool = None,
-                               # results processing options
                                duplicate_handling: str = None,
                                overwrite: bool = None,
                                store_all_poses: bool = None,
@@ -778,57 +845,39 @@ class RingtailCore:
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
             options_dict (dict): write options as a dict
+
+        Raises:
+            OptionError
         """
 
         files = self._set_file_sources(file, file_path, file_list, file_pattern, recursive, receptor_file, save_receptor, filesources_dict)
         results_files_given = (files.file is not None or files.file_path is not None or files.file_list is not None)
-        if not results_files_given and not files.save_receptor:
-            raise OptionError("At least one input option needs to be used: --file, --file_path, --file_list, or --input_db and --save_receptor")
 
-        # if dictionary of options provided, attribute to appropriate managers
-        if options_dict is not None:
-            results_dict, storage_dict = RingtailCore.split_dict(options_dict, ["append_results", "duplicate_handling", "overwrite"])
-        else:
-            storage_dict = None
-            results_dict = None
-        self.set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
+        if not results_files_given and not files.save_receptor:
+            raise OptionError("At least one input option needs to be used: file, file_path, file_list, or save_receptor")
 
         # If there are ligand files present, process ligand data
         if results_files_given: 
-            with self.storageman:
+            self._add_results(files,
+                              False,
+                              append_results,
+                              duplicate_handling,
+                              overwrite,
+                              store_all_poses,
+                              max_poses,
+                              add_interactions,
+                              interaction_tolerance,
+                              interaction_cutoffs,
+                              max_proc,
+                              summary,
+                              options_dict)
 
-                # check storage exist and can be appended to if specified
-                if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
-                    raise OptionError("The provided --input_db is not a valid path, please check the provided path.")
-                
-                # Prepare the results manager 
-                self._create_resultsmanager(file_sources=files)
-                self.resultsman.storageman = self.storageman               
-                self.resultsman.storageman_class = self.storageman.__class__
-                self.set_resultsman_attributes(store_all_poses, max_poses, add_interactions, interaction_tolerance, interaction_cutoffs, max_proc, results_dict)
-
-                # Docking mode compatibility check
-                if self.docking_mode == "vina" and self.resultsman.interaction_tolerance is not None:
-                    logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
-                    self.resultsman.interaction_tolerance = None
-
-                # Process results files and handle database versioning 
-                self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
-                logger.info("Adding results...")
-                self.resultsman.process_docking_data()
-                self.storageman.set_ringtail_db_schema_version()
-                if summary: self.produce_summary()
-
-        if files.save_receptor: 
-            self.save_receptor(files.receptor_file)
-    
     def add_results_from_vina_string(self,
                                     results_strings: dict = None,
                                     receptor_file: str = None,
                                     save_receptor: bool = None,
                                     resultsources_dict: dict = None,
                                     append_results: bool = None,
-                                    # result processing options
                                     duplicate_handling: str = None,
                                     overwrite: bool = None,
                                     store_all_poses: bool = None,
@@ -837,20 +886,18 @@ class RingtailCore:
                                     interaction_cutoffs: list = None,
                                     max_proc: int = None,
                                     summary: bool = None,
-                                    options_dict=None
+                                    options_dict: dict = None
                                     ):
         """
         Call storage manager to process the given vina output string and add to database.
         Options can be provided as a dict or as individual options.
         Creates a database, or adds to an existing one if using "append_results".
-        #TODO a lot of overlap with add_results_from_files
         
         Args:
             results_string (dict): string containing the ligand identified and docking results as a dictionary
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             resultsources_dict (dict): file sources already as an object 
-
             append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
@@ -860,44 +907,34 @@ class RingtailCore:
             max_proc (int): max number of computer processors to use for file reading
             options_dict (dict): write options as a dict
 
+        Raises:
+            OptionError
         """
         # Method currently only works with vina output, set automatically
-        self.docking_mode = "vina"
+        if self.docking_mode != "vina": self.docking_mode = "vina"
 
         # create results string object
         results = self._set_results_sources(results_strings, receptor_file, save_receptor, resultsources_dict)
         results_strings_given = bool(results.results_strings)
+
         if not results_strings_given and not results.save_receptor:
             raise OptionError("At least one input option needs to be used: 'results_strings', or 'save_receptor'")
-
-        # if dictionary of options provided, attribute to appropriate managers
-        if options_dict is not None:
-            results_dict, storage_dict = RingtailCore.split_dict(options_dict, ["append_results", "duplicate_handling", "overwrite"])
-        else:
-            storage_dict = None
-            results_dict = None
-        self.set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
-        # If there are any ligand files, process ligand data
+        
+        # If there are any docking data strings, process docking results
         if results_strings_given: 
-            with self.storageman:
-                if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
-                    raise OptionError("The provided 'input_db' is not a valid path, please check the provided path.")
-                # Prepare the results manager 
-                
-                self._create_resultsmanager(string_sources=results)
-                self.resultsman.storageman = self.storageman               
-                self.resultsman.storageman_class = self.storageman.__class__
-                self.set_resultsman_attributes(store_all_poses, max_poses, add_interactions, None, interaction_cutoffs, max_proc, results_dict)
-
-                # Process results files and handle database versioning 
-                self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
-                logger.info("Adding results...")
-                self.resultsman.process_docking_data()
-                self.storageman.set_ringtail_db_schema_version()
-                if summary: self.produce_summary()
-
-        if results.save_receptor: 
-            self.save_receptor(results.receptor_file)
+            self._add_results(results,
+                              True,
+                              append_results,
+                              duplicate_handling,
+                              overwrite,
+                              store_all_poses,
+                              max_poses,
+                              add_interactions,
+                              None,
+                              interaction_cutoffs,
+                              max_proc,
+                              summary,
+                              options_dict)
 
     def save_receptor(self, receptor_file):
         """
