@@ -22,21 +22,14 @@ class OutputManager:
     """Class for creating outputs, can be a context manager to handle log files
 
     Attributes:
-        log (string): name for log file
+        log_file (str): name for log file
         export_sdf_path (str): path for exporting SDF molecule files
-
+        _log_open (bool): if log file is open or not
     """
 
     def __init__(self, 
                  log_file=None, 
                  export_sdf_path=None):
-        """Initialize OutputManager object and create log file
-
-        Args:
-            log_file (string): name for log file
-            export_sdf_path (string): path for exporting sdf files
-        """
-
         self.log_file = log_file
         self.export_sdf_path = export_sdf_path
         self._log_open = False
@@ -51,8 +44,12 @@ class OutputManager:
     def open_logfile(self, write_filters_header=True):
         """
         Opens log file and creates it if needed
+
         Args:
             write_filters_header (bool): only used because one method does not take the same headers
+        
+        Raises:
+            OutputError
         """
         self.log_file = open(self.log_file, 'w') # makes log_file attribute a file pointer from the string path name
         self._log_open = True
@@ -76,6 +73,12 @@ class OutputManager:
         Args:
             lines (iterable): Iterable with tuples of data for
                 writing into log
+        
+        Raises:
+            OutputError
+        
+        Returns:
+            int: number of ligands passing that are written to log file
         """
         try:
             time0 = time.perf_counter()
@@ -95,7 +98,10 @@ class OutputManager:
         """write a single row to the log file
 
         Args:
-            line (string): Line to write to log
+            line (str): Line to write to log
+        
+        Raises:
+            OutputError
         """
         try:
             self.log_file.write(line)
@@ -109,6 +115,9 @@ class OutputManager:
 
         Args:
             number_passing_ligands (int): number of ligands that passed filter
+        
+        Raises:
+            OutputError
         """
         try:
             self.log_file.write("\n")
@@ -125,7 +134,10 @@ class OutputManager:
         """Write the name of the result bookmark into log
 
         Args:
-            bookmark_name (string): name of current results' bookmark in db
+            bookmark_name (str): name of current results' bookmark in db
+
+        Raises:
+            OutputError
         """
         try:
             self.log_file.write("\n")
@@ -138,9 +150,12 @@ class OutputManager:
         """Takes dictionary of filters, formats as string and writes to log file
 
         Args:
-            TODO: update this
             filters_dict (dict): dictionary with filtering options
+            included_interactions (list): types of interactions to include in the filtering
             additional_info (str): any additional information to write to top of log file
+
+        Raises:
+            OutputError
         """
         try:
             buff = [additional_info, "##### PROPERTIES"]
@@ -203,14 +218,17 @@ class OutputManager:
 
     #-#-#- Non-logfile methods -#-#-#
     def write_out_mol(self, ligname, mol, flexres_mols, properties):
-        """writes out given mol as sdf.
-        Will create the specified sdf folder in current working directory if needed.
+        """ Writes out given mol as sdf. Will create the specified sdf folder in 
+        current working directory if needed.
+
         Args:
-            ligname (string): name of ligand that will be used to
-                name output SDF file
-            mol (RDKit mol object): RDKit molobject to be written to SDF
+            ligname (str): name of ligand that will be used toname output SDF file
+            mol (RDKit.Chem.Mol): RDKit molobject to be written to SDF
             flexres_mols (list): dictionary of rdkit molecules for flexible residues
             properties (dict): dictionary of list of properties to add to mol before writing
+
+        Raises:
+            OutputError
         """
         if self.export_sdf_path is not None and not self.export_sdf_path == "" and not os.path.isdir(self.export_sdf_path):
             os.makedirs(self.export_sdf_path)
@@ -250,9 +268,12 @@ class OutputManager:
             x (list): x coordinates for data
             y (list): y coordinates for data
             z (list): z coordinates for data
-            ax (matplotlib axis): scatterplot axis
-            ax_histx (matplotlib axis): x histogram axis
-            ax_histy (matplotlib axis): y histogram axis
+            ax (matplotlib.axis): scatterplot axis
+            ax_histx (matplotlib.axis): x histogram axis
+            ax_histy (matplotlib.axis): y histogram axis
+
+        Raises:
+            OutputError
         """
         try:
             # no labels
@@ -279,13 +300,16 @@ class OutputManager:
             raise OutputError("Error occurred while adding all data to plot") from e
 
     def plot_all_data(self, binned_data):
-        """takes dictionary of binned data where key is the
+        """Takes dictionary of binned data where key is the
         coordinates of the bin and value is the number of points in that bin.
         Adds to scatter plot colored by value
 
         Args:
             binned_data (dict): Keys are tuples of key and y value for bin.
                 Value is the count of points falling into that bin.
+
+        Raises:
+            OutputError
         """
         try:
             # gather data
@@ -336,6 +360,9 @@ class OutputManager:
             x (float): x coordinate
             y (float): y coordinate
             color (str, optional): Color for point. Default black.
+
+        Raises:
+            OutputError
         """
         try:
             self.ax.scatter([x], [y], c=color)
@@ -345,6 +372,9 @@ class OutputManager:
     def save_scatterplot(self):
         """
         Saves current figure as scatter.png
+
+        Raises:
+            OutputError
         """
         try:
             plt.savefig("scatter.png", bbox_inches="tight")
