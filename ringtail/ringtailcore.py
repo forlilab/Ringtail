@@ -844,6 +844,7 @@ class RingtailCore:
         Options can be provided as a dict or as individual options.
         Creates a database, or adds to an existing one if using "append_results".
         #TODO a lot of overlap with add_results_from_files
+        
         Args:
             results_string (dict): string containing the ligand identified and docking results as a dictionary
             receptor_file (str): string containing the receptor .pdbqt
@@ -903,8 +904,7 @@ class RingtailCore:
         Add receptor to database. 
 
         Args:
-            receptors (list): list of receptor blobs to add to database
-            * currently only one receptor allowed per database
+            receptor_file (str): path to receptor file
         """
         receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
         with self.storageman:
@@ -1004,8 +1004,8 @@ class RingtailCore:
                bookmark_name: str =None, 
                options_dict: dict = None,
                return_iter=False):
-        """Prepare list of filters, then hand it off to storageman to
-            perform filtering. Create log of passing results.
+        """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
+
         Args:
             Filters:
                 eworst (float): specify the worst energy value accepted
@@ -1065,6 +1065,7 @@ class RingtailCore:
                                     "receptor" (receptor name)
                 bookmark_name (str): name for resulting book mark file. Default value is 'passing_results'
                 options_dict (dict): write options as a dict
+
         Returns:
             int: number of ligands passing filter
         """
@@ -1191,6 +1192,7 @@ class RingtailCore:
         Args:
             bookmark_name (str, optional): Option to run over specified bookmark other than that just used for filtering
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
+
         Returns:
             all_mols (dict): containing ligand names, RDKit mols, flexible residue bols, and other ligand properties
         """
@@ -1236,8 +1238,10 @@ class RingtailCore:
     def find_similar_ligands(self, query_ligname: str):
         """
         Find ligands in cluster with query_ligname
+
         Args:
             query_ligname (str): name of the ligand in the ligand table to look for similars to
+
         Returns:
             int: number of ligands that are similar
         """
@@ -1258,6 +1262,9 @@ class RingtailCore:
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
+
+        Args:
+            save (bool): whether to save plot to cd
         """
         if self.filters.max_miss > 0:
             raise OptionError("Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name.")
@@ -1291,6 +1298,7 @@ class RingtailCore:
     def display_pymol(self, bookmark_name = None):
         """
         Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
+        
         Args:
             bookmark_name (str): bookmark name to use in pymol. 'None' uses the whole db? 
         """
@@ -1353,8 +1361,8 @@ class RingtailCore:
         """Get requested data from database, export as CSV
 
         Args:
-            requested_data (string): Table name or SQL-formatted query
-            csv_name (string): Name for exported CSV file
+            requested_data (str): Table name or SQL-formatted query
+            csv_name (str): Name for exported CSV file
             table (bool): flag indicating is requested data is a table name
         """
         with self.storageman: 
@@ -1407,6 +1415,7 @@ class RingtailCore:
     def get_previous_filter_data(self, outfields = None, bookmark_name = None):
         """Get data requested in self.out_opts['outfields'] from the
         results view of a previous filtering
+
         Args:
             outfields (str): use outfields as described in RingtailOptions > StorageOptions
             bookmark_name (str): bookmark for which the filters were used
@@ -1421,8 +1430,10 @@ class RingtailCore:
 
     def drop_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database
+
         Args:
-            bookmark_name (str): name of bookmark to be dropped."""
+            bookmark_name (str): name of bookmark to be dropped.
+        """
         
         with self.storageman: self.storageman._drop_bookmark(bookmark_name=bookmark_name)
         logger.info("Bookmark {0} was dropped from the database {1}".format(bookmark_name, self.storageman.db_file))
@@ -1431,8 +1442,10 @@ class RingtailCore:
         """
         Provide ringtail config from file, will directly set storage manager settings, 
         and return dictionaries for the remaining options. 
+
         Args:
-            config_file: json formatted file containing ringtail and filter options
+            config_file (str): json formatted file containing ringtail and filter options
+
         Returns:
             file_dict: dictionary of files to use in add results
             write_dict: dictionary of options to use in add results
@@ -1453,8 +1466,10 @@ class RingtailCore:
         key-default value pairs. Outputs to options.json in 
         "util_files" of to_file = true, else it returns the dict 
         of default option values.
+
         Args:
             to_file (bool): if true writes file to standard options json path, if false returns a json string with values
+
         Return:
             str: filename or json string with options
         """
@@ -1479,9 +1494,11 @@ class RingtailCore:
         """
         Will read and parse a file containing ringtail options following the format 
         given from RingtailCore.generate_config_json_template
+
         Args:
-            config_file (str, file name in cd): json formatted file containing ringtail and filter options
+            config_file (str): json formatted config file containing ringtail and filter options present in cd
             return_as_string (bool): will return all dictionaries as dict without sections if true
+
         Returns:
             file_dict: dictionary of files to use in add results
             write_dict: dictionary of options to use in add results
