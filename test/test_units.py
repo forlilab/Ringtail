@@ -414,7 +414,6 @@ class TestConfigFile:
     def test_adding_results(self, dbquery):
         rtcore = RingtailCore(db_file="output.db", logging_level = "DEBUG")
         (file_dict, write_dict, _, _) = rtcore.add_config_from_file(config_file="config.json")
-        print(file_dict)
         rtcore.add_results_from_files(filesources_dict= file_dict, options_dict=write_dict)
         curs = dbquery("""SELECT COUNT(*) FROM Results;""")
         count = curs.fetchone()[0]
