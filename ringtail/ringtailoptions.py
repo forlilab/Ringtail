@@ -9,9 +9,6 @@ from .exceptions import OptionError
 from .logmanager import logger
 import copy
 
-""" ringtailoptions contains objects for holding all ringtail options, 
-and ensures safe type enforcement."""
-
 class TypeSafe:
     """Class that handles safe typesetting of values of a specified built-in type. 
     Any attribute can be set as a TypeSafe object, this ensures its type is checked whenever it is changed.
@@ -20,11 +17,13 @@ class TypeSafe:
 
     It is the hope to extend this to work with custom types, such as "percentage" (float with a max and min value),
     and direcotry (string that must end with '/'). 
+
     Args:
         object_name (str): name of type safe instance
         type (type): any of the native types in python that the instance must adhere to
         default (any): default value of the object, can be any including None
         value (any): value of type type assigned to instance, can be same or different than default
+
     Raises:
         OptionError: if wrong type is attempted.     
     """
@@ -40,7 +39,8 @@ class TypeSafe:
         If a value of the wrong type is attempted set, the attribute value will be reset to the default value. 
         Args:
             name (str): name of the attribute
-            value (any): value to assign to the attribute"""
+            value (any): value to assign to the attribute
+        """
         
         if name == "value":
             if type(value) == self.type:
@@ -69,7 +69,15 @@ class RTOptions:
     """
     @classmethod
     def is_valid_path(self, path):
-        """Checks if path exist in current directory."""
+        """Checks if path exist in current directory.
+        
+        Args:
+            path (str)
+
+        Returns:
+            bool: if path exist
+            
+        """
         if os.path.exists(path):
             return True
         else:
@@ -77,13 +85,26 @@ class RTOptions:
     
     @staticmethod
     def valid_bookmark_name(name) -> bool:
-        """Checks that bookmark name adheres to sqlite naming conventions of alphanumerical and limited symbols. """
+        """Checks that bookmark name adheres to sqlite naming conventions of alphanumerical and limited symbols. 
+        
+        Args:
+            name (str): bookmark name
+        
+        Returns:
+            bool: true if bookmark name is valid
+        
+        """
         import re
         regex = "^[A-Za-z0-9_]*$"
         return re.match(regex, name)
 
     def initialize_from_dict(self, dict: dict, name):
-        """Initializes a child objects using the values available in their option dictionary."""
+        """Initializes a child objects using the values available in their option dictionary.
+        
+        Args:
+            dict (dict): of attributes to be initialized to the object
+            name (str): name of the childclass/object        
+        """
         for item, info in dict.items(): 
             setattr(self, item, TypeSafe(default=info["default"], 
                                          type=info["type"], 
@@ -99,7 +120,10 @@ class RTOptions:
         return returndict
     
     def __getattribute__(self, attribute):
-        """Ensures attribute is returned as valeu and not an object."""
+        """Ensures attribute is returned as valeu and not an object.
+        Args:
+            attribute (str): name of attribute
+        """
         dataobject = object.__getattribute__(self, attribute)
         if isinstance(dataobject, TypeSafe):
             value = dataobject.value
@@ -108,7 +132,12 @@ class RTOptions:
         return value
     
     def __setattr__(self, attribute, value):
-            """Overloaded set attribute method that ensures attribute is type checked during setting."""
+            """Overloaded set attribute method that ensures attribute is type checked during setting.
+            
+            Args:
+                attribute (str): name of attribute
+                value (any): value given to attribute
+            """
             if not hasattr(self, attribute):
                 object.__setattr__(self, attribute, value)
             else:
