@@ -26,35 +26,40 @@ class RingtailCore:
 
     Attributes:
         db_file (str): name of database file being operated on
-        docking_mode (str): 
-        storageman (StorageManager object): Interface module with database
-        resultsman (ResultsManager object): Module to deal with results processing before adding to database
-        outputman (OutputManager object): Manager for output tasks of log-writting, plotting, ligand SDF writing, starting pymol sessions
-        filters (Filters object): object holding all optional filters
+        docking_mode (str): specifies what docking mode has been used for the results in the database
+        storageman (StorageManager): Interface module with database
+        resultsman (ResultsManager): Module to deal with results processing before adding to database
+        outputman (OutputManager): Manager for output tasks of log-writting, plotting, ligand SDF writing, starting pymol sessions
+        filters (Filters): object holding all optional filters
+        _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
     """
 #-#-#- Base methods -#-#-#
     
     def __init__(self, 
                  db_file: str = "output.db", 
                  storage_type: str = "sqlite", 
-                 logging_level: str = None):
-        """
-        Initialize RingtailCore object and create a storageman object with the db file.
-        Does not open access to the storage. Future option will include opening database as readonly.
+                 logging_level: str = "debug"):
+        """Initialize ringtail core, and create a storageman object with the db file. 
+        Can set logger level here, otherwise change it by logger.setLevel("level")
 
-        _run_mode refers to whether ringtail is ran from the command line or through direct API use, 
-        where the former is more restrictive. 
+        Args:
+            db_file (str): Database file to initialize core with. Defaults to "output.db".
+            storage_type (str, optional): Database setup to use for interacting with the database. Defaults to "sqlite".
+            logging_level (str, optional): Global logger level. Defaults to "DEBUG".
         """
+        
         if logging_level is not None: logger.setLevel(logging_level)
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
         self.set_storageman_attributes()
         self._run_mode = "api"
-        self._docking_mode = "dlg"
+        self.docking_mode = "dlg"
 
     def update_database_version(self, consent=False):
-        # Method to update database version from 1.0.0 to 1.1.0
+        """Method to update database version from 1.0.0 to 1.1.0
+        """
+        
         return self.storageman.update_database_version(consent)
     
 
@@ -62,10 +67,12 @@ class RingtailCore:
     
     def _validate_docking_mode(self, docking_mode: str):
         """ Method that validates specified AutoDock program used to generate results.
+
         Args:
             docking_mode (str): string that describes docking mode
+
         Raises:
-            RTCoreError if docking_mode is not supported
+            RTCoreError: if docking_mode is not supported
         """
         if type(docking_mode) is not str:
             logger.warning('The given docking mode was not given as a string, it will be set to default value "dlg".')
@@ -79,6 +86,7 @@ class RingtailCore:
     def _get_docking_mode(self):
         return self._docking_mode
 
+    # making docking mode a property of the ringtail core object
     docking_mode = property(fget = _get_docking_mode, fset = _validate_docking_mode)
 
     def _add_poses(
@@ -95,9 +103,9 @@ class RingtailCore:
         """Add poses from given cursor to rdkit mols for ligand and flexible residues
 
         Args:
-            atom_indices (List): List of ints indicating mapping of coordinate indices to smiles indices
+            atom_indices (list): List of ints indicating mapping of coordinate indices to smiles indices
             poses (iterable): iterable containing ligand_pose, flexres_pose, flexres_names
-            mol (RDKit Mol): RDKit molecule for ligand
+            mol (RDKit.Chem.Mol): RDKit molecule for ligand
             flexres_mols (list): list of rdkit molecules for flexible residues
             flexres_info (list): list of tuples containing info for each flexible residue (res_smiles, res_index_map, res_h_parents)
             ligand_saved_coords (list): list of coordinates to save for adding hydrogens later
@@ -184,8 +192,9 @@ class RingtailCore:
 
         Args:
             interaction_combination (list): list of interactions to be included in this round of filtering
+
         Returns:
-            dict: dictionary of filters for storageman
+            dict: filters for storageman
         """
 
         filters_dict = self.filters.todict()
@@ -198,7 +207,7 @@ class RingtailCore:
         return filters_dict
 
     def _create_rdkit_mol(self, ligname, smiles, atom_indices, h_parent_line, flexible_residues, flexres_atomnames, pose_ID=None, write_nonpassing=False):
-        """creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
+        """Creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
 
         Args:
             ligname (string): ligand name
@@ -208,7 +217,7 @@ class RingtailCore:
             flexible_residues (list): list of flexible residue names
             flexres_atomnames (list): list of atomtypes in flexible residue
             pose_ID (int, optional): pose_ID for single pose to return. Defaults to None.
-            write_nonpassing (bool, optional): _description_. Defaults to False.
+            write_nonpassing (bool, optional): whether or not to write ligands not passing filter
 
         Raises:
             OutputError: raises error if there is an issue with determining a flexible residue identity
@@ -342,6 +351,7 @@ class RingtailCore:
             dict: dict = None) -> InputFiles:
         """
         Object holding all ligand docking results files.
+
         Args:
             file (str, optional: list(str)): ligand result file
             file_path (str, optional: list(str)): list of folders containing one or more result files
@@ -351,8 +361,9 @@ class RingtailCore:
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+
         Returns:
-            InputFiles object
+            InputFiles
         """
 
         def ensure_double_list(object) -> list:
@@ -420,11 +431,13 @@ class RingtailCore:
             dict: dict = None) -> InputStrings:
         """
         Object holding all ligand vina docking results string and corresponding receptor.
+
         Args:
             results_string (dict): string containing the ligand identified and docking results as a dictionary
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+
         Return:
             InputStrings object
         """
@@ -451,18 +464,22 @@ class RingtailCore:
 
     def _create_resultsmanager(self, file_sources: InputFiles = None, string_sources: InputStrings = None) -> ResultsManager:
         """Creates a results manager object based on results provided either as files or as strings (currently only for vina).
-        Will create a new object each time results are added.
+        Will create a new object each time results are added, and use the docking mode specified as an attribute of the core. 
         In its current state it assumes only one source of results will be provided. 
         If both are provided, it will only process the strings. 
+
         Args:
             file_sources (InputFiles): used if docking results are provided through files
             string_sources (InputStrings): used if docking results are provided through strings
+
+        Raises:
+            RTCoreError
         """
         if file_sources is not None:
-            self.resultsman = ResultsManager(file_sources=file_sources)
+            self.resultsman = ResultsManager(file_sources=file_sources, docking_mode=self.docking_mode)
             logger.debug("Results manager object has been created with results files.")
         elif string_sources is not None:
-            self.resultsman = ResultsManager(string_sources=string_sources)
+            self.resultsman = ResultsManager(string_sources=string_sources, docking_mode=self.docking_mode)
             logger.debug("Results manager object has been created with results strings.")
         else:
             raise RTCoreError("No results sources were provided, a results manager object could not be created.")
@@ -774,12 +791,11 @@ class RingtailCore:
                 if self.docking_mode == "vina" and self.resultsman.interaction_tolerance is not None:
                     logger.warning("Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance.")
                     self.resultsman.interaction_tolerance = None
-                self.resultsman.mode = self.docking_mode
 
                 # Process results files and handle database versioning 
                 self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
                 logger.info("Adding results...")
-                self.resultsman.process_files()
+                self.resultsman.process_docking_data()
                 self.storageman.set_ringtail_db_schema_version()
                 if summary: self.produce_summary()
 
@@ -852,12 +868,10 @@ class RingtailCore:
                 self.resultsman.storageman_class = self.storageman.__class__
                 self.set_resultsman_attributes(store_all_poses, max_poses, add_interactions, None, interaction_cutoffs, max_proc, results_dict)
 
-                self.resultsman.mode = self.docking_mode
-
                 # Process results files and handle database versioning 
                 self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
                 logger.info("Adding results...")
-                self.resultsman.process_strings()
+                self.resultsman.process_docking_data()
                 self.storageman.set_ringtail_db_schema_version()
                 if summary: self.produce_summary()
 
@@ -865,30 +879,31 @@ class RingtailCore:
             self.save_receptor(results.receptor_file)
 
     def save_receptor(self, receptor_file):
-            """
-            Add receptor to database. Context managed by self.storageman
+        """
+        Add receptor to database. 
 
-            Args:
-                receptors (list): list of receptor blobs to add to database
-                * currently only one receptor allowed per database
-            """
-            receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
-            with self.storageman:
-                for rec, _ in receptor_list:
-                    # NOTE: in current implementation, only one receptor allowed per database
-                    # Check that any receptor row is incomplete (needs receptor blob) before inserting
-                    filled_receptor_rows = self.storageman.count_receptors_in_db()
-                    if filled_receptor_rows != 0:
-                        raise RTCoreError(
-                            "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
-                                filled_receptor_rows
-                            )
+        Args:
+            receptors (list): list of receptor blobs to add to database
+            * currently only one receptor allowed per database
+        """
+        receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
+        with self.storageman:
+            for rec, _ in receptor_list:
+                # NOTE: in current implementation, only one receptor allowed per database
+                # Check that any receptor row is incomplete (needs receptor blob) before inserting
+                filled_receptor_rows = self.storageman.count_receptors_in_db()
+                if filled_receptor_rows != 0:
+                    raise RTCoreError(
+                        "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
+                            filled_receptor_rows
                         )
-                    self.storageman.save_receptor(rec)
-                    logger.info("Receptor data was added to the database.")
+                    )
+                self.storageman.save_receptor(rec)
+                logger.info("Receptor data was added to the database.")
     
     def produce_summary(self, columns=["docking_score", "leff"], percentiles=[1, 10]) -> None:
-        """Print summary of data in storage
+        """Print summary of data in storage to sdout
+
         Args:
             columns (list(str)): data columns used to prepare summary
             percentiles (list(int)): cutoff percentiles for the summary
@@ -1543,15 +1558,16 @@ class RingtailCore:
 #-#-#- Util method -#-#-# 
     @staticmethod
     def split_dict(dict: dict, items: list) -> tuple:
-        """ Utility method that takes one dictionary and splits it into two based on the listed keys 
-            Args: 
-                dict (dict): original dictionary
-                items (list): list of keys to use for separation
-            Returns:
-                tuple of:
-                    dict (dict): original dict minus the removed items
-                    new_dict (dict): dict containing the items removed from the original dict
+        """Utility method that takes one dictionary and splits it into two based on the listed keys
+
+        Args:
+            dict (dict): original dictionary
+            items (list): ist of keys to use for separation
+
+        Returns:
+            tuple: original dict minus the removed items and new dict containing the items removed from the original dict
         """
+
         new_dict = {}
 
         for key in items:
