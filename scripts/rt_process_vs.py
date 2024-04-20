@@ -10,10 +10,10 @@ from ringtail import RingtailCore, logger
 import traceback
 
 if __name__ == "__main__":
-    ''' Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries 
+    """ Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries 
     and options that are then used with the ringtail core api. 
     This script will allow either a write or a read session at the time.
-    Available database operations are described in the readme.md document of this codebase.'''
+    Available database operations are described in the readme.md document of this codebase."""
     time0 = time.perf_counter()
 
     try:
