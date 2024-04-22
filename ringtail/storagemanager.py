@@ -34,9 +34,10 @@ else:
     import multiprocessing
 
 class StorageManager:
+
     _db_schema_ver = "1.1.0"
     
-    # "db_schema_ver":list("code_versions")
+    # "db_schema_ver":list("compatible code versions")
     _db_schema_code_compatibility = {
         "1.0.0":["1.0.0"],
         "1.1.0":["1.1.0", "2.0.0"]
@@ -47,7 +48,7 @@ class StorageManager:
     StorageManager class (including sub-classess)
     which will implement their own functions to return the data requested
 
-    Attributes:
+    Attributes: #TODO
         duplicate_handling (str): string indicating how conficting entries should be handled
         current_view_name (str): name of current results view
         db_file (string): Name of file containing database
@@ -75,34 +76,19 @@ class StorageManager:
         view_suffix (str): suffix to add to end of view. Used with max_miss
     """
 
-    #TODO is this necessary? It feels like these should be somehere more data oriented 
-    # initialize dictionary processing kw lists
-    stateVar_keys = ["pose_about", "pose_translations", "pose_quarternions"]
-    ligand_data_keys = [
-        "cluster_rmsds",
-        "ref_rmsds",
-        "scores",
-        "leff",
-        "delta",
-        "intermolecular_energy",
-        "vdw_hb_desolv",
-        "electrostatics",
-        "flex_ligand",
-        "flexLigand_flexReceptor",
-        "internal_energy",
-        "torsional_energy",
-        "unbound_energy",
-    ]
-    interaction_data_kws = [
-        "type",
-        "chain",
-        "residue",
-        "resid",
-        "recname",
-        "recid",
-    ]
-
     def check_storage_compatibility(storage_type):
+        """Checks if chosen storage type has been implemented
+
+        Args:
+            storage_type (str): name of the storage type
+
+        Raises:
+            NotImplementedError: raised if seelected storage type has not been implemented
+
+        Returns:
+            class: of implemented storage type
+        """
+
         storage_types = {
             "sqlite": StorageManagerSQLite,
         }
@@ -114,25 +100,26 @@ class StorageManager:
 
     def __init__(self):
         """Initialize instance variables common to all StorageManager subclasses"""
-        # I am not sure these are necessary
-
-        self.unique_interactions = {}
-        self.next_unique_interaction_idx = 1
-        self.interactions_initialized_flag = False
-        self.closed_connection = False        
+        
+        # Database attributes
+        self.closed_connection = False
         self.duplicate_handling = None
-   
-    @classmethod
-    def format_for_storage(cls, ligand_dict: dict) -> tuple:
-        """takes file dictionary from the file parser, formats required storage format
 
-        Args:
-            ligand_dict (dict): Dictionary containing data from the fileparser
-        """
+        # Specific scientific attributes
+        # # # Interaction variables
+        self.unique_interactions = {}
+        self.next_unique_interaction_idx = 1 
+        self.interactions_initialized_flag = False 
 
-        raise NotImplementedError
-    
     def __enter__(self):
+        """Used to access the database if using storage manager as a context manager
+
+        Raises:
+            StorageError
+
+        Returns:
+            instance: of class with open database connection
+        """
         try:
             self.open_storage()
         except StorageError as e: 
@@ -141,12 +128,24 @@ class StorageManager:
             return self
 
     def __exit__(self, exc_type, exc_value, tb):
+        """Used to close the database if using storage manager as a context manager
+
+        Args:
+            exc_type (_type_): error exit parameter requirerd when using context manager
+            exc_value (_type_): error exit parameter requirerd when using context manager
+            tb (_type_): error exit parameter requirerd when using context manager
+
+        Returns:
+            instance: of class with closed database connection
+        """
         if not self.closed_connection:
             self.close_storage()
         if exc_type == Exception:logger.error(str(exc_value))
         return self
 
     def _sigint_handler(self, signal_received, frame):
+        """Handles and reports if program is interrupted through the terminal
+        """
         logger.critical("Ctrl + C pressed, keyboard interupt initiated")
         self.__exit__(None, None, None)
         sys.exit(0)
@@ -155,44 +154,32 @@ class StorageManager:
     # # # Common StorageManager methods # # #
     # # # # # # # # # # # # # # # # # # # # #
 
-    def get_plot_data(self, only_passing=False):
-        """this function is expected to return an ascii plot
-        representation of the results
-
-        Returns:
-            Tuple: cursors as [<all data cursor>, <passing data cursor>]
-        """
-
-        # checks if we have filtered by looking for view name in list of view names
-        if self.check_passing_view_exists():
-            if only_passing:
-                return [], self._fetch_passing_plot_data()
-            else:
-                return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
-        else:
-            return self._fetch_all_plot_data(), []
-
     def prune(self):
-        """Deletes rows from results, ligands, and interactions
+        """Deletes rows from results, ligands, and interactions in a bookmark
         if they do not pass filtering criteria
         """
         self._delete_from_results()
         self._delete_from_ligands()
         self._delete_from_interactions()
 
-    def check_passing_view_exists(self):
-        """Return if self.bookmark_name in database
+    def check_passing_view_exists(self, bookmark_name: str = None):
+        """Checks if bookmark name is in database
+
+        Args:
+            bookmark_name (str, optional): name of bookmark name to check if exist, or else will use storageman bookmark_name attribute
 
         Returns:
-            Bool: indicates if self.bookmark_name exists
+            bool: indicates if bookmark_name exists in the current database
         """
-        view_exists = self.bookmark_name in [
-            name[0] for name in self._fetch_view_names().fetchall()
-        ]
+        if bookmark_name is None:
+            bookmark_name = self.bookmark_name
+
+        view_exists = bookmark_name in self.get_all_bookmark_names()
+
         return view_exists
 
     def close_storage(self, attached_db=None, vacuum=False):
-        """close connection to database
+        """Close connection to database
 
         Args:
             attached_db (str, optional): name of attached DB (not including file extension)
@@ -211,21 +198,75 @@ class StorageManager:
         self._close_connection()
         self.closed_connection = True
 
+#-#-#- Methods dealing with interactions -#-#-#
+
+    def insert_interactions(self, interactions_list):
+        """Takes list of interactions, inserts into database
+
+        Args:
+            interactions_list (list): List of tuples for interactions in form
+                ("type", "chain", "residue", "resid", "recname", "recid")
+        """
+        # populate unique interactions from existing database
+        if self.append_results:
+            existing_unique_interactions = self._fetch_existing_interactions() 
+            for interaction in existing_unique_interactions:
+                self.unique_interactions[interaction[1:]] = interaction[0]
+
+            self.next_unique_interaction_idx = (
+                interaction[0] + 1
+            )  # sets next index for next unique interaction
+
+        self._add_unique_interactions(interactions_list) 
+
+        # check if we need to initialize the interaction bv table and
+        # insert first set of interaction
+        if not self.interactions_initialized_flag and not self.append_results:
+            self._create_interaction_bv_table() 
+            self._insert_unique_interactions(list(self.unique_interactions.keys())) 
+            self.interactions_initialized_flag = True
+
+        self._insert_interaction_bitvectors( 
+            self._generate_interaction_bitvectors(interactions_list) 
+        )
+
+    def _generate_interaction_bitvectors(self, interactions_list):
+        """Takes string of interactions and makes bitvector
+
+        Args:
+            interactions_list (list): list of list of tuples.
+                Inner lists contain interaction tuples for
+                saved poses for a single ligand
+
+        Returns:
+            list:of bitvectors for saved poses
+        """
+        bitvectors_list = []
+        for pose_interactions in interactions_list:
+            pose_bitvector = [None] * len(self.unique_interactions)
+            for interaction_tuple in pose_interactions:
+                interaction_idx = self.unique_interactions[interaction_tuple]
+                # index corrected for interaction_indices starting at 1
+                pose_bitvector[interaction_idx - 1] = 1
+
+            bitvectors_list.append(pose_bitvector)
+        return bitvectors_list
+
     def _add_unique_interactions(self, interactions_list):
-        """takes list of interaction tuple lists. Examines
+        """Takes list of interaction tuple lists. Examines
         self.unique_interactions, add interactions if not already inserted.
 
         self.unique_interactions {(interaction tuple): unique_interaction_idx}
 
         Args:
-            interactions_list (List): List of interaction tuples
-            for insertion into database
+            interactions_list (list): List of interaction tuples
+                for insertion into database
         """
 
         for pose in interactions_list:
             for interaction_tuple in pose:
                 if interaction_tuple not in self.unique_interactions:
-                    self.unique_interactions[
+                    self.unique_interactions[ 
                         interaction_tuple
                     ] = self.next_unique_interaction_idx
                     if self.interactions_initialized_flag or self.append_results:
@@ -235,6 +276,26 @@ class StorageManager:
                         )
                     self.next_unique_interaction_idx += 1
 
+#-#-#- Plotting methods -#-#-#
+
+    def get_plot_data(self, only_passing=False):
+        """This function is expected to return an ascii plot
+        representation of the results
+
+        Returns:
+            tuple: cursors as [<all data cursor>, <passing data cursor>]
+        """
+
+        # checks if we have filtered by looking for view name in list of view names
+        if self.check_passing_view_exists():
+            if only_passing:
+                return [], self._fetch_passing_plot_data()
+            else:
+                return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
+        else:
+            return self._fetch_all_plot_data(), []
+
+    #KEEP but rejigger to be agnostic
     def filter_results(
         self,
         all_filters: dict,
@@ -244,36 +305,41 @@ class StorageManager:
 
         Args:
             all_filters (dict): dict containing all filters. Expects format and keys corresponding to ringtail.Filters().todict()
+            suppress_output (bool): prints filtering summary to sdout
 
 
         Returns:
-            SQLite Cursor: Cursor of passing results
+            SQLite Cursor: Cursor of passing results #TODO means this is not agnostic method
         """
         # create view of passing results
+        #KEEP
         filter_results_str, view_query = self._generate_result_filtering_query(
             all_filters
         )
         logger.debug(filter_results_str)
+        
+        #MOVE not sure views and bookmarks translate
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.bookmark_name
         if self.view_suffix is not None:
             self.current_view_name = self.bookmark_name + "_" + self.view_suffix
         else:
             self.current_view_name = self.bookmark_name
-
+        #MOVE
         self._create_view(
             self.current_view_name, view_query
         )  # make sure we keep Pose_ID in view
-        
+
+        #MOVE or keep as a "filter and add to view"
         self._insert_bookmark_info(self.current_view_name, view_query, all_filters)
         
         # perform filtering
-
+        #KEEP
         if suppress_output:
             return None
         
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
-
+        #KEEP
         filtered_results = self._run_query(filter_results_str)
         logger.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
         # get number of passing ligands
@@ -287,14 +353,47 @@ class StorageManager:
         """
         return self._run_query(self._generate_results_data_query(self.outfields))
 
-    def _fetch_view_names(self):
-        """Returns DB curor with the names of all view in DB
+    @classmethod
+    def _data_kw_groups(cls, group):
+        """Method containing lists of keywords in specific data groups, used to associate data with database columns
+
+        Args:
+            group (str): group of whose keywords are needed
 
         Returns:
-            sqlite cursor: cursor of view names
+            list: of keywords belonging to a specific group
         """
-        return self._run_query(self._generate_view_names_query())
+        groups = {
+            'stateVar_keys': [
+                "pose_about",
+                 "pose_translations", 
+                 "pose_quarternions"],
+            'ligand_data_keys': [
+                "cluster_rmsds",
+                "ref_rmsds",
+                "scores",
+                "leff",
+                "delta",
+                "intermolecular_energy",
+                "vdw_hb_desolv",
+                "electrostatics",
+                "flex_ligand",
+                "flexLigand_flexReceptor",
+                "internal_energy",
+                "torsional_energy",
+                "unbound_energy",
+                ],
+            'interaction_data_kws': [
+                "type",
+                "chain",
+                "residue",
+                "resid",
+                "recname",
+                "recid",
+            ]}
+        return groups[group]
 
+    #KEEP but probably regjigger
     def crossref_filter(
         self,
         new_db: str,
@@ -309,7 +408,7 @@ class StorageManager:
             new_db (str): file name for database to attach
             bookmark1_name (str): string for name of first bookmark/temp table to compare
             bookmark2_name (str): string for name of second bookmark to compare
-            selection_type (string): "+" or "-" indicating if ligand names should ("+") or should not "-" be in both databases
+            selection_type (str): "+" or "-" indicating if ligand names should ("+") or should not "-" be in both databases
             old_db (str, optional): file name for previous database
         """
 
@@ -341,19 +440,20 @@ class StorageManager:
 
         return temp_name, num_passing
     
-    def _run_query(self, query):
-        """Executes provided SQLite query. Returns cursor for results
 
-        Args:
-            query (string): Formated SQLite query as string
+    # def _run_query(self, query):
+    #     """Executes provided SQLite query. Returns cursor for results
 
-        No Longer Returned:
-            DB cursor: Contains results of query
+    #     Args:
+    #         query (string): Formated SQLite query as string
 
-        Raises:
-            NotImplementedError: Description
-        """
-        raise NotImplementedError
+    #     No Longer Returned:
+    #         DB cursor: Contains results of query
+
+    #     Raises:
+    #         NotImplementedError: Description
+    #     """
+    #     raise NotImplementedError
 
 class StorageManagerSQLite(StorageManager):
     """SQLite-specific StorageManager subclass
@@ -370,16 +470,16 @@ class StorageManagerSQLite(StorageManager):
 
     def __init__(self, 
                  db_file: str = None, 
-                 overwrite: bool=None, 
-                 append_results: bool=None,
-                 order_results: str = None,
-                 outfields: str = None,
-                 filter_bookmark: str = None,
-                 output_all_poses: bool = None,
-                 mfpt_cluster: float = None,
-                 interaction_cluster: float = None,
-                 bookmark_name: str = None,
-                 duplicate_handling: str = None,): 
+                 overwrite: bool=None, #MOVE
+                 append_results: bool=None, #MOVE
+                 order_results: str = None, #MOVE
+                 outfields: str = None, #MOVE
+                 filter_bookmark: str = None, #KEEP
+                 output_all_poses: bool = None, #MOVE
+                 mfpt_cluster: float = None, #MOVE
+                 interaction_cluster: float = None, #MOVE
+                 bookmark_name: str = None, #KEEP
+                 duplicate_handling: str = None,): #MOVE
         """Initialize superclass and subclass-specific instance variables
         Args:
             db_file (str): database file name"""
@@ -485,7 +585,18 @@ class StorageManagerSQLite(StorageManager):
     # # # # #Public methods # # # # #
     # # # # # # # # # # # # # # # # #
 
-    #NOTE needed
+    def get_all_bookmark_names(self):
+        """Get all views in sql database as a list of names. Bookmarks are called views in sqlite
+
+        Returns:
+            list: of views names
+        """
+        view_names_inter = self._run_query(self._generate_view_names_query())
+        name_list = [name[0] for name in view_names_inter.fetchall()]
+
+        return name_list
+
+    #KEEP
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> tuple:
         """takes file dictionary from the file parser, formats required storage format
@@ -605,7 +716,7 @@ class StorageManagerSQLite(StorageManager):
             int(run_number),
         ]
         # get energy data
-        for key in cls.ligand_data_keys:
+        for key in cls._data_kw_groups('ligand_data_keys'):
             if ligand_dict[key] == []:  # guard against incomplete data
                 ligand_data_list.append(None)
             else:
@@ -636,7 +747,7 @@ class StorageManagerSQLite(StorageManager):
                 ]
             )
         # add statevars
-        for key in cls.stateVar_keys:
+        for key in cls._data_kw_groups('stateVar_keys'):
             if ligand_dict[key] == []:
                 if key == "pose_about" or key == "pose_translations":
                     ligand_data_list.extend(
@@ -745,11 +856,24 @@ class StorageManagerSQLite(StorageManager):
             count = pose_interactions["count"][0]
             for i in range(int(count)):
                 interactions.add(
-                    tuple(pose_interactions[kw][i] for kw in cls.interaction_data_kws)
+                    tuple(pose_interactions[kw][i] for kw in cls._data_kw_groups('interaction_data_kws'))
                 )
 
         return list(interactions)
-
+    #MOVE I feel this could be in the master class, and that a lot of the method will reference internal property which is childclass/db type, and then run method in the childclass
+        """Something like this:
+        class StorageManager:
+            def __init__(self, , db_file, storage_type):
+                self.storage_type = storage_type
+                # initialize child class
+                self.storage_type.__init__(db_file)
+        
+            def insert_data(self, data):
+                # do standard formatting stuff
+                formatted_data = data
+                # actual insert
+                self.storage_type.insert_data(formatted_data) # db specific stuff
+        """
     def insert_data(
         self,
         results_array,
@@ -905,35 +1029,7 @@ class StorageManagerSQLite(StorageManager):
         query = """SELECT interaction_id, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid from Interaction_indices"""
         return self._run_query(query)
 
-    def insert_interactions(self, interactions_list):
-        """Takes list of interactions, inserts into database
 
-        Args:
-            interactions_list (list): List of tuples for interactions in form
-            ("type", "chain", "residue", "resid", "recname", "recid")
-        """
-        # populate unique interactions from existing database
-        if self.append_results:
-            existing_unique_interactions = self._fetch_existing_interactions()
-            for interaction in existing_unique_interactions:
-                self.unique_interactions[interaction[1:]] = interaction[0]
-
-            self.next_unique_interaction_idx = (
-                interaction[0] + 1
-            )  # sets next index for next unique interaction
-
-        self._add_unique_interactions(interactions_list)
-
-        # check if we need to initialize the interaction bv table and
-        # insert first set of interaction
-        if not self.interactions_initialized_flag and not self.append_results:
-            self._create_interaction_bv_table()
-            self._insert_unique_interactions(list(self.unique_interactions.keys()))
-            self.interactions_initialized_flag = True
-
-        self._insert_interaction_bitvectors(
-            self._generate_interaction_bitvectors(interactions_list)
-        )
 
     def save_receptor(self, receptor):
         """Takes object of Receptor class, updates the column in Receptor table
@@ -1911,7 +2007,6 @@ class StorageManagerSQLite(StorageManager):
 
         Raises:
             DatabaseTableCreationError: Description
-
         """
         interact_columns_str = (
             " INTEGER,\n".join(
@@ -2145,7 +2240,7 @@ class StorageManagerSQLite(StorageManager):
         """Fetches cursor for best energies and leff for all ligands
 
         Returns:
-            SQLite Cursor: Cursor containing docking_score,
+             iter: SQLite Cursor containing docking_score,
                 leff for the first pose for each ligand
         """
         return self._run_query(self._generate_plot_all_results_query())
@@ -2164,7 +2259,7 @@ class StorageManagerSQLite(StorageManager):
             ligands passing filtering
 
         Returns:
-            SQLite cursor: Cursor containing docking_score,
+            iter: SQL Cursor containing docking_score,
                 leff for the first pose for passing ligands
         """
         return self._run_query(self._generate_plot_passing_results_query())
@@ -2667,37 +2762,15 @@ class StorageManagerSQLite(StorageManager):
             )
         )
 
-    def _generate_interaction_bitvectors(self, interactions_list):
-        """takes string of interactions and makes bitvector
-
-        Args:
-            interactions_list (list): list of list of tuples.
-                Inner lists contain interaction tuples for
-                saved poses for a single ligand
-
-        Returns:
-            List: List of bitvectors for saved poses
-        """
-        bitvectors_list = []
-        for pose_interactions in interactions_list:
-            pose_bitvector = [None] * len(self.unique_interactions)
-            for interaction_tuple in pose_interactions:
-                interaction_idx = self.unique_interactions[interaction_tuple]
-                # index corrected for interaction_indices starting at 1
-                pose_bitvector[interaction_idx - 1] = 1
-
-            bitvectors_list.append(pose_bitvector)
-        return bitvectors_list
-
     def _insert_interaction_bitvectors(self, bitvectors):
         """Insert bitvectors of interaction data into database
 
         Args:
-            bitvectors (List): List of lists With inner list representing
+            bitvectors (list): List of lists With inner list representing
                 interaction bitvector for a pose
 
         Raises:
-            DatabaseInsertionError: Description
+            DatabaseInsertionError
         """
         interaction_columns = range(len(self.unique_interactions))
         column_str = ""
