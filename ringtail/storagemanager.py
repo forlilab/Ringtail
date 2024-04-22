@@ -43,37 +43,16 @@ class StorageManager:
         "1.1.0":["1.1.0", "2.0.0"]
     }
 
-    """Prototype class for a generic VS database object
-    this class defines the API of each
-    StorageManager class (including sub-classess)
-    which will implement their own functions to return the data requested
+    """Base class for a generic virtual screening database object.
+    This class holds some of the common API for StorageManager child classes. 
+    Each child class will implement their own functions to write to and read from the database
 
-    Attributes: #TODO
-        duplicate_handling (str): string indicating how conficting entries should be handled
-        current_view_name (str): name of current results view
-        db_file (string): Name of file containing database
-        field_to_column_name (dictionary): Dictionary for
-            converting command-line field options into DB column names
-        interaction_filter_types (set): Set for types of interaction filters
-        interactions_initialized_flag (boolean): Flag indicating if
-            interaction tables have been created
-        output_all_poses (boolean): Flag dictating, if true, all poses from passing ligands will be logged instead of just top one
-        next_unique_interaction_idx (int): Index for the next unique
-            interaction to be added to interaction_index table
-        open_cursors (list): Storage for any DB cursors which are opened
-            and not closed by the function that opened them. Will be closed by
-            close_connection method.
-        opts (dict): Dictionary of database options
-        order_results (string): string indicating result field that passing
-            results should be ordered by in log.
-        overwrite_flag (boolean): Flag indictating that Storage should drop
-            all existing tables and add nes data
-        bookmark_name (string): Name for the view of passing
-            results to be created after filtering
-        temptable_suffix (int): suffix number for temp table
-        unique_interactions (dict): Dictionary for storing unique interactions
-            to be written in interaction_index table
-        view_suffix (str): suffix to add to end of view. Used with max_miss
+    Attributes: 
+        _db_schema_ver (str): current database schema version
+        _db_schema_code_compatibility (dict): dictionary showing compatibility of code base versions with relational database schema versions
+        unique_interactions (dict)
+        interactions_initialized_flag (bool): flag indicating if interaction tables intitialized
+        next_unique_interaction_idx (int): idx for next interaction to be inserted into Interaction_indices table
     """
 
     def check_storage_compatibility(storage_type):
@@ -103,7 +82,6 @@ class StorageManager:
         
         # Database attributes
         self.closed_connection = False
-        self.duplicate_handling = None
 
         # Specific scientific attributes
         # # # Interaction variables
@@ -504,31 +482,42 @@ class StorageManagerSQLite(StorageManager):
     """SQLite-specific StorageManager subclass
 
     Attributes:
-        conn (SQLite connection): Connection to database
-        energy_filter_sqlite_call_dict (dictionary): Dictionary for
-            translating filter options
-        interactions_initialized_flag (bool): flag indicating if interaction tables intitialized
-        next_unique_interaction_idx (int): idx for next interaction to be inserted into Interaction_indices table
-        open_cursors (list): list of cursors that were not closed by the function that created them
+        conn (SQLite.conn): Connection to database
+        open_cursors (list): list of cursors that were not closed by the function that created them. 
+            Will be closed by close_connection method.
+        db_file (str): database name
+        overwrite (bool): switch to overwrite database if it exists
+        append_results (bool): switch to add results to existing database
+        order_results (str): what column name will be used to order results once read
+        outfields (str): data fields/columns to include when reading and outputting data
+        filter_bookmark (str): name of bookmark that filtering will be performed over
+        output_all_poses (bool): whether or not to output all poses of a ligand
+        mfpt_cluster (float): distance in ångströms to cluster ligands based on morgan fingerprints
+        interaction_cluster (float): distance in ångströms to cluster ligands based on interactions
+        bookmark_name (str): name of current bookmark being written to or read from
+        duplicate_handling (str): optional attribute to deal with insertion of ligands already in the database
 
+        current_view_name (str): name of last view to have been written to in the database 
+        filtering_window (str): name of bookmark/view being filtered on
+        index_columns (list)
+        view_suffix (int): current suffix for views
+        temptable_suffix (int): current suffix for temporary tables
+        energy_filter_sqlite_call_dict (dict): Dictionary for translating filter options for sqlite queries
+        field_to_column_name (dict): Dictionary for converting ringtail options into DB column names
     """
 
     def __init__(self, 
                  db_file: str = None, 
-                 overwrite: bool=None, #MOVE
-                 append_results: bool=None, #MOVE
-                 order_results: str = None, #MOVE
-                 outfields: str = None, #MOVE
-                 filter_bookmark: str = None, #KEEP
-                 output_all_poses: bool = None, #MOVE
-                 mfpt_cluster: float = None, #MOVE
-                 interaction_cluster: float = None, #MOVE
-                 bookmark_name: str = None, #KEEP
-                 duplicate_handling: str = None,): #MOVE
-        """Initialize superclass and subclass-specific instance variables
-        Args:
-            db_file (str): database file name"""
-        locals().keys()
+                 overwrite: bool=None, 
+                 append_results: bool=None, 
+                 order_results: str = None, 
+                 outfields: str = None, 
+                 filter_bookmark: str = None, 
+                 output_all_poses: bool = None, 
+                 mfpt_cluster: float = None, 
+                 interaction_cluster: float = None, 
+                 bookmark_name: str = None, 
+                 duplicate_handling: str = None,): 
         self.db_file = db_file
         self.overwrite = overwrite
         self.append_results = append_results
@@ -542,15 +531,6 @@ class StorageManagerSQLite(StorageManager):
         self.duplicate_handling = duplicate_handling 
         super().__init__()
 
-
-        """Initialize superclass and subclass-specific instance variables
-
-        Args:
-            db_file (str): database file name
-            opts (dict, optional): Dictionary of database options
-            # TODO update this
-        """
-
         self.energy_filter_sqlite_call_dict = {
             "eworst": "docking_score < {value}",
             "ebest": "docking_score > {value}",
@@ -562,7 +542,6 @@ class StorageManagerSQLite(StorageManager):
         self.filtering_window = "Results"
         self.index_columns = []
         self.open_cursors = []
-
 
 #-#-#- Methods for inserting into/removing from the database
     def _create_tables(self):
