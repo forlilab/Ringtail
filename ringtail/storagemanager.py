@@ -543,7 +543,7 @@ class StorageManagerSQLite(StorageManager):
         self.index_columns = []
         self.open_cursors = []
 
-#-#-#- Methods for inserting into/removing from the database
+    #region Methods for inserting into/removing from the database
     def _create_tables(self):
         self._create_results_table()
         self._create_ligands_table()
@@ -1512,9 +1512,9 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError(
                 f"Error occured while pruning Interaction_bitvectors not in {self.bookmark_name}"
             ) from e
+    #endregion
 
-
-#-#-#- Methods for dealing with views/bookmarks and temporary tables
+    #region Methods for dealing with views/bookmarks and temporary tables
     def get_all_bookmark_names(self):
         """Get all views in sql database as a list of names. Bookmarks are called views in sqlite
 
@@ -1766,9 +1766,9 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseInsertionError(
                 f"Error while inserting into temporary table"
             ) from e
+    #endregion
 
-
-#-#-# Methods for getting information from database
+    #region Methods for getting information from database
     def fetch_receptor_object_by_name(self, rec_name):
         """Returns Receptor object from database for given rec_name
 
@@ -1997,9 +1997,9 @@ class StorageManagerSQLite(StorageManager):
             )
         else:
             return pd.read_sql_query(requested_data, self.conn)
+    #endregion
 
-
-#-#-#- Methods dealing with filtered results
+    #region Methods dealing with filtered results
     def get_number_passing_ligands(self, bookmark_name: str = None):
         """Returns count of the number of ligands that
             passed filtering criteria
@@ -2204,9 +2204,9 @@ class StorageManagerSQLite(StorageManager):
             return cutoff
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
+    #endregion
 
-
-#-#-#- Methods that generate SQLite query strings
+    #region Methods that generate SQLite query strings
     def _generate_plot_all_results_query(self):
         """Make SQLite-formatted query string to get docking_score,
             leff of first pose of all ligands
@@ -2739,9 +2739,9 @@ class StorageManagerSQLite(StorageManager):
         return "INSERT INTO {0} SELECT Pose_ID, LigName FROM {1} WHERE LigName {2} (SELECT LigName FROM {3}.{4})".format(
             temp_table, bookmark1_name, select_str, new_db_name, bookmark2_name
         )
+    #endregion
 
-
-    #-#-#- Database operations 
+    #region Database operations 
     def open_storage(self):
         """Create connection to db. Then, check if db needs to be written.
         If self.overwrite drop existing tables and initialize new tables
@@ -3075,5 +3075,5 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
-
+    #endregion
 
