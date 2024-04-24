@@ -1233,12 +1233,14 @@ class RingtailCore:
         Returns:
             all_mols (dict): containing ligand names, RDKit mols, flexible residue bols, and other ligand properties
         """
-
+        
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
 
-        with self.storageman:        
-            if self.filters.max_miss > 0:
+        with self.storageman: 
+            bookmark_filters = self.storageman.fetch_filters_from_view() #fetches the filters used to produce the bookmark
+            max_miss = bookmark_filters["max_miss"]
+            if max_miss > 0: 
                 logger.warning("WARNING: Requested 'export_sdf_path' with 'max_miss'. Exported SDFs will be for union of interaction combinations.")
                 self.storageman.bookmark_name = self.storageman.bookmark_name + "_union"
             if not self.storageman.check_passing_view_exists():
@@ -1303,7 +1305,11 @@ class RingtailCore:
         Args:
             save (bool): whether to save plot to cd
         """
-        if self.filters.max_miss > 0:
+
+        with self.storageman:
+            bookmark_filters = self.storageman.fetch_filters_from_view() #fetches the filters used to produce the bookmark
+        max_miss = bookmark_filters["max_miss"]
+        if max_miss > 0: 
             raise OptionError("Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name.")
         
         logger.info("Creating plot of results")

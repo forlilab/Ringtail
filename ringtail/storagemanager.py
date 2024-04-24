@@ -1552,6 +1552,22 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error while remaking views") from e
 
+    def fetch_filters_from_view(self, bookmark_name = None):
+        """Method that will retrieve filter values used to construct bookmark
+
+        Args:
+            bookmark_name (str, optional): can get filter values for given bookmark, or filter values from currently active bookmark in storageman
+        
+            Returns:
+                dict: containing the filter data
+        """
+        if bookmark_name is None:
+            bookmark_name = self.bookmark_name
+        sql_query = f"SELECT filters FROM Bookmarks where Bookmark_name = '{bookmark_name}'"
+        filters = self._run_query(sql_query).fetchone()[0]
+
+        return json.loads(filters)
+
     def _drop_existing_views(self):
         """Drop any existing views
         Will only be called if self.overwrite is true
