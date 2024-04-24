@@ -59,14 +59,6 @@ if __name__ == "__main__":
                 if outopts.find_similar_ligands:
                     rtcore.find_similar_ligands(outopts.find_similar_ligands)
 
-                # plot if requested
-                if cmdinput.plot:
-                    rtcore.plot()
-
-                # open pymol viewer
-                if cmdinput.pymol:
-                    rtcore.display_pymol()
-
                 # write out molecules if requested
                 if outopts.export_sdf_path:
                     rtcore.write_molecule_sdfs()
@@ -89,6 +81,14 @@ if __name__ == "__main__":
                 # export receptor as .pdbqt
                 if cmdinput.export_receptor:
                     rtcore.export_receptors()
+
+                # plot if requested
+                if cmdinput.plot:
+                    rtcore.plot()
+
+                # open pymol viewer
+                if cmdinput.pymol:
+                    rtcore.display_pymol()
 
     except Exception as e:
         tb = traceback.format_exc()
