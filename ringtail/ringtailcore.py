@@ -48,7 +48,7 @@ class RingtailCore:
             logging_level (str, optional): Global logger level. Defaults to "DEBUG".
         """
         
-        if logging_level is not None: logger.setLevel(logging_level)
+        if logging_level is not None: self.set_logger_level(logging_level)
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
@@ -560,6 +560,14 @@ class RingtailCore:
                     - that internal consistency checks are performed on a group of options
                     - these methods ensure options are assigned to the appropriate ringtail manager classes""" 
     
+    def set_logger_level(self, level):
+        """Ringtail API to change logger level, might change if logger object changes to a class attribute
+
+        Args:
+            level (str): logger level, must be in ["DEBUG", "INFO", "WARNING"]
+        """
+        logger.setLevel(level)
+
     def set_storageman_attributes(self, 
                             filter_bookmark: str = None,
                             append_results: bool = None,
@@ -1030,7 +1038,7 @@ class RingtailCore:
                ligand_operator=None,
                filters_dict: dict = None,
                # other processing options: 
-               enumerate_interaction_combs: bool =False, 
+               enumerate_interaction_combs: bool = False, 
                output_all_poses: bool = None, 
                mfpt_cluster: float = None, 
                interaction_cluster: float = None, 
@@ -1038,7 +1046,8 @@ class RingtailCore:
                overwrite: bool = None, 
                order_results: str = None, 
                outfields: str = None, 
-               bookmark_name: str =None, 
+               bookmark_name: str = None,
+               filter_bookmark: str = None,
                options_dict: dict = None,
                return_iter=False):
         """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
@@ -1101,6 +1110,7 @@ class RingtailCore:
                                     "hb" (hydrogen bonds), 
                                     "receptor" (receptor name)
                 bookmark_name (str): name for resulting book mark file. Default value is 'passing_results'
+                filter_bookmark (str): name of bookmark to perform filtering over
                 options_dict (dict): write options as a dict
 
         Returns:
@@ -1138,6 +1148,7 @@ class RingtailCore:
                                         order_results = order_results, 
                                         outfields = outfields, 
                                         bookmark_name = bookmark_name,
+                                        filter_bookmark= filter_bookmark,
                                         dict=storage_dict)
         self.set_output_options(log_file=log_file,enumerate_interaction_combs=enumerate_interaction_combs, dict = output_dict)
 
