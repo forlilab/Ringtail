@@ -1699,7 +1699,7 @@ class StorageManagerSQLite(StorageManager):
             self._run_query(query)
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
-                "Error while inserting database properties info into DB_properties table"
+                f"Error while attempting to drop bookmark {bookmark_name}"
             ) from e
 
     def create_temp_passing_table(self):
