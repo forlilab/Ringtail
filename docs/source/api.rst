@@ -1,4 +1,5 @@
-# API procedures
+API procedures
+===============
 
 ### Command line tools for Ringtail 
 Should work just as before, but please test them too to make sure I have not made any bugs in my re-write process. 
@@ -15,12 +16,12 @@ Default logging level is "WARNING", and a different logger level can be set at t
 ```
 rtc = RingtailCore(db_file="output.db", logging_level="DEBUG)
 ```
-It is also possible to change logging level by accessing the logger object level attribute:
+It is also possible to change logging level by using the ringtail API to the log level:
 ```
-logger.setLevel("INFO")
+rtc.set_logger_level("INFO")
 ```
 
-The default docking mode is "dlg", and can be changed to "vina" by accessing the ringtail core attribute `docking_mode`:
+The default docking mode is "dlg", and can be changed to "vina" by accessing the ringtail core attribute `docking_mode`. If you are adding files to the database with a certain extension, this will change the `docking_mode` property automatically ("vina" and ".PDBQT" or "dlg" and ".dlg")
 ```
 rtc.docking_mode = "vina"
 ```
@@ -182,4 +183,5 @@ There are a number of output methods available to filter, view, and store the re
 |`pymol`| Launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with bookmark_name will be ploted and displayed in PyMol when clicked on.  | bookmark_name |
 
 ### Using the config file
-Both the command line tool and the API can make use of a configuration file, but this option is not fully vetted yet. 
+Both the command line tool and the API can make use of a configuration file. To create this file call this method, then read it using this #TODO
+
