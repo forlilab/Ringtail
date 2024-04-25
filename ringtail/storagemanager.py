@@ -937,31 +937,33 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting receptor.") from e
 
-    def save_receptor(self, receptor):
+    def save_receptor(self, receptor, rec_name):
         """Takes object of Receptor class, updates the column in Receptor table
 
         Args:
             receptor (bytes): bytes receptor object to be inserted into DB
-
-        Deleted Parameters:
             rec_name (string): Name of receptor. Used to insert into correct row of DB
 
         Raises:
             DatabaseInsertionError: Description
         """
         # Check if there is already a row for the receptor
-        cur = self.conn.execute("SELECT COUNT(*) FROM Results")
+        cur = self.conn.execute("SELECT COUNT(*) FROM Receptors")
         count = cur.fetchone()[0]
         if count == 0:
-            raise DatabaseInsertionError(
-                "Cannot add a receptor without adding docking results first."
-            ) from e
-
-        sql_update = (
-            """UPDATE Receptors SET receptor_object = ? WHERE Receptor_ID == 1"""
-        )
+            # Insert receptor statement
+            query = (f"""INSERT INTO Receptors (
+                      RecName,
+                      receptor_object)
+                      VALUES (?,?)""")
+            
+        else:
+            query = (
+                """UPDATE Receptors SET rec_name = ?, receptor_object = ? WHERE Receptor_ID == 1"""
+            )
         try:
-            cur = self.conn.execute(sql_update, (receptor,))
+            print(query)
+            cur = self.conn.execute(query, (rec_name, receptor))
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
@@ -1931,6 +1933,7 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             int: number of rows in receptors table
+            str: name of receptor if present in table
 
         Raises:
             DatabaseQueryError
@@ -1939,7 +1942,12 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.execute("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
             row_count = cur.fetchone()[0]
             cur.close()
-            return row_count
+            recname = None
+            if row_count > 0:
+                # get name of receptor
+                cur = self.conn.execute("SELECT RecName FROM Receptors")
+                recname = cur.fetchone()[0]
+            return row_count, recname
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(
                 "Error occurred while fetching number of receptor rows containing PDBQT blob"
