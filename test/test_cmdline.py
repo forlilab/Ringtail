@@ -594,3 +594,34 @@ class TestFilters:
         assert status2 == 0
     
         os.system("rm output_log.txt output.db")
+
+class TestOtherScripts:
+
+    def test_rt_compare(self):
+        # first database
+        os.system(
+            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
+        )
+        # second database
+        os.system(
+            "python ../scripts/rt_process_vs.py write -d --output_db output2.db --file_path test_data/group1"
+        )  
+        # filter producing 30 ligands
+        os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -6"
+        )
+        # filter producing 5 ligands
+        os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output2.db --eworst -7"
+        )
+        # should produce 25 ligands 
+        os.system(
+            "python ../scripts/rt_compare.py --wanted output.db --unwanted output2.db --log compared_ligands.txt"
+        )
+        with open("compared_ligands.txt") as f:
+            for pos, line in enumerate(f):
+                if pos+1 == 4: #zero based line indexing
+                    assert line == "Number passing ligands: 25 \n"
+                    break
+        
+        os.system("rm output.db output2.db compared_ligands.txt output_log.txt")

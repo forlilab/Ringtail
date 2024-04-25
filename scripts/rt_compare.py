@@ -276,7 +276,7 @@ if __name__ == "__main__":
     except Exception as e:
         tb = traceback.format_exc()
         logger.debug(tb)
-        logger.critical(e)
+        logger.critical(str(e))
         logger.error(
             "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
         )
