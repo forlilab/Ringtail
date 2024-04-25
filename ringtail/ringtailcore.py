@@ -957,21 +957,11 @@ class RingtailCore:
                 # NOTE: in current implementation, only one receptor allowed per database
                 # Check that any receptor row is incomplete (needs receptor blob) before inserting
                 filled_receptor_rows, recname_present = self.storageman.count_receptors_in_db()
-                if filled_receptor_rows != 0:
-                    if self._run_mode == "cmd": # throw error if receptor is already present
-                        raise RTCoreError(
-                            "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
-                                filled_receptor_rows
-                            ))
-                    else: # more permissive for API run mode
-                        if rec_name == recname_present: # if the same receptor has already been added, present warning and move on
-                            logger.warning(f"Table already has the following receptor present: {recname_present}. Will not add the receptor again.")
-                            return
-                        else: # if a different receptor is present, raise error
-                            raise RTCoreError(
-                            "The Receptors table has the following receptor present: {0}, which is different from the receptor you are trying to add: {1}.".format(
-                                recname_present, rec_name
-                            ))
+                if filled_receptor_rows != 0:# throw error if receptor is already present
+                    raise RTCoreError(
+                        "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
+                            filled_receptor_rows
+                        ))
                 self.storageman.save_receptor(rec, rec_name)
                 logger.info("Receptor data was added to the database.")
     
