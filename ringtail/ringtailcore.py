@@ -458,7 +458,7 @@ class RingtailCore:
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(strings, k, v)
-            logger.debug(f'Docking string results attribute {k} was set to {v}.')
+            logger.debug(f'Docking string results attribute {k} was set.')
         
         return strings
 
