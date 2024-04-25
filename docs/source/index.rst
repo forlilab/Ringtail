@@ -5,8 +5,9 @@
 
 Welcome to ringtail's documentation!
 ====================================
-
+:doc:`Command line documentation<cmdline>`
 :doc:`API documentation<api>`
+
 
 Indices and tables
 ==================
