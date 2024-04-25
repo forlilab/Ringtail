@@ -201,7 +201,7 @@ if __name__ == "__main__":
 
         # set database type to default sqlite if not specified in cmdline args
         if args.database_type is None:
-            args.database_type == "sqlite"
+            args.database_type = "sqlite"
         # ensure the specified database types are supported
         storagemanager = StorageManager.check_storage_compatibility(args.database_type) 
 
@@ -214,7 +214,7 @@ if __name__ == "__main__":
                 logger.info(f"cross-referencing {db}")
                 if not os.path.exists(db):
                     logger.critical("Wanted database {0} not found!".format(db))
-
+                print(f"passing in these parameters: {db}, {previous_bookmarkname}, {bookmark_list[idx]}, {last_db}")
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                     db,
                     previous_bookmarkname,
@@ -223,6 +223,7 @@ if __name__ == "__main__":
                     old_db=last_db,
                 )
                 last_db = db
+
 
             if unwanted_dbs is not None:
                 for idx, db in enumerate(unwanted_dbs):
@@ -240,12 +241,12 @@ if __name__ == "__main__":
 
             logger.info("Writing log")
             output_manager = OutputManager(log_file=args.log)
-            if args.save_bookmark is not None:
-                with output_manager:
+            with output_manager:
+                if args.save_bookmark is not None:
                     output_manager.write_results_bookmark_to_log(args.save_bookmark)
-                    output_manager.log_num_passing_ligands(number_passing_ligands)
-                    final_bookmark = dbman.fetch_view(previous_bookmarkname)
-                    output_manager.write_log(final_bookmark)
+                output_manager.log_num_passing_ligands(number_passing_ligands)
+                final_bookmark = dbman.fetch_view(previous_bookmarkname)
+                output_manager.write_log(final_bookmark)
 
             if args.save_bookmark is not None:
                 dbman.save_temp_table(
