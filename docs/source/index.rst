@@ -6,11 +6,7 @@
 Welcome to ringtail's documentation!
 ====================================
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-
+:doc:`API documentation<api>`
 
 Indices and tables
 ==================
@@ -18,3 +14,4 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
