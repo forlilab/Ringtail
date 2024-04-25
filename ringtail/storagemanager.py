@@ -959,10 +959,9 @@ class StorageManagerSQLite(StorageManager):
             
         else:
             query = (
-                """UPDATE Receptors SET rec_name = ?, receptor_object = ? WHERE Receptor_ID == 1"""
+                """UPDATE Receptors SET RecName = ?, receptor_object = ? WHERE Receptor_ID == 1"""
             )
         try:
-            print(query)
             cur = self.conn.execute(query, (rec_name, receptor))
             self.conn.commit()
             cur.close()
