@@ -17,34 +17,12 @@ def countrows():
         count = curs.fetchone()[0]
         curs.close()
         conn.close()
-        os.system("rm output.db")
         return count
     return __dbconnect
 
 class TestInputs:
-    os.system("rm output.db")
-
-    #TODO
-    def test_cmdline_default(self):
-        # run command line with minimal stuff, and read parsed opts
-        assert True
-    
-    #TODO
-    def test_cmdline_config_file(self):
-        # run command line with config file only and it should pass (may need read or write), and read parsed_opts
-        assert True
-    
-    #TODO
-    def test_organization_of_parsed_opts(self):
-        # print parsed dictionaries and assert composition
-        assert True
-
-    #TODO
-    def test_db_file(self):
-        # add file that exists, check for append
-        # if append, check poses and docking mode consistent (read error message)
-        assert True
-       
+    os.system("rm output.db")    
+        
     def test_files(self, countrows):
         os.system(
                 "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
@@ -56,6 +34,8 @@ class TestInputs:
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
+        os.system("rm output.db") 
+
         assert count1 == count2 == 3
 
     def test_file_paths(self, countrows):
@@ -64,10 +44,14 @@ class TestInputs:
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
+        os.system("rm output.db") 
+
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 test_data/group2"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
+
+        os.system("rm output.db") 
 
         assert count1 == count2 == 217
 
@@ -77,10 +61,14 @@ class TestInputs:
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
+        os.system("rm output.db") 
+
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt filelist2.txt"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
+
+        os.system("rm output.db") 
 
         assert count1 == count2 == 5
 
@@ -90,18 +78,34 @@ class TestInputs:
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
+        os.system("rm output.db") 
+
         assert count == 75
 
-    def test_append_results(self, countrows):
+    def test_cmdline_config_file(self, countrows):
+        from ringtail import RingtailCore
+        import json
+
+        RingtailCore.generate_config_json_template()
+        filepath = "config.json"
+
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        # all fields I want to change
+        data["fileobj"]["file_list"] = [['filelist1.txt']]
+
+        with open(filepath, "w") as f:
+            f.write(json.dumps(data, indent=4))
+
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
-        )
-        os.system(
-            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group2 --append_results"
-        )
+                "python ../scripts/rt_process_vs.py write -d --config config.json"
+            )
+        
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
-        assert count == 217
+        os.system("rm output.db config.json") 
+
+        assert count == 3
 
     def test_duplicate_handling(self, countrows):
         os.system(
@@ -112,13 +116,24 @@ class TestInputs:
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
+        
+    def test_append_results(self, countrows):
+        os.system(
+            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group2 --append_results"
+        )
+        count = countrows("SELECT COUNT(*) FROM Ligands")
+
+        assert count == 217
 
     def test_save_rec_file(self, countrows):
         
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt --save_receptor"
+            "python ../scripts/rt_process_vs.py write -d --input_db output.db --receptor_file test_data/4j8m.pdbqt --save_receptor --append_results"
         )
         count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+
+        os.system("rm output.db") 
+
         assert count == 1
     
     def test_save_rec_file_gz(self, countrows):
@@ -126,6 +141,9 @@ class TestInputs:
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor"
         )
         count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+
+        os.system("rm output.db") 
+
         assert count == 1
 
 class TestOutputs:
@@ -140,20 +158,17 @@ class TestOutputs:
         assert status1 == status2 == 0
         assert os.path.exists("Ligands.csv")
 
-        os.system("rm output.db")
         os.system("rm Ligands.csv")
 
     def test_export_query_csv(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
 
-        status2 = os.system(
+        status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --export_query_csv 'SELECT * FROM Results'"
         )
 
-        assert status1 == status2 == 0
+        assert status == 0
         assert os.path.exists("query.csv")
+
         os.system("rm output.db")
         os.system("rm query.csv")
 
@@ -286,16 +301,6 @@ class TestOutputs:
         assert count == ligcount * 20
 
 class TestFilters:
-    #TODO
-    def test_complex_filters_error(self):
-        # check that filters are parsed right
-        # check that wrong filter formats causes the correct error
-        assert True
-    
-    #TODO
-    def test_interaction_count(self):
-        # this was not tested before, and was not working
-        assert True
     
     def test_eworst(self):
         status1 = os.system(
@@ -305,122 +310,80 @@ class TestFilters:
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15"
         )
 
-        os.system("rm output.db")
         assert status1 == status2 == 0
 
     def test_ebest(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --ebest -15"
-        )
-
-        os.system("rm output.db")
-
-        assert status1 == status2 == 0
-
-    def test_leworst(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --leworst -0.4"
-        )
-
-        os.system("rm output.db")
-
-        assert status1 == status2 == 0
-
-    def test_lebest(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --leworst -0.4"
-        )
-
-        os.system("rm output.db")
-
-        assert status1 == status2 == 0
-
-    def test_epercentile(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 0.1"
-        )
-
-        os.system("rm output.db")
-
-        assert status1 == status2 == 0
-
-    def test_lepercentile(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --le_percentile 0.1"
-        )
-
-        os.system("rm output.db")
-
-        assert status1 == status2 == 0
-
-    def test_epercentile_eworst(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 0.1 --eworst -14"
-        )
-
-        os.system("rm output.db")
-
-        assert status1 == status2 == 0
-
-    def test_lepercentile_leworst(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --le_percentile 0.1 --leworst -0.4"
-        )
-
-        os.system("rm output.db")
-
-        assert status1 == status2 == 0
-
-    def test_name(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input output.db --ligand_name 127458"
-        )
-
-        os.system("rm output.db")
-
-        assert status1 == status2 == 0
-
-    def test_hbcount(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --hb_count 5"
-        )
-
-        assert status1 == status2 == 0
-
-    """def test_react_any(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --react_any"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --ebest -15"
         )
 
         assert status == 0
 
+    def test_leworst(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --leworst -0.4"
+        )
+
+        assert status == 0
+
+    def test_lebest(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --leworst -0.4"
+        )
+
+        assert status == 0
+
+    def test_epercentile(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 0.1"
+        )
+
+        assert status == 0
+
+    def test_lepercentile(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --le_percentile 0.1"
+        )
+
+        assert status == 0
+
+    def test_epercentile_eworst(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 0.1 --eworst -14"
+        )
+
+        assert status == 0
+
+    def test_lepercentile_leworst(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --le_percentile 0.1 --leworst -0.4"
+        )
+
+        assert status == 0
+
+    def test_name(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input output.db --ligand_name 127458"
+        )
+
+        assert status == 0
+
+    def test_hbcount(self, countrows):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --hb_count 5"
+        )
+        count = countrows("SELECT COUNT(*) FROM passing_results")
+
+        assert status == 0
+        assert count == 1
+    
+    def test_react_any(self):
+        status = os.system(
+                "python ../scripts/rt_process_vs.py read -d --input_db output.db --react_any"
+            )
+
+        assert status == 0
+    
     def test_react1(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions A:TYR:169:"
@@ -468,7 +431,7 @@ class TestFilters:
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions ::169:"
         )
 
-        assert status == 0"""
+        assert status == 0
 
     def test_hb1(self):
         status = os.system(
@@ -576,23 +539,32 @@ class TestFilters:
         assert status == 0
     
     def test_export_sdf(self):
-        status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        )
-        status2 = os.system(
+        # status1 = os.system(
+        #     "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+        # )
+        status = os.system(
             "python ../scripts/rt_process_vs.py read --input_db output.db -e -4 -sdf . -d "
         )
 
         import glob
         sdf_files = glob.glob("*.sdf")
         expected = ['127458.sdf', '100729.sdf', '173101.sdf']
+
         assert len(sdf_files) == len(expected)
+
         for f in sdf_files:
             assert f in expected
             os.remove(f)
 
-        assert status2 == 0
+        assert status == 0
     
+    def test_filters_value_error(self):
+
+        status = os.system(
+                "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 109"
+            )
+        # checking that code exited with error since a percentile cannot be above 100
+        assert status != 0
         os.system("rm output_log.txt output.db")
 
 class TestOtherScripts:
