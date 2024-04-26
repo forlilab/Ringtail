@@ -526,6 +526,9 @@ class RingtailCore:
             write_dict = None
         self.set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
 
+        if results_sources.save_receptor: 
+            self.save_receptor(results_sources.receptor_file)
+
         with self.storageman:
             # check storage exist and can be appended to if specified
             if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
@@ -552,8 +555,6 @@ class RingtailCore:
             self.storageman.set_ringtail_db_schema_version()
             if summary: self.produce_summary()
 
-        if results_sources.save_receptor: 
-            self.save_receptor(results_sources.receptor_file)
    
 #-#-#- Core attribute setting methods -#-#-#
     """ These methods are used internally to assing values to all ringtail options. 
