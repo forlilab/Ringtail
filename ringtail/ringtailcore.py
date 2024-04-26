@@ -453,7 +453,7 @@ class RingtailCore:
         if dict is not None:
             for k,v in dict.items():
                 setattr(strings, k, v) 
-                logger.debug(f'Docking string results attribute {k} was set to {v}.')
+                logger.debug(f'Docking string results attribute {k} was set.')
 
         # Set additional options from individual arguments
         #NOTE Will overwrite config file
