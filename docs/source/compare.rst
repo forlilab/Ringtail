@@ -3,7 +3,10 @@
 Compare docking results from different virtual screenings
 ====================
 
-The script ``rt_compare.py`` is designed to be used with databases already made and filtered. The script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (wanted) or exclusive to some screenings and not others (unwanted). The script uses a subset of commands similar to ``rt_process_vs.py``.
+
+The script ``rt_compare.py`` is designed to be used with databases already made and filtered. It is used to combine information across multiple virtual screenings to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
+
+Programmatically, the ``rt_compare.py`` script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (``--wanted``) or exclusive to some screenings and not others (``--unwanted``). The script uses a subset of commands similar to ``rt_process_vs.py``.
 
 The basic process of preparing to use this script and the concept behind it is thus:
 
