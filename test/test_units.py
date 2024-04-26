@@ -336,12 +336,7 @@ class TestVinaHandling:
 
         assert warning_worked
 
-#TODO when re-writing storageman: should have the actual storage "api"s 
 class TestStorageMan:
-    pass
-
-#TODO when re-writing storageman: clean to just include sqlite specific stuff, connection, querying, etc
-class TestStorageManSQLite:
    
     def test_storageman_setup(self):
         rtc = RingtailCore("output.db")
