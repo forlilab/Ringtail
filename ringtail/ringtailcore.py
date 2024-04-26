@@ -48,7 +48,8 @@ class RingtailCore:
             logging_level (str, optional): Global logger level. Defaults to "DEBUG".
         """
         
-        if logging_level is not None: self.set_logger_level(logging_level)
+        if logging_level is not None:
+            logger.setLevel(logging_level)
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
@@ -458,7 +459,7 @@ class RingtailCore:
         #NOTE Will overwrite config file
         for k,v in indiv_options.items():
             if v is not None: setattr(strings, k, v)
-            logger.debug(f'Docking string results attribute {k} was set to {v}.')
+            logger.debug(f'Docking string results attribute {k} was set.')
         
         return strings
 
@@ -560,14 +561,6 @@ class RingtailCore:
                     - that internal consistency checks are performed on a group of options
                     - these methods ensure options are assigned to the appropriate ringtail manager classes""" 
     
-    def set_logger_level(self, level):
-        """Ringtail API to change logger level, might change if logger object changes to a class attribute
-
-        Args:
-            level (str): logger level, must be in ["DEBUG", "INFO", "WARNING"]
-        """
-        logger.setLevel(level)
-
     def set_storageman_attributes(self, 
                             filter_bookmark: str = None,
                             append_results: bool = None,
