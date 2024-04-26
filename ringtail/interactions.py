@@ -12,14 +12,13 @@ class InteractionFinder:
     """Class for handling and calculating ligand-receptor interactions.
 
     Attributes:
-        rec_file (str): name of receptor file
+        rec_string (str): string describing the receptor
         interaction_cutoff_radii (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
     """
 
-    def __init__(self, rec_file, interaction_cutoff_radii):
-        self.rec_file = rec_file
-
-        self.pdb = PDBQTReceptor(rec_file)
+    def __init__(self, rec_string, interaction_cutoff_radii):
+        self.rec_string = rec_string
+        self.pdb = PDBQTReceptor(rec_string)
         self.interaction_cutoff_radii = interaction_cutoff_radii
 
     def find_pose_interactions(

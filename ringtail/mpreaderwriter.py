@@ -11,7 +11,7 @@ from .logmanager import logger
 import traceback
 import queue
 from .parsers import parse_single_dlg, parse_vina_result
-from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError
+from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError, StorageError
 from .interactions import InteractionFinder
 
 os_string = platform.system()
@@ -38,7 +38,6 @@ class DockingFileReader(multiprocessing.Process):
         add_interactions (bool): find and save interactions between ligand poses and receptor
         interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
         target (str): receptor name
-        receptor_file (str): path to receptor file
         string_processing (bool, optional): switch for processing result strings
     """
 
@@ -162,8 +161,17 @@ class DockingFileReader(multiprocessing.Process):
                 )
                 # Calculate interactions if requested
                 if self.add_interactions:
+                    try:
+                        from .receptormanager import ReceptorManager as rm
+                        with self.storageman:
+                            # grab receptor info from database, this assumes there is only one receptor in the database
+                            receptor_blob = self.storageman.fetch_receptor_objects()[0][1] # method returns and iter of tuples, blob is the second tuple element in the first list element
+                            # convert receptor blob to string
+                            receptor_string = rm.blob2str(receptor_blob)
+                    except: 
+                        raise StorageError("Cannot find the receptor in the database, please ensure the correct receptor is specified.")
                     if self.interaction_finder is None:
-                        self.interaction_finder = InteractionFinder(self.receptor_file, self.interaction_cutoffs)
+                        self.interaction_finder = InteractionFinder(receptor_string, self.interaction_cutoffs)
                     if parsed_file_dict["interactions"] == []:
                         for pose in parsed_file_dict["pose_coordinates"]:
                             parsed_file_dict["interactions"].append(
