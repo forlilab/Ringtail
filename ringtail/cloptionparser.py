@@ -736,7 +736,8 @@ class CLOptionParser:
             # set up filters
             filters = {} 
             # empty lists are counted as filters, and the default keyword "OR" too
-            optional_filters = Filters.get_filter_keys("all") 
+            optional_filters = Filters.get_filter_keys("all")
+            optional_filters.append("hb_count") # hb/interaction count is not part of the three formal list but works as a filter on its own
             for f in optional_filters:
                 if getattr(parsed_opts, f) is not None and getattr(parsed_opts, f) != []:
                     if f == "ligand_operator":
