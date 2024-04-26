@@ -1810,7 +1810,7 @@ class StorageManagerSQLite(StorageManager):
             rec_name (str): Name of receptor to return object for
 
         Returns:
-            iter: of receptor objects
+            iter (tuple): of receptor names and objects
         """
 
         cursor = self._run_query(
