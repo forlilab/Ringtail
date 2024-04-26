@@ -859,7 +859,7 @@ class RingtailCore:
             raise OptionError("At least one input option needs to be used: file, file_path, file_list, or save_receptor")
 
         # If there are ligand files present, process ligand data
-        if results_files_given: 
+        if results_files_given or files.save_receptor: 
             self._add_results(files,
                               False,
                               append_results,
@@ -923,7 +923,7 @@ class RingtailCore:
             raise OptionError("At least one input option needs to be used: 'results_strings', or 'save_receptor'")
         
         # If there are any docking data strings, process docking results
-        if results_strings_given: 
+        if results_strings_given or results.save_receptor: 
             self._add_results(results,
                               True,
                               append_results,
