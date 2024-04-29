@@ -105,11 +105,7 @@ class ResultsManager:
             raise ResultsProcessingError(
                 "Docking results were provided as both file sources and string sources. Currently only one results type is accepeted at the time."
             )
-        
-        if self.docking_mode == "vina" and self.add_interactions and self.receptor_file is None:
-                raise ResultsProcessingError(
-                    "Gave --add_interactions with Vina docking_mode but did not specify receptor name. Please give receptor pdbqt name with --receptor_file.")
-        
+
         # start MP process 
         if files_sources:
              logmsg = f'These are the file sources being processed: {str(self.file_sources.todict())}'

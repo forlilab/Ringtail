@@ -11,7 +11,7 @@ from .logmanager import logger
 import traceback
 import queue
 from .parsers import parse_single_dlg, parse_vina_result
-from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError, StorageError
+from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError, ResultsProcessingError
 from .interactions import InteractionFinder
 
 os_string = platform.system()
@@ -169,7 +169,7 @@ class DockingFileReader(multiprocessing.Process):
                             # convert receptor blob to string
                             receptor_string = rm.blob2str(receptor_blob)
                     except: 
-                        raise StorageError("Cannot find the receptor in the database, please ensure the correct receptor is specified.")
+                        raise ResultsProcessingError("add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database.")
                     if self.interaction_finder is None:
                         self.interaction_finder = InteractionFinder(receptor_string, self.interaction_cutoffs)
                     if parsed_file_dict["interactions"] == []:
