@@ -120,7 +120,11 @@ class DockingFileReader(multiprocessing.Process):
             try:
                 # retrieve from the queue in the next task to be done
                 next_task = self.queueIn.get() 
-                logger.debug("Next Task: " + str(next_task))
+                if type(next_task)==dict: 
+                    text = list(next_task.keys())[0]
+                else:
+                    text = next_task
+                logger.debug("Next Task: " + str(text))
                 # if a poison pill is received, this worker's job is done, quit
                 if next_task is None:
                     # before leaving, pass the poison pill back in the queue
@@ -134,8 +138,6 @@ class DockingFileReader(multiprocessing.Process):
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 elif self.docking_mode == "vina":
-                    print("\n\n docking in vina")
-                    logger.debug(f'nest task is {next_task}')
                     parsed_file_dict = parse_vina_result(next_task, self.string_processing)
 
                 # Example code for calling user-implemented docking_mode
