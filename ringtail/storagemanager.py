@@ -192,7 +192,10 @@ class StorageManager:
         self.insert_results(results_array) #TODO could add a flag in this method, if the unique is invoked, and with which keyword, and then and only then will it add statement with unique? 
         self.insert_ligands(ligands_array)
         if insert_receptor and receptor_array != []:
-            self.insert_receptors(receptor_array)
+            # first checks if there is receptor info already in the db
+            receptors = self.fetch_receptor_objects()
+            if len(receptors) == 0:   
+                self.insert_receptors(receptor_array) # insert receptor if it is empty
         if interaction_array != []:
             self.insert_interactions(interaction_array)
 
