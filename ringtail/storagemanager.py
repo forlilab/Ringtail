@@ -2816,6 +2816,9 @@ class StorageManagerSQLite(StorageManager):
             compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
             try: 
                 cur = self.conn.execute("SELECT * FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1")
+                if cur.rowcount < 1:
+                    logger.info("Adding results to an existing database that is currently empty of docking results.")
+                    return
                 (row_id, last_docking_mode, num_of_poses) = cur.fetchone()
                 if docking_mode != last_docking_mode:
                     compatible = False
@@ -2826,7 +2829,7 @@ class StorageManagerSQLite(StorageManager):
                 elif int(num_of_poses) != max_poses:
                     compatible = False
                     compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to {num_of_poses}."
-        
+                
             except Exception as e:
                 raise e
             finally:
