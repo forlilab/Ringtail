@@ -73,17 +73,36 @@ It is further possible to overwrite a database by use of the argument ``--overwr
     #vina
     $ python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/vina --overwrite --receptor_file receptor.pdbqt --save_receptor --add_interactions --interaction_cutoffs 3.7,4.0
 
+Printing a database summary
+----------------------------
+During both ``write`` and ``read`` it is possible to add the tag ``-su`` or ``--summary`` which will print a summary of the database to stdout.
 
+.. code-block:: bash
+
+    $ rt_process_vs.py read --input_db output.db -su
+
+    Total Stored Poses: 645
+    Total Unique Interactions: 183
+
+    Energy statistics:
+    min_docking_score: -7.93 kcal/mol
+    max_docking_score: -2.03 kcal/mol
+    1%_docking_score: -7.43 kcal/mol
+    10%_docking_score: -6.46 kcal/mol
+    min_leff: -0.62 kcal/mol
+    max_leff: -0.13 kcal/mol
+    1%_leff: -0.58 kcal/mol
+    10%_leff: -0.47 kcal/mol
 
 Filtering
 ----------------
 In ``read`` mode, an existing database is used to filter or export results.
 
-When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name and docking score of every pose passing filtering criteria. The log name may be changed with the ``--log`` option. There are six scoring filters that include best and worst docking score/energy, best and worst ligand efficieny, and results above worst docking score or ligand efficiency percentile. Some of these are internally inconsistent: if both ``--eworst`` and ``--score_percentile`` are used together, the ``--eworst`` cutoff alone is used. The same is true of ``--leworst`` and ``--le_percentile``.
+When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name and docking score of every pose passing filtering criteria. The log name may be changed with the ``--log_file`` option. There are six scoring filters that include best and worst docking score/energy, best and worst ligand efficieny, and results above worst docking score or ligand efficiency percentile. Some of these are internally inconsistent: if both ``--eworst`` and ``--score_percentile`` are used together, the ``--eworst`` cutoff alone is used. The same is true of ``--leworst`` and ``--le_percentile``.
 
 .. code-block:: bash
 
-    $ python ../scripts/rt_process_vs.py read --input_db output.db --score_percentile 0.1 --log output_log_01percent.txt
+    $ python ../scripts/rt_process_vs.py read --input_db output.db --score_percentile 0.1 --log_file output_log_01percent.txt
 
 The information written to the log can be specified with ``--outfields``. The full list of available output fields may be seen by using the ``--help`` option with ``read`` mode.
 By default, only the information for the top-scoring binding pose will be written to the log. If desired, each individual passing pose can be written by using the ``--output_all_poses`` flag. The passing results may also be ordered in the log file using the ``--order_results`` option.
@@ -98,18 +117,21 @@ Filtering may take from seconds to minutes, depending on the size of the databas
 Interaction filters
 ```````````````````
 It is possible to filter the docking results based on different types of interactions (hydrogen bonds onr van der waals) with specific residues. It is further possible to have ligands pass the filters while only fulfilling some of the interaction combinations in union (max number of interactions combinations missed, ``--max_miss``).
-The available interaction filters are ``--hb_interactions``, ``vdv_interactions``, and ``--reactive_interactions``. Interaction filters must be specified in the order ``CHAIN:RES:NUM:ATOM_NAME``. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. ``-vdw``) may be specified with a single option tag (``-vdw B:THR:276:,B:HIS:226:``) or separate tags (``-vdw B:THR:276: -vdw B:HIS:226:``).
+The available interaction filters are ``--hb_interactions``, ``--vdw_interactions``, and ``--reactive_interactions``. Interaction filters must be specified in the order ``CHAIN:RES:NUM:ATOM_NAME``. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. ``-vdw``) may be specified with a single option tag (``-vdw B:THR:276:,B:HIS:226:``) or separate tags (``-vdw B:THR:276: -vdw B:HIS:226:``).
 
 The ``--max_miss`` option allows the user to filter by given interactions excluding up to ``max_miss`` interactions. This gives :math:`\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}` combinations for *n* interaction filters and *m* max_miss. By default, results will be given for the union of the interaction conbinations. Use with ``--enumerate_interaction_combs`` to log ligands/poses passing each separate interaction combination (can significantly increase runtime). If ``max_miss > 0`` is used during filtering, a view is created for each combination of interaction filters and is named ``<bookmark_name>_<n>`` where n is the index of the filter combination in the log file (indexing from 0).
+``--react_any`` offers an option to filtering for poses that have reactions with any residue.
 
 .. code-block:: bash
-    $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions 'A:VAL:279: A:LYS:162: --max_miss 1)
 
-Ligand filters
+    $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions A:VAL:279: A:LYS:162: --max_miss 1 --react_any)
+
+Ligand filters #TODO
 ```````````````
 The ``--smarts_idxyz`` option may be used to filter for a specific ligand substructure (specified with a SMARTS string) to be placed within some distance of a given cartesian coordinate. The format for this option is ``"<SMARTS pattern: str>" <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>``.
 
 .. code-block:: bash
+
     $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions 'A:VAL:279: A:LYS:162: --max_miss 1)
 
 
@@ -127,7 +149,7 @@ Outputs
 ----------------
 The primary outputs from ``rt_process_vs.py`` are the database itself (``write`` mode) and the filtering log file (``read`` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
-The ``--plot`` flag generates a scatterplot of ligand efficiency vs docking score for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with ``--bookmark_name`` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as ``[filters_file].png`` if a ``--filters_file`` is used, otherwise it is saved as ``out.png``.
+The ``--plot`` flag generates a scatterplot of ligand efficiency vs docking score for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with ``--bookmark_name`` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as ``scatter.png``.
 
 The ``--pymol`` flag also generates a scatterplot of ligand efficiency vs docking score, but only for the ligands contained in the bookmark specified with ``--bookmark_name``. It also launches a PyMol session and will display the ligands in PyMol when clicked on the scatterplot. N.B.: Some users may encounter a ``ConnectionRefusedError``. If this happens, try manually launching PyMol (``pymol -R``) in a separate terminal window.
 
