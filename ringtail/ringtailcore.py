@@ -1302,7 +1302,7 @@ class RingtailCore:
                 print("Number similar ligands:", number_similar)
         return number_similar
         
-    def plot(self, save=True):
+    def plot(self, save=True, bookmark_name = None):
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
@@ -1310,7 +1310,8 @@ class RingtailCore:
         Args:
             save (bool): whether to save plot to cd
         """
-
+        if bookmark_name is not None:
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
         with self.storageman:
             bookmark_filters = self.storageman.fetch_filters_from_view() #fetches the filters used to produce the bookmark
         max_miss = bookmark_filters["max_miss"]
