@@ -176,12 +176,12 @@ This produces an output log `output_log.txt` with the names of ligands passing t
 We can also save a round of filtering with a specific bookmark name, and perform more filtering on this bookmark.
 For example, start out with filtering out the compounds that are within the 5th percentile in terms of docking score and save the bookmark as `ep5`:
 ```
-$ rt_process_vs.py read --input_db output.db --score_percentile 5 --log ep5_log.txt --bookmark_name ep5
+$ rt_process_vs.py read --input_db output.db --score_percentile 5 --log_file ep5_log.txt --bookmark_name ep5
 ```
 Let's then further refine the set of molecules by applying an interaction filter for van der Waals interactions with V279 on the receptor:
 
 ```
-$ rt_process_vs.py read --input_db output.db --filter_bookmark ep5 --vdw_interactions A:VAL:279: --log ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
+$ rt_process_vs.py read --input_db output.db --filter_bookmark ep5 --vdw_interactions A:VAL:279: --log_file ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
 ```
 The filtered molecules can then be exported as an e.g., SDF file which can be used for visual inspection in molecular graphics programs. At the same time, if pymol is installed, we can kick off a pymol session of the ligands
 
@@ -229,7 +229,7 @@ $ rt_process_vs.py read --help
 |--interaction_cutoffs  |-ic| Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. | 3.7,4.0     ||
 |--receptor_file |-rn| Use with --save_receptor and/or --add_interactions. Give receptor PDBQT. | None      ||
 |--max_proc |-mpr| Maximum number of subprocesses to spawn during database writing. | [# available CPUs]      |<tr><td colspan="5">**Read Mode**</td></tr>
-|--log              |-l| Name for log of filtered results                      | output_log.txt   ||
+|--log_file              |-l| Name for log of filtered results                      | output_log.txt   ||
 |--outfields       |-of| Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
 |--order_results    |-ord| String for field by which the passing results should be ordered in log file. | no default ||
 |--output_all_poses        |-ap| Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||
