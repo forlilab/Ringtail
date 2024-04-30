@@ -38,6 +38,7 @@ class RingtailCore:
     def __init__(self, 
                  db_file: str = "output.db", 
                  storage_type: str = "sqlite", 
+                 docking_mode: str = "dlg",
                  logging_level: str = "debug"):
         """Initialize ringtail core, and create a storageman object with the db file. 
         Can set logger level here, otherwise change it by logger.setLevel("level")
@@ -53,9 +54,9 @@ class RingtailCore:
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type) 
         self.storageman = storageman(db_file)
-        self.set_storageman_attributes()
         self._run_mode = "api"
-        self.docking_mode = "dlg"
+        self.docking_mode = docking_mode
+        self.set_storageman_attributes()
 
     def update_database_version(self, consent=False):
         """Method to update database version from 1.0.0 to 1.1.0
@@ -1459,7 +1460,7 @@ class RingtailCore:
                 self.set_output_options()
             self.outputman.write_receptor_pdbqt(recname, recblob)
 
-    def get_previous_filter_data(self, outfields = None, bookmark_name = None):
+    def get_previous_filter_data(self, outfields = None, bookmark_name = None, log_file = None): 
         """Get data requested in self.out_opts['outfields'] from the
         results view of a previous filtering
 
@@ -1471,6 +1472,8 @@ class RingtailCore:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
         if outfields is not None:
             self.set_storageman_attributes(outfields=outfields)
+        if log_file is not None:
+            self.set_output_options(log_file=log_file)
 
         with self.storageman: new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman: self.outputman.write_log(new_data)
