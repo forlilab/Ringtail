@@ -20,7 +20,7 @@ sphinx:
   configuration: docs/source/conf.py
 
 conda:
-  environment: environmment.yml
+  environment: docs/environmment.yml
 
 # Optionally build your docs in additional formats such as PDF and ePub
 # formats:
@@ -32,4 +32,4 @@ conda:
 # See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
 python:
   install:
-  - requirements: docs/requirements.txt
+  - requirements: requirements.txt
