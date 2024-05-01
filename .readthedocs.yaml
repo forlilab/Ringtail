@@ -33,5 +33,5 @@ conda:
 python:
   install:
   - requirements: docs/requirements.txt
-  - method: pip\
+  - method: pip
   - path: .
