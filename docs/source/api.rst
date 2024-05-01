@@ -1,7 +1,8 @@
 
 .. _api:
+
 API procedures
-===============
+###################
 
 The Ringtail API allows for a more advanced, flexible use of ringtail where the user can create their own scripts. In the case of the docking engine AutoDock-Vina that outputs docking results as strings, Ringtail can be directly integrated in the virtual screen pipeline (LINK TO STUFF). 
 
@@ -12,7 +13,7 @@ Unlike the command line interace (LINK) the API does not need to be specified fo
 Please note that Ringtail does not automatically have permission to perform changes outside of the working directory, so be advised that any folders or documents that Ringtail outputs will be saved in the current working directory. 
 
 Ringtail inputs
--------------------
+**************************
 
 Start by creating an instance of the RingtailCore class. The object will be created with the default database file name of ``output.db`` unless otherwise specified. The logger level may also be set at this time, and defaults to ``"WARNING"``. The ``docking_mode`` defaults to ``"dlg"`` (AutoDock-GPU) and can be set at instantiation or changed at any time by directly setting the docking_mode property of the RingtailCore object. 
 
@@ -24,7 +25,7 @@ Start by creating an instance of the RingtailCore class. The object will be crea
     rtc.docking_mode = "dlg"
 
 Writing docking results to the database
-`````````````````````
+=======================================
 To add results from docking results files, the method ``add_results_from_files`` is used. It allows one or multiple sources of results, and a range of options pertinent to the storage handling and the results processing can be set at this time. Please note that both sources of results and settings for database writing can be provided as single options or a dictionary of allowed keywords and values. If both are provided, any individual options will overwrite that given in the dictionary. The path to the receptor file is considered part of the results options. 
 
 .. code-block:: python
@@ -44,12 +45,17 @@ Example file list:
     lig4.dlg.gz
     rec1.pdbqt
 
-The receptor can also be added by itself:
+Adding a receptor
+-------------------
+The receptor can be added to a database by itself, either to a populated database without a receptor, or to an empty database that you anticipate to fill with docking results later. 
 
 .. code-block:: python
     
     rtc.save_receptor(receptor_file = "receptor.pdbqt")
 
+
+Providing inputs from dictionaries
+-----------------------------------
 The following shows how to add results using dictionaries. Please note that this becomes epsecially relevant if you chose to add ringtail arguments from a config file (LINK TO SECTION).
 
 .. code-block:: python
@@ -67,6 +73,8 @@ The following shows how to add results using dictionaries. Please note that this
     rtc.add_results_from_files( filesources_dict = file_sources,
                                 optionsdict = writeoptions)
 
+Printing a database summary
+---------------------------
 If at any point you wish to print a summary of the contents of the database, the method can be called directly. 
 
 .. code-block:: python
@@ -74,9 +82,11 @@ If at any point you wish to print a summary of the contents of the database, the
     rtc.produce_summary()
 
 Input options
-`````````````
+=====================
 The Ringtail API uses the same options that are used in the command line interface. Relevant to adding results to the database, including how many poses of a docked ligand to save, and how to handle any duplicated ligands. 
 
+Handling of duplicate and existing results
+------------------------------------------
 With the Ringtial API you can keep adding results using the same object without specifying whether or not to ``append_results``, which is contrary to the command line interface where one command line call corresponds to one ringtail core object and one connection to the database.
 You can specify what to do if you are adding duplicate results for a ligand, by invoking the ``duplicate_handling`` keyword with the value ``IGNORE`` (will not add the newest duplicate) or ``REPLACE`` (will overwrite the newest duplicate). Please note that the ``duplicate_handling`` option makes database writing significantly slower.
 
@@ -85,6 +95,8 @@ You can specify what to do if you are adding duplicate results for a ligand, by 
     rtc.add_results_from_files( file_path = "path1/",
                                 duplicate_handling = "REPLACE")
 
+Handling interaction parameters
+----------------------------------
 ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it may be added by Ringtail with the ``add_interactions`` option. **This adds a signifcant increase to the total database write time.** Distance cutoffs for the interactions are specified with the ``interaction_cutoffs`` option. Adding interactions requires that the receptor has already been added to the database, or by supplying the receptor PDBQT as one of the inputs.
 
 .. code-block:: python
@@ -105,6 +117,8 @@ The ``interaction_tolerance`` option also allows the user to give more leeway fo
                                 duplicate_handling = "REPLACE",
                                 interaction_tolerance = 0.6)
 
+Number of poses to save
+-------------------------
 By default (for DLGs), Ringtail will store the best-scored (lowest energy) binding pose from the first 3 pose clusters in the DLG. For Vina, Ringtail will store the 3 best poses. Additional settings for writing to the database include how to handle the number of poses docked (``max_poses``, or ``store_all_poses`` which will overwrite the former).
 
 .. code-block:: python
@@ -113,9 +127,13 @@ By default (for DLGs), Ringtail will store the best-scored (lowest energy) bindi
                                 max_poses = 5)
 
 Filtering
-----------------
+**********************
 
-Docking results stored in the Ringtail database can be filtered using the ``filter`` method. When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name (``Ligand_Name``) and docking score (``e``) of every pose passing filtering criteria. The name of the filter log name may be changed using the ``log_file`` keyword. There are six scoring filters that include best (``ebest``) and worst docking score/energy (``eworst``), best and worst ligand efficieny (``lebest`` and ``leworst``), and results above worst docking score or ligand efficiency percentile (``score_percentile`` and ``le_percentile``, respecitvely). Some of these are internally inconsistent: if both ``eworst`` and ``score_percentile`` are used together, the ``eworst`` cutoff alone is used. The same is true of ``leworst`` and ``le_percentile``.
+Docking results stored in the Ringtail database can be filtered using the ``filter`` method. When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name (``Ligand_Name``) and docking score (``e``) of every pose passing filtering criteria. The name of the filter log name may be changed using the ``log_file`` keyword. 
+
+Scoring filters
+===================
+There are six scoring filters that include best (``ebest``) and worst docking score/energy (``eworst``), best and worst ligand efficieny (``lebest`` and ``leworst``), and results above worst docking score or ligand efficiency percentile (``score_percentile`` and ``le_percentile``, respecitvely). Some of these are internally inconsistent: if both ``eworst`` and ``score_percentile`` are used together, the ``eworst`` cutoff alone is used. The same is true of ``leworst`` and ``le_percentile``.
 
 .. code-block:: python
 
@@ -136,7 +154,7 @@ Filtering may take from seconds to minutes, depending on the size of the databas
     rtc.get_previous_filter_data(outfields = "Ligand_Name,e,rank", bookmark_name = "eworst6", log_file = "previously_filtered_results.txt")
 
 Interaction filters
-```````````````````
+=====================
 It is possible to filter the docking results based on different types of interactions (hydrogen bonds and van der waals interactions) with specific residues. It is further possible to have ligands pass the filters while only fulfilling some of the interaction combinations in union (max number of interactions combinations missed, ``max_miss``).
 The available interaction filters are ``hb_interactions``, ``vdw_interactions``, and ``reactive_interactions``. Interaction filters must be specified as the interaction specifications in the order ``CHAIN:RES:NUM:ATOM_NAME``. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type is specified as a list of one or more tuples of specified reactions and weather to show results that includes ``(":::", True)`` or exclude ``(":::", False)`` them as shown below for ``vdw_interactions``:
 
@@ -158,7 +176,7 @@ The ``max_miss`` keywords allows the user to filter by given interactions exclud
 
 
 Ligand filters #TODO copy from cmdline docu
-```````````````
+=====================
 Several filters pertaining to the SMARTS structure of the ligand can be used. For example, the ``ligand_substruct_pos`` keyword may be used to filter for a specific ligand substructure (specified with a SMARTS string) to be placed within some distance of a given cartesian coordinate. The format for this option is ``"<SMARTS pattern: str>" <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>``.
 ligand_name: Specify ligand name(s). Will combine name filters with 'OR'.
 ligand_substruct: SMARTS pattern(s) for substructure matching.
@@ -172,7 +190,7 @@ ligand_operator: Logical join operator for multiple SMARTS.
 
 
 Clustering
-`````````````````
+==============
 In addition to the filtering options outlined in the table below #TODO, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (``mfpt_cluster``) or interaction (``interaction_cluster``) fingerprints. Dissimilarity is measured by Tanimoto distance (float input to the cluster keyword) and clustering is performed with the Butina clustering algorithm. Clustering can be also be performed on a bookmark that has already been saved to the database, without providing any extra filter values. In this case, the bookmark over which to cluster (or additional filtering) on is specified by ``filter_bookmark`` (must be different from ``bookmark_name`` that contains previously filtered results).
 
 .. code-block:: python
@@ -188,27 +206,35 @@ While not quite a filtering option, the user can provide a ligand name from a pr
 
 
 Output options
-----------------
+********************
 There are multiple options to output and visualize data in Ringtail.
 
+Creating scatter plot of ligands
+===============================
 The method ``plot`` generates a scatterplot of ligand efficiency vs docking score for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with the keyword ``bookmark_name`` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as ``scatter.png``.
 
 .. code-block:: python
 
     rtc.plot()
 
+Evaluating molecules in 3d space with PyMol
+=============================================
 The ``pymol`` flag generates a scatterplot of ligand efficiency vs docking score as well, but only for the ligands contained in the bookmark specified with ``bookmark_name``. It also launches a PyMol session and will display the ligands in PyMol when clicked on the scatterplot. N.B.: Some users may encounter a ``ConnectionRefusedError``. If this happens, try manually launching PyMol (``pymol -R``) in a separate terminal window.
 
 .. code-block:: python
 
     rtc.pymol(bookmark_name = "eworst6")
 
+Export molecule SDF files
+==========================
 The method ``write_molecule_sdfs`` will write SDF files for each ligand passing the filter and saved in a specified bookmark (can also include those who don't pass by invoking the ``write_nonpassing = True`` option). The files will be saved to the path specified in the method call. If none is specified, the files will be saved in the current working directory. The SDF will contain poses passing the filter/in the bookmark ordered by increasing docking score. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
 
 .. code-block:: python
 
     rtc.write_molecule_sdfs(sdf_path = "sdf_files", bookmark_name = "eworst6")
 
+Exporting tables or query results as CSV files
+==============================================
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. First, you can export a database table or bookmark (``requested_data``) to a csv file with a name (``csv_name``) specified in the method call. In this case one must specify that the type of the ``requested_data`` is of database type table. 
 
 .. code-block:: python
@@ -222,14 +248,15 @@ It is also possible to write a database query and export the results of the quer
     query_string = "SELECT docking_score, leff, Pose_ID, LigName FROM Results"
     rtc.export_csv(requested_data = query_string, csv_name = "query_results.csv", table = False)
 
-
+Creating a new database from a bookmark
+=======================================
 A bookmark may also be exported as a separate SQLite dabase with the ``export_bookmark_db`` method. This will create a database of name ``<current_db_name>_<bookmark_name>.db``. This is currently only possible if using SQLite.
 
 .. code-block:: python 
 
     rtc.export_bookmark_db(bookmark_name = "eworst6")
 
-    #results in output_eworst6.db
+    #results in creation of output_eworst6.db
 
 Finally, a receptor stored in the database may be re-exported as a PDBQT with the ``export_receptor`` method. This will save the receptor PDBQT in the current working directory. 
 
@@ -237,42 +264,21 @@ Finally, a receptor stored in the database may be re-exported as a PDBQT with th
 
     rtc.export_bookmark_db()
 
-
-Export results from a previous filtering as a CSV
-````````````````````````````````````````````````
-
-.. code-block:: bash
-
-    $ rt_process_vs.py write --file_path Files/
-    $ rt_process_vs.py read --input_db output.db --score_percentile 0.1 --bookmark_name filter1
-    $ rt_process_vs.py read --input_db output.db --export_bookmark_csv filter1
-
-
-Create scatterplot highlighting ligands passing filters
-```````````````````````````````````````````````````````
-
-.. code-block:: bash
-
-    $ rt_process_vs.py write --file_path Files/
-    $ rt_process_vs.py read --input_db output.db --score_percentile 0.1 --bookmark_name filter1
-    $ rt_process_vs.py read --input_db output.db --bookmark_name filter1 --plot
-
-    `all_ligands_scatter.png`
-
-.. image:: https://user-images.githubusercontent.com/41704502/215909808-2edc29e9-ebdb-4f0e-a87a-a1c293687b2e.png
-
-
-Using a config file
---------------------
+Using a config file to provide Ringtail arguments
+**************************************************
 It is possible to populate the argument list using a config file, which needs to be in a json format. The keywords needs to correspond exactly to an argument option, and the value given can be provided as a string as you would type it using the command line interface.
+Ringtail has a class method that creates a config file template, populated with default values. You can remove any arguments you do not intend to use, and you are not required to use the template to create a config file. 
+The ``config.json`` file will be saved in the current directory (default) or can be written as a dictionary object by ``to_file = False``. 
 
-.. code-block:: bash
+.. code-block:: python
 
-    $ rt_process_vs.py -c config_w.json write
-    $ rt_process_vs.py -c config_r.json read
+    from ringtail import RingtailCore as RTC 
+
+    config_dict = RTC.generate_config_json_template(to_file = False)
 
 .. code-block:: python 
 
+    #TODO show what output looks like 
     config_w.json:
         {
         "file_path": "path1/",
@@ -285,36 +291,34 @@ It is possible to populate the argument list using a config file, which needs to
         }
 
 Some usage notes
-------------------
-For many of these operations, if you do not specify a bookmark name Ringtail will simply use the bookmark that was last used for operations in the object. If it is a newly instantiated object, it will look for a bookmark of the default name ``passing_results``. 
+**************************
+
+For many of these operations, if you do not specify a bookmark name Ringtail will simply use the bookmark that was last used for operations in the object. If it is a newly instantiated object without a "recent" bookmark, it will look for a bookmark of the default name ``passing_results``. 
 Most methods accept both individual options as well as grouped options in a dictionary format. In each of these cases, for arguments that are duplicated between the two formats individual options will overwrite that given in the dictionary. 
 
-Logging
-------------
-Ringtail comes with a global logger object that will write to a new text file for each time ``rt_process_vs.py`` is called. Any log messages will also be displayed in stdout. and the default logger level is "WARNING". It is possible to change the logger level by adding ``--debug`` for lowest level of logging (will make the process take longer) or ``--verbose`` for some additional, but not very deep, logging. 
+Logging module
+===============
+Ringtail comes with a global logger object that will write to a new text file for each time a new ``RingtailCore()`` object is instantiated. Any log messages at or above specified level will write to the log file as well as be displayed in stdout . The default logger level is "WARNING". While logger level can be set at time of instantiation, it is also possible to change it later by accessing the logger object directly:
 
-.. code-block:: bash
+.. code-block:: python
 
-    $ python ../scripts/rt_process_vs.py write --verbose --file_list filelist1.txt 
+    rtc = RingtailCore("database.db")
+    # log level defaults to "WARNING"
+    logger.setLevel("INFO")
 
 Access help message
--------------------
+=====================
+#TODO
 
-.. code-block:: bash
+.. code-block:: python
 
-    $ rt_process_vs.py --help
 
-    $ rt_process_vs.py write --help
 
-    $ rt_process_vs.py read --help
-
-Available command line arguments
----------------------------------
+Available Ringtail arguments
+**********************************
 
 #TODO table showing all arguments, keywords, defaults, and info
 
-
-##### Available options for writing to the database include:
 
 | File options        |Description                                           | Default value   | Requires interactions |
 |:------------------------|:-------------------------------------------------|:----------------|----:|
@@ -384,7 +388,4 @@ There are a number of output methods available to filter, view, and store the re
 |`find_similar_ligands`| Find ligands in cluster with query_ligname |query_ligname|
 |`plot`| Freate scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as "scatter.png". | save: bool |
 |`pymol`| Launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with bookmark_name will be ploted and displayed in PyMol when clicked on.  | bookmark_name |
-
-### Using the config file
-Both the command line tool and the API can make use of a configuration file. To create this file call this method, then read it using this #TODO
 

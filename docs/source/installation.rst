@@ -1,9 +1,10 @@
 .. _installation:
+
 Installing ringtail
-==================
+###############
 
 Installation (from PyPI)
------------------------
+*******************
 Please note that Ringtail requires Python 3.9 or 3.10.
 
 .. code-block:: bash
@@ -20,7 +21,7 @@ Also note that if using MacOS, you may need to install Multiprocess separately:
 
 
 Installation from source code
----------------
+*******************
 
 .. code-block:: bash
 
@@ -44,7 +45,7 @@ If you wish to make the code for Ringtail **editable** without having to re-run 
     $ pip install --editable .
 
 Test installation
--------------------
+*******************
 If you would like to test your installation of Ringtail, a set of automated tests are included with the source code. To begin, you must install pytest in the Ringtail conda environment:
 
 .. code-block:: bash    

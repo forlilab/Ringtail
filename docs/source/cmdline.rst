@@ -1,7 +1,7 @@
 .. _cmdline:
 
 Ringtail command line interface
-================
+###############################
 
 The Ringtail command line interface is the easiest method to use to for exploring virtual screening results in a database. 
 If this is your first time learning about Ringtail, take a look at the page :ref:`Get started <get_started>`. The current page uses the knowledge already presented on the 'Get started' page as we continue exploring the wealth of options that Ringtail offers. 
@@ -13,7 +13,7 @@ The rt_process_vs.py script has two modes: ``write`` and ``read``. The desired m
 Please note that Ringtail does not automatically have permission to perform changes outside of the working directory, so be advised that any folders or documents that Ringtail outputs will be saved in the current working directory. 
 
 Ringtail inputs
--------------------
+**************************
 
 Navigate to the data repository and chose one of several paths of adding results. 
 
@@ -22,7 +22,7 @@ Navigate to the data repository and chose one of several paths of adding results
   $ cd test/test_data/
 
 Input file_sources
-`````````````````````
+=======================================
 By default, the newly-created database will be named ``output.db``. This name may be changed with the ``--output_db``` option.
 Ringtail allows referencing docking results files in multiple ways:
 ``--file/-f``: path to a single file such as ``group1/1451.dlg`` (files compressed with gzip such as ``group1/1451.dlg.gz`` are also allowed)
@@ -43,7 +43,7 @@ Example file list:
     rec1.pdbqt
 
 Input options
-`````````````
+=======================================
 To include the details of a receptor in the database, it is necessary to provide explicitly state that the receptor should be saved. If the ``--save_receptor`` argument is invoked, but no PDBQT ``--receptor_file`` is provided, Ringtail will raise an error. During results processing Ringtail checks to make sure the provided receptor file matches the receptor name used for the docking. 
 
 .. code-block:: bash
@@ -74,7 +74,7 @@ It is further possible to overwrite a database by use of the argument ``--overwr
     $ python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/vina --overwrite --receptor_file receptor.pdbqt --save_receptor --add_interactions --interaction_cutoffs 3.7,4.0
 
 Printing a database summary
-----------------------------
+*****************************
 During both ``write`` and ``read`` it is possible to add the tag ``-su`` or ``--summary`` which will print a summary of the database to stdout.
 
 .. code-block:: bash
@@ -95,10 +95,13 @@ During both ``write`` and ``read`` it is possible to add the tag ``-su`` or ``--
     10%_leff: -0.47 kcal/mol
 
 Filtering
-----------------
+************************
 In ``read`` mode, an existing database is used to filter or export results.
 
 When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name and docking score of every pose passing filtering criteria. The log name may be changed with the ``--log_file`` option. There are six scoring filters that include best and worst docking score/energy, best and worst ligand efficieny, and results above worst docking score or ligand efficiency percentile. Some of these are internally inconsistent: if both ``--eworst`` and ``--score_percentile`` are used together, the ``--eworst`` cutoff alone is used. The same is true of ``--leworst`` and ``--le_percentile``.
+
+Scoring filters
+===================
 
 .. code-block:: bash
 
@@ -115,7 +118,7 @@ When filtering, the passing results are also saved as a view in the database. Th
 Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database Results rows (i.e. stored poses). Data for poses in a view may be accessed later using the ``--data_from_bookmark`` option.
 
 Interaction filters
-```````````````````
+=====================
 It is possible to filter the docking results based on different types of interactions (hydrogen bonds onr van der waals) with specific residues. It is further possible to have ligands pass the filters while only fulfilling some of the interaction combinations in union (max number of interactions combinations missed, ``--max_miss``).
 The available interaction filters are ``--hb_interactions``, ``--vdw_interactions``, and ``--reactive_interactions``. Interaction filters must be specified in the order ``CHAIN:RES:NUM:ATOM_NAME``. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. ``-vdw``) may be specified with a single option tag (``-vdw B:THR:276:,B:HIS:226:``) or separate tags (``-vdw B:THR:276: -vdw B:HIS:226:``).
 
@@ -126,8 +129,8 @@ The ``--max_miss`` option allows the user to filter by given interactions exclud
 
     $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions A:VAL:279: A:LYS:162: --max_miss 1 --react_any)
 
-Ligand filters #TODO
-```````````````
+Ligand filters #TODO copy from cmdline docu
+=====================
 The ``--smarts_idxyz`` option may be used to filter for a specific ligand substructure (specified with a SMARTS string) to be placed within some distance of a given cartesian coordinate. The format for this option is ``"<SMARTS pattern: str>" <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>``.
 
 .. code-block:: bash
@@ -136,7 +139,7 @@ The ``--smarts_idxyz`` option may be used to filter for a specific ligand substr
 
 
 Clustering
-`````````````````
+==============
 In addition to the filtering options outlined in the table below #TODO, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (``--mfpt_cluster``) or interaction (``--interaction_cluster``) fingerprints. Dissimilarity is measured by Tanimoto distance and clustering is performed with the Butina clustering algorithm. Clustering can be also be performed on a bookmark that has already been saved to the database, without providing any extra filter values. In this case, the bookmark over which to cluster (or additional filtering) on is specified by ``--filter_bookmark`` (must be different from ``--bookmark_name``).
 
 .. code-block:: bash
@@ -146,7 +149,7 @@ In addition to the filtering options outlined in the table below #TODO, ligands 
 While not quite a filtering option, the user can provide a ligand name from a previously-run clustering and re-output other ligands that were clustered with that query ligand with ``--find_similar_ligands``. The user is prompted at runtime to choose a specific clustering group from which to re-output ligands. Filtering/clustering will be performed from the same command-line call prior to this similarity search, but all subsequent output tasks will be performed on the group of similar ligands obtained with this option unless otherwise specified. 
 
 Outputs
-----------------
+********************
 The primary outputs from ``rt_process_vs.py`` are the database itself (``write`` mode) and the filtering log file (``read`` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
 The ``--plot`` flag generates a scatterplot of ligand efficiency vs docking score for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with ``--bookmark_name`` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as ``scatter.png``.
@@ -163,7 +166,7 @@ As noted above, a bookmark may also be exported as a separate SQLite dabase with
 Finally, a receptor stored in the database may be re-exported as a PDBQT with the ``--export_receptor`` option.
 
 Export results from a previous filtering as a CSV
-`````````````````````````````````````````````````
+==============================================
 
 .. code-block:: bash
 
@@ -172,7 +175,7 @@ Export results from a previous filtering as a CSV
     $ rt_process_vs.py read --input_db output.db --export_bookmark_csv filter1
 
 Create scatterplot highlighting ligands passing filters
-```````````````````````````````````````````````````````
+==============================================
 
 .. code-block:: bash
 
@@ -185,7 +188,7 @@ Create scatterplot highlighting ligands passing filters
 .. image:: https://user-images.githubusercontent.com/41704502/215909808-2edc29e9-ebdb-4f0e-a87a-a1c293687b2e.png
 
 Using a config file
---------------------
+**************************
 It is possible to populate the argument list using a config file, which needs to be in a json format. The keywords needs to correspond exactly to an argument option, and the value given can be provided as a string as you would type it using the command line interface.
 
 .. code-block:: bash
@@ -207,7 +210,7 @@ It is possible to populate the argument list using a config file, which needs to
         }
 
 Logging
-------------
+********************
 Ringtail comes with a global logger object that will write to a new text file for each time ``rt_process_vs.py`` is called. Any log messages will also be displayed in stdout. and the default logger level is "WARNING". It is possible to change the logger level by adding ``--debug`` for lowest level of logging (will make the process take longer) or ``--verbose`` for some additional, but not very deep, logging. 
 
 .. code-block:: bash
@@ -215,7 +218,7 @@ Ringtail comes with a global logger object that will write to a new text file fo
     $ python ../scripts/rt_process_vs.py write --verbose --file_list filelist1.txt 
 
 Access help message
--------------------
+**********************
 
 .. code-block:: bash
 
@@ -226,6 +229,7 @@ Access help message
     $ rt_process_vs.py read --help
 
 Available command line arguments
----------------------------------
+**********************************
 
 #TODO table showing all arguments, keywords, defaults, and info
+#TODO should be a separate file containing this table that is referenced, maybe even incliude code so that it renders correctly for api vs cmd? like two columns that are conditional or something
