@@ -20,7 +20,7 @@ sphinx:
   configuration: docs/source/conf.py
 
 conda:
-  environment: docs/environmment.yml
+  environment: environmment.yml
 
 # Optionally build your docs in additional formats such as PDF and ePub
 # formats:
