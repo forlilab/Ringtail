@@ -6,4 +6,3 @@ dependencies:
   - python >=3.9
   - sphinx
   - sphinx_rtd_theme 
-  - pip
