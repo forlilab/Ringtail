@@ -246,15 +246,14 @@ class TestRingtailCore:
         rtc.add_results_from_files(file = file, duplicate_handling="replace")
         # ensure three results rows were added
         count = countrows("SELECT COUNT(*) FROM Results")
-
-        # add same file but ignore the duplicate
-        rtc.add_results_from_files(file = file, append_results=True, duplicate_handling="replace")
+        # add same file but replace the duplicate
+        rtc.add_results_from_files(file = file, append_results=True)
         count_replace = countrows("SELECT COUNT(*) FROM Results")
 
         os.system("rm output.db")
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file = file, duplicate_handling="ignore")
-        # add same file but replace the duplicate
+        # add same file but ignore the duplicate
         rtc.add_results_from_files(file = file, append_results=True)
         count_ignore = countrows("SELECT COUNT(*) FROM Results")
 
