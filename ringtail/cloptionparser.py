@@ -697,13 +697,17 @@ class CLOptionParser:
                 )
         else:
             db_file = parsed_opts.output_db
-            
+
         self.rtcore = RingtailCore(db_file)
         self.rtcore._run_mode = "cmd" # tag for command line processing, changes how certain errors are handled
         self.rtcore.docking_mode = parsed_opts.docking_mode
         self.print_summary = parsed_opts.print_summary
 
         if self.process_mode == "write":
+            # Check if writing to an existing database
+            if os.path.exists(db_file) and not parsed_opts.append_results:
+                raise OptionError(f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database.")
+
             # set read-only rt_process options to None to prevent errors
             parsed_opts.plot = None
             parsed_opts.find_similar_ligands=None
@@ -855,7 +859,6 @@ class CLOptionParser:
 
         # combine all options used in write mode 
         self.writeopts = {
-            "append_results":parsed_opts.append_results,
             "duplicate_handling":parsed_opts.duplicate_handling,
             "overwrite":parsed_opts.overwrite,
             "store_all_poses":parsed_opts.store_all_poses, 
@@ -883,7 +886,6 @@ class CLOptionParser:
         # combine all options for the storage manager
         self.storageopts = {
             "filter_bookmark":parsed_opts.filter_bookmark,
-            "append_results":parsed_opts.append_results,
             "duplicate_handling":parsed_opts.duplicate_handling,
             "overwrite":parsed_opts.overwrite,
             "order_results":parsed_opts.order_results,

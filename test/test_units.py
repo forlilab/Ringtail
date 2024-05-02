@@ -83,7 +83,7 @@ class TestRingtailCore:
 
     def test_append_to_database(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path=[['test_data/group2/']], append_results=True)
+        rtc.add_results_from_files(file_path=[['test_data/group2/']])
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
         assert count == 217
@@ -247,21 +247,21 @@ class TestRingtailCore:
         # ensure three results rows were added
         count = countrows("SELECT COUNT(*) FROM Results")
         # add same file but replace the duplicate
-        rtc.add_results_from_files(file = file, append_results=True)
+        rtc.add_results_from_files(file = file)
         count_replace = countrows("SELECT COUNT(*) FROM Results")
 
         os.system("rm output.db")
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file = file, duplicate_handling="ignore")
         # add same file but ignore the duplicate
-        rtc.add_results_from_files(file = file, append_results=True)
+        rtc.add_results_from_files(file = file)
         count_ignore = countrows("SELECT COUNT(*) FROM Results")
 
         os.system("rm output.db")
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file = file)
         # add same file but allow the duplicate
-        rtc.add_results_from_files(file = file, append_results=True)
+        rtc.add_results_from_files(file = file)
         count_dupl = countrows("SELECT COUNT(*) FROM Results")
         assert count == count_replace == count_ignore == count_dupl/2
 
@@ -270,7 +270,7 @@ class TestRingtailCore:
     def test_db_num_poses_warning(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file = [['test_data/group1/1451.dlg.gz']], max_poses=1)
-        rtc.add_results_from_files(file = [['test_data/group1/1620.dlg.gz']], max_poses=4, append_results=True)
+        rtc.add_results_from_files(file = [['test_data/group1/1620.dlg.gz']], max_poses=4)
         from ringtail import logger
         warning_string = 'The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1.'
         with open(logger.filename(), "r") as f:
@@ -289,7 +289,7 @@ class TestVinaHandling:
         vina_path = 'test_data/vina'
         rtc = RingtailCore("output.db")
         rtc.docking_mode="vina"
-        rtc.add_results_from_files(file_path=[[vina_path]], file_pattern = "*.pdbqt*", receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True),
+        rtc.add_results_from_files(file_path=vina_path, file_pattern = "*.pdbqt*", receptor_file=vina_path+"/receptor.pdbqt", save_receptor=True),
         count = countrows("SELECT COUNT(*) FROM Results")
         os.system("rm output.db")
 
@@ -321,7 +321,7 @@ class TestVinaHandling:
     def test_db_dockingmode_warning(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file = 'test_data/group1/1451.dlg.gz')
-        rtc.add_results_from_files(file = 'test_data/vina/sample-result.pdbqt', append_results=True)
+        rtc.add_results_from_files(file = 'test_data/vina/sample-result.pdbqt')
         
         from ringtail import logger
         warning_string = 'The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is dlg.'
@@ -344,8 +344,7 @@ class TestStorageMan:
                                     receptor_file="test_data/4j8m.pdbqt",
                                     save_receptor=True)
         
-        storageman_attributes = {'append_results': rtc.storageman.append_results, 
-                                 'duplicate_handling': rtc.storageman.duplicate_handling, 
+        storageman_attributes = {'duplicate_handling': rtc.storageman.duplicate_handling, 
                                  'filter_bookmark': rtc.storageman.filter_bookmark, 
                                  'overwrite': rtc.storageman.overwrite, 
                                  'order_results': rtc.storageman.order_results, 
