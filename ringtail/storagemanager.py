@@ -86,8 +86,12 @@ class StorageManager:
 
         # Specific scientific attributes
         # # Interaction variables
+        # this variable holds all unique interactions represented in the database, either already written or in process of being written
+        # in the format "intearction_tuple":interaction_index
         self.unique_interactions = {}
+        # this is a counter for the interactions, if adding a new, it increments, and this will in turn correspond to a new row in the interaction_indices table and a new column in the interaction_bitvector table
         self.next_unique_interaction_idx = 1 
+        # indicate whether or not the interaction_indices table has been started
         self.interactions_initialized_flag = False 
         self._append_results = False
 
@@ -200,8 +204,8 @@ class StorageManager:
             if len(receptors) == 0:   
                 self.insert_receptors(receptor_array) 
         # insert interactions if they are present
-        if interaction_array != []:
-            self.insert_interactions(interaction_array)
+        if interaction_array != []: # what unique info is passed on here
+            self.insert_interactions(interaction_array) # the interaction array has the ligand name and a long string of data, probably the unique ness stuff
 
     def insert_interactions(self, interactions_list):
         """Takes list of interactions, inserts into database
@@ -229,9 +233,12 @@ class StorageManager:
         # insert first set of interaction
         if not self.interactions_initialized_flag and not self._append_results:
             self._create_interaction_bv_table() 
+            # this is just a table of interactions represented in the database
+            # the id corresponds to column number oin the bit vector table 
             self._insert_unique_interactions(list(self.unique_interactions.keys())) 
             self.interactions_initialized_flag = True
-
+        
+        # this is the table that holds results data
         self._insert_interaction_bitvectors( 
             self._generate_interaction_bitvectors(interactions_list) 
         )
@@ -248,13 +255,18 @@ class StorageManager:
             list:of bitvectors for saved poses
         """
         bitvectors_list = []
+        # for the interactions relevant to one pose
         for pose_interactions in interactions_list:
+            # create an empty list that will be filled by 1s if there is an interaction at a certain index (interaction index table)
             pose_bitvector = [None] * len(self.unique_interactions)
+            # for each individual interaction that ligand pose exhibited with the receptor
             for interaction_tuple in pose_interactions:
+                # find the index of the tuple in all available interactions, that the current interaction corresponds to
                 interaction_idx = self.unique_interactions[interaction_tuple]
+                # at index this pose has an interaction
                 # index corrected for interaction_indices starting at 1
                 pose_bitvector[interaction_idx - 1] = 1
-
+            # append to list of all interactions relevant to that ligand pose 
             bitvectors_list.append(pose_bitvector)
         return bitvectors_list
 
