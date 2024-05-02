@@ -50,6 +50,7 @@ class StorageManager:
     Attributes: 
         _db_schema_ver (str): current database schema version
         _db_schema_code_compatibility (dict): dictionary showing compatibility of code base versions with relational database schema versions
+        _append_results (bool): indicating whether or not database has already been initialized and added results to
         unique_interactions (dict)
         interactions_initialized_flag (bool): flag indicating if interaction tables intitialized
         next_unique_interaction_idx (int): idx for next interaction to be inserted into Interaction_indices table
@@ -195,8 +196,10 @@ class StorageManager:
         if insert_receptor and receptor_array != []:
             # first checks if there is receptor info already in the db
             receptors = self.fetch_receptor_objects()
+            # insert receptor if it is empty
             if len(receptors) == 0:   
-                self.insert_receptors(receptor_array) # insert receptor if it is empty
+                self.insert_receptors(receptor_array) 
+        # insert interactions if they are present
         if interaction_array != []:
             self.insert_interactions(interaction_array)
 
@@ -209,13 +212,16 @@ class StorageManager:
         """
         # populate unique interactions from existing database
         if self._append_results:
+            # fetch existing interactions
             existing_unique_interactions = self._fetch_existing_interactions() 
+            # add each existing interaction to internal attribute keeping track of unique interactions
             for interaction in existing_unique_interactions:
                 self.unique_interactions[interaction[1:]] = interaction[0]
 
+            # sets next index taht will be used for next unique interaction and its column name
             self.next_unique_interaction_idx = (
                 interaction[0] + 1
-            )  # sets next index for next unique interaction
+            )  
 
         self._add_unique_interactions(interactions_list) 
 
@@ -263,17 +269,25 @@ class StorageManager:
                 for insertion into database
         """
 
+        # iterate through each pose docked for a specific ligand
         for pose in interactions_list:
+            # iterate through each interaction in that pose
             for interaction_tuple in pose:
+                # if the interaction is not already described in the table, i.e., has appropriate bit vector columns
                 if interaction_tuple not in self.unique_interactions:
+                    # give that new and unique interaction the next available id and column name
                     self.unique_interactions[ 
                         interaction_tuple
                     ] = self.next_unique_interaction_idx
+                    # if table already exist, either just created or from adding to existing database
                     if self.interactions_initialized_flag or self._append_results:
+                        # insert the current interaction tuple
                         self._insert_one_interaction(interaction_tuple)
+                        # create new column for that new and unique interaction
                         self._make_new_interaction_column(
                             self.next_unique_interaction_idx
                         )
+                    # iterate the counter of how many unique interactions there are
                     self.next_unique_interaction_idx += 1
 
     def get_plot_data(self, only_passing=False):
