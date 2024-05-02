@@ -304,11 +304,6 @@ class StorageOptions(RTOptions):
     """ Class that handles options for the storage (database) manager class, including
     conflict handling, and results clustering and ordering."""
     options = {
-        "append_results":{
-            "default":None,
-            "type":bool,
-            "description": "Add new results to an existing database, specified by database choice in ringtail initialization, or 'input_db' using the command line tool."
-        },
         "duplicate_handling":{
             "default":None,
             "type":str,

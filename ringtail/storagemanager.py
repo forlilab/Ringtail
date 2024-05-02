@@ -84,10 +84,11 @@ class StorageManager:
         self.closed_connection = False
 
         # Specific scientific attributes
-        # # # Interaction variables
+        # # Interaction variables
         self.unique_interactions = {}
         self.next_unique_interaction_idx = 1 
         self.interactions_initialized_flag = False 
+        self._append_results = False
 
     def __enter__(self):
         """Used to access the database if using storage manager as a context manager
@@ -189,7 +190,7 @@ class StorageManager:
             receptor_array (list): list of data to be stored in Receptors table
             insert_receptor (bool, optional): flag indicating that receptor info should inserted
         """
-        self.insert_results(results_array) #TODO could add a flag in this method, if the unique is invoked, and with which keyword, and then and only then will it add statement with unique? 
+        self.insert_results(results_array) 
         self.insert_ligands(ligands_array)
         if insert_receptor and receptor_array != []:
             # first checks if there is receptor info already in the db
@@ -207,7 +208,7 @@ class StorageManager:
                 ("type", "chain", "residue", "resid", "recname", "recid")
         """
         # populate unique interactions from existing database
-        if self.append_results:
+        if self._append_results:
             existing_unique_interactions = self._fetch_existing_interactions() 
             for interaction in existing_unique_interactions:
                 self.unique_interactions[interaction[1:]] = interaction[0]
@@ -220,7 +221,7 @@ class StorageManager:
 
         # check if we need to initialize the interaction bv table and
         # insert first set of interaction
-        if not self.interactions_initialized_flag and not self.append_results:
+        if not self.interactions_initialized_flag and not self._append_results:
             self._create_interaction_bv_table() 
             self._insert_unique_interactions(list(self.unique_interactions.keys())) 
             self.interactions_initialized_flag = True
@@ -268,7 +269,7 @@ class StorageManager:
                     self.unique_interactions[ 
                         interaction_tuple
                     ] = self.next_unique_interaction_idx
-                    if self.interactions_initialized_flag or self.append_results:
+                    if self.interactions_initialized_flag or self._append_results:
                         self._insert_one_interaction(interaction_tuple)
                         self._make_new_interaction_column(
                             self.next_unique_interaction_idx
@@ -490,7 +491,6 @@ class StorageManagerSQLite(StorageManager):
             Will be closed by close_connection method.
         db_file (str): database name
         overwrite (bool): switch to overwrite database if it exists
-        append_results (bool): switch to add results to existing database
         order_results (str): what column name will be used to order results once read
         outfields (str): data fields/columns to include when reading and outputting data
         filter_bookmark (str): name of bookmark that filtering will be performed over
@@ -512,7 +512,6 @@ class StorageManagerSQLite(StorageManager):
     def __init__(self, 
                  db_file: str = None, 
                  overwrite: bool=None, 
-                 append_results: bool=None, 
                  order_results: str = None, 
                  outfields: str = None, 
                  filter_bookmark: str = None, 
@@ -523,7 +522,6 @@ class StorageManagerSQLite(StorageManager):
                  duplicate_handling: str = None,): 
         self.db_file = db_file
         self.overwrite = overwrite
-        self.append_results = append_results
         self.order_results = order_results
         self.outfields = outfields
         self.output_all_poses = output_all_poses
@@ -2783,6 +2781,10 @@ class StorageManagerSQLite(StorageManager):
                     self._drop_existing_tables()
                 self._create_tables()  
                 self.set_ringtail_db_schema_version()
+            # if there are results in db, appending_results = True
+            results_count = self.conn.execute("SELECT COUNT(*) FROM Results").fetchone()[0]
+            self._append_results = bool(results_count > 0)
+
             logger.info(f'Ringtail connected to database {self.db_file}.')
         except Exception as e:
             raise StorageError(f"Errow while creating or connecting to database: {e}.")
@@ -2800,26 +2802,16 @@ class StorageManagerSQLite(StorageManager):
             StorageError
             OptionError: if database options are not compatible
         """
-        if not self.overwrite and not self.append_results:
-            try:
-                cur = self.conn.execute("SELECT COUNT(*) FROM Results")
-                if cur.fetchone()[0] != 0:
-                    raise StorageError(
-                        "Database already exists. Use --overwrite or --append_results if wanting to replace or append to existing database."
-                    )
-            except Exception as e:
-                raise e
-            finally:
-                cur.close()
-        elif self.append_results:
-            compatible = True
+        count = self.conn.execute("SELECT COUNT (*) FROM DB_properties").fetchone()[0]
+
+        compatible = True
+        if count < 1:
+            logger.info("Adding results to an existing database that is currently empty of docking results.")
+        else:
             compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
             try: 
                 cur = self.conn.execute("SELECT * FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1")
-                if cur.rowcount < 1:
-                    logger.info("Adding results to an existing database that is currently empty of docking results.")
-                    return
-                (row_id, last_docking_mode, num_of_poses) = cur.fetchone()
+                (_, last_docking_mode, num_of_poses) = cur.fetchone()
                 if docking_mode != last_docking_mode:
                     compatible = False
                     compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
@@ -2829,18 +2821,18 @@ class StorageManagerSQLite(StorageManager):
                 elif int(num_of_poses) != max_poses:
                     compatible = False
                     compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to {num_of_poses}."
-                
             except Exception as e:
                 raise e
             finally:
                 cur.close()
 
-            if not compatible:
-                if run_mode == "cmd":
-                    raise OptionError(compatibility_string)
-                elif run_mode == "api":
-                    logger.warning(compatibility_string)
+        if not compatible:
+            if run_mode == "cmd":
+                raise OptionError(compatibility_string)
+            elif run_mode == "api":
+                logger.warning(compatibility_string)
         
+        # write current database properties to database
         if store_all_poses: number_of_poses = "all"
         else: number_of_poses = str(max_poses)
         self._insert_db_properties(docking_mode, number_of_poses)

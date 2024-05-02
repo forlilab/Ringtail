@@ -489,7 +489,6 @@ class RingtailCore:
     def _add_results(self, 
                      results_sources,
                      strings = False,
-                     append_results: bool = None,
                      duplicate_handling: str = None,
                      overwrite: bool = None,
                      store_all_poses: bool = None,
@@ -498,7 +497,6 @@ class RingtailCore:
                      interaction_tolerance: float = None,
                      interaction_cutoffs: list = None,
                      max_proc: int = None,
-                     summary: bool = None,
                      options_dict: dict =None):
         
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database. 
@@ -506,7 +504,6 @@ class RingtailCore:
         Args:
             results_sources(InputFiles or InputStrings): type checked and validated results object
             strings (bool): whether or not results are provided as strings or files
-            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
             duplicate_handling (str): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
             max_poses (int): how many poses to save (ordered by soem score?)
@@ -521,20 +518,16 @@ class RingtailCore:
         """
         # if dictionary of options provided, attribute to appropriate managers
         if options_dict is not None:
-            write_dict, storage_dict = RingtailCore.split_dict(options_dict, ["append_results", "duplicate_handling", "overwrite"])
+            write_dict, storage_dict = RingtailCore.split_dict(options_dict, ["duplicate_handling", "overwrite"])
         else:
             storage_dict = None
             write_dict = None
-        self.set_storageman_attributes(append_results=append_results, duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
+        self.set_storageman_attributes(duplicate_handling=duplicate_handling, overwrite=overwrite, dict=storage_dict)
 
         if results_sources.save_receptor: 
             self.save_receptor(results_sources.receptor_file)
 
         with self.storageman:
-            # check storage exist and can be appended to if specified
-            if self.storageopts.append_results and not RTOptions.is_valid_path(self.db_file):
-                raise OptionError("The provided database is not a valid path, please check the provided path.")
-            
             # Prepare the results manager with the provided docking results sources
             if strings == False:
                 self._create_resultsmanager(file_sources=results_sources) 
@@ -554,7 +547,6 @@ class RingtailCore:
             logger.info("Adding results...")
             self.resultsman.process_docking_data()
             self.storageman.set_ringtail_db_schema_version()
-            if summary: self.produce_summary()
 
    
 #-#-#- Core attribute setting methods -#-#-#
@@ -565,7 +557,6 @@ class RingtailCore:
     
     def set_storageman_attributes(self, 
                             filter_bookmark: str = None,
-                            append_results: bool = None,
                             duplicate_handling: str = None,
                             overwrite: bool = None,
                             order_results: str = None,
@@ -580,7 +571,6 @@ class RingtailCore:
 
         Args:
             filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
-            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
             order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
@@ -814,7 +804,6 @@ class RingtailCore:
                                receptor_file: str = None,
                                save_receptor: bool = None,
                                filesources_dict: dict = None,
-                               append_results: bool = None,
                                duplicate_handling: str = None,
                                overwrite: bool = None,
                                store_all_poses: bool = None,
@@ -823,11 +812,10 @@ class RingtailCore:
                                interaction_tolerance: float = None,
                                interaction_cutoffs: list = None,
                                max_proc: int = None,
-                               summary: bool = None,
                                options_dict: dict =None
                                ):
         """
-        Call storage manager to process result files and add to database. Creates a database, or adds to an existing one if using "append_results".
+        Call storage manager to process result files and add to database. Creates or adds to an existing a database.
         Options can be provided as a dict or as individual options. If both are provided, individual options will overwrite those from the dictionary. 
 
         Args:
@@ -839,7 +827,6 @@ class RingtailCore:
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             filesources_dict (dict): file sources already as an object 
-            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
             max_poses (int): how many poses to save (ordered by soem score?)
@@ -863,7 +850,6 @@ class RingtailCore:
         if results_files_given or files.save_receptor: 
             self._add_results(files,
                               False,
-                              append_results,
                               duplicate_handling,
                               overwrite,
                               store_all_poses,
@@ -872,7 +858,6 @@ class RingtailCore:
                               interaction_tolerance,
                               interaction_cutoffs,
                               max_proc,
-                              summary,
                               options_dict)
 
     def add_results_from_vina_string(self,
@@ -880,7 +865,6 @@ class RingtailCore:
                                     receptor_file: str = None,
                                     save_receptor: bool = None,
                                     resultsources_dict: dict = None,
-                                    append_results: bool = None,
                                     duplicate_handling: str = None,
                                     overwrite: bool = None,
                                     store_all_poses: bool = None,
@@ -888,20 +872,18 @@ class RingtailCore:
                                     add_interactions: bool = None,
                                     interaction_cutoffs: list = None,
                                     max_proc: int = None,
-                                    summary: bool = None,
                                     options_dict: dict = None
                                     ):
         """
         Call storage manager to process the given vina output string and add to database.
         Options can be provided as a dict or as individual options.
-        Creates a database, or adds to an existing one if using "append_results".
+        Creates or adds to an existing a database.
         
         Args:
             results_string (dict): string containing the ligand identified and docking results as a dictionary
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             resultsources_dict (dict): file sources already as an object 
-            append_results (bool): Add new results to an existing database, specified by database choice in ringtail initialization or --input_db in cli
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses? 
             max_poses (int): how many poses to save (ordered by soem score?)
@@ -927,7 +909,6 @@ class RingtailCore:
         if results_strings_given or results.save_receptor: 
             self._add_results(results,
                               True,
-                              append_results,
                               duplicate_handling,
                               overwrite,
                               store_all_poses,
@@ -936,7 +917,6 @@ class RingtailCore:
                               None,
                               interaction_cutoffs,
                               max_proc,
-                              summary,
                               options_dict)
 
     def save_receptor(self, receptor_file):
@@ -1570,7 +1550,6 @@ class RingtailCore:
             file_dict = options["fileobj"]
             logger.info("A dictionary containing results files was extracted from config file.")
             write_dict = {**options["resultsmanopts"], 
-                        "append_results": options["storageopts"]["append_results"], 
                         "duplicate_handling":options["storageopts"]["duplicate_handling"], 
                         "overwrite":options["storageopts"]["overwrite"]}
             logger.info("A dictionary containing write options was extracted from config file.")
