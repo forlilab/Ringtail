@@ -195,7 +195,7 @@ class StorageManager:
             receptor_array (list): list of data to be stored in Receptors table
             insert_receptor (bool, optional): flag indicating that receptor info should inserted
         """
-        self.insert_results(results_array) 
+        Pose_IDs = self.insert_results(results_array)
         self.insert_ligands(ligands_array)
         if insert_receptor and receptor_array != []:
             # first checks if there is receptor info already in the db
@@ -205,24 +205,25 @@ class StorageManager:
                 self.insert_receptors(receptor_array) 
         # insert interactions if they are present
         if interaction_array != []: # what unique info is passed on here
-            self.insert_interactions(interaction_array) # the interaction array has the ligand name and a long string of data, probably the unique ness stuff
+            self.insert_interactions(Pose_IDs, interaction_array) # the interaction array has the ligand name and a long string of data, probably the unique ness stuff
 
-    def insert_interactions(self, interactions_list):
+    def insert_interactions(self, Pose_IDs: list, interactions_list):
         """Takes list of interactions, inserts into database
 
         Args:
+            Pose_IDs (list(int)): list of pose ids assigned while writing the current results to database
             interactions_list (list): List of tuples for interactions in form
                 ("type", "chain", "residue", "resid", "recname", "recid")
         """
         # populate unique interactions from existing database
         if self._append_results:
             # fetch existing interactions
-            existing_unique_interactions = self._fetch_existing_interactions() 
+            existing_unique_interactions = self._fetch_existing_interactions() #NOTE can keep this method, reads from indices table
             # add each existing interaction to internal attribute keeping track of unique interactions
             for interaction in existing_unique_interactions:
                 self.unique_interactions[interaction[1:]] = interaction[0]
 
-            # sets next index taht will be used for next unique interaction and its column name
+            # sets next index that will be used for next unique interaction and its column name
             self.next_unique_interaction_idx = (
                 interaction[0] + 1
             )  
@@ -232,18 +233,20 @@ class StorageManager:
         # check if we need to initialize the interaction bv table and
         # insert first set of interaction
         if not self.interactions_initialized_flag and not self._append_results:
+            #TODO instead here I should put a "add cloumn"
             self._create_interaction_bv_table() 
             # this is just a table of interactions represented in the database
             # the id corresponds to column number oin the bit vector table 
-            self._insert_unique_interactions(list(self.unique_interactions.keys())) 
+            self._insert_unique_interactions(list(self.unique_interactions.keys()))  #NOTE method can stay
             self.interactions_initialized_flag = True
         
         # this is the table that holds results data
-        self._insert_interaction_bitvectors( 
-            self._generate_interaction_bitvectors(interactions_list) 
+        self._insert_interaction_bitvectors(
+            self._generate_interaction_bitvectors(
+            Pose_IDs, interactions_list) 
         )
 
-    def _generate_interaction_bitvectors(self, interactions_list):
+    def _generate_interaction_bitvectors(self, Pose_ID_list, interactions_list):
         """Takes string of interactions and makes bitvector
 
         Args:
@@ -256,9 +259,9 @@ class StorageManager:
         """
         bitvectors_list = []
         # for the interactions relevant to one pose
-        for pose_interactions in interactions_list:
+        for index, pose_interactions in enumerate(interactions_list):
             # create an empty list that will be filled by 1s if there is an interaction at a certain index (interaction index table)
-            pose_bitvector = [None] * len(self.unique_interactions)
+            pose_bitvector = [None] * len(self.unique_interactions) #this is where I add pose id
             # for each individual interaction that ligand pose exhibited with the receptor
             for interaction_tuple in pose_interactions:
                 # find the index of the tuple in all available interactions, that the current interaction corresponds to
@@ -266,6 +269,8 @@ class StorageManager:
                 # at index this pose has an interaction
                 # index corrected for interaction_indices starting at 1
                 pose_bitvector[interaction_idx - 1] = 1
+            # prepend the Pose ID to given interaction bitvecor
+            pose_bitvector.insert(0, Pose_ID_list[index])
             # append to list of all interactions relevant to that ligand pose 
             bitvectors_list.append(pose_bitvector)
         return bitvectors_list
@@ -576,6 +581,7 @@ class StorageManagerSQLite(StorageManager):
         self._create_ligands_table()
         self._create_receptors_table()
         self._create_interaction_index_table()
+        self._create_interaction_table()
         self._create_bookmark_table()
         self._create_db_properties_table()
 
@@ -629,7 +635,7 @@ class StorageManagerSQLite(StorageManager):
             interaction_tuples.append(
                 cls._generate_interaction_tuples(pose_interactions)
             )
-
+        print(f'  the type of result rows is {type(result_rows)} and the type of interation tuples is {type(interaction_tuples)}')
         return (
             result_rows,
             cls._generate_ligand_row(ligand_dict),
@@ -850,55 +856,171 @@ class StorageManagerSQLite(StorageManager):
             results_array (np.ndAaray): numpy array of arrays containing
                 formatted result rows
 
+        Returns:
+            Pose_ID (list(int)): returns the pose ids for the ligand written to results, these are used to ensure internal consistency when writing to the interaction table 
+
         Raises:
             DatabaseInsertionError
         """
 
         sql_insert = """INSERT INTO Results (
-        LigName,
-        receptor,
-        pose_rank,
-        run_number,
-        cluster_rmsd,
-        reference_rmsd,
-        docking_score,
-        leff,
-        deltas,
-        energies_inter,
-        energies_vdw,
-        energies_electro,
-        energies_flexLig,
-        energies_flexLR,
-        energies_intra,
-        energies_torsional,
-        unbound_energy,
-        nr_interactions,
-        num_hb,
-        cluster_size,
-        about_x,
-        about_y,
-        about_z,
-        trans_x,
-        trans_y,
-        trans_z,
-        axisangle_x,
-        axisangle_y,
-        axisangle_z,
-        axisangle_w,
-        dihedrals,
-        ligand_coordinates,
-        flexible_res_coordinates
-        ) VALUES \
-        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+                        LigName,
+                        receptor,
+                        pose_rank,
+                        run_number,
+                        cluster_rmsd,
+                        reference_rmsd,
+                        docking_score,
+                        leff,
+                        deltas,
+                        energies_inter,
+                        energies_vdw,
+                        energies_electro,
+                        energies_flexLig,
+                        energies_flexLR,
+                        energies_intra,
+                        energies_torsional,
+                        unbound_energy,
+                        nr_interactions,
+                        num_hb,
+                        cluster_size,
+                        about_x,
+                        about_y,
+                        about_z,
+                        trans_x,
+                        trans_y,
+                        trans_z,
+                        axisangle_x,
+                        axisangle_y,
+                        axisangle_z,
+                        axisangle_w,
+                        dihedrals,
+                        ligand_coordinates,
+                        flexible_res_coordinates
+                        ) VALUES \
+                        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+
+        sql_replace = """UPDATE Results 
+                        SET 
+                        LigName=?,
+                        receptor=?,
+                        pose_rank=?,
+                        run_number=?,
+                        cluster_rmsd=?,
+                        reference_rmsd=?,
+                        docking_score=?,
+                        leff=?,
+                        deltas=?,
+                        energies_inter=?,
+                        energies_vdw=?,
+                        energies_electro=?,
+                        energies_flexLig=?,
+                        energies_flexLR=?,
+                        energies_intra=?,
+                        energies_torsional=?,
+                        unbound_energy=?,
+                        nr_interactions=?,
+                        num_hb=?,
+                        cluster_size=?,
+                        about_x=?,
+                        about_y=?,
+                        about_z=?,
+                        trans_x=?,
+                        trans_y=?,
+                        trans_z=?,
+                        axisangle_x=?,
+                        axisangle_y=?,
+                        axisangle_z=?,
+                        axisangle_w=?,
+                        dihedrals=?,
+                        ligand_coordinates=?,
+                        flexible_res_coordinates=?
+                        WHERE Pose_ID = ?;"""
 
         try:
+            Pose_IDs = []
             cur = self.conn.cursor()
-            cur.executemany(sql_insert, results_array)
+            for result in results_array:
+                Pose_ID = -1 # nonsensical table index to initialize row index
+                if self.duplicate_handling:
+                    Pose_ID = self.check_unique_results_row(result)
+
+                if Pose_ID != -1: # row already in table
+                    # row exist, evaluate if ignore or replace
+                    if self.duplicate_handling.upper() == "IGNORE":
+                        # do not add the new row, later means do not insert new interactions
+                        pass
+                    elif self.duplicate_handling.upper() == "REPLACE":
+                        # update old record with new data, do same with interactions
+                        result.append(Pose_ID)
+                        cur.execute(sql_replace, result)
+                        print("    result exists, but replacing:")
+                else: # means row does not exist
+                    cur.execute(sql_insert, result)
+                    print("    result did not exist, added and got new pose id:")
+                    Pose_ID = cur.lastrowid
+                    print(Pose_ID)
+                Pose_IDs.append(Pose_ID) 
+
             self.conn.commit()
             cur.close()
 
+            return Pose_IDs
+
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting results.") from e
+
+    def check_unique_results_row(self, result_data):
+        """
+        [0] LigName,
+        [1] receptor,
+        [20] about_x,
+        [21] about_y,
+        [22] about_z,
+        [23] trans_x,
+        [24] trans_y,
+        [25] trans_z,
+        [26] axisangle_x,
+        [27] axisangle_y,
+        [28] axisangle_z,
+        [29] axisangle_w,
+        [30] dihedrals,"""
+        unique_data_indeces = [0, 1, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+        unique_data = [result_data[index] for index in unique_data_indeces]
+
+        try:
+            cur = self.conn.cursor()
+            query = """SELECT Pose_ID 
+                        FROM Results 
+                        WHERE 
+                        LigName=?
+                        AND receptor=?
+                        AND about_x=?
+                        AND about_y=?
+                        AND about_z=?
+                        AND trans_x=?
+                        AND trans_y=?
+                        AND trans_z=?
+                        AND axisangle_x=?
+                        AND axisangle_y=?
+                        AND axisangle_z=?
+                        AND axisangle_w=?
+                        AND dihedrals=?;"""
+            
+            cur.execute(query, unique_data)
+            row = cur.fetchone()
+            if row is None:
+                Pose_ID = -1
+                logger.debug("Duplicate row not found.")
+            else:
+                Pose_ID = row[0]
+                logger.debug(f"Duplicate row found for Pose_ID {Pose_ID}")
+            cur.close()
+
+            return Pose_ID
+        
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError("Error while looking for unique result row.") from e
 
     def insert_ligands(self, ligand_array):
         """Takes array of ligand rows, inserts into Ligands table.
@@ -911,6 +1033,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
 
         """
+        #TODO this should have an associated poses column
         sql_insert = """INSERT INTO Ligands (
         LigName,
         ligand_smile,
@@ -1038,13 +1161,13 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError: Description
         """
         unique_string = ""
-        if self.duplicate_handling is not None:
-            unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
-                   trans_x, trans_y, trans_z,
-                   axisangle_x, axisangle_y, axisangle_z, axisangle_w,
-                   dihedrals) ON CONFLICT {0}""".format(
-                self.duplicate_handling.upper()
-            )
+        # if self.duplicate_handling is not None:
+        #     unique_string = """, UNIQUE(LigName, receptor, about_x, about_y, about_z,
+        #            trans_x, trans_y, trans_z,
+        #            axisangle_x, axisangle_y, axisangle_z, axisangle_w,
+        #            dihedrals) ON CONFLICT {0}""".format(
+        #         self.duplicate_handling.upper()
+        #     )
         sql_results_table = """CREATE TABLE IF NOT EXISTS Results (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL,
@@ -1215,7 +1338,8 @@ class StorageManagerSQLite(StorageManager):
 
     def _create_interaction_bv_table(self):
         """Create table of interaction bits for each pose. Columns are:
-        Pose_ID INTERGER PRIMARY KEY AUTOINCREMENT
+        interaction_bv_ID INTERGER PRIMARY KEY AUTOINCREMENT, unique id in table #TODO changed name, but pose_id is still there and is the one that really matters
+        Pose_ID FOREIGN KEY (Results)                       , 1-to-1 id from Results table
         Interaction_1
         Interaction_2
         ...
@@ -1224,6 +1348,7 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseTableCreationError: Description
         """
+        #TODO how to make this work with older databases, maybe just check for the new column. If it does not exist, do some magic
         interact_columns_str = (
             " INTEGER,\n".join(
                 [
@@ -1235,8 +1360,10 @@ class StorageManagerSQLite(StorageManager):
         )
 
         bv_table = """CREATE TABLE IF NOT EXISTS Interaction_bitvectors (
-        Pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        {columns})""".format(
+        interaction_bv_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Pose_ID   INTEGER,
+        {columns},
+        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID))""".format(
             columns=interact_columns_str
         )
 
@@ -1247,6 +1374,31 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating interaction bitvector table. If database already exists, use --overwrite to drop existing tables"
+            ) from e
+
+    def _create_interaction_table(self):
+        """Create table a "tall-skinny_ table of each pose-interaction . Columns are:
+        interaction_id INTERGER PRIMARY KEY AUTOINCREMENT,
+        Pose_ID INTEGER FOREIGN KEY from RESULTS(Pose_ID)
+        Interaction CHAR
+
+        Raises:
+            DatabaseTableCreationError: Description
+        """
+
+        interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
+        interaction_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Pose_ID   INTEGER,
+        interaction VARCHAR[],
+        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID))"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(interaction_table)
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
+                "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
 
     def _create_bookmark_table(self):
@@ -1392,21 +1544,23 @@ class StorageManagerSQLite(StorageManager):
         """Insert bitvectors of interaction data into database
 
         Args:
+            Pose_IDs (list): list of Pose_IDs from the Results table for the elements represented in the bitvector list
             bitvectors (list): List of lists With inner list representing
                 interaction bitvector for a pose
 
         Raises:
             DatabaseInsertionError
         """
+
         interaction_columns = range(len(self.unique_interactions))
-        column_str = ""
-        filler_str = ""
+        column_str = "Pose_ID,"
+        filler_str = "?," # to account for the pose id
         for i in interaction_columns:
             column_str += "Interaction_" + str(i + 1) + ", "
             filler_str += "?,"
         column_str = column_str.rstrip(", ")
         filler_str = filler_str.rstrip(",")
-
+        
         #TODO here: if you are adding duplicates in results, and ignore/replace, they also need to be ignored or replaced here
 
         # make sure we have unique interactions, otherwise insert empty rows for those poses
