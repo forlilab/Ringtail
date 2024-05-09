@@ -214,11 +214,9 @@ class StorageManager:
             Pose_IDs (list(int)): list of pose ids assigned while writing the current results to database
             interactions_list (list): List of tuples for interactions in form
                 ("type", "chain", "residue", "resid", "recname", "recid")
+                duplicates (list(Pose_ID)): any duplicates identified in "insert_results", if duplicate handling has been specified
         """
 
-        
-            
-        #NOTE old code, to be depreceated and replaced by a view of the table I populate above
         # populate unique interactions from existing database
         if self._append_results:
             # fetch existing interactions
@@ -246,23 +244,24 @@ class StorageManager:
         
         # this is the table that holds results data
         self._insert_interaction_bitvectors(
-            self._generate_interaction_bitvectors(
-            Pose_IDs, interactions_list),
+            self._generate_interaction_bitvectors(Pose_IDs, interactions_list),
             duplicates
         )
 
-        #NOTE this is the new table stuff
-        # I can execute many with tuples and adding to table, just have to add 
+        #NOTE this table not yet in use but will replace the stuff above eventually
         # for each pose id, list 
         interaction_rows = []
         for index, Pose_ID in enumerate(Pose_IDs):
-            # I need to take the list of lists (pone list per pose id)
-            # then for each item in sub list (these are the tuples), add an element of pose id in front
             # creates list of tuples of interactions and the pose_ID
             pose_interactions = [((Pose_ID,) + interaction_tuple) for interaction_tuple in interactions_list[index]]
             # adds each pose_interaction row to list
             interaction_rows.extend(pose_interactions)
         self._insert_interaction_rows(interaction_rows, duplicates)
+
+        #TODO check if all interactions are represented in int ind table
+        # distincts = self._fetch_distinct_interactions()
+        # print("distinct interactions:")
+        # print(len([distincts.fetchall()]))
 
     def _generate_interaction_bitvectors(self, Pose_ID_list, interactions_list):
         """Takes string of interactions and makes bitvector
@@ -1625,6 +1624,18 @@ class StorageManagerSQLite(StorageManager):
                 pass
 
     def _insert_interaction_rows(self, interaction_rows, duplicates):
+        """Inserts the interaction data into a "tall-and-skinny" table, with a primary autoincremented key and a Pose_ID that is 1-to-1 with Results table.
+        Table will contain as many rows with the same Pose_ID as that pose has interactions. 
+
+        Args:
+            interaction_rows (list(tuple)): list of tuples containing the interaction data
+            duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones
+        
+        Raises:
+            DatabaseInsertionError
+        """
+        
+
         sql_insert = """INSERT INTO Interactions 
                             (Pose_ID,
                             interaction_type,
@@ -1648,6 +1659,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             # first, add any poses that are not duplicates
             non_duplicates = [interaction_row for interaction_row in interaction_rows if interaction_row[0] not in duplicates]
+            # check if there are duplicates or if duplicates list contains only None
             duplicates_exist = bool(duplicates.count(None) != len(duplicates))
             try:
                 cur = self.conn.cursor()
@@ -1658,6 +1670,7 @@ class StorageManagerSQLite(StorageManager):
             except sqlite3.OperationalError as e:
                 raise DatabaseInsertionError("Error while inserting bitvectors") from e
             
+            # only look for values to replace if there are duplicate pose ids
             if self.duplicate_handling == "REPLACE" and duplicates_exist: 
                 try:
                     cur = self.conn.cursor()
@@ -1772,12 +1785,16 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _delete_from_interactions(self, Pose_IDs):
-        """Remove rows from interactions table if values are to be replaced
+        """Remove rows from interactions table where pose id is represented in Pose_IDs
+
+        Args:
+            Pose_IDs (list(int)): list of pose ids to delete from the table
 
         Raises:
             StorageError: Description
         """
-        sql_delete = f"DELETE FROM Interactions WHERE Pose_ID IN {tuple(Pose_IDs)};"
+        Pose_IDs_string = ",".join(map(str, Pose_IDs))
+        sql_delete = f"DELETE FROM Interactions WHERE Pose_ID IN ({Pose_IDs_string});"
         try:
             cur = self.conn.cursor()
             cur.execute(sql_delete)
@@ -2127,6 +2144,15 @@ class StorageManagerSQLite(StorageManager):
             iter: sqlite cursor of existing interactions
         """
         query = """SELECT interaction_id, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid from Interaction_indices"""
+        return self._run_query(query)
+    
+    def _fetch_distinct_interactions(self):
+        """return cursor of distinct interactions in Interactions table
+
+        Returns:
+            iter: sqlite cursor of distinct interactions in Interactions table
+        """
+        query = """SELECT DISTINCT interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid from Interactions"""
         return self._run_query(query)
 
     def fetch_flexres_info(self):
