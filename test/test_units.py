@@ -243,27 +243,34 @@ class TestRingtailCore:
 
         rtc = RingtailCore(db_file="output.db")
         file = 'test_data/group1/1451.dlg.gz'
-        rtc.add_results_from_files(file = file, duplicate_handling="replace")
+        rtc.add_results_from_files(file = file)
         # ensure three results rows were added
-        count = countrows("SELECT COUNT(*) FROM Results")
+        result_count = countrows("SELECT COUNT(*) FROM Results")
+        inter_count = countrows("SELECT COUNT(*) FROM Interactions")
+        interbv_count = countrows("SELECT COUNT(*) FROM Interaction_bitvectors")
         # add same file but replace the duplicate
-        rtc.add_results_from_files(file = file)
-        count_replace = countrows("SELECT COUNT(*) FROM Results")
-
-        os.system("rm output.db")
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file = file, duplicate_handling="ignore")
+        rtc.add_results_from_files(file = file, duplicate_handling="replace")
+        result_count_replace = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_replace = countrows("SELECT COUNT(*) FROM Interactions")
+        interbv_count_replace = countrows("SELECT COUNT(*) FROM Interaction_bitvectors")
         # add same file but ignore the duplicate
-        rtc.add_results_from_files(file = file)
-        count_ignore = countrows("SELECT COUNT(*) FROM Results")
+        rtc.add_results_from_files(file = file, duplicate_handling="ignore")
+        result_count_ignore = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_ignore = countrows("SELECT COUNT(*) FROM Interactions")
+        interbv_count_ignore = countrows("SELECT COUNT(*) FROM Interaction_bitvectors")
 
         os.system("rm output.db")
+        # add same file but allow the duplicate
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file = file)
-        # add same file but allow the duplicate
         rtc.add_results_from_files(file = file)
-        count_dupl = countrows("SELECT COUNT(*) FROM Results")
-        assert count == count_replace == count_ignore == count_dupl/2
+        result_count_dupl = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_dupl = countrows("SELECT COUNT(*) FROM Interactions")
+        interbv_count_dupl = countrows("SELECT COUNT(*) FROM Interaction_bitvectors")
+
+        assert result_count == result_count_replace == result_count_ignore == result_count_dupl/2
+        assert inter_count == inter_count_replace == inter_count_ignore == inter_count_dupl/2
+        assert interbv_count == interbv_count_replace == interbv_count_ignore == interbv_count_dupl/2
 
         os.system("rm output.db")
         
