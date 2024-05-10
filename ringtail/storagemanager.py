@@ -228,7 +228,7 @@ class StorageManager:
             # sets next index that will be used for next unique interaction and its column name
             self.next_unique_interaction_idx = (
                 interaction[0] + 1
-            )  
+            )  #TODO i think this is causing the problem
 
         self._add_unique_interactions(interactions_list) 
 
@@ -258,10 +258,6 @@ class StorageManager:
             interaction_rows.extend(pose_interactions)
         self._insert_interaction_rows(interaction_rows, duplicates)
 
-        #TODO check if all interactions are represented in int ind table
-        # distincts = self._fetch_distinct_interactions()
-        # print("distinct interactions:")
-        # print(len([distincts.fetchall()]))
 
     def _generate_interaction_bitvectors(self, Pose_ID_list, interactions_list):
         """Takes string of interactions and makes bitvector
@@ -290,6 +286,7 @@ class StorageManager:
             pose_bitvector.insert(0, Pose_ID_list[index])
             # append to list of all interactions relevant to that ligand pose 
             bitvectors_list.append(pose_bitvector)
+            #TODO bug first row has some index instead of a 1 or None
         return bitvectors_list
 
     def _add_unique_interactions(self, interactions_list):
@@ -2094,6 +2091,15 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseInsertionError(
                 f"Error while inserting into temporary table"
             ) from e
+    
+    def _create_interaction_bv_view(self):
+        # make table of unique interactions, give them each an index in that table
+         #TODO check if all interactions are represented in int ind table
+        # get all distinct interactions in table and create an index view
+        distinct_interactions = self._fetch_distinct_interactions().fetchall()
+        
+
+
     #endregion
 
     #region Methods for getting information from database
