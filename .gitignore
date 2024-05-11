@@ -172,6 +172,6 @@ HanselHarris\&_2023_suppl.pdf
 ringtail/scraptest.py 
 logfiles/
 util_files/
-*.DS_STORE
+*.DS_Store
 *_ringtail-process-log.txt
 *.db
