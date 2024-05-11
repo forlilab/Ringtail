@@ -173,5 +173,7 @@ ringtail/scraptest.py
 logfiles/
 util_files/
 *.DS_Store
+.DS_Store
+test_data/.DS_Store
 *_ringtail-process-log.txt
 *.db
