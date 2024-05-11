@@ -546,7 +546,7 @@ class RingtailCore:
             self.storageman.check_storage_ready(self._run_mode, self.docking_mode, self.resultsman.store_all_poses, self.resultsman.max_poses)
             logger.info("Adding results...")
             self.resultsman.process_docking_data()
-            self.storageman.set_ringtail_db_schema_version()
+            self.storageman.finalize_database_write()
 
    
 #-#-#- Core attribute setting methods -#-#-#
