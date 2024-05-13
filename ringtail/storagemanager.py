@@ -1421,10 +1421,6 @@ class StorageManagerSQLite(StorageManager):
                 )
             else:
                 ligand_data_list.append(0)
-            # Add the cluster size for the cluster this pose belongs to
-            ligand_data_list.append(
-                ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
-            )
         else:
             ligand_data_list.extend(
                 [
@@ -1433,6 +1429,10 @@ class StorageManagerSQLite(StorageManager):
                     None,
                 ]
             )
+        # Add the cluster size for the cluster this pose belongs to
+        ligand_data_list.append(
+            ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
+        )
         # add statevars
         for key in cls.stateVar_keys:
             if ligand_dict[key] == []:
