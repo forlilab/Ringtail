@@ -1318,7 +1318,6 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
         
-        #TODO clean up-, I think I only need one commit statement at the end
         sql_insert = """INSERT INTO Interactions 
                             (Pose_ID,
                             interaction_type,
@@ -1328,50 +1327,34 @@ class StorageManagerSQLite(StorageManager):
                             rec_atom,
                             rec_atomid)
                             VALUES (?,?,?,?,?,?,?);"""
-        
-        if not self.duplicate_handling: # add all results
-            try:
-                cur = self.conn.cursor()
-                cur.executemany(sql_insert, interaction_rows)
-                self.conn.commit()
-                cur.close()
-
-            except sqlite3.OperationalError as e:
-                raise DatabaseInsertionError(f"Error while inserting an interaction row: {e}") from e
-            
-        else:
-            # first, add any poses that are not duplicates
-            non_duplicates = [interaction_row for interaction_row in interaction_rows if interaction_row[0] not in duplicates]
-            # check if there are duplicates or if duplicates list contains only None
-            duplicates_exist = bool(duplicates.count(None) != len(duplicates))
-            try:
-                cur = self.conn.cursor()
+        try:
+            cur = self.conn.cursor()
+            if not self.duplicate_handling: # add all results
+                    cur.executemany(sql_insert, interaction_rows)
+            else:
+                # first, add any poses that are not duplicates
+                non_duplicates = [interaction_row for interaction_row in interaction_rows if interaction_row[0] not in duplicates]
+                # check if there are duplicates or if duplicates list contains only None
+                duplicates_exist = bool(duplicates.count(None) != len(duplicates))
                 cur.executemany(sql_insert, non_duplicates)
-                self.conn.commit()
-                cur.close()
 
-            except sqlite3.OperationalError as e:
-                raise DatabaseInsertionError(f"Error while inserting an interaction row: {e}") from e
-            
-            # only look for values to replace if there are duplicate pose ids
-            if self.duplicate_handling == "REPLACE" and duplicates_exist: 
-                try:
-                    cur = self.conn.cursor()
+                # only look for values to replace if there are duplicate pose ids
+                if self.duplicate_handling == "REPLACE" and duplicates_exist: 
                     # delete all rows pertaining to duplicated pose_ids
                     duplicated_pose_ids = [id for id in duplicates if id is not None]
                     self._delete_interactions(duplicated_pose_ids)
                     # insert the interaction tuples for the new pose_ids
                     duplicates_only = [interaction_row for interaction_row in interaction_rows if interaction_row[0] in duplicates]
                     cur.executemany(sql_insert, duplicates_only)
-                    self.conn.commit()
-                    cur.close()
+                    
+                elif self.duplicate_handling == "IGNORE":
+                    # ignore and don't add any poses that are duplicates
+                    pass
+            self.conn.commit()
+            cur.close()
 
-                except sqlite3.OperationalError as e:
-                    raise DatabaseInsertionError(f"Error while inserting an interaction row: {e}") from e
-                
-            elif self.duplicate_handling == "IGNORE":
-                # ignore and don't add any poses that are duplicates
-                pass
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(f"Error while inserting an interaction row: {e}") from e
 
     def _populate_interaction_index_table(self):
         '''
