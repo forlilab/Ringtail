@@ -1940,24 +1940,26 @@ class StorageManagerSQLite(StorageManager):
         query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
         return self._run_query(query)
 
-    def fetch_interaction_bitvector(self, pose_id): #TODO check where method is used
-        """Returns tuple containing interaction bitvector line for given pose_id
+    def fetch_pose_interactions(self, Pose_ID):
+        '''
+        Fetch all interactions parameters belonging to a Pose_ID
 
         Args:
-            pose_id (int): pose id to fetch interaction bitvector for
+            Pose_ID (int): pose id, 1-1 with Results table
 
         Returns:
-            tuple: representing interaction bitvector
-        """
-        # catch if database does not have interactions
-        table_names = [table[0] for table in self._fetch_existing_table_names()]
-        if "Interaction_bitvectors" not in table_names:
+            iter: of interaction information for given Pose_ID
+        '''
+        # check if table exist
+        cur = self._run_query("""SELECT name FROM sqlite_master WHERE type='table' AND name='Interactions';""")
+        if len(cur.fetchall()) == 0:
             return None
-
-        query = "SELECT * FROM Interaction_bitvectors WHERE Pose_ID = {0}".format(
-            pose_id
+        
+        query = "SELECT interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid FROM Interactions WHERE Pose_ID = {0}".format(
+            Pose_ID
         )
-        return self._run_query(query).fetchone()[1:]  # cut off pose id #TODO might have to alter to remove a table index
+
+        return self._run_query(query).fetchall()
 
     def fetch_interaction_info_by_index(self, interaction_idx):
         """Returns tuple containing interaction info for given interaction_idx
