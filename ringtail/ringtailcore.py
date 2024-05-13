@@ -123,26 +123,21 @@ class RingtailCore:
             flexres_pose,
         ) in poses:
             # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
-            #TODO BITVECTOR PROBLEM
-            pose_bitvector = self.storageman.fetch_interaction_bitvector(Pose_ID)
-            if pose_bitvector is not None:
-                interaction_indices = []
+            interactions = self.storageman.fetch_pose_interactions(Pose_ID)
+            # if that pose id has interactions
+            if interactions is not None:
+                # make a list of all of them
                 interactions_list = []
-                for idx, bit in enumerate(pose_bitvector):
-                    if bit == 1:
-                        interaction_indices.append(
-                            idx + 1
-                        )  # adjust for indexing starting at 1
-                for int_idx in interaction_indices:
-                    interaction_info = self.storageman.fetch_interaction_info_by_index(
-                        int_idx
-                    )
+                # for each interaction row, make into a string according to format above
+                for interaction_info in interactions:
                     interaction = (
                         interaction_info[0] + "-" + ":".join(interaction_info[1:])
                     )
                     interactions_list.append(interaction)
-                interactions_str = ", ".join(interactions_list)
+
+                interactions_str = ", ".join(interactions_list) 
                 properties["Interactions"].append(interactions_str)
+
             # add properties to dictionary lists
             properties["Binding energies"].append(docking_score)
             properties["Ligand effiencies"].append(leff)
