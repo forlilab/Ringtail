@@ -173,6 +173,7 @@ class TestOutputs:
         os.system("rm query.csv")
 
     def test_interaction_tolerance(self):
+        #TODO rewrite
         status_notol = os.system(
             "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz"
         )
@@ -181,9 +182,9 @@ class TestOutputs:
         cur = conn.cursor()
 
         cur.execute(
-            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
+            "SELECT * FROM Interactions WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
         )
-        count_notol = sum([1 for interaction in cur.fetchone() if interaction == 1])
+        count_notol = len(cur.fetchall()) 
 
         cur.close()
         conn.close()
@@ -197,9 +198,9 @@ class TestOutputs:
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         cur.execute(
-            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
+            "SELECT * FROM Interactions WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
         )
-        count_tol = sum([1 for interaction in cur.fetchone() if interaction == 1])
+        count_tol = len(cur.fetchall())
 
         cur.close()
         conn.close()
@@ -213,14 +214,14 @@ class TestOutputs:
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
         cur.execute(
-            "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
+            "SELECT * FROM Interactions WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
         )
-        count_tol2 = sum([1 for interaction in cur.fetchone() if interaction == 1])
+        count_tol2 = len(cur.fetchall()) 
         
         cur.close()
         conn.close()
 
-        os.system("rm output.db")
+        
 
         assert status_notol == 0
         assert status_tol == 0
@@ -232,6 +233,7 @@ class TestOutputs:
         )
 
     def test_max_poses(self):
+        os.system("rm output.db")
         status3 = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
         )
