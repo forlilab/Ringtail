@@ -1417,9 +1417,8 @@ class RingtailCore:
             return
         with self.storageman: self.storageman.clone(bookmark_db_name)
         # connect to cloned database
-        self.db_file = bookmark_db_name
         dictionary = self.storageopts.todict()
-        dictionary["db_file"] = self.db_file
+        dictionary["db_file"] = bookmark_db_name
         temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
         with temp_storageman(**dictionary) as db_clone:
             db_clone.prune()
