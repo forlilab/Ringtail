@@ -53,6 +53,7 @@ class RingtailCore:
             logger.setLevel(logging_level)
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type) 
+        self.storagetype = storage_type
         self.storageman = storageman(db_file)
         self._run_mode = "api"
         self.docking_mode = docking_mode
@@ -1417,10 +1418,10 @@ class RingtailCore:
         with self.storageman: self.storageman.clone(bookmark_db_name)
         # connect to cloned database
         self.db_file = bookmark_db_name
-        #TODO needs rejiggering so agnostic to db engine. It also rewires core to new db, is that ok? 
         dictionary = self.storageopts.todict()
         dictionary["db_file"] = self.db_file
-        with StorageManagerSQLite(**dictionary) as db_clone:
+        temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
+        with temp_storageman(**dictionary) as db_clone:
             db_clone.prune()
             db_clone.close_storage(vacuum=True)
 
