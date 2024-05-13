@@ -1319,7 +1319,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
         
-
+        #TODO clean up-, I think I only need one commit statement at the end
         sql_insert = """INSERT INTO Interactions 
                             (Pose_ID,
                             interaction_type,
@@ -1338,7 +1338,7 @@ class StorageManagerSQLite(StorageManager):
                 cur.close()
 
             except sqlite3.OperationalError as e:
-                raise DatabaseInsertionError("Error while inserting interactions") from e
+                raise DatabaseInsertionError(f"Error while inserting an interaction row: {e}") from e
             
         else:
             # first, add any poses that are not duplicates
@@ -1352,7 +1352,7 @@ class StorageManagerSQLite(StorageManager):
                 cur.close()
 
             except sqlite3.OperationalError as e:
-                raise DatabaseInsertionError("Error while inserting bitvectors") from e
+                raise DatabaseInsertionError(f"Error while inserting an interaction row: {e}") from e
             
             # only look for values to replace if there are duplicate pose ids
             if self.duplicate_handling == "REPLACE" and duplicates_exist: 
@@ -1368,7 +1368,7 @@ class StorageManagerSQLite(StorageManager):
                     cur.close()
 
                 except sqlite3.OperationalError as e:
-                    raise DatabaseInsertionError("Error while inserting bitvectors") from e
+                    raise DatabaseInsertionError(f"Error while inserting an interaction row: {e}") from e
                 
             elif self.duplicate_handling == "IGNORE":
                 # ignore and don't add any poses that are duplicates
@@ -1508,7 +1508,7 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError("Error while deleting rows in the Interaction table") from e
 
     def _delete_from_interactions_not_in_view(self):
-        """Remove rows from interactions bitvector table
+        """Remove rows from interactions table
         if they did not pass filtering
 
         Raises:
@@ -1525,7 +1525,7 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError(
-                f"Error occured while pruning Interaction_bitvectors not in {self.bookmark_name}"
+                f"Error occured while pruning Interactions not in {self.bookmark_name}"
             ) from e
     #endregion
 
@@ -1557,6 +1557,7 @@ class StorageManagerSQLite(StorageManager):
         import pandas as pd
         pose_panda = pd.DataFrame(Pose_IDs_Interaction, columns=['Pose_ID', 'Interaction_index'])
         pose_panda = pose_panda.groupby('Pose_ID', as_index=False).agg(lambda x: ','.join(map(str, x)))
+        #TODO next is to make this work for the two methods that use it
         print(pose_panda)
 
 
@@ -2694,6 +2695,7 @@ class StorageManagerSQLite(StorageManager):
             str: SQLite-formatted query
         """
         #TODO other place where interaction_bitvector is used, but it does not need bit vectors
+        #TODO this method is easily used with the new table
         return "SELECT Pose_id FROM (SELECT * FROM Interaction_bitvectors WHERE Pose_ID IN subq) WHERE " + " OR ".join(
             [
                 "Interaction_{index_n} = 1".format(index_n=index)
