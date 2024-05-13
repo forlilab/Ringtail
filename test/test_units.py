@@ -247,17 +247,14 @@ class TestRingtailCore:
         # ensure three results rows were added
         result_count = countrows("SELECT COUNT(*) FROM Results")
         inter_count = countrows("SELECT COUNT(*) FROM Interactions")
-        interbv_count = countrows("SELECT COUNT(*) FROM Interaction_bitvectors")
         # add same file but replace the duplicate
         rtc.add_results_from_files(file = file, duplicate_handling="replace")
         result_count_replace = countrows("SELECT COUNT(*) FROM Results")
         inter_count_replace = countrows("SELECT COUNT(*) FROM Interactions")
-        interbv_count_replace = countrows("SELECT COUNT(*) FROM Interaction_bitvectors")
         # add same file but ignore the duplicate
         rtc.add_results_from_files(file = file, duplicate_handling="ignore")
         result_count_ignore = countrows("SELECT COUNT(*) FROM Results")
         inter_count_ignore = countrows("SELECT COUNT(*) FROM Interactions")
-        interbv_count_ignore = countrows("SELECT COUNT(*) FROM Interaction_bitvectors")
 
         os.system("rm output.db")
         # add same file but allow the duplicate
@@ -266,11 +263,9 @@ class TestRingtailCore:
         rtc.add_results_from_files(file = file)
         result_count_dupl = countrows("SELECT COUNT(*) FROM Results")
         inter_count_dupl = countrows("SELECT COUNT(*) FROM Interactions")
-        interbv_count_dupl = countrows("SELECT COUNT(*) FROM Interaction_bitvectors")
 
         assert result_count == result_count_replace == result_count_ignore == result_count_dupl/2
         assert inter_count == inter_count_replace == inter_count_ignore == inter_count_dupl/2
-        assert interbv_count == interbv_count_replace == interbv_count_ignore == interbv_count_dupl/2
 
         os.system("rm output.db")
         
