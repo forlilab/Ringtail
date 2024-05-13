@@ -123,6 +123,7 @@ class RingtailCore:
             flexres_pose,
         ) in poses:
             # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
+            #TODO BITVECTOR PROBLEM
             pose_bitvector = self.storageman.fetch_interaction_bitvector(Pose_ID)
             if pose_bitvector is not None:
                 interaction_indices = []
