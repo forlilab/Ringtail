@@ -703,7 +703,6 @@ class StorageManagerSQLite(StorageManager):
                 ligand_data_list.append(None)
             else:
                 ligand_data_list.append(ligand_dict[key][pose_rank])
-        #TODO bug, should save clusters even if no interactions
         if ligand_dict["interactions"] != [] and any(
             ligand_dict["interactions"][pose_rank]
         ):  # catch lack of interaction data
@@ -716,18 +715,17 @@ class StorageManagerSQLite(StorageManager):
                 )
             else:
                 ligand_data_list.append(0)
-            # Add the cluster size for the cluster this pose belongs to
-            ligand_data_list.append(
-                ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
-            )
         else:
             ligand_data_list.extend(
                 [
                     None,
                     None,
-                    None,
                 ]
             )
+        # Add the cluster size for the cluster this pose belongs to
+        ligand_data_list.append(
+            ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
+        )
         # add statevars
         for key in cls._data_kw_groups('stateVar_keys'):
             if ligand_dict[key] == []:
