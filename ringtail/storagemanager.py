@@ -703,7 +703,7 @@ class StorageManagerSQLite(StorageManager):
                 ligand_data_list.append(None)
             else:
                 ligand_data_list.append(ligand_dict[key][pose_rank])
-
+        #TODO bug, should save clusters even if no interactions
         if ligand_dict["interactions"] != [] and any(
             ligand_dict["interactions"][pose_rank]
         ):  # catch lack of interaction data
