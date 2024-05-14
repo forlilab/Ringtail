@@ -232,11 +232,11 @@ class TestRingtailCore:
     def test_export_bookmark_db(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst = -7)
-        rtc.export_bookmark_db()
+        bookmark_db_name = rtc.export_bookmark_db()
         
-        assert os.path.exists(rtc.db_file)
+        assert os.path.exists(bookmark_db_name)
 
-        conn = sqlite3.connect(rtc.db_file)
+        conn = sqlite3.connect(bookmark_db_name)
         curs = conn.cursor()
         curs.execute("SELECT COUNT(*) FROM Results")
         count = curs.fetchone()[0]
@@ -245,7 +245,7 @@ class TestRingtailCore:
 
         assert count == 7
 
-        os.system("rm " + rtc.db_file)
+        os.system("rm " + bookmark_db_name)
 
     def test_duplicate_handling(self, countrows):
         os.system("rm output.db output_log.txt")
