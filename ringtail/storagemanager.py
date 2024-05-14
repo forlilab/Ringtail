@@ -266,7 +266,6 @@ class StorageManager:
         
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
-        print(f'    filter results string: {filter_results_str}')
         filtered_results = self._run_query(filter_results_str)
         logger.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
         # get number of passing ligands
@@ -1512,17 +1511,22 @@ class StorageManagerSQLite(StorageManager):
             ) from e
     #endregion
 
-    def _create_new_bitvectors(self, Pose_IDs: iter = None):
+    def _create_new_bitvectors(self, Pose_IDs: iter = None) -> dict:
         '''
         This methoc currently creates a pandas dataframe which is a pivoted version of the Interactions table.
         First column is Pose_ID, second column is all interactions it has, based on the Interaction_indices table
 
         Args:
-            Pose_IDs (iter): Pose_IDs to create bitvectors from. If not specified (None) will assume "all" and fetch from Results table
+            Pose_IDs (iter): Pose_IDs to create bitvectors from
+        
+        Returns:
+            dict: list of bitvectors per pose 
         '''
         pose_filter = ""
         if Pose_IDs is not None:
             pose_filter = """WHERE i.Pose_ID in {0}""".format(tuple(Pose_IDs))
+        else:
+            raise OptionError("No Pose_IDs were provided to create bitvectors, please provide at least one Pose_ID")
         # long skinny pose id and interaction id
         pose_int_query = """SELECT i.Pose_ID, ii.interaction_id 
                             FROM Interactions i
@@ -1534,15 +1538,46 @@ class StorageManagerSQLite(StorageManager):
                                 AND i.rec_atom = ii.rec_atom
                                 AND i.rec_atomid = ii.rec_atomid
                             {0};""".format(pose_filter)
-        # this should match pose ids with interaction ids
+        
+        # find all unique interaction IDs per Pose_ID
         Pose_IDs_Interaction = self._run_query(pose_int_query).fetchall()
-        # then make them just pivoted strings without touching the databases
+        # User pandas to pivot the information into a Pose_ID | Interaction_indices dataframe
         import pandas as pd
         pose_panda = pd.DataFrame(Pose_IDs_Interaction, columns=['Pose_ID', 'Interaction_index'])
         pose_panda = pose_panda.groupby('Pose_ID', as_index=False).agg(lambda x: ','.join(map(str, x)))
-        #TODO next is to make this work for the two methods that use it
-        print(pose_panda)
 
+        num_of_unique_interactions = self.get_length_of_table("Interaction_indices")
+        
+        def index_to_bv(index_list: list, bv_list: list) -> list:
+            '''
+            Takes a list of Nones and replaces each element with 1 (a bit) if that element is represented in the index string.
+            Please note that indices in index_string are 1-based.
+
+            Args:
+                index_list (list(int)): 1-based list of indices for interactions from the Interaction_indices table
+                bv_list (list): list of None-s the length of all unique interactions in current database
+
+            Returns:
+                list: populated bitvector of interactions, where a 1 in the nth place of the string corresponds to interactions no (n), 1-based
+            '''
+            for index, _ in enumerate(bv_list):
+                if index+1 in index_list:
+                    bv_list[index] = 1
+            return bv_list
+        
+        bitvectors = {}
+        # for each pose in the dataframe
+        for _, row in pose_panda.iterrows():
+            # go through the interaction_index and convert stirng list of indexes to bit vector
+            interaction_index_list_str = list(row["Interaction_index"].split(","))
+            # convert string to int
+            interaction_index_list = [int(item) for item in interaction_index_list_str]
+            # make bitvector from indices based on total number of unique interactions
+            bitvector = index_to_bv(interaction_index_list, [None]*num_of_unique_interactions)
+            # build dict with Pose_ID: bitvector
+            bitvectors[row["Pose_ID"]] = bitvector
+        
+        return bitvectors
 
     #region Methods for dealing with views/bookmarks and temporary tables
     def get_all_bookmark_names(self):
@@ -2052,6 +2087,20 @@ class StorageManagerSQLite(StorageManager):
             )
         else:
             return pd.read_sql_query(requested_data, self.conn)
+    
+    def get_length_of_table(self, table_name: str):
+        '''
+        Finds the rowcount/length of a table based on the rowid
+
+        Args:
+            table_name (str): name of table to count the length of
+
+        Returns:
+            int: length of the table
+        '''
+        query = """SELECT COUNT(rowid) from {0}""".format(table_name)
+
+        return self._run_query(query).fetchone()[0]
     #endregion
 
     #region Methods dealing with filtered results
@@ -2514,7 +2563,6 @@ class StorageManagerSQLite(StorageManager):
             unclustered_query = f"SELECT Pose_ID FROM {self.filtering_window}"
             logger.info("Preparing to cluster results without any filters...")
         else:
-            print(f'       filtering window:  {self.filtering_window}')
             with_stmt = f"WITH subq as (SELECT Pose_ID FROM {self.filtering_window}) "
             if queries != []:
                 with_stmt = with_stmt[:-2] + f" WHERE {' AND '.join(queries)}) "
@@ -2570,15 +2618,23 @@ class StorageManagerSQLite(StorageManager):
 
         if self.interaction_cluster is not None: 
             logger.warning("WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
-            cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_id WHERE Results.Pose_ID IN ({unclustered_query})"
+            print(f' unclustered query value is" {unclustered_query}')
+
+            # the query says:
+                # select leff, bitvector for all pose ids that qualifies for the filter value
+            cluster_query = f"SELECT Results.leff, Interactions.* FROM Interactions INNER JOIN Results ON Results.Pose_ID = Interactions.Pose_id WHERE Results.Pose_ID IN ({unclustered_query})"
             #TODO this is the next query to alter
             print(f"\n\n     cluster query: {cluster_query}\n\n")
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
             leff_poseid_ifps = self._run_query(cluster_query).fetchall()
+            print(f"\n\n     leff_poseid_ifps query: {leff_poseid_ifps}\n\n")
+            # the output is leff, interaction_index, Pose_ID, interaction_type, etc, etc, etc, etc, etc
+            # need to get rid of interaction_index
 
             #TODO this method needs to be depreceated or otherwise edited
             def make_bitstring(pose_bv):
+                #TODO depreceate
                 bs = ""
                 for i in pose_bv:
                     if i is None:
@@ -2589,6 +2645,7 @@ class StorageManagerSQLite(StorageManager):
                         raise RuntimeError(f"Unrecognized character {i} in interaction bitvector.")
                 return bs
 
+            # I think in this method I can just take my create bitvector method and write a string from it
             bclusters = clusterFps([DataStructs.CreateFromBitString(make_bitstring(pose[2:])) for pose in leff_poseid_ifps], self.interaction_cluster)
             logger.info(f"Number of interaction fingerprint butina clusters: {len(bclusters)}")
 
