@@ -113,7 +113,7 @@ class TestRingtailCore:
 
         os.system(("rm " + log_file_name))
 
-    def test_similar_ligands(self, monkeypatch):
+    def test_similar_ligands_mfpt(self, monkeypatch):
         rtc = RingtailCore(db_file="output.db")
         ligand_name = "287065"
         rtc.filter(ebest = -6, mfpt_cluster=0.5)
@@ -121,6 +121,15 @@ class TestRingtailCore:
         number_similar = rtc.find_similar_ligands(ligand_name)
 
         assert number_similar == 8
+
+    def test_similar_ligands_interaction(self, monkeypatch):
+        rtc = RingtailCore(db_file="output.db")
+        ligand_name = "287065"
+        rtc.filter(ebest = -6, interaction_cluster=0.5)
+        monkeypatch.setattr('builtins.input', lambda _: 1) # provides terminal input
+        number_similar = rtc.find_similar_ligands(ligand_name)
+
+        assert number_similar == 1
 
     def test_create_rdkitmol(self):
         bookmark_name = "rdkit_test"
@@ -268,7 +277,10 @@ class TestRingtailCore:
         assert inter_count == inter_count_replace == inter_count_ignore == inter_count_dupl/2
 
         os.system("rm output.db")
-        
+
+    def test_overwrite_database(self):
+        pass
+
     def test_db_num_poses_warning(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file = [['test_data/group1/1451.dlg.gz']], max_poses=1)
