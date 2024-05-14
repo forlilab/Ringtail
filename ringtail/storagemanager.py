@@ -1511,56 +1511,6 @@ class StorageManagerSQLite(StorageManager):
             ) from e
     #endregion
 
-    def _create_bitvectors(self, pose_index_tuple_list: list = None) -> list:
-        '''
-        This methoc currently creates a pandas dataframe which is a pivoted version of the Interactions table.
-        First column is Pose_ID, second column is all interactions it has, based on the Interaction_indices table
-
-        Args:
-            pose_index_tuple_list (iter): Pose_IDs to create bitvectors from
-        
-        Returns:
-            list (tuple): list of (pose_id, bitvector)
-        '''
-        
-        # User pandas to pivot the information into a Pose_ID | Interaction_indices dataframe
-        import pandas as pd
-        pose_panda = pd.DataFrame(pose_index_tuple_list, columns=['Pose_ID', 'Interaction_index'])
-        pose_panda = pose_panda.groupby('Pose_ID', as_index=False).agg(lambda x: ','.join(map(str, x)))
-
-        num_of_unique_interactions = self.get_length_of_table("Interaction_indices")
-        
-        def index_to_bv(index_list: list, bv_list: list) -> list:
-            '''
-            Takes a list of Nones and replaces each element with 1 (a bit) if that element is represented in the index string.
-            Please note that indices in index_string are 1-based.
-
-            Args:
-                index_list (list(int)): 1-based list of indices for interactions from the Interaction_indices table
-                bv_list (list): list of None-s the length of all unique interactions in current database
-
-            Returns:
-                list: populated bitvector of interactions, where a 1 in the nth place of the string corresponds to interactions no (n), 1-based
-            '''
-            for index, _ in enumerate(bv_list):
-                if index+1 in index_list:
-                    bv_list[index] = 1
-            return bv_list
-        
-        bitvectors = []
-        # for each pose in the dataframe
-        for _, row in pose_panda.iterrows():
-            # go through the interaction_index and convert stirng list of indexes to bit vector
-            interaction_index_list_str = list(row["Interaction_index"].split(","))
-            # convert string to int
-            interaction_index_list = [int(item) for item in interaction_index_list_str]
-            # make bitvector from indices based on total number of unique interactions
-            bitvector = index_to_bv(interaction_index_list, [0]*num_of_unique_interactions)
-            bv_string = "".join(map(str, bitvector))
-            # build dict with Pose_ID: bitvector
-            bitvectors.append((row["Pose_ID"], bv_string))
-        return bitvectors
-
     #region Methods for dealing with views/bookmarks and temporary tables
     def get_all_bookmark_names(self):
         """Get all views in sql database as a list of names. Bookmarks are called views in sqlite
@@ -2086,6 +2036,56 @@ class StorageManagerSQLite(StorageManager):
     #endregion
 
     #region Methods dealing with filtered results
+    def _create_bitvectors(self, pose_index_tuple_list: list = None) -> list:
+        '''
+        This methoc currently creates a pandas dataframe which is a pivoted version of the Interactions table.
+        First column is Pose_ID, second column is all interactions it has, based on the Interaction_indices table
+
+        Args:
+            pose_index_tuple_list (iter): Pose_IDs to create bitvectors from
+        
+        Returns:
+            list (tuple): list of (pose_id, bitvector)
+        '''
+        
+        # User pandas to pivot the information into a Pose_ID | Interaction_indices dataframe
+        import pandas as pd
+        pose_panda = pd.DataFrame(pose_index_tuple_list, columns=['Pose_ID', 'Interaction_index'])
+        pose_panda = pose_panda.groupby('Pose_ID', as_index=False).agg(lambda x: ','.join(map(str, x)))
+
+        num_of_unique_interactions = self.get_length_of_table("Interaction_indices")
+        
+        def index_to_bv(index_list: list, bv_list: list) -> list:
+            '''
+            Takes a list of Nones and replaces each element with 1 (a bit) if that element is represented in the index string.
+            Please note that indices in index_string are 1-based.
+
+            Args:
+                index_list (list(int)): 1-based list of indices for interactions from the Interaction_indices table
+                bv_list (list): list of None-s the length of all unique interactions in current database
+
+            Returns:
+                list: populated bitvector of interactions, where a 1 in the nth place of the string corresponds to interactions no (n), 1-based
+            '''
+            for index, _ in enumerate(bv_list):
+                if index+1 in index_list:
+                    bv_list[index] = 1
+            return bv_list
+        
+        bitvectors = []
+        # for each pose in the dataframe
+        for _, row in pose_panda.iterrows():
+            # go through the interaction_index and convert stirng list of indexes to bit vector
+            interaction_index_list_str = list(row["Interaction_index"].split(","))
+            # convert string to int
+            interaction_index_list = [int(item) for item in interaction_index_list_str]
+            # make bitvector from indices based on total number of unique interactions
+            bitvector = index_to_bv(interaction_index_list, [0]*num_of_unique_interactions)
+            bv_string = "".join(map(str, bitvector))
+            # build dict with Pose_ID: bitvector
+            bitvectors.append((row["Pose_ID"], bv_string))
+        return bitvectors
+    
     def get_number_passing_ligands(self, bookmark_name: str = None):
         """Returns count of the number of ligands that
             passed filtering criteria
