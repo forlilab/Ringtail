@@ -266,6 +266,7 @@ class StorageManager:
         
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
+        print(f'    filter results string: {filter_results_str}')
         filtered_results = self._run_query(filter_results_str)
         logger.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
         # get number of passing ligands
@@ -1681,7 +1682,7 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseViewCreationError(
-                "Error creating view from query \n{0}".format(query)
+                "Error ({1}) creating view from query \n{0}".format(query, e)
             ) from e
 
     def _insert_bookmark_info(self, name: str, sqlite_query: str, filters = {}):
@@ -2282,6 +2283,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _generate_outfield_string(self):
+        #TODO this method should be changed to use outfileds as an input and not a property of storagemanager
         """string describing outfields to be written 
 
         Returns:
@@ -2318,10 +2320,10 @@ class StorageManagerSQLite(StorageManager):
         # before we do anything, check that the DB version matches the version number of our module
         rt_version_same, db_rt_version = self.check_ringtaildb_version()
         if not rt_version_same:
-            # TODO: will cause error when any version int is > 10
+            #NOTE will cause error when any version int is > 10
             # catch version 1.0.0 where returned db_rt_version will be 0
             if db_rt_version == 0:
-                db_rt_version = 100
+                db_rt_version = 100 #TODO update this for new ringtail version and db schema version
             raise StorageError(f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed.")
 
         outfield_string = self._generate_outfield_string()
@@ -2387,52 +2389,52 @@ class StorageManagerSQLite(StorageManager):
             if filter_key == "react_any" and filter_value:
                 interaction_filters.append(["reactive_interactions", "", "", "", "", True])
 
-        # for each interaction filter, get the index
-        # from the interactions_indices table
         interaction_queries = []
         for interaction in interaction_filters:
-            interaction = [self.interaction_name_to_letter[interaction[0]]] + interaction[1:]
-            interaction_filter_indices = []
-            interact_index_str = self._generate_interaction_index_filtering_query(
-                interaction[:-1]
-            )  # remove bool include/exclude flag
-            interaction_indices = self._run_query(interact_index_str)
-            for i in interaction_indices:
-                interaction_filter_indices.append(i[0])
+            # format interaction to db format
+            interaction_formatted = [self.interaction_name_to_letter[interaction[0]]] + interaction[1:]
+            
+            # check if interaction in interaction_indices (i.e., represented in the results)
+            interaction_index_query = self._generate_interaction_index_filtering_query(interaction_formatted[:-1])  # removes bool include/exclude flag
+            interaction_exists = bool(self._run_query(interaction_index_query).fetchall())
 
-            # catch if interaction not found in results
-            if interaction_filter_indices == []:
-                if interaction == ["R", "", "", "", "", True]:
+            if not interaction_exists:
+                if interaction_formatted == ["R", "", "", "", "", True]:
                     logger.warning(
                         "Given --react_any filter, no reactive interactions found. Excluded from filtering."
                     )
                 else:
                     logger.warning(
                         "Interaction {i} not found in results, excluded from filtering".format(
-                            i=":".join(interaction[:4])
+                            i=":".join(interaction_formatted[:4])
                         )
                     )
                 continue
+            
+            # now that we know that interaction is present, write db query for the interaction
+            interaction_str=self._generate_interaction_filtering_query(
+                        interaction_type=interaction_formatted[0],
+                        rec_chain=interaction_formatted[1],
+                        rec_resname=interaction_formatted[2],
+                        rec_resid=interaction_formatted[3]
+            )
+
             # determine include/exclude string
-            if interaction[-1] is True:
+            if interaction_formatted[-1] is True:
                 include_str = "IN"
-            elif interaction[-1] is False:
+            elif interaction_formatted[-1] is False:
                 include_str = "NOT IN"
             else:
                 raise RuntimeError(
                     "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
                 )
-            # find pose ids for ligands with desired interactions
-            #TODO only need index table and interaction table
+            # create list of queries for finding pose ids for ligands with desired interactions
             interaction_queries.append(
                 "Pose_ID {include_str} ({interaction_str})".format(
                     include_str=include_str,
-                    interaction_str=self._generate_interaction_filtering_query(
-                        interaction_filter_indices
-                    ),
+                    interaction_str=interaction_str,
                 )
             )
-            print(f'\n\n   interaction query that also usese bit vector table: {interaction_queries}')
 
         # add ligand filters
         ligand_filters_dict = {k:v for k, v in filters_dict.items() if k in Filters.get_filter_keys("ligand")}
@@ -2506,18 +2508,19 @@ class StorageManagerSQLite(StorageManager):
         if interaction_queries == [] and queries != []:
             joined_queries = " AND ".join(queries)
             sql_string = sql_string + joined_queries
-            unclustered_query = f"SELECT Pose_id FROM {self.filtering_window} WHERE " + joined_queries
+            unclustered_query = f"SELECT Pose_ID FROM {self.filtering_window} WHERE " + joined_queries
         elif queries == [] and interaction_queries == [] and clustering:
             # allows for clustering without filtering
-            unclustered_query = f"SELECT Pose_id FROM {self.filtering_window}"
+            unclustered_query = f"SELECT Pose_ID FROM {self.filtering_window}"
             logger.info("Preparing to cluster results without any filters...")
         else:
-            with_stmt = f"WITH subq as (SELECT Pose_id FROM {self.filtering_window}) "
+            print(f'       filtering window:  {self.filtering_window}')
+            with_stmt = f"WITH subq as (SELECT Pose_ID FROM {self.filtering_window}) "
             if queries != []:
                 with_stmt = with_stmt[:-2] + f" WHERE {' AND '.join(queries)}) "
             joined_interact_queries = " AND ".join(interaction_queries)
             sql_string = with_stmt + sql_string + joined_interact_queries
-            unclustered_query = f"SELECT Pose_id FROM {self.filtering_window} WHERE " + joined_interact_queries
+            unclustered_query = f"SELECT Pose_ID FROM {self.filtering_window} WHERE " + joined_interact_queries
 
         # adding if we only want to keep
         # one pose per ligand (will keep first entry)
@@ -2565,14 +2568,16 @@ class StorageManagerSQLite(StorageManager):
             cs = Butina.ClusterData(dists,nfps,cutoff,isDistData=True)
             return cs
 
-        if self.interaction_cluster is not None: #TODO one place where intearction_bitvector is used
+        if self.interaction_cluster is not None: 
             logger.warning("WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues.")# TODO: remove this memory bottleneck
             cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_id WHERE Results.Pose_ID IN ({unclustered_query})"
-            
-            print(f"\n\n   cluster query: {cluster_query}\n\n")
+            #TODO this is the next query to alter
+            print(f"\n\n     cluster query: {cluster_query}\n\n")
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
             leff_poseid_ifps = self._run_query(cluster_query).fetchall()
+
+            #TODO this method needs to be depreceated or otherwise edited
             def make_bitstring(pose_bv):
                 bs = ""
                 for i in pose_bv:
@@ -2635,6 +2640,7 @@ class StorageManagerSQLite(StorageManager):
         ), f"SELECT * FROM {self.filtering_window}")  # sql_query, view_query
     
     def _generate_interaction_index_filtering_query(self, interaction_list):
+        #TODO depreceate
         """takes list of interaction info for a given ligand,
             looks up corresponding interaction index
 
@@ -2668,7 +2674,8 @@ class StorageManagerSQLite(StorageManager):
 
         return sql_string
 
-    def _generate_interaction_filtering_query(self, interaction_index_list):
+    def _generate_interaction_filtering_query(self, interaction_type=None, rec_chain=None, rec_resname=None, rec_resid=None, rec_atom=None):
+        #TODO rewrite doc
         """takes list of interaction indices and searches for ligand ids
             which have those interactions
 
@@ -2678,12 +2685,14 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: SQLite-formatted query
         """
-        #TODO other place where interaction_bitvector is used, but it does not need bit vectors
-        #TODO this method is easily used with the new table
-        return "SELECT Pose_id FROM (SELECT * FROM Interaction_bitvectors WHERE Pose_ID IN subq) WHERE " + " OR ".join(
+        inputs = vars()
+        del inputs["self"]
+
+        # build the query based on what column names are provided
+        return "SELECT Pose_ID FROM (SELECT * FROM Interactions WHERE Pose_ID IN subq) WHERE " + " AND ".join(
             [
-                "Interaction_{index_n} = 1".format(index_n=index)
-                for index in interaction_index_list
+                "{keyword} = '{value}'".format(keyword=keyword, value=value)
+                for keyword, value in inputs.items() if value is not None
             ]
         )
 
@@ -3117,7 +3126,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(query)
             self.open_cursors.append(cur)
         except sqlite3.OperationalError as e:
-            raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
+            raise DatabaseQueryError("Unable to execute query {0}: {1}".format(query, e)) from e
         return cur
 
     def _update_query(self, query):
