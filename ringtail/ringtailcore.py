@@ -1395,11 +1395,14 @@ class RingtailCore:
             df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
         
-    def export_bookmark_db(self, bookmark_name: str = None):
+    def export_bookmark_db(self, bookmark_name: str = None) -> str:
         """Export database containing data from bookmark
 
         Args:
-            bookmark_db_name (str): name for bookmark_db
+            bookmark_name (str): name for bookmark_db
+
+        Returns:
+            str: name of the new, exported database
         """
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
@@ -1423,6 +1426,8 @@ class RingtailCore:
         with temp_storageman(**dictionary) as db_clone:
             db_clone.prune()
             db_clone.close_storage(vacuum=True)
+
+        return bookmark_db_name
 
     def export_receptors(self):
         """
