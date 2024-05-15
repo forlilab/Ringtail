@@ -170,7 +170,7 @@ GUI/img/ringtail_logo.png
 HanselHarris\&_2023.pdf
 HanselHarris\&_2023_suppl.pdf
 ringtail/scraptest.py 
-logfiles/
+.vscode/
 util_files/
 *.DS_Store
 .DS_Store
