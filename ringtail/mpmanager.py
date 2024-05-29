@@ -295,7 +295,7 @@ class MPManager:
                 line = line.strip()
                 c += 1
                 if os.path.isfile(line):
-                    if line.endswith(pattern) or line.endswith(pattern + ".gz"): #TODO if adding zip option change here
+                    if line.endswith(pattern) or line.endswith(pattern + ".gz"): #NOTE if adding zip option change here
                         lig_accepted.append(line)
                 else:
                     logger.warning("Warning! file |%s| does not exist" % line)
