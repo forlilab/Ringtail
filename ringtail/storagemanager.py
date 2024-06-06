@@ -302,20 +302,24 @@ class StorageManager:
                     # iterate the counter of how many unique interactions there are
                     self.next_unique_interaction_idx += 1
 
-    def get_plot_data(self, only_passing=False):
+    def get_plot_data(self, bookmark_name: str = None, only_passing=False):
         """This function is expected to return an ascii plot
         representation of the results
 
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Will use default bookmark name if None. Returns empty list if bookmark does not exist.
+            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+
         Returns:
-            tuple: cursors as [<all data cursor>, <passing data cursor>]
+            tuple: cursors as (<all data cursor>, <passing data cursor>)
         """
 
         # checks if we have filtered by looking for view name in list of view names
-        if self.check_passing_view_exists():
+        if self.check_passing_view_exists(bookmark_name):
             if only_passing:
-                return [], self._fetch_passing_plot_data()
+                return [], self._fetch_passing_plot_data(bookmark_name)
             else:
-                return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
+                return self._fetch_all_plot_data(), self._fetch_passing_plot_data(bookmark_name)
         else:
             return self._fetch_all_plot_data(), []
 
@@ -1986,15 +1990,18 @@ class StorageManagerSQLite(StorageManager):
         """
         return self._run_query(self._generate_plot_all_results_query())
     
-    def _fetch_passing_plot_data(self):
+    def _fetch_passing_plot_data(self, bookmark_name: str=None):
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
 
+        Args:
+            bookmark_name (str): name for bookmark for which to fetch data. None will return data for default bookmark_name
+    
         Returns:
             iter: SQL Cursor containing docking_score,
                 leff for the first pose for passing ligands
         """
-        return self._run_query(self._generate_plot_passing_results_query())
+        return self._run_query(self._generate_plot_passing_results_query(bookmark_name))
 
     def _fetch_ligand_cluster_columns(self):
         """fetching columns from Ligand_clusters table
@@ -2264,15 +2271,21 @@ class StorageManagerSQLite(StorageManager):
         """
         return "SELECT docking_score, leff FROM Results GROUP BY LigName"
 
-    def _generate_plot_passing_results_query(self):
+    def _generate_plot_passing_results_query(self, bookmark_name: str = None):
         """Make SQLite-formatted query string to get docking_score,
             leff of first pose for passing ligands
+
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Will use default bookmark name if None. Returns empty list if bookmark does not exist.
 
         Returns:
             str: SQLite-formatted query string
         """
+        if bookmark_name is None:
+            bookmark_name = self.bookmark_name
+
         return "SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
-            results_view=self.bookmark_name
+            results_view=bookmark_name
         )
 
     def _generate_outfield_string(self):
