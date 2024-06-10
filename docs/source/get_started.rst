@@ -1,12 +1,12 @@
 .. _get_started:
 
 Getting started with Ringtail using the command line interface
-#############
+###############################################################
 
 The Ringtail command line interface is orchestrated through the script ``rt_process_vs.py``.
 
 Create and populate a database
-******************
+*********************************
 Navigate to the directory containing the data, in our case test_data:
 
 .. code-block:: bash
@@ -45,7 +45,7 @@ We can print a summary of the contents of the database by using the optional tag
     10%_leff: -0.47 kcal/mol
 
 Filtering and visualizing the data in the database
-******************************
+***************************************************
 
 Let us start filtering with a basic docking score cutoff of -6 kcal/mol:
 
@@ -75,21 +75,21 @@ The filtered molecules can then be exported as an e.g., SDF file which can be us
     $ rt_process_vs.py read --input_db output.db --bookmark_name ep5_vdwV279 --export_sdf_path ep5_vdwV279_sdfs --pymol
 
 Access help message for rt_process_vs.py
-************************
+*****************************************
 
 .. code-block:: bash
 
     $ rt_process_vs.py --help
 
 Access help message for rt_process_vs.py write mode
-************************
+***************************************************
 
 .. code-block:: bash
 
     $ rt_process_vs.py write --help
 
 Access help message for rt_process_vs.py read mode
-************************
+**************************************************
 
 .. code-block:: bash
 
