@@ -2,7 +2,7 @@
 .. _api:
 
 API procedures
-###################
+###############
 
 The Ringtail API allows for a more advanced, flexible use of ringtail where the user can create their own scripts. In the case of the docking engine AutoDock-Vina that outputs docking results as strings, Ringtail can be directly integrated in the virtual screen pipeline (LINK TO STUFF). 
 
@@ -13,7 +13,7 @@ Unlike the command line interace (LINK) the API does not need to be specified fo
 Please note that Ringtail does not automatically have permission to perform changes outside of the working directory, so be advised that any folders or documents that Ringtail outputs will be saved in the current working directory. 
 
 Ringtail inputs
-**************************
+****************
 
 Start by creating an instance of the RingtailCore class. The object will be created with the default database file name of ``output.db`` unless otherwise specified. The logger level may also be set at this time, and defaults to ``"WARNING"``. The ``docking_mode`` defaults to ``"dlg"`` (AutoDock-GPU) and can be set at instantiation or changed at any time by directly setting the docking_mode property of the RingtailCore object. 
 
@@ -82,11 +82,11 @@ If at any point you wish to print a summary of the contents of the database, the
     rtc.produce_summary()
 
 Input options
-=====================
+==============
 The Ringtail API uses the same options that are used in the command line interface. Relevant to adding results to the database, including how many poses of a docked ligand to save, and how to handle any duplicated ligands. 
 
 Handling of duplicate and existing results
-------------------------------------------
+-------------------------------------------
 With the Ringtial API you can keep adding results using the same object without specifying whether or not to ``append_results``, which is contrary to the command line interface where one command line call corresponds to one ringtail core object and one connection to the database.
 You can specify what to do if you are adding duplicate results for a ligand, by invoking the ``duplicate_handling`` keyword with the value ``IGNORE`` (will not add the newest duplicate) or ``REPLACE`` (will overwrite the newest duplicate). Please note that the ``duplicate_handling`` option makes database writing significantly slower.
 
@@ -127,12 +127,12 @@ By default (for DLGs), Ringtail will store the best-scored (lowest energy) bindi
                                 max_poses = 5)
 
 Filtering
-**********************
+**********
 
 Docking results stored in the Ringtail database can be filtered using the ``filter`` method. When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name (``Ligand_Name``) and docking score (``e``) of every pose passing filtering criteria. The name of the filter log name may be changed using the ``log_file`` keyword. 
 
 Scoring filters
-===================
+=================
 There are six scoring filters that include best (``ebest``) and worst docking score/energy (``eworst``), best and worst ligand efficieny (``lebest`` and ``leworst``), and results above worst docking score or ligand efficiency percentile (``score_percentile`` and ``le_percentile``, respecitvely). Some of these are internally inconsistent: if both ``eworst`` and ``score_percentile`` are used together, the ``eworst`` cutoff alone is used. The same is true of ``leworst`` and ``le_percentile``.
 
 .. code-block:: python
@@ -175,8 +175,8 @@ The ``max_miss`` keywords allows the user to filter by given interactions exclud
                 react_any = True)
 
 
-Ligand filters #TODO copy from cmdline docu
-=====================
+Ligand filters 
+===============
 Several filters pertaining to the SMARTS structure of the ligand can be used. For example, the ``ligand_substruct_pos`` keyword may be used to filter for a specific ligand substructure (specified with a SMARTS string) to be placed within some distance of a given cartesian coordinate. The format for this option is ``"<SMARTS pattern: str>" <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>``.
 ligand_name: Specify ligand name(s). Will combine name filters with 'OR'.
 ligand_substruct: SMARTS pattern(s) for substructure matching.
@@ -186,12 +186,12 @@ ligand_operator: Logical join operator for multiple SMARTS.
 
 .. code-block:: bash
 
-    $ python ../scripts/rt_process_vs.py read --input_db output.db --ligand_substruct_pos ["'[Oh]C' 0 1.2 -5.5 10.0 15.5"])
+    $ python ../scripts/rt_process_vs.py read --input_db output.db --ligand_substruct_pos ["'[Oh]C' 0 1.2 -5.5 10.0 15.5"]
 
 
 Clustering
-==============
-In addition to the filtering options outlined in the table below #TODO, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (``mfpt_cluster``) or interaction (``interaction_cluster``) fingerprints. Dissimilarity is measured by Tanimoto distance (float input to the cluster keyword) and clustering is performed with the Butina clustering algorithm. Clustering can be also be performed on a bookmark that has already been saved to the database, without providing any extra filter values. In this case, the bookmark over which to cluster (or additional filtering) on is specified by ``filter_bookmark`` (must be different from ``bookmark_name`` that contains previously filtered results).
+============
+In addition to the filtering options outlined in the table below, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (``mfpt_cluster``) or interaction (``interaction_cluster``) fingerprints. Dissimilarity is measured by Tanimoto distance (float input to the cluster keyword) and clustering is performed with the Butina clustering algorithm. Clustering can be also be performed on a bookmark that has already been saved to the database, without providing any extra filter values. In this case, the bookmark over which to cluster (or additional filtering) on is specified by ``filter_bookmark`` (must be different from ``bookmark_name`` that contains previously filtered results).
 
 .. code-block:: python
 
@@ -206,11 +206,11 @@ While not quite a filtering option, the user can provide a ligand name from a pr
 
 
 Output options
-********************
+***************
 There are multiple options to output and visualize data in Ringtail.
 
 Creating scatter plot of ligands
-===============================
+=================================
 The method ``plot`` generates a scatterplot of ligand efficiency vs docking score for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with the keyword ``bookmark_name`` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as ``scatter.png``.
 
 .. code-block:: python
@@ -276,10 +276,11 @@ The ``config.json`` file will be saved in the current directory (default) or can
 
     config_dict = RTC.generate_config_json_template(to_file = False)
 
-.. code-block:: python 
+Configuration file is organized in sections for enhanced readability. To edit the dictionary, then
 
-    #TODO show what output looks like 
-    config_w.json:
+.. code-block:: python
+
+    config_dict[]:
         {
         "file_path": "path1/",
         "output_db": "example.db"
@@ -290,8 +291,15 @@ The ``config.json`` file will be saved in the current directory (default) or can
         "score_percentile": "0.1"
         }
 
+#TODO show how the config file is used 
+
+.. code-block:: python
+
+    rtc = RingtailCore()
+    rtc.add_config_from_file
+
 Some usage notes
-**************************
+******************
 
 For many of these operations, if you do not specify a bookmark name Ringtail will simply use the bookmark that was last used for operations in the object. If it is a newly instantiated object without a "recent" bookmark, it will look for a bookmark of the default name ``passing_results``. 
 Most methods accept both individual options as well as grouped options in a dictionary format. In each of these cases, for arguments that are duplicated between the two formats individual options will overwrite that given in the dictionary. 
@@ -306,86 +314,84 @@ Ringtail comes with a global logger object that will write to a new text file fo
     # log level defaults to "WARNING"
     logger.setLevel("INFO")
 
-Access help message
-=====================
-#TODO
-
-.. code-block:: python
-
-
-
 Available Ringtail arguments
-**********************************
+******************************
 
-#TODO table showing all arguments, keywords, defaults, and info
+Keywords pertaining to database write and file handling
 
+.. csv-table:: Ringtail input options
+    :header: "Keyword","Description","Default value"
+    :widths: 30, 70, 10
 
-| File options        |Description                                           | Default value   | Requires interactions |
-|:------------------------|:-------------------------------------------------|:----------------|----:|
-|file             | DLG/Vina PDBQT file(s) to be read into database                  | no default       ||
-|file_path        | Path(s) to files to read into database            | no default       ||
-|file_list        | File(s) with list of files to read into database  | no default       ||
-|pattern          | Specify pattern to search for when finding files   | \*.dlg\* / \*.pdbqt\* (vina mode)        ||
-|recursive        | Flag to perform recursive subdirectory search on file_path directory(s)  | FALSE      ||
-|receptor_file | Use with save_receptor and/or add_interactions. Give receptor PDBQT. | None      ||
-|save_receptor    | Flag to specify that receptor file should be imported to database. Receptor file must also be specified with receptor_file| FALSE     |<tr><td colspan="5">***Result processing options***</td></tr>
-|max_poses        | Number of clusters for which to store top-scoring pose (dlg) or number of poses (vina) to save in database| 3     ||
-|store_all_poses  | Flag to indicate that all poses should be stored in database| FALSE      ||
-|interaction_tolerance| Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired | FALSE -> 0.8 (Å)  | Yes |
-|add_interactions  | Find interactions between ligands and receptor. Requires receptor PDBQT to be written. | FALSE      ||
-|interaction_cutoffs  | Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. | 3.7,4.0     ||
-|max_proc | Maximum number of subprocesses to spawn during database writing. | [# available CPUs]      
-|append_results      | Add new docking files to existing database given with input_db  | FALSE       ||
-|duplicate_handling| Specify how dulicate results should be handled. May specify "ignore" or "replace". Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*| None |
-|overwrite        | Flag to overwrite existing database           | FALSE       ||
+    "file", "DLG/Vina PDBQT file(s) to be read into database", None
+    "file_path", "Path(s) to files to read into database", None
+    "file_list", "File(s) with list of files to read into database", None
+    "pattern", "Specify pattern to search for when finding files", "'dlg' or 'pdbqt'"
+    "recursive", "Flag to perform recursive subdirectory search on file_path directory(s)", FALSE
+    "receptor_file", "Use with save_receptor and/or add_interactions. Give receptor PDBQT.", None
+    "save_receptor", "Flag to specify that receptor file should be imported to database. Receptor file must also be specified with receptor_file", FALSE
+    "max_poses", "Number of clusters for which to store top-scoring pose (dlg) or number of poses (vina) to save in database", 3
+    "store_all_poses", "Flag to indicate that all poses should be stored in database", FALSE
+    "interaction_tolerance", "Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired [note]_ ", "0.8 Å if used"
+    "add_interactions", "Find interactions between ligands and receptor. Requires receptor PDBQT to be written.", FALSE
+    "interaction_cutoffs", "Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0.", "3.7,4.0"
+    "max_proc", "Maximum number of subprocesses to spawn during database writing.", "number of available CPUs or fewer"
+    "append_results", "Add new docking files to existing database given with input_db", FALSE
+    "duplicate_handling", "Specify how dulicate results should be handled. May specify 'ignore' or 'replace'. Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*", None
+    "overwrite", "Flag to overwrite existing database", FALSE
 
+Keywords pertaining to filtering and read/output
 
+.. csv-table:: Ringtail filters
+    :header: "Keyword","Description","Default value"
+    :widths: 30, 70, 10
 
+    "eworst","Worst energy value accepted (kcal/mol)",None
+    "ebest","Best energy value accepted (kcal/mol)",None
+    "leworst","Worst ligand efficiency value accepted",None
+    "lebest","Best ligand efficiency value accepted",None
+    "score_percentile","Worst energy percentile accepted. Giveas percentage (1 for top 1%, 0.1 for top 0.1%)",1.0
+    "le_percentile","Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%)",None
+    "ligand_name","Search for specific ligand name. Multiple names joined by 'OR'. Multiple filters should be separated by commas",None
+    "ligand_max_atoms","Specify maximum number of heavy atoms a ligand may have",None
+    "ligand_substruct","SMARTS pattern(s) for substructur matching",None
+    "ligand_substruct_pos","SMARTS pattern, index of atom in SMARTS, cutoff distance, and target xyz coordinates. Finds poses in which the specified substructure atom is within the distance cutoff from the target location",None
+    "ligand_operator","logical operator for multiple SMARTS","OR"
+    "vdw_interactions","Filter for van der Waals interaction with given receptor information. [note]_ ",None
+    "hb_interactions","Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting. [note]_ ",None
+    "reactive_interactions","Filter for reation with residue containing specified information. [note]_ ",None
+    "interactions_count","Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting. [note]_ ",None
+    "react_any","Filter for poses with reaction with any residue. [note]_ ",FALSE
+    "max_miss","Will filter given interaction filters excluding up to max_miss interactions. Will log and output union of combinations unless used with `enumerate_interaction_combs`. See section for reference. [note]_", 0
 
-Available filter and options are:
+.. [note] Requires interactions are calculated and present in the database.
 
-| Filters          || Description                                           | Default value   | Requires interactions |
-|:------------------------|:-----|:-------------------------------------------------|:----------------|----:|
-|eworst           | Worst energy value accepted (kcal/mol)                | no default  ||
-|ebest            | Best energy value accepted (kcal/mol)                 | no default  ||
-|leworst          | Worst ligand efficiency value accepted                | no default  ||
-|lebest           | Best ligand efficiency value accepted                 | no default  ||
-|score_percentile      | Worst energy percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | 1.0  ||
-|le_percentile    | Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%) | no default |  <tr><td colspan="5">LIGAND FILTERS</td></tr>
-|ligand_name             | Search for specific ligand name. Multiple names joined by "OR". Multiple filters should be separated by commas | no default  ||
-|ligand_max_atoms     | Specify maximum number of heavy atoms a ligand may have | no default  ||
-|ligand_substruct           | SMARTS pattern(s) for substructur matching | no default  ||
-|ligand_substruct_pos     | SMARTS pattern, index of atom in SMARTS, cutoff distance, and target xyz coordinates. Finds poses in which the specified substructure atom is within the distance cutoff from the target location | no default  ||
-|ligand_operator     | logical operator for multiple SMARTS | OR  | <tr><td colspan="5">INTERACTION FILTERS</td></tr>
-|vdw_interactions    | Filter for van der Waals interaction with given receptor information.  | no default  | Yes|
-|hb_interactions    | Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting | no default  | Yes|
-|reactive_interactions     | Filter for reation with residue containing specified information | no default  |Yes |
-|interactions_count         | Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting | no default  | Yes|
-|react_any        | Filter for poses with reaction with any residue       | FALSE     | Yes|
-|max_miss         | Will filter given interaction filters excluding up to max_miss interactions. Results in ![equation](https://latex.codecogs.com/svg.image?\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}) combinations for *n* interaction filters and *m* max_miss. Will log and output union of combinations unless used with `enumerate_interaction_combs`. | 0  | <tr><td colspan="5">***Storage and read options***</td></tr>Yes |
-|log_file              | Name for log of filtered results                      | output_log.txt   ||
-|overwrite        | Flag to overwrite existing logfile of same name           | FALSE       ||
-|bookmark_name      | Name for bookmark view in database                      | passing_results  ||
-|outfields       | Data fields to be written in output (log file and STDOUT). Ligand name always included. | e        ||
-|order_results    | String for field by which the passing results should be ordered in log file. | no default ||
-|output_all_poses        | Flag that if mutiple poses for same ligand pass filters, log all poses | (OFF)        ||
-|mfpt_cluster     | Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm | 0.5  ||
-|interaction_cluster     | Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm | 0.5  | Yes |
-|enumerate_interactions_combs  | When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. | FALSE  | Yes|
+.. csv-table:: Ringtail output options
+    :header: "Keyword","Description","Default value"
+    :widths: 30, 70, 10
 
-### Output options
-There are a number of output methods available to filter, view, and store the results. 
+    "log_file","Name for log of filtered results","output_log.txt"
+    "overwrite","Flag to overwrite existing logfile of same name",FALSE
+    "bookmark_name","Name for bookmark view in database","passing_results"
+    "outfields","Data fields to be written in output (log file and STDOUT). Ligand name always included.","e"
+    "order_results","String for field by which the passing results should be ordered in log file.",None
+    "output_all_poses","Flag that if mutiple poses for same ligand pass filters, log all poses",FALSE
+    "mfpt_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm",0.5
+    "interaction_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm (*)",0.5
+    "enumerate_interactions_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)",FALSE
 
-| Availble output methods          | Description                                           |  Arguments   | 
-|:------------------------|:-------------------------------------------------|:----------------|
-|`export_csv`| Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv | requested_data= bookmark_name, csv_name, table=True |
-|`export_csv`| Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions] |requested_data = query string, csv_name, table=False|
-|`export_bookmark_db` | Export a database containing only the results found in the specified bookmark name. Will save as <core_db_file>_<bookmark_name>.db| bookmark_name |
-|`export_receptors`| Export receptor to pdbqt | None |
-|`write_molecule_sdfs`| Write molecule sdfs from a given bookmark to specified path  |  sdf_path, bookmark_name   |
-|`find_similar_ligands`|  Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest. | query_ligname |
-|`get_previous_filter_data`| Get data requested in `outfields` from the bookmark of a previous filtering | outfields: str, bookmark_name" str |
-|`find_similar_ligands`| Find ligands in cluster with query_ligname |query_ligname|
-|`plot`| Freate scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as "scatter.png". | save: bool |
-|`pymol`| Launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with bookmark_name will be ploted and displayed in PyMol when clicked on.  | bookmark_name |
+.. csv-table:: Ringtail read/output methods
+    :header: "Keyword","Description","Input options"
+    :widths: 10, 30, 10
+
+    "export_csv", "Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv.", "requested_data= bookmark_name OR csv_name, table (bool)"
+    "export_csv", "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]", "requested_data (str), csv_name (str), table (bool)"
+    "export_bookmark_db", "Export a database containing only the results found in the specified bookmark name. Will save as <core_db_file>_<bookmark_name>.db", "bookmark_name (str)"
+    "export_receptors", "Export receptor to pdbqt", None
+    "write_molecule_sdfs", "Write molecule sdfs from a given bookmark to specified path", "sdf_path (str), bookmark_name (str)"
+    "find_similar_ligands", "Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest.", "query_ligname (str)"
+    "get_previous_filter_data", "Get data requested in `outfields` from the bookmark of a previous filtering", "outfields (str), bookmark_name (str)"
+    "find_similar_ligands", "Find ligands in cluster with query_ligname", "query_ligname (str)"
+    "plot", "Create scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as 'scatter.png'.", "save (bool)"
+    "pymol", "Launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with bookmark_name will be ploted and displayed in PyMol when clicked on.","bookmark_name (str)"
 
