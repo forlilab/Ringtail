@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 .. image:: https://user-images.githubusercontent.com/41704502/170797800-53a9d94a-932e-4936-9bea-e2d292b0c62b.png
 Ringtail
-#################
+##########
 *A tool for handling results from virtual screening of molecules*
 
 Ringtail is an open-source lightweight and highly customizable Python package used to organize, filter, and visualize docking data from virtual screening. Ringtail reads collections of virtual screening results in form of Docking Log File (DLG) from `AutoDock-GPU <https://github.com/ccsb-scripps/AutoDock-GPU>`_, or docking result strings or PDBQT from `AutoDock-Vina <https://github.com/ccsb-scripps/AutoDock-Vina>`_, and inserts them into an SQLite database. It then allows for the filtering of results with numerous pre-defined filtering options, generation of a simple result scatterplot, export of molecule SDFs, and export of CSVs of result data. Result file parsing is parallelized across the user's CPU (or a chosen number) to greatly enhance efficieny of the database writing.
@@ -31,8 +31,6 @@ Fpr more advanced and customizable use, learn how to use the :ref:`Ringtail API 
 Indices and tables
 ********************
 
-* :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
 
 .. toctree::
@@ -62,3 +60,5 @@ Indices and tables
    :caption: Full Python Documentation
 
    ringtail
+   genindex
+   modindex
