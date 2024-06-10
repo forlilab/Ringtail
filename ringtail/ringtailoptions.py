@@ -684,3 +684,98 @@ class Filters(RTOptions):
         else:
             list = filter_groups[group.lower()]
         return list
+
+
+class ReadOptions(RTOptions):
+    """Object that holds choices and default values for read and export modes, mostly used for the command line interface."""
+
+    options = {
+        "plot": {
+            "default": None,
+            "type": bool,
+            "description": "Makes scatterplot of LE vs Best Energy, saves as scatter.png.",
+        },
+        "pymol": {
+            "default": None,
+            "type": bool,
+            "description": "Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.",
+        },
+        "export_bookmark_db": {
+            "default": None,
+            "type": bool,
+            "description": "Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db",
+        },
+        "export_receptor": {
+            "default": None,
+            "type": bool,
+            "description": "Export stored receptor pdbqt. Will write to current directory.",
+        },
+        "data_from_bookmark": {
+            "default": None,
+            "type": bool,
+            "description": "Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.",
+        },
+        "find_similar_ligands": {
+            "default": None,
+            "type": str,
+            "description": "Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.",
+        },
+        "export_bookmark_csv": {
+            "default": None,
+            "type": str,
+            "description": "Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables.",
+        },
+        "export_query_csv": {
+            "default": None,
+            "type": str,
+            "description": "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]",
+        },
+    }
+
+    def __init__(self):
+        super().initialize_from_dict(self.options, self.__class__.__name__)
+
+    def checks(self):
+        """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
+        then every time a value is changed."""
+        pass
+
+
+class GeneralOptions(RTOptions):
+    """Object that holds choices and default values for miscellaneous arguments used for the command line interface only."""
+
+    options = {
+        "docking_mode": {
+            "default": None,
+            "type": str,
+            "description": "specify AutoDock program used to generate results. Available options are 'DLG' and 'vina'. Will automatically change --file_pattern to *.dlg* for DLG and *.pdbqt* for vina.",
+        },
+        "db_file": {
+            "default": None,
+            "type": str,
+            "description": "DB file for which to use for all Ringtail activities.",
+        },
+        "verbose": {
+            "default": None,
+            "type": bool,
+            "description": "Print results passing filtering criteria to STDOUT and to log. NOTE: runtime may be slower option used.",
+        },
+        "debug": {
+            "default": None,
+            "type": bool,
+            "description": "Print additional error information to STDOUT and to log.",
+        },
+        "print_summary": {
+            "default": None,
+            "type": bool,
+            "description": "prints summary information about stored data to STDOUT.",
+        },
+    }
+
+    def __init__(self):
+        super().initialize_from_dict(self.options, self.__class__.__name__)
+
+    def checks(self):
+        """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
+        then every time a value is changed."""
+        pass
