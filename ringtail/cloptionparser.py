@@ -131,12 +131,11 @@ def cmdline_parser(defaults: dict = {}):
     )
     write_parser.add_argument(
         "-p",
-        "--pattern",  # should change to file_pattern
-        help='specify which pattern to use when searching for result files to process [only with "--file_path"]',
+        "--file_pattern",
+        help='specify which extension pattern to use when searching for result files to process [only with "--file_path"]',
         action="store",
         type=str,
-        metavar="PATTERN",
-        dest="file_pattern",
+        metavar="FILE PATTERN",
     )
     write_parser.add_argument(
         "-r",
