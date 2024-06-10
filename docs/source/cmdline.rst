@@ -280,7 +280,7 @@ Keywords pertaining to filtering and read/output
     "vdw_interactions","Filter for van der Waals interaction with given receptor information. [note]_ ",None
     "hb_interactions","Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting. [note]_ ",None
     "reactive_interactions","Filter for reation with residue containing specified information. [note]_ ",None
-    "interactions_count","Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting. [note]_ ",None
+    "hb_count","Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting. [note]_ ",None
     "react_any","Filter for poses with reaction with any residue. [note]_ ",FALSE
     "max_miss","Will filter given interaction filters excluding up to max_miss interactions. Will log and output union of combinations unless used with `enumerate_interaction_combs`. See section for reference. [note]_", 0
 

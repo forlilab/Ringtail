@@ -2449,7 +2449,7 @@ class StorageManagerSQLite(StorageManager):
                     )
 
             # write hb count filter(s)
-            if filter_key == "interactions_count":
+            if filter_key == "hb_count":
                 for k, v in filter_value:
                     # TODO implement other interaction count filters
                     if k != "hb_count":

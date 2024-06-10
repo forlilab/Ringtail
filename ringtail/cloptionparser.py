@@ -821,14 +821,14 @@ class CLOptionParser:
                     filters[k] = v
 
                 # count interactions
-                interactions_count = []
+                hb_count = []
                 count_kw = [("hb_count", ("hb_count"))]
                 for kw, pool in count_kw:
                     c = getattr(parsed_opts, kw, None)
                     if c is None:
                         continue
-                    interactions_count.append((pool, c))
-                filters["interactions_count"] = interactions_count
+                    hb_count.append((pool, c))
+                filters["hb_count"] = hb_count
 
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")
