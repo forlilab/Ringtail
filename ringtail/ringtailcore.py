@@ -35,7 +35,7 @@ class RingtailCore:
         _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
     """
 
-    # -#-#- Base methods -#-#-#
+    # region #-#-#- Base methods -#-#-#
 
     def __init__(
         self,
@@ -67,7 +67,9 @@ class RingtailCore:
 
         return self.storageman.update_database_version(consent)
 
-    # -#-#- Private methods -#-#-#
+    # endregion
+
+    # region #-#-#- Private methods -#-#-#
 
     def _validate_docking_mode(self, docking_mode: str):
         """Method that validates specified AutoDock program used to generate results.
@@ -614,7 +616,9 @@ class RingtailCore:
             self.resultsman.process_docking_data()
             self.storageman.set_ringtail_db_schema_version()
 
-    # -#-#- Core attribute setting methods -#-#-#
+    # endregion
+
+    # region #-#-#- Core attribute setting methods -#-#-#
     """ These methods are used internally to assing values to all ringtail options. 
     This ensures:   - that all options are set to specific types through RingtailOptions
                     - that internal consistency checks are performed on a group of options
@@ -870,7 +874,9 @@ class RingtailCore:
                 logger.debug(f"Filter {k} was set to {v}.")
         logger.info("A filter object has been prepared.")
 
-    # -#-#- API -#-#-#
+    # endregion
+
+    # region # -#-#- API -#-#-#
     def add_results_from_files(
         self,
         file: str = None,
@@ -1672,6 +1678,7 @@ class RingtailCore:
         )
 
     def add_config_from_file(self, config_file: str = "config.json"):
+        # TODO this method needs editing for reconfigured config file stuff
         """
         Provide ringtail config from file, will directly set storage manager settings,
         and return dictionaries for the remaining options.
@@ -1698,6 +1705,7 @@ class RingtailCore:
 
     @staticmethod
     def generate_config_json_template(to_file: bool = True) -> str:
+        # TODO this method needs editing for reconfigured config file stuff
         """
         Creates a dict of all Ringtail option classes, and their
         key-default value pairs. Outputs to options.json in
@@ -1730,6 +1738,7 @@ class RingtailCore:
 
     @staticmethod
     def read_config_file(config_file: str = "config.json", return_as_string=False):
+        # TODO this method needs editing for the new config stuff
         """
         Will read and parse a file containing ringtail options following the format
         given from RingtailCore.generate_config_json_template
@@ -1876,7 +1885,9 @@ class RingtailCore:
             logger.debug(f"Ringtail default values for {object} have been fetched.")
             return all_info[object.lower()]
 
-    # -#-#- Util method -#-#-#
+    # endergion
+
+    # region #-#-#- Util method -#-#-#
     @staticmethod
     def split_dict(dict: dict, items: list) -> tuple:
         """Utility method that takes one dictionary and splits it into two based on the listed keys
@@ -1895,3 +1906,6 @@ class RingtailCore:
             new_dict[key] = dict.pop(key)
 
         return dict, new_dict
+
+
+# endregion
