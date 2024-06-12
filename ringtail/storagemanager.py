@@ -1597,7 +1597,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error while remaking views") from e
 
-    def fetch_filters_from_view(self, bookmark_name=None):
+    def fetch_filters_from_view(self, bookmark_name: str = None):
         """Method that will retrieve filter values used to construct bookmark
 
         Args:
@@ -1761,7 +1761,7 @@ class StorageManagerSQLite(StorageManager):
         )
         cur.close()
         logger.debug(
-            "Creating a temporary table of passing ligands named 'passing_temp."
+            "Creating a temporary table of passing ligands named 'passing_temp'."
         )
 
     def save_temp_table(
