@@ -85,11 +85,35 @@ class TestInputs:
 
         assert count == 75
 
-    def test_vina_input(self):
-        pass
+    def test_vina_input(self, countrows):
+        os.system(
+            "python ../scripts/rt_process_vs.py write -d -m vina --file_path test_data/vina -rf test_data/vina/receptor.pdbqt -sr"
+        )
 
-    def test_overwrite(self):
-        pass
+        count = countrows("SELECT COUNT(*) FROM Results")
+        assert count == 6
+
+    def test_overwrite(self, countrows):
+        # count result rows in database to be overwritten
+
+        count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
+        os.system(
+            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --overwrite"
+        )
+        count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
+        assert count_old_db == 2
+        assert count_new_db == 3
+
+    def test_overwrite_false(self, countrows):
+        # count result rows in database to be overwritten
+
+        count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
+        assert count_old_db == 3
+
+        code = os.system(
+            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+        )
+        assert code == 256  # indicates failure pf rt_process_vs.py
 
     def test_cmdline_config_file(self, countrows):
         from ringtail import RingtailCore
