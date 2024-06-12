@@ -44,7 +44,7 @@ class TestRingtailCore:
         os.system("rm output.db output_log.txt")
         from ringtail import ringtailoptions
 
-        defaults = RingtailCore.get_defaults("resultsmanopts")
+        defaults = RingtailCore.ringtail_defaults("resultsmanopts")
         object_dict = ringtailoptions.ResultsProcessingOptions().todict()
         assert defaults == object_dict
 
@@ -230,7 +230,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "hb_interactions": [("A:ARG:123:", True)],
             "reactive_interactions": [],
-            "hb_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -250,7 +250,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "hb_interactions": [("A:VAL:124:", True)],
             "reactive_interactions": [],
-            "hb_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -270,7 +270,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:ARG:123:", True)],
             "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "reactive_interactions": [],
-            "hb_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -290,7 +290,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:VAL:124:", True)],
             "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "reactive_interactions": [],
-            "hb_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -310,7 +310,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "reactive_interactions": [],
-            "hb_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -496,7 +496,7 @@ class TestStorageMan:
             "interaction_cluster": rtc.storageman.interaction_cluster,
             "bookmark_name": rtc.storageman.bookmark_name,
         }
-        storageman_attributes_defaults = RingtailCore.get_defaults("storageopts")
+        storageman_attributes_defaults = RingtailCore.ringtail_defaults("storageopts")
         # ensure defaults values are set correctly and do not change during processing
         assert storageman_attributes == storageman_attributes_defaults
 
@@ -531,6 +531,8 @@ class TestStorageMan:
             "SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'"
         )
         bookmark_filters_db_str = curs.fetchone()[0]
+        print(bookmark_filters_db_str)
+
         filters = {
             "eworst": -3.0,
             "ebest": None,
@@ -541,7 +543,7 @@ class TestStorageMan:
             "vdw_interactions": [["A:ARG:123:", True], ["A:VAL:124:", True]],
             "hb_interactions": [["A:ARG:123:", True]],
             "reactive_interactions": [],
-            "hb_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -550,6 +552,7 @@ class TestStorageMan:
             "ligand_max_atoms": None,
             "ligand_operator": "OR",
         }
+        print(json.dumps(filters))
         assert bookmark_filters_db_str == json.dumps(filters)
 
     def test_version_info(self):
@@ -564,7 +567,7 @@ class TestStorageMan:
 class TestConfigFile:
 
     def test_generate_config_file(self):
-        RingtailCore.generate_config_json_template()
+        RingtailCore.generate_config_template_for_api()
         filepath = "config.json"
 
         assert os.path.exists(filepath)
@@ -648,7 +651,7 @@ class TestOptions:
         from ringtail import exceptions as e
 
         with pytest.raises(e.OptionError):
-            RingtailCore.get_defaults("not_a_ringtail_object")
+            RingtailCore.ringtail_defaults("not_a_ringtail_object")
 
     def test_options_type_check(self):
         rtc = RingtailCore()
@@ -675,3 +678,12 @@ class TestOptions:
         # ensure single options overwrite dict options
         rtc.set_filters(eworst=-6, dict={"eworst": -5})
         assert rtc.filters.eworst == -6
+
+    def test_overwrite_db(self):
+        # assert db is overwritte, first write a few files, then overwrite with one file not in first three
+        # assert db changed to new info
+        pass
+
+    def test_overwrite_error(self):
+        # assert the correct error happens if don't specify overwrite db
+        pass
