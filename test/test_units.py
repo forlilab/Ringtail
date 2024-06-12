@@ -458,6 +458,7 @@ class TestVinaHandling:
     def test_db_dockingmode_warning(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file="test_data/group1/1451.dlg.gz")
+        rtc = RingtailCore(db_file="output.db", docking_mode="vina")
         rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
 
         from ringtail import logger
@@ -679,11 +680,12 @@ class TestOptions:
         rtc.set_filters(eworst=-6, dict={"eworst": -5})
         assert rtc.filters.eworst == -6
 
-    def test_overwrite_db(self):
-        # assert db is overwritte, first write a few files, then overwrite with one file not in first three
-        # assert db changed to new info
-        pass
+    def test_overwrite_db(self, countrows):
+        rtc = RingtailCore()
+        rtc.add_results_from_files(file_list="filelist1.txt")
+        count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
 
-    def test_overwrite_error(self):
-        # assert the correct error happens if don't specify overwrite db
-        pass
+        rtc.add_results_from_files(file_list="filelist2.txt", overwrite=True)
+        count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
+        assert count_old_db == 3
+        assert count_new_db == 2
