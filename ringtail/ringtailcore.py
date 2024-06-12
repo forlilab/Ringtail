@@ -1703,17 +1703,17 @@ class RingtailCore:
         return (file_dict, write_dict, output_dict, filters_dict)
 
     @staticmethod
-    def _defaults_as_json() -> str:
-        # TODO this method needs editing for reconfigured config file stuff
+    def _ringtail_defaults(object: str = "all") -> str:
         """
-        Creates a dict of all Ringtail option classes, and their
-        key-default value pairs.
+        Creates a dict of select or all Ringtail option classes, and their key-default value pairs.
+
+        Args:
+            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
 
         Return:
             str: json string with options
         """
-
-        json_string = {
+        all_defaults = {
             "outputopts": OutputOptions().todict(),
             "resultsmanopts": ResultsProcessingOptions().todict(),
             "storageopts": StorageOptions().todict(),
@@ -1722,9 +1722,45 @@ class RingtailCore:
             "readopts": ReadOptions().todict(),
             "generalopts": GeneralOptions().todict(),
         }
-        """Outputs to options.json in
-        "util_files" of to_file = true, else it returns the dict
-        of default option values."""
+
+        # return all defaults
+        if type(object) == str and object.lower() == "all":
+            logger.debug("All ringtail default values have been fetched.")
+            return all_defaults
+
+        # return only defaults for one requested manager/object
+        elif type(object) == str and object.lower() in all_defaults.keys():
+            logger.debug(f"Ringtail default values for {object} have been fetched.")
+            return all_defaults[object.lower()]
+
+        # return a selected number of manager/object defaults
+        elif type(object) == list:
+            logger.debug(f"Ringtail default values for {object} have been fetched.")
+            return dict(
+                (key.lower(), all_defaults[key.lower()])
+                for key in object
+                if key in all_defaults.keys()
+            )
+
+        # no valid option provided
+        else:
+            raise OptionError(
+                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj", "readopts", "generalopts"]'
+            )
+
+    @staticmethod
+    def generate_config_template_for_api(to_file: bool = True):
+        """Outputs to "config.json in current working directory if to_file = true,
+        else it returns the dict of default option values used for API.
+
+        Args:
+            to_file (bool): whether to produce the template as a json string or as a file "config.json"
+
+        Returns:
+            str: file name of config file or json string with template including default values
+        """
+
+        json_string = RingtailCore._defaults_as_json()
         if to_file:
             filename = "config.json"
             with open(filename, "w") as f:
@@ -1821,7 +1857,7 @@ class RingtailCore:
         or options belonging to a specific group.
 
         Args:
-            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj"]
+            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
         """
 
         all_defaults = RingtailCore._defaults_as_json()
