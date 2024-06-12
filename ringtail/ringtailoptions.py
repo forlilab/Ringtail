@@ -305,7 +305,7 @@ class ResultsProcessingOptions(RTOptions):
         "interaction_tolerance": {
             "default": None,
             "type": float,
-            "description": "Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired. Only compatible with ADGPU mode.",
+            "description": "Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8 for cmd line tool, or give other value as desired (cmd line and api). Only compatible with ADGPU mode.",
         },
         "interaction_cutoffs": {
             "default": [3.7, 4.0],
@@ -746,12 +746,12 @@ class GeneralOptions(RTOptions):
 
     options = {
         "docking_mode": {
-            "default": None,
+            "default": "dlg",
             "type": str,
             "description": "specify AutoDock program used to generate results. Available options are 'DLG' and 'vina'. Will automatically change --file_pattern to *.dlg* for DLG and *.pdbqt* for vina.",
         },
         "db_file": {
-            "default": None,
+            "default": "output.db",
             "type": str,
             "description": "DB file for which to use for all Ringtail activities.",
         },
