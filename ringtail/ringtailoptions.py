@@ -490,22 +490,13 @@ class OutputOptions(RTOptions):
     def checks(self):
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
-        if hasattr(self, "export_query_csv"):
+        if hasattr(self, "enumerate_interaction_combs"):
             if (
                 self.export_sdf_path is not None
                 and not self.export_sdf_path == ""
                 and not self.export_sdf_path.endswith("/")
             ):
                 self.export_sdf_path += "/"
-            if (
-                self.export_bookmark_csv is not None
-                and not RTOptions.valid_bookmark_name(self.export_bookmark_csv)
-            ):
-                raise OptionError(
-                    "The chosen bookmark name {0} is not valid, as it contains symbols other than letters, numbers, and underscore (_)".format(
-                        self.bookmark_name
-                    )
-                )
 
 
 class Filters(RTOptions):
@@ -558,7 +549,7 @@ class Filters(RTOptions):
             "description": "Check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)].",
         },
         "hb_count": {
-            "default": [],
+            "default": None,
             "type": list,
             "description": "Accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)].",
         },

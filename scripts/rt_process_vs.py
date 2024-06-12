@@ -30,6 +30,7 @@ if __name__ == "__main__":
     try:
         rtcore.set_output_options(dict=cmdinput.outputopts)
         rtcore.set_storageman_attributes(dict=cmdinput.storageopts)
+        readopts = cmdinput.readopts
         outopts = rtcore.outputopts 
         if cmdinput.process_mode == "write":
             logger.debug("Starting write process")
@@ -41,7 +42,7 @@ if __name__ == "__main__":
         #-#-#- Print database summary
         if cmdinput.print_summary:
                     rtcore.produce_summary()
-
+        
         if  cmdinput.process_mode == "read":
                 logger.debug("Starting read process")
                 
@@ -55,23 +56,23 @@ if __name__ == "__main__":
                     rtcore.get_previous_filter_data()
                 
                 # find similar ligands to that specified, if specified (i.e., not None)
-                if outopts.find_similar_ligands:
-                    rtcore.find_similar_ligands(outopts.find_similar_ligands)
+                if readopts["find_similar_ligands"]:
+                    rtcore.find_similar_ligands(readopts["find_similar_ligands"])
 
                 # write out molecules if requested
                 if outopts.export_sdf_path:
                     rtcore.write_molecule_sdfs()
 
                 # write out requested CSVs
-                if outopts.export_bookmark_csv:
+                if readopts["export_bookmark_csv"]:
                     rtcore.export_csv(
-                        outopts.export_bookmark_csv,
-                        outopts.export_bookmark_csv + ".csv",
+                        readopts["export_bookmark_csv"],
+                        readopts["export_bookmark_csv"] + ".csv",
                         table=True,)
 
                 # export query as csv
-                if outopts.export_query_csv:
-                    rtcore.export_csv(outopts.export_query_csv, "query.csv")
+                if readopts["export_query_csv"]:
+                    rtcore.export_csv(readopts["export_query_csv"], "query.csv")
 
                 # export bookmark as database
                 if cmdinput.export_bookmark_db:

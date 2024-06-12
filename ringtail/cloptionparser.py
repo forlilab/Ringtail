@@ -77,12 +77,11 @@ def cmdline_parser(defaults: dict = {}):
 
     write_parser.add_argument(
         "-m",
-        "--mode",
+        "--docking_mode",
         help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
         metavar="[dlg] or [vina]",
-        dest="docking_mode",
     )
     write_parser.add_argument(
         "-su",
@@ -175,7 +174,7 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-ov",
         "--overwrite",
-        help="by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database",
+        help="by default, if a database or log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing database and/or log file.",
         action="store_true",
     )
     write_parser.add_argument(
@@ -251,12 +250,11 @@ def cmdline_parser(defaults: dict = {}):
     )
     read_parser.add_argument(
         "-m",
-        "--mode",
+        "--docking_mode",
         help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
         metavar="'dlg' or 'vina'",
-        dest="docking_mode",
     )
     read_parser.add_argument(
         "-su",
@@ -639,7 +637,7 @@ class CLOptionParser:
         # create parser
         try:
             # add default values from ringtailoptions
-            defaults_dict = RingtailCore.get_defaults()
+            defaults_dict = RingtailCore.get_all_defaults()
             default_values = {}
             # the defaults_dict is organized in sections for readability, remove sections before using as defaults for parser
             for _, subdict in defaults_dict.items():
@@ -678,9 +676,12 @@ class CLOptionParser:
 
         """
         if parsed_opts.debug:
-            logger.setLevel("DEBUG")
-        if parsed_opts.verbose:
-            logger.setLevel("INFO")
+            log_level = "DEBUG"
+        elif parsed_opts.verbose:
+            log_level = "INFO"
+        else:
+            log_level = "WARNING"
+
         if parsed_opts.process_mode is None:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
@@ -700,14 +701,26 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
 
-        self.rtcore = RingtailCore(db_file)
+        if parsed_opts.docking_mode.lower() not in ["dlg", "vina"]:
+            raise OptionError(
+                f"The chosen docking mode {parsed_opts.docking_mode} is not supported. Please choose either 'dlg' or 'vina'."
+            )
+
+        self.rtcore = RingtailCore(
+            db_file=db_file,
+            docking_mode=parsed_opts.docking_mode.lower(),
+            logging_level=log_level,
+        )
         self.rtcore._run_mode = "cmd"  # tag for command line processing, changes how certain errors are handled
-        self.rtcore.docking_mode = parsed_opts.docking_mode
         self.print_summary = parsed_opts.print_summary
 
         if self.process_mode == "write":
             # Check if writing to an existing database
-            if os.path.exists(db_file) and not parsed_opts.append_results:
+            if (
+                os.path.exists(db_file)
+                and not parsed_opts.append_results
+                and not parsed_opts.overwrite
+            ):
                 raise OptionError(
                     f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
                 )
@@ -886,21 +899,21 @@ class CLOptionParser:
             "interaction_cutoffs": parsed_opts.interaction_cutoffs,
             "max_proc": parsed_opts.max_proc,
         }
+
         # parse read methods
         self.plot = parsed_opts.plot
         self.export_bookmark_db = parsed_opts.export_bookmark_db
         self.export_receptor = parsed_opts.export_receptor
         self.pymol = parsed_opts.pymol
         self.data_from_bookmark = parsed_opts.data_from_bookmark
+
         # parse read and output options
         self.outputopts = {
             "log_file": parsed_opts.log_file,
             "export_sdf_path": parsed_opts.export_sdf_path,
             "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
-            "export_query_csv": parsed_opts.export_query_csv,
-            "find_similar_ligands": parsed_opts.find_similar_ligands,
-            "export_bookmark_csv": parsed_opts.export_bookmark_csv,
         }
+
         # combine all options for the storage manager
         self.storageopts = {
             "filter_bookmark": parsed_opts.filter_bookmark,
@@ -912,4 +925,11 @@ class CLOptionParser:
             "mfpt_cluster": parsed_opts.mfpt_cluster,
             "interaction_cluster": parsed_opts.interaction_cluster,
             "bookmark_name": parsed_opts.bookmark_name,
+        }
+
+        # read methods that require inputs
+        self.readopts = {
+            "export_query_csv": parsed_opts.export_query_csv,
+            "find_similar_ligands": parsed_opts.find_similar_ligands,
+            "export_bookmark_csv": parsed_opts.export_bookmark_csv,
         }

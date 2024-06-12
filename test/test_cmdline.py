@@ -8,6 +8,7 @@ import sqlite3
 import os
 import pytest
 
+
 @pytest.fixture
 def countrows():
     def __dbconnect(query):
@@ -18,23 +19,25 @@ def countrows():
         curs.close()
         conn.close()
         return count
+
     return __dbconnect
 
+
 class TestInputs:
-    os.system("rm output.db")    
-        
+    os.system("rm output.db")
+
     def test_files(self, countrows):
         os.system(
-                "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
-            )
+            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
+        )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
-        
+
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
-        os.system("rm output.db") 
+        os.system("rm output.db")
 
         assert count1 == count2 == 3
 
@@ -44,14 +47,14 @@ class TestInputs:
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
-        os.system("rm output.db") 
+        os.system("rm output.db")
 
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 test_data/group2"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
-        os.system("rm output.db") 
+        os.system("rm output.db")
 
         assert count1 == count2 == 217
 
@@ -61,14 +64,14 @@ class TestInputs:
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
-        os.system("rm output.db") 
+        os.system("rm output.db")
 
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt filelist2.txt"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
-        os.system("rm output.db") 
+        os.system("rm output.db")
 
         assert count1 == count2 == 5
 
@@ -78,32 +81,36 @@ class TestInputs:
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
-        os.system("rm output.db") 
+        os.system("rm output.db")
 
         assert count == 75
+
+    def test_vina_input(self):
+        pass
+
+    def test_overwrite(self):
+        pass
 
     def test_cmdline_config_file(self, countrows):
         from ringtail import RingtailCore
         import json
 
-        RingtailCore.generate_config_json_template()
+        RingtailCore.generate_config_template_for_cmdline()
         filepath = "config.json"
 
         with open(filepath, "r") as f:
             data = json.load(f)
         # all fields I want to change
-        data["fileobj"]["file_list"] = [['filelist1.txt']]
+        data["fileobj"]["file_list"] = [["filelist1.txt"]]
 
         with open(filepath, "w") as f:
             f.write(json.dumps(data, indent=4))
 
-        os.system(
-                "python ../scripts/rt_process_vs.py write -d --config config.json"
-            )
-        
+        os.system("python ../scripts/rt_process_vs.py write -d --config config.json")
+
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
-        os.system("rm output.db config.json") 
+        os.system("rm output.db config.json")
 
         assert count == 3
 
@@ -116,7 +123,7 @@ class TestInputs:
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
-        
+
     def test_append_results(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group2 --append_results"
@@ -126,25 +133,30 @@ class TestInputs:
         assert count == 217
 
     def test_save_rec_file(self, countrows):
-        
+
         os.system(
             "python ../scripts/rt_process_vs.py write -d --input_db output.db --receptor_file test_data/4j8m.pdbqt --save_receptor --append_results"
         )
-        count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        count = countrows(
+            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
+        )
 
-        os.system("rm output.db") 
+        os.system("rm output.db")
 
         assert count == 1
-    
+
     def test_save_rec_file_gz(self, countrows):
         os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor"
         )
-        count = countrows("SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL")
+        count = countrows(
+            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
+        )
 
-        os.system("rm output.db") 
+        os.system("rm output.db")
 
         assert count == 1
+
 
 class TestOutputs:
     def test_export_bookmark_csv(self):
@@ -216,7 +228,7 @@ class TestOutputs:
             "SELECT * FROM Interaction_bitvectors WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
         )
         count_tol2 = sum([1 for interaction in cur.fetchone() if interaction == 1])
-        
+
         cur.close()
         conn.close()
 
@@ -300,8 +312,9 @@ class TestOutputs:
         assert status == 0
         assert count == ligcount * 20
 
+
 class TestFilters:
-    
+
     def test_eworst(self):
         status1 = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
@@ -376,14 +389,14 @@ class TestFilters:
 
         assert status == 0
         assert count == 1
-    
+
     def test_react_any(self):
         status = os.system(
-                "python ../scripts/rt_process_vs.py read -d --input_db output.db --react_any"
-            )
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --react_any"
+        )
 
         assert status == 0
-    
+
     def test_react1(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions A:TYR:169:"
@@ -530,25 +543,23 @@ class TestFilters:
         )
 
         assert status == 0
-    
+
     def test_all_filters(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --ligand_name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279: --reactive_interactions A:TYR:169:"
         )
 
         assert status == 0
-    
+
     def test_export_sdf(self):
-        # status1 = os.system(
-        #     "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
-        # )
         status = os.system(
             "python ../scripts/rt_process_vs.py read --input_db output.db -e -4 -sdf . -d "
         )
 
         import glob
+
         sdf_files = glob.glob("*.sdf")
-        expected = ['127458.sdf', '100729.sdf', '173101.sdf']
+        expected = ["127458.sdf", "100729.sdf", "173101.sdf"]
 
         assert len(sdf_files) == len(expected)
 
@@ -557,15 +568,16 @@ class TestFilters:
             os.remove(f)
 
         assert status == 0
-    
+
     def test_filters_value_error(self):
 
         status = os.system(
-                "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 109"
-            )
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 109"
+        )
         # checking that code exited with error since a percentile cannot be above 100
         assert status != 0
         os.system("rm output_log.txt output.db")
+
 
 class TestOtherScripts:
 
@@ -577,7 +589,7 @@ class TestOtherScripts:
         # second database
         os.system(
             "python ../scripts/rt_process_vs.py write -d --output_db output2.db --file_path test_data/group1"
-        )  
+        )
         # filter producing 30 ligands
         os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -6"
@@ -586,14 +598,14 @@ class TestOtherScripts:
         os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output2.db --eworst -7"
         )
-        # should produce 25 ligands 
+        # should produce 25 ligands
         os.system(
             "python ../scripts/rt_compare.py --wanted output.db --unwanted output2.db --log compared_ligands.txt"
         )
         with open("compared_ligands.txt") as f:
             for pos, line in enumerate(f):
-                if pos+1 == 4: #zero based line indexing
+                if pos + 1 == 4:  # zero based line indexing
                     assert line == "Number passing ligands: 25 \n"
                     break
-        
+
         os.system("rm output.db output2.db compared_ligands.txt output_log.txt")
