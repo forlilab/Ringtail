@@ -1678,7 +1678,6 @@ class RingtailCore:
         )
 
     def add_config_from_file(self, config_file: str = "config.json"):
-        # TODO this method needs editing for reconfigured config file stuff
         """
         Provide ringtail config from file, will directly set storage manager settings,
         and return dictionaries for the remaining options.
@@ -1704,19 +1703,14 @@ class RingtailCore:
         return (file_dict, write_dict, output_dict, filters_dict)
 
     @staticmethod
-    def generate_config_json_template(to_file: bool = True) -> str:
+    def _defaults_as_json() -> str:
         # TODO this method needs editing for reconfigured config file stuff
         """
         Creates a dict of all Ringtail option classes, and their
-        key-default value pairs. Outputs to options.json in
-        "util_files" of to_file = true, else it returns the dict
-        of default option values.
-
-        Args:
-            to_file (bool): if true writes file to standard options json path, if false returns a json string with values
+        key-default value pairs.
 
         Return:
-            str: filename or json string with options
+            str: json string with options
         """
 
         json_string = {
@@ -1725,7 +1719,12 @@ class RingtailCore:
             "storageopts": StorageOptions().todict(),
             "filters": Filters().todict(),
             "fileobj": InputFiles().todict(),
+            "readopts": ReadOptions().todict(),
+            "generalopts": GeneralOptions().todict(),
         }
+        """Outputs to options.json in
+        "util_files" of to_file = true, else it returns the dict
+        of default option values."""
         if to_file:
             filename = "config.json"
             with open(filename, "w") as f:
@@ -1738,7 +1737,6 @@ class RingtailCore:
 
     @staticmethod
     def read_config_file(config_file: str = "config.json", return_as_string=False):
-        # TODO this method needs editing for the new config stuff
         """
         Will read and parse a file containing ringtail options following the format
         given from RingtailCore.generate_config_json_template
@@ -1826,7 +1824,7 @@ class RingtailCore:
             object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj"]
         """
 
-        all_defaults = RingtailCore.generate_config_json_template(to_file=False)
+        all_defaults = RingtailCore._defaults_as_json()
 
         if object.lower() not in [
             "all",
@@ -1835,9 +1833,11 @@ class RingtailCore:
             "outputopts",
             "filterobj",
             "fileobj",
+            "readopts",
+            "generalopts",
         ]:
             raise OptionError(
-                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj"]'
+                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj", "readopts", "generalopts"]'
             )
 
         if object.lower() == "all":
@@ -1854,7 +1854,7 @@ class RingtailCore:
         or specific object.
 
         Args:
-            object (str): ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]
+            object (str): ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
         """
         all_info = {
             "outputopts": OutputOptions.options,
@@ -1862,6 +1862,8 @@ class RingtailCore:
             "writeopts": ResultsProcessingOptions.options,
             "storageopts": StorageOptions.options,
             "filters": Filters.options,
+            "readopts": ReadOptions.options,
+            "generalopts": GeneralOptions.options,
         }
 
         if object.lower() not in [
@@ -1871,9 +1873,11 @@ class RingtailCore:
             "outputopts",
             "filters",
             "fileobj",
+            "readopts",
+            "generalopts",
         ]:
             raise OptionError(
-                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]'
+                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]'
             )
         if object.lower() == "all":
             all_info_one_dict = {}
