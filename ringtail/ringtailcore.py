@@ -416,12 +416,14 @@ class RingtailCore:
 
         # Set file format automatically if not specified
         if file_pattern is None:
-            if file is not None and "pdbqt" in file[0][0]:
+            if self.docking_mode == "dlg":
+                file_pattern = "*.dlg*"
+
+            elif self.docking_mode == "vina":
                 file_pattern = "*.pdbqt*"
             else:
-                file_pattern = "*.dlg*"
-                logger.warning(
-                    "File pattern was not specified, set to default '*.dlg*'."
+                logger.error(
+                    "Docking mode and file ile pattern was not specified, can not continue."
                 )
 
         # Dict of individual arguments
@@ -445,13 +447,6 @@ class RingtailCore:
             if v is not None:
                 setattr(files, k, v)
                 logger.debug(f"File attribute {k} was set to {v}.")
-
-        # set docking mode based on file pattern
-        if files.file_pattern != None:
-            if "pdbqt" in files.file_pattern.lower() and self.docking_mode != "vina":
-                self.docking_mode = "vina"
-            elif "dlg" in files.file_pattern.lower() and self.docking_mode != "dlg":
-                self.docking_mode = "dlg"
 
         return files
 
