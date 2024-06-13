@@ -3157,7 +3157,7 @@ class StorageManagerSQLite(StorageManager):
                 if not self._db_empty():
                     self._drop_existing_tables()
                 self._create_tables()
-                self.set_ringtail_db_schema_version()
+                self.set_ringtail_db_schema_version(self._db_schema_ver)
 
             logger.info(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
@@ -3233,7 +3233,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.backup(bck, pages=1)
         bck.close()
 
-    def set_ringtail_db_schema_version(self, db_version: str = "2.0.0"):
+    def set_ringtail_db_schema_version(self, db_version: str):
         """Will check current stoarge manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
 
         Raises:
