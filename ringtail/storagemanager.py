@@ -1244,29 +1244,47 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _create_interaction_bitvector_table(self):
-        """Create table of Pose_IDs and their interaction bitvector fingerprint, will be remade everytime db is written to.
+        # old table, new implementation
+        """Create table of Pose_IDs and their interaction bitvector fingerprint decomposed into columns (one per interaction).
+        This table is remade everytime db is written to.
         Columns are:
+        interaction_bv_id   INTEGER PRIMARY KEY AUTOINCREMENT
         Pose_ID             INTEGER FOREIGN KEY from RESULTS(Pose_ID),
-        bv_fingerprint      VARCHAR[]
+        Interaction_0       (number corresponds to interaction_id in Interaction_indices table)
+        Interaction_1
+        ...
+        Interaction_n
 
         Raises:
             DatabaseTableCreationError: Description
-        """
 
-        interaction_bv_table = """CREATE TABLE Interaction_bitvector_strings (
-                                    interaction_bv_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                    Pose_ID INTEGER,
-                                    bv_fingerprint VARCHAR[],
-                                    FOREIGN KEY (Pose_ID) REFERENCES RESULTS(Pose_ID));"""
+        """
+        # get unique interaction indices
+        interaction_ids = self._run_query(
+            """SELECT interaction_id IN Interaction_indices"""
+        ).fetchall()
+        # create query string to make a column for each interaction basde in the interaction index, starting with zero?
+
+        interact_columns_str = (
+            " INTEGER,\n".join(["Interaction_" + str(i) for i in interaction_ids])
+            + " INTEGER"
+        )
+        interaction_bv_table = """CREATE TABLE Interaction_bitvectors (
+            interaction_bv_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Pose_ID INTEGER,
+            {columns},
+            FOREIGN KEY (Pose_ID) REFERENCES RESULTS(Pose_ID));""".format(
+            columns=interact_columns_str
+        )
 
         try:
             cur = self.conn.cursor()
-            cur.execute("""DROP TABLE IF EXISTS Interaction_bitvector_strings""")
+            cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors""")
             cur.execute(interaction_bv_table)
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseTableCreationError(
-                "Error while creating interaction bitvector table. If database already exists, use 'overwrite' to drop existing tables"
+                f"Error while creating interaction bitvector table: {e}."
             ) from e
 
     def _create_interaction_table(self):
