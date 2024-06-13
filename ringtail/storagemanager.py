@@ -1532,7 +1532,7 @@ class StorageManagerSQLite(StorageManager):
             flat_list.insert(0, int(item[0]))
             datatuple = tuple(flat_list)
             list_of_bitvector_tuples.append(datatuple)
-
+        list_of_bitvector_tuples.sort(key=lambda tup: tup[0])
         try:
             cur = self.conn.cursor()
             cur.executemany(
@@ -2226,75 +2226,6 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Methods dealing with filtered results
-    def _create_new_bitvectors(self) -> list:
-        """
-        This methoc currently creates a pandas dataframe which is a pivoted version of the Interactions table.
-        First column is Pose_ID, second column is all interactions it has, based on the Interaction_indices tablee
-
-        Returns:
-            list (tuple): list of (pose_id, bitvector_string)
-        """
-
-        pose_int_query = """SELECT i.Pose_ID, ii.interaction_id 
-                            FROM Interactions i
-                                JOIN Interaction_indices ii
-                                ON i.interaction_type = ii.interaction_type
-                                AND i.rec_chain = ii.rec_chain
-                                AND i.rec_resname = ii.rec_resname
-                                AND i.rec_resid = ii.rec_resid
-                                AND i.rec_atom = ii.rec_atom
-                                AND i.rec_atomid = ii.rec_atomid;"""
-
-        # find all unique interaction IDs per Pose_ID
-        Pose_IDs_Interaction = self._run_query(pose_int_query).fetchall()
-
-        # User pandas to pivot the information into a Pose_ID | Interaction_indices dataframe
-        import pandas as pd
-
-        pose_panda = pd.DataFrame(
-            Pose_IDs_Interaction, columns=["Pose_ID", "Interaction_index"]
-        )
-
-        pose_panda = pose_panda.groupby("Pose_ID", as_index=False).agg(
-            lambda x: ",".join(map(str, x))
-        )
-
-        num_of_unique_interactions = self.get_length_of_table("Interaction_indices")
-
-        def index_to_bv(index_list: list, bv_list: list) -> list:
-            """
-            Takes a list of Nones and replaces each element with 1 (a bit) if that element is represented in the index string.
-            Please note that indices in index_string are 1-based.
-
-            Args:
-                index_list (list(int)): 1-based list of indices for interactions from the Interaction_indices table
-                bv_list (list): list of None-s the length of all unique interactions in current database
-
-            Returns:
-                list: populated bitvector of interactions, where a 1 in the nth place of the string corresponds to interactions no (n), 1-based
-            """
-            for index, _ in enumerate(bv_list):
-                if index + 1 in index_list:
-                    bv_list[index] = 1
-            return bv_list
-
-        bitvectors = []
-        # for each pose in the dataframe
-        for _, row in pose_panda.iterrows():
-            # go through the interaction_index and convert stirng list of indexes to bit vector
-            interaction_index_list_str = list(row["Interaction_index"].split(","))
-            # convert string to int
-            interaction_index_list = [int(item) for item in interaction_index_list_str]
-            # make bitvector from indices based on total number of unique interactions
-            bitvector = index_to_bv(
-                interaction_index_list, [0] * num_of_unique_interactions
-            )
-            # convert to string
-            bv_string = "".join(map(str, bitvector))
-            # build dict with Pose_ID: bitvector
-            bitvectors.append((row["Pose_ID"], bv_string))
-
-        return bitvectors
 
     def get_number_passing_ligands(self, bookmark_name: str = None):
         """Returns count of the number of ligands that
@@ -2676,56 +2607,52 @@ class StorageManagerSQLite(StorageManager):
                     ["reactive_interactions", "", "", "", "", True]
                 )
 
+        # for each interaction filter, get the index
+        # from the interactions_indices table
         interaction_queries = []
         for interaction in interaction_filters:
             # format interaction to db format
-            interaction_formatted = [
+            interaction = [
                 self.interaction_name_to_letter[interaction[0]]
             ] + interaction[1:]
+            interaction_filter_indices = []
+            interact_index_str = self._generate_interaction_index_filtering_query(
+                interaction[:-1]
+            )  # remove bool include/exclude flag
+            interaction_indices = self._run_query(interact_index_str)
+            for i in interaction_indices:
+                interaction_filter_indices.append(i[0])
 
-            # check if interaction in interaction_indices (i.e., represented in the results)
-            interaction_index_query = self._generate_interaction_index_filtering_query(
-                interaction_formatted[:-1]
-            )  # removes bool include/exclude flag
-            interaction_exists = bool(
-                self._run_query(interaction_index_query).fetchall()
-            )
-
-            if not interaction_exists:
-                if interaction_formatted == ["R", "", "", "", "", True]:
+            # catch if interaction not found in results
+            if interaction_filter_indices == []:
+                if interaction == ["R", "", "", "", "", True]:
                     logger.warning(
                         "Given --react_any filter, no reactive interactions found. Excluded from filtering."
                     )
                 else:
                     logger.warning(
                         "Interaction {i} not found in results, excluded from filtering".format(
-                            i=":".join(interaction_formatted[:4])
+                            i=":".join(interaction[:4])
                         )
                     )
                 continue
-
-            # now that we know that interaction is present, write db query for the interaction
-            interaction_str = self._generate_interaction_filtering_query(
-                interaction_type=interaction_formatted[0],
-                rec_chain=interaction_formatted[1],
-                rec_resname=interaction_formatted[2],
-                rec_resid=interaction_formatted[3],
-            )
-
             # determine include/exclude string
-            if interaction_formatted[-1] is True:
+            if interaction[-1] is True:
                 include_str = "IN"
-            elif interaction_formatted[-1] is False:
+            elif interaction[-1] is False:
                 include_str = "NOT IN"
             else:
                 raise RuntimeError(
                     "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
                 )
-            # create list of queries for finding pose ids for ligands with desired interactions
+            # find pose ids for ligands with desired interactions
+            # TODO only need index table and interaction table
             interaction_queries.append(
                 "Pose_ID {include_str} ({interaction_str})".format(
                     include_str=include_str,
-                    interaction_str=interaction_str,
+                    interaction_str=self._generate_interaction_filtering_query(
+                        interaction_filter_indices
+                    ),
                 )
             )
 
@@ -2846,20 +2773,20 @@ class StorageManagerSQLite(StorageManager):
             joined_queries = " AND ".join(queries)
             sql_string = sql_string + joined_queries
             unclustered_query = (
-                f"SELECT Pose_ID FROM {self.filtering_window} WHERE " + joined_queries
+                f"SELECT Pose_id FROM {self.filtering_window} WHERE " + joined_queries
             )
         elif queries == [] and interaction_queries == [] and clustering:
             # allows for clustering without filtering
-            unclustered_query = f"SELECT Pose_ID FROM {self.filtering_window}"
+            unclustered_query = f"SELECT Pose_id FROM {self.filtering_window}"
             logger.info("Preparing to cluster results without any filters...")
         else:
-            with_stmt = f"WITH subq as (SELECT Pose_ID FROM {self.filtering_window}) "
+            with_stmt = f"WITH subq as (SELECT Pose_id FROM {self.filtering_window}) "
             if queries != []:
                 with_stmt = with_stmt[:-2] + f" WHERE {' AND '.join(queries)}) "
             joined_interact_queries = " AND ".join(interaction_queries)
             sql_string = with_stmt + sql_string + joined_interact_queries
             unclustered_query = (
-                f"SELECT Pose_ID FROM {self.filtering_window} WHERE "
+                f"SELECT Pose_id FROM {self.filtering_window} WHERE "
                 + joined_interact_queries
             )
 
@@ -2911,25 +2838,38 @@ class StorageManagerSQLite(StorageManager):
             cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)
             return cs
 
-        if self.interaction_cluster is not None:
+        if (
+            self.interaction_cluster is not None
+        ):  # TODO one place where intearction_bitvector is used
             logger.warning(
                 "WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
             )  # TODO: remove this memory bottleneck
-
-            cluster_query = f"""SELECT r.leff, ibv.Pose_ID, ibv.bv_fingerprint 
-                                FROM Interaction_bitvector_strings ibv 
-                                INNER JOIN Results r 
-                                    ON r.Pose_ID = ibv.Pose_id WHERE r.Pose_ID IN ({unclustered_query})"""
+            cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_ID WHERE Results.Pose_ID IN ({unclustered_query})"
 
             if interaction_queries != []:
                 cluster_query = with_stmt + cluster_query
             leff_poseid_ifps = self._run_query(cluster_query).fetchall()
-            # separate out bit strings and do rdkit stuff with it
-            bitstring_list = [
-                DataStructs.CreateFromBitString(item[2]) for item in leff_poseid_ifps
-            ]
-            # calculate clusters
-            bclusters = clusterFps(bitstring_list, self.interaction_cluster)
+
+            def make_bitstring(pose_bv):
+                bs = ""
+                for i in pose_bv:
+                    if i is None:
+                        bs += "0"
+                    elif i == 1:
+                        bs += "1"
+                    else:
+                        raise RuntimeError(
+                            f"Unrecognized character {i} in interaction bitvector."
+                        )
+                return bs
+
+            bclusters = clusterFps(
+                [
+                    DataStructs.CreateFromBitString(make_bitstring(pose[3:]))
+                    for pose in leff_poseid_ifps
+                ],
+                self.interaction_cluster,
+            )
             logger.info(
                 f"Number of interaction fingerprint butina clusters: {len(bclusters)}"
             )
@@ -2937,7 +2877,6 @@ class StorageManagerSQLite(StorageManager):
             # select ligand from each cluster with best ligand efficiency
             int_rep_poseids = []
             for c in bclusters:
-                # for pose_id in cluster, make array of
                 c_leffs = np.array(
                     [leff_poseid_ifps[i][0] for i in c]
                 )  # beware magic numbers
@@ -2949,7 +2888,7 @@ class StorageManagerSQLite(StorageManager):
                 [l[1] for l in leff_poseid_ifps],
                 "ifp",
                 str(self.interaction_cluster),
-            )  # could this be a problem?
+            )
 
             # catch if no pose_ids returned
             if int_rep_poseids == []:
@@ -2967,7 +2906,7 @@ class StorageManagerSQLite(StorageManager):
         if self.mfpt_cluster is not None:
             logger.warning(
                 "WARNING: Ligand morgan fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
-            )  # TODO remove this memory bottleneck
+            )  # TODO: remove this memory bottleneck
             logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering."
             )
@@ -3048,41 +2987,23 @@ class StorageManagerSQLite(StorageManager):
 
         return sql_string
 
-    def _generate_interaction_filtering_query(
-        self,
-        interaction_type=None,
-        rec_chain=None,
-        rec_resname=None,
-        rec_resid=None,
-        rec_atom=None,
-    ):
-        """
-        takes list of interaction indices and searches for ligand ids
+    def _generate_interaction_filtering_query(self, interaction_index_list):
+        """takes list of interaction indices and searches for ligand ids
             which have those interactions
 
         Args:
-            interaction_type (str): vdw or hb
-            rec_chain (str): receptor chain
-            rec_resname (str): receptor residue name
-            rec_resid (str): receptor residue id
-            rec_atom (str): receptor atom
+            interaction_index_list (list): List of interaction indices
 
         Returns:
             str: SQLite-formatted query
         """
 
-        inputs = vars()
-        del inputs["self"]
-
-        # build the query based on what column names are provided
-        # TODO pretty sure I have to change this, now it returns all pose IDs and I think this messes up the query so it is random how it is read
         return (
-            "SELECT DISTINCT Pose_ID FROM (SELECT * FROM Interactions WHERE Pose_ID IN subq) WHERE "
-            + " AND ".join(
+            "SELECT Pose_id FROM (SELECT * FROM Interaction_bitvectors WHERE Pose_ID IN subq) WHERE "
+            + " OR ".join(
                 [
-                    "{keyword} = '{value}'".format(keyword=keyword, value=value)
-                    for keyword, value in inputs.items()
-                    if value is not None
+                    "Interaction_{index_n} = 1".format(index_n=index)
+                    for index in interaction_index_list
                 ]
             )
         )
