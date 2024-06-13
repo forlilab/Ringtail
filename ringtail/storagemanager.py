@@ -424,12 +424,6 @@ class StorageManager:
         "receptor": "receptor",
     }
 
-    interaction_name_to_letter = {
-        "vdw_interactions": "V",
-        "hb_interactions": "H",
-        "reactive_interactions": "R",
-    }
-
     energy_filter_col_name = {
         "eworst": "docking_score",
         "ebest": "docking_score",
@@ -1249,7 +1243,6 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _create_interaction_bitvector_table(self):
-        # old table, new implementation
         """Create table of Pose_IDs and their interaction bitvector fingerprint decomposed into columns (one per interaction).
         This table is remade everytime db is written to.
         Columns are:
@@ -1294,7 +1287,9 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _create_interaction_table(self):
-        """Create table a "tall-skinny" table of each pose-interaction. Columns are:
+        """Create table a "tall-skinny" table of each pose-interaction.
+        This table enables proper handling of duplicates if specified.
+        Columns are:
         interaction_pose_id INTERGER PRIMARY KEY AUTOINCREMENT,
         Pose_ID             INTEGER FOREIGN KEY from RESULTS,
         interaction_type    VARCHAR[],
@@ -1461,7 +1456,7 @@ class StorageManagerSQLite(StorageManager):
                 )
             ) from e
 
-    def _insert_interaction_bitvectors_query(self):
+    def _generate_interaction_bitvectors_query(self):
         """Creates the insert statement for inserting interaction bitvectors into database
 
         Returns:
@@ -1474,9 +1469,11 @@ class StorageManagerSQLite(StorageManager):
         # this prepares the strings necessary for the insert statements
         column_str = "Pose_id,"
         filler_str = "?,"
+        # add "?" for every unique interaction column
         for i in interaction_ids:
             column_str += "Interaction_" + str(i[0]) + ", "
             filler_str += "?,"
+        # strip trailing commas
         column_str = column_str.rstrip(", ")
         filler_str = filler_str.rstrip(",")
 
@@ -1486,7 +1483,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _populate_interaction_bv_table(self):
         """
-        Writes to the Interaction_bitvector_strings table the interaction bitvector fingerprint for each pose id.
+        Writes to the Interaction_bitvectors table the interaction bitvector fingerprint for each pose id.
 
         Raises:
             DatabaseInsertionError
@@ -1527,16 +1524,22 @@ class StorageManagerSQLite(StorageManager):
             dict_of_bitvectors[str(pose_id)][int_index - 1] = 1
         # make dict into tuples
         list_of_bitvector_tuples = []
+        # convert dictionary of bitvector lists to list of tuples for db insert
         for item in dict_of_bitvectors.items():
+            # actual bitvector
             flat_list = item[1]
+            # set pose_id as first element of type int (required by db)
             flat_list.insert(0, int(item[0]))
+            # make tuple of this new, flattened list
             datatuple = tuple(flat_list)
+            # add tuple to list of tuples
             list_of_bitvector_tuples.append(datatuple)
+        # order tuples by pose_id
         list_of_bitvector_tuples.sort(key=lambda tup: tup[0])
         try:
             cur = self.conn.cursor()
             cur.executemany(
-                self._insert_interaction_bitvectors_query(), list_of_bitvector_tuples
+                self._generate_interaction_bitvectors_query(), list_of_bitvector_tuples
             )
             self.conn.commit()
             cur.close()
@@ -1676,7 +1679,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _delete_from_interactions_not_in_view(self):
-        """Remove rows from interactions and interaction_bitvector_strings tables if they did not pass filtering.
+        """Remove rows from interactions and interaction_bitvectors tables if they did not pass filtering.
 
         Raises:
             StorageError: Description
@@ -1689,7 +1692,7 @@ class StorageManagerSQLite(StorageManager):
                 )
             )
             cur.execute(
-                "DELETE FROM Interaction_bitvector_strings WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
+                "DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
                     view=self.bookmark_name
                 )
             )
@@ -2542,12 +2545,14 @@ class StorageManagerSQLite(StorageManager):
         # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
         if self.filter_bookmark is not None:
             if self.filter_bookmark == self.bookmark_name:
+                # cannot write data from bookmark_a to bookmark_a
                 logger.error(
                     f"Specified filter_bookmark and bookmark_name are the same: {self.bookmark_name}"
                 )
                 raise OptionError(
                     "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
                 )
+            # cannot use percentile for an already reduced dataset
             if (
                 filters_dict["score_percentile"] is not None
                 or filters_dict["le_percentile"] is not None
@@ -2555,14 +2560,18 @@ class StorageManagerSQLite(StorageManager):
                 raise OptionError(
                     "Cannot use --score_percentile or --le_percentile with --filter_bookmark."
                 )
+            # filtering window can be specified bookmark, or whole database (or other reduced versions of db)
             self.filtering_window = self.filter_bookmark
 
         # write energy filters and compile list of interactions to search for
         queries = []
         interaction_filters = []
+
         for filter_key, filter_value in filters_dict.items():
+            # filter dict contains all possible filters, are None of not specified by user
             if filter_value is None:
                 continue
+            # if filter has to do with docking energies
             if filter_key in self.energy_filter_col_name:
                 self.index_columns.append(self.energy_filter_col_name[filter_key])
                 if filter_key == "score_percentile" or filter_key == "le_percentile":
@@ -2581,7 +2590,7 @@ class StorageManagerSQLite(StorageManager):
                     )
 
             # write hb count filter(s)
-            if filter_key == "interactions_count":
+            if filter_key == "hb_count":
                 for k, v in filter_value:
                     # TODO implement other interaction count filters
                     if k != "hb_count":
@@ -2607,14 +2616,17 @@ class StorageManagerSQLite(StorageManager):
                     ["reactive_interactions", "", "", "", "", True]
                 )
 
-        # for each interaction filter, get the index
-        # from the interactions_indices table
+        # for each interaction filter, get the index from the interactions_indices table
+
+        interaction_name_to_letter = {
+            "vdw_interactions": "V",
+            "hb_interactions": "H",
+            "reactive_interactions": "R",
+        }
         interaction_queries = []
         for interaction in interaction_filters:
             # format interaction to db format
-            interaction = [
-                self.interaction_name_to_letter[interaction[0]]
-            ] + interaction[1:]
+            interaction = [interaction_name_to_letter[interaction[0]]] + interaction[1:]
             interaction_filter_indices = []
             interact_index_str = self._generate_interaction_index_filtering_query(
                 interaction[:-1]
@@ -2627,7 +2639,7 @@ class StorageManagerSQLite(StorageManager):
             if interaction_filter_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
                     logger.warning(
-                        "Given --react_any filter, no reactive interactions found. Excluded from filtering."
+                        "Given 'react_any' filter, no reactive interactions found. Excluded from filtering."
                     )
                 else:
                     logger.warning(
@@ -2646,7 +2658,6 @@ class StorageManagerSQLite(StorageManager):
                     "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
                 )
             # find pose ids for ligands with desired interactions
-            # TODO only need index table and interaction table
             interaction_queries.append(
                 "Pose_ID {include_str} ({interaction_str})".format(
                     include_str=include_str,
@@ -2656,12 +2667,13 @@ class StorageManagerSQLite(StorageManager):
                 )
             )
 
-        # add ligand filters
+        # make dict of filters related to ligands
         ligand_filters_dict = {
             k: v
             for k, v in filters_dict.items()
             if k in Filters.get_filter_keys("ligand")
         }
+        # if ligand_substruct or ligand_name have values in filters
         if filters_dict["ligand_substruct"] != [] or filters_dict["ligand_name"] != []:
             ligand_query_str = self._generate_ligand_filtering_query(
                 ligand_filters_dict
@@ -2669,6 +2681,7 @@ class StorageManagerSQLite(StorageManager):
             queries.append(
                 "LigName IN ({ligand_str})".format(ligand_str=ligand_query_str)
             )
+        # if ligand_substruct_pos has the correct number of arguments provided
         if len(ligand_filters_dict["ligand_substruct_pos"]):
             nr_args_per_group = 6
             nr_smarts = int(
@@ -2757,9 +2770,10 @@ class StorageManagerSQLite(StorageManager):
                             break  # add pose only once
                 queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
             cur.close()
+
         # format query string
-        # raise error if query string is empty
         clustering = bool(self.mfpt_cluster or self.interaction_cluster)
+        # raise error if query string is empty
         if queries == [] and interaction_queries == [] and not clustering:
             raise DatabaseQueryError(
                 "Query strings are empty. Please check filter options and ensure requested interactions are present."
@@ -2790,8 +2804,7 @@ class StorageManagerSQLite(StorageManager):
                 + joined_interact_queries
             )
 
-        # adding if we only want to keep
-        # one pose per ligand (will keep first entry)
+        # adding if we only want to keep one pose per ligand (will keep first entry)
         if not self.output_all_poses:
             sql_string += " GROUP BY LigName"
 
@@ -2813,7 +2826,7 @@ class StorageManagerSQLite(StorageManager):
         ):  # https://macinchem.org/2023/03/05/options-for-clustering-large-datasets-of-molecules/
             """
             fps (): fingerprints
-            cutoff distance (float):
+            cutoff distance (float)
             """
 
             # first generate the distance matrix:
@@ -2838,19 +2851,31 @@ class StorageManagerSQLite(StorageManager):
             cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)
             return cs
 
-        if (
-            self.interaction_cluster is not None
-        ):  # TODO one place where intearction_bitvector is used
+        if self.interaction_cluster is not None:
             logger.warning(
                 "WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
             )  # TODO: remove this memory bottleneck
             cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_ID WHERE Results.Pose_ID IN ({unclustered_query})"
-
+            # if interaction filters are present
             if interaction_queries != []:
+                # include them in the clustering query
                 cluster_query = with_stmt + cluster_query
+            # resulting data
             leff_poseid_ifps = self._run_query(cluster_query).fetchall()
 
             def make_bitstring(pose_bv):
+                """
+                Make bitstring from bitvector
+
+                Args:
+                    pose_bv (list): bitvector
+
+                Raises:
+                    RuntimeError
+
+                Returns:
+                    str: bitstring
+                """
                 bs = ""
                 for i in pose_bv:
                     if i is None:
@@ -2863,6 +2888,10 @@ class StorageManagerSQLite(StorageManager):
                         )
                 return bs
 
+            # ((())) uses bitstring from bitvector (first three elements are energy, table id, and pose id)
+            # (()) to create fingerprint (CreateFromBitString)
+            # () which all comes together in a datastructure
+            # on which the clusterFps method is ran
             bclusters = clusterFps(
                 [
                     DataStructs.CreateFromBitString(make_bitstring(pose[3:]))
@@ -2880,12 +2909,14 @@ class StorageManagerSQLite(StorageManager):
                 c_leffs = np.array(
                     [leff_poseid_ifps[i][0] for i in c]
                 )  # beware magic numbers
-                best_lig_c = leff_poseid_ifps[c[np.argmin(c_leffs)]][1]
+                # element 2 ([2]) in each leff_poseid_ifps row is the pose_id
+                best_lig_c = leff_poseid_ifps[c[np.argmin(c_leffs)]][2]
                 int_rep_poseids.append(str(best_lig_c))
 
+            # element 2 ([2]) in each leff_poseid_ifps row is the pose_id
             self._insert_cluster_data(
                 bclusters,
-                [l[1] for l in leff_poseid_ifps],
+                [l[2] for l in leff_poseid_ifps],
                 "ifp",
                 str(self.interaction_cluster),
             )
@@ -3342,17 +3373,25 @@ class StorageManagerSQLite(StorageManager):
                     # index will correspond to the Interaction_index table if +1
                     pose_indices.append((pose_id, index + 1))
 
-        # create temporary table with this data to use in next join statement
-        cur.execute("""CREATE TEMP TABLE temp_pose_index (Pose_ID, int_index);""")
-        # insert tuples created from the previous for for loop
-        cur.executemany(
-            """INSERT INTO temp_pose_index (Pose_ID, int_index) VALUES (?,?);""",
-            pose_indices,
-        )
+        try:
+            # create temporary table with this data to use in next join statement
+            cur.execute("""CREATE TEMP TABLE temp_pose_index (Pose_ID, int_index);""")
+            # insert tuples created from the previous for for loop
+            cur.executemany(
+                """INSERT INTO temp_pose_index (Pose_ID, int_index) VALUES (?,?);""",
+                pose_indices,
+            )
+            # drop old bitvector table
+            cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
+            self.conn.commit()
+        except sqlite3.OperationalError as e:
+            raise DatabaseConnectionError(
+                f"Error while deleting old bitvector table: {e}"
+            ) from e
 
         # create new tables to hold interactions and new bit vectors
         self._create_interaction_table()
-        self._create_interaction_bitvector_table()  # table name Interaction_bitvector_strings
+        self._create_interaction_bitvector_table()  # table name Interaction_bitvectors
 
         # populate Interactions table based on temp table and interaction_indices table
         sql_insert = """INSERT INTO Interactions 
@@ -3391,15 +3430,6 @@ class StorageManagerSQLite(StorageManager):
 
         # popoulate bitvector string table
         self._populate_interaction_bv_table()
-
-        # drop old bitvector table
-        try:
-            cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
-            self.conn.commit()
-        except sqlite3.OperationalError as e:
-            raise DatabaseConnectionError(
-                f"Error while deleting old bitvector table: {e}"
-            ) from e
 
     def _create_connection(self):
         """Creates database connection to self.db_file
