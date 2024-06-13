@@ -1697,6 +1697,16 @@ class RingtailCore:
 
         return (file_dict, write_dict, output_dict, filters_dict)
 
+    def get_bookmark_names(self):
+        """
+        Method to retrieve all bookmark names in a database
+
+        Returns:
+            list: of all bookmarks in a database
+        """
+        with self.storageman:
+            return self.storageman.get_all_bookmark_names()
+
     @staticmethod
     def ringtail_defaults(object: str = "all") -> str:
         """
