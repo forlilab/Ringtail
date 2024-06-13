@@ -220,6 +220,7 @@ class StorageManager:
             # adds each pose_interaction row to list
             interaction_rows.extend(pose_interactions)
         self._insert_interaction_rows(interaction_rows, duplicates)
+        # TODO make sure a pose id without interactions is still inserted
 
     def get_plot_data(self, only_passing=False):
         """This function is expected to return an ascii plot
@@ -331,12 +332,16 @@ class StorageManager:
         Methods to finalize when a data base has been written to, including populating interaction indices with final unique interactions,
         making bitvector finger prints for interactions, and saving the current database schema to the sqlite database.
         """
-
+        # create new interaction index table each time the db is written to
+        # TODO this is not optimal when adding one file/string at the time. Perhaps optimize in ringtail later so the finalization of a db write in API
+        # can be better controlled. Check with time anyways.
         self._create_interaction_index_table()
-        self._create_interaction_bitvector_table()
         self._populate_interaction_index_table()
+        # create new interaction bitvector table each time the db is written to
+        self._create_interaction_bitvector_table()
         self._populate_interaction_bv_table()
-        self.set_ringtail_db_schema_version()
+        # set version of the database
+        self.set_ringtail_db_schema_version(self._db_schema_ver)
         logger.info("Database write session completed successfully.")
 
     @classmethod
@@ -1261,12 +1266,12 @@ class StorageManagerSQLite(StorageManager):
         """
         # get unique interaction indices
         interaction_ids = self._run_query(
-            """SELECT interaction_id IN Interaction_indices"""
+            """SELECT interaction_id FROM Interaction_indices"""
         ).fetchall()
         # create query string to make a column for each interaction basde in the interaction index, starting with zero?
 
         interact_columns_str = (
-            " INTEGER,\n".join(["Interaction_" + str(i) for i in interaction_ids])
+            " INTEGER,\n".join(["Interaction_" + str(i[0]) for i in interaction_ids])
             + " INTEGER"
         )
         interaction_bv_table = """CREATE TABLE Interaction_bitvectors (
@@ -1279,9 +1284,10 @@ class StorageManagerSQLite(StorageManager):
 
         try:
             cur = self.conn.cursor()
-            cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors""")
+            cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
             cur.execute(interaction_bv_table)
             cur.close()
+            logger.debug("Interaction bitvector table has been created")
         except sqlite3.OperationalError as e:
             raise DatabaseTableCreationError(
                 f"Error while creating interaction bitvector table: {e}."
@@ -1455,6 +1461,29 @@ class StorageManagerSQLite(StorageManager):
                 )
             ) from e
 
+    def _insert_interaction_bitvectors_query(self):
+        """Creates the insert statement for inserting interaction bitvectors into database
+
+        Returns:
+            str: sql insert query
+        """
+        # get all interaction columns
+        interaction_ids = self._run_query(
+            """SELECT interaction_id FROM Interaction_indices"""
+        ).fetchall()
+        # this prepares the strings necessary for the insert statements
+        column_str = "Pose_id,"
+        filler_str = "?,"
+        for i in interaction_ids:
+            column_str += "Interaction_" + str(i[0]) + ", "
+            filler_str += "?,"
+        column_str = column_str.rstrip(", ")
+        filler_str = filler_str.rstrip(",")
+
+        return """INSERT INTO Interaction_bitvectors ({columns}) VALUES ({fillers})""".format(
+            columns=column_str, fillers=filler_str
+        )
+
     def _populate_interaction_bv_table(self):
         """
         Writes to the Interaction_bitvector_strings table the interaction bitvector fingerprint for each pose id.
@@ -1462,14 +1491,53 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseInsertionError
         """
+        # number of unique interactions
+        num_of_interactions = self.get_length_of_table("Interaction_indices")
 
+        # number of poses in the database
+        list_of_poses = self._run_query("""SELECT Pose_id FROM Results""").fetchall()
+        # dict of list that will be used for final db insert
+        dict_of_bitvectors = {}
+
+        # for each pose in db
+        for pose_id in list_of_poses:
+            # create a list of Nulls the length of number of unique interactions
+            pose_bitvector: list = [None] * num_of_interactions
+            # add the empty list to the insert-dict
+            dict_of_bitvectors[str(pose_id[0])] = pose_bitvector
         # get all pose id and make fingerprints
-        pose_bv = self._create_new_bitvectors()
-        sql_insert = """INSERT INTO Interaction_bitvector_strings (Pose_ID, bv_fingerprint) VALUES (?,?);"""
+        pose_int_query = """SELECT i.Pose_ID, ii.interaction_id 
+                            FROM Interactions i
+                                JOIN Interaction_indices ii
+                                ON i.interaction_type = ii.interaction_type
+                                AND i.rec_chain = ii.rec_chain
+                                AND i.rec_resname = ii.rec_resname
+                                AND i.rec_resid = ii.rec_resid
+                                AND i.rec_atom = ii.rec_atom
+                                AND i.rec_atomid = ii.rec_atomid;"""
+
+        # find all unique interaction IDs per Pose_ID
+        Pose_IDs_Interaction = self._run_query(pose_int_query).fetchall()
+        # for each row in Pose_IDs_Interaction (one row for each interaction):
+        for row in Pose_IDs_Interaction:
+            # grab pose id
+            pose_id = row[0]
+            # grab interaction index
+            int_index = row[1]
+            dict_of_bitvectors[str(pose_id)][int_index - 1] = 1
+        # make dict into tuples
+        list_of_bitvector_tuples = []
+        for item in dict_of_bitvectors.items():
+            flat_list = item[1]
+            flat_list.insert(0, int(item[0]))
+            datatuple = tuple(flat_list)
+            list_of_bitvector_tuples.append(datatuple)
 
         try:
             cur = self.conn.cursor()
-            cur.executemany(sql_insert, pose_bv)
+            cur.executemany(
+                self._insert_interaction_bitvectors_query(), list_of_bitvector_tuples
+            )
             self.conn.commit()
             cur.close()
             logger.debug("Interaction bitvector table has been populated.")
@@ -3233,7 +3301,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.backup(bck, pages=1)
         bck.close()
 
-    def set_ringtail_db_schema_version(self, db_version: str):
+    def set_ringtail_db_schema_version(self, db_version: str = "2.0.0"):
         """Will check current stoarge manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
 
         Raises:
