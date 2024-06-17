@@ -132,7 +132,7 @@ class TestRingtailCore:
 
         os.system(("rm " + log_file_name))
 
-    def test_similar_ligands(self, monkeypatch):
+    def test_similar_ligands_mfpt(self, monkeypatch):
         rtc = RingtailCore(db_file="output.db")
         ligand_name = "287065"
         rtc.filter(ebest=-6, mfpt_cluster=0.5)
@@ -140,6 +140,15 @@ class TestRingtailCore:
         number_similar = rtc.find_similar_ligands(ligand_name)
 
         assert number_similar == 8
+
+    def test_similar_ligands_interaction(self, monkeypatch):
+        rtc = RingtailCore(db_file="output.db")
+        ligand_name = "287065"
+        rtc.filter(ebest=-6, interaction_cluster=0.5)
+        monkeypatch.setattr("builtins.input", lambda _: 1)  # provides terminal input
+        number_similar = rtc.find_similar_ligands(ligand_name)
+
+        assert number_similar == 1
 
     def test_create_rdkitmol(self):
         bookmark_name = "rdkit_test"
@@ -343,11 +352,11 @@ class TestRingtailCore:
     def test_export_bookmark_db(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7)
-        rtc.export_bookmark_db()
+        bookmark_db_name = rtc.export_bookmark_db()
 
-        assert os.path.exists(rtc.db_file)
+        assert os.path.exists(bookmark_db_name)
 
-        conn = sqlite3.connect(rtc.db_file)
+        conn = sqlite3.connect(bookmark_db_name)
         curs = conn.cursor()
         curs.execute("SELECT COUNT(*) FROM Results")
         count = curs.fetchone()[0]
@@ -356,34 +365,46 @@ class TestRingtailCore:
 
         assert count == 7
 
-        os.system("rm " + rtc.db_file)
+        os.system("rm " + bookmark_db_name)
 
     def test_duplicate_handling(self, countrows):
         os.system("rm output.db output_log.txt")
 
         rtc = RingtailCore(db_file="output.db")
         file = "test_data/group1/1451.dlg.gz"
-        rtc.add_results_from_files(file=file, duplicate_handling="replace")
+        rtc.add_results_from_files(file=file)
         # ensure three results rows were added
-        count = countrows("SELECT COUNT(*) FROM Results")
+        result_count = countrows("SELECT COUNT(*) FROM Results")
+        inter_count = countrows("SELECT COUNT(*) FROM Interactions")
         # add same file but replace the duplicate
-        rtc.add_results_from_files(file=file)
-        count_replace = countrows("SELECT COUNT(*) FROM Results")
-
-        os.system("rm output.db")
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file=file, duplicate_handling="ignore")
+        rtc.add_results_from_files(file=file, duplicate_handling="replace")
+        result_count_replace = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_replace = countrows("SELECT COUNT(*) FROM Interactions")
         # add same file but ignore the duplicate
-        rtc.add_results_from_files(file=file)
-        count_ignore = countrows("SELECT COUNT(*) FROM Results")
+        rtc.add_results_from_files(file=file, duplicate_handling="ignore")
+        result_count_ignore = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_ignore = countrows("SELECT COUNT(*) FROM Interactions")
 
         os.system("rm output.db")
+        # add same file but allow the duplicate
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file=file)
-        # add same file but allow the duplicate
         rtc.add_results_from_files(file=file)
-        count_dupl = countrows("SELECT COUNT(*) FROM Results")
-        assert count == count_replace == count_ignore == count_dupl / 2
+        result_count_dupl = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_dupl = countrows("SELECT COUNT(*) FROM Interactions")
+
+        assert (
+            result_count
+            == result_count_replace
+            == result_count_ignore
+            == result_count_dupl / 2
+        )
+        assert (
+            inter_count
+            == inter_count_replace
+            == inter_count_ignore
+            == inter_count_dupl / 2
+        )
 
         os.system("rm output.db")
 
@@ -562,7 +583,7 @@ class TestStorageMan:
             versionmatch, version = rtc.storageman.check_ringtaildb_version()
         os.system("rm output.db output_log.txt")
         assert versionmatch
-        assert int(version) == 110  # NOTE: update for new database schema versions
+        assert int(version) == 200  # NOTE: update for new database schema versions
 
 
 class TestConfigFile:
@@ -632,6 +653,7 @@ class TestLogger:
 
         try:
             raise (exceptions.OptionError("This is a test error."))
+            raise (exceptions.OptionError("This is a test error."))
         except Exception as e:
             pass
 
@@ -639,6 +661,11 @@ class TestLogger:
             for line in f:
                 pass
         last_line = line
+        keywords = [
+            "ERROR",
+            "test_units.py[",
+            "ringtail.exceptions:This is a test error.",
+        ]
         keywords = [
             "ERROR",
             "test_units.py[",
