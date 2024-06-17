@@ -57,19 +57,18 @@ class RingtailCore:
             logger.setLevel(logging_level)
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type)
+        self.storagetype = storage_type
         self.storageman = storageman(db_file)
         self._run_mode = "api"
         self.docking_mode = docking_mode
         self.set_storageman_attributes()
 
-    def update_database_version(self, consent=False):
-        """Method to update database version from 1.0.0 to 1.1.0"""
+    def update_database_version(self, consent=False, new_version="2.0.0"):
+        """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
 
-        return self.storageman.update_database_version(consent)
+        return self.storageman.update_database_version(new_version, consent)
 
-    # endregion
-
-    # region #-#-#- Private methods -#-#-#
+    # -#-#- Private methods -#-#-#
 
     def _validate_docking_mode(self, docking_mode: str):
         """Method that validates specified AutoDock program used to generate results.
@@ -131,25 +130,21 @@ class RingtailCore:
             flexres_pose,
         ) in poses:
             # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
-            pose_bitvector = self.storageman.fetch_interaction_bitvector(Pose_ID)
-            if pose_bitvector is not None:
-                interaction_indices = []
+            interactions = self.storageman.fetch_pose_interactions(Pose_ID)
+            # if that pose id has interactions
+            if interactions is not None:
+                # make a list of all of them
                 interactions_list = []
-                for idx, bit in enumerate(pose_bitvector):
-                    if bit == 1:
-                        interaction_indices.append(
-                            idx + 1
-                        )  # adjust for indexing starting at 1
-                for int_idx in interaction_indices:
-                    interaction_info = self.storageman.fetch_interaction_info_by_index(
-                        int_idx
-                    )
+                # for each interaction row, make into a string according to format above
+                for interaction_info in interactions:
                     interaction = (
                         interaction_info[0] + "-" + ":".join(interaction_info[1:])
                     )
                     interactions_list.append(interaction)
+
                 interactions_str = ", ".join(interactions_list)
                 properties["Interactions"].append(interactions_str)
+
             # add properties to dictionary lists
             properties["Binding energies"].append(docking_score)
             properties["Ligand effiencies"].append(leff)
@@ -244,6 +239,7 @@ class RingtailCore:
 
         Returns:
             tuple: (ligand rdkit mol, [flexres rdkit mols], {properties for ligand})
+
 
         Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
         """
@@ -423,7 +419,7 @@ class RingtailCore:
                 file_pattern = "*.pdbqt*"
             else:
                 logger.error(
-                    "Docking mode and file ile pattern was not specified, can not continue."
+                    "Docking mode and file pattern was not specified, can not continue."
                 )
 
         # Dict of individual arguments
@@ -609,7 +605,7 @@ class RingtailCore:
             )
             logger.info("Adding results...")
             self.resultsman.process_docking_data()
-            self.storageman.set_ringtail_db_schema_version()
+            self.storageman.finalize_database_write()
 
     # endregion
 
@@ -1591,11 +1587,14 @@ class RingtailCore:
             df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
 
-    def export_bookmark_db(self, bookmark_name: str = None):
+    def export_bookmark_db(self, bookmark_name: str = None) -> str:
         """Export database containing data from bookmark
 
         Args:
-            bookmark_db_name (str): name for bookmark_db
+            bookmark_name (str): name for bookmark_db
+
+        Returns:
+            str: name of the new, exported database
         """
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
@@ -1611,13 +1610,14 @@ class RingtailCore:
         with self.storageman:
             self.storageman.clone(bookmark_db_name)
         # connect to cloned database
-        self.db_file = bookmark_db_name
-        # TODO needs rejiggering so agnostic to db engine. It also rewires core to new db, is that ok?
         dictionary = self.storageopts.todict()
-        dictionary["db_file"] = self.db_file
-        with StorageManagerSQLite(**dictionary) as db_clone:
+        dictionary["db_file"] = bookmark_db_name
+        temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
+        with temp_storageman(**dictionary) as db_clone:
             db_clone.prune()
             db_clone.close_storage(vacuum=True)
+
+        return bookmark_db_name
 
     def export_receptors(self):
         """
@@ -1893,8 +1893,7 @@ class RingtailCore:
     @staticmethod
     def get_all_defaults() -> dict:
         """
-        Gets default values from RingtailOptions and returns dict of all options,
-        or options belonging to a specific group.
+        Gets default values from RingtailOptions and returns dict of all options.
 
         Returns:
             dict: all default values for Ringtail
