@@ -9,17 +9,19 @@ import logging.handlers
 import inspect
 import datetime
 
+
 class RTLogger:
     """
-    RTLogger is a global singleton class for code in Ringtail. A new header is written 
-    each time a new ringtail sore object is started. It is based on the python logging 
+    RTLogger is a global singleton class for code in Ringtail. A new header is written
+    each time a new ringtail sore object is started. It is based on the python logging
     library. Different log levels have different treatment, e.g., error level logs includes
-    a complete and readable stack trace. 
+    a complete and readable stack trace.
 
     The log is written to "YYYYMMDD-hhmmss_ringtail-process-log.txt", and the file will be saved to current working directory.
     """
 
     _instance = None
+
     def __new__(cls):
         """Method to ensure singleton logger"""
         if cls._instance is None:
@@ -28,10 +30,10 @@ class RTLogger:
             filename = dt.strftime("%Y%m%d-%H%M%S") + "_ringtail-process-log.txt"
             cls.initialization(cls, filename=filename)
         return cls._instance
-    
-    def initialization(self, level = "WARNING", filename = "ringtail-process-log.txt"):
-        """ 
-        Options for instantiation of the logger. 
+
+    def initialization(self, level="WARNING", filename="ringtail-process-log.txt"):
+        """
+        Options for instantiation of the logger.
         Starts a file handler and a stream handler that prints to stdout
 
         Args:
@@ -41,31 +43,37 @@ class RTLogger:
         self.logger = logging.getLogger("ringtail")
         self.logger.setLevel(level)
         self.fileHandler = logging.FileHandler(filename)
-        self.logger.addHandler(self.fileHandler) 
+        self.logger.addHandler(self.fileHandler)
         self.streamHandler = logging.StreamHandler()
         self.streamHandler.setLevel(level)
-        self.logger.addHandler(self.streamHandler) 
+        self.logger.addHandler(self.streamHandler)
         self.streamFmt = logging.Formatter("%(levelname)-10s %(message)s")
-        self.fileFmt = logging.Formatter("%(levelname)-10s %(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        self.fileFmt = logging.Formatter(
+            "%(levelname)-10s %(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        )
         self.header(self, header="Starting a new Ringtail Process")
         self.fileHandler.setFormatter(self.fileFmt)
         self.streamHandler.setFormatter(self.streamFmt)
 
     def setLevel(self, level: str):
-        """ Sets level of the logger, and if debug will print level change to log.
+        """Sets level of the logger, and if debug will print level change to log.
 
         Args:
             level (str): lowest level the logger will record, either debug, info, warning, error, or critical
         """
-        
+
         if type(level) == str:
             level = level.upper()
         else:
-            logger.warning(f"{level} is not a a string. Please use one of the following options: debug, info, or warning. Logger level reverted to {self.level()}.")
+            logger.warning(
+                f"{level} is not a a string. Please use one of the following options: debug, info, or warning. Logger level reverted to {self.level()}."
+            )
             return
-        
+
         if level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
-            logger.warning(f"{level} is not a valid logging level option. Logger level reverted to {self.level()}.")
+            logger.warning(
+                f"{level} is not a valid logging level option. Logger level reverted to {self.level()}."
+            )
             return
         elif level != self.logger.level:
             self.logger.setLevel(level)
@@ -77,11 +85,7 @@ class RTLogger:
         Returns:
             str: current level of the logger
         """
-        levels ={10: "DEBUG",
-                 20: "INFO",
-                 30: "WARNING",
-                 40: "ERROR",
-                 50: "CRITICAL"}
+        levels = {10: "DEBUG", 20: "INFO", 30: "WARNING", 40: "ERROR", 50: "CRITICAL"}
         return levels[self.logger.level]
 
     def filename(self):
@@ -90,7 +94,7 @@ class RTLogger:
             str: name of the log file handler
         """
         return self.fileHandler.baseFilename
-    
+
     def header(self, header):
         """
         Formats header for the log file
@@ -98,7 +102,9 @@ class RTLogger:
         Args:
             header (str): header string to get formatted
         """
-        headFmt = logging.Formatter("%(asctime)30s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        headFmt = logging.Formatter(
+            "%(asctime)30s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        )
         self.fileHandler.setFormatter(headFmt)
         self.logger.critical("--------- " + header + " ---------")
         self.fileHandler.setFormatter(self.fileFmt)
@@ -119,7 +125,7 @@ class RTLogger:
     def critical(self, message):
         stacktrace = self.st_formatted(inspect.stack())
         self.logger.critical(stacktrace + ": " + message)
-        
+
     def st_formatted(self, stack):
         """
         Method to format python FrameInfo object to this format:
@@ -128,9 +134,9 @@ class RTLogger:
         Args:
             stack (traceback): stack to be formatted to custom traceback
         """
-        stacktrace=""
+        stacktrace = ""
         for i in stack:
-            
+
             fn: str = i.filename
             if fn.startswith("<frozen"):
                 pass
@@ -139,10 +145,11 @@ class RTLogger:
             else:
                 fn = fn.rsplit("/", 1)[1]
                 lineno = i.lineno
-                if fn == "exceptions.py" or fn =="logmanager.py":
+                if fn == "exceptions.py" or fn == "logmanager.py":
                     pass
                 else:
                     stacktrace += fn + "[" + str(lineno) + "]:"
-        return stacktrace 
+        return stacktrace
+
 
 logger = RTLogger()
