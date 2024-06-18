@@ -28,8 +28,8 @@ Enhancements to the codebase
 
 Changes to code behavior
 =========================
-* Interaction tables: one new table added (`Interactions`), and the `Interaction_bitvectors` table has changed from having one column per interaction (and 1 or null for each pose row) to having the bitvector fingerprint in one column. The existing `Interaction_indices` table and the new table `Interaction_bitvector_strings` are remade every time the database is written to. 
-* To calculate interactions (vina) you have to explicitly save receptor every time data is added to the database.
+* Interaction tables: one new table has been added (`Interactions`). The existing `Interaction_indices` table and the table `Interaction_bitvectors` are remade every time the database is written to as opposed to being made on the go as results are added in previous Ringtail version. 
+* A new method to update an existing database 1.1.0 (or 1.0.0) to 2.0.0 is included. However, if the existing database was created with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0 (see Bug fixes below).
 
 Bug fixes
 ===========
