@@ -74,7 +74,7 @@ It is further possible to overwrite a database by use of the argument ``--overwr
     $ python ../scripts/rt_process_vs.py write --input_db output.db --file_path test_data/vina --overwrite --receptor_file receptor.pdbqt --save_receptor --add_interactions --interaction_cutoffs 3.7,4.0
 
 Printing a database summary
-*****************************
+***************************
 During both ``write`` and ``read`` it is possible to add the tag ``-su`` or ``--summary`` which will print a summary of the database to stdout.
 
 .. code-block:: bash
@@ -95,7 +95,7 @@ During both ``write`` and ``read`` it is possible to add the tag ``-su`` or ``--
     10%_leff: -0.47 kcal/mol
 
 Filtering
-***********
+*********
 In ``read`` mode, an existing database is used to filter or export results.
 
 When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name and docking score of every pose passing filtering criteria. The log name may be changed with the ``--log_file`` option. There are six scoring filters that include best and worst docking score/energy, best and worst ligand efficieny, and results above worst docking score or ligand efficiency percentile. Some of these are internally inconsistent: if both ``--eworst`` and ``--score_percentile`` are used together, the ``--eworst`` cutoff alone is used. The same is true of ``--leworst`` and ``--le_percentile``.
@@ -114,7 +114,7 @@ By default, only the information for the top-scoring binding pose will be writte
 
     $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --outfields Ligand_Name,e,rank,receptor --order_results ref_rmsd --bookmark_name eworst6
 
-When filtering, the passing results are also saved as a view in the database. This view is named ``passing_results`` by default. The user can specify a name for the view using the ``--bookmark_name`` option. No filtering is performed if no filters are given (see full list of filters #TODO). 
+When filtering, the passing results are also saved as a view in the database. This view is named ``passing_results`` by default. The user can specify a name for the view using the ``--bookmark_name`` option. No filtering is performed if no filters are given (see full list of filters :ref:`here <filter_kw_table>`). 
 Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database Results rows (i.e. stored poses). Data for poses in a view may be accessed later using the ``--data_from_bookmark`` option.
 
 Interaction filters
@@ -127,7 +127,7 @@ The ``--max_miss`` option allows the user to filter by given interactions exclud
 
 .. code-block:: bash
 
-    $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions A:VAL:279: A:LYS:162: --max_miss 1 --react_any)
+    $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions A:VAL:279: A:LYS:162: --max_miss 1 --react_any
 
 Ligand filters 
 =================
@@ -135,12 +135,12 @@ The ``--smarts_idxyz`` option may be used to filter for a specific ligand substr
 
 .. code-block:: bash
 
-    $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions 'A:VAL:279: A:LYS:162: --max_miss 1)
+    $ python ../scripts/rt_process_vs.py read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions A:VAL:279: A:LYS:162: --max_miss 1
 
 
 Clustering
 ============
-In addition to the filtering options outlined in the table below #TODO, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (``--mfpt_cluster``) or interaction (``--interaction_cluster``) fingerprints. Dissimilarity is measured by Tanimoto distance and clustering is performed with the Butina clustering algorithm. Clustering can be also be performed on a bookmark that has already been saved to the database, without providing any extra filter values. In this case, the bookmark over which to cluster (or additional filtering) on is specified by ``--filter_bookmark`` (must be different from ``--bookmark_name``).
+In addition to the filtering options outlined in the table below, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (``--mfpt_cluster``) or interaction (``--interaction_cluster``) fingerprints. Dissimilarity is measured by Tanimoto distance and clustering is performed with the Butina clustering algorithm. Clustering can be also be performed on a bookmark that has already been saved to the database, without providing any extra filter values. In this case, the bookmark over which to cluster (or additional filtering) on is specified by ``--filter_bookmark`` (must be different from ``--bookmark_name``).
 
 .. code-block:: bash
 
@@ -237,12 +237,10 @@ Access help message
 Available command line arguments
 **********************************
 
-Keywords pertaining to filtering and read/output:
 
 Keywords pertaining to database write and file handling
-
+========================================================
 .. _input_kw_table:
-
 .. csv-table:: Ringtail input options
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
@@ -264,10 +262,10 @@ Keywords pertaining to database write and file handling
     "duplicate_handling", "Specify how dulicate results should be handled. May specify 'ignore' or 'replace'. Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*", None
     "overwrite", "Flag to overwrite existing database", FALSE
 
-Keywords pertaining to filtering and read/output
 
+Keywords pertaining to filtering 
+=================================
 .. _filter_kw_table:
-
 .. csv-table:: Ringtail filters
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
@@ -292,8 +290,10 @@ Keywords pertaining to filtering and read/output
 
 .. [note] Requires interactions are calculated and present in the database.
 
-.. _output_kw_table:
 
+Keywords pertaining to output of data
+======================================
+.. _output_kw_table:
 .. csv-table:: Ringtail output options
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
@@ -307,9 +307,11 @@ Keywords pertaining to filtering and read/output
     "mfpt_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm",0.5
     "interaction_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm (*)",0.5
     "enumerate_interactions_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)",FALSE
-    
-.. _read_kw_table:
 
+
+Keywords pertaining to output methods
+======================================
+.. _read_kw_table:
 .. csv-table:: Ringtail read/output methods
     :header: "Keyword","Description","Input options"
     :widths: 10, 30, 10
@@ -325,4 +327,3 @@ Keywords pertaining to filtering and read/output
     "plot", "Create scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as 'scatter.png'.", "save (bool)"
     "pymol", "Launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with bookmark_name will be ploted and displayed in PyMol when clicked on.","bookmark_name (str)"
 
-#TODO table of values that are explicit keywords in cmd line tool
