@@ -264,6 +264,7 @@ Available Ringtail arguments
 ******************************
 
 Keywords pertaining to database write and file handling
+========================================================
 
 .. csv-table:: Ringtail input options
     :header: "Keyword","Description","Default value"
@@ -286,7 +287,9 @@ Keywords pertaining to database write and file handling
     "duplicate_handling", "Specify how dulicate results should be handled. May specify 'ignore' or 'replace'. Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*", None
     "overwrite", "Flag to overwrite existing database", FALSE
 
+
 Keywords pertaining to filtering and read/output
+================================================
 
 .. csv-table:: Ringtail filters
     :header: "Keyword","Description","Default value"
@@ -312,6 +315,8 @@ Keywords pertaining to filtering and read/output
 
 .. [note] Requires interactions are calculated and present in the database.
 
+Keywords pertaining to output of data
+======================================
 .. csv-table:: Ringtail output options
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
@@ -325,19 +330,4 @@ Keywords pertaining to filtering and read/output
     "mfpt_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm",0.5
     "interaction_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm (*)",0.5
     "enumerate_interactions_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)",FALSE
-
-.. csv-table:: Ringtail read/output methods
-    :header: "Keyword","Description","Input options"
-    :widths: 10, 30, 10
-
-    "export_csv", "Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv.", "requested_data= bookmark_name OR csv_name, table (bool)"
-    "export_csv", "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]", "requested_data (str), csv_name (str), table (bool)"
-    "export_bookmark_db", "Export a database containing only the results found in the specified bookmark name. Will save as <core_db_file>_<bookmark_name>.db", "bookmark_name (str)"
-    "export_receptors", "Export receptor to pdbqt", None
-    "write_molecule_sdfs", "Write molecule sdfs from a given bookmark to specified path", "sdf_path (str), bookmark_name (str)"
-    "find_similar_ligands", "Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest.", "query_ligname (str)"
-    "get_previous_filter_data", "Get data requested in `outfields` from the bookmark of a previous filtering", "outfields (str), bookmark_name (str)"
-    "find_similar_ligands", "Find ligands in cluster with query_ligname", "query_ligname (str)"
-    "plot", "Create scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as 'scatter.png'.", "save (bool)"
-    "pymol", "Launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with bookmark_name will be ploted and displayed in PyMol when clicked on.","bookmark_name (str)"
 
