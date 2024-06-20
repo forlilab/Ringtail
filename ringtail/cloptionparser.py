@@ -637,11 +637,7 @@ class CLOptionParser:
         # create parser
         try:
             # add default values from ringtailoptions
-            defaults_dict = RingtailCore.get_all_defaults()
-            default_values = {}
-            # the defaults_dict is organized in sections for readability, remove sections before using as defaults for parser
-            for _, subdict in defaults_dict.items():
-                default_values.update(subdict)
+            defaults_dict = RingtailCore.default_dict()
 
             (
                 parsed_opts,
@@ -649,7 +645,7 @@ class CLOptionParser:
                 self.confargs,
                 self.write_parser,
                 self.read_parser,
-            ) = cmdline_parser(default_values)
+            ) = cmdline_parser(defaults_dict)
             self.process_options(parsed_opts)
 
         except argparse.ArgumentError as e:

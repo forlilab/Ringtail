@@ -119,13 +119,12 @@ class TestInputs:
         from ringtail import RingtailCore
         import json
 
-        RingtailCore.generate_config_template_for_cmdline()
-        filepath = "config.json"
+        filepath = RingtailCore.generate_config_file_template()
 
         with open(filepath, "r") as f:
             data = json.load(f)
         # all fields I want to change
-        data["fileobj"]["file_list"] = [["filelist1.txt"]]
+        data["file_list"] = [["filelist1.txt"]]
 
         with open(filepath, "w") as f:
             f.write(json.dumps(data, indent=4))
