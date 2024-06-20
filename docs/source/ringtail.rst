@@ -1,6 +1,6 @@
 
 
-Ringtail 
+Ringtail package
 ================
 
 Submodules

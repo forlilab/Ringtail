@@ -51,6 +51,7 @@ class RingtailCore:
         Args:
             db_file (str): Database file to initialize core with. Defaults to "output.db".
             storage_type (str, optional): Database setup to use for interacting with the database. Defaults to "sqlite".
+            docking_mode (str, optional): Docking mode for which the database will be used
             logging_level (str, optional): Global logger level. Defaults to "DEBUG".
         """
 
@@ -61,7 +62,7 @@ class RingtailCore:
         self.storagetype = storage_type
         self.storageman = storageman(db_file)
         self._run_mode = "api"
-        self.docking_mode = docking_mode
+        self._docking_mode = docking_mode
         self.set_storageman_attributes()
 
     def update_database_version(self, consent=False, new_version="2.0.0"):
@@ -94,6 +95,12 @@ class RingtailCore:
             logger.debug(f"Docking mode set to {self.docking_mode}.")
 
     def _get_docking_mode(self):
+        """
+        Private method to retrieve docking mode
+
+        Returns:
+            str: docking mode
+        """
         return self._docking_mode
 
     # making docking mode a property of the ringtail core object
@@ -768,6 +775,7 @@ class RingtailCore:
             export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
             enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+
         """
         # Dict of individual arguments
         indiv_options: dict = vars()
@@ -913,6 +921,7 @@ class RingtailCore:
 
         Raises:
             OptionError
+
         """
 
         files = self._set_file_sources(
@@ -987,6 +996,7 @@ class RingtailCore:
 
         Raises:
             OptionError
+
         """
         # Method currently only works with vina output, set automatically
         if self.docking_mode != "vina":
@@ -1025,6 +1035,7 @@ class RingtailCore:
 
         Args:
             receptor_file (str): path to receptor file
+
         """
         receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
         with self.storageman:
@@ -1053,6 +1064,7 @@ class RingtailCore:
         Args:
             columns (list(str)): data columns used to prepare summary
             percentiles (list(int)): cutoff percentiles for the summary
+
         """
         with self.storageman:
             summary_data = self.storageman.fetch_summary_data(columns, percentiles)
@@ -1171,44 +1183,44 @@ class RingtailCore:
                 output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
                 mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
                 interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-                log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
+                log_file (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
                 overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
-                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION.
-                                        available fields are:
-                                        "e" (docking_score),
-                                        "le" (ligand efficiency),
-                                        "delta" (delta energy from best pose),
-                                        "ref_rmsd" (RMSD to reference pose),
-                                        "e_inter" (intermolecular energy),
-                                        "e_vdw" (van der waals energy),
-                                        "e_elec" (electrostatic energy),
-                                        "e_intra" (intermolecular energy),
-                                        "n_interact" (number of interactions),
-                                        "rank" (rank of ligand pose),
-                                        "run" (run number for ligand pose),
-                                        "hb" (hydrogen bonds);
-                outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are: \n
-                                    "Ligand_name" (Ligand name),
-                                    "e" (docking_score),
-                                    "le" (ligand efficiency),
-                                    "delta" (delta energy from best pose),
-                                    "ref_rmsd" (RMSD to reference pose),
-                                    "e_inter" (intermolecular energy),
-                                    "e_vdw" (van der waals energy),
-                                    "e_elec" (electrostatic energy),
-                                    "e_intra" (intermolecular energy),
-                                    "n_interact" (number of iteractions),
-                                    "ligand_smile" ,
-                                    "rank" (rank of ligand pose),
-                                    "run" (run number for ligand pose),
-                                    "hb" (hydrogen bonds),
-                                    "receptor" (receptor name)
+                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION. Available fields are:\n
+                    "e" (docking_score),
+                    "le" (ligand efficiency),
+                    "delta" (delta energy from best pose),
+                    "ref_rmsd" (RMSD to reference pose),
+                    "e_inter" (intermolecular energy),
+                    "e_vdw" (van der waals energy),
+                    "e_elec" (electrostatic energy),
+                    "e_intra" (intermolecular energy),
+                    "n_interact" (number of interactions),
+                    "rank" (rank of ligand pose),
+                    "run" (run number for ligand pose),
+                    "hb" (hydrogen bonds);
+                outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. `--outfields=e,le,hb`; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are: \n
+                    "Ligand_name" (Ligand name),
+                    "e" (docking_score),
+                    "le" (ligand efficiency),
+                    "delta" (delta energy from best pose),
+                    "ref_rmsd" (RMSD to reference pose),
+                    "e_inter" (intermolecular energy),
+                    "e_vdw" (van der waals energy),
+                    "e_elec" (electrostatic energy),
+                    "e_intra" (intermolecular energy),
+                    "n_interact" (number of iteractions),
+                    "ligand_smile" ,
+                    "rank" (rank of ligand pose),
+                    "run" (run number for ligand pose),
+                    "hb" (hydrogen bonds),
+                    "receptor" (receptor name)
                 bookmark_name (str): name for resulting book mark file. Default value is 'passing_results'
                 filter_bookmark (str): name of bookmark to perform filtering over
                 options_dict (dict): write options as a dict
 
         Returns:
             int: number of ligands passing filter
+
         """
 
         self.set_filters(
@@ -1283,7 +1295,9 @@ class RingtailCore:
             self.filters.max_miss
         )
         ligands_passed = 0
-        """This for comprehension takes all combinations represented in one union of one or multiple, and filters, and goes around until all combinations have been used to filter"""
+        """This for comprehension takes all combinations represented in one union of one or multiple, and filters, and goes around until all combinations have been used to filter
+        
+        """
         with self.storageman:
             for ic_idx, combination in enumerate(interaction_combs):
                 # prepare Filter object with only desired interaction combination for storageManager
