@@ -658,5 +658,11 @@ class TestOptions:
 
         rtc.add_results_from_files(file_list="filelist2.txt", overwrite=True)
         count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
+
+        os.system("rm output.db")
+
         assert count_old_db == 3
         assert count_new_db == 2
+
+    def test_remove_test_log_files(self):
+        os.system("rm *_ringtail-process-log.txt")

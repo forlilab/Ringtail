@@ -6,6 +6,7 @@
 
 from .logmanager import logger
 
+
 class StorageError(Exception):
     def __init__(self, e):
         logger.error(__name__ + ":" + e)

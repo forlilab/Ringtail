@@ -18,6 +18,7 @@ from matplotlib import colors
 from rdkit.Chem import SDWriter
 from meeko import RDKitMolCreate
 
+
 class OutputManager:
     """Class for creating outputs, can be a context manager to handle log files
 
@@ -27,9 +28,7 @@ class OutputManager:
         _log_open (bool): if log file is open or not
     """
 
-    def __init__(self, 
-                 log_file=None, 
-                 export_sdf_path=None):
+    def __init__(self, log_file=None, export_sdf_path=None):
         self.log_file = log_file
         self.export_sdf_path = export_sdf_path
         self._log_open = False
@@ -40,18 +39,20 @@ class OutputManager:
     def __exit__(self, exc_type, exc_value, traceback):
         self.close_logfile()
 
-    #-#-#- Log file methods -#-#-#
+    # -#-#- Log file methods -#-#-#
     def open_logfile(self, write_filters_header=True):
         """
         Opens log file and creates it if needed
 
         Args:
             write_filters_header (bool): only used because one method does not take the same headers
-        
+
         Raises:
             OutputError
         """
-        self.log_file = open(self.log_file, 'w') # makes log_file attribute a file pointer from the string path name
+        self.log_file = open(
+            self.log_file, "w"
+        )  # makes log_file attribute a file pointer from the string path name
         self._log_open = True
         try:
             if write_filters_header:
@@ -59,12 +60,14 @@ class OutputManager:
                 self.log_file.write("***************\n")
         except Exception as e:
             raise OutputError("Error while creating log file") from e
-        
+
     def close_logfile(self):
         """Closes the log file properly"""
         if self._log_open:
             self.log_file.close()
-            self.log_file = os.path.basename(self.log_file.name) # returns log_file attribute from file pointer to string path name
+            self.log_file = os.path.basename(
+                self.log_file.name
+            )  # returns log_file attribute from file pointer to string path name
             self._log_open = False
 
     def write_log(self, lines):
@@ -73,10 +76,10 @@ class OutputManager:
         Args:
             lines (iterable): Iterable with tuples of data for
                 writing into log
-        
+
         Raises:
             OutputError
-        
+
         Returns:
             int: number of ligands passing that are written to log file
         """
@@ -89,7 +92,9 @@ class OutputManager:
                 )  # strip parens from line, which is natively a tuple
                 num_passing += 1
             self._write_log_line("***************\n")
-            logger.debug(f"Time to write log: {time.perf_counter() - time0:.2f} seconds")
+            logger.debug(
+                f"Time to write log: {time.perf_counter() - time0:.2f} seconds"
+            )
             return num_passing
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
@@ -99,7 +104,7 @@ class OutputManager:
 
         Args:
             line (str): Line to write to log
-        
+
         Raises:
             OutputError
         """
@@ -115,17 +120,17 @@ class OutputManager:
 
         Args:
             number_passing_ligands (int): number of ligands that passed filter
-        
+
         Raises:
             OutputError
         """
         try:
             self.log_file.write("\n")
             self.log_file.write(
-                    "Number passing ligands: {num} \n".format(
-                        num=str(number_passing_ligands)
-                    )
+                "Number passing ligands: {num} \n".format(
+                    num=str(number_passing_ligands)
                 )
+            )
             self.log_file.write("---------------\n")
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
@@ -146,7 +151,9 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
-    def write_filters_to_log(self, filters_dict, included_interactions, additional_info=""):
+    def write_filters_to_log(
+        self, filters_dict, included_interactions, additional_info=""
+    ):
         """Takes dictionary of filters, formats as string and writes to log file
 
         Args:
@@ -214,11 +221,13 @@ class OutputManager:
         if not self._log_open:
             self.open_logfile(write_filters_header=False)
         self.log_file.write("\n---------------\n")
-        self.log_file.write(f"Found ligands similar to {query_ligname} in clustering {cluster_name}:\n")
+        self.log_file.write(
+            f"Found ligands similar to {query_ligname} in clustering {cluster_name}:\n"
+        )
 
-    #-#-#- Non-logfile methods -#-#-#
+    # -#-#- Non-logfile methods -#-#-#
     def write_out_mol(self, ligname, mol, flexres_mols, properties):
-        """ Writes out given mol as sdf. Will create the specified sdf folder in 
+        """Writes out given mol as sdf. Will create the specified sdf folder in
         current working directory if needed.
 
         Args:
@@ -230,9 +239,15 @@ class OutputManager:
         Raises:
             OutputError
         """
-        if self.export_sdf_path is not None and not self.export_sdf_path == "" and not os.path.isdir(self.export_sdf_path):
+        if (
+            self.export_sdf_path is not None
+            and not self.export_sdf_path == ""
+            and not os.path.isdir(self.export_sdf_path)
+        ):
             os.makedirs(self.export_sdf_path)
-            logger.info("Specified directory for SDF files was created in current working directory.")
+            logger.info(
+                "Specified directory for SDF files was created in current working directory."
+            )
         try:
             filename = self.export_sdf_path + ligname + ".sdf"
             mol_flexres_list = [mol]
@@ -257,7 +272,7 @@ class OutputManager:
         if not recname.endswith(".pdbqt"):
             recname = recname + ".pdbqt"
         receptor_str = ReceptorManager.blob2str(receptor_compbytes)
-        with open(recname, 'w') as f:
+        with open(recname, "w") as f:
             f.write(receptor_str)
 
     def scatter_hist(self, x, y, z, ax, ax_histx, ax_histy):
@@ -342,8 +357,11 @@ class OutputManager:
             ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax)
             fig.colorbar(
                 mappable=cm.ScalarMappable(
-                    colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts)),),
-                cax=self.ax.inset_axes([0.85, 0.1, 0.05, 0.8]), #TODO dimensions not quite right 
+                    colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts)),
+                ),
+                cax=self.ax.inset_axes(
+                    [0.85, 0.1, 0.05, 0.8]
+                ),  # TODO dimensions not quite right
                 label="Scatterplot bin count",
             )
             self.ax.set_xlabel("Best docking score / kcal/mol")
@@ -381,4 +399,3 @@ class OutputManager:
             plt.close()
         except Exception as e:
             raise OutputError("Error while saving figure") from e
-
