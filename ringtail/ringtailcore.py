@@ -12,6 +12,7 @@ from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
 from .ringtailoptions import *
+from .util import *
 from .exceptions import RTCoreError, OutputError
 from rdkit import Chem
 import itertools
@@ -553,7 +554,7 @@ class RingtailCore:
         """
         # if dictionary of options provided, attribute to appropriate managers
         if options_dict is not None:
-            write_dict, storage_dict = RingtailCore.split_dict(
+            write_dict, storage_dict = split_dict(
                 options_dict, ["duplicate_handling", "overwrite"]
             )
         else:
@@ -1232,7 +1233,7 @@ class RingtailCore:
         )
 
         if options_dict is not None:
-            storage_dict, output_dict = RingtailCore.split_dict(
+            storage_dict, output_dict = split_dict(
                 options_dict, ["log_file", "enumerate_interaction_combs"]
             )
         else:
@@ -1742,25 +1743,3 @@ class RingtailCore:
         return options
 
     # endergion
-
-    # region #-#-#- Util method -#-#-#
-    @staticmethod
-    def split_dict(dict: dict, items: list) -> tuple:
-        """Utility method that takes one dictionary and splits it into two based on the listed keys
-
-        Args:
-            dict (dict): original dictionary
-            items (list): ist of keys to use for separation
-
-        Returns:
-            tuple: original dict minus the removed items and new dict containing the items removed from the original dict
-        """
-
-        new_dict = {}
-
-        for key in items:
-            new_dict[key] = dict.pop(key)
-
-        return dict, new_dict
-
-    # endregion

@@ -5,6 +5,7 @@
 #
 
 from .cloptionparser import CLOptionParser
+from .util import *
 from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
@@ -57,5 +58,6 @@ __all__ = [
     "DatabaseViewCreationError",
     "OutputError",
     "logger",
-    "Filters"
+    "Filters",
+    "util",
 ]
