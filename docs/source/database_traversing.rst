@@ -12,7 +12,8 @@ Using `vd` is particularly helpful to examine possible interactions of interest,
 
 To exit, return to the screen shown in the image above by pressing `q`, then press `q` to exit.
 
-### Data integrity sanity checks
+Data integrity sanity checks
+*****************************
 There are a few quick checks the user can make to ensure that the data has been properly written from the input files to the database. Discrepancies may indicate an error occurred while writing the database or the input file format did not match that which Ringtail expected.
 - The number of rows in the `Ligands` table should match the number of input ligand files
 - The number of rows in the `Results` and `Interaction_bitvectors` tables should match
