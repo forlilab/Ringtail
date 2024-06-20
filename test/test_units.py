@@ -44,9 +44,9 @@ class TestRingtailCore:
         os.system("rm output.db output_log.txt")
         from ringtail import ringtailoptions
 
-        defaults = RingtailCore.ringtail_defaults("resultsmanopts")
+        defaults = RingtailCore.default_dict()
         object_dict = ringtailoptions.ResultsProcessingOptions().todict()
-        assert defaults == object_dict
+        assert object_dict.items() <= defaults.items()
 
     def test_add_folder(self, countrows):
         rtc = RingtailCore(db_file="output.db")
@@ -518,9 +518,9 @@ class TestStorageMan:
             "interaction_cluster": rtc.storageman.interaction_cluster,
             "bookmark_name": rtc.storageman.bookmark_name,
         }
-        storageman_attributes_defaults = RingtailCore.ringtail_defaults("storageopts")
+        defaults = RingtailCore.default_dict()
         # ensure defaults values are set correctly and do not change during processing
-        assert storageman_attributes == storageman_attributes_defaults
+        assert storageman_attributes.items() <= defaults.items()
 
     def test_fetch_summary_data(self):
         rtc = RingtailCore("output.db")
@@ -586,57 +586,6 @@ class TestStorageMan:
         assert int(version) == 200  # NOTE: update for new database schema versions
 
 
-class TestConfigFile:
-
-    def test_generate_config_file(self):
-        RingtailCore.generate_config_template_for_api()
-        filepath = "config.json"
-
-        assert os.path.exists(filepath)
-
-        # Assure file is created, and populate it with non-default values
-        with open(filepath, "r") as f:
-            data = json.load(f)
-        # all fields I want to change
-        data["fileobj"]["file_path"] = [["test_data/"]]
-        data["fileobj"]["file_path"]
-        data["fileobj"]["recursive"] = True
-        data["fileobj"]["receptor_file"] = "test_data/4j8m.pdbqt"
-        data["fileobj"]["save_receptor"] = True
-        data["filters"]["eworst"] = -6
-        data["filters"]["vdw_interactions"] = [
-            ("A:VAL:279:", True),
-            ("A:LYS:162:", True),
-        ]
-        data["filters"]["hb_interactions"] = [
-            ("A:VAL:279:", True),
-            ("A:LYS:162:", True),
-        ]
-        data["filters"]["max_miss"] = 1
-        with open(filepath, "w") as f:
-            f.write(json.dumps(data, indent=4))
-
-    def test_adding_results(self, dbquery):
-        rtcore = RingtailCore(db_file="output.db", logging_level="DEBUG")
-        (file_dict, write_dict, _, _) = rtcore.add_config_from_file(
-            config_file="config.json"
-        )
-        rtcore.add_results_from_files(
-            filesources_dict=file_dict, options_dict=write_dict
-        )
-        curs = dbquery("""SELECT COUNT(*) FROM Results;""")
-        count = curs.fetchone()[0]
-
-        assert count == 645
-
-    def test_filter(self):
-        rtcore = RingtailCore(db_file="output.db", logging_level="DEBUG")
-        (_, _, _, filters_dict) = rtcore.add_config_from_file(config_file="config.json")
-        count_ligands_passing = rtcore.filter(filters_dict=filters_dict)
-        os.system("rm output_log.txt output.db config.json")
-        assert count_ligands_passing == 51
-
-
 class TestLogger:
 
     def test_set_log_level(self):
@@ -679,13 +628,8 @@ class TestOptions:
         from ringtail import exceptions as e
 
         with pytest.raises(e.OptionError):
-            RingtailCore.ringtail_defaults("not_a_ringtail_object")
-
-    def test_options_type_check(self):
-        rtc = RingtailCore()
-        # set to wrong type, ensure reset to default value
-        rtc.set_storageman_attributes(outfields=5)
-        assert rtc.storageman.outfields == "Ligand_name,e"
+            rtc = RingtailCore()
+            rtc.filter(eworst="a")
 
     def test_object_checks(self):
         # checking that incompatible options are handled

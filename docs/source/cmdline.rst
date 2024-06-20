@@ -209,6 +209,12 @@ It is possible to populate the argument list using a config file, which needs to
         "score_percentile": "0.1"
         }
 
+The Ringtail API can provide a config file template by running the following script. The file will be saved as ``config.json``.
+
+.. code-block:: bash
+
+    $ rt_generate_config_file.py
+
 Logging
 ********
 Ringtail comes with a global logger object that will write to a new text file for each time ``rt_process_vs.py`` is called. Any log messages will also be displayed in stdout. and the default logger level is "WARNING". It is possible to change the logger level by adding ``--debug`` for lowest level of logging (will make the process take longer) or ``--verbose`` for some additional, but not very deep, logging. 

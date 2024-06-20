@@ -53,26 +53,6 @@ The receptor can be added to a database by itself, either to a populated databas
     
     rtc.save_receptor(receptor_file = "receptor.pdbqt")
 
-
-Providing inputs from dictionaries
------------------------------------
-The following shows how to add results using dictionaries. Please note that this becomes epsecially relevant if you chose to add ringtail arguments from a config file (LINK TO SECTION).
-
-.. code-block:: python
-
-    file_sources = {
-        "file_path": "test_data/",
-        "recursive": True,
-    }
-
-    writeoptions = {
-        "store_all_poses": True,
-        "max_proc": 4
-    }
-
-    rtc.add_results_from_files( filesources_dict = file_sources,
-                                optionsdict = writeoptions)
-
 Printing a database summary
 ---------------------------
 If at any point you wish to print a summary of the contents of the database, the method can be called directly. 
@@ -263,40 +243,6 @@ Finally, a receptor stored in the database may be re-exported as a PDBQT with th
 .. code-block:: python 
 
     rtc.export_bookmark_db()
-
-Using a config file to provide Ringtail arguments
-**************************************************
-It is possible to populate the argument list using a config file, which needs to be in a json format. The keywords needs to correspond exactly to an argument option, and the value given can be provided as a string as you would type it using the command line interface.
-Ringtail has a class method that creates a config file template, populated with default values. You can remove any arguments you do not intend to use, and you are not required to use the template to create a config file. 
-The ``config.json`` file will be saved in the current directory (default) or can be written as a dictionary object by ``to_file = False``. 
-
-.. code-block:: python
-
-    from ringtail import RingtailCore as RTC 
-
-    config_dict = RTC.generate_config_json_template(to_file = False)
-
-Configuration file is organized in sections for enhanced readability. To edit the dictionary, then
-
-.. code-block:: python
-
-    config_dict[]:
-        {
-        "file_path": "path1/",
-        "output_db": "example.db"
-        }
-
-    config_r.json:
-        {
-        "score_percentile": "0.1"
-        }
-
-#TODO show how the config file is used 
-
-.. code-block:: python
-
-    rtc = RingtailCore()
-    rtc.add_config_from_file
 
 Some usage notes
 ******************

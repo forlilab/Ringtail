@@ -1672,31 +1672,6 @@ class RingtailCore:
             )
         )
 
-    def add_config_from_file(self, config_file: str = "config.json"):
-        """
-        Provide ringtail config from file, will directly set storage manager settings,
-        and return dictionaries for the remaining options.
-
-        Args:
-            config_file (str): json formatted file containing ringtail and filter options
-
-        Returns:
-            file_dict: dictionary of files to use in add results
-            write_dict: dictionary of options to use in add results
-            output_dict: dictionary of options to use for filtering
-            filters_dict: dictionary of files containing filters
-        """
-        (file_dict, write_dict, output_dict, filters_dict, storageman_dict) = (
-            RingtailCore.read_config_file(config_file=config_file)
-        )
-
-        self.set_storageman_attributes(dict=storageman_dict)
-        logger.info(
-            "A dictionary containing storage options was extracted from config file and assigned storagemanager."
-        )
-
-        return (file_dict, write_dict, output_dict, filters_dict)
-
     def get_bookmark_names(self):
         """
         Method to retrieve all bookmark names in a database
@@ -1708,53 +1683,27 @@ class RingtailCore:
             return self.storageman.get_all_bookmark_names()
 
     @staticmethod
-    def ringtail_defaults(object: str = "all") -> str:
+    def default_dict() -> dict:
         """
-        Creates a dict of select or all Ringtail option classes, and their key-default value pairs.
-
-        Args:
-            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
+        Creates a dict of all Ringtail options.
 
         Return:
             str: json string with options
         """
-        all_defaults = {
-            "outputopts": OutputOptions().todict(),
-            "resultsmanopts": ResultsProcessingOptions().todict(),
-            "storageopts": StorageOptions().todict(),
-            "filters": Filters().todict(),
-            "fileobj": InputFiles().todict(),
-            "readopts": ReadOptions().todict(),
-            "generalopts": GeneralOptions().todict(),
-        }
+        defaults = {}
+        defaults.update(OutputOptions().todict())
+        defaults.update(ResultsProcessingOptions().todict())
+        defaults.update(StorageOptions().todict())
+        defaults.update(Filters().todict())
+        defaults.update(InputFiles().todict())
+        defaults.update(ReadOptions().todict())
+        defaults.update(GeneralOptions().todict())
 
-        # return all defaults
-        if type(object) == str and object.lower() == "all":
-            logger.debug("All ringtail default values have been fetched.")
-            return all_defaults
-
-        # return only defaults for one requested manager/object
-        elif type(object) == str and object.lower() in all_defaults.keys():
-            logger.debug(f"Ringtail default values for {object} have been fetched.")
-            return all_defaults[object.lower()]
-
-        # return a selected number of manager/object defaults
-        elif type(object) == list:
-            logger.debug(f"Ringtail default values for {object} have been fetched.")
-            return dict(
-                (key.lower(), all_defaults[key.lower()])
-                for key in object
-                if key in all_defaults.keys()
-            )
-
-        # no valid option provided
-        else:
-            raise OptionError(
-                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj", "readopts", "generalopts"]'
-            )
+        logger.debug("All ringtail default values have been fetched.")
+        return defaults
 
     @staticmethod
-    def generate_config_template_for_api(to_file: bool = True):
+    def generate_config_file_template():
         """Outputs to "config.json in current working directory if to_file = true,
         else it returns the dict of default option values used for API (for command
         line a few more options are included that are always used explicitly when using API)
@@ -1766,182 +1715,31 @@ class RingtailCore:
             str: file name of config file or json string with template including default values
         """
 
-        json_string = RingtailCore.ringtail_defaults(
-            ["resultsmanopts", "storageopts", "outputopts", "filters", "fileobj"]
+        json_string = RingtailCore.default_dict()
+
+        filename = "config.json"
+        with open(filename, "w") as f:
+            f.write(json.dumps(json_string, indent=4))
+        logger.debug(
+            f"Default ringtail command line option values written to file {filename}."
         )
-
-        if to_file:
-            filename = "config.json"
-            with open(filename, "w") as f:
-                f.write(json.dumps(json_string, indent=4))
-            logger.debug(
-                f"Default ringtail API option values written to file {filename}."
-            )
-            return filename
-        else:
-            logger.debug("Default ringtail API option values prepared as a string.")
-            return json_string
+        return filename
 
     @staticmethod
-    def generate_config_template_for_cmdline(to_file: bool = True):
-        """Outputs to "config.json in current working directory if to_file = true,
-        else it returns the dict of default option values used for API (for command
-        line a few more options are included that are always used explicitly when using API)
-
-        Args:
-            to_file (bool): whether to produce the template as a json string or as a file "config.json"
-
-        Returns:
-            str: file name of config file or json string with template including default values
+    def get_options_info() -> dict:
         """
-
-        json_string = RingtailCore.ringtail_defaults("all")
-
-        if to_file:
-            filename = "config.json"
-            with open(filename, "w") as f:
-                f.write(json.dumps(json_string, indent=4))
-            logger.debug(
-                f"Default ringtail command line option values written to file {filename}."
-            )
-            return filename
-        else:
-            logger.debug(
-                "Default ringtail command line option values prepared as a string."
-            )
-            return json_string
-
-    @staticmethod
-    def read_config_file(config_file: str = "config.json", return_as_string=False):
+        Gets names, default values, and meta data for all Ringtail options.
         """
-        Will read and parse a file containing ringtail options following the format
-        given from RingtailCore.generate_config_json_template
+        options = {}
+        options.update(OutputOptions.options)
+        options.update(ResultsProcessingOptions.options)
+        options.update(StorageOptions.options)
+        options.update(Filters.options)
+        options.update(InputFiles.options)
+        options.update(ReadOptions.options)
+        options.update(GeneralOptions.options)
 
-        Args:
-            config_file (str): json formatted config file containing ringtail and filter options present in cd
-            return_as_string (bool): will return all dictionaries as dict without sections if true
-
-        Returns:
-            file_dict: dictionary of files to use in add results
-            write_dict: dictionary of options to use in add results
-            output_dict: dictionary of options to use for filtering
-            filters_dict: dictionary of files containing filters
-            storageman_dict: dictionary of storage manager options
-        """
-
-        try:
-            if config_file is None:
-                raise OptionError(
-                    "No config file was found in the Ringtail/util_files directory."
-                )
-
-            filepath = "config.json"
-            with open(filepath, "r") as f:
-                logger.info("Reading Ringtail options from config file")
-                options: dict = json.load(f)
-
-            file_dict = options["fileobj"]
-            logger.info(
-                "A dictionary containing results files was extracted from config file."
-            )
-            write_dict = {
-                **options["resultsmanopts"],
-                "duplicate_handling": options["storageopts"]["duplicate_handling"],
-                "overwrite": options["storageopts"]["overwrite"],
-            }
-            logger.info(
-                "A dictionary containing write options was extracted from config file."
-            )
-
-            storageman_dict = options["storageopts"]
-            logger.info(
-                "A dictionary containing storage options was extracted from config file."
-            )
-
-            output_dict = options["outputopts"]
-            logger.info(
-                "A dictionary containing database read options was extracted from config file."
-            )
-
-            filters_dict = options["filters"]
-            logger.info(
-                "A dictionary containing filters was extracted from config file."
-            )
-
-            if return_as_string:
-                return (
-                    file_dict
-                    | write_dict
-                    | output_dict
-                    | filters_dict
-                    | storageman_dict
-                )
-            else:
-                return (
-                    file_dict,
-                    write_dict,
-                    output_dict,
-                    filters_dict,
-                    storageman_dict,
-                )
-
-        except FileNotFoundError:
-            logger.error("Please ensure config file is in the working directory.")
-        except Exception as e:
-            OptionError(f"There were issues with the configuration file: {e}")
-
-    @staticmethod
-    def get_all_defaults() -> dict:
-        """
-        Gets default values from RingtailOptions and returns dict of all options.
-
-        Returns:
-            dict: all default values for Ringtail
-        """
-
-        return RingtailCore.ringtail_defaults("all")
-
-    @staticmethod
-    def get_options_info(object: str = "all") -> dict:
-        """
-        Gets default values from RingtailOptions and returns dict of all,
-        or specific object.
-
-        Args:
-            object (str): ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
-        """
-        all_info = {
-            "outputopts": OutputOptions.options,
-            "fileobj": InputFiles.options,
-            "writeopts": ResultsProcessingOptions.options,
-            "storageopts": StorageOptions.options,
-            "filters": Filters.options,
-            "readopts": ReadOptions.options,
-            "generalopts": GeneralOptions.options,
-        }
-
-        if object.lower() not in [
-            "all",
-            "writeopts",
-            "storageopts",
-            "outputopts",
-            "filters",
-            "fileobj",
-            "readopts",
-            "generalopts",
-        ]:
-            raise OptionError(
-                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]'
-            )
-        if object.lower() == "all":
-            all_info_one_dict = {}
-            for _, v in all_info.items():
-                all_info_one_dict.update(v)
-            logger.debug("All ringtail default values have been fetched.")
-            return all_info_one_dict
-        else:
-            logger.debug(f"Ringtail default values for {object} have been fetched.")
-            return all_info[object.lower()]
+        return options
 
     # endergion
 
@@ -1965,5 +1763,4 @@ class RingtailCore:
 
         return dict, new_dict
 
-
-# endregion
+    # endregion
