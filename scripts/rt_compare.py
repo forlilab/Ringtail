@@ -125,7 +125,7 @@ def cmdline_parser(defaults={}):
         "--database_type",
         "-dbt",
         help="Specify what database type was used to construct the databases. NOTE: All databases have to be created with the same type.",
-        action="store"
+        action="store",
     )
 
     parser.set_defaults(**config)
@@ -203,18 +203,22 @@ if __name__ == "__main__":
         if args.database_type is None:
             args.database_type = "sqlite"
         # ensure the specified database types are supported
-        storagemanager = StorageManager.check_storage_compatibility(args.database_type) 
+        storagemanager = StorageManager.check_storage_compatibility(args.database_type)
 
         dbman = storagemanager(ref_db)
 
         last_db = None
         num_wanted_dbs = len(wanted_dbs)
-        with dbman: # storageman is a context manager, and keeps connection to the database open within the `with` statmenet
+        with (
+            dbman
+        ):  # storageman is a context manager, and keeps connection to the database open within the `with` statmenet
             for idx, db in enumerate(wanted_dbs):
                 logger.info(f"cross-referencing {db}")
                 if not os.path.exists(db):
                     logger.critical("Wanted database {0} not found!".format(db))
-                print(f"passing in these parameters: {db}, {previous_bookmarkname}, {bookmark_list[idx]}, {last_db}")
+                print(
+                    f"passing in these parameters: {db}, {previous_bookmarkname}, {bookmark_list[idx]}, {last_db}"
+                )
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                     db,
                     previous_bookmarkname,
@@ -224,18 +228,19 @@ if __name__ == "__main__":
                 )
                 last_db = db
 
-
             if unwanted_dbs is not None:
                 for idx, db in enumerate(unwanted_dbs):
                     logger.info(f"cross-referencing {db}")
                     if not os.path.exists(db):
                         logger.critical("Unwanted database {0} not found!".format(db))
-                    previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
-                        db,
-                        previous_bookmarkname,
-                        bookmark_list[idx + num_wanted_dbs],
-                        selection_type="-",
-                        old_db=last_db,
+                    previous_bookmarkname, number_passing_ligands = (
+                        dbman.crossref_filter(
+                            db,
+                            previous_bookmarkname,
+                            bookmark_list[idx + num_wanted_dbs],
+                            selection_type="-",
+                            old_db=last_db,
+                        )
                     )
                     last_db = db
 
@@ -281,4 +286,3 @@ if __name__ == "__main__":
             "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
         )
         sys.exit(1)
-

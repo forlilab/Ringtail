@@ -31,7 +31,7 @@ class InteractionFinder:
             lig_coordinates (list): coordinates for the atoms in the ligand
 
         Returns:
-            dict: all interaction details for a given ligand pose 
+            dict: all interaction details for a given ligand pose
         """
 
         def append_rec_atom_info(rec_at):

@@ -11,7 +11,12 @@ from .logmanager import logger
 import traceback
 import queue
 from .parsers import parse_single_dlg, parse_vina_result
-from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError, ResultsProcessingError
+from .exceptions import (
+    FileParsingError,
+    WriteToStorageError,
+    MultiprocessingError,
+    ResultsProcessingError,
+)
 from .interactions import InteractionFinder
 
 os_string = platform.system()
@@ -23,7 +28,7 @@ else:
 
 class DockingFileReader(multiprocessing.Process):
     """This class is the individual worker for processing docking results.
-    One instance of this class is instantiated for each available processor. 
+    One instance of this class is instantiated for each available processor.
 
     Attributes:
         queueIn (multiprocessing.Queue): current queue for the processor/file reader
@@ -56,7 +61,7 @@ class DockingFileReader(multiprocessing.Process):
         add_interactions,
         interaction_cutoffs,
         receptor_file,
-        string_processing=False
+        string_processing=False,
     ):
         # set docking_mode for which file parser to use (and for vina, '_string' if parsing string output directly)
         self.docking_mode = docking_mode
@@ -88,7 +93,7 @@ class DockingFileReader(multiprocessing.Process):
         self.string_processing = string_processing
 
     def _find_best_cluster_poses(self, ligand_dict):
-        """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run" 
+        """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run"
         entry with the top scoring run for each cluster
 
         Args:
@@ -97,7 +102,7 @@ class DockingFileReader(multiprocessing.Process):
         Returns:
             dict: top poses in cluster for each ligand
         """
-        
+
         top_poses = []
         cluster_dict = ligand_dict["clusters"]
         for cluster in cluster_dict:
@@ -107,20 +112,19 @@ class DockingFileReader(multiprocessing.Process):
 
     def run(self):
         """Method overload from parent class .This is where the task of this class is performed.
-        Each multiprocessing.Process class must have a "run" method which is called by the 
+        Each multiprocessing.Process class must have a "run" method which is called by the
         initialization (see below) with start()
 
         Raises:
             NotImplementedError: if parser for specific docking result type is not implemented
             FileParsingError
         """
-        
 
         while True:
             try:
                 # retrieve from the queue in the next task to be done
-                next_task = self.queueIn.get() 
-                if type(next_task)==dict: 
+                next_task = self.queueIn.get()
+                if type(next_task) == dict:
                     text = list(next_task.keys())[0]
                 else:
                     text = next_task
@@ -138,13 +142,17 @@ class DockingFileReader(multiprocessing.Process):
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 elif self.docking_mode == "vina":
-                    parsed_file_dict = parse_vina_result(next_task, self.string_processing)
+                    parsed_file_dict = parse_vina_result(
+                        next_task, self.string_processing
+                    )
 
                 # Example code for calling user-implemented docking_mode
                 # elif self.docking_mode == "my_docking_mode":
                 #     parsed_file_dict = myparser(next_task)
                 else:
-                    raise NotImplementedError(f"Parser for input file docking_mode {self.docking_mode} not implemented!")
+                    raise NotImplementedError(
+                        f"Parser for input file docking_mode {self.docking_mode} not implemented!"
+                    )
                 # check receptor name from file against that which we expect
                 if (
                     parsed_file_dict["receptor"] != self.target
@@ -156,7 +164,7 @@ class DockingFileReader(multiprocessing.Process):
                             parsed_file_dict["receptor"], next_task, self.target
                         )
                     )
-                
+
                 # find run numbers for poses we want to save
                 parsed_file_dict["poses_to_save"] = self._find_poses_to_save(
                     parsed_file_dict
@@ -165,15 +173,22 @@ class DockingFileReader(multiprocessing.Process):
                 if self.add_interactions:
                     try:
                         from .receptormanager import ReceptorManager as rm
+
                         with self.storageman:
                             # grab receptor info from database, this assumes there is only one receptor in the database
-                            receptor_blob = self.storageman.fetch_receptor_objects()[0][1] # method returns and iter of tuples, blob is the second tuple element in the first list element
+                            receptor_blob = self.storageman.fetch_receptor_objects()[0][
+                                1
+                            ]  # method returns and iter of tuples, blob is the second tuple element in the first list element
                             # convert receptor blob to string
                             receptor_string = rm.blob2str(receptor_blob)
-                    except: 
-                        raise ResultsProcessingError("add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database.")
+                    except:
+                        raise ResultsProcessingError(
+                            "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                        )
                     if self.interaction_finder is None:
-                        self.interaction_finder = InteractionFinder(receptor_string, self.interaction_cutoffs)
+                        self.interaction_finder = InteractionFinder(
+                            receptor_string, self.interaction_cutoffs
+                        )
                     if parsed_file_dict["interactions"] == []:
                         for pose in parsed_file_dict["pose_coordinates"]:
                             parsed_file_dict["interactions"].append(
@@ -197,18 +212,22 @@ class DockingFileReader(multiprocessing.Process):
                             )
                 # find poses we want to save tolerated interactions for
                 if self.interaction_tolerance is not None:
-                    parsed_file_dict[
-                        "tolerated_interaction_runs"
-                    ] = self._find_tolerated_interactions(parsed_file_dict)
+                    parsed_file_dict["tolerated_interaction_runs"] = (
+                        self._find_tolerated_interactions(parsed_file_dict)
+                    )
                 else:
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 # put the result in the out queue
                 data_packet = self.storageman_class.format_for_storage(parsed_file_dict)
-                self._add_to_queueout(data_packet) 
+                self._add_to_queueout(data_packet)
             except Exception:
                 tb = traceback.format_exc()
                 self.pipe.send(
-                    (FileParsingError(f"Error while parsing {next_task}"), tb, next_task)
+                    (
+                        FileParsingError(f"Error while parsing {next_task}"),
+                        tb,
+                        next_task,
+                    )
                 )
 
     def _add_to_queueout(self, obj):
@@ -224,7 +243,9 @@ class DockingFileReader(multiprocessing.Process):
                 self.queueOut.put(obj, block=True, timeout=timeout)
                 break
             except queue.Full:
-                logger.debug(f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining.")
+                logger.debug(
+                    f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining."
+                )
                 attempts += 1
 
     def _find_poses_to_save(self, ligand_dict: dict) -> list:
@@ -267,9 +288,11 @@ class DockingFileReader(multiprocessing.Process):
                 tolerated_runs.append(run)
         return tolerated_runs
 
+
 class Writer(multiprocessing.Process):
     """This class is a listener that retrieves data from the queue and writes it
     into datbase"""
+
     def __init__(
         self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
     ):
@@ -295,7 +318,7 @@ class Writer(multiprocessing.Process):
         self.last_write_time = 0
 
     def run(self):
-        """Method overload from parent class. This is where the task of this class 
+        """Method overload from parent class. This is where the task of this class
         is performed. Each multiprocessing.Process class must have a "run" method which
         is called by the initialization (see below) with start()
 
@@ -387,7 +410,7 @@ class Writer(multiprocessing.Process):
             self.storageman.set_ringtail_db_schema_version()
 
     def process_file(self, file_packet):
-        """Breaks up the data in the file_packet to distribute between 
+        """Breaks up the data in the file_packet to distribute between
         the different arrays to be inserted in the database.
 
         Args:

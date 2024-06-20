@@ -12,7 +12,7 @@ from .logmanager import logger
 
 class ResultsManager:
     """Class that handles the processing of the results, including passing on the docking results to the appropriate paralell/multi-processing unit
-   
+
     Args:
         max_poses (int): max number of poses to store for each ligand
         interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
@@ -26,7 +26,7 @@ class ResultsManager:
         parser_manager (str, optional): what paralellization or multiprocessing package to use
         file_sources (InputFiles, optional): given file sources including the receptor file
         string_sources (InputStrings, optional): given string sources including the path to the receptor
-    
+
     Raises:
         ResultsProcessingError
     """
@@ -42,11 +42,10 @@ class ResultsManager:
         max_proc: int = None,
         storageman: StorageManager = None,
         storageman_class: StorageManager = None,
-        chunk_size: int = 1, 
+        chunk_size: int = 1,
         parser_manager: str = "multiprocessing",
-        file_sources = None, 
-        string_sources = None,
-        
+        file_sources=None,
+        string_sources=None,
     ):
         self.parser_manager = parser_manager
         self.docking_mode = docking_mode
@@ -78,7 +77,7 @@ class ResultsManager:
         """Processes docking data in the form of files or strings
 
         Raises:
-            ResultsProcessingError: if no file or string sources are provided, or if both are provided 
+            ResultsProcessingError: if no file or string sources are provided, or if both are provided
         """
         # check that we have results source(s)
         files_sources = bool(self.file_sources)
@@ -87,8 +86,8 @@ class ResultsManager:
                 self.file_sources.file == (None and [[]])
                 and self.file_sources.file_path == (None and [[]])
                 and self.file_sources.file_list == (None and [[]])
-        )
-            
+            )
+
         strings_present = bool(self.string_sources)
 
         # if no results are given
@@ -106,11 +105,11 @@ class ResultsManager:
                 "Docking results were provided as both file sources and string sources. Currently only one results type is accepeted at the time."
             )
 
-        # start MP process 
+        # start MP process
         if files_sources:
-             logmsg = f'These are the file sources being processed: {str(self.file_sources.todict())}'
+            logmsg = f"These are the file sources being processed: {str(self.file_sources.todict())}"
         else:
-             logmsg = f'This is the list of ligands whos strings ware being procssed: {str(self.string_sources.todict()["results_strings"].keys())}'
+            logmsg = f'This is the list of ligands whos strings ware being procssed: {str(self.string_sources.todict()["results_strings"].keys())}'
         logger.debug(logmsg)
 
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
@@ -124,4 +123,3 @@ class ResultsManager:
             parser_opts[k] = v
         self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
         self.parser.process_results(string_processing=strings_present)
-   
