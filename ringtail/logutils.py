@@ -23,7 +23,7 @@ import sys
 import inspect
 
 
-def caller_info(skip=3):
+def caller_info(skip=2):
     """Get the name of a caller in the format module.class.method.
 
     https://gist.github.com/lee-pai-long/d3004225e1847b84acb4fbba0c2aea91
@@ -97,18 +97,8 @@ class RaccoonLogger:
         custom_logger_name: str = "RingtailLogger",
     ) -> None:
         if self._owner is not None:
-            print(f"            [already initialized by {self._owner}, skipping]")
             return
         self._owner = caller_info()
-        print(
-            "SETTING UP!",
-            log_file,
-            log_console,
-            log_level,
-            log_level_console,
-            custom_logger_name,
-        )
-        print("        CALLER>", self._owner)
 
         # access the logger; the logger module implements the named
         # singleton for logging, so if the logger is already available, it

@@ -22,13 +22,10 @@ if __name__ == "__main__":
         # set up the logger
         logger = logutils.LOGGER
         logger.add_filehandler(log_file="ringtail", level="DEBUG")
-        print("      LOG FILE INITIATED")
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
     except Exception as e:
-        tb = traceback.format_exc()
-        logger.debug(tb)
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
 
@@ -101,8 +98,6 @@ if __name__ == "__main__":
                 rtcore.display_pymol()
 
     except Exception as e:
-        tb = traceback.format_exc()
-        logger.debug(tb)
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
 
