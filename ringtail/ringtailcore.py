@@ -44,7 +44,7 @@ class RingtailCore:
         storage_type: str = "sqlite",
         docking_mode: str = "dlg",
         logging_level: str = "DEBUG",
-        logging_file: str = None,
+        logging_file: str = "ringtail",
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
         Can set logger level here, otherwise change it by logger.setLevel("level")
@@ -62,7 +62,7 @@ class RingtailCore:
         # create log file handler if requested
         if logging_file is not None:
             self.logger.add_filehandler(logging_file)
-            print("      NEW FILE LOGGER: ", self.logger._log_fp)
+
         # Check if storage type is implemented
         try:
             storageman = StorageManager.check_storage_compatibility(storage_type)

@@ -703,7 +703,6 @@ class CLOptionParser:
             db_file=db_file,
             docking_mode=parsed_opts.docking_mode.lower(),
             logging_level=log_level,
-            logging_file="ringtail",
         )
         # make sure we log the command line prompt
         self.rtcore.logger.info("Command line prompt: " + self.cmd_line_prompt)
