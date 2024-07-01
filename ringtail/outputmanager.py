@@ -7,7 +7,6 @@
 from .receptormanager import ReceptorManager
 from .exceptions import OutputError
 from .ringtailoptions import Filters
-from .logmanager import logger
 import os
 import json
 import numpy as np
@@ -17,6 +16,7 @@ from matplotlib import cm
 from matplotlib import colors
 from rdkit.Chem import SDWriter
 from meeko import RDKitMolCreate
+from .logutils import LOGGER
 
 
 class OutputManager:
@@ -32,6 +32,7 @@ class OutputManager:
         self.log_file = log_file
         self.export_sdf_path = export_sdf_path
         self._log_open = False
+        self.logger = LOGGER
 
     def __enter__(self):
         self.open_logfile()
@@ -70,7 +71,7 @@ class OutputManager:
             )  # returns log_file attribute from file pointer to string path name
             self._log_open = False
 
-    def write_log(self, lines):
+    def write_filter_log(self, lines):
         """Writes lines from results iterable into log file
 
         Args:
@@ -92,7 +93,7 @@ class OutputManager:
                 )  # strip parens from line, which is natively a tuple
                 num_passing += 1
             self._write_log_line("***************\n")
-            logger.debug(
+            self.logger.debug(
                 f"Time to write log: {time.perf_counter() - time0:.2f} seconds"
             )
             return num_passing
@@ -245,7 +246,7 @@ class OutputManager:
             and not os.path.isdir(self.export_sdf_path)
         ):
             os.makedirs(self.export_sdf_path)
-            logger.info(
+            self.logger.info(
                 "Specified directory for SDF files was created in current working directory."
             )
         try:

@@ -9,8 +9,9 @@ import json
 import sys
 import os
 from ringtail import StorageManager, StorageManagerSQLite
-from ringtail import OutputManager, OptionError, logger
+from ringtail import OutputManager, OptionError
 from ringtail import OptionError
+from ringtail import logutils
 import traceback
 
 
@@ -142,6 +143,7 @@ def cmdline_parser(defaults={}):
 
 if __name__ == "__main__":
     time0 = time.perf_counter()
+    logger = logutils.LOGGER
     logger.info("Starting a ringtail database compare process")
     try:
         args = cmdline_parser()
@@ -161,12 +163,12 @@ if __name__ == "__main__":
         # set logging level
         debug = True
         if debug:
-            level = logger.setLevel("DEBUG")
+            level = logger.set_level("DEBUG")
         elif args.verbose:
-            level = logger.setLevel("INFO")
+            level = logger.set_level("INFO")
         else:
-            level = logger.setLevel("WARNING")
-
+            level = logger.set_level("WARNING")
+        logger.add_filehandler("ringtail", level)
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
 
@@ -251,7 +253,7 @@ if __name__ == "__main__":
                     output_manager.write_results_bookmark_to_log(args.save_bookmark)
                 output_manager.log_num_passing_ligands(number_passing_ligands)
                 final_bookmark = dbman.fetch_view(previous_bookmarkname)
-                output_manager.write_log(final_bookmark)
+                output_manager.write_filter_log(final_bookmark)
 
             if args.save_bookmark is not None:
                 dbman.save_temp_table(

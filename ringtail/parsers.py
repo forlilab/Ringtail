@@ -9,7 +9,7 @@ import gzip
 import bz2
 import numpy as np
 from .exceptions import FileParsingError
-from .logmanager import logger
+from .logutils import LOGGER as logger
 
 
 # TODO add a second zip method (bz2), clean up duplication between dlg and pdbqt
@@ -26,6 +26,7 @@ def parse_single_dlg(fname):
     Returns:
         dict: parsed results ready to be inserted in database
     """
+
     STD_END = "DOCKED: ENDMDL"
     STD_KW = "DOCKED: "
 

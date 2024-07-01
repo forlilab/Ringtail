@@ -6,7 +6,7 @@
 
 import os
 from .exceptions import OptionError
-from .logmanager import logger
+from .logutils import LOGGER as logger
 import copy
 
 

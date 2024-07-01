@@ -7,7 +7,6 @@
 import sys
 import argparse
 import os
-from .logmanager import logger
 from .exceptions import OptionError
 import __main__
 from .ringtailcore import RingtailCore
@@ -591,22 +590,21 @@ def cmdline_parser(defaults: dict = {}):
 
     if confargs.config is not None:
         # update default values with those given in the config file
-        logger.info("Reading options from config file")
         try:
             with open(confargs.config) as f:
-                c = RingtailCore.read_config_file(f, return_as_string=True)
+                c = RingtailCore.read_config_file(
+                    f, return_as_string=True
+                )  # TODO old method
                 defaults.update(c)
-                logger.debug("Arguments successfully extracted from config file.")
         except FileNotFoundError as e:
             raise OptionError("Config file not found in current directory.") from e
 
-    logger.info(f"Command line prompt: {str(sys.argv)}")
-
+    cmd_line_prompt = str(sys.argv)
     parser.set_defaults(**defaults)
     write_parser.set_defaults(**defaults)
     read_parser.set_defaults(**defaults)
     args = parser.parse_args(remaining_argv)
-    return args, parser, confargs, write_parser, read_parser
+    return args, parser, confargs, write_parser, read_parser, cmd_line_prompt
 
 
 class CLOptionParser:
@@ -645,11 +643,11 @@ class CLOptionParser:
                 self.confargs,
                 self.write_parser,
                 self.read_parser,
+                self.cmd_line_prompt,
             ) = cmdline_parser(defaults_dict)
             self.process_options(parsed_opts)
 
         except argparse.ArgumentError as e:
-            logger.error("\n")
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
@@ -660,7 +658,6 @@ class CLOptionParser:
                 elif parsed_opts.process_mode == "read":
                     self.read_parser.print_help()
             finally:
-                logger.error("\n")
                 raise e
 
     def process_options(self, parsed_opts):
@@ -683,8 +680,8 @@ class CLOptionParser:
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
             )
         self.process_mode = parsed_opts.process_mode.lower()
-        self.filtering = False  # set flag indicating if any filters given
-
+        # initialize flag indicating if any filters given
+        self.filtering = False
         # Check database options
         if parsed_opts.input_db is not None:
             if not os.path.exists(parsed_opts.input_db):
@@ -706,8 +703,12 @@ class CLOptionParser:
             db_file=db_file,
             docking_mode=parsed_opts.docking_mode.lower(),
             logging_level=log_level,
+            logging_file="ringtail",
         )
-        self.rtcore._run_mode = "cmd"  # tag for command line processing, changes how certain errors are handled
+        # make sure we log the command line prompt
+        self.rtcore.logger.info("Command line prompt: " + self.cmd_line_prompt)
+        # specify core run mode as this affects how certain errors are handled
+        self.rtcore._run_mode = "cmd"
         self.print_summary = parsed_opts.print_summary
 
         if self.process_mode == "write":
@@ -790,7 +791,7 @@ class CLOptionParser:
                             found_res.append(res)
                     for res in found_res:
                         if type(res) == str:
-                            logger.debug(
+                            self.rtcore.logger.debug(
                                 "cloptionparser: interaction filters provided as string"
                             )
                             wanted = True
@@ -809,7 +810,7 @@ class CLOptionParser:
                                 wanted = False
                             interactions[_type].append((res, wanted))
                         else:
-                            logger.debug(
+                            self.rtcore.logger.debug(
                                 "cloptionparser: interaction filters provided as list"
                             )
                             if (

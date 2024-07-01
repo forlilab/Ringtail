@@ -6,7 +6,8 @@
 import sys
 import time
 from ringtail import CLOptionParser
-from ringtail import RingtailCore, logger
+from ringtail import RingtailCore
+from ringtail import logutils
 import traceback
 
 if __name__ == "__main__":
@@ -18,6 +19,10 @@ if __name__ == "__main__":
     time0 = time.perf_counter()
 
     try:
+        # set up the logger
+        logger = logutils.LOGGER
+        logger.add_filehandler(log_file="ringtail", level="DEBUG")
+        print("      LOG FILE INITIATED")
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore

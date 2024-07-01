@@ -9,7 +9,7 @@ import sqlite3
 import time
 import json
 import pandas as pd
-from .logmanager import logger
+from .logutils import LOGGER as logger
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
@@ -72,9 +72,6 @@ class StorageManager:
             "sqlite": StorageManagerSQLite,
         }
         if storage_type in storage_types:
-            logger.debug(
-                f"Storage type {storage_type} is implemented and will be used for the database."
-            )
             return storage_types[storage_type]
         else:
             raise NotImplementedError(
@@ -83,7 +80,7 @@ class StorageManager:
 
     def __init__(self):
         """Initialize instance variables common to all StorageManager subclasses"""
-
+        self.logger = logger
         self.closed_connection = False
 
     def __enter__(self):
@@ -116,12 +113,12 @@ class StorageManager:
         if not self.closed_connection:
             self.close_storage()
         if exc_type == Exception:
-            logger.error(str(exc_value))
+            self.logger.error(str(exc_value))
         return self
 
     def _sigint_handler(self, signal_received, frame):
         """Handles and reports if program is interrupted through the terminal"""
-        logger.critical("Ctrl + C pressed, keyboard interupt initiated")
+        self.logger.critical("Ctrl + C pressed, keyboard interupt initiated")
         self.__exit__(None, None, None)
         sys.exit(0)
 
@@ -258,7 +255,7 @@ class StorageManager:
         filter_results_str, view_query = self._generate_result_filtering_query(
             all_filters
         )
-        logger.debug(f"Query for filtering results: {filter_results_str}")
+        self.logger.debug(f"Query for filtering results: {filter_results_str}")
 
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.bookmark_name
         if self.view_suffix is not None:
@@ -276,10 +273,12 @@ class StorageManager:
         if suppress_output:
             return None
 
-        logger.debug("Running filtering query...")
+        self.logger.debug("Running filtering query...")
         time0 = time.perf_counter()
         filtered_results = self._run_query(filter_results_str)
-        logger.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
+        self.logger.debug(
+            f"Time to run query: {time.perf_counter() - time0:.2f} seconds"
+        )
         # get number of passing ligands
         return filtered_results
 
@@ -334,7 +333,7 @@ class StorageManager:
 
     def finalize_database_write(self):
         """
-        Methods to finalize when a data base has been written to, including populating interaction indices with final unique interactions,
+        Methods to finalize when a database has been written to, including populating interaction indices with final unique interactions,
         making bitvector finger prints for interactions, and saving the current database schema to the sqlite database.
         """
         # create new interaction index table each time the db is written to
@@ -347,7 +346,7 @@ class StorageManager:
         self._populate_interaction_bv_table()
         # set version of the database
         self.set_ringtail_db_schema_version(self._db_schema_ver)
-        logger.info("Database write session completed successfully.")
+        self.logger.info("Database write session completed successfully.")
 
     @classmethod
     def _data_kw_groups(cls, group):
@@ -902,8 +901,8 @@ class StorageManagerSQLite(StorageManager):
 
         """
         # create list of the data that is to be considered unique
-        unique_data_indeces = [0, 1, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-        unique_data = [result_data[index] for index in unique_data_indeces]
+        unique_data_indices = [0, 1, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+        unique_data = [result_data[index] for index in unique_data_indices]
 
         try:
             cur = self.conn.cursor()
@@ -928,10 +927,10 @@ class StorageManagerSQLite(StorageManager):
             row = cur.fetchone()
             if row is None:
                 Pose_ID = -1
-                logger.debug("Duplicate row not found.")
+                self.logger.debug("Duplicate row not found.")
             else:
                 Pose_ID = row[0]
-                logger.debug(f"Duplicate row found for Pose_ID {Pose_ID}")
+                self.logger.debug(f"Duplicate row found for Pose_ID {Pose_ID}")
             cur.close()
 
             return Pose_ID
@@ -1284,7 +1283,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
             cur.execute(interaction_bv_table)
             cur.close()
-            logger.debug("Interaction bitvector table has been created")
+            self.logger.debug("Interaction bitvector table has been created")
         except sqlite3.OperationalError as e:
             raise DatabaseTableCreationError(
                 f"Error while creating interaction bitvector table: {e}."
@@ -1452,7 +1451,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(sql_insert)
             self.conn.commit()
             cur.close()
-            logger.debug("Interaction index table has been populated.")
+            self.logger.debug("Interaction index table has been populated.")
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error inserting unique interaction tuples in index table: {0}".format(
@@ -1547,7 +1546,7 @@ class StorageManagerSQLite(StorageManager):
             )
             self.conn.commit()
             cur.close()
-            logger.debug("Interaction bitvector table has been populated.")
+            self.logger.debug("Interaction bitvector table has been populated.")
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error inserting interaction bitvectors in interaction bitvector table: {0}".format(
@@ -1595,13 +1594,13 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             cur = self.conn.cursor()
-            logger.debug("Creating columns index...")
+            self.logger.debug("Creating columns index...")
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
             )
             self.conn.commit()
             cur.close()
-            logger.info("Indicies were created for specified Results columns.")
+            self.logger.info("Indicies were created for specified Results columns.")
         except sqlite3.OperationalError as e:
             raise StorageError("Error occurred while indexing") from e
 
@@ -1616,7 +1615,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute("DROP INDEX IF EXISTS idx_filter_cols")
             cur.execute("DROP INDEX IF EXISTS idx_ligname")
             cur.close()
-            logger.info("Existing indicies pertaining to filtering were dropped.")
+            self.logger.info("Existing indicies pertaining to filtering were dropped.")
         except sqlite3.OperationalError as e:
             raise StorageError("Error while dropping indices") from e
 
@@ -1830,7 +1829,7 @@ class StorageManagerSQLite(StorageManager):
         cur = self.conn.cursor()
         if add_poseID:
             query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
-        logger.info("Creating bookmark...")
+        self.logger.info("Creating bookmark...")
         # drop old view if there is one
         try:
             if temp:
@@ -1843,7 +1842,7 @@ class StorageManagerSQLite(StorageManager):
                     name=name, query=query, temp_flag=temp_flag
                 )
             )
-            logger.debug(
+            self.logger.debug(
                 "CREATE {temp_flag}VIEW {name} AS {query}".format(
                     name=name, query=query, temp_flag=temp_flag
                 )
@@ -1910,7 +1909,7 @@ class StorageManagerSQLite(StorageManager):
             f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {self.bookmark_name}"
         )
         cur.close()
-        logger.debug(
+        self.logger.debug(
             "Creating a temporary table of passing ligands named 'passing_temp'."
         )
 
@@ -2298,10 +2297,10 @@ class StorageManagerSQLite(StorageManager):
             view_strs.append(f"SELECT * FROM {self.bookmark_name + '_' + str(i)}")
 
         view_name = f"{self.bookmark_name}_union"
-        logger.debug("Saving union bookmark...")
+        self.logger.debug("Saving union bookmark...")
         self._create_view(view_name, " UNION ".join(view_strs))
         self._insert_bookmark_info(view_name, " UNION ".join(view_strs))
-        logger.debug("Running union query...")
+        self.logger.debug("Running union query...")
         return self._run_query(" UNION ".join(selection_strs))
 
     def fetch_summary_data(
@@ -2369,7 +2368,7 @@ class StorageManagerSQLite(StorageManager):
             ValueError: wrong terminal input
             DatabaseQueryError
         """
-        logger.warning(
+        self.logger.warning(
             "N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters."
         )
         cur = self.conn.cursor()
@@ -2464,7 +2463,7 @@ class StorageManagerSQLite(StorageManager):
         """
         # get total number of ligands
         try:
-            logger.debug(f"Generating percentile filter query for {column}")
+            self.logger.debug(f"Generating percentile filter query for {column}")
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(LigName) FROM Ligands")
             n_ligands = int(cur.fetchone()[0])
@@ -2478,7 +2477,7 @@ class StorageManagerSQLite(StorageManager):
                     cutoff = i[0]
                     break
                 counter += 1
-            logger.debug(f"{column} percentile cutoff is {cutoff}")
+            self.logger.debug(f"{column} percentile cutoff is {cutoff}")
             return cutoff
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
@@ -2559,7 +2558,7 @@ class StorageManagerSQLite(StorageManager):
         if self.filter_bookmark is not None:
             if self.filter_bookmark == self.bookmark_name:
                 # cannot write data from bookmark_a to bookmark_a
-                logger.error(
+                self.logger.error(
                     f"Specified filter_bookmark and bookmark_name are the same: {self.bookmark_name}"
                 )
                 raise OptionError(
@@ -2650,11 +2649,11 @@ class StorageManagerSQLite(StorageManager):
             # catch if interaction not found in results
             if interaction_filter_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
-                    logger.warning(
+                    self.logger.warning(
                         "Given 'react_any' filter, no reactive interactions found. Excluded from filtering."
                     )
                 else:
-                    logger.warning(
+                    self.logger.warning(
                         "Interaction {i} not found in results, excluded from filtering".format(
                             i=":".join(interaction[:4])
                         )
@@ -2804,7 +2803,7 @@ class StorageManagerSQLite(StorageManager):
         elif queries == [] and interaction_queries == [] and clustering:
             # allows for clustering without filtering
             unclustered_query = f"SELECT Pose_id FROM {self.filtering_window}"
-            logger.info("Preparing to cluster results without any filters...")
+            self.logger.info("Preparing to cluster results without any filters...")
         else:
             with_stmt = f"WITH subq as (SELECT Pose_id FROM {self.filtering_window}) "
             if queries != []:
@@ -2864,7 +2863,7 @@ class StorageManagerSQLite(StorageManager):
             return cs
 
         if self.interaction_cluster is not None:
-            logger.warning(
+            self.logger.warning(
                 "WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
             )  # TODO: remove this memory bottleneck
             cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_ID WHERE Results.Pose_ID IN ({unclustered_query})"
@@ -2911,7 +2910,7 @@ class StorageManagerSQLite(StorageManager):
                 ],
                 self.interaction_cluster,
             )
-            logger.info(
+            self.logger.info(
                 f"Number of interaction fingerprint butina clusters: {len(bclusters)}"
             )
 
@@ -2935,7 +2934,7 @@ class StorageManagerSQLite(StorageManager):
 
             # catch if no pose_ids returned
             if int_rep_poseids == []:
-                logger.warning(
+                self.logger.warning(
                     "No passing results prior to clustering. Clustering not performed."
                 )
             else:
@@ -2947,10 +2946,10 @@ class StorageManagerSQLite(StorageManager):
                     unclustered_query = f"SELECT Pose_ID FROM Results WHERE {'Pose_ID=' + ' OR Pose_ID='.join(int_rep_poseids)}"
 
         if self.mfpt_cluster is not None:
-            logger.warning(
+            self.logger.warning(
                 "WARNING: Ligand morgan fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
             )  # TODO: remove this memory bottleneck
-            logger.warning(
+            self.logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering."
             )
             cluster_query = f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({unclustered_query})"
@@ -2961,7 +2960,7 @@ class StorageManagerSQLite(StorageManager):
                 [DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps],
                 self.mfpt_cluster,
             )
-            logger.info(
+            self.logger.info(
                 f"Number of Morgan fingerprint butina clusters: {len(bclusters)}"
             )
 
@@ -2981,7 +2980,7 @@ class StorageManagerSQLite(StorageManager):
 
             # catch if no pose_ids returned
             if fp_rep_poseids == []:
-                logger.warning(
+                self.logger.warning(
                     "No passing results prior to clustering. Clustering not performed."
                 )
             else:
@@ -3191,7 +3190,7 @@ class StorageManagerSQLite(StorageManager):
                 self._create_tables()
                 self.set_ringtail_db_schema_version(self._db_schema_ver)
 
-            logger.info(f"Ringtail connected to database {self.db_file}.")
+            self.logger.info(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
             raise StorageError(f"Errow while creating or connecting to database: {e}.")
 
@@ -3214,7 +3213,7 @@ class StorageManagerSQLite(StorageManager):
 
         compatible = True
         if count < 1:
-            logger.info(
+            self.logger.info(
                 "Adding results to an existing database that is currently empty of docking results."
             )
         else:
@@ -3242,7 +3241,7 @@ class StorageManagerSQLite(StorageManager):
             if run_mode == "cmd":
                 raise OptionError(compatibility_string)
             elif run_mode == "api":
-                logger.warning(compatibility_string)
+                self.logger.warning(compatibility_string)
 
         # write current database properties to database
         if store_all_poses:
@@ -3250,7 +3249,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             number_of_poses = str(max_poses)
         self._insert_db_properties(docking_mode, number_of_poses)
-        logger.info("Storage compatibility has been checked.")
+        self.logger.info("Storage compatibility has been checked.")
 
     def clone(self, backup_name=None):
         """Creates a copy of the db
@@ -3280,7 +3279,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(f"PRAGMA user_version = {rtdb_version}")
             self.conn.commit()
             cur.close()
-            logger.info("Database version set to {0}".format(rtdb_version))
+            self.logger.info("Database version set to {0}".format(rtdb_version))
         else:
             raise StorageError(
                 f"Code base version {code_version} is not compatible with database schema version {db_version}."
@@ -3292,14 +3291,14 @@ class StorageManagerSQLite(StorageManager):
         db_schema_ver = ".".join([*db_version])
         if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
             is_compatible = True
-            logger.debug(
+            self.logger.debug(
                 "Database version {0} is compatible with code base version {1}".format(
                     db_schema_ver, version("ringtail")
                 )
             )
         else:
             is_compatible = False
-            logger.warning(
+            self.logger.warning(
                 "Database version {0} is NOT compatible with code base version {1}".format(
                     db_schema_ver, version("ringtail")
                 )
@@ -3324,16 +3323,16 @@ class StorageManagerSQLite(StorageManager):
 
         # get consent, same for both
         if not consent:
-            logger.warning(
+            self.logger.warning(
                 "WARNING: All existing bookmarks in database will be dropped during database update!"
             )
             consent = input("Type 'yes' if you wish to continue: ") == "yes"
         if not consent:
-            logger.critical("Consent not given for database update. Cancelling...")
+            self.logger.critical("Consent not given for database update. Cancelling...")
             sys.exit(1)
 
         # get views and drop them
-        logger.info(f"Updating {self.db_file}...")
+        self.logger.info(f"Updating {self.db_file}...")
         views = cur.execute(
             "SELECT name FROM sqlite_master WHERE type = 'view'"
         ).fetchall()
@@ -3459,7 +3458,7 @@ class StorageManagerSQLite(StorageManager):
                 con.load_extension("chemicalite")
                 con.enable_load_extension(False)
             except sqlite3.OperationalError as e:
-                logger.critical(
+                self.logger.critical(
                     "Failed to load chemicalite cartridge. Please ensure chemicalite is installed with `conda install -c conda-forge chemicalite`."
                 )
                 raise e
@@ -3474,7 +3473,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _close_connection(self):
         """Closes connection to database"""
-        logger.info("Closing database")
+        self.logger.info("Closing database")
         self.conn.close()
 
     def _close_open_cursors(self):

@@ -4,7 +4,7 @@
 # Ringtail custom exceptions
 #
 
-from .logmanager import logger
+from .logutils import LOGGER as logger
 
 
 class StorageError(Exception):

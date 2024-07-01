@@ -50,12 +50,12 @@ class TestRingtailCore:
 
     def test_add_folder(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path=[["test_data/group1"]])
+        rtc.add_results_from_files(file_path="test_data/group1")
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
 
     def test_save_receptor(self, countrows):
-        rtc = RingtailCore(db_file="output.db", logging_level="debug")
+        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
         count0 = countrows(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )
@@ -409,13 +409,17 @@ class TestRingtailCore:
         os.system("rm output.db")
 
     def test_db_num_poses_warning(self):
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file=[["test_data/group1/1451.dlg.gz"]], max_poses=1)
-        rtc.add_results_from_files(file=[["test_data/group1/1620.dlg.gz"]], max_poses=4)
-        from ringtail import logger
+        # make sure we make ringtail core object with log file
+        rtc = RingtailCore(db_file="output.db", logging_file="ringtail")
 
+        # add results with max poses = 1
+        rtc.add_results_from_files(file="test_data/group1/1451.dlg.gz", max_poses=1)
+        # add results with different max poses
+        rtc.add_results_from_files(file="test_data/group1/1620.dlg.gz", max_poses=4)
         warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1."
-        with open(logger.filename(), "r") as f:
+
+        log_file = rtc.logger._log_fp.baseFilename
+        with open(log_file) as f:
             if warning_string in f.read():
                 warning_worked = True
             else:
@@ -477,15 +481,16 @@ class TestVinaHandling:
         assert count == 45
 
     def test_db_dockingmode_warning(self):
-        rtc = RingtailCore(db_file="output.db")
+        rtc = RingtailCore(db_file="output.db", logging_file="ringtail")
         rtc.add_results_from_files(file="test_data/group1/1451.dlg.gz")
-        rtc = RingtailCore(db_file="output.db", docking_mode="vina")
+        rtc = RingtailCore(
+            db_file="output.db", docking_mode="vina", logging_file="ringtail"
+        )
         rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
 
-        from ringtail import logger
-
         warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is dlg."
-        with open(logger.filename(), "r") as f:
+        log_file = rtc.logger._log_fp.baseFilename
+        with open(log_file, "r") as f:
             if warning_string in f.read():
                 warning_worked = True
             else:
@@ -553,7 +558,6 @@ class TestStorageMan:
             "SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'"
         )
         bookmark_filters_db_str = curs.fetchone()[0]
-        print(bookmark_filters_db_str)
 
         filters = {
             "eworst": -3.0,
@@ -574,7 +578,6 @@ class TestStorageMan:
             "ligand_max_atoms": None,
             "ligand_operator": "OR",
         }
-        print(json.dumps(filters))
         assert bookmark_filters_db_str == json.dumps(filters)
 
     def test_version_info(self):
@@ -589,38 +592,12 @@ class TestStorageMan:
 class TestLogger:
 
     def test_set_log_level(self):
-        from ringtail import logger
+        from ringtail.logutils import RaccoonLogger
 
-        logger.setLevel("info")
-        log1 = logger.level()
-        logger.setLevel(50)
-        log2 = logger.level()
-        assert log1 == log2 == "INFO"
-
-    def test_loggerfile_format(self):
-        from ringtail import logger, exceptions
-
-        try:
-            raise (exceptions.OptionError("This is a test error."))
-            raise (exceptions.OptionError("This is a test error."))
-        except Exception as e:
-            pass
-
-        with open(logger.filename()) as f:
-            for line in f:
-                pass
-        last_line = line
-        keywords = [
-            "ERROR",
-            "test_units.py[",
-            "ringtail.exceptions:This is a test error.",
-        ]
-        keywords = [
-            "ERROR",
-            "test_units.py[",
-            "ringtail.exceptions:This is a test error.",
-        ]
-        assert all(x in last_line for x in keywords)
+        logger = RaccoonLogger()
+        logger.set_level("info")
+        log_level = logger.level()
+        assert log_level == "INFO"
 
 
 class TestOptions:
@@ -665,4 +642,6 @@ class TestOptions:
         assert count_new_db == 2
 
     def test_remove_test_log_files(self):
-        os.system("rm *_ringtail-process-log.txt")
+        # Alter this method if you wish to delete all log files after testing automatically
+        # return
+        os.system("rm *_ringtail.log")
