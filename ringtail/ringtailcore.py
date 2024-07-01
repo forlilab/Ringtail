@@ -44,7 +44,7 @@ class RingtailCore:
         storage_type: str = "sqlite",
         docking_mode: str = "dlg",
         logging_level: str = "DEBUG",
-        logging_file: str = "ringtail",
+        logging_file: str = None,
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
         Can set logger level here, otherwise change it by logger.setLevel("level")
