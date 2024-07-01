@@ -5,7 +5,7 @@
 #
 
 import gzip
-from .logmanager import logger
+from .logutils import LOGGER as logger
 
 
 class ReceptorManager:

@@ -7,7 +7,7 @@
 from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
 from .storagemanager import StorageManager
-from .logmanager import logger
+from .logutils import LOGGER as logger
 
 
 class ResultsManager:

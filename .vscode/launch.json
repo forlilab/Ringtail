@@ -5,6 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
+          "name": "Python: Pytest",
+          "type": "python",
+          "request": "launch",
+          "console": "integratedTerminal",
+          "module": "pytest",
+          "args": [
+            "${file}"
+          ],
+            },
+        {
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",

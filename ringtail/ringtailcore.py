@@ -18,7 +18,7 @@ from rdkit import Chem
 import itertools
 import os
 from os import path
-from .logmanager import logger
+from .logutils import LOGGER
 
 
 class RingtailCore:
@@ -43,7 +43,8 @@ class RingtailCore:
         db_file: str = "output.db",
         storage_type: str = "sqlite",
         docking_mode: str = "dlg",
-        logging_level: str = "debug",
+        logging_level: str = "DEBUG",
+        logging_file: str = None,
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
         Can set logger level here, otherwise change it by logger.setLevel("level")
@@ -55,11 +56,23 @@ class RingtailCore:
             logging_level (str, optional): Global logger level. Defaults to "DEBUG".
         """
 
-        if logging_level is not None:
-            logger.setLevel(logging_level)
-        self.db_file = db_file
-        storageman = StorageManager.check_storage_compatibility(storage_type)
+        # Initiate logging
+        self.logger = LOGGER
+        self.logger.set_level(logging_level)
+        # create log file handler if requested
+        if logging_file is not None:
+            self.logger.add_filehandler(logging_file)
+            print("      NEW FILE LOGGER: ", self.logger._log_fp)
+        # Check if storage type is implemented
+        try:
+            storageman = StorageManager.check_storage_compatibility(storage_type)
+        except NotImplementedError as e:
+            self.logger.error(e)
+            raise e
+
+        # initialize remaining variables and storagemanager
         self.storagetype = storage_type
+        self.db_file = db_file
         self.storageman = storageman(db_file)
         self._run_mode = "api"
         self._docking_mode = docking_mode
@@ -82,7 +95,7 @@ class RingtailCore:
             RTCoreError: if docking_mode is not supported
         """
         if type(docking_mode) is not str:
-            logger.warning(
+            self.logger.warning(
                 'The given docking mode was not given as a string, it will be set to default value "dlg".'
             )
             self._docking_mode = "dlg"
@@ -92,7 +105,7 @@ class RingtailCore:
             )
         else:
             self._docking_mode = docking_mode.lower()
-            logger.debug(f"Docking mode set to {self.docking_mode}.")
+            self.logger.debug(f"Docking mode set to {self.docking_mode}.")
 
     def _get_docking_mode(self):
         """
@@ -182,7 +195,7 @@ class RingtailCore:
                 all_interactions.append(_type + "-" + interact[0])
         # warn if max_miss greater than number of interactions
         if max_miss > len(all_interactions):
-            logger.warning(
+            self.logger.warning(
                 "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
             )
             max_miss = len(all_interactions)
@@ -402,11 +415,11 @@ class RingtailCore:
                 elif type(object[0]) == str:
                     object = [object]
                 else:
-                    logger.error("Unable to parse file input.")
+                    self.logger.error("Unable to parse file input.")
             elif type(object) == str:
                 object = [[object]]
             else:
-                logger.error("Unable to parse file input.")
+                self.logger.error("Unable to parse file input.")
 
             return object
 
@@ -426,7 +439,7 @@ class RingtailCore:
             elif self.docking_mode == "vina":
                 file_pattern = "*.pdbqt*"
             else:
-                logger.error(
+                self.logger.error(
                     "Docking mode and file pattern was not specified, can not continue."
                 )
 
@@ -443,14 +456,14 @@ class RingtailCore:
         if dict is not None:
             for k, v in dict.items():
                 setattr(files, k, v)
-                logger.debug(f"File attribute {k} was set to {v}.")
+                self.logger.debug(f"File attribute {k} was set to {v}.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
         for k, v in indiv_options.items():
             if v is not None:
                 setattr(files, k, v)
-                logger.debug(f"File attribute {k} was set to {v}.")
+                self.logger.debug(f"File attribute {k} was set to {v}.")
 
         return files
 
@@ -485,14 +498,14 @@ class RingtailCore:
         if dict is not None:
             for k, v in dict.items():
                 setattr(strings, k, v)
-                logger.debug(f"Docking string results attribute {k} was set.")
+                self.logger.debug(f"Docking string results attribute {k} was set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
         for k, v in indiv_options.items():
             if v is not None:
                 setattr(strings, k, v)
-            logger.debug(f"Docking string results attribute {k} was set.")
+            self.logger.debug(f"Docking string results attribute {k} was set.")
 
         return strings
 
@@ -515,12 +528,14 @@ class RingtailCore:
             self.resultsman = ResultsManager(
                 file_sources=file_sources, docking_mode=self.docking_mode
             )
-            logger.debug("Results manager object has been created with results files.")
+            self.logger.debug(
+                "Results manager object has been created with results files."
+            )
         elif string_sources is not None:
             self.resultsman = ResultsManager(
                 string_sources=string_sources, docking_mode=self.docking_mode
             )
-            logger.debug(
+            self.logger.debug(
                 "Results manager object has been created with results strings."
             )
         else:
@@ -599,7 +614,7 @@ class RingtailCore:
                 self.docking_mode == "vina"
                 and self.resultsman.interaction_tolerance is not None
             ):
-                logger.warning(
+                self.logger.warning(
                     "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
                 )
                 self.resultsman.interaction_tolerance = None
@@ -611,7 +626,7 @@ class RingtailCore:
                 self.resultsman.store_all_poses,
                 self.resultsman.max_poses,
             )
-            logger.info("Adding results...")
+            self.logger.info("Adding results...")
             self.resultsman.process_docking_data()
             self.storageman.finalize_database_write()
 
@@ -695,19 +710,19 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.storageopts, k, v)
-                    logger.debug(f"Storage manager attribute {k} was set to {v}.")
+                    self.logger.debug(f"Storage manager attribute {k} was set to {v}.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
         for k, v in indiv_options.items():
             if v is not None:
                 setattr(self.storageopts, k, v)
-                logger.debug(f"Storage manager attribute {k} was set to {v}.")
+                self.logger.debug(f"Storage manager attribute {k} was set to {v}.")
 
         # Assign attributes to storage manager
         for k, v in self.storageopts.todict().items():
             setattr(self.storageman, k, v)
-        logger.info("Options for storage manager have been changed.")
+        self.logger.info("Options for storage manager have been changed.")
 
     def set_resultsman_attributes(
         self,
@@ -745,20 +760,20 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.resultsmanopts, k, v)
-                    logger.debug(f"Results manager attribute {k} was set to {v}.")
+                    self.logger.debug(f"Results manager attribute {k} was set to {v}.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
         for k, v in indiv_options.items():
             if v is not None:
                 setattr(self.resultsmanopts, k, v)
-                logger.debug(f"Results manager attribute {k} was set to {v}.")
+                self.logger.debug(f"Results manager attribute {k} was set to {v}.")
 
         # Assigns options to the results manager object
         for k, v in self.resultsmanopts.todict().items():
             if v is not None:
                 setattr(self.resultsman, k, v)
-        logger.info("Options for results manager have been changed.")
+        self.logger.info("Options for results manager have been changed.")
 
     def set_output_options(
         self,
@@ -791,20 +806,20 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.outputopts, k, v)
-                    logger.debug(f"Output options {k} was set to {v}.")
+                    self.logger.debug(f"Output options {k} was set to {v}.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
         for k, v in indiv_options.items():
             if v is not None:
                 setattr(self.outputopts, k, v)
-                logger.debug(f"Output options {k} was set to {v}.")
+                self.logger.debug(f"Output options {k} was set to {v}.")
 
         # Creates output man with attributes if needed
         self.outputman = OutputManager(
             self.outputopts.log_file, self.outputopts.export_sdf_path
         )
-        logger.info("Options for output manager have been changed.")
+        self.logger.info("Options for output manager have been changed.")
 
     def set_filters(
         self,
@@ -864,15 +879,15 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.filters, k, v)
-                    logger.debug(f"Filter {k} was set to {v}.")
+                    self.logger.debug(f"Filter {k} was set to {v}.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
         for k, v in indiv_options.items():
             if v is not None:
                 setattr(self.filters, k, v)
-                logger.debug(f"Filter {k} was set to {v}.")
-        logger.info("A filter object has been prepared.")
+                self.logger.debug(f"Filter {k} was set to {v}.")
+        self.logger.info("A filter object has been prepared.")
 
     # endregion
 
@@ -1054,7 +1069,7 @@ class RingtailCore:
                         )
                     )
                 self.storageman.save_receptor(rec, rec_name)
-                logger.info("Receptor data was added to the database.")
+                self.logger.info("Receptor data was added to the database.")
 
     def produce_summary(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
@@ -1270,7 +1285,7 @@ class RingtailCore:
 
         # Compatibility check with docking mode
         if self.docking_mode == "vina" and self.filters.react_any:
-            logger.warning(
+            self.logger.warning(
                 "Cannot use reaction filters with Vina mode. Removing react_any filter."
             )
             self.filters.react_any = False
@@ -1283,12 +1298,12 @@ class RingtailCore:
         if self.storageopts.output_all_poses and not (
             self.filters.score_percentile is None or self.filters.le_percentile is None
         ):
-            logger.warning(
+            self.logger.warning(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             self.storageopts.output_all_poses = False
 
-        logger.info("Filtering results...")
+        self.logger.info("Filtering results...")
 
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(
@@ -1322,12 +1337,14 @@ class RingtailCore:
                         self.outputman.write_results_bookmark_to_log(
                             result_bookmark_name
                         )
-                        number_passing = self.outputman.write_log(filtered_results)
+                        number_passing = self.outputman.write_filter_log(
+                            filtered_results
+                        )
                         self.outputman.log_num_passing_ligands(number_passing)
                         print("\nNumber of ligands passing filters:", number_passing)
                         ligands_passed = number_passing
                 else:
-                    logger.warning("WARNING: No ligands found passing filters")
+                    self.logger.warning("WARNING: No ligands found passing filters")
             if len(interaction_combs) > 1:
                 maxmiss_union_results = self.storageman.get_maxmiss_union(
                     len(interaction_combs)
@@ -1337,7 +1354,7 @@ class RingtailCore:
                     self.outputman.write_results_bookmark_to_log(
                         self.storageman.bookmark_name + "_union"
                     )
-                    number_passing_union = self.outputman.write_log(
+                    number_passing_union = self.outputman.write_filter_log(
                         maxmiss_union_results
                     )
                     self.outputman.log_num_passing_ligands(number_passing_union)
@@ -1369,7 +1386,7 @@ class RingtailCore:
         )
 
         for ligname, info in all_mols.items():
-            logger.info("Writing " + ligname + ".sdf")
+            self.logger.info("Writing " + ligname + ".sdf")
             self.outputman.write_out_mol(
                 ligname, info["ligand"], info["flex_residues"], info["properties"]
             )
@@ -1396,12 +1413,12 @@ class RingtailCore:
             )  # fetches the filters used to produce the bookmark
             max_miss = bookmark_filters["max_miss"]
             if max_miss > 0:
-                logger.warning(
+                self.logger.warning(
                     "WARNING: Requested 'export_sdf_path' with 'max_miss'. Exported SDFs will be for union of interaction combinations."
                 )
                 self.storageman.bookmark_name = self.storageman.bookmark_name + "_union"
             if not self.storageman.check_passing_view_exists():
-                logger.warning(
+                self.logger.warning(
                     "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
                 )
                 return None
@@ -1417,10 +1434,12 @@ class RingtailCore:
 
             all_mols = {}
             for ligname, smiles, atom_indices, h_parent_line in passing_molecule_info:
-                logger.info("Creating an RDKIT mol for ligand: " + ligname + ".")
+                self.logger.info("Creating an RDKIT mol for ligand: " + ligname + ".")
                 # create rdkit ligand molecule and flexible residue container
                 if smiles == "":
-                    logger.warning(f"No SMILES found for {ligname}. Cannot create SDF.")
+                    self.logger.warning(
+                        f"No SMILES found for {ligname}. Cannot create SDF."
+                    )
                     continue
                 # some work needed bc of info needed for creating rd kit, can I remove more than flex stuff?
                 mol, flexres_mols, properties = self._create_rdkit_mol(
@@ -1462,7 +1481,7 @@ class RingtailCore:
             with self.outputman:
                 self.outputman.write_find_similar_header(query_ligname, cluster_name)
                 self.outputman.write_results_bookmark_to_log(bookmark_name)
-                number_similar = self.outputman.write_log(similar_ligands)
+                number_similar = self.outputman.write_filter_log(similar_ligands)
                 self.outputman.log_num_passing_ligands(number_similar)
                 print("Number similar ligands:", number_similar)
         return number_similar
@@ -1477,7 +1496,7 @@ class RingtailCore:
             bookmark_name (str): name of bookmark to annotate on plot
         """
 
-        logger.info("Creating plot of results...")
+        self.logger.info("Creating plot of results...")
         # get data from storageMan
         with self.storageman:
             all_data, passing_data = self.storageman.get_plot_data(
@@ -1555,7 +1574,9 @@ class RingtailCore:
                 line = event.artist
                 coords = tuple([c[0] for c in line.get_data()])
                 chosen_pose = poseIDs[coords]
-                logger.info(f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}")
+                self.logger.info(
+                    f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}"
+                )
 
                 # make rdkit mol for poseid
                 ligname, ligand_smile, atom_index_map, hydrogen_parents = (
@@ -1577,7 +1598,7 @@ class RingtailCore:
                     flexres_atomnames,
                     pose_ID=chosen_pose[0],
                 )
-                logger.debug(Chem.MolToSmiles(mol))
+                self.logger.debug(Chem.MolToSmiles(mol))
                 pymol.ShowMol(mol, name=ligname, showOnly=False)
                 for idx, resmol in enumerate(flexres_mols):
                     pymol.ShowMol(
@@ -1616,9 +1637,9 @@ class RingtailCore:
         bookmark_db_name = (
             self.db_file.rstrip(".db") + "_" + self.storageman.bookmark_name + ".db"
         )
-        logger.info("Exporting bookmark database")
+        self.logger.info("Exporting bookmark database")
         if os.path.exists(bookmark_db_name):
-            logger.warning(
+            self.logger.warning(
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
@@ -1642,7 +1663,7 @@ class RingtailCore:
             receptor_tuples = self.storageman.fetch_receptor_objects()
         for recname, recblob in receptor_tuples:
             if recblob is None:
-                logger.warning(
+                self.logger.warning(
                     f"No receptor pdbqt stored for {recname}. Export failed."
                 )
                 continue
@@ -1670,7 +1691,7 @@ class RingtailCore:
         with self.storageman:
             new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman:
-            self.outputman.write_log(new_data)
+            self.outputman.write_filter_log(new_data)
 
     def drop_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database
@@ -1681,7 +1702,7 @@ class RingtailCore:
 
         with self.storageman:
             self.storageman._drop_bookmark(bookmark_name=bookmark_name)
-        logger.info(
+        self.logger.info(
             "Bookmark {0} was dropped from the database {1}".format(
                 bookmark_name, self.storageman.db_file
             )
@@ -1714,7 +1735,6 @@ class RingtailCore:
         defaults.update(ReadOptions().todict())
         defaults.update(GeneralOptions().todict())
 
-        logger.debug("All ringtail default values have been fetched.")
         return defaults
 
     @staticmethod
@@ -1735,9 +1755,6 @@ class RingtailCore:
         filename = "config.json"
         with open(filename, "w") as f:
             f.write(json.dumps(json_string, indent=4))
-        logger.debug(
-            f"Default ringtail command line option values written to file {filename}."
-        )
         return filename
 
     @staticmethod

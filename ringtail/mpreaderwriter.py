@@ -7,7 +7,7 @@
 import platform
 import time
 import sys
-from .logmanager import logger
+from .logutils import LOGGER as logger
 import traceback
 import queue
 from .parsers import parse_single_dlg, parse_vina_result

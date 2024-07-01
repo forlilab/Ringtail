@@ -33,7 +33,7 @@ class TestInputs:
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
+            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz --append_results"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
