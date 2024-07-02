@@ -38,7 +38,7 @@ def dbquery():
     conn.close()
 
 
-class TestRingtailCore:
+class TestRingtailCoreInputs:
 
     def test_get_defaults(self):
         os.system("rm output.db output_log.txt")
@@ -96,12 +96,15 @@ class TestRingtailCore:
         assert len(summary_items.data) == 38
 
     def test_append_to_database(self, countrows):
+        print("ROWS BEFORE STARTING:", countrows("SELECT COUNT(*) FROM Ligands"))
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path=[["test_data/group2/"]])
+        rtc.add_results_from_files(file_path="test_data/group2/")
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
         assert count == 217
 
+
+class TestRingtailCoreFilters:
     def test_filter(self):
         rtc = RingtailCore(db_file="output.db")
         count_ligands_passing = rtc.filter(
@@ -643,5 +646,5 @@ class TestOptions:
 
     def test_remove_test_log_files(self):
         # Alter this method if you wish to delete all log files after testing automatically
-        # return
+        return
         os.system("rm *_ringtail.log")

@@ -3,6 +3,7 @@ import logging
 from typing import Union
 import traceback as tb
 import sys
+import os
 
 # https://gist.github.com/lee-pai-long/d3004225e1847b84acb4fbba0c2aea91
 """
@@ -115,9 +116,7 @@ class RaccoonLogger:
         if log_console is True:
             self.log_console = logging.StreamHandler()
             self.log_console.setLevel(log_level_console)
-            console_formatter = logging.Formatter(
-                "%(levelname)s - %(filename)s - Line: %(lineno)d - %(message)s"
-            )
+            console_formatter = logging.Formatter("%(levelname)s - %(message)s")
             self.log_console.setFormatter(console_formatter)
             self.logger.addHandler(self.log_console)
         else:
@@ -146,7 +145,7 @@ class RaccoonLogger:
         else:
             self._log_fp.setLevel(self.level())
         log_file_formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(filename)s - Line: %(lineno)d - %(message)s"
+            "%(asctime)s - %(levelname)s - %(message)s"
         )
         self._log_fp.setFormatter(log_file_formatter)
         self.logger.addHandler(self._log_fp)
@@ -177,20 +176,41 @@ class RaccoonLogger:
                 self.log_console.setLevel(log_level)
             self.logger.debug("Log level changed to " + str(log_level))
 
+    def get_caller(self, stack_level: int = 2):
+        """
+        _summary_
+
+        Args:
+            stack_level (int, optional): _description_. Defaults to 2.
+
+        Returns:
+            _type_: _description_
+        """
+        module_path = inspect.stack()[stack_level].filename
+        module = os.path.basename(module_path)
+        line = inspect.stack()[stack_level].lineno
+        return module, line
+
     def debug(self, message):
-        self.logger.debug(message)
+        module, line = self.get_caller()
+        self.logger.debug(module + ":" + str(line) + " - " + message)
 
     def info(self, message):
-        self.logger.info(message)
+        module, line = self.get_caller()
+        self.logger.debug(module + ":" + str(line) + " - " + message)
+        # self.logger.info(message)
 
     def warning(self, message):
-        self.logger.warning(message)
+        module, line = self.get_caller()
+        self.logger.debug(module + ":" + str(line) + " - " + message)
 
     def error(self, message):
-        self.logger.error(message)
+        module, line = self.get_caller()
+        self.logger.debug(module + ":" + str(line) + " - " + message)
 
     def critical(self, message):
-        self.logger.critical(message)
+        module, line = self.get_caller()
+        self.logger.debug(module + ":" + str(line) + " - " + message)
 
 
 LOGGER = RaccoonLogger()
