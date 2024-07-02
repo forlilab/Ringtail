@@ -44,7 +44,7 @@ class RingtailCore:
         storage_type: str = "sqlite",
         docking_mode: str = "dlg",
         logging_level: str = "DEBUG",
-        logging_file: str = None,
+        logging_file: str = "ringtail",
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
         Can set logger level here, otherwise change it by logger.setLevel("level")
@@ -400,6 +400,7 @@ class RingtailCore:
             InputFiles
         """
 
+        # Method to deal with the file read manager currently expecting file data to be presented as double [[]] lists
         def ensure_double_list(object) -> list:
             """Most of ringtail is set up to handle files, file paths, and file lists as double lists [[items]].
             Instead of changing that for now, the input is checked to ensure they are presented as, or can be
@@ -423,13 +424,8 @@ class RingtailCore:
 
             return object
 
-        # Ensure files are in current writeable format
-        if file is not None:
-            file = ensure_double_list(file)
-        if file_path is not None:
-            file_path = ensure_double_list(file_path)
-        if file_list is not None:
-            file_list = ensure_double_list(file_list)
+        # keywords this pertains to
+        need_to_be_double_list = ["file", "file_path", "file_list"]
 
         # Set file format automatically if not specified
         if file_pattern is None:
@@ -444,10 +440,15 @@ class RingtailCore:
                 )
 
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
-        del indiv_options["ensure_double_list"]
+        individual_options = {
+            "file": file,
+            "file_path": file_path,
+            "file_list": file_list,
+            "file_pattern": file_pattern,
+            "recursive": recursive,
+            "receptor_file": receptor_file,
+            "save_receptor": save_receptor,
+        }
 
         # Create option object with default values if needed
         files = InputFiles()
@@ -455,15 +456,23 @@ class RingtailCore:
         # Set options from dict if provided
         if dict is not None:
             for k, v in dict.items():
+                if k in need_to_be_double_list:
+                    v = ensure_double_list(v)
                 setattr(files, k, v)
-                self.logger.debug(f"File attribute {k} was set to {v}.")
+        self.logger.debug(
+            f"File attributes {dict} were assigned from provided option dictionary."
+        )
 
         # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        # NOTE Will overwrite provided dictionary
+        for k, v in individual_options.items():
             if v is not None:
+                if k in need_to_be_double_list:
+                    v = ensure_double_list(v)
                 setattr(files, k, v)
-                self.logger.debug(f"File attribute {k} was set to {v}.")
+        self.logger.debug(
+            f"File attributes {individual_options} were assigned from provided individual options."
+        )
 
         return files
 
@@ -487,10 +496,11 @@ class RingtailCore:
             InputStrings object
         """
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
-
+        individual_options = {
+            "results_strings": results_strings,
+            "receptor_file": receptor_file,
+            "save_receptor": save_receptor,
+        }
         # Create option object with default values if needed
         strings = InputStrings()
 
@@ -498,14 +508,16 @@ class RingtailCore:
         if dict is not None:
             for k, v in dict.items():
                 setattr(strings, k, v)
-                self.logger.debug(f"Docking string results attribute {k} was set.")
+            self.logger.debug(f"Docking string results attributes {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(strings, k, v)
-            self.logger.debug(f"Docking string results attribute {k} was set.")
+        self.logger.debug(
+            f"Docking string results attributes {individual_options} were set."
+        )
 
         return strings
 
@@ -697,9 +709,17 @@ class RingtailCore:
         """
 
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
+        individual_options = {
+            "filter_bookmark": filter_bookmark,
+            "duplicate_handling": duplicate_handling,
+            "overwrite": overwrite,
+            "order_results": order_results,
+            "outfields": outfields,
+            "output_all_poses": output_all_poses,
+            "mfpt_cluster": mfpt_cluster,
+            "interaction_cluster": interaction_cluster,
+            "bookmark_name": bookmark_name,
+        }
 
         # Create option object with default values if needed
         if not hasattr(self, "storageopts"):
@@ -710,14 +730,14 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.storageopts, k, v)
-                    self.logger.debug(f"Storage manager attribute {k} was set to {v}.")
+            self.logger.debug(f"Storage manager attributes {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(self.storageopts, k, v)
-                self.logger.debug(f"Storage manager attribute {k} was set to {v}.")
+        self.logger.debug(f"Storage manager attributes {individual_options} were.")
 
         # Assign attributes to storage manager
         for k, v in self.storageopts.todict().items():
@@ -730,7 +750,7 @@ class RingtailCore:
         max_poses: int = None,
         add_interactions: bool = None,
         interaction_tolerance: float = None,
-        interaction_cutoffs=None,
+        interaction_cutoffs: list = None,
         max_proc: int = None,
         dict: dict = None,
     ):
@@ -747,9 +767,14 @@ class RingtailCore:
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
+        individual_options = {
+            "store_all_poses": store_all_poses,
+            "max_poses": max_poses,
+            "add_interactions": add_interactions,
+            "interaction_tolerance": interaction_tolerance,
+            "interaction_cutoffs": interaction_cutoffs,
+            "max_proc": max_proc,
+        }
 
         # Create option object with default values if needed
         if not hasattr(self, "resultsmanopts"):
@@ -760,14 +785,14 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.resultsmanopts, k, v)
-                    self.logger.debug(f"Results manager attribute {k} was set to {v}.")
+            self.logger.debug(f"Results manager attributes {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(self.resultsmanopts, k, v)
-                self.logger.debug(f"Results manager attribute {k} was set to {v}.")
+        self.logger.debug(f"Results manager attributes {individual_options} were set.")
 
         # Assigns options to the results manager object
         for k, v in self.resultsmanopts.todict().items():
@@ -793,10 +818,11 @@ class RingtailCore:
 
         """
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
-
+        individual_options = {
+            "log_file": log_file,
+            "export_sdf_path": export_sdf_path,
+            "enumerate_interaction_combs": enumerate_interaction_combs,
+        }
         # Create option object with default values if needed
         if not hasattr(self, "outputopts"):
             self.outputopts = OutputOptions()
@@ -806,14 +832,14 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.outputopts, k, v)
-                    self.logger.debug(f"Output options {k} was set to {v}.")
+            self.logger.debug(f"Output options {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(self.outputopts, k, v)
-                self.logger.debug(f"Output options {k} was set to {v}.")
+            self.logger.debug(f"Output options {individual_options} were set.")
 
         # Creates output man with attributes if needed
         self.outputman = OutputManager(
@@ -867,9 +893,25 @@ class RingtailCore:
         """
 
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
+        individual_options = {
+            "eworst": eworst,
+            "ebest": ebest,
+            "leworst": leworst,
+            "lebest": lebest,
+            "score_percentile": score_percentile,
+            "le_percentile": le_percentile,
+            "vdw_interactions": vdw_interactions,
+            "hb_interactions": hb_interactions,
+            "reactive_interactions": reactive_interactions,
+            "hb_count": hb_count,
+            "react_any": react_any,
+            "max_miss": max_miss,
+            "ligand_name": ligand_name,
+            "ligand_substruct": ligand_substruct,
+            "ligand_substruct_pos": ligand_substruct_pos,
+            "ligand_max_atoms": ligand_max_atoms,
+            "ligand_operator": ligand_operator,
+        }
 
         # Create a filter object
         self.filters = Filters()
@@ -879,14 +921,15 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.filters, k, v)
-                    self.logger.debug(f"Filter {k} was set to {v}.")
+            self.logger.debug(f"Filter {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(self.filters, k, v)
-                self.logger.debug(f"Filter {k} was set to {v}.")
+        self.logger.debug(f"Filter {individual_options} were set.")
+
         self.logger.info("A filter object has been prepared.")
 
     # endregion
