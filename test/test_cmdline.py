@@ -113,7 +113,9 @@ class TestInputs:
         code = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
         )
-        assert code == 256  # indicates failure pf rt_process_vs.py
+        assert (
+            code == 256
+        )  # indicates failure of rt_process_vs.py, log file will have error w traceback
 
     def test_cmdline_config_file(self, countrows):
         from ringtail import RingtailCore

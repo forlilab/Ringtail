@@ -44,7 +44,7 @@ class RingtailCore:
         storage_type: str = "sqlite",
         docking_mode: str = "dlg",
         logging_level: str = "DEBUG",
-        logging_file: str = "ringtail",
+        logging_file: str = None,
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
         Can set logger level here, otherwise change it by logger.setLevel("level")
@@ -60,9 +60,14 @@ class RingtailCore:
         self.logger = LOGGER
         self.logger.set_level(logging_level)
         # create log file handler if requested
-        if logging_file is not None:
+        if logging_file is not None and self.logger._log_fp is None:
             self.logger.add_filehandler(logging_file)
 
+        elif logging_file is not None and self.logger._log_fp is not None:
+            self.logger.warning(
+                f"A logging file already exist and will be used: {self.logger._log_fp.baseFilename}"
+            )
+        self.logger.warning("[     New RingtailCore object initialized     ]")
         # Check if storage type is implemented
         try:
             storageman = StorageManager.check_storage_compatibility(storage_type)
@@ -456,12 +461,12 @@ class RingtailCore:
         # Set options from dict if provided
         if dict is not None:
             for k, v in dict.items():
-                if k in need_to_be_double_list:
+                if k in need_to_be_double_list and v is not None:
                     v = ensure_double_list(v)
                 setattr(files, k, v)
-        self.logger.debug(
-            f"File attributes {dict} were assigned from provided option dictionary."
-        )
+            self.logger.debug(
+                f"File attributes {dict} were assigned from provided option dictionary."
+            )
 
         # Set additional options from individual arguments
         # NOTE Will overwrite provided dictionary
@@ -839,7 +844,7 @@ class RingtailCore:
         for k, v in individual_options.items():
             if v is not None:
                 setattr(self.outputopts, k, v)
-            self.logger.debug(f"Output options {individual_options} were set.")
+        self.logger.debug(f"Output options {individual_options} were set.")
 
         # Creates output man with attributes if needed
         self.outputman = OutputManager(

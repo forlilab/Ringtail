@@ -1,6 +1,4 @@
 import logging
-
-from typing import Union
 import traceback as tb
 import sys
 import os
@@ -91,12 +89,22 @@ class RaccoonLogger:
 
     def setup_logger(
         self,
-        log_file: str | None = None,
+        log_file: str = None,
         log_console: bool = True,
         log_level: str = logging.WARNING,
         log_level_console: str = logging.WARNING,
         custom_logger_name: str = "RingtailLogger",
     ) -> None:
+        """
+        Setting up the logger.
+
+        Args:
+            log_file (str): name of log file, 'none' will not create a logfile
+            log_console (bool): whether or not logger logs to console
+            log_level (str): minimum logging level of the logger and file handler
+            log_level_console (str): minimum logging level of the console, currently set with 'log_level'
+            custom_logger_name (str): unique name of the logger
+        """
         if self._owner is not None:
             return
         self._owner = caller_info()
@@ -135,6 +143,13 @@ class RaccoonLogger:
         return levels[self.logger.level]
 
     def add_filehandler(self, log_file: str = "ringtail", level: str = logging.DEBUG):
+        """
+        Will add file handler to an existing logging object and produce a '.log' file.
+
+        Args:
+            log_file (str): Name to include in the log file name, will prepend date and time.
+            level (str): Log level of log file, defaults to DEBUG.
+        """
         import datetime
 
         dt = datetime.datetime.now()
@@ -168,7 +183,7 @@ class RaccoonLogger:
                 f"{log_level} is not a valid logging level option. Logger level reverted to {self.level()}."
             )
             return
-        elif log_level != self.logger.level:
+        elif log_level != self.level():
             self.logger.setLevel(log_level)
             if self._log_fp is not None:
                 self._log_fp.setLevel(log_level)
@@ -178,13 +193,14 @@ class RaccoonLogger:
 
     def get_caller(self, stack_level: int = 2):
         """
-        _summary_
+        Method to get basic information about the module and line no calling a certain function.
 
         Args:
-            stack_level (int, optional): _description_. Defaults to 2.
+            stack_level (int): what level in the stack you want. 0 is this method, 1 is its caller (typically the logutil.log method), 2 the caller of the caller (usually the package module)
 
         Returns:
-            _type_: _description_
+            str: name of the module/file calling
+            int: line number in the module/file calling
         """
         module_path = inspect.stack()[stack_level].filename
         module = os.path.basename(module_path)
@@ -192,25 +208,56 @@ class RaccoonLogger:
         return module, line
 
     def debug(self, message):
+        """
+        Lowest level of log message
+
+        Args:
+            message (str): message to be logged
+        """
         module, line = self.get_caller()
         self.logger.debug(module + ":" + str(line) + " - " + message)
 
     def info(self, message):
+        """
+        Second lowest level of log message
+
+        Args:
+            message (str): message to be logged
+        """
         module, line = self.get_caller()
-        self.logger.debug(module + ":" + str(line) + " - " + message)
-        # self.logger.info(message)
+        self.logger.info(module + ":" + str(line) + " - " + message)
 
     def warning(self, message):
+        """
+        Medium level of log message
+
+        Args:
+            message (str): message to be logged
+        """
         module, line = self.get_caller()
-        self.logger.debug(module + ":" + str(line) + " - " + message)
+        self.logger.warning(module + ":" + str(line) + " - " + message)
 
     def error(self, message):
+        """
+        For logging errors
+
+        Args:
+            message (str): message to be logged. A stack trace will be appended automatically.
+        """
         module, line = self.get_caller()
-        self.logger.debug(module + ":" + str(line) + " - " + message)
+        message = module + ":" + str(line) + " - " + message
+        self.logger.error(message + "\n", exc_info=1)
 
     def critical(self, message):
+        """
+        For logging critical errors and failures. A stack trace will be appended automatically.
+
+        Args:
+            message (str): message to be logged
+        """
         module, line = self.get_caller()
-        self.logger.debug(module + ":" + str(line) + " - " + message)
+        message = module + ":" + str(line) + " - " + message
+        self.logger.critical(message + "\n", exc_info=1)
 
 
 LOGGER = RaccoonLogger()
