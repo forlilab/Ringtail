@@ -35,7 +35,7 @@ class RingtailCore:
         _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
     """
 
-    # region #-#-#- Base methods -#-#-#
+    # -#-#- Base methods -#-#-#
 
     def __init__(
         self,
@@ -57,19 +57,18 @@ class RingtailCore:
             logger.setLevel(logging_level)
         self.db_file = db_file
         storageman = StorageManager.check_storage_compatibility(storage_type)
+        self.storagetype = storage_type
         self.storageman = storageman(db_file)
         self._run_mode = "api"
         self.docking_mode = docking_mode
         self.set_storageman_attributes()
 
-    def update_database_version(self, consent=False):
-        """Method to update database version from 1.0.0 to 1.1.0"""
+    def update_database_version(self, consent=False, new_version="2.0.0"):
+        """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
 
-        return self.storageman.update_database_version(consent)
+        return self.storageman.update_database_version(new_version, consent)
 
-    # endregion
-
-    # region #-#-#- Private methods -#-#-#
+    # -#-#- Private methods -#-#-#
 
     def _validate_docking_mode(self, docking_mode: str):
         """Method that validates specified AutoDock program used to generate results.
@@ -131,25 +130,21 @@ class RingtailCore:
             flexres_pose,
         ) in poses:
             # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
-            pose_bitvector = self.storageman.fetch_interaction_bitvector(Pose_ID)
-            if pose_bitvector is not None:
-                interaction_indices = []
+            interactions = self.storageman.fetch_pose_interactions(Pose_ID)
+            # if that pose id has interactions
+            if interactions is not None:
+                # make a list of all of them
                 interactions_list = []
-                for idx, bit in enumerate(pose_bitvector):
-                    if bit == 1:
-                        interaction_indices.append(
-                            idx + 1
-                        )  # adjust for indexing starting at 1
-                for int_idx in interaction_indices:
-                    interaction_info = self.storageman.fetch_interaction_info_by_index(
-                        int_idx
-                    )
+                # for each interaction row, make into a string according to format above
+                for interaction_info in interactions:
                     interaction = (
                         interaction_info[0] + "-" + ":".join(interaction_info[1:])
                     )
                     interactions_list.append(interaction)
+
                 interactions_str = ", ".join(interactions_list)
                 properties["Interactions"].append(interactions_str)
+
             # add properties to dictionary lists
             properties["Binding energies"].append(docking_score)
             properties["Ligand effiencies"].append(leff)
@@ -414,7 +409,7 @@ class RingtailCore:
         if file_list is not None:
             file_list = ensure_double_list(file_list)
 
-        # Set file format automatically if not specified
+        # Set file format
         if file_pattern is None:
             if self.docking_mode == "dlg":
                 file_pattern = "*.dlg*"
@@ -422,8 +417,9 @@ class RingtailCore:
             elif self.docking_mode == "vina":
                 file_pattern = "*.pdbqt*"
             else:
-                logger.error(
-                    "Docking mode and file ile pattern was not specified, can not continue."
+                file_pattern = "*.dlg*"
+                logger.warning(
+                    "File pattern was not specified, set to default '*.dlg*'."
                 )
 
         # Dict of individual arguments
@@ -447,6 +443,13 @@ class RingtailCore:
             if v is not None:
                 setattr(files, k, v)
                 logger.debug(f"File attribute {k} was set to {v}.")
+
+        # set docking mode based on file pattern
+        if files.file_pattern != None:
+            if "pdbqt" in files.file_pattern.lower() and self.docking_mode != "vina":
+                self.docking_mode = "vina"
+            elif "dlg" in files.file_pattern.lower() and self.docking_mode != "dlg":
+                self.docking_mode = "dlg"
 
         return files
 
@@ -609,11 +612,9 @@ class RingtailCore:
             )
             logger.info("Adding results...")
             self.resultsman.process_docking_data()
-            self.storageman.set_ringtail_db_schema_version()
+            self.storageman.finalize_database_write()
 
-    # endregion
-
-    # region #-#-#- Core attribute setting methods -#-#-#
+    # -#-#- Core attribute setting methods -#-#-#
     """ These methods are used internally to assing values to all ringtail options. 
     This ensures:   - that all options are set to specific types through RingtailOptions
                     - that internal consistency checks are performed on a group of options
@@ -761,6 +762,9 @@ class RingtailCore:
         log_file: str = None,
         export_sdf_path: str = None,
         enumerate_interaction_combs: bool = None,
+        find_similar_ligands: str = None,
+        export_bookmark_csv: str = None,
+        export_query_csv: str = None,
         dict: dict = None,
     ):
         """Creates output options object that holds attributes related to reading and outputting results.
@@ -812,7 +816,7 @@ class RingtailCore:
         vdw_interactions=None,
         hb_interactions=None,
         reactive_interactions=None,
-        hb_count=None,
+        interactions_count=None,
         react_any=None,
         max_miss=None,
         ligand_name=None,
@@ -869,9 +873,7 @@ class RingtailCore:
                 logger.debug(f"Filter {k} was set to {v}.")
         logger.info("A filter object has been prepared.")
 
-    # endregion
-
-    # region # -#-#- API -#-#-#
+    # -#-#- API -#-#-#
     def add_results_from_files(
         self,
         file: str = None,
@@ -1124,7 +1126,7 @@ class RingtailCore:
         vdw_interactions=None,
         hb_interactions=None,
         reactive_interactions=None,
-        hb_count=None,
+        interactions_count=None,
         react_any=None,
         max_miss=None,
         ligand_name=None,
@@ -1224,7 +1226,7 @@ class RingtailCore:
             vdw_interactions=vdw_interactions,
             hb_interactions=hb_interactions,
             reactive_interactions=reactive_interactions,
-            hb_count=hb_count,
+            interactions_count=interactions_count,
             react_any=react_any,
             max_miss=max_miss,
             ligand_name=ligand_name,
@@ -1456,33 +1458,41 @@ class RingtailCore:
                 print("Number similar ligands:", number_similar)
         return number_similar
 
-    def plot(self, save=True, bookmark_name: str = None):
+    def plot(self, save=True, bookmark_name=None):
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
 
         Args:
             save (bool): whether to save plot to cd
-            bookmark_name (str): name of bookmark to annotate on plot
         """
+        if bookmark_name is not None:
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
+        with self.storageman:
+            bookmark_filters = (
+                self.storageman.fetch_filters_from_view()
+            )  # fetches the filters used to produce the bookmark
+        max_miss = bookmark_filters["max_miss"]
+        if max_miss > 0:
+            raise OptionError(
+                "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
+            )
 
-        logger.info("Creating plot of results...")
+        logger.info("Creating plot of results")
         # get data from storageMan
         with self.storageman:
-            all_data, passing_data = self.storageman.get_plot_data(
-                bookmark_name=bookmark_name, only_passing=False
-            )
-            all_plot_data_binned = dict()
-            # bin the all_ligands data by 1000ths to make plotting faster
-            for line in all_data:
-                # add to dictionary as bin of energy and le
-                if None in line:
-                    continue
-                data_bin = (round(line[0], 3), round(line[1], 3))
-                if data_bin not in all_plot_data_binned:
-                    all_plot_data_binned[data_bin] = 1
-                else:
-                    all_plot_data_binned[data_bin] += 1
+            all_data, passing_data = self.storageman.get_plot_data()
+        all_plot_data_binned = dict()
+        # bin the all_ligands data by 1000ths to make plotting faster
+        for line in all_data:
+            # add to dictionary as bin of energy and le
+            if None in line:
+                continue
+            data_bin = (round(line[0], 3), round(line[1], 3))
+            if data_bin not in all_plot_data_binned:
+                all_plot_data_binned[data_bin] = 1
+            else:
+                all_plot_data_binned[data_bin] += 1
         # plot the data
         self.outputman.plot_all_data(all_plot_data_binned)
         if passing_data != []:  # handle if no passing ligands
@@ -1591,11 +1601,14 @@ class RingtailCore:
             df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
 
-    def export_bookmark_db(self, bookmark_name: str = None):
+    def export_bookmark_db(self, bookmark_name: str = None) -> str:
         """Export database containing data from bookmark
 
         Args:
-            bookmark_db_name (str): name for bookmark_db
+            bookmark_name (str): name for bookmark_db
+
+        Returns:
+            str: name of the new, exported database
         """
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
@@ -1611,13 +1624,14 @@ class RingtailCore:
         with self.storageman:
             self.storageman.clone(bookmark_db_name)
         # connect to cloned database
-        self.db_file = bookmark_db_name
-        # TODO needs rejiggering so agnostic to db engine. It also rewires core to new db, is that ok?
         dictionary = self.storageopts.todict()
-        dictionary["db_file"] = self.db_file
-        with StorageManagerSQLite(**dictionary) as db_clone:
+        dictionary["db_file"] = bookmark_db_name
+        temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
+        with temp_storageman(**dictionary) as db_clone:
             db_clone.prune()
             db_clone.close_storage(vacuum=True)
+
+        return bookmark_db_name
 
     def export_receptors(self):
         """
@@ -1710,7 +1724,10 @@ class RingtailCore:
     @staticmethod
     def ringtail_defaults(object: str = "all") -> str:
         """
-        Creates a dict of select or all Ringtail option classes, and their key-default value pairs.
+        Creates a dict of all Ringtail option classes, and their
+        key-default value pairs. Outputs to options.json in
+        "util_files" of to_file = true, else it returns the dict
+        of default option values.
 
         Args:
             object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
@@ -1718,58 +1735,14 @@ class RingtailCore:
         Return:
             str: json string with options
         """
-        all_defaults = {
+
+        json_string = {
             "outputopts": OutputOptions().todict(),
             "resultsmanopts": ResultsProcessingOptions().todict(),
             "storageopts": StorageOptions().todict(),
             "filters": Filters().todict(),
             "fileobj": InputFiles().todict(),
-            "readopts": ReadOptions().todict(),
-            "generalopts": GeneralOptions().todict(),
         }
-
-        # return all defaults
-        if type(object) == str and object.lower() == "all":
-            logger.debug("All ringtail default values have been fetched.")
-            return all_defaults
-
-        # return only defaults for one requested manager/object
-        elif type(object) == str and object.lower() in all_defaults.keys():
-            logger.debug(f"Ringtail default values for {object} have been fetched.")
-            return all_defaults[object.lower()]
-
-        # return a selected number of manager/object defaults
-        elif type(object) == list:
-            logger.debug(f"Ringtail default values for {object} have been fetched.")
-            return dict(
-                (key.lower(), all_defaults[key.lower()])
-                for key in object
-                if key in all_defaults.keys()
-            )
-
-        # no valid option provided
-        else:
-            raise OptionError(
-                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj", "readopts", "generalopts"]'
-            )
-
-    @staticmethod
-    def generate_config_template_for_api(to_file: bool = True):
-        """Outputs to "config.json in current working directory if to_file = true,
-        else it returns the dict of default option values used for API (for command
-        line a few more options are included that are always used explicitly when using API)
-
-        Args:
-            to_file (bool): whether to produce the template as a json string or as a file "config.json"
-
-        Returns:
-            str: file name of config file or json string with template including default values
-        """
-
-        json_string = RingtailCore.ringtail_defaults(
-            ["resultsmanopts", "storageopts", "outputopts", "filters", "fileobj"]
-        )
-
         if to_file:
             filename = "config.json"
             with open(filename, "w") as f:
@@ -1780,35 +1753,6 @@ class RingtailCore:
             return filename
         else:
             logger.debug("Default ringtail API option values prepared as a string.")
-            return json_string
-
-    @staticmethod
-    def generate_config_template_for_cmdline(to_file: bool = True):
-        """Outputs to "config.json in current working directory if to_file = true,
-        else it returns the dict of default option values used for API (for command
-        line a few more options are included that are always used explicitly when using API)
-
-        Args:
-            to_file (bool): whether to produce the template as a json string or as a file "config.json"
-
-        Returns:
-            str: file name of config file or json string with template including default values
-        """
-
-        json_string = RingtailCore.ringtail_defaults("all")
-
-        if to_file:
-            filename = "config.json"
-            with open(filename, "w") as f:
-                f.write(json.dumps(json_string, indent=4))
-            logger.debug(
-                f"Default ringtail command line option values written to file {filename}."
-            )
-            return filename
-        else:
-            logger.debug(
-                "Default ringtail command line option values prepared as a string."
-            )
             return json_string
 
     @staticmethod
@@ -1891,16 +1835,35 @@ class RingtailCore:
             OptionError(f"There were issues with the configuration file: {e}")
 
     @staticmethod
-    def get_all_defaults() -> dict:
+    def get_defaults(object: str = "all") -> dict:
         """
         Gets default values from RingtailOptions and returns dict of all options,
         or options belonging to a specific group.
 
-        Returns:
-            dict: all default values for Ringtail
+        Args:
+            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj"]
         """
 
-        return RingtailCore.ringtail_defaults("all")
+        all_defaults = RingtailCore.generate_config_json_template(to_file=False)
+
+        if object.lower() not in [
+            "all",
+            "resultsmanopts",
+            "storageopts",
+            "outputopts",
+            "filterobj",
+            "fileobj",
+        ]:
+            raise OptionError(
+                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj"]'
+            )
+
+        if object.lower() == "all":
+            logger.debug("All ringtail default values have been fetched.")
+            return all_defaults
+        else:
+            logger.debug(f"Ringtail default values for {object} have been fetched.")
+            return all_defaults[object.lower()]
 
     @staticmethod
     def get_options_info(object: str = "all") -> dict:
@@ -1917,8 +1880,6 @@ class RingtailCore:
             "writeopts": ResultsProcessingOptions.options,
             "storageopts": StorageOptions.options,
             "filters": Filters.options,
-            "readopts": ReadOptions.options,
-            "generalopts": GeneralOptions.options,
         }
 
         if object.lower() not in [
@@ -1928,11 +1889,9 @@ class RingtailCore:
             "outputopts",
             "filters",
             "fileobj",
-            "readopts",
-            "generalopts",
         ]:
             raise OptionError(
-                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]'
+                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]'
             )
         if object.lower() == "all":
             all_info_one_dict = {}
@@ -1944,9 +1903,7 @@ class RingtailCore:
             logger.debug(f"Ringtail default values for {object} have been fetched.")
             return all_info[object.lower()]
 
-    # endergion
-
-    # region #-#-#- Util method -#-#-#
+    # -#-#- Util method -#-#-#
     @staticmethod
     def split_dict(dict: dict, items: list) -> tuple:
         """Utility method that takes one dictionary and splits it into two based on the listed keys

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail script for updating v1.0.0 databases to v1.1.0
+# Ringtail script for updating v1.1.0 databases to v2.0.0
 #
 
 import argparse
@@ -15,14 +15,14 @@ if __name__ == "__main__":
     )
     # get name(s) of dbs to update from command line
     parser = argparse.ArgumentParser(
-        prog="rt_db_v100_to_v110",
-        description="Given one or multiple Ringtail databases made with v1.0.0, will update them to be compatible with v1.1.0",
+        prog="rt_db_to_v200",
+        description="Given one or multiple Ringtail databases made with v1.1.0, will update them to be compatible with v2.0.0",
     )
 
     parser.add_argument(
         "-d",
         "--database",
-        help="Database file(s) made with Ringtail v1.0.0 to update to v1.1.0",
+        help="Database file(s) made with Ringtail v1.0.0 or v1.1.0 to update to v2.0.0",
         nargs="+",
         type=str,
         action="store",
@@ -32,5 +32,6 @@ if __name__ == "__main__":
     consent = False
 
     for db in args.database:
+        # create a new ringtailcore for each db file to be converted
         with RingtailCore(db) as rtcore:
-            consent = rtcore.update_database_version(consent, new_version="1.1.0")
+            consent = rtcore.update_database_version(consent, new_version="2.0.0")
