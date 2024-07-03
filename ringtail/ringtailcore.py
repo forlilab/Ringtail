@@ -1541,26 +1541,34 @@ class RingtailCore:
 
         Args:
             save (bool): whether to save plot to cd
-            bookmark_name (str): name of bookmark to annotate on plot
         """
+        if bookmark_name is not None:
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
+        with self.storageman:
+            bookmark_filters = (
+                self.storageman.fetch_filters_from_view()
+            )  # fetches the filters used to produce the bookmark
+        max_miss = bookmark_filters["max_miss"]
+        if max_miss > 0:
+            raise OptionError(
+                "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
+            )
 
-        self.logger.info("Creating plot of results...")
+        logger.info("Creating plot of results")
         # get data from storageMan
         with self.storageman:
-            all_data, passing_data = self.storageman.get_plot_data(
-                bookmark_name=bookmark_name, only_passing=False
-            )
-            all_plot_data_binned = dict()
-            # bin the all_ligands data by 1000ths to make plotting faster
-            for line in all_data:
-                # add to dictionary as bin of energy and le
-                if None in line:
-                    continue
-                data_bin = (round(line[0], 3), round(line[1], 3))
-                if data_bin not in all_plot_data_binned:
-                    all_plot_data_binned[data_bin] = 1
-                else:
-                    all_plot_data_binned[data_bin] += 1
+            all_data, passing_data = self.storageman.get_plot_data()
+        all_plot_data_binned = dict()
+        # bin the all_ligands data by 1000ths to make plotting faster
+        for line in all_data:
+            # add to dictionary as bin of energy and le
+            if None in line:
+                continue
+            data_bin = (round(line[0], 3), round(line[1], 3))
+            if data_bin not in all_plot_data_binned:
+                all_plot_data_binned[data_bin] = 1
+            else:
+                all_plot_data_binned[data_bin] += 1
         # plot the data
         self.outputman.plot_all_data(all_plot_data_binned)
         if passing_data != []:  # handle if no passing ligands

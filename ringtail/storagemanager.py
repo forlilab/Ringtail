@@ -1706,8 +1706,6 @@ class StorageManagerSQLite(StorageManager):
                 f"Error occured while pruning Interactions not in {self.bookmark_name}"
             ) from e
 
-    # endregion
-
     # region Methods for dealing with views/bookmarks and temporary tables
     def get_all_bookmark_names(self):
         """Get all views in sql database as a list of names. Bookmarks are called views in sqlite
@@ -2551,7 +2549,6 @@ class StorageManagerSQLite(StorageManager):
                 f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
             )
 
-        # column names that will be written to log file
         outfield_string = self._generate_outfield_string()
 
         # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
