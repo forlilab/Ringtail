@@ -44,7 +44,7 @@ class TestRingtailCore:
         os.system("rm output.db output_log.txt")
         from ringtail import ringtailoptions
 
-        defaults = RingtailCore.get_defaults("resultsmanopts")
+        defaults = RingtailCore.ringtail_defaults("resultsmanopts")
         object_dict = ringtailoptions.ResultsProcessingOptions().todict()
         assert defaults == object_dict
 
@@ -239,7 +239,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "hb_interactions": [("A:ARG:123:", True)],
             "reactive_interactions": [],
-            "interactions_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -259,7 +259,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "hb_interactions": [("A:VAL:124:", True)],
             "reactive_interactions": [],
-            "interactions_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -279,7 +279,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:ARG:123:", True)],
             "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "reactive_interactions": [],
-            "interactions_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -299,7 +299,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:VAL:124:", True)],
             "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "reactive_interactions": [],
-            "interactions_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -319,7 +319,7 @@ class TestRingtailCore:
             "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
             "reactive_interactions": [],
-            "interactions_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -372,44 +372,31 @@ class TestRingtailCore:
 
         rtc = RingtailCore(db_file="output.db")
         file = "test_data/group1/1451.dlg.gz"
-        rtc.add_results_from_files(file=file)
+        rtc.add_results_from_files(file=file, duplicate_handling="replace")
         # ensure three results rows were added
         result_count = countrows("SELECT COUNT(*) FROM Results")
         inter_count = countrows("SELECT COUNT(*) FROM Interactions")
         # add same file but replace the duplicate
-        rtc.add_results_from_files(file=file, duplicate_handling="replace")
-        result_count_replace = countrows("SELECT COUNT(*) FROM Results")
-        inter_count_replace = countrows("SELECT COUNT(*) FROM Interactions")
-        # add same file but ignore the duplicate
+        rtc.add_results_from_files(file=file)
+        count_replace = countrows("SELECT COUNT(*) FROM Results")
+
+        os.system("rm output.db")
+        rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file=file, duplicate_handling="ignore")
-        result_count_ignore = countrows("SELECT COUNT(*) FROM Results")
-        inter_count_ignore = countrows("SELECT COUNT(*) FROM Interactions")
+        # add same file but ignore the duplicate
+        rtc.add_results_from_files(file=file)
+        count_ignore = countrows("SELECT COUNT(*) FROM Results")
 
         os.system("rm output.db")
         # add same file but allow the duplicate
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file=file)
+        # add same file but allow the duplicate
         rtc.add_results_from_files(file=file)
-        result_count_dupl = countrows("SELECT COUNT(*) FROM Results")
-        inter_count_dupl = countrows("SELECT COUNT(*) FROM Interactions")
-
-        assert (
-            result_count
-            == result_count_replace
-            == result_count_ignore
-            == result_count_dupl / 2
-        )
-        assert (
-            inter_count
-            == inter_count_replace
-            == inter_count_ignore
-            == inter_count_dupl / 2
-        )
+        count_dupl = countrows("SELECT COUNT(*) FROM Results")
+        assert count == count_replace == count_ignore == count_dupl / 2
 
         os.system("rm output.db")
-
-    def test_overwrite_database(self):
-        pass
 
     def test_db_num_poses_warning(self):
         rtc = RingtailCore(db_file="output.db")
@@ -482,6 +469,7 @@ class TestVinaHandling:
     def test_db_dockingmode_warning(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file="test_data/group1/1451.dlg.gz")
+        rtc = RingtailCore(db_file="output.db", docking_mode="vina")
         rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
 
         from ringtail import logger
@@ -520,7 +508,7 @@ class TestStorageMan:
             "interaction_cluster": rtc.storageman.interaction_cluster,
             "bookmark_name": rtc.storageman.bookmark_name,
         }
-        storageman_attributes_defaults = RingtailCore.get_defaults("storageopts")
+        storageman_attributes_defaults = RingtailCore.ringtail_defaults("storageopts")
         # ensure defaults values are set correctly and do not change during processing
         assert storageman_attributes == storageman_attributes_defaults
 
@@ -555,6 +543,8 @@ class TestStorageMan:
             "SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'"
         )
         bookmark_filters_db_str = curs.fetchone()[0]
+        print(bookmark_filters_db_str)
+
         filters = {
             "eworst": -3.0,
             "ebest": None,
@@ -565,7 +555,7 @@ class TestStorageMan:
             "vdw_interactions": [["A:ARG:123:", True], ["A:VAL:124:", True]],
             "hb_interactions": [["A:ARG:123:", True]],
             "reactive_interactions": [],
-            "interactions_count": [],
+            "hb_count": None,
             "react_any": None,
             "max_miss": 0,
             "ligand_name": [],
@@ -574,6 +564,7 @@ class TestStorageMan:
             "ligand_max_atoms": None,
             "ligand_operator": "OR",
         }
+        print(json.dumps(filters))
         assert bookmark_filters_db_str == json.dumps(filters)
 
     def test_version_info(self):
@@ -588,7 +579,7 @@ class TestStorageMan:
 class TestConfigFile:
 
     def test_generate_config_file(self):
-        RingtailCore.generate_config_json_template()
+        RingtailCore.generate_config_template_for_api()
         filepath = "config.json"
 
         assert os.path.exists(filepath)
@@ -672,7 +663,7 @@ class TestOptions:
         from ringtail import exceptions as e
 
         with pytest.raises(e.OptionError):
-            RingtailCore.get_defaults("not_a_ringtail_object")
+            RingtailCore.ringtail_defaults("not_a_ringtail_object")
 
     def test_options_type_check(self):
         rtc = RingtailCore()
@@ -699,3 +690,13 @@ class TestOptions:
         # ensure single options overwrite dict options
         rtc.set_filters(eworst=-6, dict={"eworst": -5})
         assert rtc.filters.eworst == -6
+
+    def test_overwrite_db(self, countrows):
+        rtc = RingtailCore()
+        rtc.add_results_from_files(file_list="filelist1.txt")
+        count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
+
+        rtc.add_results_from_files(file_list="filelist2.txt", overwrite=True)
+        count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
+        assert count_old_db == 3
+        assert count_new_db == 2

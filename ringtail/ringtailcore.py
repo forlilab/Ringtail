@@ -411,7 +411,10 @@ class RingtailCore:
 
         # Set file format
         if file_pattern is None:
-            if file is not None and "pdbqt" in file[0][0]:
+            if self.docking_mode == "dlg":
+                file_pattern = "*.dlg*"
+
+            elif self.docking_mode == "vina":
                 file_pattern = "*.pdbqt*"
             else:
                 file_pattern = "*.dlg*"
@@ -771,9 +774,6 @@ class RingtailCore:
             log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
             export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
             enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
-            find_similar_ligands (str): Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.
-            export_bookmark_csv (str): Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables
-            export_query_csv (str): Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
         # Dict of individual arguments
@@ -839,7 +839,7 @@ class RingtailCore:
             vdw_interactions (list[tuple]): define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
             hb_interactions (list[tuple]): define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
             reactive_interactions (list[tuple]): check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-            interactions_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
+            hb_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
             react_any (bool): check if ligand reacted with any residue
             max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
             ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., ["lig1", "lig2"]
@@ -1162,7 +1162,7 @@ class RingtailCore:
                 vdw_interactions (list[tuple]): define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
                 hb_interactions (list[tuple]): define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
                 reactive_interactions (list[tuple]): check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-                interactions_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
+                hb_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
                 react_any (bool): check if ligand reacted with any residue
                 max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
                 ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., ["lig1", "lig2"]
@@ -1711,8 +1711,18 @@ class RingtailCore:
 
         return (file_dict, write_dict, output_dict, filters_dict)
 
+    def get_bookmark_names(self):
+        """
+        Method to retrieve all bookmark names in a database
+
+        Returns:
+            list: of all bookmarks in a database
+        """
+        with self.storageman:
+            return self.storageman.get_all_bookmark_names()
+
     @staticmethod
-    def generate_config_json_template(to_file: bool = True) -> str:
+    def ringtail_defaults(object: str = "all") -> str:
         """
         Creates a dict of all Ringtail option classes, and their
         key-default value pairs. Outputs to options.json in
@@ -1720,10 +1730,10 @@ class RingtailCore:
         of default option values.
 
         Args:
-            to_file (bool): if true writes file to standard options json path, if false returns a json string with values
+            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
 
         Return:
-            str: filename or json string with options
+            str: json string with options
         """
 
         json_string = {
@@ -1737,10 +1747,12 @@ class RingtailCore:
             filename = "config.json"
             with open(filename, "w") as f:
                 f.write(json.dumps(json_string, indent=4))
-            logger.debug(f"Default ringtail option values written to file {filename}.")
+            logger.debug(
+                f"Default ringtail API option values written to file {filename}."
+            )
             return filename
         else:
-            logger.debug("Default ringtail option values prepared as a string.")
+            logger.debug("Default ringtail API option values prepared as a string.")
             return json_string
 
     @staticmethod
@@ -1860,7 +1872,7 @@ class RingtailCore:
         or specific object.
 
         Args:
-            object (str): ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]
+            object (str): ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
         """
         all_info = {
             "outputopts": OutputOptions.options,
@@ -1910,3 +1922,6 @@ class RingtailCore:
             new_dict[key] = dict.pop(key)
 
         return dict, new_dict
+
+
+# endregion
