@@ -28,7 +28,7 @@ Let us assume that kinase1 is our target of interest. It has related proteins ki
 
 
 Usage examples
-**********************
+****************
 
 Select ligands found in "passing_results" bookmarks of vs1 but not vs2 or vs3
 ============================
@@ -38,41 +38,41 @@ Select ligands found in "passing_results" bookmarks of vs1 but not vs2 or vs3
     $ rt_compare.py --wanted vs1.db --unwanted vs2.db vs3.db
 
 Select ligands found in "passing_results" bookmarks of vs1 and vs2 but not vs3 or vs4
-============================
+======================================================================================
 
 .. code-block:: bash
 
     $ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db
 
 Select ligands found in "passing_results" bookmarks of every vs except vs4
-============================
+============================================================================
 
 .. code-block:: bash
 
     $ rt_compare.py --wanted vs1.db vs2.db vs3.db --unwanted vs4.db
 
 Select ligands found in "filter1" bookmarks of vs1 but not vs2
-============================
+==============================================================
 
 .. code-block:: bash
 
     $ rt_compare.py --wanted vs1.db --unwanted vs2.db --bookmark_name filter1
 
 Save bookmark of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as "selective_bookmark" in vs1.db
-============================
+==========================================================================================================================
 
 .. code-block:: bash
 
     $ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --save_bookmark selective_bookmark
 
 Export bookmark set of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as CSV
-============================
+=====================================================================================================
 .. code-block:: bash
 
     $ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --export_csv
 
 Access help message for rt_compare.py
-****************************
+*************************************
 
 .. code-block:: bash
 
@@ -80,7 +80,7 @@ Access help message for rt_compare.py
 
 
 Supported arguments for the comparison script
-**************************
+***********************************************
 
 +----------------+---+----------------------------------------------------------------------------------------------------------------------------------+------------------+
 | Argument           | Description                                                                                                                      | Default value    |

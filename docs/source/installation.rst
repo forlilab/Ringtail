@@ -1,10 +1,10 @@
 .. _installation:
 
 Installing ringtail
-###############
+###################
 
 Installation (from PyPI)
-*******************
+*************************
 Please note that Ringtail requires Python 3.9 or 3.10.
 
 .. code-block:: bash
@@ -21,7 +21,7 @@ Also note that if using MacOS, you may need to install Multiprocess separately:
 
 
 Installation from source code
-*******************
+******************************
 
 .. code-block:: bash
 

@@ -86,6 +86,17 @@ class StorageManager:
 
         self.closed_connection = False
 
+        # Specific scientific attributes
+        # # Interaction variables
+        # this variable holds all unique interactions represented in the database, either already written or in process of being written
+        # in the format "intearction_tuple":interaction_index
+        self.unique_interactions = {}
+        # this is a counter for the interactions, if adding a new, it increments, and this will in turn correspond to a new row in the interaction_indices table and a new column in the interaction_bitvector table
+        self.next_unique_interaction_idx = 1
+        # indicate whether or not the interaction_indices table has been started
+        self.interactions_initialized_flag = False
+        self._append_results = False
+
     def __enter__(self):
         """Used to access the database if using storage manager as a context manager
 
@@ -195,6 +206,10 @@ class StorageManager:
             if len(receptors) == 0:
                 self.insert_receptors(receptor_array)
         # insert interactions if they are present
+        if interaction_array != []:  # what unique info is passed on here
+            self.insert_interactions(
+                interaction_array
+            )  # the interaction array has the ligand name and a long string of data, probably the unique ness stuff
         if interaction_list != []:
             self.insert_interactions(Pose_IDs, interaction_list, duplicates)
 
@@ -226,16 +241,22 @@ class StorageManager:
         """This function is expected to return an ascii plot
         representation of the results
 
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Will use default bookmark name if None. Returns empty list if bookmark does not exist.
+            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+
         Returns:
-            tuple: cursors as [<all data cursor>, <passing data cursor>]
+            tuple: cursors as (<all data cursor>, <passing data cursor>)
         """
 
         # checks if we have filtered by looking for view name in list of view names
-        if self.check_passing_view_exists():
+        if self.check_passing_view_exists(bookmark_name):
             if only_passing:
-                return [], self._fetch_passing_plot_data()
+                return [], self._fetch_passing_plot_data(bookmark_name)
             else:
-                return self._fetch_all_plot_data(), self._fetch_passing_plot_data()
+                return self._fetch_all_plot_data(), self._fetch_passing_plot_data(
+                    bookmark_name
+                )
         else:
             return self._fetch_all_plot_data(), []
 
@@ -630,7 +651,6 @@ class StorageManagerSQLite(StorageManager):
                 ligand_data_list.append(None)
             else:
                 ligand_data_list.append(ligand_dict[key][pose_rank])
-
         if ligand_dict["interactions"] != [] and any(
             ligand_dict["interactions"][pose_rank]
         ):  # catch lack of interaction data
@@ -1126,7 +1146,7 @@ class StorageManagerSQLite(StorageManager):
         RecName             VARCHAR,
         box_dim             VARCHAR[],
         box_center          VARCHAR[],
-        grid_spacing        INT[],
+        grid_spacing        FLOAT(4),
         flexible_residues   VARCHAR[],
         flexres_atomnames   VARCHAR[],
         receptor_object     BLOB
@@ -1139,7 +1159,7 @@ class StorageManagerSQLite(StorageManager):
             RecName             VARCHAR,
             box_dim             VARCHAR[],
             box_center          VARCHAR[],
-            grid_spacing        INT[],
+            grid_spacing        FLOAT(4),
             flexible_residues   VARCHAR[],
             flexres_atomnames   VARCHAR[],
             receptor_object     BLOB
@@ -1703,8 +1723,6 @@ class StorageManagerSQLite(StorageManager):
                 f"Error occured while pruning Interactions not in {self.bookmark_name}"
             ) from e
 
-    # endregion
-
     # region Methods for dealing with views/bookmarks and temporary tables
     def get_all_bookmark_names(self):
         """Get all views in sql database as a list of names. Bookmarks are called views in sqlite
@@ -2145,15 +2163,18 @@ class StorageManagerSQLite(StorageManager):
         """
         return self._run_query(self._generate_plot_all_results_query())
 
-    def _fetch_passing_plot_data(self):
+    def _fetch_passing_plot_data(self, bookmark_name: str = None):
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
+
+        Args:
+            bookmark_name (str): name for bookmark for which to fetch data. None will return data for default bookmark_name
 
         Returns:
             iter: SQL Cursor containing docking_score,
                 leff for the first pose for passing ligands
         """
-        return self._run_query(self._generate_plot_passing_results_query())
+        return self._run_query(self._generate_plot_passing_results_query(bookmark_name))
 
     def _fetch_ligand_cluster_columns(self):
         """fetching columns from Ligand_clusters table
@@ -2488,15 +2509,21 @@ class StorageManagerSQLite(StorageManager):
         """
         return "SELECT docking_score, leff FROM Results GROUP BY LigName"
 
-    def _generate_plot_passing_results_query(self):
+    def _generate_plot_passing_results_query(self, bookmark_name: str = None):
         """Make SQLite-formatted query string to get docking_score,
             leff of first pose for passing ligands
+
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Will use default bookmark name if None. Returns empty list if bookmark does not exist.
 
         Returns:
             str: SQLite-formatted query string
         """
+        if bookmark_name is None:
+            bookmark_name = self.bookmark_name
+
         return "SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
-            results_view=self.bookmark_name
+            results_view=bookmark_name
         )
 
     def _generate_outfield_string(self):
@@ -2539,7 +2566,6 @@ class StorageManagerSQLite(StorageManager):
                 f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
             )
 
-        # column names that will be written to log file
         outfield_string = self._generate_outfield_string()
 
         # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database

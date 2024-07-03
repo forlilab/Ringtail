@@ -14,9 +14,9 @@ from .ringtailcore import RingtailCore
 from .ringtailoptions import Filters
 
 
-def cmdline_parser(defaults: dict={}):
-    """ Parses options provided using the command line.
-    All arguments are first populated with default values. 
+def cmdline_parser(defaults: dict = {}):
+    """Parses options provided using the command line.
+    All arguments are first populated with default values.
     If a config file is provided, these will overwrite default values.
     Any single arguments provided using the argument parser will overwrite
     default and config file values.
@@ -77,17 +77,16 @@ def cmdline_parser(defaults: dict={}):
 
     write_parser.add_argument(
         "-m",
-        "--mode",
+        "--docking_mode",
         help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
         metavar="[dlg] or [vina]",
-        dest="docking_mode",
     )
     write_parser.add_argument(
         "-su",
         "--print_summary",
-        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1%% (percentile) and 10%% (percentile) energy and ligand efficiency.',
+        help="Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1%% (percentile) and 10%% (percentile) energy and ligand efficiency.",
         action="store_true",
     )
     write_parser.add_argument(
@@ -131,12 +130,11 @@ def cmdline_parser(defaults: dict={}):
     )
     write_parser.add_argument(
         "-p",
-        "--pattern", #should change to file_pattern
-        help='specify which pattern to use when searching for result files to process [only with "--file_path"]',
+        "--file_pattern",
+        help='specify which extension pattern to use when searching for result files to process [only with "--file_path"]',
         action="store",
         type=str,
-        metavar="PATTERN",
-        dest="file_pattern",
+        metavar="FILE PATTERN",
     )
     write_parser.add_argument(
         "-r",
@@ -171,12 +169,12 @@ def cmdline_parser(defaults: dict={}):
         action="store",
         type=str,
         metavar="[FILE_NAME].DB",
-        default="output.db"
+        default="output.db",
     )
     write_parser.add_argument(
         "-ov",
         "--overwrite",
-        help="by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database",
+        help="by default, if a database or log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing database and/or log file.",
         action="store_true",
     )
     write_parser.add_argument(
@@ -252,17 +250,16 @@ def cmdline_parser(defaults: dict={}):
     )
     read_parser.add_argument(
         "-m",
-        "--mode",
+        "--docking_mode",
         help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
         metavar="'dlg' or 'vina'",
-        dest="docking_mode",
     )
     read_parser.add_argument(
         "-su",
         "--print_summary",
-        help='Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1%% (percentile) and 10%% (percentile) energy and ligand efficiency.',
+        help="Prints summary information about stored data to STDOUT. Includes number of stored ligands and poses, min and max docking score and ligand efficiency, and 1%% (percentile) and 10%% (percentile) energy and ligand efficiency.",
         action="store_true",
     )
     read_parser.add_argument(
@@ -424,10 +421,10 @@ def cmdline_parser(defaults: dict={}):
         action="store_true",
     )
     output_group.add_argument(
-        '-py',
-        '--pymol',
+        "-py",
+        "--pymol",
         help="Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.",
-        action="store_true"
+        action="store_true",
     )
 
     properties_group = read_parser.add_argument_group(
@@ -588,7 +585,9 @@ def cmdline_parser(defaults: dict={}):
     # catch if running with no options
     if len(sys.argv) == 1:
         parser.print_help()
-        raise OptionError("Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details.")
+        raise OptionError(
+            "Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details."
+        )
 
     if confargs.config is not None:
         # update default values with those given in the config file
@@ -599,9 +598,9 @@ def cmdline_parser(defaults: dict={}):
                 defaults.update(c)
                 logger.debug("Arguments successfully extracted from config file.")
         except FileNotFoundError as e:
-            raise OptionError ("Config file not found in current directory.") from e
+            raise OptionError("Config file not found in current directory.") from e
 
-    logger.info(f'Command line prompt: {str(sys.argv)}')
+    logger.info(f"Command line prompt: {str(sys.argv)}")
 
     parser.set_defaults(**defaults)
     write_parser.set_defaults(**defaults)
@@ -611,7 +610,7 @@ def cmdline_parser(defaults: dict={}):
 
 
 class CLOptionParser:
-    """Command line option/argument parser. Options and switches are utilized in the script 
+    """Command line option/argument parser. Options and switches are utilized in the script
     'rt_process_vs.py'.
 
     Attributes:
@@ -631,18 +630,19 @@ class CLOptionParser:
         data_from_bookmark (bool): switch to write bookmark data to the output log file
 
     Raises:
-        OptionError: Error when an option cannot be parsed correctly 
+        OptionError: Error when an option cannot be parsed correctly
     """
 
     def __init__(self):
         # create parser
         try:
             # add default values from ringtailoptions
-            defaults_dict = RingtailCore.get_defaults()
+            defaults_dict = RingtailCore.get_all_defaults()
             default_values = {}
+            # the defaults_dict is organized in sections for readability, remove sections before using as defaults for parser
             for _, subdict in defaults_dict.items():
                 default_values.update(subdict)
-            
+
             (
                 parsed_opts,
                 self.parser,
@@ -651,14 +651,14 @@ class CLOptionParser:
                 self.read_parser,
             ) = cmdline_parser(default_values)
             self.process_options(parsed_opts)
-            
+
         except argparse.ArgumentError as e:
             logger.error("\n")
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
         except Exception as e:
-            try: 
+            try:
                 if parsed_opts.process_mode == "write":
                     self.write_parser.print_help()
                 elif parsed_opts.process_mode == "read":
@@ -670,15 +670,18 @@ class CLOptionParser:
     def process_options(self, parsed_opts):
         """
         Process and organize command line options to into ringtail options and filter dictionaries and ringtail core attributes
-        
+
         Args:
             parsed_opts (argparse.Namespace): arguments provided through the cmdline_parser method.
-            
+
         """
         if parsed_opts.debug:
-            logger.setLevel("DEBUG")
-        if parsed_opts.verbose:
-            logger.setLevel("INFO")
+            log_level = "DEBUG"
+        elif parsed_opts.verbose:
+            log_level = "INFO"
+        else:
+            log_level = "WARNING"
+
         if parsed_opts.process_mode is None:
             raise OptionError(
                 "No mode specified for rt_process_vs.py. Please specify mode (write/read)."
@@ -686,31 +689,45 @@ class CLOptionParser:
         self.process_mode = parsed_opts.process_mode.lower()
         self.filtering = False  # set flag indicating if any filters given
 
-        #Check database options
+        # Check database options
         if parsed_opts.input_db is not None:
             if not os.path.exists(parsed_opts.input_db):
                 raise OptionError("WARNING: input database does not exist!")
             db_file = parsed_opts.input_db
         elif self.process_mode == "read" and parsed_opts.input_db is None:
             raise OptionError(
-                    "No input database specified in read mode. Please specify database with --input_db"
-                )
+                "No input database specified in read mode. Please specify database with --input_db"
+            )
         else:
             db_file = parsed_opts.output_db
 
-        self.rtcore = RingtailCore(db_file)
-        self.rtcore._run_mode = "cmd" # tag for command line processing, changes how certain errors are handled
-        self.rtcore.docking_mode = parsed_opts.docking_mode
+        if parsed_opts.docking_mode.lower() not in ["dlg", "vina"]:
+            raise OptionError(
+                f"The chosen docking mode {parsed_opts.docking_mode} is not supported. Please choose either 'dlg' or 'vina'."
+            )
+
+        self.rtcore = RingtailCore(
+            db_file=db_file,
+            docking_mode=parsed_opts.docking_mode.lower(),
+            logging_level=log_level,
+        )
+        self.rtcore._run_mode = "cmd"  # tag for command line processing, changes how certain errors are handled
         self.print_summary = parsed_opts.print_summary
 
         if self.process_mode == "write":
             # Check if writing to an existing database
-            if os.path.exists(db_file) and not parsed_opts.append_results:
-                raise OptionError(f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database.")
+            if (
+                os.path.exists(db_file)
+                and not parsed_opts.append_results
+                and not parsed_opts.overwrite
+            ):
+                raise OptionError(
+                    f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
+                )
 
             # set read-only rt_process options to None to prevent errors
             parsed_opts.plot = None
-            parsed_opts.find_similar_ligands=None
+            parsed_opts.find_similar_ligands = None
             parsed_opts.export_bookmark_csv = None
             parsed_opts.export_query_csv = None
             parsed_opts.export_bookmark_db = None
@@ -720,44 +737,49 @@ class CLOptionParser:
             parsed_opts.log_file = None
             parsed_opts.export_sdf_path = None
             parsed_opts.enumerate_interaction_combs = None
-            
+
             # Create dictionary of all file sources
             self.file_sources = {
-                "file": parsed_opts.file, 
+                "file": parsed_opts.file,
                 "file_path": parsed_opts.file_path,
                 "file_pattern": parsed_opts.file_pattern,
                 "recursive": parsed_opts.recursive,
                 "file_list": parsed_opts.file_list,
                 "receptor_file": parsed_opts.receptor_file,
-                "save_receptor": parsed_opts.save_receptor
+                "save_receptor": parsed_opts.save_receptor,
             }
-        
+
         elif self.process_mode == "read":
             # set write-only rt_process options to None to prevent errors
             parsed_opts.receptor_file = None
             parsed_opts.save_receptor = None
-            
+
             # set up filters
-            filters = {} 
+            filters = {}
             # empty lists are counted as filters, and the default keyword "OR" too
             optional_filters = Filters.get_filter_keys("all")
-            optional_filters.append("hb_count") # hb/interaction count is not part of the three formal list but works as a filter on its own
+            optional_filters.append(
+                "hb_count"
+            )  # hb/interaction count is not part of the three formal list but works as a filter on its own
             for f in optional_filters:
-                if getattr(parsed_opts, f) is not None and getattr(parsed_opts, f) != []:
+                if (
+                    getattr(parsed_opts, f) is not None
+                    and getattr(parsed_opts, f) != []
+                ):
                     if f == "ligand_operator":
                         pass
                     else:
                         self.filtering = True
-            
+
             if self.filtering:
                 # property filters
-                property_list = Filters.get_filter_keys("property") 
+                property_list = Filters.get_filter_keys("property")
                 for kw in property_list:
                     filters[kw] = getattr(parsed_opts, kw)
 
                 # interaction filters (residues)
                 interactions = {}
-                interactions_kw = Filters.get_filter_keys("interaction") 
+                interactions_kw = Filters.get_filter_keys("interaction")
                 for _type in interactions_kw:
                     interactions[_type] = []
                     res_list = getattr(parsed_opts, _type)
@@ -772,7 +794,9 @@ class CLOptionParser:
                             found_res.append(res)
                     for res in found_res:
                         if type(res) == str:
-                            logger.debug("cloptionparser: interaction filters provided as string")
+                            logger.debug(
+                                "cloptionparser: interaction filters provided as string"
+                            )
                             wanted = True
                             if not res.count(":") == 3:
                                 raise OptionError(
@@ -789,8 +813,12 @@ class CLOptionParser:
                                 wanted = False
                             interactions[_type].append((res, wanted))
                         else:
-                            logger.debug("cloptionparser: interaction filters provided as list")
-                            if not res[0].count(":") == 3: #first element of list is the interaction
+                            logger.debug(
+                                "cloptionparser: interaction filters provided as list"
+                            )
+                            if (
+                                not res[0].count(":") == 3
+                            ):  # first element of list is the interaction
                                 raise OptionError(
                                     (
                                         "[%s]: to specify a residue use "
@@ -806,31 +834,34 @@ class CLOptionParser:
                     filters[k] = v
 
                 # count interactions
-                interactions_count = []
+                hb_count = []
                 count_kw = [("hb_count", ("hb_count"))]
                 for kw, pool in count_kw:
                     c = getattr(parsed_opts, kw, None)
                     if c is None:
                         continue
-                    interactions_count.append((pool, c))
-                filters["interactions_count"] = interactions_count
+                    hb_count.append((pool, c))
+                filters["hb_count"] = hb_count
 
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")
                 ligand_filters = {}
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
-                    if _type == ("ligand_max_atoms"): 
+                    if _type == ("ligand_max_atoms"):
                         ligand_filters[_type] = ligand_filter_value
                         continue
                     if ligand_filter_value is (None):
                         continue
                     ligand_filters[_type] = []
-                    for filter in ligand_filter_value: 
-                        ligand_filters[_type].append(filter) 
+                    for filter in ligand_filter_value:
+                        ligand_filters[_type].append(filter)
 
                 ligand_filters["ligand_operator"] = parsed_opts.ligand_operator
-                if ligand_filters["ligand_max_atoms"] is not None and len(ligand_filters["ligand_max_atoms"]) % 6 != 0:
+                if (
+                    ligand_filters["ligand_max_atoms"] is not None
+                    and len(ligand_filters["ligand_max_atoms"]) % 6 != 0
+                ):
                     msg = "--ligand_substruct_pos needs groups of 6 values:\n"
                     msg += "  1. Ligand SMARTS\n"
                     msg += "  2. index of atom in ligand SMARTS (0 based)\n"
@@ -838,16 +869,16 @@ class CLOptionParser:
                     msg += "  4. X\n"
                     msg += "  5. Y\n"
                     msg += "  6. Z\n"
-                    msg += "For example --ligand_substruct_pos \"[C][Oh]\" 1 1.5 -20. 42. -7.1"
+                    msg += 'For example --ligand_substruct_pos "[C][Oh]" 1 1.5 -20. 42. -7.1'
                     raise OptionError(msg)
-                
+
                 for k, v in ligand_filters.items():
                     filters[k] = v
                 filters["max_miss"] = parsed_opts.max_miss
                 filters["react_any"] = parsed_opts.react_any
-            
+
             self.filters = filters
-            
+
             # another form of filtering is clustering, which can in theory be performed without filtering (such as clustering over a filtered bookmark)
             if parsed_opts.mfpt_cluster or parsed_opts.interaction_cluster:
                 self.filtering = True
@@ -857,41 +888,48 @@ class CLOptionParser:
                 float(val) for val in parsed_opts.interaction_cutoffs.split(",")
             ]
 
-        # combine all options used in write mode 
+        # combine all options used in write mode
         self.writeopts = {
-            "duplicate_handling":parsed_opts.duplicate_handling,
-            "overwrite":parsed_opts.overwrite,
-            "store_all_poses":parsed_opts.store_all_poses, 
-            "max_poses":parsed_opts.max_poses,
-            "add_interactions":parsed_opts.add_interactions,
-            "interaction_tolerance":parsed_opts.interaction_tolerance,
-            "interaction_cutoffs":parsed_opts.interaction_cutoffs,
-            "max_proc":parsed_opts.max_proc
+            "duplicate_handling": parsed_opts.duplicate_handling,
+            "overwrite": parsed_opts.overwrite,
+            "store_all_poses": parsed_opts.store_all_poses,
+            "max_poses": parsed_opts.max_poses,
+            "add_interactions": parsed_opts.add_interactions,
+            "interaction_tolerance": parsed_opts.interaction_tolerance,
+            "interaction_cutoffs": parsed_opts.interaction_cutoffs,
+            "max_proc": parsed_opts.max_proc,
         }
-        # parse read methods 
+
+        # parse read methods
         self.plot = parsed_opts.plot
         self.export_bookmark_db = parsed_opts.export_bookmark_db
         self.export_receptor = parsed_opts.export_receptor
         self.pymol = parsed_opts.pymol
-        self.data_from_bookmark = parsed_opts.data_from_bookmark 
+        self.data_from_bookmark = parsed_opts.data_from_bookmark
+
         # parse read and output options
         self.outputopts = {
-            "log_file":parsed_opts.log_file,
-            "export_sdf_path":parsed_opts.export_sdf_path,
-            "enumerate_interaction_combs":parsed_opts.enumerate_interaction_combs,
-            "export_query_csv": parsed_opts.export_query_csv,
-            "find_similar_ligands":parsed_opts.find_similar_ligands,
-            "export_bookmark_csv":parsed_opts.export_bookmark_csv,
+            "log_file": parsed_opts.log_file,
+            "export_sdf_path": parsed_opts.export_sdf_path,
+            "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
         }
+
         # combine all options for the storage manager
         self.storageopts = {
-            "filter_bookmark":parsed_opts.filter_bookmark,
-            "duplicate_handling":parsed_opts.duplicate_handling,
-            "overwrite":parsed_opts.overwrite,
-            "order_results":parsed_opts.order_results,
-            "outfields":parsed_opts.outfields,
-            "output_all_poses":parsed_opts.output_all_poses,
-            "mfpt_cluster":parsed_opts.mfpt_cluster,
-            "interaction_cluster":parsed_opts.interaction_cluster,
-            "bookmark_name":parsed_opts.bookmark_name
+            "filter_bookmark": parsed_opts.filter_bookmark,
+            "duplicate_handling": parsed_opts.duplicate_handling,
+            "overwrite": parsed_opts.overwrite,
+            "order_results": parsed_opts.order_results,
+            "outfields": parsed_opts.outfields,
+            "output_all_poses": parsed_opts.output_all_poses,
+            "mfpt_cluster": parsed_opts.mfpt_cluster,
+            "interaction_cluster": parsed_opts.interaction_cluster,
+            "bookmark_name": parsed_opts.bookmark_name,
+        }
+
+        # read methods that require inputs
+        self.readopts = {
+            "export_query_csv": parsed_opts.export_query_csv,
+            "find_similar_ligands": parsed_opts.find_similar_ligands,
+            "export_bookmark_csv": parsed_opts.export_bookmark_csv,
         }
