@@ -591,11 +591,11 @@ def cmdline_parser(defaults: dict = {}):
     if confargs.config is not None:
         # update default values with those given in the config file
         try:
-            with open(confargs.config) as f:
-                c = RingtailCore.read_config_file(
-                    f, return_as_string=True
-                )  # TODO old method
-                defaults.update(c)
+            with open(confargs.config) as json_file:
+                import json
+
+                config_dict = json.load(json_file)
+                defaults.update(config_dict)
         except FileNotFoundError as e:
             raise OptionError("Config file not found in current directory.") from e
 
