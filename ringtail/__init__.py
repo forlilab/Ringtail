@@ -5,6 +5,7 @@
 #
 
 from .cloptionparser import CLOptionParser
+from .util import *
 from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
@@ -13,7 +14,8 @@ from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .ringtailcore import RingtailCore
 from .ringtailoptions import *
-from .logmanager import logger
+
+from .logutils import *
 from .outputmanager import OutputManager
 from .interactions import InteractionFinder
 from .exceptions import (
@@ -56,6 +58,7 @@ __all__ = [
     "ResultsProcessingError",
     "DatabaseViewCreationError",
     "OutputError",
-    "logger",
-    "Filters"
+    "logutils",
+    "Filters",
+    "util",
 ]

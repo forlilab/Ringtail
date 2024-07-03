@@ -46,6 +46,7 @@ setup(
         "scripts/rt_compare.py",
         "scripts/rt_db_v100_to_v110.py",
         "scripts/rt_db_to_v200.py",
+        "scripts/rt_generate_config_file.py",
     ],
     data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,

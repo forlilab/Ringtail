@@ -9,8 +9,9 @@ import json
 import sys
 import os
 from ringtail import StorageManager, StorageManagerSQLite
-from ringtail import OutputManager, OptionError, logger
+from ringtail import OutputManager, OptionError
 from ringtail import OptionError
+from ringtail import logutils
 import traceback
 
 
@@ -125,7 +126,7 @@ def cmdline_parser(defaults={}):
         "--database_type",
         "-dbt",
         help="Specify what database type was used to construct the databases. NOTE: All databases have to be created with the same type.",
-        action="store"
+        action="store",
     )
 
     parser.set_defaults(**config)
@@ -142,6 +143,7 @@ def cmdline_parser(defaults={}):
 
 if __name__ == "__main__":
     time0 = time.perf_counter()
+    logger = logutils.LOGGER
     logger.info("Starting a ringtail database compare process")
     try:
         args = cmdline_parser()
@@ -161,12 +163,12 @@ if __name__ == "__main__":
         # set logging level
         debug = True
         if debug:
-            level = logger.setLevel("DEBUG")
+            level = logger.set_level("DEBUG")
         elif args.verbose:
-            level = logger.setLevel("INFO")
+            level = logger.set_level("INFO")
         else:
-            level = logger.setLevel("WARNING")
-
+            level = logger.set_level("WARNING")
+        logger.add_filehandler("ringtail", level)
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
 
@@ -203,18 +205,22 @@ if __name__ == "__main__":
         if args.database_type is None:
             args.database_type = "sqlite"
         # ensure the specified database types are supported
-        storagemanager = StorageManager.check_storage_compatibility(args.database_type) 
+        storagemanager = StorageManager.check_storage_compatibility(args.database_type)
 
         dbman = storagemanager(ref_db)
 
         last_db = None
         num_wanted_dbs = len(wanted_dbs)
-        with dbman: # storageman is a context manager, and keeps connection to the database open within the `with` statmenet
+        with (
+            dbman
+        ):  # storageman is a context manager, and keeps connection to the database open within the `with` statmenet
             for idx, db in enumerate(wanted_dbs):
                 logger.info(f"cross-referencing {db}")
                 if not os.path.exists(db):
                     logger.critical("Wanted database {0} not found!".format(db))
-                print(f"passing in these parameters: {db}, {previous_bookmarkname}, {bookmark_list[idx]}, {last_db}")
+                print(
+                    f"passing in these parameters: {db}, {previous_bookmarkname}, {bookmark_list[idx]}, {last_db}"
+                )
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                     db,
                     previous_bookmarkname,
@@ -224,18 +230,19 @@ if __name__ == "__main__":
                 )
                 last_db = db
 
-
             if unwanted_dbs is not None:
                 for idx, db in enumerate(unwanted_dbs):
                     logger.info(f"cross-referencing {db}")
                     if not os.path.exists(db):
                         logger.critical("Unwanted database {0} not found!".format(db))
-                    previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
-                        db,
-                        previous_bookmarkname,
-                        bookmark_list[idx + num_wanted_dbs],
-                        selection_type="-",
-                        old_db=last_db,
+                    previous_bookmarkname, number_passing_ligands = (
+                        dbman.crossref_filter(
+                            db,
+                            previous_bookmarkname,
+                            bookmark_list[idx + num_wanted_dbs],
+                            selection_type="-",
+                            old_db=last_db,
+                        )
                     )
                     last_db = db
 
@@ -246,7 +253,7 @@ if __name__ == "__main__":
                     output_manager.write_results_bookmark_to_log(args.save_bookmark)
                 output_manager.log_num_passing_ligands(number_passing_ligands)
                 final_bookmark = dbman.fetch_view(previous_bookmarkname)
-                output_manager.write_log(final_bookmark)
+                output_manager.write_filter_log(final_bookmark)
 
             if args.save_bookmark is not None:
                 dbman.save_temp_table(
@@ -281,4 +288,3 @@ if __name__ == "__main__":
             "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
         )
         sys.exit(1)
-

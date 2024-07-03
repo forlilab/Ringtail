@@ -6,7 +6,7 @@
 
 import os
 from .exceptions import OptionError
-from .logmanager import logger
+from .logutils import LOGGER as logger
 import copy
 
 
@@ -52,10 +52,9 @@ class TypeSafe:
             else:
                 self.__dict__["value"] = self.default
                 if value is not None:
-                    OptionError(
+                    raise OptionError(
                         f"Object {self.object_name} was assigned a value of type {type(value)} but is only allowed as type {self.type}."
                     )
-                    logger.debug(f"{self.object_name} reset to default {self.default}.")
         else:
             self.__dict__[name] = value
 
@@ -520,7 +519,7 @@ class Filters(RTOptions):
         },
         "lebest": {
             "default": None,
-            "type": "",
+            "type": float,
             "description": "Specify the best ligand efficiency value accepted.",
         },
         "score_percentile": {

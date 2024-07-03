@@ -312,7 +312,7 @@ rtc.add_results_from_files( file_path = "test_data/",
                             max_poses = 3,
                             summary = True)
 ```
-Both files (`filesources_dict`) and processing options (`optionsdict`) can be provided as dictionaries as well or instead of the the individual options. Any provided individual options will overwrite the options provided through dictionaries. The use and prioritization of dictionaries and method attributes is true for most of the available API methods, and is taken advantage of if using the method `add_config_from_file`.
+Both files (`filesources_dict`) and processing options (`optionsdict`) can be provided as dictionaries as well or instead of the the individual options. Any provided individual options will overwrite the options provided through dictionaries. The use and prioritization of dictionaries and method attributes is true for most of the available API methods.
 
 ```
 file_sources = {

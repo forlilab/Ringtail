@@ -5,12 +5,13 @@
 #
 
 import gzip
-from .logmanager import logger
+from .logutils import LOGGER as logger
 
 
 class ReceptorManager:
-    #TODO add b2z method too? 
+    # TODO add b2z method too?
     """Class with methods dealing with formatting of receptor information"""
+
     @staticmethod
     def make_receptor_blobs(file_list):
         """Creates compressed receptor info
@@ -47,5 +48,3 @@ class ReceptorManager:
             str: receptor string
         """
         return gzip.decompress(receptor_blob).decode()
-    
-    

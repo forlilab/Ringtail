@@ -6,23 +6,26 @@
 import sys
 import time
 from ringtail import CLOptionParser
-from ringtail import RingtailCore, logger
+from ringtail import RingtailCore
+from ringtail import logutils
 import traceback
 
 if __name__ == "__main__":
-    """ Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries 
-    and options that are then used with the ringtail core api. 
+    """Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries
+    and options that are then used with the ringtail core api.
     This script will allow either a write or a read session at the time.
-    Available database operations are described in the readme.md document of this codebase."""
+    Available database operations are described in the readme.md document of this codebase.
+    """
     time0 = time.perf_counter()
 
     try:
+        # set up the logger
+        logger = logutils.LOGGER
+        logger.add_filehandler(log_file="ringtail", level="DEBUG")
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
     except Exception as e:
-        tb = traceback.format_exc()
-        logger.debug(tb)
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
 
@@ -31,68 +34,70 @@ if __name__ == "__main__":
         rtcore.set_output_options(dict=cmdinput.outputopts)
         rtcore.set_storageman_attributes(dict=cmdinput.storageopts)
         readopts = cmdinput.readopts
-        outopts = rtcore.outputopts 
+        outopts = rtcore.outputopts
         if cmdinput.process_mode == "write":
             logger.debug("Starting write process")
-            #-#-#- Processes results, will add receptor if "save_receptor" is true
-            rtcore.add_results_from_files(filesources_dict=cmdinput.file_sources, 
-                                          options_dict=cmdinput.writeopts)
+            # -#-#- Processes results, will add receptor if "save_receptor" is true
+            rtcore.add_results_from_files(
+                filesources_dict=cmdinput.file_sources, options_dict=cmdinput.writeopts
+            )
         time1 = time.perf_counter()
-        
-        #-#-#- Print database summary
+
+        # -#-#- Print database summary
         if cmdinput.print_summary:
-                    rtcore.produce_summary()
-        
-        if  cmdinput.process_mode == "read":
-                logger.debug("Starting read process")
-                
-                #-#-#- Perform filtering
-                if cmdinput.filtering:
-                    rtcore.filter(filters_dict=cmdinput.filters,
-                                  enumerate_interaction_combs=outopts.enumerate_interaction_combs)
+            rtcore.produce_summary()
 
-                # Write log with new data for previous filtering results
-                if cmdinput.data_from_bookmark and not cmdinput.filtering:
-                    rtcore.get_previous_filter_data()
-                
-                # find similar ligands to that specified, if specified (i.e., not None)
-                if readopts["find_similar_ligands"]:
-                    rtcore.find_similar_ligands(readopts["find_similar_ligands"])
+        if cmdinput.process_mode == "read":
+            logger.debug("Starting read process")
 
-                # write out molecules if requested
-                if outopts.export_sdf_path:
-                    rtcore.write_molecule_sdfs()
+            # -#-#- Perform filtering
+            if cmdinput.filtering:
+                rtcore.filter(
+                    filters_dict=cmdinput.filters,
+                    enumerate_interaction_combs=outopts.enumerate_interaction_combs,
+                )
 
-                # write out requested CSVs
-                if readopts["export_bookmark_csv"]:
-                    rtcore.export_csv(
-                        readopts["export_bookmark_csv"],
-                        readopts["export_bookmark_csv"] + ".csv",
-                        table=True,)
+            # Write log with new data for previous filtering results
+            if cmdinput.data_from_bookmark and not cmdinput.filtering:
+                rtcore.get_previous_filter_data()
 
-                # export query as csv
-                if readopts["export_query_csv"]:
-                    rtcore.export_csv(readopts["export_query_csv"], "query.csv")
+            # find similar ligands to that specified, if specified (i.e., not None)
+            if readopts["find_similar_ligands"]:
+                rtcore.find_similar_ligands(readopts["find_similar_ligands"])
 
-                # export bookmark as database
-                if cmdinput.export_bookmark_db:
-                    rtcore.export_bookmark_db(rtcore.storageman.bookmark_name)
+            # write out molecules if requested
+            if outopts.export_sdf_path:
+                rtcore.write_molecule_sdfs()
 
-                # export receptor as .pdbqt
-                if cmdinput.export_receptor:
-                    rtcore.export_receptors()
+            # write out requested CSVs
+            if readopts["export_bookmark_csv"]:
+                rtcore.export_csv(
+                    readopts["export_bookmark_csv"],
+                    readopts["export_bookmark_csv"] + ".csv",
+                    table=True,
+                )
 
-                # plot if requested
-                if cmdinput.plot:
-                    rtcore.plot()
+            # export query as csv
+            if readopts["export_query_csv"]:
+                rtcore.export_csv(readopts["export_query_csv"], "query.csv")
 
-                # open pymol viewer
-                if cmdinput.pymol:
-                    rtcore.display_pymol()
+            # export bookmark as database
+            if cmdinput.export_bookmark_db:
+                rtcore.export_bookmark_db(rtcore.storageman.bookmark_name)
+
+            # export receptor as .pdbqt
+            if cmdinput.export_receptor:
+                rtcore.export_receptors()
+
+            # plot if requested
+            if cmdinput.plot:
+                rtcore.plot()
+
+            # open pymol viewer
+            if cmdinput.pymol:
+                rtcore.display_pymol()
 
     except Exception as e:
-        tb = traceback.format_exc()
-        logger.debug(tb)
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
 
@@ -106,4 +111,5 @@ if __name__ == "__main__":
     logger.info(
         "Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds "
     )
-    if logger.level() in ["DEBUG", "INFO"]: print(cmdinput.parser.epilog)
+    if logger.level() in ["DEBUG", "INFO"]:
+        print(cmdinput.parser.epilog)

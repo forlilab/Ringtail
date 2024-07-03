@@ -9,9 +9,10 @@ import gzip
 import bz2
 import numpy as np
 from .exceptions import FileParsingError
-from .logmanager import logger
+from .logutils import LOGGER as logger
 
-#TODO add a second zip method (bz2), clean up duplication between dlg and pdbqt
+
+# TODO add a second zip method (bz2), clean up duplication between dlg and pdbqt
 def parse_single_dlg(fname):
     """Parse an ADGPU DLG file uncompressed or gzipped
 
@@ -25,6 +26,7 @@ def parse_single_dlg(fname):
     Returns:
         dict: parsed results ready to be inserted in database
     """
+
     STD_END = "DOCKED: ENDMDL"
     STD_KW = "DOCKED: "
 
@@ -233,7 +235,9 @@ def parse_single_dlg(fname):
                             )
                     finally:
                         if np.isnan(e):
-                            raise ValueError("Error! File contains NaN value for energy.")
+                            raise ValueError(
+                                "Error! File contains NaN value for energy."
+                            )
                     scores.append(e)
                 elif "Final Intermolecular Energy" in line:
                     try:
@@ -451,6 +455,7 @@ def parse_single_dlg(fname):
         "flexres_atomnames": flexres_atomnames,
     }
 
+
 def parse_vina_result(data_pointer, string=False) -> dict:
     """Parser for vina docking results, supporting either pdbqt or gzipped (.gz) files, or with the
     docking results provided as a string.
@@ -472,7 +477,7 @@ def parse_vina_result(data_pointer, string=False) -> dict:
             string (bool): string or file
 
         Raises:
-            ValueError: if a line cannot be parsed 
+            ValueError: if a line cannot be parsed
 
         Returns:
             dict: parsed results ready to be inserted in database
@@ -504,7 +509,7 @@ def parse_vina_result(data_pointer, string=False) -> dict:
         logger.debug("Inside method that reads results")
 
         for line in data_object.readlines():
-            if string==False:
+            if string == False:
                 line = line.decode("utf-8")
             try:
                 if line.startswith("MODEL"):
@@ -526,7 +531,9 @@ def parse_vina_result(data_pointer, string=False) -> dict:
                     unbound_energy.append(float(line.split()[2]))
                 if line.startswith("HETATM") or line.startswith("ATOM"):
                     if inside_res:
-                        flexible_res_coords[-1][-1].append([line[30:38], line[38:46], line[46:54]])
+                        flexible_res_coords[-1][-1].append(
+                            [line[30:38], line[38:46], line[46:54]]
+                        )
                         if first_model:
                             flexres_atomnames[-1].append(line[12:16].strip())
                     else:
@@ -566,57 +573,57 @@ def parse_vina_result(data_pointer, string=False) -> dict:
                     flexible_residues.append(res_string)
             except ValueError:
                 raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, name))
-            
+
         # calculate ligand efficiency and deltas from the best pose
         leff = [x / num_heavy_atoms for x in scores]
         delta = [x - scores[0] for x in scores]
 
         return {
-                "ligname": ligname,  # string
-                "receptor": "",
-                "grid_center": "",
-                "grid_dim": "",
-                "grid_spacing": "",
-                "ligand_input_model": "",
-                "ligand_index_map": smile_idx_map,
-                "ligand_h_parents": ligand_h_parents,
-                "pose_coordinates": pose_coordinates,  # list
-                "flexible_res_coordinates": flexible_res_coords,
-                "flexible_residues": flexible_residues,
-                "flexres_atomnames": flexres_atomnames,
-                "ligand_smile_string": smile_string,
-                "clusters": clusters,
-                "cluster_rmsds": cluster_rmsds,
-                "cluster_sizes": cluster_sizes,
-                "cluster_list": cluster_list,
-                "ref_rmsds": [],
-                "scores": scores,  # list
-                "leff": leff,  # list
-                "delta": delta,  # list
-                "intermolecular_energy": intermolecular_energy,  # list
-                "vdw_hb_desolv": [],
-                "electrostatics": [],
-                "flex_ligand": [],
-                "flexLigand_flexReceptor": [],
-                "internal_energy": internal_energy,  # list
-                "torsional_energy": [],
-                "unbound_energy": unbound_energy,  # list
-                "interactions": [],  # list of dictionaries
-                "num_interactions": [],
-                "num_hb": [],
-                "sorted_runs": sorted_runs,
-                "pose_about": [],
-                "pose_translations": [],
-                "pose_quarternions": [],
-                "pose_dihedrals": [],
-                "fname": name,
-                "ligand_atomtypes": ligand_atomtypes,
-            }
+            "ligname": ligname,  # string
+            "receptor": "",
+            "grid_center": "",
+            "grid_dim": "",
+            "grid_spacing": "",
+            "ligand_input_model": "",
+            "ligand_index_map": smile_idx_map,
+            "ligand_h_parents": ligand_h_parents,
+            "pose_coordinates": pose_coordinates,  # list
+            "flexible_res_coordinates": flexible_res_coords,
+            "flexible_residues": flexible_residues,
+            "flexres_atomnames": flexres_atomnames,
+            "ligand_smile_string": smile_string,
+            "clusters": clusters,
+            "cluster_rmsds": cluster_rmsds,
+            "cluster_sizes": cluster_sizes,
+            "cluster_list": cluster_list,
+            "ref_rmsds": [],
+            "scores": scores,  # list
+            "leff": leff,  # list
+            "delta": delta,  # list
+            "intermolecular_energy": intermolecular_energy,  # list
+            "vdw_hb_desolv": [],
+            "electrostatics": [],
+            "flex_ligand": [],
+            "flexLigand_flexReceptor": [],
+            "internal_energy": internal_energy,  # list
+            "torsional_energy": [],
+            "unbound_energy": unbound_energy,  # list
+            "interactions": [],  # list of dictionaries
+            "num_interactions": [],
+            "num_hb": [],
+            "sorted_runs": sorted_runs,
+            "pose_about": [],
+            "pose_translations": [],
+            "pose_quarternions": [],
+            "pose_dihedrals": [],
+            "fname": name,
+            "ligand_atomtypes": ligand_atomtypes,
+        }
 
     if string == False:
         # split the first name/extension
         fname_clean = os.path.basename(data_pointer)
-        name, ext = os.path.splitext(fname_clean) 
+        name, ext = os.path.splitext(fname_clean)
         ext = ext[1:].lower()
         if ext == "gz":
             open_fn = gzip.open
@@ -632,13 +639,17 @@ def parse_vina_result(data_pointer, string=False) -> dict:
 
     elif string == True:
         import io
+
         lines = list(data_pointer.values())[0]
         data_object = io.StringIO(lines)
-        ligname = list(data_pointer.keys())[0] # get the first (and only, probably not optimal) key which should be the ligand name
+        ligname = list(data_pointer.keys())[
+            0
+        ]  # get the first (and only, probably not optimal) key which should be the ligand name
         logger.debug("Parsing vina docking string")
         parsed_results = _read_vina_results_lines(data_object, ligname, True)
 
     return parsed_results
+
 
 def receptor_pdbqt_parser(fname):
     """Parse receptor PDBQT file into list of dictionary with dictionary containing data for a single atom line
