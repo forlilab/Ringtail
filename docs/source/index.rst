@@ -2,7 +2,9 @@
    sphinx-quickstart on Thu Apr 18 11:08:19 2024.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
+   
 .. image:: https://user-images.githubusercontent.com/41704502/170797800-53a9d94a-932e-4936-9bea-e2d292b0c62b.png
+
 Ringtail
 ##########
 *A tool for handling results from virtual screening of molecules*

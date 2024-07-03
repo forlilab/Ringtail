@@ -12,7 +12,7 @@ import os
 import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
-from .logmanager import logger
+from .logutils import LOGGER
 from .exceptions import MultiprocessingError, RTCoreError
 import traceback
 from datetime import datetime
@@ -25,7 +25,7 @@ else:
 
 
 class MPManager:
-    """Manager that orchestrates paralell processing of docking results data, using one of the supported 
+    """Manager that orchestrates paralell processing of docking results data, using one of the supported
     multiprocessors.
 
     Attributes:
@@ -47,6 +47,7 @@ class MPManager:
         num_files (int): number of files processed at any given time
 
     """
+
     def __init__(
         self,
         docking_mode,
@@ -58,12 +59,12 @@ class MPManager:
         max_proc,
         storageman,
         storageman_class,
-        chunk_size, 
+        chunk_size,
         target,
         receptor_file,
-        file_pattern = None,
-        file_sources = None, 
-        string_sources = None,
+        file_pattern=None,
+        file_sources=None,
+        string_sources=None,
     ):
         self.docking_mode = docking_mode
         self.chunk_size = chunk_size
@@ -81,13 +82,14 @@ class MPManager:
         self.storageman_class = storageman_class
         self.num_files = 0
         self.max_proc = max_proc
+        self.logger = LOGGER
 
     def process_results(self, string_processing=False):
-        """Processes results data (files or string sources) by adding them to the queue 
+        """Processes results data (files or string sources) by adding them to the queue
         and starting their processing in multiprocessing.
 
         Args:
-            string_sources (bool, optional): Switch for processing results that are provided as strings instead of files. 
+            string_sources (bool, optional): Switch for processing results that are provided as strings instead of files.
         """
         if self.max_proc is None:
             self.max_proc = multiprocessing.cpu_count()
@@ -97,7 +99,9 @@ class MPManager:
         # start the workers in background
         self.workers = []
         self.p_conn, self.c_conn = multiprocessing.Pipe(True)
-        logger.info("Starting {0} docking results readers".format(self.num_readers))
+        self.logger.info(
+            "Starting {0} docking results readers".format(self.num_readers)
+        )
         for i in range(self.num_readers):
             # one worker is started for each processor to be used
             s = DockingFileReader(
@@ -114,7 +118,7 @@ class MPManager:
                 self.add_interactions,
                 self.interaction_cutoffs,
                 self.receptor_file,
-                string_processing=string_processing
+                string_processing=string_processing,
             )
             # this method calls .run() internally
             s.start()
@@ -138,10 +142,10 @@ class MPManager:
             if string_processing == True:
                 self._process_string_sources()
             else:
-                self._process_file_sources() 
+                self._process_file_sources()
         except Exception as e:
             tb = traceback.format_exc()
-            self._kill_all_workers(e, "results sources processing", tb) 
+            self._kill_all_workers(e, "results sources processing", tb)
         # put as many poison pills in the queue as there are workers
         for i in range(self.num_readers):
             self.queueIn.put(None)
@@ -153,7 +157,9 @@ class MPManager:
 
         w.join()
 
-        logger.info("Wrote {0} docking results to the database".format(self.num_files)) 
+        self.logger.info(
+            "Wrote {0} docking results to the database".format(self.num_files)
+        )
 
     def _process_file_sources(self):
         """Adds each results file item to the queue, and processes lists of files,
@@ -168,7 +174,7 @@ class MPManager:
                         and file != self.receptor_file
                     ):
                         self._add_to_queue(file)
-                        
+
         # add files from file path(s)
         if self.file_sources.file_path != (None and [[]]):
             for path_list in self.file_sources.file_path:
@@ -192,11 +198,16 @@ class MPManager:
             RTCoreError
         """
         if self.string_sources != None:
-            for ligand_name, docking_result in self.string_sources.results_strings.items():
+            for (
+                ligand_name,
+                docking_result,
+            ) in self.string_sources.results_strings.items():
                 string_data = {ligand_name: docking_result}
                 self._add_to_queue(string_data, string=True)
         else:
-            raise RTCoreError("There was an error while reading the results string input.")
+            raise RTCoreError(
+                "There was an error while reading the results string input."
+            )
 
     def _add_to_queue(self, results_data, string=False):
         """_summary_
@@ -223,7 +234,7 @@ class MPManager:
                     "Something is blocking the progressing of results data reading. Exiting program."
                 ) from queue.Full
             try:
-                self.queueIn.put(results_data, block=True, timeout=timeout) 
+                self.queueIn.put(results_data, block=True, timeout=timeout)
                 self.num_files += 1
                 self._check_for_worker_exceptions()
                 break
@@ -234,24 +245,26 @@ class MPManager:
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
             error, tb, filename = self.p_conn.recv()
-            logger.error(f"Caught error in multiprocessing from {filename}")
+            self.logger.error(f"Caught error in multiprocessing from {filename}")
             # don't kill parser errors, only database error
             if filename == "Database":
                 self._kill_all_workers(error, filename, tb)
             else:
-                with open("ringtail_failed_files.log", 'a') as f:
-                    f.write(str(datetime.now()) + f"\tRingtail failed to parse {filename}\n")
-                    logger.debug(tb)
+                with open("ringtail_failed_files.log", "a") as f:
+                    f.write(
+                        str(datetime.now()) + f"\tRingtail failed to parse {filename}\n"
+                    )
+                    self.logger.debug(tb)
 
     def _kill_all_workers(self, error, filename, tb):
         for s in self.workers:
             s.kill()
-        logger.debug(f"Error encountered while handling {filename}")
-        logger.debug(tb)
+        self.logger.debug(f"Error encountered while handling {filename}")
+        self.logger.debug(tb)
         raise error
 
     def _scan_dir(self, path, pattern, recursive=False):
-        """scan for valid output files in a directory the pattern is used 
+        """scan for valid output files in a directory the pattern is used
         to glob files optionally, a recursive search is performed
 
         Args:
@@ -262,7 +275,7 @@ class MPManager:
         Yields:
             list: of file paths found in the search
         """
-        logger.info(
+        self.logger.info(
             "Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern)
         )
         if recursive:
@@ -277,7 +290,7 @@ class MPManager:
             yield glob(os.path.join(path, pattern))  # <----
 
     def _scan_file_list(self, filename, pattern):
-        """read file names from file list and ensures they exist, 
+        """read file names from file list and ensures they exist,
         then adding them to the list of files to be processed
 
         Args:
@@ -287,7 +300,7 @@ class MPManager:
         Raises:
             MultiprocessingError
         """
-        
+
         lig_accepted = []
         c = 0
         with open(filename, "r") as fp:
@@ -295,15 +308,17 @@ class MPManager:
                 line = line.strip()
                 c += 1
                 if os.path.isfile(line):
-                    if line.endswith(pattern) or line.endswith(pattern + ".gz"): #NOTE if adding zip option change here
+                    if line.endswith(pattern) or line.endswith(
+                        pattern + ".gz"
+                    ):  # NOTE if adding zip option change here
                         lig_accepted.append(line)
                 else:
-                    logger.warning("Warning! file |%s| does not exist" % line)
+                    self.logger.warning("Warning! file |%s| does not exist" % line)
         if len(lig_accepted) == 0:
             raise MultiprocessingError(
                 "*ERROR* No valid files were found when reading from |%s|" % filename
             )
-        logger.info(
+        self.logger.info(
             "# [ %5.3f%% files in list accepted (%d) ]"
             % ((len(lig_accepted) / c * 100, c))
         )

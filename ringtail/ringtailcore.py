@@ -12,12 +12,13 @@ from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
 from .ringtailoptions import *
+from .util import *
 from .exceptions import RTCoreError, OutputError
 from rdkit import Chem
 import itertools
 import os
 from os import path
-from .logmanager import logger
+from .logutils import LOGGER
 
 
 class RingtailCore:
@@ -35,14 +36,15 @@ class RingtailCore:
         _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
     """
 
-    # -#-#- Base methods -#-#-#
+    # region #-#-#- Base methods -#-#-#
 
     def __init__(
         self,
         db_file: str = "output.db",
         storage_type: str = "sqlite",
         docking_mode: str = "dlg",
-        logging_level: str = "debug",
+        logging_level: str = "DEBUG",
+        logging_file: str = None,
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
         Can set logger level here, otherwise change it by logger.setLevel("level")
@@ -50,17 +52,35 @@ class RingtailCore:
         Args:
             db_file (str): Database file to initialize core with. Defaults to "output.db".
             storage_type (str, optional): Database setup to use for interacting with the database. Defaults to "sqlite".
+            docking_mode (str, optional): Docking mode for which the database will be used
             logging_level (str, optional): Global logger level. Defaults to "DEBUG".
         """
 
-        if logging_level is not None:
-            logger.setLevel(logging_level)
-        self.db_file = db_file
-        storageman = StorageManager.check_storage_compatibility(storage_type)
+        # Initiate logging
+        self.logger = LOGGER
+        self.logger.set_level(logging_level)
+        # create log file handler if requested
+        if logging_file is not None and self.logger._log_fp is None:
+            self.logger.add_filehandler(logging_file)
+
+        elif logging_file is not None and self.logger._log_fp is not None:
+            self.logger.warning(
+                f"A logging file already exist and will be used: {self.logger._log_fp.baseFilename}"
+            )
+        self.logger.warning("[     New RingtailCore object initialized     ]")
+        # Check if storage type is implemented
+        try:
+            storageman = StorageManager.check_storage_compatibility(storage_type)
+        except NotImplementedError as e:
+            self.logger.error(e)
+            raise e
+
+        # initialize remaining variables and storagemanager
         self.storagetype = storage_type
+        self.db_file = db_file
         self.storageman = storageman(db_file)
         self._run_mode = "api"
-        self.docking_mode = docking_mode
+        self._docking_mode = docking_mode
         self.set_storageman_attributes()
 
     def update_database_version(self, consent=False, new_version="2.0.0"):
@@ -80,7 +100,7 @@ class RingtailCore:
             RTCoreError: if docking_mode is not supported
         """
         if type(docking_mode) is not str:
-            logger.warning(
+            self.logger.warning(
                 'The given docking mode was not given as a string, it will be set to default value "dlg".'
             )
             self._docking_mode = "dlg"
@@ -90,9 +110,15 @@ class RingtailCore:
             )
         else:
             self._docking_mode = docking_mode.lower()
-            logger.debug(f"Docking mode set to {self.docking_mode}.")
+            self.logger.debug(f"Docking mode set to {self.docking_mode}.")
 
     def _get_docking_mode(self):
+        """
+        Private method to retrieve docking mode
+
+        Returns:
+            str: docking mode
+        """
         return self._docking_mode
 
     # making docking mode a property of the ringtail core object
@@ -174,7 +200,7 @@ class RingtailCore:
                 all_interactions.append(_type + "-" + interact[0])
         # warn if max_miss greater than number of interactions
         if max_miss > len(all_interactions):
-            logger.warning(
+            self.logger.warning(
                 "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
             )
             max_miss = len(all_interactions)
@@ -239,6 +265,7 @@ class RingtailCore:
 
         Returns:
             tuple: (ligand rdkit mol, [flexres rdkit mols], {properties for ligand})
+
 
         Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
         """
@@ -378,6 +405,7 @@ class RingtailCore:
             InputFiles
         """
 
+        # Method to deal with the file read manager currently expecting file data to be presented as double [[]] lists
         def ensure_double_list(object) -> list:
             """Most of ringtail is set up to handle files, file paths, and file lists as double lists [[items]].
             Instead of changing that for now, the input is checked to ensure they are presented as, or can be
@@ -393,23 +421,18 @@ class RingtailCore:
                 elif type(object[0]) == str:
                     object = [object]
                 else:
-                    logger.error("Unable to parse file input.")
+                    self.logger.error("Unable to parse file input.")
             elif type(object) == str:
                 object = [[object]]
             else:
-                logger.error("Unable to parse file input.")
+                self.logger.error("Unable to parse file input.")
 
             return object
 
-        # Ensure files are in current writeable format
-        if file is not None:
-            file = ensure_double_list(file)
-        if file_path is not None:
-            file_path = ensure_double_list(file_path)
-        if file_list is not None:
-            file_list = ensure_double_list(file_list)
+        # keywords this pertains to
+        need_to_be_double_list = ["file", "file_path", "file_list"]
 
-        # Set file format
+        # Set file format automatically if not specified
         if file_pattern is None:
             if self.docking_mode == "dlg":
                 file_pattern = "*.dlg*"
@@ -417,16 +440,20 @@ class RingtailCore:
             elif self.docking_mode == "vina":
                 file_pattern = "*.pdbqt*"
             else:
-                file_pattern = "*.dlg*"
-                logger.warning(
-                    "File pattern was not specified, set to default '*.dlg*'."
+                self.logger.error(
+                    "Docking mode and file pattern was not specified, can not continue."
                 )
 
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
-        del indiv_options["ensure_double_list"]
+        individual_options = {
+            "file": file,
+            "file_path": file_path,
+            "file_list": file_list,
+            "file_pattern": file_pattern,
+            "recursive": recursive,
+            "receptor_file": receptor_file,
+            "save_receptor": save_receptor,
+        }
 
         # Create option object with default values if needed
         files = InputFiles()
@@ -434,22 +461,23 @@ class RingtailCore:
         # Set options from dict if provided
         if dict is not None:
             for k, v in dict.items():
+                if k in need_to_be_double_list and v is not None:
+                    v = ensure_double_list(v)
                 setattr(files, k, v)
-                logger.debug(f"File attribute {k} was set to {v}.")
+            self.logger.debug(
+                f"File attributes {dict} were assigned from provided option dictionary."
+            )
 
         # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        # NOTE Will overwrite provided dictionary
+        for k, v in individual_options.items():
             if v is not None:
+                if k in need_to_be_double_list:
+                    v = ensure_double_list(v)
                 setattr(files, k, v)
-                logger.debug(f"File attribute {k} was set to {v}.")
-
-        # set docking mode based on file pattern
-        if files.file_pattern != None:
-            if "pdbqt" in files.file_pattern.lower() and self.docking_mode != "vina":
-                self.docking_mode = "vina"
-            elif "dlg" in files.file_pattern.lower() and self.docking_mode != "dlg":
-                self.docking_mode = "dlg"
+        self.logger.debug(
+            f"File attributes {individual_options} were assigned from provided individual options."
+        )
 
         return files
 
@@ -473,10 +501,11 @@ class RingtailCore:
             InputStrings object
         """
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
-
+        individual_options = {
+            "results_strings": results_strings,
+            "receptor_file": receptor_file,
+            "save_receptor": save_receptor,
+        }
         # Create option object with default values if needed
         strings = InputStrings()
 
@@ -484,14 +513,16 @@ class RingtailCore:
         if dict is not None:
             for k, v in dict.items():
                 setattr(strings, k, v)
-                logger.debug(f"Docking string results attribute {k} was set.")
+            self.logger.debug(f"Docking string results attributes {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(strings, k, v)
-            logger.debug(f"Docking string results attribute {k} was set.")
+        self.logger.debug(
+            f"Docking string results attributes {individual_options} were set."
+        )
 
         return strings
 
@@ -514,12 +545,14 @@ class RingtailCore:
             self.resultsman = ResultsManager(
                 file_sources=file_sources, docking_mode=self.docking_mode
             )
-            logger.debug("Results manager object has been created with results files.")
+            self.logger.debug(
+                "Results manager object has been created with results files."
+            )
         elif string_sources is not None:
             self.resultsman = ResultsManager(
                 string_sources=string_sources, docking_mode=self.docking_mode
             )
-            logger.debug(
+            self.logger.debug(
                 "Results manager object has been created with results strings."
             )
         else:
@@ -560,7 +593,7 @@ class RingtailCore:
         """
         # if dictionary of options provided, attribute to appropriate managers
         if options_dict is not None:
-            write_dict, storage_dict = RingtailCore.split_dict(
+            write_dict, storage_dict = split_dict(
                 options_dict, ["duplicate_handling", "overwrite"]
             )
         else:
@@ -598,7 +631,7 @@ class RingtailCore:
                 self.docking_mode == "vina"
                 and self.resultsman.interaction_tolerance is not None
             ):
-                logger.warning(
+                self.logger.warning(
                     "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
                 )
                 self.resultsman.interaction_tolerance = None
@@ -610,11 +643,13 @@ class RingtailCore:
                 self.resultsman.store_all_poses,
                 self.resultsman.max_poses,
             )
-            logger.info("Adding results...")
+            self.logger.info("Adding results...")
             self.resultsman.process_docking_data()
             self.storageman.finalize_database_write()
 
-    # -#-#- Core attribute setting methods -#-#-#
+    # endregion
+
+    # region #-#-#- Core attribute setting methods -#-#-#
     """ These methods are used internally to assing values to all ringtail options. 
     This ensures:   - that all options are set to specific types through RingtailOptions
                     - that internal consistency checks are performed on a group of options
@@ -679,9 +714,17 @@ class RingtailCore:
         """
 
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
+        individual_options = {
+            "filter_bookmark": filter_bookmark,
+            "duplicate_handling": duplicate_handling,
+            "overwrite": overwrite,
+            "order_results": order_results,
+            "outfields": outfields,
+            "output_all_poses": output_all_poses,
+            "mfpt_cluster": mfpt_cluster,
+            "interaction_cluster": interaction_cluster,
+            "bookmark_name": bookmark_name,
+        }
 
         # Create option object with default values if needed
         if not hasattr(self, "storageopts"):
@@ -692,19 +735,19 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.storageopts, k, v)
-                    logger.debug(f"Storage manager attribute {k} was set to {v}.")
+            self.logger.debug(f"Storage manager attributes {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(self.storageopts, k, v)
-                logger.debug(f"Storage manager attribute {k} was set to {v}.")
+        self.logger.debug(f"Storage manager attributes {individual_options} were.")
 
         # Assign attributes to storage manager
         for k, v in self.storageopts.todict().items():
             setattr(self.storageman, k, v)
-        logger.info("Options for storage manager have been changed.")
+        self.logger.info("Options for storage manager have been changed.")
 
     def set_resultsman_attributes(
         self,
@@ -712,7 +755,7 @@ class RingtailCore:
         max_poses: int = None,
         add_interactions: bool = None,
         interaction_tolerance: float = None,
-        interaction_cutoffs=None,
+        interaction_cutoffs: list = None,
         max_proc: int = None,
         dict: dict = None,
     ):
@@ -729,9 +772,14 @@ class RingtailCore:
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
         """
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
+        individual_options = {
+            "store_all_poses": store_all_poses,
+            "max_poses": max_poses,
+            "add_interactions": add_interactions,
+            "interaction_tolerance": interaction_tolerance,
+            "interaction_cutoffs": interaction_cutoffs,
+            "max_proc": max_proc,
+        }
 
         # Create option object with default values if needed
         if not hasattr(self, "resultsmanopts"):
@@ -742,29 +790,26 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.resultsmanopts, k, v)
-                    logger.debug(f"Results manager attribute {k} was set to {v}.")
+            self.logger.debug(f"Results manager attributes {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(self.resultsmanopts, k, v)
-                logger.debug(f"Results manager attribute {k} was set to {v}.")
+        self.logger.debug(f"Results manager attributes {individual_options} were set.")
 
         # Assigns options to the results manager object
         for k, v in self.resultsmanopts.todict().items():
             if v is not None:
                 setattr(self.resultsman, k, v)
-        logger.info("Options for results manager have been changed.")
+        self.logger.info("Options for results manager have been changed.")
 
     def set_output_options(
         self,
         log_file: str = None,
         export_sdf_path: str = None,
         enumerate_interaction_combs: bool = None,
-        find_similar_ligands: str = None,
-        export_bookmark_csv: str = None,
-        export_query_csv: str = None,
         dict: dict = None,
     ):
         """Creates output options object that holds attributes related to reading and outputting results.
@@ -775,12 +820,14 @@ class RingtailCore:
             export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
             enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
             dict (dict): dictionary of one or more of the above args, is overwritten by individual args
+
         """
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
-
+        individual_options = {
+            "log_file": log_file,
+            "export_sdf_path": export_sdf_path,
+            "enumerate_interaction_combs": enumerate_interaction_combs,
+        }
         # Create option object with default values if needed
         if not hasattr(self, "outputopts"):
             self.outputopts = OutputOptions()
@@ -790,20 +837,20 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.outputopts, k, v)
-                    logger.debug(f"Output options {k} was set to {v}.")
+            self.logger.debug(f"Output options {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(self.outputopts, k, v)
-                logger.debug(f"Output options {k} was set to {v}.")
+        self.logger.debug(f"Output options {individual_options} were set.")
 
         # Creates output man with attributes if needed
         self.outputman = OutputManager(
             self.outputopts.log_file, self.outputopts.export_sdf_path
         )
-        logger.info("Options for output manager have been changed.")
+        self.logger.info("Options for output manager have been changed.")
 
     def set_filters(
         self,
@@ -816,7 +863,7 @@ class RingtailCore:
         vdw_interactions=None,
         hb_interactions=None,
         reactive_interactions=None,
-        interactions_count=None,
+        hb_count=None,
         react_any=None,
         max_miss=None,
         ligand_name=None,
@@ -851,9 +898,25 @@ class RingtailCore:
         """
 
         # Dict of individual arguments
-        indiv_options: dict = vars()
-        del indiv_options["self"]
-        del indiv_options["dict"]
+        individual_options = {
+            "eworst": eworst,
+            "ebest": ebest,
+            "leworst": leworst,
+            "lebest": lebest,
+            "score_percentile": score_percentile,
+            "le_percentile": le_percentile,
+            "vdw_interactions": vdw_interactions,
+            "hb_interactions": hb_interactions,
+            "reactive_interactions": reactive_interactions,
+            "hb_count": hb_count,
+            "react_any": react_any,
+            "max_miss": max_miss,
+            "ligand_name": ligand_name,
+            "ligand_substruct": ligand_substruct,
+            "ligand_substruct_pos": ligand_substruct_pos,
+            "ligand_max_atoms": ligand_max_atoms,
+            "ligand_operator": ligand_operator,
+        }
 
         # Create a filter object
         self.filters = Filters()
@@ -863,17 +926,20 @@ class RingtailCore:
             for k, v in dict.items():
                 if v is not None:
                     setattr(self.filters, k, v)
-                    logger.debug(f"Filter {k} was set to {v}.")
+            self.logger.debug(f"Filter {dict} were set.")
 
         # Set additional options from individual arguments
         # NOTE Will overwrite config file
-        for k, v in indiv_options.items():
+        for k, v in individual_options.items():
             if v is not None:
                 setattr(self.filters, k, v)
-                logger.debug(f"Filter {k} was set to {v}.")
-        logger.info("A filter object has been prepared.")
+        self.logger.debug(f"Filter {individual_options} were set.")
 
-    # -#-#- API -#-#-#
+        self.logger.info("A filter object has been prepared.")
+
+    # endregion
+
+    # region # -#-#- API -#-#-#
     def add_results_from_files(
         self,
         file: str = None,
@@ -918,6 +984,7 @@ class RingtailCore:
 
         Raises:
             OptionError
+
         """
 
         files = self._set_file_sources(
@@ -992,6 +1059,7 @@ class RingtailCore:
 
         Raises:
             OptionError
+
         """
         # Method currently only works with vina output, set automatically
         if self.docking_mode != "vina":
@@ -1030,6 +1098,7 @@ class RingtailCore:
 
         Args:
             receptor_file (str): path to receptor file
+
         """
         receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
         with self.storageman:
@@ -1048,7 +1117,7 @@ class RingtailCore:
                         )
                     )
                 self.storageman.save_receptor(rec, rec_name)
-                logger.info("Receptor data was added to the database.")
+                self.logger.info("Receptor data was added to the database.")
 
     def produce_summary(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
@@ -1058,6 +1127,7 @@ class RingtailCore:
         Args:
             columns (list(str)): data columns used to prepare summary
             percentiles (list(int)): cutoff percentiles for the summary
+
         """
         with self.storageman:
             summary_data = self.storageman.fetch_summary_data(columns, percentiles)
@@ -1126,7 +1196,7 @@ class RingtailCore:
         vdw_interactions=None,
         hb_interactions=None,
         reactive_interactions=None,
-        interactions_count=None,
+        hb_count=None,
         react_any=None,
         max_miss=None,
         ligand_name=None,
@@ -1176,44 +1246,44 @@ class RingtailCore:
                 output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
                 mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
                 interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-                log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
+                log_file (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
                 overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
-                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION.
-                                        available fields are:
-                                        "e" (docking_score),
-                                        "le" (ligand efficiency),
-                                        "delta" (delta energy from best pose),
-                                        "ref_rmsd" (RMSD to reference pose),
-                                        "e_inter" (intermolecular energy),
-                                        "e_vdw" (van der waals energy),
-                                        "e_elec" (electrostatic energy),
-                                        "e_intra" (intermolecular energy),
-                                        "n_interact" (number of interactions),
-                                        "rank" (rank of ligand pose),
-                                        "run" (run number for ligand pose),
-                                        "hb" (hydrogen bonds);
-                outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are: \n
-                                    "Ligand_name" (Ligand name),
-                                    "e" (docking_score),
-                                    "le" (ligand efficiency),
-                                    "delta" (delta energy from best pose),
-                                    "ref_rmsd" (RMSD to reference pose),
-                                    "e_inter" (intermolecular energy),
-                                    "e_vdw" (van der waals energy),
-                                    "e_elec" (electrostatic energy),
-                                    "e_intra" (intermolecular energy),
-                                    "n_interact" (number of iteractions),
-                                    "ligand_smile" ,
-                                    "rank" (rank of ligand pose),
-                                    "run" (run number for ligand pose),
-                                    "hb" (hydrogen bonds),
-                                    "receptor" (receptor name)
+                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION. Available fields are:\n
+                    "e" (docking_score),
+                    "le" (ligand efficiency),
+                    "delta" (delta energy from best pose),
+                    "ref_rmsd" (RMSD to reference pose),
+                    "e_inter" (intermolecular energy),
+                    "e_vdw" (van der waals energy),
+                    "e_elec" (electrostatic energy),
+                    "e_intra" (intermolecular energy),
+                    "n_interact" (number of interactions),
+                    "rank" (rank of ligand pose),
+                    "run" (run number for ligand pose),
+                    "hb" (hydrogen bonds);
+                outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. `--outfields=e,le,hb`; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are: \n
+                    "Ligand_name" (Ligand name),
+                    "e" (docking_score),
+                    "le" (ligand efficiency),
+                    "delta" (delta energy from best pose),
+                    "ref_rmsd" (RMSD to reference pose),
+                    "e_inter" (intermolecular energy),
+                    "e_vdw" (van der waals energy),
+                    "e_elec" (electrostatic energy),
+                    "e_intra" (intermolecular energy),
+                    "n_interact" (number of iteractions),
+                    "ligand_smile" ,
+                    "rank" (rank of ligand pose),
+                    "run" (run number for ligand pose),
+                    "hb" (hydrogen bonds),
+                    "receptor" (receptor name)
                 bookmark_name (str): name for resulting book mark file. Default value is 'passing_results'
                 filter_bookmark (str): name of bookmark to perform filtering over
                 options_dict (dict): write options as a dict
 
         Returns:
             int: number of ligands passing filter
+
         """
 
         self.set_filters(
@@ -1226,7 +1296,7 @@ class RingtailCore:
             vdw_interactions=vdw_interactions,
             hb_interactions=hb_interactions,
             reactive_interactions=reactive_interactions,
-            interactions_count=interactions_count,
+            hb_count=hb_count,
             react_any=react_any,
             max_miss=max_miss,
             ligand_name=ligand_name,
@@ -1238,7 +1308,7 @@ class RingtailCore:
         )
 
         if options_dict is not None:
-            storage_dict, output_dict = RingtailCore.split_dict(
+            storage_dict, output_dict = split_dict(
                 options_dict, ["log_file", "enumerate_interaction_combs"]
             )
         else:
@@ -1263,7 +1333,7 @@ class RingtailCore:
 
         # Compatibility check with docking mode
         if self.docking_mode == "vina" and self.filters.react_any:
-            logger.warning(
+            self.logger.warning(
                 "Cannot use reaction filters with Vina mode. Removing react_any filter."
             )
             self.filters.react_any = False
@@ -1276,19 +1346,21 @@ class RingtailCore:
         if self.storageopts.output_all_poses and not (
             self.filters.score_percentile is None or self.filters.le_percentile is None
         ):
-            logger.warning(
+            self.logger.warning(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             self.storageopts.output_all_poses = False
 
-        logger.info("Filtering results...")
+        self.logger.info("Filtering results...")
 
         # get possible permutations of interaction with max_miss excluded
         interaction_combs = self._generate_interaction_combinations(
             self.filters.max_miss
         )
         ligands_passed = 0
-        """This for comprehension takes all combinations represented in one union of one or multiple, and filters, and goes around until all combinations have been used to filter"""
+        """This for comprehension takes all combinations represented in one union of one or multiple, and filters, and goes around until all combinations have been used to filter
+        
+        """
         with self.storageman:
             for ic_idx, combination in enumerate(interaction_combs):
                 # prepare Filter object with only desired interaction combination for storageManager
@@ -1313,12 +1385,14 @@ class RingtailCore:
                         self.outputman.write_results_bookmark_to_log(
                             result_bookmark_name
                         )
-                        number_passing = self.outputman.write_log(filtered_results)
+                        number_passing = self.outputman.write_filter_log(
+                            filtered_results
+                        )
                         self.outputman.log_num_passing_ligands(number_passing)
                         print("\nNumber of ligands passing filters:", number_passing)
                         ligands_passed = number_passing
                 else:
-                    logger.warning("WARNING: No ligands found passing filters")
+                    self.logger.warning("WARNING: No ligands found passing filters")
             if len(interaction_combs) > 1:
                 maxmiss_union_results = self.storageman.get_maxmiss_union(
                     len(interaction_combs)
@@ -1328,7 +1402,7 @@ class RingtailCore:
                     self.outputman.write_results_bookmark_to_log(
                         self.storageman.bookmark_name + "_union"
                     )
-                    number_passing_union = self.outputman.write_log(
+                    number_passing_union = self.outputman.write_filter_log(
                         maxmiss_union_results
                     )
                     self.outputman.log_num_passing_ligands(number_passing_union)
@@ -1360,7 +1434,7 @@ class RingtailCore:
         )
 
         for ligname, info in all_mols.items():
-            logger.info("Writing " + ligname + ".sdf")
+            self.logger.info("Writing " + ligname + ".sdf")
             self.outputman.write_out_mol(
                 ligname, info["ligand"], info["flex_residues"], info["properties"]
             )
@@ -1387,12 +1461,12 @@ class RingtailCore:
             )  # fetches the filters used to produce the bookmark
             max_miss = bookmark_filters["max_miss"]
             if max_miss > 0:
-                logger.warning(
+                self.logger.warning(
                     "WARNING: Requested 'export_sdf_path' with 'max_miss'. Exported SDFs will be for union of interaction combinations."
                 )
                 self.storageman.bookmark_name = self.storageman.bookmark_name + "_union"
             if not self.storageman.check_passing_view_exists():
-                logger.warning(
+                self.logger.warning(
                     "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
                 )
                 return None
@@ -1408,10 +1482,12 @@ class RingtailCore:
 
             all_mols = {}
             for ligname, smiles, atom_indices, h_parent_line in passing_molecule_info:
-                logger.info("Creating an RDKIT mol for ligand: " + ligname + ".")
+                self.logger.info("Creating an RDKIT mol for ligand: " + ligname + ".")
                 # create rdkit ligand molecule and flexible residue container
                 if smiles == "":
-                    logger.warning(f"No SMILES found for {ligname}. Cannot create SDF.")
+                    self.logger.warning(
+                        f"No SMILES found for {ligname}. Cannot create SDF."
+                    )
                     continue
                 # some work needed bc of info needed for creating rd kit, can I remove more than flex stuff?
                 mol, flexres_mols, properties = self._create_rdkit_mol(
@@ -1453,12 +1529,12 @@ class RingtailCore:
             with self.outputman:
                 self.outputman.write_find_similar_header(query_ligname, cluster_name)
                 self.outputman.write_results_bookmark_to_log(bookmark_name)
-                number_similar = self.outputman.write_log(similar_ligands)
+                number_similar = self.outputman.write_filter_log(similar_ligands)
                 self.outputman.log_num_passing_ligands(number_similar)
                 print("Number similar ligands:", number_similar)
         return number_similar
 
-    def plot(self, save=True, bookmark_name=None):
+    def plot(self, save=True, bookmark_name: str = None):
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
@@ -1554,7 +1630,9 @@ class RingtailCore:
                 line = event.artist
                 coords = tuple([c[0] for c in line.get_data()])
                 chosen_pose = poseIDs[coords]
-                logger.info(f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}")
+                self.logger.info(
+                    f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}"
+                )
 
                 # make rdkit mol for poseid
                 ligname, ligand_smile, atom_index_map, hydrogen_parents = (
@@ -1576,7 +1654,7 @@ class RingtailCore:
                     flexres_atomnames,
                     pose_ID=chosen_pose[0],
                 )
-                logger.debug(Chem.MolToSmiles(mol))
+                self.logger.debug(Chem.MolToSmiles(mol))
                 pymol.ShowMol(mol, name=ligname, showOnly=False)
                 for idx, resmol in enumerate(flexres_mols):
                     pymol.ShowMol(
@@ -1615,9 +1693,9 @@ class RingtailCore:
         bookmark_db_name = (
             self.db_file.rstrip(".db") + "_" + self.storageman.bookmark_name + ".db"
         )
-        logger.info("Exporting bookmark database")
+        self.logger.info("Exporting bookmark database")
         if os.path.exists(bookmark_db_name):
-            logger.warning(
+            self.logger.warning(
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
@@ -1641,7 +1719,7 @@ class RingtailCore:
             receptor_tuples = self.storageman.fetch_receptor_objects()
         for recname, recblob in receptor_tuples:
             if recblob is None:
-                logger.warning(
+                self.logger.warning(
                     f"No receptor pdbqt stored for {recname}. Export failed."
                 )
                 continue
@@ -1669,7 +1747,7 @@ class RingtailCore:
         with self.storageman:
             new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman:
-            self.outputman.write_log(new_data)
+            self.outputman.write_filter_log(new_data)
 
     def drop_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database
@@ -1680,36 +1758,11 @@ class RingtailCore:
 
         with self.storageman:
             self.storageman._drop_bookmark(bookmark_name=bookmark_name)
-        logger.info(
+        self.logger.info(
             "Bookmark {0} was dropped from the database {1}".format(
                 bookmark_name, self.storageman.db_file
             )
         )
-
-    def add_config_from_file(self, config_file: str = "config.json"):
-        """
-        Provide ringtail config from file, will directly set storage manager settings,
-        and return dictionaries for the remaining options.
-
-        Args:
-            config_file (str): json formatted file containing ringtail and filter options
-
-        Returns:
-            file_dict: dictionary of files to use in add results
-            write_dict: dictionary of options to use in add results
-            output_dict: dictionary of options to use for filtering
-            filters_dict: dictionary of files containing filters
-        """
-        (file_dict, write_dict, output_dict, filters_dict, storageman_dict) = (
-            RingtailCore.read_config_file(config_file=config_file)
-        )
-
-        self.set_storageman_attributes(dict=storageman_dict)
-        logger.info(
-            "A dictionary containing storage options was extracted from config file and assigned storagemanager."
-        )
-
-        return (file_dict, write_dict, output_dict, filters_dict)
 
     def get_bookmark_names(self):
         """
@@ -1722,206 +1775,58 @@ class RingtailCore:
             return self.storageman.get_all_bookmark_names()
 
     @staticmethod
-    def ringtail_defaults(object: str = "all") -> str:
+    def default_dict() -> dict:
         """
-        Creates a dict of all Ringtail option classes, and their
-        key-default value pairs. Outputs to options.json in
-        "util_files" of to_file = true, else it returns the dict
-        of default option values.
-
-        Args:
-            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
+        Creates a dict of all Ringtail options.
 
         Return:
             str: json string with options
         """
+        defaults = {}
+        defaults.update(OutputOptions().todict())
+        defaults.update(ResultsProcessingOptions().todict())
+        defaults.update(StorageOptions().todict())
+        defaults.update(Filters().todict())
+        defaults.update(InputFiles().todict())
+        defaults.update(ReadOptions().todict())
+        defaults.update(GeneralOptions().todict())
 
-        json_string = {
-            "outputopts": OutputOptions().todict(),
-            "resultsmanopts": ResultsProcessingOptions().todict(),
-            "storageopts": StorageOptions().todict(),
-            "filters": Filters().todict(),
-            "fileobj": InputFiles().todict(),
-        }
-        if to_file:
-            filename = "config.json"
-            with open(filename, "w") as f:
-                f.write(json.dumps(json_string, indent=4))
-            logger.debug(
-                f"Default ringtail API option values written to file {filename}."
-            )
-            return filename
-        else:
-            logger.debug("Default ringtail API option values prepared as a string.")
-            return json_string
+        return defaults
 
     @staticmethod
-    def read_config_file(config_file: str = "config.json", return_as_string=False):
-        """
-        Will read and parse a file containing ringtail options following the format
-        given from RingtailCore.generate_config_json_template
+    def generate_config_file_template():
+        """Outputs to "config.json in current working directory if to_file = true,
+        else it returns the dict of default option values used for API (for command
+        line a few more options are included that are always used explicitly when using API)
 
         Args:
-            config_file (str): json formatted config file containing ringtail and filter options present in cd
-            return_as_string (bool): will return all dictionaries as dict without sections if true
+            to_file (bool): whether to produce the template as a json string or as a file "config.json"
 
         Returns:
-            file_dict: dictionary of files to use in add results
-            write_dict: dictionary of options to use in add results
-            output_dict: dictionary of options to use for filtering
-            filters_dict: dictionary of files containing filters
-            storageman_dict: dictionary of storage manager options
+            str: file name of config file or json string with template including default values
         """
 
-        try:
-            if config_file is None:
-                raise OptionError(
-                    "No config file was found in the Ringtail/util_files directory."
-                )
+        json_string = RingtailCore.default_dict()
 
-            filepath = "config.json"
-            with open(filepath, "r") as f:
-                logger.info("Reading Ringtail options from config file")
-                options: dict = json.load(f)
-
-            file_dict = options["fileobj"]
-            logger.info(
-                "A dictionary containing results files was extracted from config file."
-            )
-            write_dict = {
-                **options["resultsmanopts"],
-                "duplicate_handling": options["storageopts"]["duplicate_handling"],
-                "overwrite": options["storageopts"]["overwrite"],
-            }
-            logger.info(
-                "A dictionary containing write options was extracted from config file."
-            )
-
-            storageman_dict = options["storageopts"]
-            logger.info(
-                "A dictionary containing storage options was extracted from config file."
-            )
-
-            output_dict = options["outputopts"]
-            logger.info(
-                "A dictionary containing database read options was extracted from config file."
-            )
-
-            filters_dict = options["filters"]
-            logger.info(
-                "A dictionary containing filters was extracted from config file."
-            )
-
-            if return_as_string:
-                return (
-                    file_dict
-                    | write_dict
-                    | output_dict
-                    | filters_dict
-                    | storageman_dict
-                )
-            else:
-                return (
-                    file_dict,
-                    write_dict,
-                    output_dict,
-                    filters_dict,
-                    storageman_dict,
-                )
-
-        except FileNotFoundError:
-            logger.error("Please ensure config file is in the working directory.")
-        except Exception as e:
-            OptionError(f"There were issues with the configuration file: {e}")
+        filename = "config.json"
+        with open(filename, "w") as f:
+            f.write(json.dumps(json_string, indent=4))
+        return filename
 
     @staticmethod
-    def get_defaults(object: str = "all") -> dict:
+    def get_options_info() -> dict:
         """
-        Gets default values from RingtailOptions and returns dict of all options,
-        or options belonging to a specific group.
-
-        Args:
-            object (str): ["all", "resultsmanopts", "storageopts", "outputopts", "filters", "fileobj"]
+        Gets names, default values, and meta data for all Ringtail options.
         """
+        options = {}
+        options.update(OutputOptions.options)
+        options.update(ResultsProcessingOptions.options)
+        options.update(StorageOptions.options)
+        options.update(Filters.options)
+        options.update(InputFiles.options)
+        options.update(ReadOptions.options)
+        options.update(GeneralOptions.options)
 
-        all_defaults = RingtailCore.generate_config_json_template(to_file=False)
+        return options
 
-        if object.lower() not in [
-            "all",
-            "resultsmanopts",
-            "storageopts",
-            "outputopts",
-            "filterobj",
-            "fileobj",
-        ]:
-            raise OptionError(
-                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filterobj", "fileobj"]'
-            )
-
-        if object.lower() == "all":
-            logger.debug("All ringtail default values have been fetched.")
-            return all_defaults
-        else:
-            logger.debug(f"Ringtail default values for {object} have been fetched.")
-            return all_defaults[object.lower()]
-
-    @staticmethod
-    def get_options_info(object: str = "all") -> dict:
-        """
-        Gets default values from RingtailOptions and returns dict of all,
-        or specific object.
-
-        Args:
-            object (str): ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj","readopts","generalopts"]
-        """
-        all_info = {
-            "outputopts": OutputOptions.options,
-            "fileobj": InputFiles.options,
-            "writeopts": ResultsProcessingOptions.options,
-            "storageopts": StorageOptions.options,
-            "filters": Filters.options,
-        }
-
-        if object.lower() not in [
-            "all",
-            "writeopts",
-            "storageopts",
-            "outputopts",
-            "filters",
-            "fileobj",
-        ]:
-            raise OptionError(
-                f'The options object {object.lower()} does not exist. Please choose amongst \n ["all", "writeopts", "storageopts", "outputopts", "filters", "fileobj"]'
-            )
-        if object.lower() == "all":
-            all_info_one_dict = {}
-            for _, v in all_info.items():
-                all_info_one_dict.update(v)
-            logger.debug("All ringtail default values have been fetched.")
-            return all_info_one_dict
-        else:
-            logger.debug(f"Ringtail default values for {object} have been fetched.")
-            return all_info[object.lower()]
-
-    # -#-#- Util method -#-#-#
-    @staticmethod
-    def split_dict(dict: dict, items: list) -> tuple:
-        """Utility method that takes one dictionary and splits it into two based on the listed keys
-
-        Args:
-            dict (dict): original dictionary
-            items (list): ist of keys to use for separation
-
-        Returns:
-            tuple: original dict minus the removed items and new dict containing the items removed from the original dict
-        """
-
-        new_dict = {}
-
-        for key in items:
-            new_dict[key] = dict.pop(key)
-
-        return dict, new_dict
-
-
-# endregion
+    # endergion

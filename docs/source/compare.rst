@@ -31,7 +31,7 @@ Usage examples
 ****************
 
 Select ligands found in "passing_results" bookmarks of vs1 but not vs2 or vs3
-============================
+===============================================================================
 
 .. code-block:: bash
 

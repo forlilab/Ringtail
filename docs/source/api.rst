@@ -53,26 +53,6 @@ The receptor can be added to a database by itself, either to a populated databas
     
     rtc.save_receptor(receptor_file = "receptor.pdbqt")
 
-
-Providing inputs from dictionaries
------------------------------------
-The following shows how to add results using dictionaries. Please note that this becomes epsecially relevant if you chose to add ringtail arguments from a config file (LINK TO SECTION).
-
-.. code-block:: python
-
-    file_sources = {
-        "file_path": "test_data/",
-        "recursive": True,
-    }
-
-    writeoptions = {
-        "store_all_poses": True,
-        "max_proc": 4
-    }
-
-    rtc.add_results_from_files( filesources_dict = file_sources,
-                                optionsdict = writeoptions)
-
 Printing a database summary
 ---------------------------
 If at any point you wish to print a summary of the contents of the database, the method can be called directly. 
@@ -264,40 +244,6 @@ Finally, a receptor stored in the database may be re-exported as a PDBQT with th
 
     rtc.export_bookmark_db()
 
-Using a config file to provide Ringtail arguments
-**************************************************
-It is possible to populate the argument list using a config file, which needs to be in a json format. The keywords needs to correspond exactly to an argument option, and the value given can be provided as a string as you would type it using the command line interface.
-Ringtail has a class method that creates a config file template, populated with default values. You can remove any arguments you do not intend to use, and you are not required to use the template to create a config file. 
-The ``config.json`` file will be saved in the current directory (default) or can be written as a dictionary object by ``to_file = False``. 
-
-.. code-block:: python
-
-    from ringtail import RingtailCore as RTC 
-
-    config_dict = RTC.generate_config_json_template(to_file = False)
-
-Configuration file is organized in sections for enhanced readability. To edit the dictionary, then
-
-.. code-block:: python
-
-    config_dict[]:
-        {
-        "file_path": "path1/",
-        "output_db": "example.db"
-        }
-
-    config_r.json:
-        {
-        "score_percentile": "0.1"
-        }
-
-#TODO show how the config file is used 
-
-.. code-block:: python
-
-    rtc = RingtailCore()
-    rtc.add_config_from_file
-
 Some usage notes
 ******************
 
@@ -318,6 +264,7 @@ Available Ringtail arguments
 ******************************
 
 Keywords pertaining to database write and file handling
+========================================================
 
 .. csv-table:: Ringtail input options
     :header: "Keyword","Description","Default value"
@@ -340,7 +287,9 @@ Keywords pertaining to database write and file handling
     "duplicate_handling", "Specify how dulicate results should be handled. May specify 'ignore' or 'replace'. Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*", None
     "overwrite", "Flag to overwrite existing database", FALSE
 
+
 Keywords pertaining to filtering and read/output
+================================================
 
 .. csv-table:: Ringtail filters
     :header: "Keyword","Description","Default value"
@@ -366,6 +315,8 @@ Keywords pertaining to filtering and read/output
 
 .. [note] Requires interactions are calculated and present in the database.
 
+Keywords pertaining to output of data
+======================================
 .. csv-table:: Ringtail output options
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
@@ -379,19 +330,4 @@ Keywords pertaining to filtering and read/output
     "mfpt_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm",0.5
     "interaction_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm (*)",0.5
     "enumerate_interactions_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)",FALSE
-
-.. csv-table:: Ringtail read/output methods
-    :header: "Keyword","Description","Input options"
-    :widths: 10, 30, 10
-
-    "export_csv", "Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv.", "requested_data= bookmark_name OR csv_name, table (bool)"
-    "export_csv", "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]", "requested_data (str), csv_name (str), table (bool)"
-    "export_bookmark_db", "Export a database containing only the results found in the specified bookmark name. Will save as <core_db_file>_<bookmark_name>.db", "bookmark_name (str)"
-    "export_receptors", "Export receptor to pdbqt", None
-    "write_molecule_sdfs", "Write molecule sdfs from a given bookmark to specified path", "sdf_path (str), bookmark_name (str)"
-    "find_similar_ligands", "Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest.", "query_ligname (str)"
-    "get_previous_filter_data", "Get data requested in `outfields` from the bookmark of a previous filtering", "outfields (str), bookmark_name (str)"
-    "find_similar_ligands", "Find ligands in cluster with query_ligname", "query_ligname (str)"
-    "plot", "Create scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as 'scatter.png'.", "save (bool)"
-    "pymol", "Launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with bookmark_name will be ploted and displayed in PyMol when clicked on.","bookmark_name (str)"
 

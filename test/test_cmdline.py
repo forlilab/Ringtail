@@ -33,7 +33,7 @@ class TestInputs:
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
+            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz --append_results"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -113,19 +113,20 @@ class TestInputs:
         code = os.system(
             "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
         )
-        assert code == 256  # indicates failure pf rt_process_vs.py
+        assert (
+            code == 256
+        )  # indicates failure of rt_process_vs.py, log file will have error w traceback
 
     def test_cmdline_config_file(self, countrows):
         from ringtail import RingtailCore
         import json
 
-        RingtailCore.generate_config_template_for_cmdline()
-        filepath = "config.json"
+        filepath = RingtailCore.generate_config_file_template()
 
         with open(filepath, "r") as f:
             data = json.load(f)
         # all fields I want to change
-        data["fileobj"]["file_list"] = [["filelist1.txt"]]
+        data["file_list"] = [["filelist1.txt"]]
 
         with open(filepath, "w") as f:
             f.write(json.dumps(data, indent=4))

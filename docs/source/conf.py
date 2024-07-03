@@ -5,34 +5,34 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../ringtail/'))
+
+sys.path.insert(0, os.path.abspath("../../ringtail/"))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'ringtail'
-copyright = '2024, Forli lab'
-author = 'Forli lab'
-release = '2.0.0'
+project = "ringtail"
+copyright = "2024, Forli lab"
+author = "Forli lab"
+release = "2.0.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx.ext.autosectionlabel',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.intersphinx',
+    "sphinx.ext.autosectionlabel",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.intersphinx",
 ]
 
-templates_path = ['_templates']
+templates_path = ["_templates"]
 exclude_patterns = []
 
-pygments_style = 'sphinx'
+pygments_style = "sphinx"
 
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
-
+html_theme = "sphinx_rtd_theme"
+html_static_path = ["_static"]

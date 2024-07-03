@@ -44,18 +44,18 @@ class TestRingtailCore:
         os.system("rm output.db output_log.txt")
         from ringtail import ringtailoptions
 
-        defaults = RingtailCore.ringtail_defaults("resultsmanopts")
+        defaults = RingtailCore.default_dict()
         object_dict = ringtailoptions.ResultsProcessingOptions().todict()
-        assert defaults == object_dict
+        assert object_dict.items() <= defaults.items()
 
     def test_add_folder(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path=[["test_data/group1"]])
+        rtc.add_results_from_files(file_path="test_data/group1")
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
 
     def test_save_receptor(self, countrows):
-        rtc = RingtailCore(db_file="output.db", logging_level="debug")
+        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
         count0 = countrows(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )
@@ -97,7 +97,7 @@ class TestRingtailCore:
 
     def test_append_to_database(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path=[["test_data/group2/"]])
+        rtc.add_results_from_files(file_path="test_data/group2/")
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
         assert count == 217
@@ -372,40 +372,54 @@ class TestRingtailCore:
 
         rtc = RingtailCore(db_file="output.db")
         file = "test_data/group1/1451.dlg.gz"
-        rtc.add_results_from_files(file=file, duplicate_handling="replace")
+        rtc.add_results_from_files(file=file)
         # ensure three results rows were added
         result_count = countrows("SELECT COUNT(*) FROM Results")
         inter_count = countrows("SELECT COUNT(*) FROM Interactions")
         # add same file but replace the duplicate
-        rtc.add_results_from_files(file=file)
-        count_replace = countrows("SELECT COUNT(*) FROM Results")
-
-        os.system("rm output.db")
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file=file, duplicate_handling="ignore")
+        rtc.add_results_from_files(file=file, duplicate_handling="replace")
+        result_count_replace = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_replace = countrows("SELECT COUNT(*) FROM Interactions")
         # add same file but ignore the duplicate
-        rtc.add_results_from_files(file=file)
-        count_ignore = countrows("SELECT COUNT(*) FROM Results")
+        rtc.add_results_from_files(file=file, duplicate_handling="ignore")
+        result_count_ignore = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_ignore = countrows("SELECT COUNT(*) FROM Interactions")
 
         os.system("rm output.db")
         # add same file but allow the duplicate
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file=file)
-        # add same file but allow the duplicate
         rtc.add_results_from_files(file=file)
-        count_dupl = countrows("SELECT COUNT(*) FROM Results")
-        assert count == count_replace == count_ignore == count_dupl / 2
+        result_count_dupl = countrows("SELECT COUNT(*) FROM Results")
+        inter_count_dupl = countrows("SELECT COUNT(*) FROM Interactions")
+
+        assert (
+            result_count
+            == result_count_replace
+            == result_count_ignore
+            == result_count_dupl / 2
+        )
+        assert (
+            inter_count
+            == inter_count_replace
+            == inter_count_ignore
+            == inter_count_dupl / 2
+        )
 
         os.system("rm output.db")
 
     def test_db_num_poses_warning(self):
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file=[["test_data/group1/1451.dlg.gz"]], max_poses=1)
-        rtc.add_results_from_files(file=[["test_data/group1/1620.dlg.gz"]], max_poses=4)
-        from ringtail import logger
+        # make sure we make ringtail core object with log file
+        rtc = RingtailCore(db_file="output.db", logging_file="ringtail")
 
+        # add results with max poses = 1
+        rtc.add_results_from_files(file="test_data/group1/1451.dlg.gz", max_poses=1)
+        # add results with different max poses
+        rtc.add_results_from_files(file="test_data/group1/1620.dlg.gz", max_poses=4)
         warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1."
-        with open(logger.filename(), "r") as f:
+
+        log_file = rtc.logger._log_fp.baseFilename
+        with open(log_file) as f:
             if warning_string in f.read():
                 warning_worked = True
             else:
@@ -467,15 +481,16 @@ class TestVinaHandling:
         assert count == 45
 
     def test_db_dockingmode_warning(self):
-        rtc = RingtailCore(db_file="output.db")
+        rtc = RingtailCore(db_file="output.db", logging_file="ringtail")
         rtc.add_results_from_files(file="test_data/group1/1451.dlg.gz")
-        rtc = RingtailCore(db_file="output.db", docking_mode="vina")
+        rtc = RingtailCore(
+            db_file="output.db", docking_mode="vina", logging_file="ringtail"
+        )
         rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
 
-        from ringtail import logger
-
         warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is dlg."
-        with open(logger.filename(), "r") as f:
+        log_file = rtc.logger._log_fp.baseFilename
+        with open(log_file, "r") as f:
             if warning_string in f.read():
                 warning_worked = True
             else:
@@ -508,9 +523,9 @@ class TestStorageMan:
             "interaction_cluster": rtc.storageman.interaction_cluster,
             "bookmark_name": rtc.storageman.bookmark_name,
         }
-        storageman_attributes_defaults = RingtailCore.ringtail_defaults("storageopts")
+        defaults = RingtailCore.default_dict()
         # ensure defaults values are set correctly and do not change during processing
-        assert storageman_attributes == storageman_attributes_defaults
+        assert storageman_attributes.items() <= defaults.items()
 
     def test_fetch_summary_data(self):
         rtc = RingtailCore("output.db")
@@ -543,7 +558,6 @@ class TestStorageMan:
             "SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'"
         )
         bookmark_filters_db_str = curs.fetchone()[0]
-        print(bookmark_filters_db_str)
 
         filters = {
             "eworst": -3.0,
@@ -564,7 +578,6 @@ class TestStorageMan:
             "ligand_max_atoms": None,
             "ligand_operator": "OR",
         }
-        print(json.dumps(filters))
         assert bookmark_filters_db_str == json.dumps(filters)
 
     def test_version_info(self):
@@ -576,86 +589,15 @@ class TestStorageMan:
         assert int(version) == 200  # NOTE: update for new database schema versions
 
 
-class TestConfigFile:
-
-    def test_generate_config_file(self):
-        RingtailCore.generate_config_template_for_api()
-        filepath = "config.json"
-
-        assert os.path.exists(filepath)
-
-        # Assure file is created, and populate it with non-default values
-        with open(filepath, "r") as f:
-            data = json.load(f)
-        # all fields I want to change
-        data["fileobj"]["file_path"] = [["test_data/"]]
-        data["fileobj"]["file_path"]
-        data["fileobj"]["recursive"] = True
-        data["fileobj"]["receptor_file"] = "test_data/4j8m.pdbqt"
-        data["fileobj"]["save_receptor"] = True
-        data["filters"]["eworst"] = -6
-        data["filters"]["vdw_interactions"] = [
-            ("A:VAL:279:", True),
-            ("A:LYS:162:", True),
-        ]
-        data["filters"]["hb_interactions"] = [
-            ("A:VAL:279:", True),
-            ("A:LYS:162:", True),
-        ]
-        data["filters"]["max_miss"] = 1
-        with open(filepath, "w") as f:
-            f.write(json.dumps(data, indent=4))
-
-    def test_adding_results(self, dbquery):
-        rtcore = RingtailCore(db_file="output.db", logging_level="DEBUG")
-        (file_dict, write_dict, _, _) = rtcore.add_config_from_file(
-            config_file="config.json"
-        )
-        rtcore.add_results_from_files(
-            filesources_dict=file_dict, options_dict=write_dict
-        )
-        curs = dbquery("""SELECT COUNT(*) FROM Results;""")
-        count = curs.fetchone()[0]
-
-        assert count == 645
-
-    def test_filter(self):
-        rtcore = RingtailCore(db_file="output.db", logging_level="DEBUG")
-        (_, _, _, filters_dict) = rtcore.add_config_from_file(config_file="config.json")
-        count_ligands_passing = rtcore.filter(filters_dict=filters_dict)
-        os.system("rm output_log.txt output.db config.json")
-        assert count_ligands_passing == 51
-
-
 class TestLogger:
 
     def test_set_log_level(self):
-        from ringtail import logger
+        from ringtail.logutils import RaccoonLogger
 
-        logger.setLevel("info")
-        log1 = logger.level()
-        logger.setLevel(50)
-        log2 = logger.level()
-        assert log1 == log2 == "INFO"
-
-    def test_loggerfile_format(self):
-        from ringtail import logger, exceptions
-
-        try:
-            raise (exceptions.OptionError("This is a test error."))
-        except Exception as e:
-            pass
-
-        with open(logger.filename()) as f:
-            for line in f:
-                pass
-        last_line = line
-        keywords = [
-            "ERROR",
-            "test_units.py[",
-            "ringtail.exceptions:This is a test error.",
-        ]
-        assert all(x in last_line for x in keywords)
+        logger = RaccoonLogger()
+        logger.set_level("info")
+        log_level = logger.level()
+        assert log_level == "INFO"
 
 
 class TestOptions:
@@ -663,13 +605,8 @@ class TestOptions:
         from ringtail import exceptions as e
 
         with pytest.raises(e.OptionError):
-            RingtailCore.ringtail_defaults("not_a_ringtail_object")
-
-    def test_options_type_check(self):
-        rtc = RingtailCore()
-        # set to wrong type, ensure reset to default value
-        rtc.set_storageman_attributes(outfields=5)
-        assert rtc.storageman.outfields == "Ligand_name,e"
+            rtc = RingtailCore()
+            rtc.filter(eworst="a")
 
     def test_object_checks(self):
         # checking that incompatible options are handled
@@ -698,5 +635,13 @@ class TestOptions:
 
         rtc.add_results_from_files(file_list="filelist2.txt", overwrite=True)
         count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
+
+        os.system("rm output.db")
+
         assert count_old_db == 3
         assert count_new_db == 2
+
+    def test_remove_test_log_files(self):
+        # Alter this method if you wish to delete all log files after testing automatically
+        return
+        os.system("rm *_ringtail.log")
