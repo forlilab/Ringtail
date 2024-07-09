@@ -1,0 +1,6 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file alias="ringtail_logo">resources/ringtail_logo.png</file>
+    <file alias="ringtail_head">resources/ringtail_head.png</file>
+</qresource>
+</RCC>
