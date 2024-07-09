@@ -11,9 +11,6 @@ class MainWindow(QDialog):
         self.browse_files_button.clicked.connect(self.browsefiles)
         self.browse_directories_button.clicked.connect(self.browsedirectories)
         self.browse_filelists_button.clicked.connect(self.browsefilelists)
-        self.selected_files = []
-        self.selected_directories = []
-        self.selected_filelists = []
         self.delete_file_button.clicked.connect(self.delete_file_item)
         self.delete_directory_button.clicked.connect(self.delete_directory_item)
         self.delete_filelist_button.clicked.connect(self.delete_filelist_item)
@@ -26,15 +23,11 @@ class MainWindow(QDialog):
             extension,
         )
         if filenames:
-
             # add latest items on top of list
-            # but this should always reflect self.selected_data I feel, and update selected data if the list view is changed, so probably a better approach needed in future
             if "txt" in extension:
                 self.filelist_list.insertItems(0, filenames)
-                self.selected_filelists.extend(filenames)
             else:
                 self.file_list.insertItems(0, filenames)
-                self.selected_files.extend(filenames)
             self.file_browser_text.setText(filenames[0])
 
     def browsefiles(self):
@@ -52,7 +45,6 @@ class MainWindow(QDialog):
 
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             self.directory_list.insertItems(0, dialog.selectedFiles())
-            self.selected_directories.extend(dialog.selectedFiles())
             self.file_browser_text.setText(dialog.selectedFiles()[0])
         dialog.deleteLater()
 
@@ -60,16 +52,13 @@ class MainWindow(QDialog):
         self.selectfiles("*.txt")
 
     def delete_file_item(self):
-        # items = self.file_list.selectedItems()
         # get index of the items, and remove from bottom up so index doesn't change
         indices = [x.row() for x in self.file_list.selectedIndexes()]
-
         # then remove each item from bottom up (so indices don't change)
         for index in reversed(indices):
             self.file_list.takeItem(index)
 
     def delete_directory_item(self):
-        # items = self.file_list.selectedItems()
         # get index of the items, and remove from bottom up so index doesn't change
         indices = [x.row() for x in self.directory_list.selectedIndexes()]
 
@@ -78,7 +67,6 @@ class MainWindow(QDialog):
             self.directory_list.takeItem(index)
 
     def delete_filelist_item(self):
-        # items = self.file_list.selectedItems()
         # get index of the items, and remove from bottom up so index doesn't change
         indices = [x.row() for x in self.filelist_list.selectedIndexes()]
 

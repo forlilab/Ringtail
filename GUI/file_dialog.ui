@@ -10,6 +10,11 @@
     <height>606</height>
    </rect>
   </property>
+  <property name="font">
+   <font>
+    <family>Arial</family>
+   </font>
+  </property>
   <property name="windowTitle">
    <string>Dialog</string>
   </property>
@@ -21,6 +26,11 @@
      <width>151</width>
      <height>26</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+    </font>
    </property>
    <property name="text">
     <string>browse files</string>
@@ -35,6 +45,11 @@
      <height>51</height>
     </rect>
    </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+    </font>
+   </property>
   </widget>
   <widget class="QListWidget" name="file_list">
    <property name="geometry">
@@ -44,6 +59,11 @@
      <width>231</width>
      <height>371</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+    </font>
    </property>
    <property name="selectionMode">
     <enum>QAbstractItemView::ExtendedSelection</enum>
@@ -64,6 +84,11 @@
      <height>26</height>
     </rect>
    </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+    </font>
+   </property>
    <property name="text">
     <string>browse directories</string>
    </property>
@@ -76,6 +101,11 @@
      <width>231</width>
      <height>371</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+    </font>
    </property>
    <property name="selectionMode">
     <enum>QAbstractItemView::ExtendedSelection</enum>
@@ -93,6 +123,11 @@
      <height>371</height>
     </rect>
    </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+    </font>
+   </property>
    <property name="selectionMode">
     <enum>QAbstractItemView::ExtendedSelection</enum>
    </property>
@@ -108,6 +143,11 @@
      <width>181</width>
      <height>26</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+    </font>
    </property>
    <property name="text">
     <string>browse lists</string>
@@ -566,6 +606,7 @@
    </property>
    <property name="font">
     <font>
+     <family>Arial</family>
      <italic>true</italic>
     </font>
    </property>
@@ -1026,6 +1067,7 @@
    </property>
    <property name="font">
     <font>
+     <family>Arial</family>
      <italic>true</italic>
     </font>
    </property>
@@ -1486,6 +1528,7 @@
    </property>
    <property name="font">
     <font>
+     <family>Arial</family>
      <italic>true</italic>
     </font>
    </property>
@@ -1501,6 +1544,11 @@
      <width>58</width>
      <height>16</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+    </font>
    </property>
    <property name="text">
     <string>Path</string>
