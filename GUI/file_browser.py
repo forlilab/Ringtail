@@ -14,6 +14,9 @@ class MainWindow(QDialog):
         self.selected_files = []
         self.selected_directories = []
         self.selected_filelists = []
+        self.delete_file_button.clicked.connect(self.delete_file_item)
+        self.delete_directory_button.clicked.connect(self.delete_directory_item)
+        self.delete_filelist_button.clicked.connect(self.delete_filelist_item)
 
     def selectfiles(self, extension: str = ""):
         filenames, _ = QFileDialog.getOpenFileNames(
@@ -54,7 +57,34 @@ class MainWindow(QDialog):
         dialog.deleteLater()
 
     def browsefilelists(self):
-        self.selectfiles("txt")
+        self.selectfiles("*.txt")
+
+    def delete_file_item(self):
+        # items = self.file_list.selectedItems()
+        # get index of the items, and remove from bottom up so index doesn't change
+        indices = [x.row() for x in self.file_list.selectedIndexes()]
+
+        # then remove each item from bottom up (so indices don't change)
+        for index in reversed(indices):
+            self.file_list.takeItem(index)
+
+    def delete_directory_item(self):
+        # items = self.file_list.selectedItems()
+        # get index of the items, and remove from bottom up so index doesn't change
+        indices = [x.row() for x in self.directory_list.selectedIndexes()]
+
+        # then remove each item from bottom up (so indices don't change)
+        for index in reversed(indices):
+            self.directory_list.takeItem(index)
+
+    def delete_filelist_item(self):
+        # items = self.file_list.selectedItems()
+        # get index of the items, and remove from bottom up so index doesn't change
+        indices = [x.row() for x in self.filelist_list.selectedIndexes()]
+
+        # then remove each item from bottom up (so indices don't change)
+        for index in reversed(indices):
+            self.filelist_list.takeItem(index)
 
 
 app = QApplication(sys.argv)
