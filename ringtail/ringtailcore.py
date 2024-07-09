@@ -67,7 +67,7 @@ class RingtailCore:
             self.logger.warning(
                 f"A logging file already exist and will be used: {self.logger._log_fp.baseFilename}"
             )
-        self.logger.warning("[     New RingtailCore object initialized     ]")
+
         # Check if storage type is implemented
         try:
             storageman = StorageManager.check_storage_compatibility(storage_type)
@@ -82,6 +82,9 @@ class RingtailCore:
         self._run_mode = "api"
         self._docking_mode = docking_mode
         self.set_storageman_attributes()
+        self.logger.warning(
+            f"[     New RingtailCore object initialized with database file: {db_file}    ]"
+        )
 
     def update_database_version(self, consent=False, new_version="2.0.0"):
         """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
