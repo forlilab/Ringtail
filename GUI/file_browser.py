@@ -9,39 +9,36 @@ class MainWindow(QDialog):
         super(MainWindow, self).__init__()
         loadUi("GUI/file_dialog.ui", self)
         self.browse_files_button.clicked.connect(self.browsefiles)
-        self.browse_directories_button.clicked.connect(self.handleChooseDirectories)
-        self.selected_data = []
+        self.browse_directories_button.clicked.connect(self.browsedirectories)
+        self.browse_filelists_button.clicked.connect(self.browsefilelists)
+        self.selected_files = []
+        self.selected_directories = []
+        self.selected_filelists = []
 
-        # self.button = QtWidgets.QPushButton("Choose Directories")
-        # self.button.clicked.connect(self.handleChooseDirectories)
-        # self.listWidget = QtWidgets.QListWidget()
-        # layout = QtWidgets.QVBoxLayout(self)
-        # layout.addWidget(self.listWidget)
-        # layout.addWidget(self.button)
-
-    def browsefiles(self):
-
+    def selectfiles(self, extension: str = ""):
         filenames, _ = QFileDialog.getOpenFileNames(
             self,
             "QFileDialog.getOpenFileNames()",
             "",
+            extension,
         )
         if filenames:
-            self.selected_data.extend(filenames)
+
             # add latest items on top of list
             # but this should always reflect self.selected_data I feel, and update selected data if the list view is changed, so probably a better approach needed in future
-            self.data_list.insertItems(0, filenames)
+            if "txt" in extension:
+                self.filelist_list.insertItems(0, filenames)
+                self.selected_filelists.extend(filenames)
+            else:
+                self.file_list.insertItems(0, filenames)
+                self.selected_files.extend(filenames)
             self.file_browser_text.setText(filenames[0])
 
+    def browsefiles(self):
+        # this should be set by the chosen docking mode
+        return self.selectfiles("*.dlg*")
+
     def browsedirectories(self):
-
-        directory = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
-        print(directory)
-        self.selected_data.extend(directory)
-        self.data_list.insertItems(0, directory)
-        self.file_browser_text.setText(directory)
-
-    def handleChooseDirectories(self):
         dialog = QtWidgets.QFileDialog(self)
         dialog.setWindowTitle("Choose Directories")
         dialog.setOption(QtWidgets.QFileDialog.DontUseNativeDialog, True)
@@ -51,18 +48,20 @@ class MainWindow(QDialog):
                 view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
 
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            # self.listWidget.clear()
-            # self.listWidget.addItems(dialog.selectedFiles())
-            self.data_list.insertItems(0, dialog.selectedFiles())
+            self.directory_list.insertItems(0, dialog.selectedFiles())
+            self.selected_directories.extend(dialog.selectedFiles())
             self.file_browser_text.setText(dialog.selectedFiles()[0])
         dialog.deleteLater()
+
+    def browsefilelists(self):
+        self.selectfiles("txt")
 
 
 app = QApplication(sys.argv)
 mainwindow = MainWindow()
 widget = QtWidgets.QStackedWidget()
 widget.addWidget(mainwindow)
-widget.setFixedWidth(400)
-widget.setFixedHeight(300)
+widget.setFixedWidth(800)
+widget.setFixedHeight(600)
 widget.show()
 sys.exit(app.exec_())

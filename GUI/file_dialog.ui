@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1067</width>
-    <height>817</height>
+    <width>780</width>
+    <height>606</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,8 +16,8 @@
   <widget class="QPushButton" name="browse_files_button">
    <property name="geometry">
     <rect>
-     <x>69</x>
-     <y>70</y>
+     <x>30</x>
+     <y>170</y>
      <width>151</width>
      <height>26</height>
     </rect>
@@ -29,19 +29,19 @@
   <widget class="QLineEdit" name="file_browser_text">
    <property name="geometry">
     <rect>
-     <x>40</x>
-     <y>30</y>
-     <width>281</width>
-     <height>22</height>
+     <x>30</x>
+     <y>100</y>
+     <width>701</width>
+     <height>51</height>
     </rect>
    </property>
   </widget>
-  <widget class="QListWidget" name="data_list">
+  <widget class="QListWidget" name="file_list">
    <property name="geometry">
     <rect>
-     <x>40</x>
-     <y>140</y>
-     <width>301</width>
+     <x>30</x>
+     <y>210</y>
+     <width>231</width>
      <height>371</height>
     </rect>
    </property>
@@ -49,14 +49,47 @@
   <widget class="QPushButton" name="browse_directories_button">
    <property name="geometry">
     <rect>
-     <x>60</x>
-     <y>100</y>
+     <x>270</x>
+     <y>170</y>
      <width>181</width>
      <height>26</height>
     </rect>
    </property>
    <property name="text">
     <string>browse directories</string>
+   </property>
+  </widget>
+  <widget class="QListWidget" name="directory_list">
+   <property name="geometry">
+    <rect>
+     <x>270</x>
+     <y>210</y>
+     <width>231</width>
+     <height>371</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QListWidget" name="filelist_list">
+   <property name="geometry">
+    <rect>
+     <x>510</x>
+     <y>210</y>
+     <width>231</width>
+     <height>371</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="browse_filelists_button">
+   <property name="geometry">
+    <rect>
+     <x>510</x>
+     <y>170</y>
+     <width>181</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>browse lists</string>
    </property>
   </widget>
  </widget>
