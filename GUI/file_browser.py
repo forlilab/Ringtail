@@ -4,16 +4,22 @@ from PyQt5.QtWidgets import QDialog, QApplication, QFileDialog
 from PyQt5.uic import loadUi
 
 
-class MainWindow(QDialog):
+class FileBrowser(QDialog):
     def __init__(self):
-        super(MainWindow, self).__init__()
+        super(FileBrowser, self).__init__()
         loadUi("GUI/file_dialog.ui", self)
         self.browse_files_button.clicked.connect(self.browsefiles)
         self.browse_directories_button.clicked.connect(self.browsedirectories)
         self.browse_filelists_button.clicked.connect(self.browsefilelists)
-        self.delete_file_button.clicked.connect(self.delete_file_item)
-        self.delete_directory_button.clicked.connect(self.delete_directory_item)
-        self.delete_filelist_button.clicked.connect(self.delete_filelist_item)
+        self.delete_file_button.clicked.connect(
+            lambda: self.delete_item(self.file_list)
+        )
+        self.delete_directory_button.clicked.connect(
+            lambda: self.delete_item(self.directory_list)
+        )
+        self.delete_filelist_button.clicked.connect(
+            lambda: self.delete_item(self.filelist_list)
+        )
 
     def selectfiles(self, extension: str = ""):
         filenames, _ = QFileDialog.getOpenFileNames(
@@ -51,35 +57,22 @@ class MainWindow(QDialog):
     def browsefilelists(self):
         self.selectfiles("*.txt")
 
-    def delete_file_item(self):
+    def delete_item(self, list_widget):
         # get index of the items, and remove from bottom up so index doesn't change
-        indices = [x.row() for x in self.file_list.selectedIndexes()]
+        indices = [x.row() for x in list_widget.selectedIndexes()]
         # then remove each item from bottom up (so indices don't change)
         for index in reversed(indices):
-            self.file_list.takeItem(index)
-
-    def delete_directory_item(self):
-        # get index of the items, and remove from bottom up so index doesn't change
-        indices = [x.row() for x in self.directory_list.selectedIndexes()]
-
-        # then remove each item from bottom up (so indices don't change)
-        for index in reversed(indices):
-            self.directory_list.takeItem(index)
-
-    def delete_filelist_item(self):
-        # get index of the items, and remove from bottom up so index doesn't change
-        indices = [x.row() for x in self.filelist_list.selectedIndexes()]
-
-        # then remove each item from bottom up (so indices don't change)
-        for index in reversed(indices):
-            self.filelist_list.takeItem(index)
+            list_widget.takeItem(index)
 
 
-app = QApplication(sys.argv)
-mainwindow = MainWindow()
-widget = QtWidgets.QStackedWidget()
-widget.addWidget(mainwindow)
-widget.setFixedWidth(800)
-widget.setFixedHeight(600)
-widget.show()
-sys.exit(app.exec_())
+if __name__ == "__main__":
+    import sys
+
+    app = QApplication(sys.argv)
+    filebrowser = FileBrowser()
+    widget = QtWidgets.QStackedWidget()
+    widget.addWidget(filebrowser)
+    widget.setFixedWidth(800)
+    widget.setFixedHeight(600)
+    widget.show()
+    sys.exit(app.exec_())
