@@ -68,18 +68,38 @@ class FileBrowser(QDialog):
             list_widget.takeItem(index)
 
     def submit_files(self):
+        files = False
         self.parent.num_of_directories_display.setText(str(len(self.directory_list)))
-        self.parent.num_of_files_display.setText(str(len(self.file_list)))
-        self.parent.num_of_filelists_display.setText(str(len(self.filelist_list)))
-        self.parent.files = self.file_list
-        self.parent.filelists = self.filelist_list
-        self.parent.directories = self.directory_list
 
-        if (
-            len(self.directory_list) > 0
-            or len(self.file_list) > 0
-            or len(self.filelist_list) > 0
-        ):
+        self.parent.num_of_files_display.setText(str(len(self.file_list)))
+
+        self.parent.num_of_filelists_display.setText(str(len(self.filelist_list)))
+
+        if len(self.file_list) > 0:
+            self.parent.files = [
+                str(self.file_list.item(i).text())
+                for i in range(self.file_list.count())
+            ]
+            files = True
+            print(self.parent.files)
+
+        if len(self.filelist_list) > 0:
+            self.parent.filelists = [
+                str(self.filelist_list.item(i).text())
+                for i in range(self.filelist_list.count())
+            ]
+            files = True
+            print(self.parent.filelists)
+
+        if len(self.directory_list) > 0:
+            self.parent.directories = [
+                str(self.directory_list.item(i).text())
+                for i in range(self.directory_list.count())
+            ]
+            files = True
+            print(self.parent.directories)
+
+        if files:
             self.parent.submit_files_button.setEnabled(True)
         else:
             self.parent.submit_files_button.setEnabled(False)

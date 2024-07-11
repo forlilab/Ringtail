@@ -167,6 +167,7 @@ class Ui_MainWindow(object):
         self.select_files_button.setGeometry(QtCore.QRect(100, 300, 150, 50))
         self.select_files_button.setObjectName("select_files_button")
         self.select_files_button.clicked.connect(self.select_docking_result_files)
+        self.select_files_button.setEnabled(False)
 
         self.submit_files_button = QtWidgets.QCommandLinkButton(self.initwidget)
         self.submit_files_button.setGeometry(QtCore.QRect(650, 180, 150, 80))
@@ -265,6 +266,7 @@ class Ui_MainWindow(object):
         )
         print("Initialized Ringtail Core")
         self.rtc = rtc
+        self.select_files_button.setEnabled(True)
 
     def select_docking_result_files(self):
         # should open up a new window with file picking
@@ -272,8 +274,11 @@ class Ui_MainWindow(object):
         window.show()
 
     def add_docking_results(self):
-        pass
+        self.rtc.add_results_from_files(
+            file=self.files, file_path=self.directories, file_list=self.filelists
+        )
 
+    # this is basically where all labels live so they can be translated to other languages, probably not necessary for now
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
@@ -297,6 +302,10 @@ class Ui_MainWindow(object):
             _translate("MainWindow", "Start your Ringtail Core")
         )
         self.adgpu_button.setText(_translate("MainWindow", "AutoDock GPU (dlg)"))
+        self.select_files_button.setText(
+            _translate("MainWindow", "Select results paths")
+        )
+        self.submit_files_button.setText(_translate("MainWindow", "Add results to db"))
         self.vina_button.setText(_translate("MainWindow", "vina (pdbqt)"))
         self.log_file_label.setText(
             _translate("MainWindow", "Logging file name (optional)")
