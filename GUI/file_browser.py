@@ -5,12 +5,13 @@ from PyQt5.uic import loadUi
 
 
 class FileBrowser(QDialog):
-    def __init__(self):
+    def __init__(self, parent):
         super(FileBrowser, self).__init__()
         loadUi("GUI/file_dialog.ui", self)
         self.browse_files_button.clicked.connect(self.browsefiles)
         self.browse_directories_button.clicked.connect(self.browsedirectories)
         self.browse_filelists_button.clicked.connect(self.browsefilelists)
+        self.submit_files_button.clicked.connect(self.submit_files)
         self.delete_file_button.clicked.connect(
             lambda: self.delete_item(self.file_list)
         )
@@ -20,6 +21,8 @@ class FileBrowser(QDialog):
         self.delete_filelist_button.clicked.connect(
             lambda: self.delete_item(self.filelist_list)
         )
+
+        self.parent = parent
 
     def selectfiles(self, extension: str = ""):
         filenames, _ = QFileDialog.getOpenFileNames(
@@ -63,6 +66,25 @@ class FileBrowser(QDialog):
         # then remove each item from bottom up (so indices don't change)
         for index in reversed(indices):
             list_widget.takeItem(index)
+
+    def submit_files(self):
+        self.parent.num_of_directories_display.setText(str(len(self.directory_list)))
+        self.parent.num_of_files_display.setText(str(len(self.file_list)))
+        self.parent.num_of_filelists_display.setText(str(len(self.filelist_list)))
+        self.parent.files = self.file_list
+        self.parent.filelists = self.filelist_list
+        self.parent.directories = self.directory_list
+
+        if (
+            len(self.directory_list) > 0
+            or len(self.file_list) > 0
+            or len(self.filelist_list) > 0
+        ):
+            self.parent.submit_files_button.setEnabled(True)
+        else:
+            self.parent.submit_files_button.setEnabled(False)
+
+        self.close()
 
 
 if __name__ == "__main__":

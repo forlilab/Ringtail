@@ -36,9 +36,9 @@ sys.path.append(ringtail_gui_path)
 class Ui_MainWindow(object):
 
     def __init__(self):
-        self.num_of_files = None
-        self.num_of_filelists = None
-        self.num_of_directories = None
+        self.files = None
+        self.filelists = None
+        self.directories = None
 
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -168,6 +168,12 @@ class Ui_MainWindow(object):
         self.select_files_button.setObjectName("select_files_button")
         self.select_files_button.clicked.connect(self.select_docking_result_files)
 
+        self.submit_files_button = QtWidgets.QCommandLinkButton(self.initwidget)
+        self.submit_files_button.setGeometry(QtCore.QRect(650, 180, 150, 80))
+        self.submit_files_button.setObjectName("submit_files_button")
+        self.submit_files_button.clicked.connect(self.add_docking_results)
+        self.submit_files_button.setEnabled(False)
+
         self.db_file = QtWidgets.QPlainTextEdit(self.initwidget)
         self.db_file.setGeometry(QtCore.QRect(20, 190, 121, 31))
         self.db_file.setObjectName("db_file")
@@ -244,7 +250,7 @@ class Ui_MainWindow(object):
             docking_mode = "dlg"
         return docking_mode
 
-    def pressed_init_rt_core(self) -> RingtailCore:
+    def pressed_init_rt_core(self):
         if len(self.log_file.toPlainText()) > 0:
             log_file = self.log_file.toPlainText()
         else:
@@ -258,20 +264,14 @@ class Ui_MainWindow(object):
             logging_file=log_file,
         )
         print("Initialized Ringtail Core")
-        self.add_docking_results()
         self.rtc = rtc
 
     def select_docking_result_files(self):
         # should open up a new window with file picking
-        window = FileBrowser()
+        window = FileBrowser(self)
         window.show()
 
     def add_docking_results(self):
-        # on button click
-        # display some values
-        self.num_of_directories_display.setText(str(5))
-        self.num_of_files_display.setText(str(6))
-        self.num_of_filelists_display.setText(str(8))
         pass
 
     def retranslateUi(self, MainWindow):
