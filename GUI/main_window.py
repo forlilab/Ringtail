@@ -18,8 +18,10 @@ from PyQt5.QtWidgets import (
     QWidget,
     QLabel,
 )
+import logging
+from PyQt5.QtCore import QObject, pyqtSignal, QThread
 
-from ringtail import RingtailCore
+from ringtail import RingtailCore, LOGGER
 import resources_rc
 
 from file_browser import FileBrowser
@@ -238,6 +240,10 @@ class Ui_MainWindow(object):
         self.vlayout.addWidget(self.initwidget)
         self.centralwidget.adjustSize()
 
+        consoleHandler = ConsoleWindowLogHandler()
+        consoleHandler.sigLog.connect(self.log_output_text_browser.append)
+        LOGGER.logger.addHandler(consoleHandler)
+
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
@@ -313,6 +319,18 @@ class Ui_MainWindow(object):
             _translate("MainWindow", "Logging file name (optional)")
         )
         self.log_output_label.setText(_translate("MainWindow", "Log messages"))
+
+
+class ConsoleWindowLogHandler(logging.Handler, QObject):
+    sigLog = pyqtSignal(str)
+
+    def __init__(self):
+        logging.Handler.__init__(self)
+        QObject.__init__(self)
+
+    def emit(self, logRecord):
+        message = str(logRecord.getMessage())
+        self.sigLog.emit(message)
 
 
 class Popup(FileBrowser):
