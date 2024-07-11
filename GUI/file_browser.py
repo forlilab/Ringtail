@@ -41,7 +41,7 @@ class FileBrowser(QDialog):
 
     def browsefiles(self):
         # this should be set by the chosen docking mode
-        return self.selectfiles("*.dlg*")
+        return self.selectfiles(self.parent.file_pattern())
 
     def browsedirectories(self):
         dialog = QtWidgets.QFileDialog(self)

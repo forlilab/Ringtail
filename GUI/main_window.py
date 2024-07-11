@@ -241,15 +241,17 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
-    def docking_mode(self) -> str:
+    def docking_mode(self):
         if self.adgpu_button.isChecked():
-            docking_mode = "dlg"
+            return "dlg"
         elif self.vina_button.isChecked():
-            docking_mode = "pdbqt"
-        else:
-            print("No docking mode selected, defaulting to dlg")
-            docking_mode = "dlg"
-        return docking_mode
+            return "vina"
+
+    def file_pattern(self) -> str:
+        if self.adgpu_button.isChecked():
+            return "*.dlg*"
+        elif self.vina_button.isChecked():
+            return "*.pdbqt*"
 
     def pressed_init_rt_core(self):
         if len(self.log_file.toPlainText()) > 0:
