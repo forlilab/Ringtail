@@ -9,6 +9,7 @@
 
 import os
 import sys
+import util as u
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import (
     QApplication,
@@ -17,11 +18,13 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QWidget,
     QLabel,
+    QFrame,
 )
 import logging
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 
-from ringtail import RingtailCore, LOGGER
+
+from ringtail import RingtailCore, RaccoonLogger
 import resources_rc
 
 from file_browser import FileBrowser
@@ -41,96 +44,17 @@ class Ui_MainWindow(object):
         self.files = None
         self.filelists = None
         self.directories = None
+        self.num_files = 0
+        self.num_filelists = 0
+        self.num_directories = 0
+        self.logger = RaccoonLogger(log_level_console="ERROR")
 
     def setupUi(self, MainWindow):
-        MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(881, 777)
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
-        self.db_file = QtWidgets.QPlainTextEdit(self.centralwidget)
-        self.db_file.setGeometry(QtCore.QRect(20, 190, 121, 31))
-        self.db_file.setObjectName("db_file")
-        self.db_type_dropdown = QtWidgets.QComboBox(self.centralwidget)
-        self.db_type_dropdown.setGeometry(QtCore.QRect(20, 90, 81, 22))
-        self.db_type_dropdown.setObjectName("db_type_dropdown")
-        self.db_type_dropdown.addItem("")
-        self.db_type_dropdown.addItem("")
-        self.db_type_dropdown.addItem("")
-        self.log_level_dropdown = QtWidgets.QComboBox(self.centralwidget)
-        self.log_level_dropdown.setGeometry(QtCore.QRect(20, 140, 81, 22))
-        self.log_level_dropdown.setObjectName("log_level_dropdown")
-        self.log_level_dropdown.addItem("")
-        self.log_level_dropdown.addItem("")
-        self.log_level_dropdown.addItem("")
-        self.db_type_label = QtWidgets.QLabel(self.centralwidget)
-        self.db_type_label.setGeometry(QtCore.QRect(20, 70, 91, 16))
-        self.db_type_label.setObjectName("db_type_label")
-        self.log_level_label = QtWidgets.QLabel(self.centralwidget)
-        self.log_level_label.setGeometry(QtCore.QRect(20, 120, 91, 16))
-        self.log_level_label.setObjectName("log_level_label")
-        self.init_rt_core_button = QtWidgets.QCommandLinkButton(self.centralwidget)
-        self.init_rt_core_button.setGeometry(QtCore.QRect(150, 190, 168, 41))
-        icon = QtGui.QIcon()
-        icon.addPixmap(
-            QtGui.QPixmap(":ringtail_head"),
-            QtGui.QIcon.Normal,
-            QtGui.QIcon.Off,
-        )
-        self.init_rt_core_button.setIcon(icon)
-        self.init_rt_core_button.setObjectName("init_rt_core_button")
-        self.init_rt_core_button.clicked.connect(self.pressed_init_rt_core)
-        self.adgpu_button = QtWidgets.QRadioButton(self.centralwidget)
-        self.adgpu_button.setGeometry(QtCore.QRect(20, 10, 151, 21))
-        self.adgpu_button.setObjectName("adgpu_button")
-        self.adgpu_button.setChecked(True)
-        self.docking_mode_button_group = QtWidgets.QButtonGroup(MainWindow)
-        self.docking_mode_button_group.setObjectName("docking_mode_button_group")
-        self.docking_mode_button_group.addButton(self.adgpu_button)
-        self.vina_button = QtWidgets.QRadioButton(self.centralwidget)
-        self.vina_button.setGeometry(QtCore.QRect(20, 40, 91, 21))
-        self.vina_button.setObjectName("vina_button")
-        self.docking_mode_button_group.addButton(self.vina_button)
-        self.log_file = QtWidgets.QPlainTextEdit(self.centralwidget)
-        self.log_file.setGeometry(QtCore.QRect(110, 140, 191, 31))
-        self.log_file.setPlainText("")
-        self.log_file.setObjectName("log_file")
-        self.log_file_label = QtWidgets.QLabel(self.centralwidget)
-        self.log_file_label.setGeometry(QtCore.QRect(110, 120, 191, 16))
-        self.log_file_label.setObjectName("log_file_label")
-        self.log_output_text_browser = QtWidgets.QTextBrowser(self.centralwidget)
-        self.log_output_text_browser.setGeometry(QtCore.QRect(380, 40, 256, 192))
-        self.log_output_text_browser.setObjectName("log_output_text_browser")
-        self.log_output_label = QtWidgets.QLabel(self.centralwidget)
-        self.log_output_label.setGeometry(QtCore.QRect(380, 10, 161, 16))
-        self.log_output_label.setObjectName("log_output_label")
-        MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 881, 21))
-        self.menubar.setObjectName("menubar")
-        self.menuringtail = QtWidgets.QMenu(self.menubar)
-        self.menuringtail.setObjectName("menuringtail")
-        MainWindow.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(MainWindow)
-        self.statusbar.setObjectName("statusbar")
-        MainWindow.setStatusBar(self.statusbar)
-        self.menubar.addAction(self.menuringtail.menuAction())
-        # self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
-        self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
-        self.gridLayout.setObjectName("gridLayout")
-        # # create a QHBoxLayout instance
-        # self.layout = QHBoxLayout()
-        # # add widgets to layout
-        self.filepickerWidget = FileBrowser()
-        self.gridLayout.addWidget(self.filepickerWidget, 0, 0, 1, 0)
-
-        self.retranslateUi(MainWindow)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
-
-    def setupUi_test(self, MainWindow):
         # this object is handed a main window class
         MainWindow.setObjectName("MainWindow")
         # MainWindow.resize(900, 800)
         # central widget is the central widget
+
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         # I probahly have to set up a layout inside the central widget
@@ -140,43 +64,53 @@ class Ui_MainWindow(object):
         self.initwidget = QtWidgets.QWidget()
         self.initwidget.setObjectName("initwidget")
         self.initwidget.setFixedSize(1000, 400)
-
+        # vertical layout of the main window
         self.vlayout = QtWidgets.QVBoxLayout(self.centralwidget)
         self.vlayout.setObjectName("vlayout")
 
-        self.num_of_files_display = QtWidgets.QTextBrowser(self.initwidget)
+        # need new widget input stuff
+        self.inputwidget = QtWidgets.QWidget()
+        self.inputwidget.setObjectName("initwidget")
+        self.inputwidget.setFixedSize(1000, 400)
+        self.inputwidget.setStyleSheet("border:1px solid rgb(0, 0, 0); ")
+
+        # self.inputwidget.setFrameStyle(QFrame.StyledPanel | QFrame.Plain)
+        # self.inputwidget.setLineWidth(1)
+        # displays of numbe of selected files and their labels
+        self.num_of_files_display = QtWidgets.QTextBrowser(self.inputwidget)
         self.num_of_files_display.setGeometry(QtCore.QRect(650, 40, 60, 30))
         self.num_of_files_display.setObjectName("num_of_files_display")
-        self.num_of_files_label = QtWidgets.QLabel(self.initwidget)
+        self.num_of_files_label = QtWidgets.QLabel(self.inputwidget)
         self.num_of_files_label.setGeometry(QtCore.QRect(720, 40, 150, 30))
         self.num_of_files_label.setObjectName("num_of_files_label")
 
-        self.num_of_filelists_display = QtWidgets.QTextBrowser(self.initwidget)
+        self.num_of_filelists_display = QtWidgets.QTextBrowser(self.inputwidget)
         self.num_of_filelists_display.setGeometry(QtCore.QRect(650, 80, 60, 30))
         self.num_of_filelists_display.setObjectName("num_of_filelists_display")
-        self.num_of_filelists_label = QtWidgets.QLabel(self.initwidget)
+        self.num_of_filelists_label = QtWidgets.QLabel(self.inputwidget)
         self.num_of_filelists_label.setGeometry(QtCore.QRect(720, 80, 150, 30))
         self.num_of_filelists_label.setObjectName("num_of_filelists_label")
 
-        self.num_of_directories_display = QtWidgets.QTextBrowser(self.initwidget)
+        self.num_of_directories_display = QtWidgets.QTextBrowser(self.inputwidget)
         self.num_of_directories_display.setGeometry(QtCore.QRect(650, 120, 60, 30))
         self.num_of_directories_display.setObjectName("num_of_directories_display")
-        self.num_of_directories_label = QtWidgets.QLabel(self.initwidget)
+        self.num_of_directories_label = QtWidgets.QLabel(self.inputwidget)
         self.num_of_directories_label.setGeometry(QtCore.QRect(720, 120, 150, 30))
         self.num_of_directories_label.setObjectName("num_of_directories_label")
-
-        self.select_files_button = QtWidgets.QCommandLinkButton(self.initwidget)
-        self.select_files_button.setGeometry(QtCore.QRect(100, 300, 150, 50))
+        # button to select files
+        self.select_files_button = QtWidgets.QCommandLinkButton(self.inputwidget)
+        self.select_files_button.setGeometry(QtCore.QRect(10, 10, 150, 40))
         self.select_files_button.setObjectName("select_files_button")
         self.select_files_button.clicked.connect(self.select_docking_result_files)
         self.select_files_button.setEnabled(False)
-
-        self.submit_files_button = QtWidgets.QCommandLinkButton(self.initwidget)
-        self.submit_files_button.setGeometry(QtCore.QRect(650, 180, 150, 80))
+        # button to submit files to database
+        self.submit_files_button = QtWidgets.QCommandLinkButton(self.inputwidget)
+        self.submit_files_button.setGeometry(QtCore.QRect(10, 180, 150, 40))
         self.submit_files_button.setObjectName("submit_files_button")
         self.submit_files_button.clicked.connect(self.add_docking_results)
         self.submit_files_button.setEnabled(False)
 
+        # settings to do with initializing ringtail core
         self.db_file = QtWidgets.QPlainTextEdit(self.initwidget)
         self.db_file.setGeometry(QtCore.QRect(20, 190, 121, 31))
         self.db_file.setObjectName("db_file")
@@ -210,14 +144,14 @@ class Ui_MainWindow(object):
         self.init_rt_core_button.setObjectName("init_rt_core_button")
         self.init_rt_core_button.clicked.connect(self.pressed_init_rt_core)
         self.adgpu_button = QtWidgets.QRadioButton(self.initwidget)
-        self.adgpu_button.setGeometry(QtCore.QRect(20, 10, 151, 21))
+        self.adgpu_button.setGeometry(QtCore.QRect(20, 10, 150, 20))
         self.adgpu_button.setObjectName("adgpu_button")
         self.adgpu_button.setChecked(True)
         self.docking_mode_button_group = QtWidgets.QButtonGroup(MainWindow)
         self.docking_mode_button_group.setObjectName("docking_mode_button_group")
         self.docking_mode_button_group.addButton(self.adgpu_button)
         self.vina_button = QtWidgets.QRadioButton(self.initwidget)
-        self.vina_button.setGeometry(QtCore.QRect(20, 40, 91, 21))
+        self.vina_button.setGeometry(QtCore.QRect(20, 40, 150, 20))
         self.vina_button.setObjectName("vina_button")
         self.docking_mode_button_group.addButton(self.vina_button)
         self.log_file = QtWidgets.QPlainTextEdit(self.initwidget)
@@ -228,7 +162,7 @@ class Ui_MainWindow(object):
         self.log_file_label.setGeometry(QtCore.QRect(110, 120, 191, 16))
         self.log_file_label.setObjectName("log_file_label")
         self.log_output_text_browser = QtWidgets.QTextBrowser(self.initwidget)
-        self.log_output_text_browser.setGeometry(QtCore.QRect(380, 40, 256, 192))
+        self.log_output_text_browser.setGeometry(QtCore.QRect(380, 40, 500, 200))
         self.log_output_text_browser.setObjectName("log_output_text_browser")
         self.log_output_label = QtWidgets.QLabel(self.initwidget)
         self.log_output_label.setGeometry(QtCore.QRect(380, 10, 161, 16))
@@ -238,11 +172,12 @@ class Ui_MainWindow(object):
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.vlayout.addWidget(self.initwidget)
+        self.vlayout.addWidget(self.inputwidget)
         self.centralwidget.adjustSize()
 
         consoleHandler = ConsoleWindowLogHandler()
         consoleHandler.sigLog.connect(self.log_output_text_browser.append)
-        LOGGER.logger.addHandler(consoleHandler)
+        self.logger.logger.addHandler(consoleHandler)
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
@@ -265,15 +200,13 @@ class Ui_MainWindow(object):
         else:
             log_file = None
 
-        rtc = RingtailCore(
+        self.rtc = RingtailCore(
             db_file=self.db_file.toPlainText(),
             storage_type=self.db_type_dropdown.currentText(),
             docking_mode=self.docking_mode(),
             logging_level=self.log_level_dropdown.currentText(),
             logging_file=log_file,
         )
-        print("Initialized Ringtail Core")
-        self.rtc = rtc
         self.select_files_button.setEnabled(True)
 
     def select_docking_result_files(self):
@@ -283,8 +216,13 @@ class Ui_MainWindow(object):
 
     def add_docking_results(self):
         self.rtc.add_results_from_files(
-            file=self.files, file_path=self.directories, file_list=self.filelists
+            file=u.QListWidget_to_list(self.files),
+            file_path=u.QListWidget_to_list(self.directories),
+            file_list=u.QListWidget_to_list(self.filelists),
         )
+        self.files = None
+        self.directories = None
+        self.filelists = None
 
     # this is basically where all labels live so they can be translated to other languages, probably not necessary for now
     def retranslateUi(self, MainWindow):
@@ -347,6 +285,6 @@ if __name__ == "__main__":
     app.setWindowIcon(QtGui.QIcon(":ringtail_head"))
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
-    ui.setupUi_test(MainWindow)
+    ui.setupUi(MainWindow)
     MainWindow.show()
     sys.exit(app.exec_())
