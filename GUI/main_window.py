@@ -22,6 +22,11 @@ from PyQt5.QtWidgets import (
 )
 import logging
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
+from PyQt5.QtWidgets import QFileDialog
+import sqlite3
+import time
+import datetime
+from PyQt5.QtCore import pyqtSlot
 
 
 from ringtail import RingtailCore, RaccoonLogger
@@ -63,39 +68,37 @@ class Ui_MainWindow(object):
         # a ringtail init widget
         self.initwidget = QtWidgets.QWidget()
         self.initwidget.setObjectName("initwidget")
-        self.initwidget.setFixedSize(1000, 400)
+        self.initwidget.setFixedSize(1000, 250)
         # vertical layout of the main window
         self.vlayout = QtWidgets.QVBoxLayout(self.centralwidget)
         self.vlayout.setObjectName("vlayout")
 
         # need new widget input stuff
         self.inputwidget = QtWidgets.QWidget()
-        self.inputwidget.setObjectName("initwidget")
-        self.inputwidget.setFixedSize(1000, 400)
+        self.inputwidget.setObjectName("inputwidget")
+        self.inputwidget.setFixedSize(1000, 150)
         self.inputwidget.setStyleSheet("border:1px solid rgb(0, 0, 0); ")
 
-        # self.inputwidget.setFrameStyle(QFrame.StyledPanel | QFrame.Plain)
-        # self.inputwidget.setLineWidth(1)
         # displays of numbe of selected files and their labels
         self.num_of_files_display = QtWidgets.QTextBrowser(self.inputwidget)
-        self.num_of_files_display.setGeometry(QtCore.QRect(650, 40, 60, 30))
+        self.num_of_files_display.setGeometry(QtCore.QRect(650, 10, 60, 30))
         self.num_of_files_display.setObjectName("num_of_files_display")
         self.num_of_files_label = QtWidgets.QLabel(self.inputwidget)
-        self.num_of_files_label.setGeometry(QtCore.QRect(720, 40, 150, 30))
+        self.num_of_files_label.setGeometry(QtCore.QRect(720, 10, 150, 30))
         self.num_of_files_label.setObjectName("num_of_files_label")
 
         self.num_of_filelists_display = QtWidgets.QTextBrowser(self.inputwidget)
-        self.num_of_filelists_display.setGeometry(QtCore.QRect(650, 80, 60, 30))
+        self.num_of_filelists_display.setGeometry(QtCore.QRect(650, 50, 60, 30))
         self.num_of_filelists_display.setObjectName("num_of_filelists_display")
         self.num_of_filelists_label = QtWidgets.QLabel(self.inputwidget)
-        self.num_of_filelists_label.setGeometry(QtCore.QRect(720, 80, 150, 30))
+        self.num_of_filelists_label.setGeometry(QtCore.QRect(720, 50, 150, 30))
         self.num_of_filelists_label.setObjectName("num_of_filelists_label")
 
         self.num_of_directories_display = QtWidgets.QTextBrowser(self.inputwidget)
-        self.num_of_directories_display.setGeometry(QtCore.QRect(650, 120, 60, 30))
+        self.num_of_directories_display.setGeometry(QtCore.QRect(650, 90, 60, 30))
         self.num_of_directories_display.setObjectName("num_of_directories_display")
         self.num_of_directories_label = QtWidgets.QLabel(self.inputwidget)
-        self.num_of_directories_label.setGeometry(QtCore.QRect(720, 120, 150, 30))
+        self.num_of_directories_label.setGeometry(QtCore.QRect(720, 90, 150, 30))
         self.num_of_directories_label.setObjectName("num_of_directories_label")
         # button to select files
         self.select_files_button = QtWidgets.QCommandLinkButton(self.inputwidget)
@@ -105,7 +108,7 @@ class Ui_MainWindow(object):
         self.select_files_button.setEnabled(False)
         # button to submit files to database
         self.submit_files_button = QtWidgets.QCommandLinkButton(self.inputwidget)
-        self.submit_files_button.setGeometry(QtCore.QRect(10, 180, 150, 40))
+        self.submit_files_button.setGeometry(QtCore.QRect(10, 70, 150, 40))
         self.submit_files_button.setObjectName("submit_files_button")
         self.submit_files_button.clicked.connect(self.add_docking_results)
         self.submit_files_button.setEnabled(False)
@@ -162,7 +165,7 @@ class Ui_MainWindow(object):
         self.log_file_label.setGeometry(QtCore.QRect(110, 120, 191, 16))
         self.log_file_label.setObjectName("log_file_label")
         self.log_output_text_browser = QtWidgets.QTextBrowser(self.initwidget)
-        self.log_output_text_browser.setGeometry(QtCore.QRect(380, 40, 500, 200))
+        self.log_output_text_browser.setGeometry(QtCore.QRect(330, 40, 650, 200))
         self.log_output_text_browser.setObjectName("log_output_text_browser")
         self.log_output_label = QtWidgets.QLabel(self.initwidget)
         self.log_output_label.setGeometry(QtCore.QRect(380, 10, 161, 16))
@@ -172,12 +175,40 @@ class Ui_MainWindow(object):
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.vlayout.addWidget(self.initwidget)
-        self.vlayout.addWidget(self.inputwidget)
+
         self.centralwidget.adjustSize()
 
         consoleHandler = ConsoleWindowLogHandler()
         consoleHandler.sigLog.connect(self.log_output_text_browser.append)
         self.logger.logger.addHandler(consoleHandler)
+
+        self.databasewidget = QtWidgets.QWidget()
+        self.databasewidget.setObjectName("databasewidget")
+        self.databasewidget.setFixedSize(1000, 250)
+        self.threadpool = QtCore.QThreadPool()
+        self.tableWidget = QtWidgets.QTableWidget(self.databasewidget)
+        self.tableWidget.setObjectName("tableWidget")
+        self.tableWidget.setGeometry(QtCore.QRect(200, 10, 800, 350))
+        self.tableWidget.setColumnCount(0)
+        self.tableWidget.setRowCount(0)
+        self.db_table = QtWidgets.QPlainTextEdit(self.databasewidget)
+        self.db_table.setGeometry(QtCore.QRect(10, 130, 170, 50))
+        self.db_table.setObjectName("db_table")
+
+        self.vlayout.addWidget(self.inputwidget)
+
+        self.pushButton = QtWidgets.QPushButton(self.databasewidget)
+        self.pushButton.setGeometry(QtCore.QRect(10, 40, 150, 50))
+        self.pushButton.setObjectName("pushButton")
+        self.pushButton_2 = QtWidgets.QPushButton(self.databasewidget)
+        self.pushButton_2.setGeometry(QtCore.QRect(10, 200, 150, 100))
+        self.pushButton_2.setObjectName("pushButton_2")
+        self.vlayout.addWidget(self.databasewidget)
+        self.databasewidget.setFixedSize(1000, 400)
+        self.projectName = ""
+        self.pushButton.clicked.connect(self.openFile)
+        self.pushButton_2.clicked.connect(self.workerStart)
+        self.vlayout.addWidget(self.databasewidget)
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
@@ -208,6 +239,37 @@ class Ui_MainWindow(object):
             logging_file=log_file,
         )
         self.select_files_button.setEnabled(True)
+
+    def openFile(self):
+        projectName = QFileDialog.getOpenFileName(filter="Data (*.db)")
+        print("File name: ", projectName[0])
+        self.projectName = projectName[0]
+
+    def workerStart(self):
+        worker = Worker(self.loadDataBase)
+        self.threadpool.start(worker)
+
+    def loadDataBase(self):
+
+        self.conn = sqlite3.connect(self.projectName)
+        query = f"SELECT * FROM {self.db_table.toPlainText()}"
+        cursor = self.conn.execute(query)
+        row_len = []
+        for i in cursor:
+            row_len.append(len(i))
+        self.col_num = max(row_len)
+        self.tableWidget.setRowCount(0)
+        self.tableWidget.setColumnCount(int(self.col_num))
+
+        cursor = self.conn.execute(query)
+        for row, row_data in enumerate(cursor):
+            self.tableWidget.insertRow(row)
+            for col, col_data in enumerate(row_data):
+                self.tableWidget.setItem(
+                    row, col, QtWidgets.QTableWidgetItem(str(col_data))
+                )
+
+        self.conn.close()
 
     def select_docking_result_files(self):
         # should open up a new window with file picking
@@ -257,6 +319,8 @@ class Ui_MainWindow(object):
             _translate("MainWindow", "Logging file name (optional)")
         )
         self.log_output_label.setText(_translate("MainWindow", "Log messages"))
+        self.pushButton.setText(_translate("MainWindow", "LOAD\ndatabase"))
+        self.pushButton_2.setText(_translate("MainWindow", "SHOW\ndatabase\ntable"))
 
 
 class ConsoleWindowLogHandler(logging.Handler, QObject):
@@ -276,6 +340,21 @@ class Popup(FileBrowser):
         super().__init__(self)
         self.resize(800, 500)
         self.label = QLabel("File selector", self)
+
+
+# visit www.pyshine.com for more details
+class Worker(QtCore.QRunnable):
+
+    def __init__(self, fnc, *args, **kwargs):
+        super(Worker, self).__init__()
+        self.fnc = fnc
+        self.args = args
+        self.kwargs = kwargs
+
+    @pyqtSlot()
+    def run(self):
+
+        self.fnc(*self.args, **self.kwargs)
 
 
 if __name__ == "__main__":
