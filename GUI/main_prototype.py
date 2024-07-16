@@ -2,7 +2,7 @@ import os
 import sys
 import util as u
 from ringtail_prototype_ui import Ringtail_Prototype_UI
-from PyQt6 import QtWidgets, QtGui
+from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from ringtail import RingtailCore, RaccoonLogger
 import resources_rc
@@ -21,7 +21,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         self.logger = RaccoonLogger(log_level_console="ERROR")
 
     def connectUI(self, MainWindow):
-        ### set up the superficial UI (this method is inherited from ringtail_protptype_ui)
+        ### set up the superficial UI (inherited from ringtail_protptype_ui)
         self.setupUi(MainWindow)
 
         ### Connecting text boxes and buttons
@@ -40,10 +40,34 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         # region resultsAdd
         self.selectPathsButton.clicked.connect(self.selectDockingResultPaths)
         self.submitResultsButton.clicked.connect(self.addDockingResults)
+
+        # TODO I'd like to add a count of number of files added
+        # TODO connect files added to progress bar somehow
+        # TODO add count for failed files
         # endregion
 
         # region databaseView
-
+        # self.databasewidget = QtWidgets.QWidget()
+        # self.databasewidget.setObjectName("databasewidget")
+        # self.databasewidget.setFixedSize(1000, 250)
+        self.threadpool = QtCore.QThreadPool()
+        self.tableWidget = QtWidgets.QTableWidget(self.dbViewTab)
+        self.tableWidget.setObjectName("tableWidget")
+        # figure out where to put table based on the other buttons
+        tableNameButtonX, tableNameButtonY, _, buttonHeight = (
+            self.tableNameButton.geometry().getRect()
+        )
+        tableX = tableNameButtonX
+        tableY = tableNameButtonY + buttonHeight * 2
+        # need to get widget dimensions for the full table size
+        _, _, tabWidgetWidth, tabWidgetHeight = self.tabWidget.geometry().getRect()
+        tableWidth = tabWidgetWidth - 2 * tableX
+        tableHeight = tabWidgetHeight - tableY - 2 * tableX
+        self.tableWidget.setGeometry(
+            QtCore.QRect(tableX, tableY, tableWidth, tableHeight)
+        )
+        self.tableWidget.setColumnCount(0)
+        self.tableWidget.setRowCount(0)
         # endregion
 
         # endregion
