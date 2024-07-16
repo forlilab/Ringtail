@@ -146,6 +146,7 @@ class Ui_MainWindow(object):
         self.init_rt_core_button.setIcon(icon)
         self.init_rt_core_button.setObjectName("init_rt_core_button")
         self.init_rt_core_button.clicked.connect(self.pressed_init_rt_core)
+        ### HERE
         self.adgpu_button = QtWidgets.QRadioButton(self.initwidget)
         self.adgpu_button.setGeometry(QtCore.QRect(20, 10, 150, 20))
         self.adgpu_button.setObjectName("adgpu_button")
