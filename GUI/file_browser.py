@@ -1,5 +1,5 @@
 import sys
-from PyQt6 import QtWidgets
+from PyQt6 import QtWidgets, QtGui
 from PyQt6.QtWidgets import QDialog, QApplication, QFileDialog
 from PyQt6.uic import loadUi
 
@@ -14,7 +14,8 @@ class FileBrowser(QDialog):
         """
         super(FileBrowser, self).__init__()
         loadUi("GUI/ui_files/file_dialog.ui", self)
-
+        # locks any other window by making this window modal
+        self.setModal(True)
         # disable/enable control buttons
         self.close_filebrowser_window_button.setEnabled(True)
         self.submit_files_button.setEnabled(False)
@@ -69,21 +70,28 @@ class FileBrowser(QDialog):
         Browse results files with file extension given from main UI
 
         """
-        return self.selectfiles(self.parent.file_pattern())
+        return self.selectfiles(self.parent.filepattern)
 
     def browsedirectories(self):
         """
         Browses folders and can pick one or more
         """
-        dialog = QtWidgets.QFileDialog(self)
+        dialog = QtWidgets.QFileDialog(
+            self,
+            options=QFileDialog.Option.DontUseNativeDialog,
+            fileMode=QFileDialog.FileMode.Directory,
+        )
+        # dialog.setOption(QtWidgets.QFileDialog.DontUseNativeDialog, True)
         dialog.setWindowTitle("Choose Directories")
-        dialog.setOption(QtWidgets.QFileDialog.DontUseNativeDialog, True)
-        dialog.setFileMode(QtWidgets.QFileDialog.DirectoryOnly)
-        for view in dialog.findChildren((QtWidgets.QListView, QtWidgets.QTreeView)):
-            if isinstance(view.model(), QtWidgets.QFileSystemModel):
-                view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
 
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+        # dialog.setFileMode()
+        for view in dialog.findChildren((QtWidgets.QListView, QtWidgets.QTreeView)):
+            if isinstance(view.model(), QtGui.QFileSystemModel):
+                view.setSelectionMode(
+                    QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection
+                )
+
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             self.directory_list.insertItems(0, dialog.selectedFiles())
         dialog.deleteLater()
 
@@ -118,9 +126,9 @@ class FileBrowser(QDialog):
         num_dir = str(len(self.directory_list))
         num_fl = str(len(self.file_list))
         num_fll = str(len(self.filelist_list))
-        self.parent.num_of_directories_display.setText(num_dir)
-        self.parent.num_of_files_display.setText(num_fl)
-        self.parent.num_of_filelists_display.setText(num_fll)
+        self.parent.numOfDirs.setText(num_dir)
+        self.parent.numOfFiles.setText(num_fl)
+        self.parent.numOfFilelists.setText(num_fll)
 
         if len(self.file_list) > 0:
             self.parent.files = self.file_list
@@ -135,9 +143,9 @@ class FileBrowser(QDialog):
             files = True
 
         if files:
-            self.parent.submit_files_button.setEnabled(True)
+            self.parent.submitResultsButton.setEnabled(True)
         else:
-            self.parent.submit_files_button.setEnabled(False)
+            self.parent.submitResultsButton.setEnabled(False)
 
         self.close_window()
 
@@ -158,4 +166,4 @@ if __name__ == "__main__":
     widget.setFixedWidth(800)
     widget.setFixedHeight(600)
     widget.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
