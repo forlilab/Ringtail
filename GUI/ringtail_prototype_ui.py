@@ -14,7 +14,7 @@ class Ringtail_Prototype_UI(QMainWindow):
     def __init__(self):
         super(Ringtail_Prototype_UI, self).__init__()
 
-    def setupUi(self, MainWindow):
+    def setupUi(self, MainWindow: QMainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(881, 965)
         self.centralwidget = QtWidgets.QWidget(parent=MainWindow)

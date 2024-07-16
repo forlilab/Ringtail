@@ -22,10 +22,8 @@ from PyQt6.QtWidgets import (
 )
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
-from PyQt6.QtWidgets import QFileDialog
+from PyQt6.QtWidgets import QFileDialog, QMainWindow
 import sqlite3
-import time
-import datetime
 from PyQt6.QtCore import pyqtSlot
 
 
@@ -54,7 +52,7 @@ class Ui_MainWindow(object):
         self.num_directories = 0
         self.logger = RaccoonLogger(log_level_console="ERROR")
 
-    def setupUi(self, MainWindow):
+    def setupUi(self, MainWindow: QMainWindow):
         # this object is handed a main window class
         MainWindow.setObjectName("MainWindow")
         # MainWindow.resize(900, 800)
