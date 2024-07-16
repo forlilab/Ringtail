@@ -140,8 +140,8 @@ class Ui_MainWindow(object):
         icon = QtGui.QIcon()
         icon.addPixmap(
             QtGui.QPixmap(":ringtail_head"),
-            QtGui.QIcon.Normal,
-            QtGui.QIcon.Off,
+            QtGui.QIcon.Mode.Normal,
+            QtGui.QIcon.State.Off,
         )
         self.init_rt_core_button.setIcon(icon)
         self.init_rt_core_button.setObjectName("init_rt_core_button")
@@ -366,4 +366,4 @@ if __name__ == "__main__":
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)
     MainWindow.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
