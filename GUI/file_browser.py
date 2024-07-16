@@ -1,7 +1,7 @@
 import sys
-from PyQt5 import QtWidgets
-from PyQt5.QtWidgets import QDialog, QApplication, QFileDialog
-from PyQt5.uic import loadUi
+from PyQt6 import QtWidgets
+from PyQt6.QtWidgets import QDialog, QApplication, QFileDialog
+from PyQt6.uic import loadUi
 
 
 class FileBrowser(QDialog):
@@ -13,7 +13,7 @@ class FileBrowser(QDialog):
             parent (object): Main window that the browser interacts with (to and from)
         """
         super(FileBrowser, self).__init__()
-        loadUi("GUI/file_dialog.ui", self)
+        loadUi("GUI/ui_files/file_dialog.ui", self)
 
         # disable/enable control buttons
         self.close_filebrowser_window_button.setEnabled(True)

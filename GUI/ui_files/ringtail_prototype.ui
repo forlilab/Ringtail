@@ -1,0 +1,597 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>881</width>
+    <height>965</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <widget class="QWidget" name="initwidget" native="true">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>10</y>
+      <width>861</width>
+      <height>251</height>
+     </rect>
+    </property>
+    <widget class="QTextBrowser" name="logOutputTextBrowser">
+     <property name="geometry">
+      <rect>
+       <x>340</x>
+       <y>30</y>
+       <width>491</width>
+       <height>192</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLabel" name="logOutputLabel">
+     <property name="geometry">
+      <rect>
+       <x>340</x>
+       <y>0</y>
+       <width>161</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Log messages</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="logLevelLabel">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>10</y>
+       <width>91</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Logging level</string>
+     </property>
+    </widget>
+    <widget class="QPlainTextEdit" name="dbFile">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>150</y>
+       <width>191</width>
+       <height>71</height>
+      </rect>
+     </property>
+     <property name="plainText">
+      <string>output.db</string>
+     </property>
+    </widget>
+    <widget class="QCommandLinkButton" name="initRTButton">
+     <property name="geometry">
+      <rect>
+       <x>197</x>
+       <y>160</y>
+       <width>121</width>
+       <height>50</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>15</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Start your 
+Ringtail Core</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>../Ringtail_GUI_old/resources/ringtail_head.png</normaloff>../Ringtail_GUI_old/resources/ringtail_head.png</iconset>
+     </property>
+    </widget>
+    <widget class="QComboBox" name="dbTypeDropdown">
+     <property name="geometry">
+      <rect>
+       <x>0</x>
+       <y>30</y>
+       <width>81</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <item>
+      <property name="text">
+       <string extracomment="(default)">sqlite</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string extracomment="(currently not implemented)">sqlalchemy</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string extracomment="(not yet implemented)">postgres</string>
+      </property>
+     </item>
+    </widget>
+    <widget class="QLabel" name="logFileLabel">
+     <property name="geometry">
+      <rect>
+       <x>150</x>
+       <y>70</y>
+       <width>161</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Logging file name (optional)</string>
+     </property>
+    </widget>
+    <widget class="QRadioButton" name="vinaButton">
+     <property name="geometry">
+      <rect>
+       <x>0</x>
+       <y>90</y>
+       <width>91</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>vina (pdbqt)</string>
+     </property>
+    </widget>
+    <widget class="QPlainTextEdit" name="logFile">
+     <property name="geometry">
+      <rect>
+       <x>150</x>
+       <y>90</y>
+       <width>161</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="plainText">
+      <string/>
+     </property>
+    </widget>
+    <widget class="QLabel" name="dbTypeLabel">
+     <property name="geometry">
+      <rect>
+       <x>0</x>
+       <y>10</y>
+       <width>91</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Database type</string>
+     </property>
+    </widget>
+    <widget class="QRadioButton" name="adgpuButton">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
+     <property name="geometry">
+      <rect>
+       <x>0</x>
+       <y>60</y>
+       <width>151</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>AutoDock GPU (dlg)</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
+    <widget class="QComboBox" name="logLevelDropdown">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>30</y>
+       <width>81</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <item>
+      <property name="text">
+       <string>warning</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>info</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string extracomment="(default)">debug</string>
+      </property>
+     </item>
+    </widget>
+    <widget class="QLabel" name="dbFileLabel">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>130</y>
+       <width>121</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Database path</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QTabWidget" name="tabWidget">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>270</y>
+      <width>851</width>
+      <height>651</height>
+     </rect>
+    </property>
+    <property name="currentIndex">
+     <number>0</number>
+    </property>
+    <widget class="QWidget" name="inputTab">
+     <attribute name="title">
+      <string>Add docking results</string>
+     </attribute>
+     <widget class="QPlainTextEdit" name="numOfFiles">
+      <property name="geometry">
+       <rect>
+        <x>480</x>
+        <y>40</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QPlainTextEdit" name="numOfDirs">
+      <property name="geometry">
+       <rect>
+        <x>480</x>
+        <y>100</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QPlainTextEdit" name="numOfFilelists">
+      <property name="geometry">
+       <rect>
+        <x>480</x>
+        <y>160</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLabel" name="numOfFilesLabel">
+      <property name="geometry">
+       <rect>
+        <x>620</x>
+        <y>50</y>
+        <width>181</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>files chosen</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="numOfDirsLabel">
+      <property name="geometry">
+       <rect>
+        <x>620</x>
+        <y>110</y>
+        <width>181</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>directories chosen</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="numOfFilelistsLabel">
+      <property name="geometry">
+       <rect>
+        <x>620</x>
+        <y>170</y>
+        <width>181</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>file lists chosen</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="selectPathsButton">
+      <property name="geometry">
+       <rect>
+        <x>100</x>
+        <y>80</y>
+        <width>251</width>
+        <height>91</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Select results</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="submitResultsButton">
+      <property name="geometry">
+       <rect>
+        <x>100</x>
+        <y>330</y>
+        <width>251</width>
+        <height>91</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Submit results to database</string>
+      </property>
+     </widget>
+     <widget class="QProgressBar" name="resultsAddProgressBar">
+      <property name="geometry">
+       <rect>
+        <x>130</x>
+        <y>480</y>
+        <width>191</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="value">
+       <number>24</number>
+      </property>
+     </widget>
+     <widget class="QLabel" name="numOfFailedLabel">
+      <property name="geometry">
+       <rect>
+        <x>620</x>
+        <y>420</y>
+        <width>181</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>failed files</string>
+      </property>
+     </widget>
+     <widget class="QPlainTextEdit" name="numOfFailed">
+      <property name="geometry">
+       <rect>
+        <x>480</x>
+        <y>410</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLabel" name="numOfResultsLabel">
+      <property name="geometry">
+       <rect>
+        <x>620</x>
+        <y>360</y>
+        <width>181</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>results added</string>
+      </property>
+     </widget>
+     <widget class="QPlainTextEdit" name="numOfResults">
+      <property name="geometry">
+       <rect>
+        <x>480</x>
+        <y>350</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="dbViewTab">
+     <attribute name="title">
+      <string>View database</string>
+     </attribute>
+     <widget class="QPushButton" name="tableNameButton">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>110</y>
+        <width>120</width>
+        <height>26</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Show table</string>
+      </property>
+     </widget>
+     <widget class="QPlainTextEdit" name="tableNameTextBox">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>60</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLabel" name="tableNameLabel">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>30</y>
+        <width>91</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Table name</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="SQLQueryLabel">
+      <property name="geometry">
+       <rect>
+        <x>182</x>
+        <y>30</y>
+        <width>151</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>SQL formatted query</string>
+      </property>
+     </widget>
+     <widget class="QPlainTextEdit" name="SQLQueryTextBox">
+      <property name="geometry">
+       <rect>
+        <x>179</x>
+        <y>60</y>
+        <width>661</width>
+        <height>41</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLabel" name="orLabel">
+      <property name="geometry">
+       <rect>
+        <x>142</x>
+        <y>30</y>
+        <width>30</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>OR</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="SQLQueryButton">
+      <property name="geometry">
+       <rect>
+        <x>180</x>
+        <y>110</y>
+        <width>658</width>
+        <height>26</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Show results of query</string>
+      </property>
+     </widget>
+     <widget class="QWidget" name="dbViewWidget" native="true">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>150</y>
+        <width>821</width>
+        <height>461</height>
+       </rect>
+      </property>
+      <widget class="QLabel" name="dbViewLabel">
+       <property name="geometry">
+        <rect>
+         <x>350</x>
+         <y>180</y>
+         <width>58</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>(db view)</string>
+       </property>
+      </widget>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="plotTab">
+     <attribute name="title">
+      <string>Plotting</string>
+     </attribute>
+     <widget class="QGraphicsView" name="graphicsView">
+      <property name="geometry">
+       <rect>
+        <x>430</x>
+        <y>41</y>
+        <width>371</width>
+        <height>351</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QCommandLinkButton" name="updatePlotButton">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>110</y>
+        <width>168</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Update plot</string>
+      </property>
+     </widget>
+     <widget class="QRadioButton" name="plotAllDataButton">
+      <property name="enabled">
+       <bool>true</bool>
+      </property>
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>30</y>
+        <width>151</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>All data</string>
+      </property>
+      <property name="checked">
+       <bool>true</bool>
+      </property>
+      <attribute name="buttonGroup">
+       <string notr="true">plot_data_button_group</string>
+      </attribute>
+     </widget>
+     <widget class="QRadioButton" name="plotFilterDataButton">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>60</y>
+        <width>91</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Filtered data</string>
+      </property>
+      <attribute name="buttonGroup">
+       <string notr="true">plot_data_button_group</string>
+      </attribute>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="filterTab">
+     <attribute name="title">
+      <string>Filtering</string>
+     </attribute>
+    </widget>
+   </widget>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+ <buttongroups>
+  <buttongroup name="plot_data_button_group"/>
+ </buttongroups>
+</ui>

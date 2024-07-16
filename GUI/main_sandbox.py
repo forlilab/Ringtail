@@ -10,8 +10,8 @@
 import os
 import sys
 import util as u
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import (
+from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QVBoxLayout,
@@ -21,12 +21,12 @@ from PyQt5.QtWidgets import (
     QFrame,
 )
 import logging
-from PyQt5.QtCore import QObject, pyqtSignal, QThread
-from PyQt5.QtWidgets import QFileDialog
+from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtWidgets import QFileDialog
 import sqlite3
 import time
 import datetime
-from PyQt5.QtCore import pyqtSlot
+from PyQt6.QtCore import pyqtSlot
 
 
 from ringtail import RingtailCore, RaccoonLogger
