@@ -6,8 +6,10 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from ringtail import RingtailCore, RaccoonLogger
 import resources_rc
+import sqlite3
 from ui_log_handler import ConsoleWindowLogHandler
 from file_browser import FileBrowser
+from worker import Worker
 
 
 class UI_MainWindow(Ringtail_Prototype_UI):
@@ -47,9 +49,6 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         # endregion
 
         # region databaseView
-        # self.databasewidget = QtWidgets.QWidget()
-        # self.databasewidget.setObjectName("databasewidget")
-        # self.databasewidget.setFixedSize(1000, 250)
         self.threadpool = QtCore.QThreadPool()
         self.tableWidget = QtWidgets.QTableWidget(self.dbViewTab)
         self.tableWidget.setObjectName("tableWidget")
@@ -59,18 +58,58 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         )
         tableX = tableNameButtonX
         tableY = tableNameButtonY + buttonHeight * 2
-        # need to get widget dimensions for the full table size
+        # need to get tab widget dimensions for the full table size
         _, _, tabWidgetWidth, tabWidgetHeight = self.tabWidget.geometry().getRect()
         tableWidth = tabWidgetWidth - 2 * tableX
         tableHeight = tabWidgetHeight - tableY - 2 * tableX
         self.tableWidget.setGeometry(
             QtCore.QRect(tableX, tableY, tableWidth, tableHeight)
         )
-        self.tableWidget.setColumnCount(0)
-        self.tableWidget.setRowCount(0)
+        self.tableWidget.setColumnCount(10)
+        self.tableWidget.setRowCount(10)
+
+        # use lambda expresssions to how the query is sent depending on what button is pushed
+        self.tableNameButton.clicked.connect(
+            lambda: self.workerStart(
+                f"SELECT * FROM {self.tableNameTextBox.toPlainText()}"
+            )
+        )
+        self.SQLQueryButton.clicked.connect(
+            lambda: self.workerStart(self.SQLQueryTextBox)
+        )
         # endregion
 
         # endregion
+
+    def workerStart(self, query):
+
+        worker = Worker(lambda: self.loadDataBase(query))
+        self.threadpool.start(worker)
+
+    def loadDataBase(self, query):
+
+        self.conn = sqlite3.connect(self.rtc.db_file)
+        try:
+            cursor = self.conn.execute(query)
+        except Exception as e:
+            print("    THIS IS THE ERROR: ", e)
+            # TODO error popup that prints to log and can be cleared
+        row_len = []
+        for i in cursor:
+            row_len.append(len(i))
+        self.col_num = max(row_len)
+        self.tableWidget.setRowCount(0)
+        self.tableWidget.setColumnCount(int(self.col_num))
+
+        cursor = self.conn.execute(query)
+        for row, row_data in enumerate(cursor):
+            self.tableWidget.insertRow(row)
+            for col, col_data in enumerate(row_data):
+                self.tableWidget.setItem(
+                    row, col, QtWidgets.QTableWidgetItem(str(col_data))
+                )
+
+        self.conn.close()
 
     def pressedInitRT(self):
         """
