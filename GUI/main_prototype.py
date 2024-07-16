@@ -50,6 +50,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
 
         # region databaseView
         self.threadpool = QtCore.QThreadPool()
+        self.dbViewTab.setDisabled(True)
         self.tableWidget = QtWidgets.QTableWidget(self.dbViewTab)
         self.tableWidget.setObjectName("tableWidget")
         # figure out where to put table based on the other buttons
@@ -75,7 +76,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
             )
         )
         self.SQLQueryButton.clicked.connect(
-            lambda: self.workerStart(self.SQLQueryTextBox)
+            lambda: self.workerStart(self.SQLQueryTextBox.toPlainText())
         )
         # endregion
 
@@ -131,6 +132,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         self.selectPathsButton.setEnabled(True)
         # disable editing log file path after init
         self.logFile.setReadOnly(True)
+        self.dbViewTab.setEnabled(True)
 
     def dockingMode(self):
         """
