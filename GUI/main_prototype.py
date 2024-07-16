@@ -95,19 +95,25 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         except Exception as e:
             print("    THIS IS THE ERROR: ", e)
             # TODO error popup that prints to log and can be cleared
+        # TODO redo this stackoverflow method to get column iterated over
         row_len = []
         for i in cursor:
             row_len.append(len(i))
         self.col_num = max(row_len)
         self.tableWidget.setRowCount(0)
         self.tableWidget.setColumnCount(int(self.col_num))
-
+        # set table headers
         cursor = self.conn.execute(query)
+        columnNames = list(map(lambda x: x[0], cursor.description))
+        self.tableWidget.insertRow(0)
+        for col, colName in enumerate(columnNames):
+            self.tableWidget.setItem(0, col, QtWidgets.QTableWidgetItem(str(colName)))
+        # actually fetches the data and inserts it to the table widget
         for row, row_data in enumerate(cursor):
-            self.tableWidget.insertRow(row)
+            self.tableWidget.insertRow(row + 1)
             for col, col_data in enumerate(row_data):
                 self.tableWidget.setItem(
-                    row, col, QtWidgets.QTableWidgetItem(str(col_data))
+                    row + 1, col, QtWidgets.QTableWidgetItem(str(col_data))
                 )
 
         self.conn.close()
