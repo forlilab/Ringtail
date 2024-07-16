@@ -93,7 +93,7 @@ Ringtail Core</string>
      </property>
      <property name="icon">
       <iconset>
-       <normaloff>../Ringtail_GUI_old/resources/ringtail_head.png</normaloff>../Ringtail_GUI_old/resources/ringtail_head.png</iconset>
+       <normaloff>../../../Ringtail_GUI_old/resources/ringtail_head.png</normaloff>../../../Ringtail_GUI_old/resources/ringtail_head.png</iconset>
      </property>
     </widget>
     <widget class="QComboBox" name="dbTypeDropdown">
@@ -247,7 +247,10 @@ Ringtail Core</string>
      <attribute name="title">
       <string>Add docking results</string>
      </attribute>
-     <widget class="QPlainTextEdit" name="numOfFiles">
+     <widget class="QTextEdit" name="numOfFiles">
+      <property name="enabled">
+       <bool>true</bool>
+      </property>
       <property name="geometry">
        <rect>
         <x>480</x>
@@ -256,8 +259,11 @@ Ringtail Core</string>
         <height>41</height>
        </rect>
       </property>
+      <property name="readOnly">
+       <bool>true</bool>
+      </property>
      </widget>
-     <widget class="QPlainTextEdit" name="numOfDirs">
+     <widget class="QTextEdit" name="numOfDirs">
       <property name="geometry">
        <rect>
         <x>480</x>
@@ -266,8 +272,11 @@ Ringtail Core</string>
         <height>41</height>
        </rect>
       </property>
+      <property name="readOnly">
+       <bool>true</bool>
+      </property>
      </widget>
-     <widget class="QPlainTextEdit" name="numOfFilelists">
+     <widget class="QTextEdit" name="numOfFilelists">
       <property name="geometry">
        <rect>
         <x>480</x>
@@ -275,6 +284,9 @@ Ringtail Core</string>
         <width>121</width>
         <height>41</height>
        </rect>
+      </property>
+      <property name="readOnly">
+       <bool>true</bool>
       </property>
      </widget>
      <widget class="QLabel" name="numOfFilesLabel">
