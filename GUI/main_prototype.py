@@ -83,6 +83,10 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         # region filtering
         # only enable if initialized database has results
         self.filterTab.setDisabled(True)
+
+        # if num format button group changes change slider and spin box appearance
+        self.propertiesFormatButtonGroup.buttonToggled.connect(self.togglePropNumFormat)
+
         # endregion
 
         # endregion
@@ -125,7 +129,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
 
     def pressedInitRT(self):
         """
-        Initializes the Ringtail core
+        Initializes the Ringtail core and conditionally enables tabs
         """
         if len(self.logFile.toPlainText()) > 0:
             log_file = self.logFile.toPlainText()
@@ -145,7 +149,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         self.logFile.setReadOnly(True)
         self.dbViewTab.setEnabled(True)
         if self.dbNumOfResults() > 0:
-            self.filterTab.setEnabled(True)
+            self.enableFilterTab()
         else:
             self.filterTab.setDisabled(True)
 
@@ -179,7 +183,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         self.filelists = None
 
         if self.dbNumOfResults() > 0:
-            self.filterTab.setEnabled(True)
+            self.enableFilterTab()
         else:
             self.filterTab.setDisabled(True)
 
@@ -194,7 +198,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
             tuple: (min, max) values of the selected column
         """
         with self.rtc.storageman:
-            max, min = self.rtc.storageman._run_query(
+            min, max = self.rtc.storageman._run_query(
                 f"SELECT MIN({columnName}), MAX({columnName}) FROM Results"
             ).fetchall()[0]
 
@@ -211,6 +215,41 @@ class UI_MainWindow(Ringtail_Prototype_UI):
             return self.rtc.storageman._run_query(
                 "SELECT COUNT(*) FROM Results"
             ).fetchone()[0]
+
+    def enableFilterTab(self):
+        import math
+
+        self.filterTab.setEnabled(True)
+        min, max = self.getValueRange()
+        # set slider range, must be int, multiply by 100
+        self.horizontalSlider.setRange(math.floor(min * 100), math.ceil(max * 100))
+        # slider interval
+        self.horizontalSlider.setTickInterval(1)
+        # min/best energy spin box settings
+        self.minEnergySpinBox.setRange(min, max)
+        self.minEnergySpinBox.setValue(min)
+        # connect to slider - slider value
+
+        # max/poorest energy spin box settings
+        self.maxEnergySpinBox.setRange(min, max)
+        self.maxEnergySpinBox.setValue(max)
+        # connect to slider
+        self.horizontalSlider.valueChanged.connect(
+            lambda: self.maxEnergySpinBox.setValue(self.horizontalSlider.value() / 100)
+        )
+        # if button group is absolute value, set min and max
+        # if button group changes recalculate to percentile
+
+        ### (currentT)textChanged.connect is a thing!!!
+        ### radiobuttongroup.checkedButton
+
+    def togglePropNumFormat(self):
+        if self.percentileButton:
+            # disable min energy
+            pass
+        else:
+            # enable min energy
+            pass
 
 
 if __name__ == "__main__":
