@@ -1,4 +1,3 @@
-import os
 import sys
 import util as u
 from ringtail_prototype_ui import Ringtail_Prototype_UI
@@ -20,7 +19,7 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         self.files = None
         self.filelists = None
         self.directories = None
-        self.logger = RaccoonLogger(log_level_console="ERROR")
+        self.logger = RaccoonLogger(log_level_console="DEBUG")
 
     def connectUI(self, MainWindow):
         ### set up the superficial UI (inherited from ringtail_protptype_ui)
@@ -82,7 +81,8 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         # endregion
 
         # region filtering
-
+        # only enable if initialized database has results
+        self.filterTab.setDisabled(True)
         # endregion
 
         # endregion
@@ -144,6 +144,10 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         # disable editing log file path after init
         self.logFile.setReadOnly(True)
         self.dbViewTab.setEnabled(True)
+        if self.dbNumOfResults() > 0:
+            self.filterTab.setEnabled(True)
+        else:
+            self.filterTab.setDisabled(True)
 
     def dockingMode(self):
         """
@@ -173,6 +177,40 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         self.files = None
         self.directories = None
         self.filelists = None
+
+        if self.dbNumOfResults() > 0:
+            self.filterTab.setEnabled(True)
+        else:
+            self.filterTab.setDisabled(True)
+
+    def getValueRange(self, columnName: str = "docking_score") -> tuple:
+        """
+        Method to get max and min value from a numerical column in the database
+
+        Args:
+            columnName (str): name of column to be queried
+
+        Returns:
+            tuple: (min, max) values of the selected column
+        """
+        with self.rtc.storageman:
+            max, min = self.rtc.storageman._run_query(
+                f"SELECT MIN({columnName}), MAX({columnName}) FROM Results"
+            ).fetchall()[0]
+
+        return (min, max)
+
+    def dbNumOfResults(self):
+        """
+        Count number of results in the database
+
+        Returns:
+            int: number of results in the results table
+        """
+        with self.rtc.storageman:
+            return self.rtc.storageman._run_query(
+                "SELECT COUNT(*) FROM Results"
+            ).fetchone()[0]
 
 
 if __name__ == "__main__":
