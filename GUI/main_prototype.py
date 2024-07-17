@@ -225,17 +225,25 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         self.horizontalSlider.setRange(math.floor(min * 100), math.ceil(max * 100))
         # slider interval
         self.horizontalSlider.setTickInterval(1)
+        # connect to slider, divide by 100 since the slider uses energy*100 for formatting purposes
+        self.horizontalSlider.valueChanged.connect(
+            lambda: self.maxEnergySpinBox.setValue(self.horizontalSlider.value() / 100)
+        )
         # min/best energy spin box settings
         self.minEnergySpinBox.setRange(min, max)
         self.minEnergySpinBox.setValue(min)
-        # connect to slider - slider value
-
+        self.minEnergySpinBox.valueChanged.connect(
+            lambda: self.horizontalSlider.setMinimum(
+                int(self.minEnergySpinBox.value() * 100)
+            )
+        )
         # max/poorest energy spin box settings
         self.maxEnergySpinBox.setRange(min, max)
         self.maxEnergySpinBox.setValue(max)
-        # connect to slider
-        self.horizontalSlider.valueChanged.connect(
-            lambda: self.maxEnergySpinBox.setValue(self.horizontalSlider.value() / 100)
+        self.maxEnergySpinBox.valueChanged.connect(
+            lambda: self.horizontalSlider.setValue(
+                int(self.maxEnergySpinBox.value() * 100)
+            )
         )
         # if button group is absolute value, set min and max
         # if button group changes recalculate to percentile
