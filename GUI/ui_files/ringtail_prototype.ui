@@ -241,7 +241,7 @@ Ringtail Core</string>
      </rect>
     </property>
     <property name="currentIndex">
-     <number>0</number>
+     <number>3</number>
     </property>
     <widget class="QWidget" name="inputTab">
      <attribute name="title">
@@ -573,7 +573,7 @@ Ringtail Core</string>
        <bool>true</bool>
       </property>
       <attribute name="buttonGroup">
-       <string notr="true">plot_data_button_group</string>
+       <string notr="true">plotDataButtonGroup</string>
       </attribute>
      </widget>
      <widget class="QRadioButton" name="plotFilterDataButton">
@@ -589,7 +589,7 @@ Ringtail Core</string>
        <string>Filtered data</string>
       </property>
       <attribute name="buttonGroup">
-       <string notr="true">plot_data_button_group</string>
+       <string notr="true">plotDataButtonGroup</string>
       </attribute>
      </widget>
     </widget>
@@ -597,6 +597,153 @@ Ringtail Core</string>
      <attribute name="title">
       <string>Filtering</string>
      </attribute>
+     <widget class="QGroupBox" name="propertiesFilterBox">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>10</y>
+        <width>374</width>
+        <height>159</height>
+       </rect>
+      </property>
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="autoFillBackground">
+       <bool>false</bool>
+      </property>
+      <property name="title">
+       <string>Properties</string>
+      </property>
+      <layout class="QGridLayout" name="gridLayout_9">
+       <item row="4" column="0">
+        <widget class="QDoubleSpinBox" name="minLigandsEfficiencySpinBox">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="readEnergyLabel">
+         <property name="text">
+          <string>Energy:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="3">
+        <widget class="QDoubleSpinBox" name="maxEnergySpinBox">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0" colspan="2">
+        <widget class="QRadioButton" name="absoluteButton">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>Absolute</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+         <attribute name="buttonGroup">
+          <string notr="true">propertiesFormatButtonGroup</string>
+         </attribute>
+        </widget>
+       </item>
+       <item row="0" column="2" colspan="2">
+        <widget class="QRadioButton" name="percentileButton">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>Percentile</string>
+         </property>
+         <attribute name="buttonGroup">
+          <string notr="true">propertiesFormatButtonGroup</string>
+         </attribute>
+        </widget>
+       </item>
+       <item row="4" column="3">
+        <widget class="QDoubleSpinBox" name="maxLigandsEfficiencySpinBox">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0" colspan="2">
+        <widget class="QLabel" name="readLigandsEfficiencyLabel">
+         <property name="text">
+          <string>Ligands efficiency:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QDoubleSpinBox" name="minEnergySpinBox">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1" colspan="2">
+        <widget class="QSlider" name="horizontalSlider_2">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1" colspan="2">
+        <widget class="QSlider" name="horizontalSlider">
+         <property name="autoFillBackground">
+          <bool>false</bool>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">groove:horizontal {
+    border: 1px solid #999999;
+    height: 8px; /* the groove expands to the size of the slider by default. by giving it a height, it has a fixed size */
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #B1B1B1, stop:1 #c4c4c4);
+    margin: 2px 0;
+}</string>
+         </property>
+         <property name="minimum">
+          <number>-5</number>
+         </property>
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="invertedAppearance">
+          <bool>false</bool>
+         </property>
+         <property name="invertedControls">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </widget>
   </widget>
@@ -604,6 +751,7 @@ Ringtail Core</string>
  <resources/>
  <connections/>
  <buttongroups>
-  <buttongroup name="plot_data_button_group"/>
+  <buttongroup name="plotDataButtonGroup"/>
+  <buttongroup name="propertiesFormatButtonGroup"/>
  </buttongroups>
 </ui>

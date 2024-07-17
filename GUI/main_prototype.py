@@ -75,9 +75,14 @@ class UI_MainWindow(Ringtail_Prototype_UI):
                 f"SELECT * FROM {self.tableNameTextBox.toPlainText()}"
             )
         )
+        # TODO this can probably be better used as a dropdown of available table names
         self.SQLQueryButton.clicked.connect(
             lambda: self.workerStart(self.SQLQueryTextBox.toPlainText())
         )
+        # endregion
+
+        # region filtering
+
         # endregion
 
         # endregion

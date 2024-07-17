@@ -174,21 +174,150 @@ class Ringtail_Prototype_UI(QMainWindow):
         self.plotAllDataButton.setGeometry(QtCore.QRect(10, 30, 151, 21))
         self.plotAllDataButton.setChecked(True)
         self.plotAllDataButton.setObjectName("plotAllDataButton")
-        self.plot_data_button_group = QtWidgets.QButtonGroup(MainWindow)
-        self.plot_data_button_group.setObjectName("plot_data_button_group")
-        self.plot_data_button_group.addButton(self.plotAllDataButton)
+        self.plotDataButtonGroup = QtWidgets.QButtonGroup(MainWindow)
+        self.plotDataButtonGroup.setObjectName("plotDataButtonGroup")
+        self.plotDataButtonGroup.addButton(self.plotAllDataButton)
         self.plotFilterDataButton = QtWidgets.QRadioButton(parent=self.plotTab)
         self.plotFilterDataButton.setGeometry(QtCore.QRect(10, 60, 91, 21))
         self.plotFilterDataButton.setObjectName("plotFilterDataButton")
-        self.plot_data_button_group.addButton(self.plotFilterDataButton)
+        self.plotDataButtonGroup.addButton(self.plotFilterDataButton)
         self.tabWidget.addTab(self.plotTab, "")
         self.filterTab = QtWidgets.QWidget()
         self.filterTab.setObjectName("filterTab")
+        self.propertiesFilterBox = QtWidgets.QGroupBox(parent=self.filterTab)
+        self.propertiesFilterBox.setGeometry(QtCore.QRect(0, 10, 374, 159))
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(
+            self.propertiesFilterBox.sizePolicy().hasHeightForWidth()
+        )
+        self.propertiesFilterBox.setSizePolicy(sizePolicy)
+        self.propertiesFilterBox.setAutoFillBackground(False)
+        self.propertiesFilterBox.setObjectName("propertiesFilterBox")
+        self.gridLayout_9 = QtWidgets.QGridLayout(self.propertiesFilterBox)
+        self.gridLayout_9.setObjectName("gridLayout_9")
+        self.minLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(
+            parent=self.propertiesFilterBox
+        )
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(
+            self.minLigandsEfficiencySpinBox.sizePolicy().hasHeightForWidth()
+        )
+        self.minLigandsEfficiencySpinBox.setSizePolicy(sizePolicy)
+        self.minLigandsEfficiencySpinBox.setObjectName("minLigandsEfficiencySpinBox")
+        self.gridLayout_9.addWidget(self.minLigandsEfficiencySpinBox, 4, 0, 1, 1)
+        self.readEnergyLabel = QtWidgets.QLabel(parent=self.propertiesFilterBox)
+        self.readEnergyLabel.setObjectName("readEnergyLabel")
+        self.gridLayout_9.addWidget(self.readEnergyLabel, 1, 0, 1, 1)
+        self.maxEnergySpinBox = QtWidgets.QDoubleSpinBox(
+            parent=self.propertiesFilterBox
+        )
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(
+            self.maxEnergySpinBox.sizePolicy().hasHeightForWidth()
+        )
+        self.maxEnergySpinBox.setSizePolicy(sizePolicy)
+        self.maxEnergySpinBox.setObjectName("maxEnergySpinBox")
+        self.gridLayout_9.addWidget(self.maxEnergySpinBox, 2, 3, 1, 1)
+        self.absoluteButton = QtWidgets.QRadioButton(parent=self.propertiesFilterBox)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(
+            self.absoluteButton.sizePolicy().hasHeightForWidth()
+        )
+        self.absoluteButton.setSizePolicy(sizePolicy)
+        self.absoluteButton.setChecked(True)
+        self.absoluteButton.setObjectName("absoluteButton")
+        self.propertiesFormatButtonGroup = QtWidgets.QButtonGroup(MainWindow)
+        self.propertiesFormatButtonGroup.setObjectName("propertiesFormatButtonGroup")
+        self.propertiesFormatButtonGroup.addButton(self.absoluteButton)
+        self.gridLayout_9.addWidget(self.absoluteButton, 0, 0, 1, 2)
+        self.percentileButton = QtWidgets.QRadioButton(parent=self.propertiesFilterBox)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(
+            self.percentileButton.sizePolicy().hasHeightForWidth()
+        )
+        self.percentileButton.setSizePolicy(sizePolicy)
+        self.percentileButton.setObjectName("percentileButton")
+        self.propertiesFormatButtonGroup.addButton(self.percentileButton)
+        self.gridLayout_9.addWidget(self.percentileButton, 0, 2, 1, 2)
+        self.maxLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(
+            parent=self.propertiesFilterBox
+        )
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(
+            self.maxLigandsEfficiencySpinBox.sizePolicy().hasHeightForWidth()
+        )
+        self.maxLigandsEfficiencySpinBox.setSizePolicy(sizePolicy)
+        self.maxLigandsEfficiencySpinBox.setObjectName("maxLigandsEfficiencySpinBox")
+        self.gridLayout_9.addWidget(self.maxLigandsEfficiencySpinBox, 4, 3, 1, 1)
+        self.readLigandsEfficiencyLabel = QtWidgets.QLabel(
+            parent=self.propertiesFilterBox
+        )
+        self.readLigandsEfficiencyLabel.setObjectName("readLigandsEfficiencyLabel")
+        self.gridLayout_9.addWidget(self.readLigandsEfficiencyLabel, 3, 0, 1, 2)
+        self.minEnergySpinBox = QtWidgets.QDoubleSpinBox(
+            parent=self.propertiesFilterBox
+        )
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(
+            self.minEnergySpinBox.sizePolicy().hasHeightForWidth()
+        )
+        self.minEnergySpinBox.setSizePolicy(sizePolicy)
+        self.minEnergySpinBox.setObjectName("minEnergySpinBox")
+        self.gridLayout_9.addWidget(self.minEnergySpinBox, 2, 0, 1, 1)
+        self.horizontalSlider_2 = QtWidgets.QSlider(parent=self.propertiesFilterBox)
+        self.horizontalSlider_2.setOrientation(QtCore.Qt.Orientation.Horizontal)
+        self.horizontalSlider_2.setObjectName("horizontalSlider_2")
+        self.gridLayout_9.addWidget(self.horizontalSlider_2, 4, 1, 1, 2)
+        self.horizontalSlider = QtWidgets.QSlider(parent=self.propertiesFilterBox)
+        self.horizontalSlider.setAutoFillBackground(False)
+        self.horizontalSlider.setStyleSheet(
+            "groove:horizontal {\n"
+            "    border: 1px solid #999999;\n"
+            "    height: 8px; /* the groove expands to the size of the slider by default. by giving it a height, it has a fixed size */\n"
+            "    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #B1B1B1, stop:1 #c4c4c4);\n"
+            "    margin: 2px 0;\n"
+            "}"
+        )
+        self.horizontalSlider.setMinimum(-5)
+        self.horizontalSlider.setOrientation(QtCore.Qt.Orientation.Horizontal)
+        self.horizontalSlider.setInvertedAppearance(False)
+        self.horizontalSlider.setInvertedControls(False)
+        self.horizontalSlider.setObjectName("horizontalSlider")
+        self.gridLayout_9.addWidget(self.horizontalSlider, 2, 1, 1, 2)
         self.tabWidget.addTab(self.filterTab, "")
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
-        self.tabWidget.setCurrentIndex(0)
+        self.tabWidget.setCurrentIndex(3)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
@@ -241,6 +370,13 @@ class Ringtail_Prototype_UI(QMainWindow):
         self.plotFilterDataButton.setText(_translate("MainWindow", "Filtered data"))
         self.tabWidget.setTabText(
             self.tabWidget.indexOf(self.plotTab), _translate("MainWindow", "Plotting")
+        )
+        self.propertiesFilterBox.setTitle(_translate("MainWindow", "Properties"))
+        self.readEnergyLabel.setText(_translate("MainWindow", "Energy:"))
+        self.absoluteButton.setText(_translate("MainWindow", "Absolute"))
+        self.percentileButton.setText(_translate("MainWindow", "Percentile"))
+        self.readLigandsEfficiencyLabel.setText(
+            _translate("MainWindow", "Ligands efficiency:")
         )
         self.tabWidget.setTabText(
             self.tabWidget.indexOf(self.filterTab),
