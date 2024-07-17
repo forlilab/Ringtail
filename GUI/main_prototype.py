@@ -217,39 +217,50 @@ class UI_MainWindow(Ringtail_Prototype_UI):
             ).fetchone()[0]
 
     def enableFilterTab(self):
+        # TODO should probably be its own class
         import math
 
         self.filterTab.setEnabled(True)
         min, max = self.getValueRange()
         # set slider range, must be int, multiply by 100
-        self.horizontalSlider.setRange(math.floor(min * 100), math.ceil(max * 100))
+        self.energySlider.setRange(math.floor(min * 100), math.ceil(max * 100))
         # slider interval
-        self.horizontalSlider.setTickInterval(1)
+        self.energySlider.setTickInterval(1)
         # connect to slider, divide by 100 since the slider uses energy*100 for formatting purposes
-        self.horizontalSlider.valueChanged.connect(
-            lambda: self.maxEnergySpinBox.setValue(self.horizontalSlider.value() / 100)
+        self.energySlider.valueChanged.connect(
+            lambda: self.maxEnergySpinBox.setValue(self.energySlider.value() / 100)
         )
         # min/best energy spin box settings
         self.minEnergySpinBox.setRange(min, max)
         self.minEnergySpinBox.setValue(min)
+        self.minEnergySpinBox.setSingleStep(0.01)
         self.minEnergySpinBox.valueChanged.connect(
-            lambda: self.horizontalSlider.setMinimum(
+            lambda: self.energySlider.setMinimum(
                 int(self.minEnergySpinBox.value() * 100)
             )
         )
         # max/poorest energy spin box settings
         self.maxEnergySpinBox.setRange(min, max)
         self.maxEnergySpinBox.setValue(max)
+        self.maxEnergySpinBox.setSingleStep(0.01)
         self.maxEnergySpinBox.valueChanged.connect(
-            lambda: self.horizontalSlider.setValue(
-                int(self.maxEnergySpinBox.value() * 100)
-            )
+            lambda: self.energySlider.setValue(int(self.maxEnergySpinBox.value() * 100))
         )
         # if button group is absolute value, set min and max
         # if button group changes recalculate to percentile
 
         ### (currentT)textChanged.connect is a thing!!!
         ### radiobuttongroup.checkedButton
+        self.filterButton.clicked.connect(self.filterResults)
+        # button that filters
+        # window that shows all the data in the created filter bookmark
+
+    def filterResults(self):
+        self.rtc.filter(
+            eworst=self.maxEnergySpinBox.value(),
+            ebest=self.minEnergySpinBox.value(),
+            bookmark_name=self.bookmarkName.text(),
+        )
 
     def togglePropNumFormat(self):
         if self.percentileButton:

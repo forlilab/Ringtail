@@ -200,7 +200,7 @@ class Ringtail_Prototype_UI(QMainWindow):
         self.propertiesFilterBox.setObjectName("propertiesFilterBox")
         self.gridLayout_9 = QtWidgets.QGridLayout(self.propertiesFilterBox)
         self.gridLayout_9.setObjectName("gridLayout_9")
-        self.minLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(
+        self.minEnergySpinBox = QtWidgets.QDoubleSpinBox(
             parent=self.propertiesFilterBox
         )
         sizePolicy = QtWidgets.QSizePolicy(
@@ -209,14 +209,18 @@ class Ringtail_Prototype_UI(QMainWindow):
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(
-            self.minLigandsEfficiencySpinBox.sizePolicy().hasHeightForWidth()
+            self.minEnergySpinBox.sizePolicy().hasHeightForWidth()
         )
-        self.minLigandsEfficiencySpinBox.setSizePolicy(sizePolicy)
-        self.minLigandsEfficiencySpinBox.setObjectName("minLigandsEfficiencySpinBox")
-        self.gridLayout_9.addWidget(self.minLigandsEfficiencySpinBox, 4, 0, 1, 1)
-        self.readEnergyLabel = QtWidgets.QLabel(parent=self.propertiesFilterBox)
-        self.readEnergyLabel.setObjectName("readEnergyLabel")
-        self.gridLayout_9.addWidget(self.readEnergyLabel, 1, 0, 1, 1)
+        self.minEnergySpinBox.setSizePolicy(sizePolicy)
+        self.minEnergySpinBox.setObjectName("minEnergySpinBox")
+        self.gridLayout_9.addWidget(self.minEnergySpinBox, 2, 0, 1, 1)
+        self.efficiencySlider = QtWidgets.QSlider(parent=self.propertiesFilterBox)
+        self.efficiencySlider.setOrientation(QtCore.Qt.Orientation.Horizontal)
+        self.efficiencySlider.setObjectName("efficiencySlider")
+        self.gridLayout_9.addWidget(self.efficiencySlider, 4, 1, 1, 2)
+        self.energyLabel = QtWidgets.QLabel(parent=self.propertiesFilterBox)
+        self.energyLabel.setObjectName("energyLabel")
+        self.gridLayout_9.addWidget(self.energyLabel, 1, 0, 1, 1)
         self.maxEnergySpinBox = QtWidgets.QDoubleSpinBox(
             parent=self.propertiesFilterBox
         )
@@ -274,12 +278,10 @@ class Ringtail_Prototype_UI(QMainWindow):
         self.maxLigandsEfficiencySpinBox.setSizePolicy(sizePolicy)
         self.maxLigandsEfficiencySpinBox.setObjectName("maxLigandsEfficiencySpinBox")
         self.gridLayout_9.addWidget(self.maxLigandsEfficiencySpinBox, 4, 3, 1, 1)
-        self.readLigandsEfficiencyLabel = QtWidgets.QLabel(
-            parent=self.propertiesFilterBox
-        )
-        self.readLigandsEfficiencyLabel.setObjectName("readLigandsEfficiencyLabel")
-        self.gridLayout_9.addWidget(self.readLigandsEfficiencyLabel, 3, 0, 1, 2)
-        self.minEnergySpinBox = QtWidgets.QDoubleSpinBox(
+        self.efficiencyLabel = QtWidgets.QLabel(parent=self.propertiesFilterBox)
+        self.efficiencyLabel.setObjectName("efficiencyLabel")
+        self.gridLayout_9.addWidget(self.efficiencyLabel, 3, 0, 1, 2)
+        self.minLigandsEfficiencySpinBox = QtWidgets.QDoubleSpinBox(
             parent=self.propertiesFilterBox
         )
         sizePolicy = QtWidgets.QSizePolicy(
@@ -288,18 +290,14 @@ class Ringtail_Prototype_UI(QMainWindow):
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(
-            self.minEnergySpinBox.sizePolicy().hasHeightForWidth()
+            self.minLigandsEfficiencySpinBox.sizePolicy().hasHeightForWidth()
         )
-        self.minEnergySpinBox.setSizePolicy(sizePolicy)
-        self.minEnergySpinBox.setObjectName("minEnergySpinBox")
-        self.gridLayout_9.addWidget(self.minEnergySpinBox, 2, 0, 1, 1)
-        self.horizontalSlider_2 = QtWidgets.QSlider(parent=self.propertiesFilterBox)
-        self.horizontalSlider_2.setOrientation(QtCore.Qt.Orientation.Horizontal)
-        self.horizontalSlider_2.setObjectName("horizontalSlider_2")
-        self.gridLayout_9.addWidget(self.horizontalSlider_2, 4, 1, 1, 2)
-        self.horizontalSlider = QtWidgets.QSlider(parent=self.propertiesFilterBox)
-        self.horizontalSlider.setAutoFillBackground(False)
-        self.horizontalSlider.setStyleSheet(
+        self.minLigandsEfficiencySpinBox.setSizePolicy(sizePolicy)
+        self.minLigandsEfficiencySpinBox.setObjectName("minLigandsEfficiencySpinBox")
+        self.gridLayout_9.addWidget(self.minLigandsEfficiencySpinBox, 4, 0, 1, 1)
+        self.energySlider = QtWidgets.QSlider(parent=self.propertiesFilterBox)
+        self.energySlider.setAutoFillBackground(False)
+        self.energySlider.setStyleSheet(
             "groove:horizontal {\n"
             "    border: 1px solid #999999;\n"
             "    height: 8px; /* the groove expands to the size of the slider by default. by giving it a height, it has a fixed size */\n"
@@ -307,12 +305,18 @@ class Ringtail_Prototype_UI(QMainWindow):
             "    margin: 2px 0;\n"
             "}"
         )
-        self.horizontalSlider.setMinimum(-5)
-        self.horizontalSlider.setOrientation(QtCore.Qt.Orientation.Horizontal)
-        self.horizontalSlider.setInvertedAppearance(False)
-        self.horizontalSlider.setInvertedControls(False)
-        self.horizontalSlider.setObjectName("horizontalSlider")
-        self.gridLayout_9.addWidget(self.horizontalSlider, 2, 1, 1, 2)
+        self.energySlider.setMinimum(-5)
+        self.energySlider.setOrientation(QtCore.Qt.Orientation.Horizontal)
+        self.energySlider.setInvertedAppearance(False)
+        self.energySlider.setInvertedControls(False)
+        self.energySlider.setObjectName("energySlider")
+        self.gridLayout_9.addWidget(self.energySlider, 2, 1, 1, 2)
+        self.filterButton = QtWidgets.QPushButton(parent=self.filterTab)
+        self.filterButton.setGeometry(QtCore.QRect(390, 50, 441, 26))
+        self.filterButton.setObjectName("filterButton")
+        self.bookmarkName = QtWidgets.QLineEdit(parent=self.filterTab)
+        self.bookmarkName.setGeometry(QtCore.QRect(390, 20, 441, 22))
+        self.bookmarkName.setObjectName("bookmarkName")
         self.tabWidget.addTab(self.filterTab, "")
         MainWindow.setCentralWidget(self.centralwidget)
 
@@ -372,12 +376,11 @@ class Ringtail_Prototype_UI(QMainWindow):
             self.tabWidget.indexOf(self.plotTab), _translate("MainWindow", "Plotting")
         )
         self.propertiesFilterBox.setTitle(_translate("MainWindow", "Properties"))
-        self.readEnergyLabel.setText(_translate("MainWindow", "Energy:"))
+        self.energyLabel.setText(_translate("MainWindow", "Energy:"))
         self.absoluteButton.setText(_translate("MainWindow", "Absolute"))
         self.percentileButton.setText(_translate("MainWindow", "Percentile"))
-        self.readLigandsEfficiencyLabel.setText(
-            _translate("MainWindow", "Ligands efficiency:")
-        )
+        self.efficiencyLabel.setText(_translate("MainWindow", "Ligands efficiency:"))
+        self.filterButton.setText(_translate("MainWindow", "Click to filter! "))
         self.tabWidget.setTabText(
             self.tabWidget.indexOf(self.filterTab),
             _translate("MainWindow", "Filtering"),
