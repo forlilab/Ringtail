@@ -21,6 +21,7 @@ if __name__ == "__main__":
     try:
         # set up the logger
         logger = logutils.LOGGER
+        logger.add_consolehandler(level="INFO")
         logger.add_filehandler(log_file="ringtail", level="DEBUG")
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
