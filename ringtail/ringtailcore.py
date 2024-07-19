@@ -58,6 +58,7 @@ class RingtailCore:
 
         # Initiate logging
         self.logger = LOGGER
+        self.logger.add_consolehandler()
         self.logger.set_level(logging_level)
         # create log file handler if requested
         if logging_file is not None and self.logger._log_fp is None:
