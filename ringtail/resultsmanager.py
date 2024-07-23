@@ -45,6 +45,7 @@ class ResultsManager:
         parser_manager: str = "multiprocessing",
         file_sources=None,
         string_sources=None,
+        receptor_blob=None,
     ):
         self.parser_manager = parser_manager
         self.docking_mode = docking_mode
@@ -58,6 +59,7 @@ class ResultsManager:
         self.receptor_file = None
         self.file_pattern = None
         self.max_proc = max_proc
+        self.receptor_blob = receptor_blob
         # will be used to create individual db connections in multiprocessing
         self.storageman_class = storageman_class
         self.db_file = db_file
