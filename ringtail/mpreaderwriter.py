@@ -298,6 +298,8 @@ class Writer(multiprocessing.Process):
         pipe_conn,
         chunksize,
         docking_mode,
+        duplicate_handling,
+        overwrite,
         db_file,
         storageman_class,
     ):
@@ -310,6 +312,8 @@ class Writer(multiprocessing.Process):
         self.docking_mode = docking_mode
         self.chunksize = chunksize
         self.storageman_class = storageman_class
+        self.duplicate_handling = duplicate_handling
+        self.overwrite = overwrite
         self.db_file = db_file
         # initialize data array (stack of dictionaries)
         self.results_array = []
@@ -388,7 +392,10 @@ class Writer(multiprocessing.Process):
             final (bool): if last data entry, finalize database
         """
         # insert result, ligand, and receptor data
-        with self.storageman_class(self.db_file) as self.storageman:
+        self.storageman = self.storageman_class(self.db_file)
+        self.storageman.duplicate_handling = self.duplicate_handling
+        self.storageman.overwrite = self.overwrite
+        with self.storageman:
             self.storageman.insert_data(
                 self.results_array,
                 self.ligands_array,
@@ -413,7 +420,7 @@ class Writer(multiprocessing.Process):
 
         if final:
             # if final write, tell storageman to index
-            with self.storageman_class(self.db_file) as self.storageman:
+            with self.storageman:
                 self.storageman.create_indices()
                 self.storageman.set_ringtail_db_schema_version()
 

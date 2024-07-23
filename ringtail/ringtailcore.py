@@ -649,7 +649,9 @@ class RingtailCore:
                 self.resultsman.max_poses,
             )
         self.logger.info("Adding results...")
-        self.resultsman.process_docking_data()
+        self.resultsman.process_docking_data(
+            duplicate_handling=duplicate_handling, overwrite=overwrite
+        )
 
         with self.storageman:
             self.storageman.finalize_database_write()
