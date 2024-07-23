@@ -58,6 +58,7 @@ class MPManager:
         chunk_size,
         target,
         receptor_file,
+        receptor_blob,
         file_pattern=None,
         file_sources=None,
         string_sources=None,
@@ -81,6 +82,7 @@ class MPManager:
         self.num_files = 0
         self.max_proc = max_proc
         self.logger = LOGGER
+        self.receptor_blob = receptor_blob
 
         # set up queue
         if self.max_proc is None:
@@ -106,7 +108,6 @@ class MPManager:
         Args:
             string_sources (bool, optional): Switch for processing results that are provided as strings instead of files.
         """
-
         # exception comment: "Queue objects should only be shared between processes through inheritance"
         for _ in range(self.num_readers):
             # one worker is started for each processor to be used
@@ -114,7 +115,6 @@ class MPManager:
                 self.managed_queue_in,
                 self.managed_queue_out,
                 self.c_conn,
-                self.db_file,
                 self.storageman_class,
                 self.docking_mode,
                 self.max_poses,
@@ -125,12 +125,15 @@ class MPManager:
                 self.interaction_cutoffs,
                 self.receptor_file,
                 string_processing,
+                # need to pass receptor blob object of add interactions
+                self.receptor_blob,
             )
+
             # this method calls .run() internally
             s.start()
             self.workers.append(s)
 
-        # start the writer to process the data from the workers
+        # TODO so this branch needs a db connection object and I'd like to make it shared. It could maybe be a pool?
         w = Writer(
             self.managed_queue_out,
             self.num_readers,

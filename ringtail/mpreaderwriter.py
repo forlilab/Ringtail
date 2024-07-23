@@ -48,7 +48,6 @@ class DockingFileReader(
         queueIn,
         queueOut,
         pipe_conn,
-        db_file,
         storageman_class,
         docking_mode,
         max_poses,
@@ -59,6 +58,7 @@ class DockingFileReader(
         interaction_cutoffs,
         receptor_file,
         string_processing=False,
+        receptor_blob=None,
     ):
         multiprocessing.Process.__init__(self)
         # set docking_mode for which file parser to use (and for vina, '_string' if parsing string output directly)
@@ -69,12 +69,10 @@ class DockingFileReader(
         # set interaction_tolerance cutoff
         self.interaction_tolerance = interaction_tolerance
         # set options for finding interactions
-        self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
         self.receptor_file = receptor_file
-
+        self.receptor_blob = receptor_blob
         self.storageman_class = storageman_class
-        self.db_file = db_file
         # set target name to check against
         self.target = target
         # initialize the parent class to inherit all multiprocessing methods
@@ -168,21 +166,11 @@ class DockingFileReader(
                     parsed_file_dict
                 )
                 # Calculate interactions if requested
-                if self.add_interactions:
-                    try:
-                        from .receptormanager import ReceptorManager as rm
+                if self.receptor_blob:
+                    from .receptormanager import ReceptorManager as rm
 
-                        with self.storageman_class(self.db_file) as self.storageman:
-                            # grab receptor info from database, this assumes there is only one receptor in the database
-                            receptor_blob = self.storageman.fetch_receptor_objects()[0][
-                                1
-                            ]  # method returns and iter of tuples, blob is the second tuple element in the first list element
-                            # convert receptor blob to string
-                            receptor_string = rm.blob2str(receptor_blob)
-                    except:
-                        raise ResultsProcessingError(
-                            "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
-                        )
+                    receptor_string = rm.blob2str(self.receptor_blob)
+
                     if self.interaction_finder is None:
                         self.interaction_finder = InteractionFinder(
                             receptor_string, self.interaction_cutoffs
@@ -315,6 +303,8 @@ class Writer(multiprocessing.Process):
         self.duplicate_handling = duplicate_handling
         self.overwrite = overwrite
         self.db_file = db_file
+        # self.storageman = storageman_class(db_file)
+        # self.storageman.duplicate_handling = duplicate_handling
         # initialize data array (stack of dictionaries)
         self.results_array = []
         self.ligands_array = []
@@ -335,55 +325,58 @@ class Writer(multiprocessing.Process):
         Raises:
             WriteToStorageError
         """
+        self.storageman = self.storageman_class(self.db_file)
+        self.storageman.duplicate_handling = self.duplicate_handling
+        with self.storageman:
+            try:
+                while True:
 
-        try:
-            while True:
-                # retrieve the next task from the queue
-                next_task = self.queue.get()
-                if next_task is None:
-                    # if a poison pill is found, it means one of the workers quit
-                    self.num_readers -= 1
-                    logger.debug(
-                        "Closing process. Remaining open processes: "
-                        + str(self.num_readers)
-                    )
-                else:
-                    # if not a poison pill, process the task item
-
-                    # after every n (chunksize) files, write to storage
-                    if self.counter >= self.chunksize:
-                        self.write_to_storage()
-                        # print info about files and time remaining
-                        sys.stdout.write("\r")
-                        sys.stdout.write(
-                            "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
-                                self.num_files_written,
-                                self.num_files_written * 60 / self.total_runtime,
-                                self.total_runtime,
-                            )
+                    # retrieve the next task from the queue
+                    next_task = self.queue.get()
+                    if next_task is None:
+                        # if a poison pill is found, it means one of the workers quit
+                        self.num_readers -= 1
+                        logger.debug(
+                            "Closing process. Remaining open processes: "
+                            + str(self.num_readers)
                         )
-                        sys.stdout.flush()
+                    else:
+                        # if not a poison pill, process the task item
 
-                    # process next file
-                    self.process_file(next_task)
-                if self.num_readers == 0:
-                    # received as many poison pills as workers
-                    logger.info("Performing final database write")
-                    # perform final storage write
-                    self.write_to_storage(final=True)
-                    # no workers left, no job to do
-                    logger.info("File processing completed")
-                    self.close()
-                    break
-        except Exception:
-            tb = traceback.format_exc()
-            self.pipe.send(
-                (
-                    WriteToStorageError("Error occured while writing database"),
-                    tb,
-                    "Database",
+                        # after every n (chunksize) files, write to storage
+                        if self.counter >= self.chunksize:
+                            self.write_to_storage()
+                            # print info about files and time remaining
+                            sys.stdout.write("\r")
+                            sys.stdout.write(
+                                "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
+                                    self.num_files_written,
+                                    self.num_files_written * 60 / self.total_runtime,
+                                    self.total_runtime,
+                                )
+                            )
+                            sys.stdout.flush()
+
+                        # process next file
+                        self.process_file(next_task)
+                    if self.num_readers == 0:
+                        # received as many poison pills as workers
+                        logger.info("Performing final database write")
+                        # perform final storage write
+                        self.write_to_storage(final=True)
+                        # no workers left, no job to do
+                        logger.info("File processing completed")
+                        self.close()
+                        break
+            except Exception:
+                tb = traceback.format_exc()
+                self.pipe.send(
+                    (
+                        WriteToStorageError("Error occured while writing database"),
+                        tb,
+                        "Database",
+                    )
                 )
-            )
 
     def write_to_storage(self, final=False):
         """Inserting data to the database through the designated storagemanager.
@@ -392,17 +385,14 @@ class Writer(multiprocessing.Process):
             final (bool): if last data entry, finalize database
         """
         # insert result, ligand, and receptor data
-        self.storageman = self.storageman_class(self.db_file)
-        self.storageman.duplicate_handling = self.duplicate_handling
-        self.storageman.overwrite = self.overwrite
-        with self.storageman:
-            self.storageman.insert_data(
-                self.results_array,
-                self.ligands_array,
-                self.interactions_list,
-                self.receptor_array,
-                self.first_insert,
-            )
+
+        self.storageman.insert_data(
+            self.results_array,
+            self.ligands_array,
+            self.interactions_list,
+            self.receptor_array,
+            self.first_insert,
+        )
         # So at this point the ligand array is empty
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
@@ -420,9 +410,8 @@ class Writer(multiprocessing.Process):
 
         if final:
             # if final write, tell storageman to index
-            with self.storageman:
-                self.storageman.create_indices()
-                self.storageman.set_ringtail_db_schema_version()
+            self.storageman.create_indices()
+            self.storageman.set_ringtail_db_schema_version()
 
     def process_file(self, file_packet):
         """Breaks up the data in the file_packet to distribute between

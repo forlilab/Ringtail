@@ -620,6 +620,7 @@ class RingtailCore:
         # self.resultsman.storageman = self.storageman
         self.resultsman.storageman_class = self.storageman.__class__
         self.resultsman.db_file = self.db_file
+
         self.set_resultsman_attributes(
             store_all_poses,
             max_poses,
@@ -641,6 +642,18 @@ class RingtailCore:
             self.resultsman.interaction_tolerance = None
 
         with self.storageman:
+            if add_interactions:
+                from exceptions import ResultsProcessingError
+
+                try:
+                    # grab receptor info from database, this assumes there is only one receptor in the database
+                    receptor_blob = self.storageman.fetch_receptor_objects()[0][1]
+                # method returns and iter of tuples, blob is the second tuple element in the first list element
+                except:
+                    raise ResultsProcessingError(
+                        "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                    )
+                self.resultsman.receptor_blob = receptor_blob
             # Process results files and handle database versioning
             self.storageman.check_storage_ready(
                 self._run_mode,
