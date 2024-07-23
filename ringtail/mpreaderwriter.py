@@ -4,7 +4,6 @@
 # Ringtail multiprocessing workers
 #
 
-import platform
 import time
 import sys
 from .logutils import LOGGER as logger
@@ -61,7 +60,7 @@ class DockingFileReader(
         receptor_file,
         string_processing=False,
     ):
-
+        multiprocessing.Process.__init__(self)
         # set docking_mode for which file parser to use (and for vina, '_string' if parsing string output directly)
         self.docking_mode = docking_mode
         # set number of clusters to write
@@ -72,23 +71,22 @@ class DockingFileReader(
         # set options for finding interactions
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
-        self.interaction_finder = None
         self.receptor_file = receptor_file
+
+        self.storageman_class = storageman_class
+        self.db_file = db_file
         # set target name to check against
         self.target = target
-
-        # create storageman
-        self.storageman_class = storageman_class
-        self.storageman = self.storageman_class(db_file)
-
         # initialize the parent class to inherit all multiprocessing methods
-        super().__init__()
+
         # # each worker knows the queue in (where data to process comes from)
         # # ...and a queue out (where to send the results)
         self.queueIn = queueIn
         self.queueOut = queueOut
         # # ...and a pipe to the parent
         self.pipe = pipe_conn
+        self.interaction_finder = None
+        self.exception = None
         # if the results being processed comes as a string instead of a file (currently only implemented for vina)
         self.string_processing = string_processing
 
@@ -174,7 +172,7 @@ class DockingFileReader(
                     try:
                         from .receptormanager import ReceptorManager as rm
 
-                        with self.storageman:
+                        with self.storageman_class(self.db_file) as self.storageman:
                             # grab receptor info from database, this assumes there is only one receptor in the database
                             receptor_blob = self.storageman.fetch_receptor_objects()[0][
                                 1
@@ -312,7 +310,7 @@ class Writer(multiprocessing.Process):
         self.docking_mode = docking_mode
         self.chunksize = chunksize
         self.storageman_class = storageman_class
-        self.storageman = self.storageman_class(db_file)
+        self.db_file = db_file
         # initialize data array (stack of dictionaries)
         self.results_array = []
         self.ligands_array = []
@@ -390,7 +388,7 @@ class Writer(multiprocessing.Process):
             final (bool): if last data entry, finalize database
         """
         # insert result, ligand, and receptor data
-        with self.storageman:
+        with self.storageman_class(self.db_file) as self.storageman:
             self.storageman.insert_data(
                 self.results_array,
                 self.ligands_array,
@@ -415,7 +413,7 @@ class Writer(multiprocessing.Process):
 
         if final:
             # if final write, tell storageman to index
-            with self.storageman:
+            with self.storageman_class(self.db_file) as self.storageman:
                 self.storageman.create_indices()
                 self.storageman.set_ringtail_db_schema_version()
 
