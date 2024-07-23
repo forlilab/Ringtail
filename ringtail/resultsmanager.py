@@ -6,7 +6,6 @@
 
 from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
-from .storagemanager import StorageManager
 from .logutils import LOGGER as logger
 
 
@@ -40,8 +39,8 @@ class ResultsManager:
         add_interactions: bool = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        storageman: StorageManager = None,
-        storageman_class: StorageManager = None,
+        db_file: str = None,
+        storageman_class=None,
         chunk_size: int = 1,
         parser_manager: str = "multiprocessing",
         file_sources=None,
@@ -59,8 +58,9 @@ class ResultsManager:
         self.receptor_file = None
         self.file_pattern = None
         self.max_proc = max_proc
+        # will be used to create individual db connections in multiprocessing
         self.storageman_class = storageman_class
-        self.storageman = storageman
+        self.db_file = db_file
         # if results are provided as files
         self.file_sources = file_sources
         if file_sources is not None:
