@@ -3178,9 +3178,9 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             self.conn = self._create_connection()
-            signal(
-                SIGINT, self._sigint_handler
-            )  # signal handler to catch keyboard interupts
+            # signal(
+            #     SIGINT, self._sigint_handler
+            # )  # signal handler to catch keyboard interupts
             if self._db_empty() or self.overwrite:  # write and drop tables as necessary
                 if not self._db_empty():
                     self._drop_existing_tables()

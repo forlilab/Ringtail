@@ -40,8 +40,8 @@ class UI_MainWindow(Ringtail_Prototype_UI):
 
         # region resultsAdd
         self.selectPathsButton.clicked.connect(self.selectDockingResultPaths)
-        self.submitResultsButton.clicked.connect(self.addDockingResults)
-
+        # self.submitResultsButton.clicked.connect(self.addDockingResults)
+        self.submitResultsButton.clicked.connect(self.workerSubmitResults)
         # TODO I'd like to add a count of number of files added
         # TODO connect files added to progress bar somehow
         # TODO add count for failed files
@@ -96,6 +96,10 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         worker = Worker(lambda: self.loadDataBase(query))
         self.threadpool.start(worker)
 
+    def workerSubmitResults(self):
+        worker = Worker(self.addDockingResults)
+        self.threadpool.start(worker)
+
     def loadDataBase(self, query):
 
         self.conn = sqlite3.connect(self.rtc.db_file)
@@ -106,19 +110,19 @@ class UI_MainWindow(Ringtail_Prototype_UI):
             # TODO error popup that prints to log and can be cleared
         # TODO redo this stackoverflow method to get column iterated over
         row_len = []
-        for i in cursor:
+        cursor_data = cursor.fetchall()
+        for i in cursor_data:
             row_len.append(len(i))
         self.col_num = max(row_len)
         self.tableWidget.setRowCount(0)
         self.tableWidget.setColumnCount(int(self.col_num))
         # set table headers
-        cursor = self.conn.execute(query)
         columnNames = list(map(lambda x: x[0], cursor.description))
         self.tableWidget.insertRow(0)
         for col, colName in enumerate(columnNames):
             self.tableWidget.setItem(0, col, QtWidgets.QTableWidgetItem(str(colName)))
-        # actually fetches the data and inserts it to the table widget
-        for row, row_data in enumerate(cursor):
+        # insert data into the table widget
+        for row, row_data in enumerate(cursor_data):
             self.tableWidget.insertRow(row + 1)
             for col, col_data in enumerate(row_data):
                 self.tableWidget.setItem(
@@ -173,10 +177,12 @@ class UI_MainWindow(Ringtail_Prototype_UI):
         window.show()
 
     def addDockingResults(self):
+        # TODO maybe what I have to do is spawn the results process to a separate thread that can run in the background or on top or something
         self.rtc.add_results_from_files(
             file=u.QListWidget_to_list(self.files),
             file_path=u.QListWidget_to_list(self.directories),
             file_list=u.QListWidget_to_list(self.filelists),
+            max_proc=3,
         )
         self.files = None
         self.directories = None

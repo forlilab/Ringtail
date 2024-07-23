@@ -18,15 +18,13 @@ from .exceptions import (
     ResultsProcessingError,
 )
 from .interactions import InteractionFinder
-
-os_string = platform.system()
-if os_string == "Darwin":  # mac
-    import multiprocess as multiprocessing
-else:
-    import multiprocessing
+from .storagemanager import *
+import multiprocessing
 
 
-class DockingFileReader(multiprocessing.Process):
+class DockingFileReader(
+    multiprocessing.Process,
+):
     """This class is the individual worker for processing docking results.
     One instance of this class is instantiated for each available processor.
 
@@ -51,7 +49,7 @@ class DockingFileReader(multiprocessing.Process):
         queueIn,
         queueOut,
         pipe_conn,
-        storageman,
+        db_file,
         storageman_class,
         docking_mode,
         max_poses,
@@ -63,6 +61,7 @@ class DockingFileReader(multiprocessing.Process):
         receptor_file,
         string_processing=False,
     ):
+
         # set docking_mode for which file parser to use (and for vina, '_string' if parsing string output directly)
         self.docking_mode = docking_mode
         # set number of clusters to write
@@ -73,22 +72,23 @@ class DockingFileReader(multiprocessing.Process):
         # set options for finding interactions
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
+        self.interaction_finder = None
         self.receptor_file = receptor_file
-        # set storagemanager and class
-        self.storageman = storageman
-        self.storageman_class = storageman_class
         # set target name to check against
         self.target = target
+
+        # create storageman
+        self.storageman_class = storageman_class
+        self.storageman = self.storageman_class(db_file)
+
         # initialize the parent class to inherit all multiprocessing methods
-        multiprocessing.Process.__init__(self)
-        # each worker knows the queue in (where data to process comes from)
+        super().__init__()
+        # # each worker knows the queue in (where data to process comes from)
+        # # ...and a queue out (where to send the results)
         self.queueIn = queueIn
-        # ...and a queue out (where to send the results)
         self.queueOut = queueOut
-        # ...and a pipe to the parent
+        # # ...and a pipe to the parent
         self.pipe = pipe_conn
-        self.interaction_finder = None
-        self.exception = None
         # if the results being processed comes as a string instead of a file (currently only implemented for vina)
         self.string_processing = string_processing
 
@@ -294,7 +294,14 @@ class Writer(multiprocessing.Process):
     into datbase"""
 
     def __init__(
-        self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
+        self,
+        queue,
+        num_readers,
+        pipe_conn,
+        chunksize,
+        docking_mode,
+        db_file,
+        storageman_class,
     ):
         multiprocessing.Process.__init__(self)
         self.queue = queue
@@ -303,8 +310,9 @@ class Writer(multiprocessing.Process):
         self.pipe = pipe_conn
         # assign pointer to storage object, set chunksize
         self.docking_mode = docking_mode
-        self.storageman = storageman
         self.chunksize = chunksize
+        self.storageman_class = storageman_class
+        self.storageman = self.storageman_class(db_file)
         # initialize data array (stack of dictionaries)
         self.results_array = []
         self.ligands_array = []
@@ -382,13 +390,14 @@ class Writer(multiprocessing.Process):
             final (bool): if last data entry, finalize database
         """
         # insert result, ligand, and receptor data
-        self.storageman.insert_data(
-            self.results_array,
-            self.ligands_array,
-            self.interactions_list,
-            self.receptor_array,
-            self.first_insert,
-        )
+        with self.storageman:
+            self.storageman.insert_data(
+                self.results_array,
+                self.ligands_array,
+                self.interactions_list,
+                self.receptor_array,
+                self.first_insert,
+            )
         # So at this point the ligand array is empty
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
@@ -406,8 +415,9 @@ class Writer(multiprocessing.Process):
 
         if final:
             # if final write, tell storageman to index
-            self.storageman.create_indices()
-            self.storageman.set_ringtail_db_schema_version()
+            with self.storageman:
+                self.storageman.create_indices()
+                self.storageman.set_ringtail_db_schema_version()
 
     def process_file(self, file_packet):
         """Breaks up the data in the file_packet to distribute between
