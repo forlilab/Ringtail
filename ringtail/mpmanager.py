@@ -51,6 +51,8 @@ class MPManager:
         add_interactions,
         interaction_cutoffs,
         max_proc,
+        duplicate_handling,
+        overwrite,
         db_file,
         storageman_class,
         chunk_size,
@@ -68,6 +70,8 @@ class MPManager:
         self.target = target
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
+        self.duplicate_handling = duplicate_handling
+        self.overwrite = overwrite
         self.receptor_file = receptor_file
         self.file_sources = file_sources
         self.file_pattern = file_pattern
@@ -133,6 +137,8 @@ class MPManager:
             self.c_conn,
             self.chunk_size,
             self.docking_mode,
+            self.duplicate_handling,
+            self.overwrite,
             self.db_file,
             self.storageman_class,
         )
