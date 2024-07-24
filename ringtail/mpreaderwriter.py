@@ -347,7 +347,7 @@ class Writer(multiprocessing.Process):
                         sys.stdout.write("\r")
                         sys.stdout.write(
                             "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
-                                self.num_files_written,
+                                self.num_files_written + 1,
                                 self.num_files_written * 60 / self.total_runtime,
                                 self.total_runtime,
                             )
