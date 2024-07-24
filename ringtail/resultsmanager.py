@@ -75,9 +75,7 @@ class ResultsManager:
             self.target = self.string_sources.target
             self.receptor_file = self.string_sources.receptor_file
 
-    def process_docking_data(
-        self, duplicate_handling: bool = None, overwrite: bool = None
-    ):
+    def process_docking_data(self, duplicate_handling: bool = None):
         """Processes docking data in the form of files or strings
 
         Raises:
@@ -85,7 +83,6 @@ class ResultsManager:
         """
         # check that we have results source(s)
         self.duplicate_handling = duplicate_handling
-        self.overwrite = overwrite
         files_sources = bool(self.file_sources)
         if files_sources:
             files_present = not bool(

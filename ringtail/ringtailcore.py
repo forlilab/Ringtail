@@ -647,16 +647,14 @@ class RingtailCore:
         with self.storageman:
             if (
                 self.resultsman.add_interactions
-            ):  ### needs to be from results man not storageopts
+            ):  # grab receptor info from database, this assumes there is only one receptor in the database
                 try:
-                    # grab receptor info from database, this assumes there is only one receptor in the database
+                    # method returns and iter of tuples, blob is the second tuple element in the first list element
                     receptor_blob = self.storageman.fetch_receptor_objects()[0][1]
-                # method returns and iter of tuples, blob is the second tuple element in the first list element
                 except:
                     raise ResultsProcessingError(
                         "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
                     )
-                # TODO I am making some problems here, probably I need to add receptor explicitly always?
                 self.resultsman.receptor_blob = receptor_blob
 
             self.storageman.check_storage_ready(
@@ -666,9 +664,7 @@ class RingtailCore:
                 self.resultsman.max_poses,
             )
         self.logger.info("Adding results...")
-        self.resultsman.process_docking_data(
-            duplicate_handling=duplicate_handling, overwrite=overwrite
-        )
+        self.resultsman.process_docking_data(duplicate_handling)
 
         with self.storageman:
             self.storageman.finalize_database_write()

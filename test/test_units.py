@@ -643,5 +643,5 @@ class TestOptions:
 
     def test_remove_test_log_files(self):
         # Alter this method if you wish to delete all log files after testing automatically
-        return
+        # return
         os.system("rm *_ringtail.log")
