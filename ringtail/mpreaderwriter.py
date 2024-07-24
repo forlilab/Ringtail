@@ -70,6 +70,7 @@ class DockingFileReader(
         self.interaction_tolerance = interaction_tolerance
         # set options for finding interactions
         self.interaction_cutoffs = interaction_cutoffs
+        self.add_interactions = add_interactions
         self.receptor_file = receptor_file
         self.receptor_blob = receptor_blob
         self.storageman_class = storageman_class
@@ -166,7 +167,7 @@ class DockingFileReader(
                     parsed_file_dict
                 )
                 # Calculate interactions if requested
-                if self.receptor_blob:
+                if self.add_interactions:
                     from .receptormanager import ReceptorManager as rm
 
                     receptor_string = rm.blob2str(self.receptor_blob)
@@ -303,6 +304,7 @@ class Writer(multiprocessing.Process):
         self.duplicate_handling = duplicate_handling
         self.overwrite = overwrite
         self.db_file = db_file
+        self.overwrite = overwrite
         # self.storageman = storageman_class(db_file)
         # self.storageman.duplicate_handling = duplicate_handling
         # initialize data array (stack of dictionaries)
@@ -327,6 +329,7 @@ class Writer(multiprocessing.Process):
         """
         self.storageman = self.storageman_class(self.db_file)
         self.storageman.duplicate_handling = self.duplicate_handling
+        self.storageman.overwrite = self.overwrite
         with self.storageman:
             try:
                 while True:

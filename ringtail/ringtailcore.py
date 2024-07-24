@@ -13,7 +13,7 @@ from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
 from .ringtailoptions import *
 from .util import *
-from .exceptions import RTCoreError, OutputError
+from .exceptions import RTCoreError, OutputError, ResultsProcessingError
 from rdkit import Chem
 import itertools
 import os
@@ -608,6 +608,9 @@ class RingtailCore:
             overwrite=overwrite,
             dict=storage_dict,
         )
+        # Process results files and handle database versioning
+        with self.storageman:
+            self.storageman.prepare_storage(self.storageopts.overwrite)
 
         if results_sources.save_receptor:
             self.save_receptor(results_sources.receptor_file)
@@ -642,9 +645,9 @@ class RingtailCore:
             self.resultsman.interaction_tolerance = None
 
         with self.storageman:
-            if add_interactions:
-                from exceptions import ResultsProcessingError
-
+            if (
+                self.resultsman.add_interactions
+            ):  ### needs to be from results man not storageopts
                 try:
                     # grab receptor info from database, this assumes there is only one receptor in the database
                     receptor_blob = self.storageman.fetch_receptor_objects()[0][1]
@@ -655,8 +658,6 @@ class RingtailCore:
                     )
                 # TODO I am making some problems here, probably I need to add receptor explicitly always?
                 self.resultsman.receptor_blob = receptor_blob
-            # Process results files and handle database versioning
-            self.storageman.prepare_storage(self.storageopts.overwrite)
 
             self.storageman.check_storage_ready(
                 self._run_mode,
@@ -1127,6 +1128,7 @@ class RingtailCore:
         """
         receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
         with self.storageman:
+            self.storageman.prepare_storage(self.storageopts.overwrite)
             for rec, rec_name in receptor_list:
                 # NOTE: in current implementation, only one receptor allowed per database
                 # Check that any receptor row is incomplete (needs receptor blob) before inserting
