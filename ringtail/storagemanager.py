@@ -3178,18 +3178,27 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             self.conn = self._create_connection()
+            # TODO statement below to only be relevant if cmd line
             # signal(
             #     SIGINT, self._sigint_handler
             # )  # signal handler to catch keyboard interupts
-            if self._db_empty() or self.overwrite:  # write and drop tables as necessary
-                if not self._db_empty():
-                    self._drop_existing_tables()
-                self._create_tables()
-                self.set_ringtail_db_schema_version(self._db_schema_ver)
-
             self.logger.info(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
             raise StorageError(f"Errow while creating or connecting to database: {e}.")
+
+    def prepare_storage(self, overwrite: bool = False):
+        """
+        Prepares the database by dropping tables if overwriting existing database.
+        Creates tables and sets db schema version if needed for empty databases
+
+        Args:
+            overwrite (bool): Whether or not to overwrite the database
+        """
+        if overwrite and not self._db_empty():
+            self._drop_existing_tables()
+        if self._db_empty():
+            self._create_tables()
+            self.set_ringtail_db_schema_version(self._db_schema_ver)
 
     def check_storage_ready(
         self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
@@ -3489,7 +3498,7 @@ class StorageManagerSQLite(StorageManager):
             bool: whether or not db is empty
         """
         cur = self.conn.execute(
-            "SELECT COUNT(*) name FROM sqlite_master WHERE type='table';"
+            "SELECT COUNT(*) name FROM sqlite_master WHERE type='table' AND name <> 'sqlite_sequence';"
         )
         tablecount = cur.fetchone()[0]
         cur.close()

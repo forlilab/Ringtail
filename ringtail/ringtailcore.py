@@ -653,8 +653,11 @@ class RingtailCore:
                     raise ResultsProcessingError(
                         "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
                     )
+                # TODO I am making some problems here, probably I need to add receptor explicitly always?
                 self.resultsman.receptor_blob = receptor_blob
             # Process results files and handle database versioning
+            self.storageman.prepare_storage(self.storageopts.overwrite)
+
             self.storageman.check_storage_ready(
                 self._run_mode,
                 self.docking_mode,
