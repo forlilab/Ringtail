@@ -130,7 +130,7 @@ class StorageManager:
         self._delete_from_ligands()
         self._delete_from_interactions_not_in_view()
 
-    def check_passing_view_exists(self, bookmark_name: str = None):
+    def check_passing_view_exists(self, bookmark_name: str | None = None):
         """Checks if bookmark name is in database
 
         Args:
@@ -275,11 +275,10 @@ class StorageManager:
 
         self.logger.debug("Running filtering query...")
         time0 = time.perf_counter()
-        filtered_results = self._run_query(filter_results_str)
+        filtered_results = self._run_query(filter_results_str).fetchall()
         self.logger.debug(
             f"Time to run query: {time.perf_counter() - time0:.2f} seconds"
         )
-        # get number of passing ligands
         return filtered_results
 
     def crossref_filter(
@@ -1744,7 +1743,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error while remaking views") from e
 
-    def fetch_filters_from_view(self, bookmark_name: str = None):
+    def fetch_filters_from_view(self, bookmark_name: str | None = None):
         """Method that will retrieve filter values used to construct bookmark
 
         Args:
@@ -1762,6 +1761,45 @@ class StorageManagerSQLite(StorageManager):
 
         return json.loads(filters)
 
+    def _view_has_rows(self, bookmark: str) -> bool:
+        """
+        Method that checks if a given bookmark has any data in it
+
+        Args:
+            bookmark (str): bookmark/view to check
+
+        Returns:
+            bool: True if more than zero rows in view
+        """
+
+        count = self._run_query(
+            "SELECT COUNT(*) FROM {0};".format(bookmark)
+        ).fetchone()[0]
+        return bool(count > 0)
+
+    def _fetch_existing_views(self) -> tuple[int, list]:
+        """
+        Will get number of views in database and a list of their names (if present)
+
+        Raises:
+            StorageError
+
+        Returns:
+            tuple[int, list]: (num of views, list of view names as tuples)
+        """
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT name FROM sqlite_schema WHERE type='view';")
+            views = cur.fetchall()
+            cur.close()
+
+            return (len(views), views)
+
+        except sqlite3.OperationalError as e:
+            raise StorageError(
+                "Error occured while fetching existing database views"
+            ) from e
+
     def _drop_existing_views(self):
         """Drop any existing views
         Will only be called if self.overwrite is true
@@ -1770,12 +1808,10 @@ class StorageManagerSQLite(StorageManager):
             StorageError: Description
         """
         # fetch existing views
+        _, views = self._fetch_existing_views()
         try:
-            cur = self.conn.cursor()
-            cur.execute("SELECT name FROM sqlite_schema WHERE type='view';")
-            views = cur.fetchall()
-
             # drop views
+            cur = self.conn.cursor()
             for view in views:
                 # cannot drop this, so we catch it instead
                 if view[0] == "sqlite_sequence":
