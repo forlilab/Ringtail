@@ -757,6 +757,9 @@ class CLOptionParser:
             optional_filters.append(
                 "hb_count"
             )  # hb/interaction count is not part of the three formal list but works as a filter on its own
+            optional_filters.append(
+                "react_any"
+            )  # react_any is not part of the three formal list but works as a filter on its own
             for f in optional_filters:
                 if (
                     getattr(parsed_opts, f) is not None
@@ -766,7 +769,7 @@ class CLOptionParser:
                         pass
                     else:
                         self.filtering = True
-
+            print(optional_filters)
             if self.filtering:
                 # property filters
                 property_list = Filters.get_filter_keys("property")

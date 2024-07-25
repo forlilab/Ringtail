@@ -74,7 +74,7 @@ class TestRingtailCore:
         # Ensure storage error thrown if no data in database
         from ringtail import exceptions as e
 
-        with pytest.raises(e.RTCoreError):
+        with pytest.raises(e.StorageError):
             fake_rtc = RingtailCore("nodata.db")
             fake_rtc.produce_summary()
         os.system("rm nodata.db")
