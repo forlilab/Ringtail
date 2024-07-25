@@ -1204,7 +1204,7 @@ class RingtailCore:
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
         ligand_operator=None,
-        filters_dict: dict = None,
+        filters_dict: dict | None = None,
         # other processing options:
         enumerate_interaction_combs: bool = False,
         output_all_poses: bool = None,
@@ -1216,7 +1216,7 @@ class RingtailCore:
         outfields: str = None,
         bookmark_name: str = None,
         filter_bookmark: str = None,
-        options_dict: dict = None,
+        options_dict: dict | None = None,
         return_iter=False,
     ):
         """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
@@ -1372,7 +1372,7 @@ class RingtailCore:
                 filtered_results = self.storageman.filter_results(
                     filters_dict, not self.outputopts.enumerate_interaction_combs
                 )
-                if filtered_results is not None:
+                if filtered_results:
                     if return_iter:
                         return filtered_results
                     result_bookmark_name = self.storageman.get_current_view_name()
@@ -1392,7 +1392,10 @@ class RingtailCore:
                         print("\nNumber of ligands passing filters:", number_passing)
                         ligands_passed = number_passing
                 else:
-                    self.logger.warning("WARNING: No ligands found passing filters")
+                    self.logger.warning(
+                        "WARNING: No ligands found passing filters, no view created"
+                    )
+                    self.storageman._drop_bookmark(self.storageman.bookmark_name)
             if len(interaction_combs) > 1:
                 maxmiss_union_results = self.storageman.get_maxmiss_union(
                     len(interaction_combs)
@@ -1432,6 +1435,13 @@ class RingtailCore:
         all_mols = self.ligands_rdkit_mol(
             bookmark_name=bookmark_name, write_nonpassing=write_nonpassing
         )
+        if all_mols is None:
+            self.logger.error(
+                "Selected bookmark {0} does not exist or does not have any data, cannot write molecule SDFS.".format(
+                    bookmark_name
+                )
+            )
+            return
 
         for ligname, info in all_mols.items():
             self.logger.info("Writing " + ligname + ".sdf")
@@ -1456,6 +1466,25 @@ class RingtailCore:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
 
         with self.storageman:
+            # Ensure bookmarks exist and have data
+            if not self.storageman.check_passing_view_exists(
+                self.storageman.bookmark_name
+            ):
+                self.logger.warning(
+                    "Filtering bookmark {0} does not exist in database. Cannot write passing molecule SDFs".format(
+                        self.storageman.bookmark_name
+                    )
+                )
+                return None
+            elif (
+                self.storageman.check_passing_view_exists()
+                and not self.storageman._view_has_rows(self.storageman.bookmark_name)
+            ):
+                self.logger.warning(
+                    "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
+                )
+                return None
+
             bookmark_filters = (
                 self.storageman.fetch_filters_from_view()
             )  # fetches the filters used to produce the bookmark
@@ -1465,11 +1494,6 @@ class RingtailCore:
                     "WARNING: Requested 'export_sdf_path' with 'max_miss'. Exported SDFs will be for union of interaction combinations."
                 )
                 self.storageman.bookmark_name = self.storageman.bookmark_name + "_union"
-            if not self.storageman.check_passing_view_exists():
-                self.logger.warning(
-                    "Given results bookmark does not exist in database. Cannot write passing molecule SDFs"
-                )
-                return None
 
             # make temp table
             self.storageman.create_temp_passing_table()
