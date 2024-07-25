@@ -112,8 +112,11 @@ class StorageManager:
         """
         if not self.closed_connection:
             self.close_storage()
-        if exc_type == Exception:
-            self.logger.error(str(exc_value))
+        if exc_type:
+            if exc_type == Exception:
+                self.logger.error(str(exc_value))
+            else:
+                raise
         return self
 
     def _sigint_handler(self, signal_received, frame):
