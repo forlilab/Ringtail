@@ -28,16 +28,42 @@ Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
 
-### Usage notes #TODO
+### New in version 2.0
+##### Changes in keywords used for the command line tool
 
+- `--mode` is now `--docking_mode`
+- `--summary` is now `--print_summary`
+- `--pattern` is now `--file_pattern`
+- `--name` is now `--ligand_name`
+- `--max_nr_atoms` is now `--ligand_max_atoms`
+- `--smarts` is now `--ligand_substruct`
+- `--smarts_idxyz` is now `--ligand_substruct_pos`
+- `--smarts_join` is now `--ligand_operator`
+- `--van_der_waals` is now `--vdw_interactions`
+- `--hydrogen_bond` is now `--hb_interactions`
+- `--reactive_res` is now `--reactive_interactions`
 
-### New in version 2.0.0 
-- API extended and made more user friendly and offers an alternative to the command line tool
-- Supports scripting and can circumvent file system use for docking engines such as vina where docking results are returned as strings
-- Changes to the names of some command line arguments for more coherent naming throughout the package
-- Enabled code logging to file as well as stdout
-- All default values for user input can now be found in one and only one file
-- For appending to an existing database, the following properties are checked: docking_mode and number_of_poses_saved. Only direct API usage will allow incompatible results to be appended to an existing database
+##### Enhancements to the codebase
+- Fully developed API can use python for scripting exclusively 
+- Can add docking results directly without using file system (for vina only as output comes as a string). 
+- The Ringtail log is now written to a logging file in addition to STDOUT
+
+##### Changes to code behavior
+- Interaction tables: one new table has been added (`Interactions`). The existing `Interaction_indices` table and the table `Interaction_bitvectors` are remade every time the database is written to as opposed to being made on the go as results are added in previous Ringtail version. 
+- A new method to update an existing database 1.1.0 (or 1.0.0) to 2.0.0 is included. However, if the existing database was created with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0 (see Bug fixes below).
+
+##### Bug fixes
+- The option `duplicate_handling` could previously only be applied during database creation and produced inconsistent table behavior. Option can now be applied at any time results are added to a database, and will create internally consistent tables. **Please note: if you have created tables in the past and invoking the keyword `duplicate_handling` you may have errors in the "Interaction_bitvectors" table. These errors cannot be recovered, and we recommend you re-make the database with Ringtail 2.0.0.**
+- Writing SDFs from filtering bookmarks: will check that bookmark exists and has data before writing, and will now produce SDFs for any bookmarks existing bookmarks. If the bookmark results from a filtering where `max_miss` &lt; 0 it will note if the non-union bookmark is used, and if the base name for such bookmarks is provided it will default to the `basename_union` bookmark for writing the SDFs.
+
+#### Updating database to work with v2.0.0
+If you have previously written a database with Ringtail < v2.0.0, it will need to be updated to be compatible with filtering with v2.0.0. We have included a new script `rt_db_to_v200.py` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
+
+```
+$ rt_db_to_v200.py -d <v2.0.0 database 1 (required)> <v2.0.0 database 2+ (optional)>
+```
+
+Multiple databases may be specified at once. The update may take a few minutes per database.
 
 ### New in version 1.1:
 Code base and database schema version update
@@ -49,6 +75,7 @@ Code base and database schema version update
 - Filter by ligand substructure
 - Filter by ligand substructure location in cartesian space
 - `--max_miss` option now outputs union of interaction combinations by default, with `--enumerate_interaction_combs` option to log passing ligands/poses for individual interaction combination
+
 
 ##### Example Filtering Timings (M1Pro MacBook, ~2 million ligands)
 ![rt_v11_timings](https://github.com/forlilab/Ringtail/assets/41704502/eac373fc-1324-45df-b845-6697dc9d1465)
@@ -272,6 +299,12 @@ The Ringtail package includes two command line oriented scripts: `rt_process_vs.
 
 [rt_compare.py](https://github.com/forlilab/Ringtail#rt_comparepy-documentation) is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
 
+[rt_generate_config_file.py](https://github.com/forlilab/Ringtail#rt_generate_config_filepy-documentation) can be ran to create a config file template
+
+[rt_db_to_v200.py](https://github.com/forlilab/Ringtail#Updating-database-to-work-with-v200) is used to update older databases to the latest version. 
+
+[rt_db_v100_to_v110.py](https://github.com/forlilab/Ringtail#Updating-database-written-with-v100-to-work-with-v110) is used to update db v1.0.0 to 1.1.0. 
+
 #### rt_compare.py Documentation
 The `rt_compare.py` script is designed to be used with databases already made and filtered. The script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (wanted) or exclusive to some screenings and not others (unwanted). The script uses a subset of commands similar to `rt_process_vs.py`.
 
@@ -280,7 +313,9 @@ An example of use: select ligands found in "filter_bookmark" bookmarks of databa
 rt_compare.py --wanted database1.db --unwanted database2.db --bookmark_name filter_bookmark
 ```
 
-For more detailed description of usage, please see the readthedocs.org site for ringtail. #TODO
+For more detailed description of usage, please see [the readthedocs.org site for ringtail](https://ringtail.readthedocs.io/en/latest/compare.html).
+
+#### rt_generate_config_file.py Documentation
 
 
 ## Advanced usage: scripting with Ringtail API 
@@ -297,7 +332,7 @@ Default logging level is "WARNING", and a different logger level can be set at t
 ```
 rtc = RingtailCore(db_file="output.db", logging_level="DEBUG)
 # or
-rtc.set_logger_level("INFO")
+rtc.logger.set_level("INFO")
 ```
 
 #### Populate the database
@@ -309,8 +344,7 @@ and whether or not to print a summary after writing the results to the database.
 rtc.add_results_from_files( file_path = "test_data/", 
                             recursive = True, 
                             save_receptor = False,
-                            max_poses = 3,
-                            summary = True)
+                            max_poses = 3)
 ```
 Both files (`filesources_dict`) and processing options (`optionsdict`) can be provided as dictionaries as well or instead of the the individual options. Any provided individual options will overwrite the options provided through dictionaries. The use and prioritization of dictionaries and method attributes is true for most of the available API methods.
 
@@ -326,8 +360,7 @@ writeoptions = {
 }
 
 rtc.add_results_from_files( filesources_dict = file_sources,
-                            optionsdict = writeoptions,
-                            summary = True)
+                            optionsdict = writeoptions,)
 ```
 
 If at any point you wish to print a summary of the database, the method can be called directly:
@@ -381,5 +414,5 @@ rtc.pymol(bookmark_name = "e6vdw279162")
 ```
 
 ### Arguments used for API vs command line
-All of the arguments used for the command line tool also applies to the Ringtail API in some form. For example, bookmark names and filter values are provided when an API method is called, while the log level can be sat at instantiation or at any time during the scripting process. Instead of differentiating between an `--input_db` and `--output_db`, only one database file is operated on in a given instantiated `RingtailCore` object. A subset of the command line arguments are actual API methods (such as `--plot` or `--find_similar_ligands`) that will be called directly, with optional input arguments (typically a `bookmark_name` or `ligand_name`). Each API method comes with type hints and extensive documentation. Additionally, a more extensive example of its use can be found on (readthedocs link). #TODO
+All of the arguments used for the command line tool also applies to the Ringtail API in some form. For example, bookmark names and filter values are provided when an API method is called, while the log level can be sat at instantiation or at any time during the scripting process. Instead of differentiating between an `--input_db` and `--output_db`, only one database file is operated on in a given instantiated `RingtailCore` object. A subset of the command line arguments are actual API methods (such as `--plot` or `--find_similar_ligands`) that will be called directly, with optional input arguments (typically a `bookmark_name` or `ligand_name`). Each API method comes with type hints and extensive documentation. Additionally, a more extensive example of its use can be found on [readthedocs](https://ringtail.readthedocs.io/en/latest/). 
 
