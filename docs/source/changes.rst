@@ -34,7 +34,7 @@ Changes to code behavior
 Bug fixes
 ===========
 * The option `duplicate_handling` could previously only be applied during database creation and produced inconsistent table behavior. Option can now be applied at any time results are added to a database, and will create internally consistent tables. **Please note: if you have created tables in the past and invoking the keyword `duplicate_handling` you may have errors in the "Interaction_bitvectors" table. These errors cannot be recovered, and we recommend you re-make the database with Ringtail 2.0.0.**
-
+* Writing SDFs from filtering bookmarks: will check that bookmark exists and has data before writing, and will now produce SDFs for any bookmarks existing bookmarks. If the bookmark results from a filtering where `max_miss` &lt; 0 it will note if the non-union bookmark is used, and if the base name for such bookmarks is provided it will default to the `basename_union` bookmark for writing the SDFs.
 
 Changes in 1.1.0: enhanced database performance
 ***********************************************
