@@ -4,69 +4,54 @@
 # Ringtail custom exceptions
 #
 
-from .logutils import LOGGER as logger
-
 
 class StorageError(Exception):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class DatabaseInsertionError(StorageError):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class DatabaseConnectionError(StorageError):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class DatabaseTableCreationError(StorageError):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class DatabaseQueryError(StorageError):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class DatabaseViewCreationError(StorageError):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class RTCoreError(Exception):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class OptionError(Exception):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class FileParsingError(Exception):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class WriteToStorageError(Exception):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class MultiprocessingError(Exception):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class ResultsProcessingError(Exception):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
 
 
 class OutputError(Exception):
-    def __init__(self, e):
-        logger.error(__name__ + ":" + e)
+    pass
