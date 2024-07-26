@@ -13,7 +13,7 @@ from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
 from .ringtailoptions import *
 from .util import *
-from .exceptions import RTCoreError, OutputError
+from .exceptions import RTCoreError, OutputError, StorageError
 from rdkit import Chem
 import itertools
 import os
@@ -1427,14 +1427,21 @@ class RingtailCore:
             sdf_path (str, optional): Optional path existing or to be created in cd where SDF files will be saved
             bookmark_name (str, optional): Option to run over specified bookmark other than that just used for filtering
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
+
+        Raises:
+            StorageError: if bookmark or data not found
         """
 
         if sdf_path is not None:
             self.set_output_options(export_sdf_path=sdf_path)
+        try:
+            all_mols = self.ligands_rdkit_mol(
+                bookmark_name=bookmark_name, write_nonpassing=write_nonpassing
+            )
+        except StorageError as e:
+            self.logger.error(str(e))
+            return
 
-        all_mols = self.ligands_rdkit_mol(
-            bookmark_name=bookmark_name, write_nonpassing=write_nonpassing
-        )
         if all_mols is None:
             self.logger.error(
                 "Selected bookmark {0} does not exist or does not have any data, cannot write molecule SDFS.".format(
@@ -1467,33 +1474,51 @@ class RingtailCore:
 
         with self.storageman:
             # Ensure bookmarks exist and have data
-            if not self.storageman.check_passing_view_exists(
-                self.storageman.bookmark_name
-            ):
-                self.logger.warning(
-                    "Filtering bookmark {0} does not exist in database. Cannot write passing molecule SDFs".format(
-                        self.storageman.bookmark_name
-                    )
+            all_bookmarks = self.storageman.get_all_bookmark_names()
+
+            # is bookmark name actually in database
+            if self.storageman.bookmark_name in all_bookmarks:
+                # check if has max_miss filter
+                bookmark_filters = self.storageman.fetch_filters_from_view(
+                    self.storageman.bookmark_name
                 )
-                return None
-            elif (
-                self.storageman.check_passing_view_exists()
-                and not self.storageman._view_has_rows(self.storageman.bookmark_name)
-            ):
-                self.logger.warning(
+                try:
+                    max_miss_present = bool(
+                        bookmark_filters["max_miss"] > 0
+                        and not "_union" in self.storageman.bookmark_name
+                    )
+                except:
+                    #  in case bookmark query string does not contain the phrase 'max_miss', carry on
+                    pass
+                else:
+                    if max_miss_present:
+                        self.logger.warning(
+                            "'max_miss' used in filtering, but the bookmark used for sdfs writing is not the union of the search"
+                        )
+            # if bookmark name is not in the database
+            elif not self.storageman.bookmark_name in all_bookmarks:
+                # does bookmark name + _union resolve the issue
+                if self.storageman.check_passing_view_exists(
+                    self.storageman.bookmark_name + "_union"
+                ):
+                    self.storageman.bookmark_name = (
+                        self.storageman.bookmark_name + "_union"
+                    )
+                    self.logger.warning(
+                        "Requested 'export_sdf_path' with 'max_miss' present in the bookmark filter. Exported SDFs will be for union of interaction combinations."
+                    )
+                # if not, raise error
+                else:
+                    raise StorageError(
+                        "Filtering bookmark {0} does not exist in database. Cannot write passing molecule SDFs".format(
+                            self.storageman.bookmark_name
+                        )
+                    )
+
+            if not self.storageman._view_has_rows(self.storageman.bookmark_name):
+                raise StorageError(
                     "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
                 )
-                return None
-
-            bookmark_filters = (
-                self.storageman.fetch_filters_from_view()
-            )  # fetches the filters used to produce the bookmark
-            max_miss = bookmark_filters["max_miss"]
-            if max_miss > 0:
-                self.logger.warning(
-                    "WARNING: Requested 'export_sdf_path' with 'max_miss'. Exported SDFs will be for union of interaction combinations."
-                )
-                self.storageman.bookmark_name = self.storageman.bookmark_name + "_union"
 
             # make temp table
             self.storageman.create_temp_passing_table()
