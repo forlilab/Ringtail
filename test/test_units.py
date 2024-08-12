@@ -50,7 +50,7 @@ class TestRingtailCore:
 
     def test_add_folder(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path="test_data/group1")
+        rtc.add_results_from_files(file_path="test_data/adgpu/group1")
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
 
@@ -62,7 +62,7 @@ class TestRingtailCore:
 
         assert count0 == 0
 
-        rtc.save_receptor(receptor_file="test_data/4j8m.pdbqt")
+        rtc.save_receptor(receptor_file="test_data/adgpu/4j8m.pdbqt")
         count = countrows(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )
@@ -97,7 +97,7 @@ class TestRingtailCore:
 
     def test_append_to_database(self, countrows):
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path="test_data/group2/")
+        rtc.add_results_from_files(file_path="test_data/adgpu/group2/")
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
         assert count == 217
@@ -371,7 +371,7 @@ class TestRingtailCore:
         os.system("rm output.db output_log.txt")
 
         rtc = RingtailCore(db_file="output.db")
-        file = "test_data/group1/1451.dlg.gz"
+        file = "test_data/adgpu/group1/1451.dlg.gz"
         rtc.add_results_from_files(file=file)
         # ensure three results rows were added
         result_count = countrows("SELECT COUNT(*) FROM Results")
@@ -413,9 +413,13 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db", logging_file="ringtail")
 
         # add results with max poses = 1
-        rtc.add_results_from_files(file="test_data/group1/1451.dlg.gz", max_poses=1)
+        rtc.add_results_from_files(
+            file="test_data/adgpu/group1/1451.dlg.gz", max_poses=1
+        )
         # add results with different max poses
-        rtc.add_results_from_files(file="test_data/group1/1620.dlg.gz", max_poses=4)
+        rtc.add_results_from_files(
+            file="test_data/adgpu/group1/1620.dlg.gz", max_poses=4
+        )
         warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1."
 
         log_file = rtc.logger._log_fp.baseFilename
@@ -428,6 +432,19 @@ class TestRingtailCore:
         os.system("rm output.db")
 
         assert warning_worked
+
+    def test_reactive_filtering(self):
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(
+            file_path="/Users/maylinnp/forlilab/Ringtail/test/test_data/reactive/",
+            store_all_poses=True,
+            receptor_file="/Users/maylinnp/forlilab/Ringtail/test/test_data/reactive/4j8m_m_rigid.pdbqt",
+        )
+        count_ligands_passing = rtc.filter(reactive_interactions=[("A:TYR:212:", True)])
+
+        os.system("rm output.db")
+
+        assert count_ligands_passing == 10
 
 
 class TestVinaHandling:
@@ -482,7 +499,7 @@ class TestVinaHandling:
 
     def test_db_dockingmode_warning(self):
         rtc = RingtailCore(db_file="output.db", logging_file="ringtail")
-        rtc.add_results_from_files(file="test_data/group1/1451.dlg.gz")
+        rtc.add_results_from_files(file="test_data/adgpu/group1/1451.dlg.gz")
         rtc = RingtailCore(
             db_file="output.db", docking_mode="vina", logging_file="ringtail"
         )
@@ -506,9 +523,9 @@ class TestStorageMan:
     def test_storageman_setup(self):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
-            file_list="filelist1.txt",
+            file_list="test_data/filelist1.txt",
             recursive=True,
-            receptor_file="test_data/4j8m.pdbqt",
+            receptor_file="test_data/adgpu/4j8m.pdbqt",
             save_receptor=True,
         )
 
@@ -630,10 +647,10 @@ class TestOptions:
 
     def test_overwrite_db(self, countrows):
         rtc = RingtailCore()
-        rtc.add_results_from_files(file_list="filelist1.txt")
+        rtc.add_results_from_files(file_list="test_data/filelist1.txt")
         count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
 
-        rtc.add_results_from_files(file_list="filelist2.txt", overwrite=True)
+        rtc.add_results_from_files(file_list="test_data/filelist2.txt", overwrite=True)
         count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system("rm output.db")

@@ -1,0 +1,2 @@
+test_data/adgpu/group1/272275.dlg.gz
+test_data/adgpu/group3/80807.dlg.gz

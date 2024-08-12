@@ -28,12 +28,12 @@ class TestInputs:
 
     def test_files(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
+            "python ../scripts/rt_process_vs.py write -d --file test_data/adgpu/group1/127458.dlg.gz --file test_data/adgpu/group1/173101.dlg.gz --file test_data/adgpu/group1/100729.dlg.gz"
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz --append_results"
+            "python ../scripts/rt_process_vs.py write -d --file test_data/adgpu/group1/127458.dlg.gz test_data/adgpu/group1/173101.dlg.gz --file test_data/adgpu/group1/100729.dlg.gz --append_results"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -43,14 +43,14 @@ class TestInputs:
 
     def test_file_paths(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 --file_path test_data/group2"
+            "python ../scripts/rt_process_vs.py write -d --file_path test_data/adgpu/group1 --file_path test_data/adgpu/group2"
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system("rm output.db")
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 test_data/group2"
+            "python ../scripts/rt_process_vs.py write -d --file_path test_data/adgpu/group1 test_data/adgpu/group2"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -60,14 +60,14 @@ class TestInputs:
 
     def test_file_list(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --file_list filelist2.txt"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt --file_list test_data/filelist2.txt"
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system("rm output.db")
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt filelist2.txt"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt test_data/filelist2.txt"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -77,7 +77,7 @@ class TestInputs:
 
     def test_all_file_inputs(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --file test_data/group2/361056.dlg.gz test_data/group2/53506.dlg.gz --file_path test_data/group3"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt --file test_data/adgpu/group2/361056.dlg.gz test_data/adgpu/group2/53506.dlg.gz --file_path test_data/adgpu/group3"
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -98,7 +98,7 @@ class TestInputs:
 
         count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --overwrite"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt --overwrite"
         )
         count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
         assert count_old_db == 2
@@ -111,7 +111,7 @@ class TestInputs:
         assert count_old_db == 3
 
         code = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt"
         )
         assert (
             code == 256
@@ -125,8 +125,8 @@ class TestInputs:
 
         with open(filepath, "r") as f:
             data = json.load(f)
-        # all fields I want to change
-        data["file_list"] = [["filelist1.txt"]]
+        # all fields to be changed
+        data["file_list"] = [["test_data/filelist1.txt"]]
 
         with open(filepath, "w") as f:
             f.write(json.dumps(data, indent=4))
@@ -141,17 +141,17 @@ class TestInputs:
 
     def test_duplicate_handling(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
+            "python ../scripts/rt_process_vs.py write -d --file_path test_data/adgpu/group1"
         )
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group1 --append_results --duplicate_handling ignore"
+            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/adgpu/group1 --append_results --duplicate_handling ignore"
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
 
     def test_append_results(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group2 --append_results"
+            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/adgpu/group2 --append_results"
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -160,7 +160,7 @@ class TestInputs:
     def test_save_rec_file(self, countrows):
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --input_db output.db --receptor_file test_data/4j8m.pdbqt --save_receptor --append_results"
+            "python ../scripts/rt_process_vs.py write -d --input_db output.db --receptor_file test_data/adgpu/4j8m.pdbqt --save_receptor --append_results"
         )
         count = countrows(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
@@ -172,7 +172,7 @@ class TestInputs:
 
     def test_save_rec_file_gz(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt --receptor_file test_data/adgpu/4j8m.pdbqt.gz --save_receptor"
         )
         count = countrows(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
@@ -186,7 +186,7 @@ class TestInputs:
 class TestOutputs:
     def test_export_bookmark_csv(self):
         status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt"
         )
         status2 = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --export_bookmark_csv Ligands"
@@ -212,7 +212,7 @@ class TestOutputs:
     def test_interaction_tolerance(self):
         # TODO rewrite
         status_notol = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz"
+            "python ../scripts/rt_process_vs.py write -d --file test_data/adgpu/group1/127458.dlg.gz"
         )
 
         conn = sqlite3.connect("output.db")
@@ -229,7 +229,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status_tol = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --interaction_tolerance"
+            "python ../scripts/rt_process_vs.py write -d --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance"
         )
 
         conn = sqlite3.connect("output.db")
@@ -245,7 +245,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status_tol2 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --interaction_tolerance 2.0"
+            "python ../scripts/rt_process_vs.py write -d --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance 2.0"
         )
 
         conn = sqlite3.connect("output.db")
@@ -270,7 +270,7 @@ class TestOutputs:
     def test_max_poses(self):
         os.system("rm output.db")
         status3 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -283,7 +283,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --max_poses 1"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt --max_poses 1"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -299,7 +299,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status5 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --max_poses 5"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt --max_poses 5"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -319,7 +319,7 @@ class TestOutputs:
 
     def test_store_all(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --store_all_poses"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt --store_all_poses"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -342,7 +342,7 @@ class TestFilters:
 
     def test_eworst(self):
         status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+            "python ../scripts/rt_process_vs.py write -d --file_list test_data/filelist1.txt"
         )
         status2 = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15"
@@ -414,63 +414,6 @@ class TestFilters:
 
         assert status == 0
         assert count == 1
-
-    # NOTE currently no docking results with reactive residues, so all reactive tests will return error (e.g., exit code 256)
-    def test_react_any(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --react_any"
-        )
-
-        assert status == 256
-
-    def test_react1(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions A:TYR:169:"
-        )
-
-        assert status == 256
-
-    def test_react2(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions :TYR:169:"
-        )
-
-        assert status == 256
-
-    def test_react3(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions :TYR::"
-        )
-
-        assert status == 256
-
-    def test_react4(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:TYR::"
-        )
-
-        assert status == 256
-
-    def test_react5(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A::169:"
-        )
-
-        assert status == 256
-
-    def test_react6(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:::"
-        )
-
-        assert status == 256
-
-    def test_react7(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions ::169:"
-        )
-
-        assert status == 256
 
     def test_hb1(self):
         status = os.system(
@@ -604,17 +547,79 @@ class TestFilters:
         assert status != 0
         os.system("rm output_log.txt output.db")
 
+    def test_react_any(self):
+        # write new db with reactive data
+        os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --file_path test_data/reactive --receptor_file test_data/reactive/4j8m_m_rigid.pdbqt"
+        )
+
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --react_any"
+        )
+
+        assert status == 256
+
+    def test_react1(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions A:TYR:212:"
+        )
+
+        assert status == 256
+
+    def test_react2(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions :TYR:212:"
+        )
+
+        assert status == 256
+
+    def test_react3(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions :TYR::"
+        )
+
+        assert status == 256
+
+    def test_react4(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:TYR::"
+        )
+
+        assert status == 256
+
+    def test_react5(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A::212:"
+        )
+
+        assert status == 256
+
+    def test_react6(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:::"
+        )
+
+        assert status == 256
+
+    def test_react7(self):
+        status = os.system(
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions ::212:"
+        )
+
+        assert status == 256
+        os.system("rm output_log.txt output.db")
+
 
 class TestOtherScripts:
 
     def test_rt_compare(self):
         # first database
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
+            "python ../scripts/rt_process_vs.py write -d --file_path test_data/adgpu/group1"
         )
         # second database
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --output_db output2.db --file_path test_data/group1"
+            "python ../scripts/rt_process_vs.py write -d --output_db output2.db --file_path test_data/adgpu/group1"
         )
         # filter producing 30 ligands
         os.system(
