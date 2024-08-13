@@ -1418,13 +1418,18 @@ class RingtailCore:
         return ligands_passed
 
     def write_molecule_sdfs(
-        self, sdf_path=None, bookmark_name=None, write_nonpassing=None
+        self,
+        sdf_path: str = None,
+        all_in_one: bool = False,
+        bookmark_name: str = None,
+        write_nonpassing: bool = None,
     ):
         """
         Have output manager write molecule sdf files for passing results in given results bookmark
 
         Args:
             sdf_path (str, optional): Optional path existing or to be created in cd where SDF files will be saved
+            all_in_one (bool, optional): If True will write all molecules to one SDF (separated by $$$$), if False will write one molecule pre SDF
             bookmark_name (str, optional): Option to run over specified bookmark other than that just used for filtering
             write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
 
@@ -1451,9 +1456,23 @@ class RingtailCore:
             return
 
         for ligname, info in all_mols.items():
-            self.logger.info("Writing " + ligname + ".sdf")
+            # determine filename
+            if all_in_one:
+                # will write one SDF file for all molecules in bookmark (_None if no bookmark present)
+                sdf_file_name = ("{0}_{1}.sdf").format(
+                    self.db_file, str(self.storageman.bookmark_name)
+                )
+                self.logger.info("Writing " + ligname + " to {0}".format(sdf_file_name))
+            else:
+                # filename is name of ligand
+                sdf_file_name = ligname + ".sdf"
+                self.logger.info("Writing " + ligname + ".sdf")
+
             self.outputman.write_out_mol(
-                ligname, info["ligand"], info["flex_residues"], info["properties"]
+                sdf_file_name,
+                info["ligand"],
+                info["flex_residues"],
+                info["properties"],
             )
 
     def ligands_rdkit_mol(self, bookmark_name=None, write_nonpassing=False) -> dict:
