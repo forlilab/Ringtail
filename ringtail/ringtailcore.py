@@ -1420,7 +1420,7 @@ class RingtailCore:
     def write_molecule_sdfs(
         self,
         sdf_path: str = None,
-        all_in_one: bool = False,
+        all_in_one: bool = True,
         bookmark_name: str = None,
         write_nonpassing: bool = None,
     ):
