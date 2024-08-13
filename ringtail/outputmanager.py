@@ -227,12 +227,13 @@ class OutputManager:
         )
 
     # -#-#- Non-logfile methods -#-#-#
-    def write_out_mol(self, ligname, mol, flexres_mols, properties):
+
+    def write_out_mol(self, filename, mol, flexres_mols, properties):
         """Writes out given mol as sdf. Will create the specified sdf folder in
         current working directory if needed.
 
         Args:
-            ligname (str): name of ligand that will be used toname output SDF file
+            filename (str): name of SDF file that will be written to
             mol (RDKit.Chem.Mol): RDKit molobject to be written to SDF
             flexres_mols (list): dictionary of rdkit molecules for flexible residues
             properties (dict): dictionary of list of properties to add to mol before writing
@@ -249,8 +250,8 @@ class OutputManager:
             self.logger.info(
                 "Specified directory for SDF files was created in current working directory."
             )
+        filename = self.export_sdf_path + "/" + filename
         try:
-            filename = self.export_sdf_path + ligname + ".sdf"
             mol_flexres_list = [mol]
             mol_flexres_list += flexres_mols
             mol = RDKitMolCreate.combine_rdkit_mols(mol_flexres_list)
@@ -262,9 +263,12 @@ class OutputManager:
                     v = str(v)
                 mol.SetProp(k, v)
 
-            with SDWriter(filename) as w:
+            # open/create file so it can be appended to if requested
+            with open(filename, "a") as sdf_file:
+                w = SDWriter(sdf_file)
                 for conf in mol.GetConformers():
                     w.write(mol, conf.GetId())
+                w.close()
 
         except Exception as e:
             raise OutputError("Error occurred while writing SDF from RDKit Mol") from e
