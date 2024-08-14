@@ -164,7 +164,7 @@ class TestRingtailCore:
         sdf_path = "sdf_files"
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7)
-        rtc.write_molecule_sdfs(sdf_path)
+        rtc.write_molecule_sdfs(sdf_path, all_in_one=False)
 
         # ensure correct number of files written
         sdf_files = os.listdir(sdf_path)
