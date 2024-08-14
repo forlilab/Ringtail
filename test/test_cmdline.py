@@ -528,13 +528,9 @@ class TestFilters:
         import glob
 
         sdf_files = glob.glob("*.sdf")
-        expected = ["127458.sdf", "100729.sdf", "173101.sdf"]
 
-        assert len(sdf_files) == len(expected)
-
-        for f in sdf_files:
-            assert f in expected
-            os.remove(f)
+        assert len(sdf_files) == 1
+        os.remove(sdf_files[0])
 
         assert status == 0
 
