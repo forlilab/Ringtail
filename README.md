@@ -97,7 +97,7 @@ Multiple databases may be specified at once. The update may take a few minutes p
 - Pandas
 - chemicalite
 - [Meeko](https://github.com/forlilab/Meeko) (from the Forli Lab)
-- [Multiprocess](https://pypi.org/project/multiprocess/) (MacOS only)
+- [Multiprocess](https://pypi.org/project/multiprocess/)
 
 ## README Outline
 - [Installation](https://github.com/forlilab/Ringtail#installation)

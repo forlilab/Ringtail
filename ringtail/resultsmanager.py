@@ -43,7 +43,7 @@ class ResultsManager:
         storageman: StorageManager = None,
         storageman_class: StorageManager = None,
         chunk_size: int = 1,
-        parser_manager: str = "multiprocessing",
+        parser_manager: str = "multiprocess",
         file_sources=None,
         string_sources=None,
     ):
@@ -114,7 +114,7 @@ class ResultsManager:
 
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {
-            "multiprocessing": MPManager,
+            "multiprocess": MPManager,
         }
         parser_opts = {}
         for k, v in self.__dict__.items():
