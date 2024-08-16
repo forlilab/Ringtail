@@ -436,9 +436,9 @@ class TestRingtailCore:
     def test_reactive_filtering(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(
-            file_path="/Users/maylinnp/forlilab/Ringtail/test/test_data/reactive/",
+            file_path="test_data/reactive/",
             store_all_poses=True,
-            receptor_file="/Users/maylinnp/forlilab/Ringtail/test/test_data/reactive/4j8m_m_rigid.pdbqt",
+            receptor_file="test_data/reactive/4j8m_m_rigid.pdbqt",
         )
         count_ligands_passing = rtc.filter(reactive_interactions=[("A:TYR:212:", True)])
 
