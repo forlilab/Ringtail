@@ -26,13 +26,8 @@ from .exceptions import (
     DatabaseTableCreationError,
 )
 from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError
-import platform
 
-os_string = platform.system()
-if os_string == "Darwin":  # mac
-    import multiprocess as multiprocessing
-else:
-    import multiprocessing
+import multiprocess
 
 
 class StorageManager:
@@ -2889,7 +2884,7 @@ class StorageManagerSQLite(StorageManager):
                 i, fps = input_tpl
                 return DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
 
-            with multiprocessing.Pool() as p:
+            with multiprocess.Pool() as p:
                 inputs = gen(fps)
                 for sims in p.imap(mp_wrapper, inputs):
                     dists.extend([1 - x for x in sims])

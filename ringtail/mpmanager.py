@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail multiprocessing manager
+# Ringtail multiprocess manager
 #
 
 import platform
@@ -17,11 +17,7 @@ from .exceptions import MultiprocessingError, RTCoreError
 import traceback
 from datetime import datetime
 
-os_string = platform.system()
-if os_string == "Darwin":  # mac
-    import multiprocess as multiprocessing
-else:
-    import multiprocessing
+import multiprocess
 
 
 class MPManager:
@@ -86,19 +82,19 @@ class MPManager:
 
     def process_results(self, string_processing=False):
         """Processes results data (files or string sources) by adding them to the queue
-        and starting their processing in multiprocessing.
+        and starting their processing in multiprocess.
 
         Args:
             string_sources (bool, optional): Switch for processing results that are provided as strings instead of files.
         """
         if self.max_proc is None:
-            self.max_proc = multiprocessing.cpu_count()
+            self.max_proc = multiprocess.cpu_count()
         self.num_readers = self.max_proc - 1
-        self.queueIn = multiprocessing.Queue(maxsize=2 * self.max_proc)
-        self.queueOut = multiprocessing.Queue(maxsize=2 * self.max_proc)
+        self.queueIn = multiprocess.Queue(maxsize=2 * self.max_proc)
+        self.queueOut = multiprocess.Queue(maxsize=2 * self.max_proc)
         # start the workers in background
         self.workers = []
-        self.p_conn, self.c_conn = multiprocessing.Pipe(True)
+        self.p_conn, self.c_conn = multiprocess.Pipe(True)
         self.logger.info(
             "Starting {0} docking results readers".format(self.num_readers)
         )
@@ -219,7 +215,7 @@ class MPManager:
         Raises:
             MultiprocessingError
         """
-        # adds result file to the multiprocessing queue
+        # adds result file to the multiprocess queue
         max_attempts = 750
         timeout = 0.5  # seconds
         if string == False and self.receptor_file is not None:
@@ -245,7 +241,7 @@ class MPManager:
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
             error, tb, filename = self.p_conn.recv()
-            self.logger.error(f"Caught error in multiprocessing from {filename}")
+            self.logger.error(f"Caught error in multiprocess from {filename}")
             # don't kill parser errors, only database error
             if filename == "Database":
                 self._kill_all_workers(error, filename, tb)

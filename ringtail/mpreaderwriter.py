@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail multiprocessing workers
+# Ringtail multiprocess workers
 #
 
 import platform
@@ -19,21 +19,17 @@ from .exceptions import (
 )
 from .interactions import InteractionFinder
 
-os_string = platform.system()
-if os_string == "Darwin":  # mac
-    import multiprocess as multiprocessing
-else:
-    import multiprocessing
+import multiprocess
 
 
-class DockingFileReader(multiprocessing.Process):
+class DockingFileReader(multiprocess.Process):
     """This class is the individual worker for processing docking results.
     One instance of this class is instantiated for each available processor.
 
     Attributes:
-        queueIn (multiprocessing.Queue): current queue for the processor/file reader
-        queueOut (multiprocessing.Queue): queue for the processor/file reader after adding or removing an item
-        pipe_conn (multiprocessing.Pipe): pipe connection to the reader
+        queueIn (multiprocess.Queue): current queue for the processor/file reader
+        queueOut (multiprocess.Queue): queue for the processor/file reader after adding or removing an item
+        pipe_conn (multiprocess.Pipe): pipe connection to the reader
         storageman (StorageManager): storageman object
         storageman_class (StorageManager): storagemanager child class/database type
         docking_mode (str): describes what docking engine was used to produce the results
@@ -79,8 +75,8 @@ class DockingFileReader(multiprocessing.Process):
         self.storageman_class = storageman_class
         # set target name to check against
         self.target = target
-        # initialize the parent class to inherit all multiprocessing methods
-        multiprocessing.Process.__init__(self)
+        # initialize the parent class to inherit all multiprocess methods
+        multiprocess.Process.__init__(self)
         # each worker knows the queue in (where data to process comes from)
         self.queueIn = queueIn
         # ...and a queue out (where to send the results)
@@ -112,7 +108,7 @@ class DockingFileReader(multiprocessing.Process):
 
     def run(self):
         """Method overload from parent class .This is where the task of this class is performed.
-        Each multiprocessing.Process class must have a "run" method which is called by the
+        Each multiprocess.Process class must have a "run" method which is called by the
         initialization (see below) with start()
 
         Raises:
@@ -289,14 +285,14 @@ class DockingFileReader(multiprocessing.Process):
         return tolerated_runs
 
 
-class Writer(multiprocessing.Process):
+class Writer(multiprocess.Process):
     """This class is a listener that retrieves data from the queue and writes it
     into datbase"""
 
     def __init__(
         self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
     ):
-        multiprocessing.Process.__init__(self)
+        multiprocess.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
         self.num_readers = num_readers
@@ -319,7 +315,7 @@ class Writer(multiprocessing.Process):
 
     def run(self):
         """Method overload from parent class. This is where the task of this class
-        is performed. Each multiprocessing.Process class must have a "run" method which
+        is performed. Each multiprocess.Process class must have a "run" method which
         is called by the initialization (see below) with start()
 
         Raises:

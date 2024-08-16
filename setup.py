@@ -27,9 +27,8 @@ required_modules = [
     "meeko>=0.4",
     "matplotlib",
     "pandas",
+    "multiprocess>=0.70.13",
 ]
-if platform.system() == "Darwin":  # mac
-    required_modules.append("multiprocess>=0.70.13")
 
 setup(
     name="ringtail",
