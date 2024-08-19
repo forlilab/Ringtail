@@ -350,7 +350,7 @@ class Writer(multiprocess.Process):
                     # received as many poison pills as workers
                     logger.info("Performing final database write")
                     # perform final storage write
-                    self.write_to_storage(final=True)
+                    self.write_to_storage()
                     # no workers left, no job to do
                     logger.info("File processing completed")
                     self.close()
@@ -365,12 +365,8 @@ class Writer(multiprocess.Process):
                 )
             )
 
-    def write_to_storage(self, final=False):
-        """Inserting data to the database through the designated storagemanager.
-
-        Args:
-            final (bool): if last data entry, finalize database
-        """
+    def write_to_storage(self):
+        """Inserting data to the database through the designated storagemanager."""
         # insert result, ligand, and receptor data
         self.storageman.insert_data(
             self.results_array,
@@ -393,11 +389,6 @@ class Writer(multiprocess.Process):
         self.interactions_list = []
         self.receptor_array = []
         self.counter = 0
-
-        if final:
-            # if final write, tell storageman to index
-            self.storageman.create_indices()
-            self.storageman.set_ringtail_db_schema_version()
 
     def process_data(self, data_packet):
         """Breaks up the data in the data_packet to distribute between
