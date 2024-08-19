@@ -769,7 +769,7 @@ class CLOptionParser:
                         pass
                     else:
                         self.filtering = True
-            print(optional_filters)
+
             if self.filtering:
                 # property filters
                 property_list = Filters.get_filter_keys("property")
