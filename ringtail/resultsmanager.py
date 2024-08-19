@@ -122,4 +122,4 @@ class ResultsManager:
                 continue
             parser_opts[k] = v
         self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
-        self.parser.process_results(string_processing=strings_present)
+        self.parser.process_results()

@@ -456,25 +456,23 @@ def parse_single_dlg(fname):
     }
 
 
-def parse_vina_result(data_pointer, string=False) -> dict:
+def parse_vina_result(data_pointer) -> dict:
     """Parser for vina docking results, supporting either pdbqt or gzipped (.gz) files, or with the
     docking results provided as a string.
 
     Args:
         data_pointer (any): either filename or dictionary of string docking results
-        string (bool): switch if dat apointer is provided as string
 
     Returns:
         dict: parsed results ready to be inserted in database
     """
 
-    def _read_vina_results_lines(data_object, name, string) -> dict:
+    def _read_vina_results_lines(data_object, name) -> dict:
         """Reads vina docking results line by line
 
         Args:
             data_object (any): filename or dict containing docking results
             name (str): given ligand name/file name
-            string (bool): string or file
 
         Raises:
             ValueError: if a line cannot be parsed
@@ -482,7 +480,6 @@ def parse_vina_result(data_pointer, string=False) -> dict:
         Returns:
             dict: parsed results ready to be inserted in database
         """
-        logger.debug("Inside line reading method")
         pose_coordinates = []
         scores = []
         sorted_runs = []
@@ -506,11 +503,8 @@ def parse_vina_result(data_pointer, string=False) -> dict:
         cluster_rmsds = []
         smile_idx_map = []
         ligand_h_parents = []
-        logger.debug("Inside method that reads results")
 
-        for line in data_object.readlines():
-            if string == False:
-                line = line.decode("utf-8")
+        for line in data_object:
             try:
                 if line.startswith("MODEL"):
                     cluster_list.append(cluster)
@@ -620,9 +614,17 @@ def parse_vina_result(data_pointer, string=False) -> dict:
             "ligand_atomtypes": ligand_atomtypes,
         }
 
-    if string == False:
-        # split the first name/extension
+    # check if input is file or data string
+    try:
+        os.path.splitext(data_pointer)
+        from_file = True
+    except TypeError:
+        from_file = False
+
+    if from_file:
+        # read and decode contents
         fname_clean = os.path.basename(data_pointer)
+        # split the first name/extension
         name, ext = os.path.splitext(fname_clean)
         ext = ext[1:].lower()
         if ext == "gz":
@@ -635,20 +637,16 @@ def parse_vina_result(data_pointer, string=False) -> dict:
         ligname = data_pointer.split(".pdbqt")[0].split("/")[-1]
         logger.debug("Parsing vina docking file")
         with open_fn(data_pointer, "rb") as fp:
-            parsed_results = _read_vina_results_lines(fp, ligname, False)
-
-    elif string == True:
-        import io
-
-        lines = list(data_pointer.values())[0]
-        data_object = io.StringIO(lines)
-        ligname = list(data_pointer.keys())[
-            0
-        ]  # get the first (and only, probably not optimal) key which should be the ligand name
+            # this should decode lines into iterable object
+            data_object = [line.decode("utf-8") for line in fp]
+    else:
+        # input provided as string and convert from '\n' separated to to iterable lines
+        data_object = list(data_pointer.values())[0].splitlines()
+        # get the first (and only, probably not optimal) key which should be the ligand name
+        ligname = list(data_pointer.keys())[0]
         logger.debug("Parsing vina docking string")
-        parsed_results = _read_vina_results_lines(data_object, ligname, True)
 
-    return parsed_results
+    return _read_vina_results_lines(data_object, ligname)
 
 
 def receptor_pdbqt_parser(fname):
