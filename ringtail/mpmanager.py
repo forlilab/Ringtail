@@ -4,7 +4,6 @@
 # Ringtail multiprocess manager
 #
 
-import platform
 from time import sleep
 import queue
 import fnmatch
@@ -131,11 +130,7 @@ class MPManager:
 
         # process items in the queue
         try:
-            if self.file_sources:
-                # NOTE assumes only one type of input sources given
-                self._process_file_sources()
-            elif self.string_sources:
-                self._process_string_sources()
+            self._process_data_sources()
         except Exception as e:
             tb = traceback.format_exc()
             self._kill_all_workers(e, "results sources processing", tb)
@@ -154,55 +149,56 @@ class MPManager:
             "Wrote {0} docking results to the database".format(self.num_files)
         )
 
-    def _process_file_sources(self):
-        """Adds each results file item to the queue, and processes lists of files,
-        recursively traveresed filepaths, and individually listed file paths.
+    def _process_data_sources(self):
+        """Adds each docking result item to the queue, including files and data provided as string/dict.
+        For files, processes lists of files, recursively traveresed filepaths, and individually listed file paths.
         """
-        # add individual file(s)
-        if self.file_sources.file != (None and [[]]):
-            for file_list in self.file_sources.file:
-                for file in file_list:
-                    if (
-                        fnmatch.fnmatch(file, self.file_pattern)
-                        and file != self.receptor_file
-                    ):
-                        self._add_to_queue(file)
 
-        # add files from file path(s)
-        if self.file_sources.file_path != (None and [[]]):
-            for path_list in self.file_sources.file_path:
-                for path in path_list:
-                    # scan for ligand dlgs
-                    for files in self._scan_dir(
-                        path, self.file_pattern, recursive=True
-                    ):
-                        for f in files:
-                            self._add_to_queue(f)
-        # add files from file list(s)
-        if self.file_sources.file_list != (None and [[]]):
-            for filelist_list in self.file_sources.file_list:
-                for filelist in filelist_list:
-                    self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
+        if self.file_sources:
+            # add individual file(s)
+            if self.file_sources.file != (None and [[]]):
+                for file_list in self.file_sources.file:
+                    for file in file_list:
+                        if (
+                            fnmatch.fnmatch(file, self.file_pattern)
+                            and file != self.receptor_file
+                        ):
+                            self._add_to_queue(file)
 
-    def _process_string_sources(self):
-        """Adds each results string dictionary item to the queue
+            # add files from file path(s)
+            if self.file_sources.file_path != (None and [[]]):
+                for path_list in self.file_sources.file_path:
+                    for path in path_list:
+                        # scan for ligand dlgs
+                        for files in self._scan_dir(
+                            path, self.file_pattern, recursive=True
+                        ):
+                            for file in files:
+                                self._add_to_queue(file)
 
-        Raises:
-            RTCoreError
-        """
-        if self.string_sources != None:
-            for (
-                ligand_name,
-                docking_result,
-            ) in self.string_sources.results_strings.items():
-                string_data = {ligand_name: docking_result}
-                self._add_to_queue(string_data, string=True)
-        else:
-            raise RTCoreError(
-                "There was an error while reading the results string input."
-            )
+            # add files from file list(s)
+            if self.file_sources.file_list != (None and [[]]):
+                for filelist_list in self.file_sources.file_list:
+                    for filelist in filelist_list:
+                        self._scan_file_list(
+                            filelist, self.file_pattern.replace("*", "")
+                        )
 
-    def _add_to_queue(self, results_data, string=False):
+        # add docking data from input strings
+        if self.string_sources:
+            try:
+                for (
+                    ligand_name,
+                    docking_result,
+                ) in self.string_sources.results_strings.items():
+                    string_data = {ligand_name: docking_result}
+                    self._add_to_queue(string_data)
+            except:
+                raise RTCoreError(
+                    "There was an error while reading the results string input."
+                )
+
+    def _add_to_queue(self, results_data):
         """_summary_
 
         Args:
@@ -215,7 +211,7 @@ class MPManager:
         # adds result file to the multiprocess queue
         max_attempts = 750
         timeout = 0.5  # seconds
-        if string == False and self.receptor_file is not None:
+        if not isinstance(results_data, dict) and self.receptor_file is not None:
             if (
                 os.path.split(results_data)[-1] == os.path.split(self.receptor_file)[-1]
             ):  # check that we don't try to add the receptor
@@ -274,7 +270,7 @@ class MPManager:
         if recursive:
             path = os.path.normpath(path)
             path = os.path.expanduser(path)
-            for dirpath, dirnames, filenames in os.walk(path):
+            for dirpath, _, filenames in os.walk(path):
                 yield (  # <----
                     os.path.join(dirpath, f)
                     for f in fnmatch.filter(filenames, "*" + pattern)
