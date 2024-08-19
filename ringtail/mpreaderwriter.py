@@ -39,7 +39,6 @@ class DockingFileReader(multiprocess.Process):
         add_interactions (bool): find and save interactions between ligand poses and receptor
         interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
         target (str): receptor name
-        string_processing (bool, optional): switch for processing result strings
     """
 
     def __init__(
@@ -57,7 +56,6 @@ class DockingFileReader(multiprocess.Process):
         add_interactions,
         interaction_cutoffs,
         receptor_file,
-        string_processing=False,
     ):
         # set docking_mode for which file parser to use (and for vina, '_string' if parsing string output directly)
         self.docking_mode = docking_mode
@@ -85,8 +83,6 @@ class DockingFileReader(multiprocess.Process):
         self.pipe = pipe_conn
         self.interaction_finder = None
         self.exception = None
-        # if the results being processed comes as a string instead of a file (currently only implemented for vina)
-        self.string_processing = string_processing
 
     def _find_best_cluster_poses(self, ligand_dict):
         """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run"
@@ -138,9 +134,7 @@ class DockingFileReader(multiprocess.Process):
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 elif self.docking_mode == "vina":
-                    parsed_file_dict = parse_vina_result(
-                        next_task, self.string_processing
-                    )
+                    parsed_file_dict = parse_vina_result(next_task)
 
                 # Example code for calling user-implemented docking_mode
                 # elif self.docking_mode == "my_docking_mode":
@@ -351,7 +345,7 @@ class Writer(multiprocess.Process):
                         sys.stdout.flush()
 
                     # process next file
-                    self.process_file(next_task)
+                    self.process_data(next_task)
                 if self.num_readers == 0:
                     # received as many poison pills as workers
                     logger.info("Performing final database write")
@@ -405,14 +399,14 @@ class Writer(multiprocess.Process):
             self.storageman.create_indices()
             self.storageman.set_ringtail_db_schema_version()
 
-    def process_file(self, file_packet):
-        """Breaks up the data in the file_packet to distribute between
+    def process_data(self, data_packet):
+        """Breaks up the data in the data_packet to distribute between
         the different arrays to be inserted in the database.
 
         Args:
-            file_packet (any): File packet to be processed
+            data_packet (any): File packet to be processed
         """
-        results_rows, ligand_row, interaction_rows, receptor_row = file_packet
+        results_rows, ligand_row, interaction_rows, receptor_row = data_packet
         for pose in results_rows:
             self.results_array.append(pose)
         for pose in interaction_rows:
