@@ -341,6 +341,8 @@ class StorageManager:
         # create new interaction bitvector table each time the db is written to
         self._create_interaction_bitvector_table()
         self._populate_interaction_bv_table()
+        # index certain tables
+        self.create_indices()
         # set version of the database
         self.set_ringtail_db_schema_version(self._db_schema_ver)
         self.logger.info("Database write session completed successfully.")
