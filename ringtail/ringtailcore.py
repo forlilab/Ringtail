@@ -7,7 +7,7 @@
 import matplotlib.pyplot as plt
 import json
 from meeko import RDKitMolCreate
-from .storagemanager import StorageManager, StorageManagerSQLite
+from .storagemanager import StorageManager
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
@@ -17,7 +17,6 @@ from .exceptions import RTCoreError, OutputError, StorageError
 from rdkit import Chem
 import itertools
 import os
-from os import path
 from .logutils import LOGGER
 
 
@@ -67,7 +66,9 @@ class RingtailCore:
             self.logger.warning(
                 f"A logging file already exist and will be used: {self.logger._log_fp.baseFilename}"
             )
-        self.logger.warning("[     New RingtailCore object initialized     ]")
+        self.logger.warning(
+            f"[     New RingtailCore object initialized with database file {db_file}    ]"
+        )
         # Check if storage type is implemented
         try:
             storageman = StorageManager.check_storage_compatibility(storage_type)
