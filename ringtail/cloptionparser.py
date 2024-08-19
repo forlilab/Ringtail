@@ -899,7 +899,7 @@ class CLOptionParser:
             "max_proc": parsed_opts.max_proc,
         }
 
-        # parse read methods
+        # parse read methods without inputs
         self.plot = parsed_opts.plot
         self.export_bookmark_db = parsed_opts.export_bookmark_db
         self.export_receptor = parsed_opts.export_receptor
