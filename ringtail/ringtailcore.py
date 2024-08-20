@@ -1106,7 +1106,7 @@ class RingtailCore:
             for rec, rec_name in receptor_list:
                 # NOTE: in current implementation, only one receptor allowed per database
                 # Check that any receptor row is incomplete (needs receptor blob) before inserting
-                filled_receptor_rows, _ = self.storageman.count_receptors_in_db()
+                filled_receptor_rows = self.storageman.count_receptors_in_db()
                 if (
                     filled_receptor_rows != 0
                 ):  # throw error if receptor is already present
