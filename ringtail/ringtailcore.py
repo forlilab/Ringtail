@@ -1106,9 +1106,7 @@ class RingtailCore:
             for rec, rec_name in receptor_list:
                 # NOTE: in current implementation, only one receptor allowed per database
                 # Check that any receptor row is incomplete (needs receptor blob) before inserting
-                filled_receptor_rows, recname_present = (
-                    self.storageman.count_receptors_in_db()
-                )
+                filled_receptor_rows, _ = self.storageman.count_receptors_in_db()
                 if (
                     filled_receptor_rows != 0
                 ):  # throw error if receptor is already present
@@ -1117,7 +1115,7 @@ class RingtailCore:
                             filled_receptor_rows
                         )
                     )
-                self.storageman.save_receptor(rec, rec_name)
+                self.storageman.insert_receptor_blob(rec, rec_name)
                 self.logger.info("Receptor data was added to the database.")
 
     def produce_summary(
@@ -1368,7 +1366,7 @@ class RingtailCore:
                 filters_dict = self._prepare_filters_for_storageman(combination)
                 # set storageMan's internal ic_counter to reflect current ic_idx
                 if len(interaction_combs) > 1:
-                    self.storageman.set_view_suffix(ic_idx)
+                    self.storageman.set_bookmark_suffix(ic_idx)
                 # ask storageManager to fetch results
                 filtered_results = self.storageman.filter_results(
                     filters_dict, not self.outputopts.enumerate_interaction_combs
@@ -1376,7 +1374,7 @@ class RingtailCore:
                 if filtered_results:
                     if return_iter:
                         return filtered_results
-                    result_bookmark_name = self.storageman.get_current_view_name()
+                    result_bookmark_name = self.storageman.get_current_bookmark_name()
                     with self.outputman:
                         self.outputman.write_filters_to_log(
                             self.filters.todict(),
@@ -1394,9 +1392,9 @@ class RingtailCore:
                         ligands_passed = number_passing
                 else:
                     self.logger.warning(
-                        "WARNING: No ligands found passing filters, no view created"
+                        "WARNING: No ligands found passing filters, no bookmark created"
                     )
-                    self.storageman._drop_bookmark(self.storageman.bookmark_name)
+                    self.storageman.drop_bookmark(self.storageman.bookmark_name)
             if len(interaction_combs) > 1:
                 maxmiss_union_results = self.storageman.get_maxmiss_union(
                     len(interaction_combs)
@@ -1500,7 +1498,7 @@ class RingtailCore:
             # is bookmark name actually in database
             if self.storageman.bookmark_name in all_bookmarks:
                 # check if has max_miss filter
-                bookmark_filters = self.storageman.fetch_filters_from_view(
+                bookmark_filters = self.storageman.fetch_filters_from_bookmark(
                     self.storageman.bookmark_name
                 )
                 try:
@@ -1519,7 +1517,7 @@ class RingtailCore:
             # if bookmark name is not in the database
             elif not self.storageman.bookmark_name in all_bookmarks:
                 # does bookmark name + _union resolve the issue
-                if self.storageman.check_passing_view_exists(
+                if self.storageman.check_passing_bookmark_exists(
                     self.storageman.bookmark_name + "_union"
                 ):
                     self.storageman.bookmark_name = (
@@ -1536,13 +1534,13 @@ class RingtailCore:
                         )
                     )
 
-            if not self.storageman._view_has_rows(self.storageman.bookmark_name):
+            if not self.storageman.bookmark_has_rows(self.storageman.bookmark_name):
                 raise StorageError(
                     "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
                 )
 
             # make temp table
-            self.storageman.create_temp_passing_table()
+            self.storageman.create_temp_table_from_bookmark()
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
 
@@ -1616,7 +1614,7 @@ class RingtailCore:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
         with self.storageman:
             bookmark_filters = (
-                self.storageman.fetch_filters_from_view()
+                self.storageman.fetch_filters_from_bookmark()
             )  # fetches the filters used to produce the bookmark
         max_miss = bookmark_filters["max_miss"]
         if max_miss > 0:
@@ -1801,7 +1799,7 @@ class RingtailCore:
         self, outfields=None, bookmark_name=None, log_file=None
     ):
         """Get data requested in self.out_opts['outfields'] from the
-        results view of a previous filtering
+        results bookmark of a previous filtering
 
         Args:
             outfields (str): use outfields as described in RingtailOptions > StorageOptions
@@ -1827,7 +1825,7 @@ class RingtailCore:
         """
 
         with self.storageman:
-            self.storageman._drop_bookmark(bookmark_name=bookmark_name)
+            self.storageman.drop_bookmark(bookmark_name)
         self.logger.info(
             "Bookmark {0} was dropped from the database {1}".format(
                 bookmark_name, self.storageman.db_file
