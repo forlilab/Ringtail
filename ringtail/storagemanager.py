@@ -89,7 +89,7 @@ class StorageManager:
             instance: of class with open database connection
         """
         try:
-            self.open_storage()
+            self._open_storage()
         except StorageError as e:
             raise e
         else:
@@ -135,9 +135,9 @@ class StorageManager:
         self._create_interaction_bitvector_table()
         self._populate_interaction_bv_table()
         # index certain tables
-        self.create_indices()
+        self._create_indices()
         # set version of the database
-        self.set_ringtail_db_schema_version(self._db_schema_ver)
+        self._set_ringtail_db_schema_version(self._db_schema_ver)
         self.logger.info("Database write session completed successfully.")
 
     def close_storage(self, attached_db=None, vacuum=False):
@@ -180,14 +180,14 @@ class StorageManager:
             receptor_array (list): list of data to be stored in Receptors table
             insert_receptor (bool, optional): flag indicating that receptor info should inserted
         """
-        Pose_IDs, duplicates = self.insert_results(results_array)
-        self.insert_ligands(ligands_array)
+        Pose_IDs, duplicates = self._insert_results(results_array)
+        self._insert_ligands(ligands_array)
         if insert_receptor and receptor_array != []:
             # first checks if there is receptor info already in the db
             receptors = self.fetch_receptor_objects()
             # insert receptor if database does not have already have a receptor entry
             if len(receptors) == 0:
-                self.insert_receptors(receptor_array)
+                self._insert_receptors(receptor_array)
         # insert interactions if they are present
         if interaction_list != []:
             self.insert_interactions(Pose_IDs, interaction_list, duplicates)
@@ -339,7 +339,7 @@ class StorageManager:
 
         self._insert_into_temp_table(temp_insert_query)
 
-        num_passing = self.get_number_passing_ligands(temp_name)
+        num_passing = self._get_number_passing_ligands(temp_name)
 
         self.temptable_suffix += 1
 
@@ -622,7 +622,7 @@ class StorageManagerSQLite(StorageManager):
             input_model,
         ]
 
-    def insert_ligands(self, ligand_array):
+    def _insert_ligands(self, ligand_array):
         """Takes array of ligand rows, inserts into Ligands table.
 
         Args:
@@ -895,7 +895,7 @@ class StorageManagerSQLite(StorageManager):
 
         return ligand_data_list
 
-    def check_unique_results_row(self, result_data):
+    def _check_unique_results_row(self, result_data):
         """Checks if a pose ID is uniquely represented in the result table, based on the following [index in result_data] columns:
         [0] LigName,
         [1] receptor,
@@ -963,7 +963,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while looking for unique result row."
             ) from e
 
-    def insert_results(self, results_array):
+    def _insert_results(self, results_array):
         """Takes array of database rows to insert, adds data to results table. Will handle duplicates if specified
 
         Args:
@@ -1024,7 +1024,7 @@ class StorageManagerSQLite(StorageManager):
                     -1
                 )  # nonsensical table index to initialize row index if checking for duplicates
                 if self.duplicate_handling:
-                    Pose_ID = self.check_unique_results_row(result)
+                    Pose_ID = self._check_unique_results_row(result)
 
                 if Pose_ID != -1:  # row exists in table
                     duplicates.append(Pose_ID)
@@ -1114,7 +1114,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating receptor table. If database already exists, use --overwrite to drop existing tables"
             ) from e
 
-    def insert_receptors(self, receptor_array):
+    def _insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
 
         Args:
@@ -1509,7 +1509,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
         # number of unique interactions
-        num_of_interactions = self.get_length_of_table("Interaction_indices")
+        num_of_interactions = self._get_length_of_table("Interaction_indices")
 
         # number of poses in the database
         list_of_poses = self._run_query("""SELECT Pose_id FROM Results""").fetchall()
@@ -1672,7 +1672,7 @@ class StorageManagerSQLite(StorageManager):
         cur.close()
         self.conn.commit()
 
-    def create_indices(self):
+    def _create_indices(self):
         """Create index containing possible filter and order by columns
 
         Raises:
@@ -2020,8 +2020,32 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             iter: sqlite cursor of data from passing data
+
+        Raises:
+            OptionError
         """
-        return self._run_query(self._generate_results_data_query(self.outfields))
+        output_fields = self.outfields
+        if type(output_fields) == str:
+            output_fields = output_fields.replace(" ", "")
+            output_fields_list = output_fields.split(",")
+        elif type(output_fields) == list:
+            output_fields_list = output_fields
+        else:
+            raise OptionError(
+                f"The output fields {outfield_string} were provided in the wrong format {type(output_fields)}. Please provide a string or a list."
+            )
+        outfield_string = "LigName, " + ", ".join(
+            [self.field_to_column_name[field] for field in output_fields_list]
+        )
+
+        query = (
+            "SELECT "
+            + outfield_string
+            + " FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {0})".format(
+                self.bookmark_name
+            )
+        )
+        return self._run_query(query)
 
     def fetch_flexres_info(self):
         """fetch flexible residues names and atomname lists
@@ -2125,12 +2149,7 @@ class StorageManagerSQLite(StorageManager):
             )
             row_count = cur.fetchone()[0]
             cur.close()
-            recname = None
-            if row_count > 0:
-                # get name of receptor
-                cur = self.conn.execute("SELECT RecName FROM Receptors")
-                recname = cur.fetchone()[0]
-            return row_count, recname
+            return row_count
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(
                 "Error occurred while fetching number of receptor rows containing PDBQT blob"
@@ -2143,9 +2162,11 @@ class StorageManagerSQLite(StorageManager):
              iter: SQLite Cursor containing docking_score,
                 leff for the first pose for each ligand
         """
-        return self._run_query(self._generate_plot_all_results_query())
+        return self._run_query(
+            "SELECT docking_score, leff FROM Results GROUP BY LigName"
+        )
 
-    def _fetch_passing_plot_data(self, bookmark_name: str = None):
+    def _fetch_passing_plot_data(self, bookmark_name: str | None = None):
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
 
@@ -2156,7 +2177,14 @@ class StorageManagerSQLite(StorageManager):
             iter: SQL Cursor containing docking_score,
                 leff for the first pose for passing ligands
         """
-        return self._run_query(self._generate_plot_passing_results_query(bookmark_name))
+        if bookmark_name is None:
+            bookmark_name = self.bookmark_name
+
+        return self._run_query(
+            "SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {bookmark}) GROUP BY LigName".format(
+                bookmark=bookmark_name
+            )
+        )
 
     def _fetch_ligand_cluster_columns(self):
         """fetching columns from Ligand_clusters table
@@ -2215,7 +2243,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             return pd.read_sql_query(requested_data, self.conn)
 
-    def get_length_of_table(self, table_name: str):
+    def _get_length_of_table(self, table_name: str):
         """
         Finds the rowcount/length of a table based on the rowid
 
@@ -2233,7 +2261,7 @@ class StorageManagerSQLite(StorageManager):
 
     # region Methods dealing with filtered results
 
-    def get_number_passing_ligands(self, bookmark_name: str = None):
+    def _get_number_passing_ligands(self, bookmark_name: str | None = None):
         """Returns count of the number of ligands that
             passed filtering criteria
 
@@ -2263,18 +2291,6 @@ class StorageManagerSQLite(StorageManager):
                 "Error while getting number of passing ligands"
             ) from e
 
-    def get_results(self):
-        """Gets all fields for filtered results
-
-        Returns:
-            iter: SQLite cursor with all fields
-                and rows in passing results view
-        """
-        # check if we have previously filtered and saved view
-        return self._run_query(
-            "SELECT * FROM {passing_view}".format(passing_view=self.bookmark_name)
-        )
-
     def get_maxmiss_union(self, total_combinations: int):
         """Get results that are in union considering max miss
 
@@ -2293,9 +2309,9 @@ class StorageManagerSQLite(StorageManager):
             )
             view_strs.append(f"SELECT * FROM {self.bookmark_name + '_' + str(i)}")
 
-        view_name = f"{self.bookmark_name}_union"
+        bookmark_name = f"{self.bookmark_name}_union"
         self.logger.debug("Saving union bookmark...")
-        self.create_bookmark(view_name, " UNION ".join(view_strs))
+        self.create_bookmark(bookmark_name, " UNION ".join(view_strs))
         self.logger.debug("Running union query...")
         return self._run_query(" UNION ".join(selection_strs))
 
@@ -2409,13 +2425,10 @@ class StorageManagerSQLite(StorageManager):
         sql_query = f"SELECT LigName FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
         view_query = f"SELECT * FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
 
-        view_name = f"similar_{ligname}_{cluster_col_choice}"
-        self._create_view(view_name, view_query)
-        self._insert_bookmark_info(name=view_name, sqlite_query=view_query)
+        self.bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
+        self.create_bookmark(self.bookmark_name, view_query)
 
-        self.bookmark_name = view_name
-
-        return self._run_query(sql_query), view_name, cluster_col_choice
+        return self._run_query(sql_query), self.bookmark_name, cluster_col_choice
 
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
@@ -2481,32 +2494,6 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Methods that generate SQLite query strings
-    def _generate_plot_all_results_query(self):
-        """Make SQLite-formatted query string to get docking_score,
-            leff of first pose of all ligands
-
-        Returns:
-            str: SQLite-formatted query string
-        """
-        return "SELECT docking_score, leff FROM Results GROUP BY LigName"
-
-    def _generate_plot_passing_results_query(self, bookmark_name: str = None):
-        """Make SQLite-formatted query string to get docking_score,
-            leff of first pose for passing ligands
-
-        Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Will use default bookmark name if None. Returns empty list if bookmark does not exist.
-
-        Returns:
-            str: SQLite-formatted query string
-        """
-        if bookmark_name is None:
-            bookmark_name = self.bookmark_name
-
-        return "SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {results_view}) GROUP BY LigName".format(
-            results_view=bookmark_name
-        )
-
     def _generate_outfield_string(self):
         """string describing outfields to be written
 
@@ -3097,51 +3084,6 @@ class StorageManagerSQLite(StorageManager):
 
         return sql_ligand_string
 
-    def _generate_results_data_query(self, output_fields: str):
-        """Generates SQLite-formatted query string to select outfields data for ligands in self.bookmark_name
-
-        Args:
-            output_fields (list): List of result column data for output
-
-        Returns:
-            str: sqlite query string to select data from passing results view
-
-        Raises:
-            OptionError
-        """
-        if type(output_fields) == str:
-            output_fields = output_fields.replace(" ", "")
-            output_fields_list = output_fields.split(",")
-        elif type(output_fields) == list:
-            output_fields_list = output_fields
-        else:
-            raise OptionError(
-                f"The output fields {outfield_string} were provided in the wrong format {type(output_fields)}. Please provide a string or a list."
-            )
-        outfield_string = "LigName, " + ", ".join(
-            [self.field_to_column_name[field] for field in output_fields_list]
-        )
-
-        return (
-            "SELECT "
-            + outfield_string
-            + " FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {0})".format(
-                self.bookmark_name
-            )
-        )
-
-    def _generate_percentile_rank_window(self):
-        """makes window with percentile ranks for percentile filtering
-
-        Returns:
-            str: SQLite-formatted string for creating
-                percent ranks on docking_score and leff
-        """
-        column_names = ",".join(self._fetch_results_column_names())
-        return "SELECT {columns}, PERCENT_RANK() OVER (ORDER BY docking_score) score_percentile_rank, PERCENT_RANK() OVER (ORDER BY leff) leff_percentile_rank FROM Results Group BY LigName".format(
-            columns=column_names
-        )
-
     def _generate_selective_insert_query(
         self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
     ):
@@ -3164,7 +3106,7 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Database operations
-    def open_storage(self):
+    def _open_storage(self):
         """Create connection to db. Then, check if db needs to be created.
         If self.overwrite drop existing tables and initialize new tables
 
@@ -3180,7 +3122,7 @@ class StorageManagerSQLite(StorageManager):
                 if not self._db_empty():
                     self._drop_existing_tables()
                 self._create_tables()
-                self.set_ringtail_db_schema_version(self._db_schema_ver)
+                self._set_ringtail_db_schema_version(self._db_schema_ver)
 
             self.logger.info(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
@@ -3256,7 +3198,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.backup(bck, pages=1)
         bck.close()
 
-    def set_ringtail_db_schema_version(self, db_version: str = "2.0.0"):
+    def _set_ringtail_db_schema_version(self, db_version: str = "2.0.0"):
         """Will check current stoarge manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
 
         Raises:
@@ -3352,7 +3294,7 @@ class StorageManagerSQLite(StorageManager):
                 ) from e
         # if you only wanted to upgrade to v1.1.0, stop here
         if new_version == "1.1.0":
-            self.set_ringtail_db_schema_version("1.1.0")  # set explicit version
+            self._set_ringtail_db_schema_version("1.1.0")  # set explicit version
         elif new_version == "2.0.0":
             # major table updates and sets db version inside method
             self._update_db_110_to_200()
@@ -3421,7 +3363,7 @@ class StorageManagerSQLite(StorageManager):
 
         try:
             self.conn.commit()
-            self.set_ringtail_db_schema_version("2.0.0")  # set explicit version
+            self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
         except sqlite3.OperationalError as e:
             raise DatabaseConnectionError(
                 f"Error while creating new interaction tables: {e}"
@@ -3606,16 +3548,5 @@ class StorageManagerSQLite(StorageManager):
                 "Unable to execute query {0}: {1}".format(query, e)
             ) from e
         return cur
-
-    def _update_query(self, query):
-        """Executes SQLite update query, does not return cursor.
-        Args:
-            query (str): Formated SQLite query as string
-        """
-        try:
-            cur = self.conn.execute(query)
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError("Unable to execute query {0}".format(query)) from e
 
     # endregion
