@@ -574,6 +574,7 @@ class RingtailCore:
         interaction_cutoffs: list = None,
         max_proc: int = None,
         options_dict: dict = None,
+        finalize: bool = True,
     ):
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
 
@@ -646,7 +647,8 @@ class RingtailCore:
             )
             self.logger.info("Adding results...")
             self.resultsman.process_docking_data()
-            self.storageman.finalize_database_write()
+            if finalize:
+                self.storageman.finalize_database_write()
 
     # endregion
 
@@ -960,6 +962,7 @@ class RingtailCore:
         interaction_cutoffs: list = None,
         max_proc: int = None,
         options_dict: dict = None,
+        finalize: bool = True,
     ):
         """
         Call storage manager to process result files and add to database. Creates or adds to an existing a database.
@@ -1023,6 +1026,7 @@ class RingtailCore:
                 interaction_cutoffs,
                 max_proc,
                 options_dict,
+                finalize,
             )
 
     def add_results_from_vina_string(
@@ -1039,6 +1043,7 @@ class RingtailCore:
         interaction_cutoffs: list = None,
         max_proc: int = None,
         options_dict: dict = None,
+        finalize: bool = True,
     ):
         """
         Call storage manager to process the given vina output string and add to database.
@@ -1091,7 +1096,15 @@ class RingtailCore:
                 interaction_cutoffs,
                 max_proc,
                 options_dict,
+                finalize,
             )
+
+    def finalize_write(self):
+        """
+        Finalize database write by creating interaction tables and setting database version
+        """
+        with self.storageman:
+            self.storageman.finalize_database_write()
 
     def save_receptor(self, receptor_file):
         """
