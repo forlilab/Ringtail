@@ -23,7 +23,7 @@ def find_files(directory):
 required_modules = [
     "rdkit>=2022.03.2",
     "scipy>=1.8.0",
-    "meeko>=0.6",
+    "meeko>=0.5",
     "matplotlib",
     "pandas",
     "multiprocess>=0.70.13",
