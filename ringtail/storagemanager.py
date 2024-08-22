@@ -123,12 +123,8 @@ class StorageManager:
 
     def finalize_database_write(self):
         """
-        Methods to finalize when a database has been written to, including populating interaction indices with final unique interactions,
-        making bitvector finger prints for interactions, and saving the current database schema to the sqlite database.
+        Methods to finalize when a database has been written to, and saving the current database schema to the sqlite database.
         """
-        # create new interaction index table each time the db is written to
-        self._create_interaction_index_table()
-        self._populate_interaction_index_table()
         # index certain tables
         self._create_indices()  # TODO maybe add indexing the long interactions table
         # set version of the database
@@ -201,9 +197,9 @@ class StorageManager:
         # for each pose id, list
         interaction_rows = []
         for index, Pose_ID in enumerate(Pose_IDs):
-            # creates list of tuples of interactions and the pose_ID
+            # add interaction if unique, returns index of interaction
             pose_interactions = [
-                ((Pose_ID,) + interaction_tuple)
+                ((Pose_ID,) + self._insert_interaction_index_row(interaction_tuple))
                 for interaction_tuple in interactions_list[index]
             ]
             # adds each pose_interaction row to list
@@ -511,6 +507,7 @@ class StorageManagerSQLite(StorageManager):
         self._create_results_table()
         self._create_ligands_table()
         self._create_receptors_table()
+        self._create_interaction_index_table()
         self._create_interaction_table()
         self._create_bookmark_table()
         self._create_db_properties_table()
@@ -1296,12 +1293,7 @@ class StorageManagerSQLite(StorageManager):
         Columns are:
         interaction_pose_id INTERGER PRIMARY KEY AUTOINCREMENT,
         Pose_ID             INTEGER FOREIGN KEY from RESULTS,
-        interaction_type    VARCHAR[],
-        rec_chain           VARCHAR[],
-        rec_resname         VARCHAR[],
-        rec_resid           VARCHAR[],
-        rec_atom            VARCHAR[],
-        rec_atomid          VARCHAR[],
+        interaction_id      INTEGER FOREIGN KEY from Interaction_indices
 
 
         Raises:
@@ -1309,15 +1301,11 @@ class StorageManagerSQLite(StorageManager):
         """
 
         interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        interaction_pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
         Pose_ID   INTEGER,
-        interaction_type    VARCHAR[],
-        rec_chain           VARCHAR[],
-        rec_resname         VARCHAR[],
-        rec_resid           VARCHAR[],
-        rec_atom            VARCHAR[],
-        rec_atomid          VARCHAR[],
-        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID))"""
+        interaction_id INTEGER,
+        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID),
+        FOREIGN KEY (interaction_id) REFERENCES Interaction_indices(interaction_id))"""
 
         try:
             cur = self.conn.cursor()
@@ -1339,16 +1327,10 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseInsertionError
         """
-
         sql_insert = """INSERT INTO Interactions 
                             (Pose_ID,
-                            interaction_type,
-                            rec_chain,
-                            rec_resname,
-                            rec_resid,
-                            rec_atom,
-                            rec_atomid)
-                            VALUES (?,?,?,?,?,?,?);"""
+                            interaction_id)
+                            VALUES (?,?);"""
         try:
             cur = self.conn.cursor()
             if not self.duplicate_handling:  # add all results
@@ -1413,23 +1395,34 @@ class StorageManagerSQLite(StorageManager):
 
         return list(interactions)
 
-    def _populate_interaction_index_table(self):
+    def _insert_interaction_index_row(self, interaction_tuple) -> int:
+        # change method to _insert_interaction_index
         """
         Writes to the Interaction_indices table all the unique interactions found in the Interactions table
 
         Raises:
             DatabaseInsertionError
         """
-
-        sql_insert = """INSERT INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
-                        SELECT DISTINCT interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid from Interactions;"""
+        # to insert interaction if unique
+        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
+                        VALUES (?,?,?,?,?,?);"""
+        # to get interaction_id from the given interaction
+        sql_query = """SELECT interaction_id FROM Interaction_indices 
+        WHERE interaction_type = ?
+        AND rec_chain = ?
+        AND rec_resname = ?
+        AND rec_resid = ?
+        AND rec_atom = ?
+        AND rec_atomid = ?"""
 
         try:
             cur = self.conn.cursor()
-            cur.execute(sql_insert)
+            cur.execute(sql_insert, interaction_tuple)
+            cur.execute(sql_query, interaction_tuple)
             self.conn.commit()
+            interaction_index = cur.fetchall()[0]
             cur.close()
-            self.logger.debug("Interaction index table has been populated.")
+            return interaction_index
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error inserting unique interaction tuples in index table: {0}".format(
