@@ -2837,15 +2837,8 @@ class StorageManagerSQLite(StorageManager):
         # make dict of pose id and bitvector
         poseid_bvlist = {str(pose_id): [0] * ii_length for pose_id in pose_ids}
         # iterate over the tuple results from the query
-        print("      length of poseid_intinds", len(poseid_intinds))
         for poseid_intind in poseid_intinds:
-            print("      poseid_intind", poseid_intind)
-            print("      poseid_intind[0]", poseid_intind[0])
-            print("      poseid_intind[1]", poseid_intind[1])
-            print(
-                "         poseid_bvlist[str(poseid_intind[0])]",
-                poseid_bvlist[str(poseid_intind[0])],
-            )
+
             poseid_bvlist[str(poseid_intind[0])][poseid_intind[1] - 1] = 1
 
         # join list as string without any delimiter
