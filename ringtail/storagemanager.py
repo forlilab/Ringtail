@@ -2548,10 +2548,10 @@ class StorageManagerSQLite(StorageManager):
             if self.filter_bookmark == self.bookmark_name:
                 # cannot write data from bookmark_a to bookmark_a
                 self.logger.error(
-                    f"Specified filter_bookmark and bookmark_name are the same: {self.bookmark_name}"
+                    f"Specified 'filter_bookmark' and 'bookmark_name' are the same: {self.bookmark_name}"
                 )
                 raise OptionError(
-                    "--filter_bookmark and --bookmark_name cannot be the same! Please rename --bookmark_name"
+                    "'filter_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
                 )
             # cannot use percentile for an already reduced dataset
             if (
@@ -2559,7 +2559,7 @@ class StorageManagerSQLite(StorageManager):
                 or filters_dict["le_percentile"] is not None
             ):
                 raise OptionError(
-                    "Cannot use --score_percentile or --le_percentile with --filter_bookmark."
+                    "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
                 )
             # filtering window can be specified bookmark, or whole database (or other reduced versions of db)
             self.filtering_window = self.filter_bookmark
@@ -2604,9 +2604,10 @@ class StorageManagerSQLite(StorageManager):
             if filter_key in Filters.get_filter_keys("interaction"):
                 for interact in filter_value:
                     interaction_string = filter_key + ":" + interact[0]
+                    # add bool flag for included (T) or excluded (F) interaction
                     interaction_filters.append(
                         interaction_string.split(":") + [interact[1]]
-                    )  # add bool flag for included (T) or excluded (F) interaction
+                    )
 
             # add react_any flag as interaction filter
             # check if react_any is true
@@ -2633,19 +2634,18 @@ class StorageManagerSQLite(StorageManager):
             for i in interaction_indices:
                 interaction_filter_indices.append(i[0])
 
-            # catch if interaction not found in results
+            # catch if interaction not found in database
             if interaction_filter_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
                     self.logger.warning(
                         "Given 'react_any' filter, no reactive interactions found. Excluded from filtering."
                     )
                 else:
-                    self.logger.warning(
-                        "Interaction {i} not found in results, excluded from filtering".format(
+                    raise OptionError(
+                        "Interaction {i} not found in the database, please check for spelling errors or remove from filter.".format(
                             i=":".join(interaction[:4])
                         )
                     )
-                continue
             # determine include/exclude string
             if interaction[-1] is True:
                 include_str = "IN"
