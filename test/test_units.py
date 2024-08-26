@@ -111,7 +111,7 @@ class TestRingtailCore:
             max_miss=1,
         )
 
-        assert count_ligands_passing == 36
+        assert count_ligands_passing == 33
 
     def test_get_filterdata(self):
         rtc = RingtailCore(db_file="output.db")
@@ -567,8 +567,8 @@ class TestStorageMan:
         rtc = RingtailCore("output.db")
         rtc.filter(
             eworst=-3,
-            vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
-            hb_interactions=[("A:ARG:123:", True)],
+            vdw_interactions=[("A:ALA:213:", True), ("A:VAL:279:", True)],
+            hb_interactions=[("A:ALA:213:", True)],
             ligand_operator="OR",
         )
         curs = dbquery(
@@ -583,8 +583,8 @@ class TestStorageMan:
             "lebest": None,
             "score_percentile": None,
             "le_percentile": None,
-            "vdw_interactions": [["A:ARG:123:", True], ["A:VAL:124:", True]],
-            "hb_interactions": [["A:ARG:123:", True]],
+            "vdw_interactions": [["A:ALA:213:", True], ["A:VAL:279:", True]],
+            "hb_interactions": [["A:ALA:213:", True]],
             "reactive_interactions": [],
             "hb_count": None,
             "react_any": None,
