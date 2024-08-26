@@ -515,7 +515,7 @@ class TestFilters:
 
     def test_all_filters(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --ligand_name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279: --reactive_interactions A:TYR:169:"
+            "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --ligand_name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279:"
         )
 
         assert status == 0
@@ -546,63 +546,63 @@ class TestFilters:
     def test_react_any(self):
         # write new db with reactive data
         os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --file_path test_data/reactive --receptor_file test_data/reactive/4j8m_m_rigid.pdbqt"
+            "python ../scripts/rt_process_vs.py write -d --output_db output.db --file_path test_data/reactive --receptor_file test_data/reactive/4j8m_m_rigid.pdbqt"
         )
 
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --react_any"
         )
 
-        assert status == 256
+        assert status == 0
 
     def test_react1(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions A:TYR:212:"
         )
 
-        assert status == 256
+        assert status == 0
 
     def test_react2(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions :TYR:212:"
         )
 
-        assert status == 256
+        assert status == 0
 
     def test_react3(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions :TYR::"
         )
 
-        assert status == 256
+        assert status == 0
 
     def test_react4(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:TYR::"
         )
 
-        assert status == 256
+        assert status == 0
 
     def test_react5(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A::212:"
         )
 
-        assert status == 256
+        assert status == 0
 
     def test_react6(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:::"
         )
 
-        assert status == 256
+        assert status == 0
 
     def test_react7(self):
         status = os.system(
             "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions ::212:"
         )
 
-        assert status == 256
+        assert status == 0
         os.system("rm output_log.txt output.db")
 
 

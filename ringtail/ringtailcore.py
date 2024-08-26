@@ -573,7 +573,7 @@ class RingtailCore:
         interaction_tolerance: float = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        options_dict: dict = None,
+        options_dict: dict | None = None,
         finalize: bool = True,
     ):
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.

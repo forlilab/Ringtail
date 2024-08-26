@@ -232,6 +232,9 @@ class StorageManager:
         filter_results_str, view_query = self._generate_result_filtering_query(
             all_filters
         )
+        print("      filter_results_str", filter_results_str)
+        print("     output view_query", view_query)
+        input()
         self.logger.debug(f"Query for filtering results: {filter_results_str}")
 
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.bookmark_name
@@ -1812,10 +1815,8 @@ class StorageManagerSQLite(StorageManager):
             temp_flag = "TEMP "
         else:
             temp_flag = ""
-        query = "CREATE {temp_flag}VIEW {name} AS {query}".format(
-            name=name, query=query, temp_flag=temp_flag
-        )
-        self._create_view(name=name, query=query)
+        query = f"CREATE {temp_flag}VIEW {name} AS {query}"
+        self._create_view(name, query)
         self._insert_bookmark_info(name, query, filters)
         self.logger.debug(f"Created bookmark from the following query: {query}")
 
@@ -2310,10 +2311,15 @@ class StorageManagerSQLite(StorageManager):
             view_strs.append(f"SELECT * FROM {self.bookmark_name + '_' + str(i)}")
 
         bookmark_name = f"{self.bookmark_name}_union"
-        self.logger.debug("Saving union bookmark...")
-        self.create_bookmark(bookmark_name, " UNION ".join(view_strs))
+        union_view_query = " UNION ".join(view_strs)
+        if not self.output_all_poses:
+            # if not outputting all poses, it is necessary to "create" the view (each of which had a grouping statement), then group by in the final view
+            union_view_query = (
+                "SELECT * FROM (" + union_view_query + ") GROUP BY LigName"
+            )
+        self.create_bookmark(bookmark_name, union_view_query)
         self.logger.debug("Running union query...")
-        return self._run_query(" UNION ".join(selection_strs))
+        return self._run_query(union_view_query)
 
     def fetch_summary_data(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
@@ -2781,6 +2787,9 @@ class StorageManagerSQLite(StorageManager):
                 out_columns=outfield_string, window=self.filtering_window
             )
         )
+        print("      sql_stirng", sql_string)
+        print("     output string", output_str)
+        input()
         if interaction_queries == [] and queries != []:
             joined_queries = " AND ".join(queries)
             sql_string = sql_string + joined_queries
@@ -2790,7 +2799,9 @@ class StorageManagerSQLite(StorageManager):
         elif queries == [] and interaction_queries == [] and clustering:
             # allows for clustering without filtering
             unclustered_query = f"SELECT Pose_id FROM {self.filtering_window}"
-            self.logger.info("Preparing to cluster results without any filters...")
+            self.logger.warning(
+                "Preparing to cluster results without any filters, this can take significant time if not performed on pre-filtered data."
+            )
         else:
             with_stmt = f"WITH subq as (SELECT Pose_id FROM {self.filtering_window}) "
             if queries != []:
@@ -2805,7 +2816,9 @@ class StorageManagerSQLite(StorageManager):
         # adding if we only want to keep one pose per ligand (will keep first entry)
         if not self.output_all_poses:
             sql_string += " GROUP BY LigName"
-
+        print("      sql_stirng 2nd time", sql_string)
+        print("     output string", output_str)
+        input()
         # add how to order results
         if self.order_results is not None:
             try:
@@ -2816,6 +2829,9 @@ class StorageManagerSQLite(StorageManager):
                 raise RuntimeError(
                     "Please ensure you are only requesting one option for --order_results and have written it correctly"
                 ) from None
+        print("      sql_stirng 3rd time", sql_string)
+        print("     output string", output_str)
+        input()
 
         # if clustering is requested, do that before saving view or filtering results for output
         # Define clustering setup
@@ -2852,7 +2868,7 @@ class StorageManagerSQLite(StorageManager):
         if self.interaction_cluster is not None:
             self.logger.warning(
                 "WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
-            )  # TODO: remove this memory bottleneck
+            )
             cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_ID WHERE Results.Pose_ID IN ({unclustered_query})"
             # if interaction filters are present
             if interaction_queries != []:
@@ -2935,7 +2951,7 @@ class StorageManagerSQLite(StorageManager):
         if self.mfpt_cluster is not None:
             self.logger.warning(
                 "WARNING: Ligand morgan fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
-            )  # TODO: remove this memory bottleneck
+            )
             self.logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering."
             )
@@ -2974,7 +2990,9 @@ class StorageManagerSQLite(StorageManager):
                 sql_string = (
                     output_str + "Pose_ID=" + " OR Pose_ID=".join(fp_rep_poseids)
                 )
-
+        print("      sql_stirng before returning", sql_string)
+        print("     output string", output_str)
+        input()
         return sql_string, sql_string.replace(
             """SELECT {out_columns} FROM {window}""".format(
                 out_columns=outfield_string, window=self.filtering_window
