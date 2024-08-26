@@ -2182,9 +2182,19 @@ class StorageManagerSQLite(StorageManager):
 
         bookmark_name = f"{self.bookmark_name}_union"
         self.logger.debug("Saving union bookmark...")
-        self.create_bookmark(bookmark_name, " UNION ".join(view_strs))
+        union_view_query = " UNION ".join(view_strs)
+        union_select_query = " UNION ".join(selection_strs)
+        if not self.output_all_poses:
+            # if not outputting all poses, it is necessary to "create" the view (each of which had a grouping statement), then group by in the final view
+            union_view_query = (
+                "SELECT * FROM (" + union_view_query + ") GROUP BY LigName"
+            )
+            union_select_query = (
+                "SELECT * FROM (" + union_select_query + ") GROUP BY LigName"
+            )
+        self.create_bookmark(bookmark_name, union_view_query)
         self.logger.debug("Running union query...")
-        return self._run_query(" UNION ".join(selection_strs))
+        return self._run_query(union_select_query)
 
     def fetch_summary_data(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
