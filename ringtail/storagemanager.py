@@ -232,9 +232,7 @@ class StorageManager:
         filter_results_str, view_query = self._generate_result_filtering_query(
             all_filters
         )
-        print("      filter_results_str", filter_results_str)
-        print("     output view_query", view_query)
-        input()
+
         self.logger.debug(f"Query for filtering results: {filter_results_str}")
 
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.bookmark_name
@@ -2312,14 +2310,18 @@ class StorageManagerSQLite(StorageManager):
 
         bookmark_name = f"{self.bookmark_name}_union"
         union_view_query = " UNION ".join(view_strs)
+        union_select_query = " UNION ".join(selection_strs)
         if not self.output_all_poses:
             # if not outputting all poses, it is necessary to "create" the view (each of which had a grouping statement), then group by in the final view
             union_view_query = (
                 "SELECT * FROM (" + union_view_query + ") GROUP BY LigName"
             )
+            union_select_query = (
+                "SELECT * FROM (" + union_select_query + ") GROUP BY LigName"
+            )
         self.create_bookmark(bookmark_name, union_view_query)
         self.logger.debug("Running union query...")
-        return self._run_query(union_view_query)
+        return self._run_query(union_select_query)
 
     def fetch_summary_data(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
@@ -2787,9 +2789,6 @@ class StorageManagerSQLite(StorageManager):
                 out_columns=outfield_string, window=self.filtering_window
             )
         )
-        print("      sql_stirng", sql_string)
-        print("     output string", output_str)
-        input()
         if interaction_queries == [] and queries != []:
             joined_queries = " AND ".join(queries)
             sql_string = sql_string + joined_queries
@@ -2816,9 +2815,7 @@ class StorageManagerSQLite(StorageManager):
         # adding if we only want to keep one pose per ligand (will keep first entry)
         if not self.output_all_poses:
             sql_string += " GROUP BY LigName"
-        print("      sql_stirng 2nd time", sql_string)
-        print("     output string", output_str)
-        input()
+
         # add how to order results
         if self.order_results is not None:
             try:
@@ -2829,9 +2826,6 @@ class StorageManagerSQLite(StorageManager):
                 raise RuntimeError(
                     "Please ensure you are only requesting one option for --order_results and have written it correctly"
                 ) from None
-        print("      sql_stirng 3rd time", sql_string)
-        print("     output string", output_str)
-        input()
 
         # if clustering is requested, do that before saving view or filtering results for output
         # Define clustering setup
@@ -2990,9 +2984,7 @@ class StorageManagerSQLite(StorageManager):
                 sql_string = (
                     output_str + "Pose_ID=" + " OR Pose_ID=".join(fp_rep_poseids)
                 )
-        print("      sql_stirng before returning", sql_string)
-        print("     output string", output_str)
-        input()
+
         return sql_string, sql_string.replace(
             """SELECT {out_columns} FROM {window}""".format(
                 out_columns=outfield_string, window=self.filtering_window
