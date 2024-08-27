@@ -1553,7 +1553,9 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
             )
-
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS allind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
+            )
             self.conn.commit()
             cur.close()
             self.logger.info("Indicies were created for specified Results columns.")
