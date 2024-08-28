@@ -1427,15 +1427,6 @@ class StorageManagerSQLite(StorageManager):
                 self.conn.commit()
             else:
                 interaction_index = interaction_index[0]
-            # print("      what comes back from the cursor:", cur.fetchall())
-            # print()
-            # # first check if it exist in DB, get index and move on, OR
-            # # get table length, insert with last new index
-            # cur.execute(sql_insert, interaction_tuple)
-            # # cur.execute(sql_query, interaction_tuple)
-            # self.conn.commit()
-            # # this returns the interaction index as a tuple
-            # interaction_index = self._run_query(sql_query).fetchall()[0]
             cur.close()
             return interaction_index
         except sqlite3.OperationalError as e:
@@ -1576,6 +1567,17 @@ class StorageManagerSQLite(StorageManager):
             self.logger.info("Existing indicies pertaining to filtering were dropped.")
         except sqlite3.OperationalError as e:
             raise StorageError("Error while dropping indices") from e
+
+    def _delete_table(self, table_name: str):
+        """
+        Method to delete a table
+
+        Args:
+            table_name (str): table to be dropped
+
+        """
+        query = f"""DROP TABLE IF EXISTS {table_name};"""
+        return self._run_query(query)
 
     # endregion
 
@@ -3188,17 +3190,19 @@ class StorageManagerSQLite(StorageManager):
             DatabaseConnectionError
             StorageError
         """
+        # delete interaction table if necessary
+        self._delete_table("Interactions")
         # create interaction table
         self._create_interaction_table()
+
         # get all interaction bitvector tuples
         cur = self.conn.cursor()
         cur.execute("SELECT * FROM Interaction_bitvectors")
 
         pose_indices = []
         # for each table entry
-        for _ in cur:
+        for entry in cur:
             # pose id is firste element of tuple
-            entry = cur.fetchone()
             pose_id = entry[0]
             # enumerate the remaining (1:) tuple data which are all the bits
             for index, bit in enumerate(entry[1:]):
