@@ -3161,6 +3161,9 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(
                 "CREATE INDEX allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
             )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS allind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
+            )
             try:
                 self.conn.commit()
                 cur.close()
@@ -3178,14 +3181,24 @@ class StorageManagerSQLite(StorageManager):
         return consent
 
     def _update_db_110_to_200(self):
-        cur = self.conn.cursor()
+        """
+        Method to update from database v 1.1.0 to 2.0.0, will remove bitvetor table and create Interaction table
+
+        Raises:
+            DatabaseConnectionError
+            StorageError
+        """
+        # create interaction table
+        self._create_interaction_table()
         # get all interaction bitvector tuples
+        cur = self.conn.cursor()
         cur.execute("SELECT * FROM Interaction_bitvectors")
-        table_tuple = cur.fetchall()
+
         pose_indices = []
         # for each table entry
-        for entry in table_tuple:
+        for _ in cur:
             # pose id is firste element of tuple
+            entry = cur.fetchone()
             pose_id = entry[0]
             # enumerate the remaining (1:) tuple data which are all the bits
             for index, bit in enumerate(entry[1:]):
@@ -3195,50 +3208,13 @@ class StorageManagerSQLite(StorageManager):
                     pose_indices.append((pose_id, index + 1))
 
         try:
-            # create temporary table with this data to use in next join statement
-            cur.execute("""CREATE TEMP TABLE temp_pose_index (Pose_ID, int_index);""")
-            # insert tuples created from the previous for for loop
+            # just populate the Interaction table straight
             cur.executemany(
-                """INSERT INTO temp_pose_index (Pose_ID, int_index) VALUES (?,?);""",
+                """INSERT INTO Interactions (Pose_id, Interaction_id) VALUES (?,?)""",
                 pose_indices,
             )
             # drop old bitvector table
             cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
-            self.conn.commit()
-        except sqlite3.OperationalError as e:
-            raise DatabaseConnectionError(
-                f"Error while deleting old bitvector table: {e}"
-            ) from e
-
-        # create new tables to hold interactions and new bit vectors
-        self._create_interaction_table()
-        self._create_interaction_bitvector_table()  # table name Interaction_bitvectors
-
-        # populate Interactions table based on temp table and interaction_indices table
-        # TODO need to update this method
-        sql_insert = """INSERT INTO Interactions 
-                            (Pose_ID,
-                            interaction_type,
-                            rec_chain,
-                            rec_resname,
-                            rec_resid,
-                            rec_atom,
-                            rec_atomid)
-                        SELECT 
-                            tpi.Pose_ID,
-                            ii.interaction_type,
-                            ii.rec_chain,
-                            ii.rec_resname,
-                            ii.rec_resid,
-                            ii.rec_atom,
-                            ii.rec_atomid
-                        FROM Interaction_indices ii
-                        JOIN temp_pose_index tpi
-                            ON tpi.int_index = ii.interaction_id;"""
-
-        cur.execute(sql_insert)
-
-        try:
             self.conn.commit()
             self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
         except sqlite3.OperationalError as e:
@@ -3249,9 +3225,6 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError(
                 f"Error while setting the database schema version: {e}"
             ) from e
-
-        # popoulate bitvector string table
-        self._populate_interaction_bv_table()
 
     def _create_connection(self):
         """Creates database connection to self.db_file
