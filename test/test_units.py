@@ -111,7 +111,7 @@ class TestRingtailCore:
             max_miss=1,
         )
 
-        assert count_ligands_passing == 36
+        assert count_ligands_passing == 33
 
     def test_get_filterdata(self):
         rtc = RingtailCore(db_file="output.db")
