@@ -3,7 +3,6 @@
 
 import os
 import fnmatch
-import platform
 from setuptools import setup, find_packages
 
 
@@ -14,7 +13,7 @@ base_dir = os.path.abspath(os.path.dirname(__file__))
 def find_files(directory):
     matches = []
 
-    for root, dirnames, filenames in os.walk(directory):
+    for root, _, filenames in os.walk(directory):
         for filename in fnmatch.filter(filenames, "*"):
             matches.append(os.path.join(root, filename))
 
@@ -24,7 +23,7 @@ def find_files(directory):
 required_modules = [
     "rdkit>=2022.03.2",
     "scipy>=1.8.0",
-    "meeko>=0.4",
+    "meeko>=0.5",
     "matplotlib",
     "pandas",
     "multiprocess>=0.70.13",
@@ -51,7 +50,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=required_modules,
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     license="L-GPL-v2.1",
     keywords=[
         "virtual screening",

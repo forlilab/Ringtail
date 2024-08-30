@@ -123,19 +123,10 @@ class StorageManager:
 
     def finalize_database_write(self):
         """
-        Methods to finalize when a database has been written to, including populating interaction indices with final unique interactions,
-        making bitvector finger prints for interactions, and saving the current database schema to the sqlite database.
+        Methods to finalize when a database has been written to, and saving the current database schema to the sqlite database.
         """
-        # create new interaction index table each time the db is written to
-        # TODO this is not optimal when adding one file/string at the time. Perhaps optimize in ringtail later so the finalization of a db write in API
-        # can be better controlled. Check with time anyways.
-        self._create_interaction_index_table()
-        self._populate_interaction_index_table()
-        # create new interaction bitvector table each time the db is written to
-        self._create_interaction_bitvector_table()
-        self._populate_interaction_bv_table()
         # index certain tables
-        self._create_indices()
+        self._create_indices()  # TODO maybe add indexing the long interactions table
         # set version of the database
         self._set_ringtail_db_schema_version(self._db_schema_ver)
         self.logger.info("Database write session completed successfully.")
@@ -206,9 +197,9 @@ class StorageManager:
         # for each pose id, list
         interaction_rows = []
         for index, Pose_ID in enumerate(Pose_IDs):
-            # creates list of tuples of interactions and the pose_ID
+            # add interaction if unique, returns index of interaction
             pose_interactions = [
-                ((Pose_ID,) + interaction_tuple)
+                ((Pose_ID,) + self._insert_interaction_index_row(interaction_tuple))
                 for interaction_tuple in interactions_list[index]
             ]
             # adds each pose_interaction row to list
@@ -228,6 +219,16 @@ class StorageManager:
         Returns:
              iter: iterable, such as an sqlite cursor, of passing results
         """
+        # before we do anything, check that the DB version matches the version number of our module
+        rt_version_same, db_rt_version = self.check_ringtaildb_version()
+        if not rt_version_same:
+            # NOTE will cause error when any version int is > 10
+            # catch version 1.0.0 where returned db_rt_version will be 0
+            if db_rt_version == 0:
+                db_rt_version = 100  # TODO update this for new ringtail version and db schema version
+            raise StorageError(
+                f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
+            )
         # create view of passing results
         filter_results_str, view_query = self._generate_result_filtering_query(
             all_filters
@@ -507,6 +508,7 @@ class StorageManagerSQLite(StorageManager):
         self._create_results_table()
         self._create_ligands_table()
         self._create_receptors_table()
+        self._create_interaction_index_table()
         self._create_interaction_table()
         self._create_bookmark_table()
         self._create_db_properties_table()
@@ -634,7 +636,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
 
         """
-        # TODO this should have an associated poses column
+
         sql_insert = """INSERT INTO Ligands (
         LigName,
         ligand_smile,
@@ -1266,7 +1268,7 @@ class StorageManagerSQLite(StorageManager):
 
         """
         interaction_index_table = """CREATE TABLE Interaction_indices (
-                                        interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                                        interaction_id      INTEGER PRIMARY KEY,
                                         interaction_type    VARCHAR[],
                                         rec_chain           VARCHAR[],
                                         rec_resname         VARCHAR[],
@@ -1286,78 +1288,24 @@ class StorageManagerSQLite(StorageManager):
                 f"Error while creating interaction index table: {e}"
             ) from e
 
-    def _create_interaction_bitvector_table(self):
-        """Create table of Pose_IDs and their interaction bitvector fingerprint decomposed into columns (one per interaction).
-        This table is remade everytime db is written to.
-        Columns are:
-        interaction_bv_id   INTEGER PRIMARY KEY AUTOINCREMENT
-        Pose_ID             INTEGER FOREIGN KEY from RESULTS(Pose_ID),
-        Interaction_0       (number corresponds to interaction_id in Interaction_indices table)
-        Interaction_1
-        ...
-        Interaction_n
-
-        Raises:
-            DatabaseTableCreationError: Description
-
-        """
-        # get unique interaction indices
-        interaction_ids = self._run_query(
-            """SELECT interaction_id FROM Interaction_indices"""
-        ).fetchall()
-        # create query string to make a column for each interaction basde in the interaction index, starting with zero?
-
-        interact_columns_str = (
-            " INTEGER,\n".join(["Interaction_" + str(i[0]) for i in interaction_ids])
-            + " INTEGER"
-        )
-        interaction_bv_table = """CREATE TABLE Interaction_bitvectors (
-            interaction_bv_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Pose_ID INTEGER,
-            {columns},
-            FOREIGN KEY (Pose_ID) REFERENCES RESULTS(Pose_ID));""".format(
-            columns=interact_columns_str
-        )
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
-            cur.execute(interaction_bv_table)
-            cur.close()
-            self.logger.debug("Interaction bitvector table has been created")
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                f"Error while creating interaction bitvector table: {e}."
-            ) from e
-
     def _create_interaction_table(self):
         """Create table a "tall-skinny" table of each pose-interaction.
         This table enables proper handling of duplicates if specified.
         Columns are:
         interaction_pose_id INTERGER PRIMARY KEY AUTOINCREMENT,
         Pose_ID             INTEGER FOREIGN KEY from RESULTS,
-        interaction_type    VARCHAR[],
-        rec_chain           VARCHAR[],
-        rec_resname         VARCHAR[],
-        rec_resid           VARCHAR[],
-        rec_atom            VARCHAR[],
-        rec_atomid          VARCHAR[],
-
+        interaction_id      INTEGER FOREIGN KEY from Interaction_indices
 
         Raises:
             DatabaseTableCreationError: Description
         """
 
         interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        interaction_pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
         Pose_ID   INTEGER,
-        interaction_type    VARCHAR[],
-        rec_chain           VARCHAR[],
-        rec_resname         VARCHAR[],
-        rec_resid           VARCHAR[],
-        rec_atom            VARCHAR[],
-        rec_atomid          VARCHAR[],
-        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID))"""
+        interaction_id INTEGER,
+        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID),
+        FOREIGN KEY (interaction_id) REFERENCES Interaction_indices(interaction_id))"""
 
         try:
             cur = self.conn.cursor()
@@ -1379,16 +1327,10 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseInsertionError
         """
-
         sql_insert = """INSERT INTO Interactions 
                             (Pose_ID,
-                            interaction_type,
-                            rec_chain,
-                            rec_resname,
-                            rec_resid,
-                            rec_atom,
-                            rec_atomid)
-                            VALUES (?,?,?,?,?,?,?);"""
+                            interaction_id)
+                            VALUES (?,?);"""
         try:
             cur = self.conn.cursor()
             if not self.duplicate_handling:  # add all results
@@ -1453,121 +1395,44 @@ class StorageManagerSQLite(StorageManager):
 
         return list(interactions)
 
-    def _populate_interaction_index_table(self):
+    def _insert_interaction_index_row(self, interaction_tuple) -> tuple:
+        # change method to _insert_interaction_index
         """
-        Writes to the Interaction_indices table all the unique interactions found in the Interactions table
+        Writes unique interactions and returns the interaction_id of the given interaction
 
         Raises:
             DatabaseInsertionError
         """
-
-        sql_insert = """INSERT INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
-                        SELECT DISTINCT interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid from Interactions;"""
+        # to insert interaction if unique
+        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_id, interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
+                        VALUES (?,?,?,?,?,?,?);"""
+        # to get interaction_id from the given interaction
+        sql_query = f"""SELECT interaction_id FROM Interaction_indices 
+        WHERE interaction_type = ?
+        AND rec_chain = ?
+        AND rec_resname = ?
+        AND rec_resid = ?
+        AND rec_atom = ?
+        AND rec_atomid = ?"""
 
         try:
             cur = self.conn.cursor()
-            cur.execute(sql_insert)
+            cur.execute(sql_query, interaction_tuple)
             self.conn.commit()
+            interaction_index = cur.fetchall()
+            if not interaction_index:
+                # get table length and use that as index
+                interaction_index = (self._get_length_of_table("Interaction_indices"),)
+                input_tuple = interaction_index + interaction_tuple
+                cur.execute(sql_insert, input_tuple)
+                self.conn.commit()
+            else:
+                interaction_index = interaction_index[0]
             cur.close()
-            self.logger.debug("Interaction index table has been populated.")
+            return interaction_index
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error inserting unique interaction tuples in index table: {0}".format(
-                    e
-                )
-            ) from e
-
-    def _generate_interaction_bitvectors_query(self):
-        """Creates the insert statement for inserting interaction bitvectors into database
-
-        Returns:
-            str: sql insert query
-        """
-        # get all interaction columns
-        interaction_ids = self._run_query(
-            """SELECT interaction_id FROM Interaction_indices"""
-        ).fetchall()
-        # this prepares the strings necessary for the insert statements
-        column_str = "Pose_id,"
-        filler_str = "?,"
-        # add "?" for every unique interaction column
-        for i in interaction_ids:
-            column_str += "Interaction_" + str(i[0]) + ", "
-            filler_str += "?,"
-        # strip trailing commas
-        column_str = column_str.rstrip(", ")
-        filler_str = filler_str.rstrip(",")
-
-        return """INSERT INTO Interaction_bitvectors ({columns}) VALUES ({fillers})""".format(
-            columns=column_str, fillers=filler_str
-        )
-
-    def _populate_interaction_bv_table(self):
-        """
-        Writes to the Interaction_bitvectors table the interaction bitvector fingerprint for each pose id.
-
-        Raises:
-            DatabaseInsertionError
-        """
-        # number of unique interactions
-        num_of_interactions = self._get_length_of_table("Interaction_indices")
-
-        # number of poses in the database
-        list_of_poses = self._run_query("""SELECT Pose_id FROM Results""").fetchall()
-        # dict of list that will be used for final db insert
-        dict_of_bitvectors = {}
-
-        # for each pose in db
-        for pose_id in list_of_poses:
-            # create a list of Nulls the length of number of unique interactions
-            pose_bitvector: list = [None] * num_of_interactions
-            # add the empty list to the insert-dict
-            dict_of_bitvectors[str(pose_id[0])] = pose_bitvector
-        # get all pose id and make fingerprints
-        pose_int_query = """SELECT i.Pose_ID, ii.interaction_id 
-                            FROM Interactions i
-                                JOIN Interaction_indices ii
-                                ON i.interaction_type = ii.interaction_type
-                                AND i.rec_chain = ii.rec_chain
-                                AND i.rec_resname = ii.rec_resname
-                                AND i.rec_resid = ii.rec_resid
-                                AND i.rec_atom = ii.rec_atom
-                                AND i.rec_atomid = ii.rec_atomid;"""
-
-        # find all unique interaction IDs per Pose_ID
-        Pose_IDs_Interaction = self._run_query(pose_int_query).fetchall()
-        # for each row in Pose_IDs_Interaction (one row for each interaction):
-        for row in Pose_IDs_Interaction:
-            # grab pose id
-            pose_id = row[0]
-            # grab interaction index
-            int_index = row[1]
-            dict_of_bitvectors[str(pose_id)][int_index - 1] = 1
-        # make dict into tuples
-        list_of_bitvector_tuples = []
-        # convert dictionary of bitvector lists to list of tuples for db insert
-        for item in dict_of_bitvectors.items():
-            # actual bitvector
-            flat_list = item[1]
-            # set pose_id as first element of type int (required by db)
-            flat_list.insert(0, int(item[0]))
-            # make tuple of this new, flattened list
-            datatuple = tuple(flat_list)
-            # add tuple to list of tuples
-            list_of_bitvector_tuples.append(datatuple)
-        # order tuples by pose_id
-        list_of_bitvector_tuples.sort(key=lambda tup: tup[0])
-        try:
-            cur = self.conn.cursor()
-            cur.executemany(
-                self._generate_interaction_bitvectors_query(), list_of_bitvector_tuples
-            )
-            self.conn.commit()
-            cur.close()
-            self.logger.debug("Interaction bitvector table has been populated.")
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error inserting interaction bitvectors in interaction bitvector table: {0}".format(
                     e
                 )
             ) from e
@@ -1595,7 +1460,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _delete_from_interactions_not_in_view(self):
-        """Remove rows from interactions and interaction_bitvectors tables if they did not pass filtering.
+        """Remove rows from interactions table if they did not pass filtering.
 
         Raises:
             StorageError: Description
@@ -1604,11 +1469,6 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Interactions WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
-                    view=self.bookmark_name
-                )
-            )
-            cur.execute(
-                "DELETE FROM Interaction_bitvectors WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
                     view=self.bookmark_name
                 )
             )
@@ -1685,6 +1545,9 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
             )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS allind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
+            )
             self.conn.commit()
             cur.close()
             self.logger.info("Indicies were created for specified Results columns.")
@@ -1705,6 +1568,17 @@ class StorageManagerSQLite(StorageManager):
             self.logger.info("Existing indicies pertaining to filtering were dropped.")
         except sqlite3.OperationalError as e:
             raise StorageError("Error while dropping indices") from e
+
+    def _delete_table(self, table_name: str):
+        """
+        Method to delete a table
+
+        Args:
+            table_name (str): table to be dropped
+
+        """
+        query = f"""DROP TABLE IF EXISTS {table_name};"""
+        return self._run_query(query)
 
     # endregion
 
@@ -2126,9 +2000,10 @@ class StorageManagerSQLite(StorageManager):
         if len(cur.fetchall()) == 0:
             return None
 
-        query = "SELECT interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid FROM Interactions WHERE Pose_ID = {0}".format(
-            Pose_ID
-        )
+        query = f"""SELECT ii.interaction_type, ii.rec_chain, ii.rec_resname, ii.rec_resid, ii.rec_atom, ii.rec_atomid 
+        FROM Interaction_indices ii 
+        JOIN Interactions i ON i.interaction_id = ii.interaction_id
+        WHERE i.Pose_ID = {Pose_ID}"""
 
         return self._run_query(query).fetchall()
 
@@ -2309,6 +2184,7 @@ class StorageManagerSQLite(StorageManager):
             view_strs.append(f"SELECT * FROM {self.bookmark_name + '_' + str(i)}")
 
         bookmark_name = f"{self.bookmark_name}_union"
+        self.logger.debug("Saving union bookmark...")
         union_view_query = " UNION ".join(view_strs)
         union_select_query = " UNION ".join(selection_strs)
         if not self.output_all_poses:
@@ -2531,16 +2407,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: SQLite-formatted string for filtering query
         """
-        # before we do anything, check that the DB version matches the version number of our module
-        rt_version_same, db_rt_version = self.check_ringtaildb_version()
-        if not rt_version_same:
-            # NOTE will cause error when any version int is > 10
-            # catch version 1.0.0 where returned db_rt_version will be 0
-            if db_rt_version == 0:
-                db_rt_version = 100  # TODO update this for new ringtail version and db schema version
-            raise StorageError(
-                f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
-            )
+
         energy_filter_col_name = {
             "eworst": "docking_score",
             "ebest": "docking_score",
@@ -2625,7 +2492,6 @@ class StorageManagerSQLite(StorageManager):
                 )
 
         # for each interaction filter, get the index from the interactions_indices table
-
         interaction_name_to_letter = {
             "vdw_interactions": "V",
             "hb_interactions": "H",
@@ -2642,7 +2508,9 @@ class StorageManagerSQLite(StorageManager):
             for i in interaction_indices:
                 interaction_filter_indices.append(i[0])
 
-            # catch if interaction not found in database
+            # so it creates indexes for specified interactions to keep using in filtering
+
+            # catch if interaction not found in results
             if interaction_filter_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
                     self.logger.warning(
@@ -2664,6 +2532,7 @@ class StorageManagerSQLite(StorageManager):
                     "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
                 )
             # find pose ids for ligands with desired interactions
+            # this query can be joining interaction_indices on the list of indices, and all the columns matching in interactions table (index that table)
             interaction_queries.append(
                 "Pose_ID {include_str} ({interaction_str})".format(
                     include_str=include_str,
@@ -2869,41 +2738,21 @@ class StorageManagerSQLite(StorageManager):
                 # include them in the clustering query
                 cluster_query = with_stmt + cluster_query
             # resulting data
-            leff_poseid_ifps = self._run_query(cluster_query).fetchall()
+            # new
+            poseid_leffs = self._run_query(cluster_query).fetchall()
+            cluster_poseids = [poseid_leff[0] for poseid_leff in poseid_leffs]
+            poseid_bvs = self._generate_interaction_bitvectors(cluster_poseids)
 
-            def make_bitstring(pose_bv):
-                """
-                Make bitstring from bitvector
-
-                Args:
-                    pose_bv (list): bitvector
-
-                Raises:
-                    RuntimeError
-
-                Returns:
-                    str: bitstring
-                """
-                bs = ""
-                for i in pose_bv:
-                    if i is None:
-                        bs += "0"
-                    elif i == 1:
-                        bs += "1"
-                    else:
-                        raise RuntimeError(
-                            f"Unrecognized character {i} in interaction bitvector."
-                        )
-                return bs
-
-            # ((())) uses bitstring from bitvector (first three elements are energy, table id, and pose id)
-            # (()) to create fingerprint (CreateFromBitString)
-            # () which all comes together in a datastructure
-            # on which the clusterFps method is ran
+            # create a list of tuples from the query data and bitvector
+            poseid_leff_bvs = [
+                (poseid_leff[0], poseid_leff[1], poseid_bvs[str(poseid_leff[0])])
+                for poseid_leff in poseid_leffs
+            ]
+            # index 2 is the bitvector string element
             bclusters = clusterFps(
                 [
-                    DataStructs.CreateFromBitString(make_bitstring(pose[3:]))
-                    for pose in leff_poseid_ifps
+                    DataStructs.CreateFromBitString(poseid_leff_bv[2])
+                    for poseid_leff_bv in poseid_leff_bvs
                 ],
                 self.interaction_cluster,
             )
@@ -2913,18 +2762,22 @@ class StorageManagerSQLite(StorageManager):
 
             # select ligand from each cluster with best ligand efficiency
             int_rep_poseids = []
-            for c in bclusters:
+
+            for cluster in bclusters:
+                # element 1 in individual pose id item is the ligand efficiency (leff)
                 c_leffs = np.array(
-                    [leff_poseid_ifps[i][0] for i in c]
-                )  # beware magic numbers
-                # element 2 ([2]) in each leff_poseid_ifps row is the pose_id
-                best_lig_c = leff_poseid_ifps[c[np.argmin(c_leffs)]][2]
+                    [poseid_leff_bvs[cluster_element][1] for cluster_element in cluster]
+                )
+                # beware magic numbers
+
+                # element 0 ([0]) in each leff_poseid_ifps row is the pose_id
+                best_lig_c = poseid_leff_bvs[cluster[np.argmin(c_leffs)]][0]
                 int_rep_poseids.append(str(best_lig_c))
 
-            # element 2 ([2]) in each leff_poseid_ifps row is the pose_id
+            # element 0 ([0]) in each leff_poseid_ifps row is the pose_id
             self._insert_cluster_data(
                 bclusters,
-                [l[2] for l in leff_poseid_ifps],
+                [l[0] for l in poseid_leff_bvs],
                 "ifp",
                 str(self.interaction_cluster),
             )
@@ -2992,7 +2845,31 @@ class StorageManagerSQLite(StorageManager):
             f"SELECT * FROM {self.filtering_window}",
         )  # sql_query, view_query
 
+    def _generate_interaction_bitvectors(self, pose_ids: list) -> dict:
+        # create a list of 0 items the length of interaction_indices table
+        ii_length = self._get_length_of_table("Interaction_indices")
+        # for each pose id, get a list of interaction_indices from joining the two tables i and ii
+        poseid_intind_query = f"""SELECT Pose_ID, interaction_id
+                                    FROM Interactions
+                                    WHERE Pose_ID IN {tuple(pose_ids)}"""  # TODO bad practice to cast and cast
+        poseid_intinds = self._run_query(poseid_intind_query).fetchall()
+
+        # make dict of pose id and bitvector
+        poseid_bvlist = {str(pose_id): [0] * ii_length for pose_id in pose_ids}
+        # iterate over the tuple results from the query
+        for poseid_intind in poseid_intinds:
+
+            poseid_bvlist[str(poseid_intind[0])][poseid_intind[1] - 1] = 1
+
+        # join list as string without any delimiter
+        poseid_bv = {
+            key: "".join(map(str, value)) for (key, value) in poseid_bvlist.items()
+        }
+        # return dict of pose id as string and bitvector
+        return poseid_bv
+
     def _generate_interaction_index_filtering_query(self, interaction_list):
+        # TODO I think this method can be combined with the next method
         """takes list of interaction info for a given ligand,
             looks up corresponding interaction index
 
@@ -3037,14 +2914,11 @@ class StorageManagerSQLite(StorageManager):
             str: SQLite-formatted query
         """
 
-        return (
-            "SELECT Pose_id FROM (SELECT * FROM Interaction_bitvectors WHERE Pose_ID IN subq) WHERE "
-            + " OR ".join(
-                [
-                    "Interaction_{index_n} = 1".format(index_n=index)
-                    for index in interaction_index_list
-                ]
-            )
+        return """SELECT Pose_id FROM (SELECT Pose_ID, interaction_id
+                                        FROM Interactions
+                                        WHERE Pose_ID IN subq) 
+                    WHERE """ + """ OR """.join(
+            [f"""interaction_id={index}""" for index in interaction_index_list]
         )
 
     def _generate_ligand_filtering_query(self, ligand_filters):
@@ -3295,6 +3169,9 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(
                 "CREATE INDEX allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
             )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS allind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
+            )
             try:
                 self.conn.commit()
                 cur.close()
@@ -3312,13 +3189,25 @@ class StorageManagerSQLite(StorageManager):
         return consent
 
     def _update_db_110_to_200(self):
-        cur = self.conn.cursor()
+        """
+        Method to update from database v 1.1.0 to 2.0.0, will remove bitvetor table and create Interaction table
+
+        Raises:
+            DatabaseConnectionError
+            StorageError
+        """
+        # delete interaction table if necessary
+        self._delete_table("Interactions")
+        # create interaction table
+        self._create_interaction_table()
+
         # get all interaction bitvector tuples
+        cur = self.conn.cursor()
         cur.execute("SELECT * FROM Interaction_bitvectors")
-        table_tuple = cur.fetchall()
+
         pose_indices = []
         # for each table entry
-        for entry in table_tuple:
+        for entry in cur:
             # pose id is firste element of tuple
             pose_id = entry[0]
             # enumerate the remaining (1:) tuple data which are all the bits
@@ -3329,49 +3218,13 @@ class StorageManagerSQLite(StorageManager):
                     pose_indices.append((pose_id, index + 1))
 
         try:
-            # create temporary table with this data to use in next join statement
-            cur.execute("""CREATE TEMP TABLE temp_pose_index (Pose_ID, int_index);""")
-            # insert tuples created from the previous for for loop
+            # just populate the Interaction table straight
             cur.executemany(
-                """INSERT INTO temp_pose_index (Pose_ID, int_index) VALUES (?,?);""",
+                """INSERT INTO Interactions (Pose_id, Interaction_id) VALUES (?,?)""",
                 pose_indices,
             )
             # drop old bitvector table
             cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
-            self.conn.commit()
-        except sqlite3.OperationalError as e:
-            raise DatabaseConnectionError(
-                f"Error while deleting old bitvector table: {e}"
-            ) from e
-
-        # create new tables to hold interactions and new bit vectors
-        self._create_interaction_table()
-        self._create_interaction_bitvector_table()  # table name Interaction_bitvectors
-
-        # populate Interactions table based on temp table and interaction_indices table
-        sql_insert = """INSERT INTO Interactions 
-                            (Pose_ID,
-                            interaction_type,
-                            rec_chain,
-                            rec_resname,
-                            rec_resid,
-                            rec_atom,
-                            rec_atomid)
-                        SELECT 
-                            tpi.Pose_ID,
-                            ii.interaction_type,
-                            ii.rec_chain,
-                            ii.rec_resname,
-                            ii.rec_resid,
-                            ii.rec_atom,
-                            ii.rec_atomid
-                        FROM Interaction_indices ii
-                        JOIN temp_pose_index tpi
-                            ON tpi.int_index = ii.interaction_id;"""
-
-        cur.execute(sql_insert)
-
-        try:
             self.conn.commit()
             self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
         except sqlite3.OperationalError as e:
@@ -3382,9 +3235,6 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError(
                 f"Error while setting the database schema version: {e}"
             ) from e
-
-        # popoulate bitvector string table
-        self._populate_interaction_bv_table()
 
     def _create_connection(self):
         """Creates database connection to self.db_file
