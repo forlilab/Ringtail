@@ -233,7 +233,6 @@ class StorageManager:
         filter_results_str, view_query = self._generate_result_filtering_query(
             all_filters
         )
-
         self.logger.debug(f"Query for filtering results: {filter_results_str}")
 
         # if max_miss is not 0, we want to give each passing view a new name by changing the self.bookmark_name
@@ -1687,8 +1686,10 @@ class StorageManagerSQLite(StorageManager):
             temp_flag = "TEMP "
         else:
             temp_flag = ""
-        query = f"CREATE {temp_flag}VIEW {name} AS {query}"
-        self._create_view(name, query)
+        query = "CREATE {temp_flag}VIEW {name} AS {query}".format(
+            name=name, query=query, temp_flag=temp_flag
+        )
+        self._create_view(name=name, query=query)
         self._insert_bookmark_info(name, query, filters)
         self.logger.debug(f"Created bookmark from the following query: {query}")
 
@@ -2510,7 +2511,7 @@ class StorageManagerSQLite(StorageManager):
 
             # so it creates indexes for specified interactions to keep using in filtering
 
-            # catch if interaction not found in results
+            # catch if interaction not found in database
             if interaction_filter_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
                     self.logger.warning(
@@ -2522,6 +2523,7 @@ class StorageManagerSQLite(StorageManager):
                             i=":".join(interaction[:4])
                         )
                     )
+                continue
             # determine include/exclude string
             if interaction[-1] is True:
                 include_str = "IN"
@@ -2667,8 +2669,9 @@ class StorageManagerSQLite(StorageManager):
         elif queries == [] and interaction_queries == [] and clustering:
             # allows for clustering without filtering
             unclustered_query = f"SELECT Pose_id FROM {self.filtering_window}"
+            self.logger.info("Preparing to cluster results")
             self.logger.warning(
-                "Preparing to cluster results without any filters, this can take significant time if not performed on pre-filtered data."
+                "If clustering is not performed on a pre-filtered bookmark, thhe clustering process will be very slow."
             )
         else:
             with_stmt = f"WITH subq as (SELECT Pose_id FROM {self.filtering_window}) "
@@ -2729,10 +2732,7 @@ class StorageManagerSQLite(StorageManager):
             return cs
 
         if self.interaction_cluster is not None:
-            self.logger.warning(
-                "WARNING: Interaction fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
-            )
-            cluster_query = f"SELECT Results.leff, Interaction_bitvectors.* FROM Interaction_bitvectors INNER JOIN Results ON Results.Pose_ID = Interaction_bitvectors.Pose_ID WHERE Results.Pose_ID IN ({unclustered_query})"
+            cluster_query = f"SELECT Pose_ID, leff FROM Results WHERE Pose_ID IN ({unclustered_query})"
             # if interaction filters are present
             if interaction_queries != []:
                 # include them in the clustering query
