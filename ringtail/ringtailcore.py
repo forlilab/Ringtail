@@ -42,7 +42,7 @@ class RingtailCore:
         db_file: str = "output.db",
         storage_type: str = "sqlite",
         docking_mode: str = "dlg",
-        logging_level: str = "DEBUG",
+        logging_level: str = "WARNING",
         logging_file: str = None,
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
@@ -855,7 +855,6 @@ class RingtailCore:
         self.outputman = OutputManager(
             self.outputopts.log_file, self.outputopts.export_sdf_path
         )
-        print("         this is the output manager", self.outputman)
         self.logger.info("Options for output manager have been changed.")
 
     def set_filters(
@@ -1406,10 +1405,13 @@ class RingtailCore:
                         self.outputman.log_num_passing_ligands(number_passing)
                         print("\nNumber of ligands passing filters:", number_passing)
                         ligands_passed = number_passing
-                else:
+                elif len(interaction_combs) > 1:
                     self.logger.warning(
-                        "WARNING: No ligands found passing filters, no bookmark created"
+                        f"WARNING: No ligands found passing given interaction combination {combination}"
                     )
+                    self.storageman.drop_bookmark(self.storageman.bookmark_name)
+                else:
+                    self.logger.warning(f"WARNING: No ligands found passing filter.")
                     self.storageman.drop_bookmark(self.storageman.bookmark_name)
             if len(interaction_combs) > 1:
                 maxmiss_union_results = self.storageman.get_maxmiss_union(
