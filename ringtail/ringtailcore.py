@@ -86,8 +86,9 @@ class RingtailCore:
 
     def update_database_version(self, consent=False, new_version="2.0.0"):
         """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
-
-        return self.storageman.update_database_version(new_version, consent)
+        with self.storageman:
+            self.storageman.update_database_version(new_version, consent)
+        # return self.storageman.update_database_version(new_version, consent)
 
     # -#-#- Private methods -#-#-#
 
@@ -365,7 +366,8 @@ class RingtailCore:
                 flexres_saved_coords,
                 properties,
             )
-
+        # add ligand name to properties
+        properties["_Name"] = ligname
         # add hydrogens to mols
         lig_h_parents = [int(idx) for idx in json.loads(h_parent_line)]
         mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
@@ -853,6 +855,7 @@ class RingtailCore:
         self.outputman = OutputManager(
             self.outputopts.log_file, self.outputopts.export_sdf_path
         )
+        print("         this is the output manager", self.outputman)
         self.logger.info("Options for output manager have been changed.")
 
     def set_filters(
@@ -1431,7 +1434,7 @@ class RingtailCore:
 
     def write_molecule_sdfs(
         self,
-        sdf_path: str = None,
+        sdf_path: str | None = None,
         all_in_one: bool = True,
         bookmark_name: str = None,
         write_nonpassing: bool = None,
@@ -1451,6 +1454,8 @@ class RingtailCore:
 
         if sdf_path is not None:
             self.set_output_options(export_sdf_path=sdf_path)
+        else:
+            self.set_output_options(export_sdf_path=".")
         try:
             all_mols = self.ligands_rdkit_mol(
                 bookmark_name=bookmark_name, write_nonpassing=write_nonpassing
