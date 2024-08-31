@@ -43,7 +43,6 @@ class RingtailCore:
         storage_type: str = "sqlite",
         docking_mode: str = "dlg",
         logging_level: str = "WARNING",
-        logging_file: str = None,
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
         Can set logger level here, otherwise change it by logger.setLevel("level")
@@ -58,15 +57,11 @@ class RingtailCore:
         # Initiate logging
         self.logger = LOGGER
         self.logger.set_level(logging_level)
-        # create log file handler if requested
-        if logging_file is not None and self.logger._log_fp is None:
-            self.logger.add_filehandler(logging_file)
+        # create log file handler if log level is debug
+        if self.logger.level() == "DEBUG":
+            self.logger.add_filehandler()
 
-        elif logging_file is not None and self.logger._log_fp is not None:
-            self.logger.warning(
-                f"A logging file already exist and will be used: {self.logger._log_fp.baseFilename}"
-            )
-        self.logger.warning(
+        self.logger.info(
             f"[     New RingtailCore object initialized with database file {db_file}    ]"
         )
         # Check if storage type is implemented

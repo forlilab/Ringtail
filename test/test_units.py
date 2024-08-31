@@ -410,7 +410,7 @@ class TestRingtailCore:
 
     def test_db_num_poses_warning(self):
         # make sure we make ringtail core object with log file
-        rtc = RingtailCore(db_file="output.db", logging_file="ringtail")
+        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
 
         # add results with max poses = 1
         rtc.add_results_from_files(
@@ -498,10 +498,10 @@ class TestVinaHandling:
         assert count == 45
 
     def test_db_dockingmode_warning(self):
-        rtc = RingtailCore(db_file="output.db", logging_file="ringtail")
+        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
         rtc.add_results_from_files(file="test_data/adgpu/group1/1451.dlg.gz")
         rtc = RingtailCore(
-            db_file="output.db", docking_mode="vina", logging_file="ringtail"
+            db_file="output.db", docking_mode="vina", logging_level="DEBUG"
         )
         rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
 
@@ -659,6 +659,5 @@ class TestOptions:
         assert count_new_db == 2
 
     def test_remove_test_log_files(self):
-        # Alter this method if you wish to delete all log files after testing automatically
-        return
+        # Alter this method if you wish to not delete all log files after testing automatically
         os.system("rm *_ringtail.log")

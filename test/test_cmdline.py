@@ -210,7 +210,6 @@ class TestOutputs:
         os.system("rm query.csv")
 
     def test_interaction_tolerance(self):
-        # TODO rewrite
         status_notol = os.system(
             "python ../scripts/rt_process_vs.py write -d --file test_data/adgpu/group1/127458.dlg.gz"
         )
