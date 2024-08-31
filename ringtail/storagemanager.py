@@ -126,7 +126,7 @@ class StorageManager:
         Methods to finalize when a database has been written to, and saving the current database schema to the sqlite database.
         """
         # index certain tables
-        self._create_indices()  # TODO maybe add indexing the long interactions table
+        self._create_indices()
         # set version of the database
         self._set_ringtail_db_schema_version(self._db_schema_ver)
         self.logger.info("Database write session completed successfully.")
@@ -2467,7 +2467,7 @@ class StorageManagerSQLite(StorageManager):
             # write hb count filter(s)
             if filter_key == "hb_count":
                 for k, v in filter_value:
-                    # TODO implement other interaction count filters
+                    # NOTE here if implementing other interaction count filters
                     if k != "hb_count":
                         continue
                     self.index_columns.append("num_hb")
@@ -2740,7 +2740,12 @@ class StorageManagerSQLite(StorageManager):
             # resulting data
             # new
             poseid_leffs = self._run_query(cluster_query).fetchall()
-            cluster_poseids = [poseid_leff[0] for poseid_leff in poseid_leffs]
+            cluster_poseids = (
+                "("
+                + ",".join(map(str, [(poseid_leff[0]) for poseid_leff in poseid_leffs]))
+                + ")"
+            )
+            print("           cluster pose id", cluster_poseids)
             poseid_bvs = self._generate_interaction_bitvectors(cluster_poseids)
 
             # create a list of tuples from the query data and bitvector
@@ -2845,20 +2850,20 @@ class StorageManagerSQLite(StorageManager):
             f"SELECT * FROM {self.filtering_window}",
         )  # sql_query, view_query
 
-    def _generate_interaction_bitvectors(self, pose_ids: list) -> dict:
+    def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
         # create a list of 0 items the length of interaction_indices table
         ii_length = self._get_length_of_table("Interaction_indices")
         # for each pose id, get a list of interaction_indices from joining the two tables i and ii
         poseid_intind_query = f"""SELECT Pose_ID, interaction_id
                                     FROM Interactions
-                                    WHERE Pose_ID IN {tuple(pose_ids)}"""  # TODO bad practice to cast and cast
+                                    WHERE Pose_ID IN {pose_ids}"""
         poseid_intinds = self._run_query(poseid_intind_query).fetchall()
-
+        # cast string to list
+        pose_id_list = list((pose_ids.strip("()")).split(","))
         # make dict of pose id and bitvector
-        poseid_bvlist = {str(pose_id): [0] * ii_length for pose_id in pose_ids}
+        poseid_bvlist = {(pose_id): [0] * ii_length for pose_id in pose_id_list}
         # iterate over the tuple results from the query
         for poseid_intind in poseid_intinds:
-
             poseid_bvlist[str(poseid_intind[0])][poseid_intind[1] - 1] = 1
 
         # join list as string without any delimiter
