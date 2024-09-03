@@ -5,6 +5,8 @@
 #
 
 import numpy as np
+import tempfile
+import meeko
 from meeko import PDBQTReceptor
 
 
@@ -18,7 +20,12 @@ class InteractionFinder:
 
     def __init__(self, rec_string, interaction_cutoff_radii):
         self.rec_string = rec_string
-        self.pdb = PDBQTReceptor(rec_string)
+        try:
+            self.pdb = PDBQTReceptor(rec_string)
+        except OSError as e:
+            with tempfile.NamedTemporaryFile(dir="/dev/shm", mode="wt") as f:
+                f.write(rec_string)
+                self.pdb = PDBQTReceptor(f.name)
         self.interaction_cutoff_radii = interaction_cutoff_radii
 
     def find_pose_interactions(
