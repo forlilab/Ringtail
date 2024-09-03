@@ -41,7 +41,7 @@ class RaccoonLogger:
         # set the log level for the overal logger
         self.logger.setLevel(log_level)
         # configure the optional log file, if provided
-        if self.logger.level is "DEBUG":
+        if self.logger.level == "DEBUG":
             self.add_filehandler(log_file)
         else:
             self._log_fp = None
