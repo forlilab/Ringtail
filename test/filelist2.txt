@@ -1,2 +1,0 @@
-test_data/group1/272275.dlg.gz
-test_data/group3/80807.dlg.gz

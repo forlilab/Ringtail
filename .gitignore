@@ -167,3 +167,14 @@ cython_debug/
 
 # customs
 GUI/img/ringtail_logo.png
+HanselHarris\&_2023.pdf
+HanselHarris\&_2023_suppl.pdf
+ringtail/scraptest.py 
+.vscode/
+util_files/
+*.DS_Store
+.DS_Store
+test/test_data/.DS_Store
+test/.DS_Store
+*_ringtail-process-log.txt
+*.db

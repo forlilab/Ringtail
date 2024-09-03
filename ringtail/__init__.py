@@ -5,15 +5,18 @@
 #
 
 from .cloptionparser import CLOptionParser
+from .util import *
 from .storagemanager import StorageManager, StorageManagerSQLite
 from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
-from .parsers import parse_single_dlg, parse_vina_pdbqt
+from .parsers import parse_single_dlg, parse_vina_result
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .ringtailcore import RingtailCore
+from .ringtailoptions import *
+
+from .logutils import *
 from .outputmanager import OutputManager
-from .filters import Filters
 from .interactions import InteractionFinder
 from .exceptions import (
     StorageError,
@@ -36,12 +39,11 @@ __all__ = [
     "DockingFileReader",
     "Writer",
     "parse_single_dlg",
-    "parse_vina_pdbqt",
+    "parse_vina_result",
     "ReceptorManager",
     "ResultsManager",
     "RingtailCore",
     "OutputManager",
-    "Filters",
     "InteractionFinder",
     "StorageError",
     "DatabaseInsertionError",
@@ -56,4 +58,7 @@ __all__ = [
     "ResultsProcessingError",
     "DatabaseViewCreationError",
     "OutputError",
+    "logutils",
+    "Filters",
+    "util",
 ]
