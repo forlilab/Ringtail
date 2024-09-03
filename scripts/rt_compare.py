@@ -8,10 +8,10 @@ import argparse
 import json
 import sys
 import os
-from ringtail import StorageManagerSQLite
-from ringtail import OutputManager
+from ringtail import StorageManager, StorageManagerSQLite
+from ringtail import OutputManager, OptionError
 from ringtail import OptionError
-import logging
+from ringtail import logutils
 import traceback
 
 
@@ -43,7 +43,7 @@ def cmdline_parser(defaults={}):
     )  # using dict -> str -> dict as a safe copy method
 
     if confargs.config is not None:
-        logging.info("Reading options from config file")
+        logger.info("Reading options from config file")
         with open(confargs.config) as f:
             c = json.load(f)
             config.update(c)
@@ -122,6 +122,12 @@ def cmdline_parser(defaults={}):
     parser.add_argument(
         "--verbose", "-v", help="Verbose output while running", action="store_true"
     )
+    parser.add_argument(
+        "--database_type",
+        "-dbt",
+        help="Specify what database type was used to construct the databases. NOTE: All databases have to be created with the same type.",
+        action="store",
+    )
 
     parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
@@ -137,7 +143,8 @@ def cmdline_parser(defaults={}):
 
 if __name__ == "__main__":
     time0 = time.perf_counter()
-
+    logger = logutils.LOGGER
+    logger.info("Starting a ringtail database compare process")
     try:
         args = cmdline_parser()
 
@@ -156,21 +163,18 @@ if __name__ == "__main__":
         # set logging level
         debug = True
         if debug:
-            level = logging.DEBUG
+            level = logger.set_level("DEBUG")
         elif args.verbose:
-            level = logging.INFO
+            level = logger.set_level("INFO")
         else:
-            level = logging.WARNING
-        logging.basicConfig(
-            level=level, stream=sys.stdout, filemode="w", format="%(message)s"
-        )
-
+            level = logger.set_level("WARNING")
+        logger.add_filehandler("ringtail", level)
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
 
         # check that ref database exists
         if not os.path.exists(wanted_dbs[0]):
-            logging.critical("Wanted database {0} not found!".format(wanted_dbs[0]))
+            logger.critical("Wanted database {0} not found!".format(wanted_dbs[0]))
 
         ref_db = wanted_dbs[0]
         wanted_dbs = wanted_dbs[1:]
@@ -195,80 +199,91 @@ if __name__ == "__main__":
                 for db in unwanted_dbs:
                     bookmark_list.append(original_bookmark_name)
 
-        logging.info("Starting cross-reference process")
+        logger.info("Starting cross-reference process")
 
-        dbman = StorageManagerSQLite(ref_db)
+        # set database type to default sqlite if not specified in cmdline args
+        if args.database_type is None:
+            args.database_type = "sqlite"
+        # ensure the specified database types are supported
+        storagemanager = StorageManager.check_storage_compatibility(args.database_type)
+
+        dbman = storagemanager(ref_db)
 
         last_db = None
         num_wanted_dbs = len(wanted_dbs)
-        for idx, db in enumerate(wanted_dbs):
-            logging.info(f"cross-referencing {db}")
-            if not os.path.exists(db):
-                logging.critical("Wanted database {0} not found!".format(db))
-            previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
-                db,
-                previous_bookmarkname,
-                bookmark_list[idx],
-                selection_type="+",
-                old_db=last_db,
-            )
-            last_db = db
-
-        if unwanted_dbs is not None:
-            for idx, db in enumerate(unwanted_dbs):
-                logging.info(f"cross-referencing {db}")
+        # storageman is a context manager, and keeps connection to the database open within the `with` statement
+        with dbman:
+            for idx, db in enumerate(wanted_dbs):
+                logger.info(f"cross-referencing {db}")
                 if not os.path.exists(db):
-                    logging.critical("Unwanted database {0} not found!".format(db))
+                    logger.critical("Wanted database {0} not found!".format(db))
+                print(
+                    f"passing in these parameters: {db}, {previous_bookmarkname}, {bookmark_list[idx]}, {last_db}"
+                )
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                     db,
                     previous_bookmarkname,
-                    bookmark_list[idx + num_wanted_dbs],
-                    selection_type="-",
+                    bookmark_list[idx],
+                    selection_type="+",
                     old_db=last_db,
                 )
                 last_db = db
 
-        logging.info("Writing log")
-        output_manager = OutputManager(args.log)
-        if args.save_bookmark is not None:
-            output_manager.write_results_bookmark_to_log(args.save_bookmark)
-        output_manager.log_num_passing_ligands(number_passing_ligands)
-        final_bookmark = dbman.fetch_view(previous_bookmarkname)
-        output_manager.write_log(final_bookmark)
+            if unwanted_dbs is not None:
+                for idx, db in enumerate(unwanted_dbs):
+                    logger.info(f"cross-referencing {db}")
+                    if not os.path.exists(db):
+                        logger.critical("Unwanted database {0} not found!".format(db))
+                    previous_bookmarkname, number_passing_ligands = (
+                        dbman.crossref_filter(
+                            db,
+                            previous_bookmarkname,
+                            bookmark_list[idx + num_wanted_dbs],
+                            selection_type="-",
+                            old_db=last_db,
+                        )
+                    )
+                    last_db = db
 
-        if args.save_bookmark is not None:
-            dbman.save_temp_table(
-                previous_bookmarkname,
-                args.save_bookmark,
-                original_bookmark_name,
-                args.wanted,
-                args.unwanted,
-            )
+            logger.info("Writing log")
+            output_manager = OutputManager(log_file=args.log)
+            with output_manager:
+                if args.save_bookmark is not None:
+                    output_manager.write_results_bookmark_to_log(args.save_bookmark)
+                output_manager.log_num_passing_ligands(number_passing_ligands)
+                final_bookmark = dbman.fetch_bookmark(previous_bookmarkname)
+                output_manager.write_filter_log(final_bookmark)
 
-        if args.export_csv:
             if args.save_bookmark is not None:
-                csv_name = args.save_bookmark + ".csv"
-            else:
-                csv_name = "crossref.csv"
-            output_manager.export_csv(previous_bookmarkname, csv_name, True)
+                dbman.create_bookmark_from_temp_table(
+                    previous_bookmarkname,
+                    args.save_bookmark,
+                    original_bookmark_name,
+                    args.wanted,
+                    args.unwanted,
+                )
 
-        logging.info(
+            if args.export_csv:
+                if args.save_bookmark is not None:
+                    csv_name = args.save_bookmark + ".csv"
+                else:
+                    csv_name = "crossref.csv"
+                dataframe = dbman.to_dataframe(previous_bookmarkname, table=True)
+                dataframe.to_csv(csv_name)
+                logger.info("Exported bookmark to csv")
+
+        logger.info(
             "Time to cross-reference: {0:.0f} seconds".format(
                 time.perf_counter() - time0
             )
         )
+        logger.info("Database comparison process complete.")
 
     except Exception as e:
         tb = traceback.format_exc()
-        logging.debug(tb)
-        logging.critical(e)
-        logging.error(
+        logger.debug(tb)
+        logger.critical(str(e))
+        logger.error(
             "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
         )
         sys.exit(1)
-
-    finally:
-        try:
-            dbman.close_storage()
-        except NameError:
-            pass
