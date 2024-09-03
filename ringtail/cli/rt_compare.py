@@ -140,8 +140,7 @@ def cmdline_parser(defaults={}):
 
     return args
 
-
-if __name__ == "__main__":
+def main():
     time0 = time.perf_counter()
     logger = logutils.LOGGER
     logger.info("Starting a ringtail database compare process")
@@ -287,3 +286,7 @@ if __name__ == "__main__":
             "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
         )
         sys.exit(1)
+    return
+
+if __name__ == "__main__":
+    sys.exit(main())

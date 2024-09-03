@@ -10,12 +10,7 @@ from ringtail import RingtailCore
 from ringtail import logutils
 import traceback
 
-if __name__ == "__main__":
-    """Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries
-    and options that are then used with the ringtail core api.
-    This script will allow either a write or a read session at the time.
-    Available database operations are described in the readme.md document of this codebase.
-    """
+def main():
     time0 = time.perf_counter()
 
     try:
@@ -113,3 +108,12 @@ if __name__ == "__main__":
     )
     if logger.level() in ["DEBUG", "INFO"]:
         print(cmdinput.parser.epilog)
+    return
+
+if __name__ == "__main__":
+    """Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries
+    and options that are then used with the ringtail core api.
+    This script will allow either a write or a read session at the time.
+    Available database operations are described in the readme.md document of this codebase.
+    """
+    sys.exit(main())
