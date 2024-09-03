@@ -19,16 +19,6 @@ def find_files(directory):
 
     return matches
 
-
-required_modules = [
-    "rdkit>=2022.03.2",
-    "scipy>=1.8.0",
-    "meeko>=0.5",
-    "matplotlib",
-    "pandas",
-    "multiprocess>=0.70.13",
-]
-
 setup(
     name="ringtail",
     version="2.0.0",
@@ -39,18 +29,8 @@ setup(
     long_description=open(os.path.join(base_dir, "README.md")).read(),
     long_description_content_type="text/markdown",
     packages=find_packages(),
-    scripts=[
-        "scripts/rt_process_vs.py",
-        "scripts/rt_compare.py",
-        "scripts/rt_db_v100_to_v110.py",
-        "scripts/rt_db_to_v200.py",
-        "scripts/rt_generate_config_file.py",
-    ],
-    data_files=[("", ["README.md", "LICENSE"]), ("scripts", find_files("scripts"))],
     include_package_data=True,
     zip_safe=False,
-    install_requires=required_modules,
-    python_requires=">=3.10",
     license="L-GPL-v2.1",
     keywords=[
         "virtual screening",
@@ -74,4 +54,13 @@ setup(
         "Topic :: Scientific/Engineering :: Chemistry",
         "Topic :: Software Development :: Libraries",
     ],
+    entry_points={
+        'console_scripts': [
+            'rt_process_vs=ringtail.cli.rt_process_cs:main',
+            'rt_compare=ringtail.cli.rt_compare:main',
+            'rt_db_v100_to_v110=ringtail.cli.rt_db_v100_to_v110:main',
+            'rt_db_to_v200=ringtail.cli.rt_db_to_v200:main',
+            'rt_generate_config_file=ringtail.cli.rt_generate_config_file:main'
+        ]
+    }
 )
