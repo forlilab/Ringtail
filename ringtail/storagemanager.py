@@ -2747,7 +2747,6 @@ class StorageManagerSQLite(StorageManager):
                 + ",".join(map(str, [(poseid_leff[0]) for poseid_leff in poseid_leffs]))
                 + ")"
             )
-            print("           cluster pose id", cluster_poseids)
             poseid_bvs = self._generate_interaction_bitvectors(cluster_poseids)
 
             # create a list of tuples from the query data and bitvector
