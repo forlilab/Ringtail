@@ -43,6 +43,6 @@ jobs:
         if: github.event_name == 'release' && github.event.action == 'published'
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          TWINE_PASSWORD: ${{ secrets.__TOKEN__ }}
         run: |
           twine upload dist/*
