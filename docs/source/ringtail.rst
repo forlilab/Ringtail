@@ -30,14 +30,6 @@ ringtail.interactions module
    :undoc-members:
    :show-inheritance:
 
-ringtail.logmanager module
---------------------------
-
-.. automodule:: ringtail.logmanager
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 ringtail.mpmanager module
 -------------------------
 
@@ -98,14 +90,6 @@ ringtail.ringtailoptions module
 -------------------------------
 
 .. automodule:: ringtail.ringtailoptions
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-ringtail.scraptest module
--------------------------
-
-.. automodule:: ringtail.scraptest
    :members:
    :undoc-members:
    :show-inheritance:
