@@ -9,6 +9,7 @@ from ringtail import RingtailCore
 import logging
 import sys
 
+
 def main():
     logging.basicConfig(
         level=logging.INFO, stream=sys.stdout, filemode="w", format="%(message)s"
@@ -32,9 +33,10 @@ def main():
     consent = False
 
     for db in args.database:
-        with RingtailCore(db) as rtcore:
-            consent = rtcore.update_database_version(consent, new_version="1.1.0")
+        rtcore = RingtailCore(db)
+        consent = rtcore.update_database_version(consent, new_version="1.1.0")
     return
+
 
 if __name__ == "__main__":
     sys.exit(main())
