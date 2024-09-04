@@ -9,6 +9,7 @@ from ringtail import RingtailCore
 import logging
 import sys
 
+
 def main():
     logging.basicConfig(
         level=logging.INFO, stream=sys.stdout, filemode="w", format="%(message)s"
@@ -33,9 +34,10 @@ def main():
 
     for db in args.database:
         # create a new ringtailcore for each db file to be converted
-        with RingtailCore(db) as rtcore:
-            consent = rtcore.update_database_version(consent, new_version="2.0.0")
+        rtcore = RingtailCore(db)
+        consent = rtcore.update_database_version(consent, new_version="2.0.0")
     return
+
 
 if __name__ == "__main__":
     sys.exit(main())
