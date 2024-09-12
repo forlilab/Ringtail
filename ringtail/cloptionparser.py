@@ -177,6 +177,11 @@ def cmdline_parser(defaults={}):
         action="store_true",
     )
     write_parser.add_argument(
+        "--not_final_write",
+        help="useful when appending to an existing database",
+        action="store_true",
+    )
+    write_parser.add_argument(
         "-dh",
         "--duplicate_handling",
         help='specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.',
@@ -1005,6 +1010,7 @@ class CLOptionParser:
             "results_view_name": parsed_opts.results_view_name,
             "overwrite": parsed_opts.overwrite,
             "append_results": parsed_opts.append_results,
+            "not_final_write": parsed_opts.not_final_write,
             "conflict_opt": conflict_handling,
         }
         for k,v in storage_opts.items():

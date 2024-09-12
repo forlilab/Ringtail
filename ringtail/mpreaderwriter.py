@@ -5,6 +5,7 @@
 #
 
 import platform
+import pathlib
 import time
 import sys
 import logging
@@ -280,15 +281,16 @@ class Writer(multiprocessing.Process):
                     if self.counter >= self.chunksize:
                         self.write_to_storage()
                         # print info about files and time remaining
-                        sys.stdout.write("\r")
-                        sys.stdout.write(
-                            "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
-                                self.num_files_written,
-                                self.num_files_written * 60 / self.total_runtime,
-                                self.total_runtime,
+                        if (self.num_files_written) % 1000 == 0:
+                            # sys.stdout.write("\r")
+                            sys.stdout.write(
+                                "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
+                                    self.num_files_written,
+                                    self.num_files_written * 60 / self.total_runtime,
+                                    self.total_runtime,
+                                ) + pathlib.os.linesep
                             )
-                        )
-                        sys.stdout.flush()
+                            sys.stdout.flush()
 
                     # process next file
                     self.process_file(next_task)
@@ -297,7 +299,7 @@ class Writer(multiprocessing.Process):
                     # received as many poison pills as workers
                     logging.info("Performing final database write")
                     # perform final storage write
-                    self.write_to_storage(final=True)
+                    self.write_to_storage(final=not self.storageman.not_final_write)
                     # no workers left, no job to do
                     logging.info("File processing completed")
                     self.close()

@@ -1183,6 +1183,7 @@ class StorageManagerSQLite(StorageManager):
         self.overwrite = overwrite
         self.conflict_opt = conflict_opt
         self.db_file = db_file
+        self.not_final_write = False
         if _stop_at_defaults:
             return
 
