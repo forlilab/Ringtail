@@ -91,7 +91,7 @@ $ rt_db_v100_to_v110 -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (opti
 Multiple databases may be specified at once. The update may take a few minutes per database.
 
 ### Dependencies 
-- python (> 3.9, tested up to 3.12)
+- python (> 3.9, tested up to 3.11)
 - RDKit
 - SciPy
 - Matplotlib
@@ -111,10 +111,10 @@ Multiple databases may be specified at once. The update may take a few minutes p
 
 ### Installation 
 #### Create a Ringtail environment
-It is necessary to create a Ringtail python environment for managing the external dependencies, conda will be used in the following examples but other environment managers such as the lightweight micromamba will also work. Please note that Ringtail requires Python 3.9 or higher.
+It is necessary to create a Ringtail python environment for managing the external dependencies, conda will be used in the following examples but other environment managers such as the lightweight micromamba will also work. Please note that Ringtail requires Python 3.9, 3.10, or 3.11.
 
 ```bash
-$ conda create -n Ringtail python=3.10
+$ conda create -n Ringtail python=3.11
 $ conda activate ringtail
 ```
 
