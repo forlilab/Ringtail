@@ -91,7 +91,7 @@ The compounds used for the testing dataset were taken from the `NCI Diversity Se
 .. _envsetup:
 Setting up your environment
 **************************
-To set up your environment use for example `conda <https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_ or `micromamba <https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html>`_, and ensure the python version is 3.9, 3.10, 3.11, or 3.12 (Ringtail 2.0.0 has not been tested for other versions). 
+To set up your environment use for example `conda <https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_ or `micromamba <https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html>`_, and ensure the python version is 3.9, 3.10, 3.11, or 3.12 (Ringtail 2.0 has not been tested for other versions). 
 
 .. code-block:: bash
 
