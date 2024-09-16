@@ -106,6 +106,18 @@ By default (for DLGs), Ringtail will store the best-scored (lowest energy) bindi
     rtc.add_results_from_files( file_path = "path2"
                                 max_poses = 5)
 
+Iteratively appending to a database
+------------------------------------
+When results are added to the database, there is a final step where some tables are indexed, and some database properties saved. If you are adding data iteratively through e.g., a for-loop and adding some number at files at once, it is time-consuming (and not necessary) to do this every iteration. Instead, you can invoke the keyword ``finalize=False``, and run the finalization method separately at the end:
+
+.. code-block:: python
+
+    for folder in enumerate("path_with_many_folders"):
+        rtc.add_results_from_files( file_path = folder,
+                                    finalize = False)
+    
+    rtc.finalize_write()
+
 Filtering
 **********
 
