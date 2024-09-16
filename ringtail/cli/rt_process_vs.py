@@ -17,7 +17,6 @@ def main():
     try:
         # set up the logger
         logger = logutils.LOGGER
-        logger.add_filehandler(log_file="ringtail")
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
