@@ -1,17 +1,17 @@
 .. _get_started:
 
-Getting started with Ringtail using the command line interface
-###############################################################
+Getting started
+###############
 
-The Ringtail command line interface is orchestrated through the script ``rt_process_vs.py``.
+The Ringtail command line interface is orchestrated through the script ``rt_process_vs``.
 
 Create and populate a database
 *********************************
-Navigate to the directory containing the data, in our case test_data:
+Navigate to the directory containing the data, in our case test_data from Autodock-GPU (make sure your Ringtail environment is active):
 
 .. code-block:: bash
 
-    $ cd test/test_data/
+    $ cd test/test_data/adgpu
 
 To write to the database we need to specify a few things:
 - that we are using ``write`` mode
@@ -23,13 +23,13 @@ Let us add all docking files within the path test_data (specified by ``.`` meani
 
 .. code-block:: bash
 
-    $ rt_process_vs.py write --file_path . --recursive
+    $ rt_process_vs write --file_path . --recursive
 
 We can print a summary of the contents of the database by using the optional tag ``-su`` or ``--summary`` and specifying the database database from which to ``read``:
 
 .. code-block:: bash
 
-    $ rt_process_vs.py read --input_db output.db -su
+    $ rt_process_vs read --input_db output.db -su
 
     Total Stored Poses: 645
     Total Unique Interactions: 183
@@ -51,7 +51,7 @@ Let us start filtering with a basic docking score cutoff of -6 kcal/mol:
 
 .. code-block:: bash
 
-    $ rt_process_vs.py read --input_db output.db --eworst -6
+    $ rt_process_vs read --input_db output.db --eworst -6
 
 This produces an output log ``output_log.txt`` with the names of ligands passing the filter, as well as their binding energies. Each round of filtering is also stored in the database as a SQLite view, which we refer to as a "bookmark" (default value is ``passing_results``). 
 
@@ -60,38 +60,38 @@ For example, start out with filtering out the compounds that are within the 5th 
 
 .. code-block:: bash
 
-    $ rt_process_vs.py read --input_db output.db --score_percentile 5 --log ep5_log.txt --bookmark_name ep5
+    $ rt_process_vs read --input_db output.db --score_percentile 5 --log ep5_log.txt --bookmark_name ep5
 
 Let's then further refine the set of molecules by applying an interaction filter for van der Waals interactions with V279 on the receptor:
 
 .. code-block:: bash
 
-    $ rt_process_vs.py read --input_db output.db --filter_bookmark ep5 --vdw_interactions A:VAL:279: --log ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
+    $ rt_process_vs read --input_db output.db --filter_bookmark ep5 --vdw_interactions A:VAL:279: --log ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
 
 The filtered molecules can then be exported as an e.g., SDF file which can be used for visual inspection in molecular graphics programs. At the same time, if pymol is installed, we can kick off a pymol session of the ligands
 
 .. code-block:: bash
 
-    $ rt_process_vs.py read --input_db output.db --bookmark_name ep5_vdwV279 --export_sdf_path ep5_vdwV279_sdfs --pymol
+    $ rt_process_vs read --input_db output.db --bookmark_name ep5_vdwV279 --export_sdf_path ep5_vdwV279_sdfs --pymol
 
-Access help message for rt_process_vs.py
-*****************************************
-
-.. code-block:: bash
-
-    $ rt_process_vs.py --help
-
-Access help message for rt_process_vs.py write mode
-***************************************************
+Access help message for rt_process_vs
+**************************************
 
 .. code-block:: bash
 
-    $ rt_process_vs.py write --help
+    $ rt_process_vs --help
 
-Access help message for rt_process_vs.py read mode
-**************************************************
+Access help message for rt_process_vs write mode
+************************************************
 
 .. code-block:: bash
 
-    $ rt_process_vs.py read --help
+    $ rt_process_vs write --help
+
+Access help message for rt_process_vs read mode
+***********************************************
+
+.. code-block:: bash
+
+    $ rt_process_vs read --help
 
