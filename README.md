@@ -161,7 +161,7 @@ If you wish to make the code for Ringtail editable without having to re-run `pip
 $ pip install --editable .
 ```
 
-From source code installation you can test your installation using the automated tests in the `Ringtail/test` directory. To begin, you must install pytest in the Ringtail environment:
+You can test the source code installation using the automated tests in the `Ringtail/test` directory. To begin, you must install pytest in the Ringtail environment:
 
 ```bash
 $ pip install pytest
