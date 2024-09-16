@@ -10,13 +10,14 @@ from ringtail import RingtailCore
 from ringtail import logutils
 import traceback
 
+
 def main():
     time0 = time.perf_counter()
 
     try:
         # set up the logger
         logger = logutils.LOGGER
-        logger.add_filehandler(log_file="ringtail", level="DEBUG")
+        logger.add_filehandler(log_file="ringtail")
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
@@ -109,6 +110,7 @@ def main():
     if logger.level() in ["DEBUG", "INFO"]:
         print(cmdinput.parser.epilog)
     return
+
 
 if __name__ == "__main__":
     """Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries
