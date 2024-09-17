@@ -23,7 +23,7 @@ class InteractionFinder:
         try:
             self.pdb = PDBQTReceptor(rec_string)
         except OSError as e:
-            with tempfile.NamedTemporaryFile(dir="/dev/shm", mode="wt") as f:
+            with tempfile.NamedTemporaryFile(mode="wt") as f:
                 f.write(rec_string)
                 self.pdb = PDBQTReceptor(f.name)
         self.interaction_cutoff_radii = interaction_cutoff_radii

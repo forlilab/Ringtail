@@ -483,8 +483,7 @@ class TestVinaHandling:
 
     def test_add_interactions(self, countrows):
         vina_path = "test_data/vina"
-        rtc = RingtailCore("output.db")
-        rtc.logger.set_level("DEBUG")
+        rtc = RingtailCore("output.db", logging_level="DEBUG")
         rtc.docking_mode = "vina"
         rtc.add_results_from_files(
             file_path=vina_path,
