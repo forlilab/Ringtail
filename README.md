@@ -28,6 +28,8 @@ Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
 
+In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io/en/latest/).
+
 ### New in version 2.0
 ##### Changes in keywords used for the command line tool
 
