@@ -2695,7 +2695,7 @@ class StorageManagerSQLite(StorageManager):
             interaction_queries.append(
                 "Pose_ID {include_str} ({interaction_str})".format(
                     include_str=include_str,
-                    interaction_str=self._generate_interaction_filtering_query(
+                    interaction_str=self._generate_interaction_bv_filtering_query(
                         interaction_filter_indices
                     ),
                 )
