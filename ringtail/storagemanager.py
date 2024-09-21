@@ -262,7 +262,6 @@ class StorageManager:
 
         self.logger.debug("Running filtering query...")
         time0 = time.perf_counter()
-        print("       filter results str", filter_results_str)
         filtered_results = self._run_query(filter_results_str).fetchall()
         self.logger.debug(
             f"Time to run query: {time.perf_counter() - time0:.2f} seconds"
@@ -2106,6 +2105,40 @@ class StorageManagerSQLite(StorageManager):
         query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
         return self._run_query(query)
 
+    def fetch_interaction_info_by_index(self, interaction_idx):
+        """Returns tuple containing interaction info for given interaction_idx
+
+        Args:
+            interaction_idx (int): interaction index to fetch info for
+
+        Returns:
+            tuple: tuple of info for requested interaction
+        """
+        query = "SELECT * FROM Interaction_indices WHERE interaction_id = {0}".format(
+            interaction_idx
+        )
+        return self._run_query(query).fetchone()[1:]  # cut off interaction index
+
+    def fetch_interaction_bitvector(self, pose_id):
+        """Returns tuple containing interaction bitvector line for given pose_id
+
+        Args:
+            pose_id (int): pose id to fetch interaction bitvector for
+
+        Returns:
+            tuple: tuple representing interaction bitvector
+            None: if no interactions in database
+        """
+        # catch if database does not have interactions
+        table_names = [table[0] for table in self._fetch_existing_table_names()]
+        if "Interaction_bitvectors" not in table_names:
+            return None
+
+        query = "SELECT * FROM Interaction_bitvectors WHERE Pose_ID = {0}".format(
+            pose_id
+        )
+        return self._run_query(query).fetchone()[1:]  # cut off pose id
+
     def fetch_pose_interactions(self, Pose_ID):
         """
         Fetch all interactions parameters belonging to a Pose_ID
@@ -2662,7 +2695,7 @@ class StorageManagerSQLite(StorageManager):
             interaction_queries.append(
                 "Pose_ID {include_str} ({interaction_str})".format(
                     include_str=include_str,
-                    interaction_str=self._generate_interaction_bv_filtering_query(
+                    interaction_str=self._generate_interaction_filtering_query(
                         interaction_filter_indices
                     ),
                 )
