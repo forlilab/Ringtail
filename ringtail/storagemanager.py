@@ -1667,6 +1667,7 @@ class StorageManagerSQLite(StorageManager):
         self.conn.commit()
 
     def _create_indices(self):
+        # TODO refactor
         """Create index containing possible filter and order by columns
 
         Raises:
@@ -1675,11 +1676,16 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             self.logger.debug("Creating columns index...")
+
             cur.execute(
-                "CREATE INDEX IF NOT EXISTS allind ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
+                "CREATE INDEX IF NOT EXISTS ak_results ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
+            )
+            cur.execute("CREATE INDEX IF NOT EXISTS ak_poseid ON Results(Pose_id)")
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
             )
             cur.execute(
-                "CREATE INDEX IF NOT EXISTS intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
+                "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
             )
             self.conn.commit()
             cur.close()
@@ -2011,6 +2017,7 @@ class StorageManagerSQLite(StorageManager):
         return cursor.fetchall()
 
     def fetch_data_for_passing_results(self) -> iter:
+        # TODO refactor
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.bookmark_name
 
         Returns:
@@ -2058,6 +2065,7 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError("Error retrieving flexible residue info") from e
 
     def fetch_passing_ligand_output_info(self):
+        # TODO refactor
         """fetch information required by vsmanager for writing out molecules
 
         Returns:
@@ -2068,6 +2076,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query)
 
     def fetch_single_ligand_output_info(self, ligname):
+        # TODO refactor
         """get output information for given ligand
 
         Args:
@@ -2093,6 +2102,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def fetch_single_pose_properties(self, pose_ID: int):
+        # TODO refactor
         """fetch coordinates for pose given by pose_ID
 
         Args:
@@ -2106,6 +2116,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query)
 
     def fetch_interaction_info_by_index(self, interaction_idx):
+        # TODO refactor
         """Returns tuple containing interaction info for given interaction_idx
 
         Args:
@@ -2120,6 +2131,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query).fetchone()[1:]  # cut off interaction index
 
     def fetch_interaction_bitvector(self, pose_id):
+        # TODO refactor
         """Returns tuple containing interaction bitvector line for given pose_id
 
         Args:
@@ -2140,6 +2152,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query).fetchone()[1:]  # cut off pose id
 
     def fetch_pose_interactions(self, Pose_ID):
+        # TODO refactor
         """
         Fetch all interactions parameters belonging to a Pose_ID
 
@@ -2197,6 +2210,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _fetch_passing_plot_data(self, bookmark_name: str | None = None):
+        # TODO refactor
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
 
@@ -2217,6 +2231,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _fetch_ligand_cluster_columns(self):
+        # TODO refactor
         """fetching columns from Ligand_clusters table
 
         Raises:
@@ -2274,6 +2289,7 @@ class StorageManagerSQLite(StorageManager):
             return pd.read_sql_query(requested_data, self.conn)
 
     def _get_length_of_table(self, table_name: str):
+        # TODO refactor
         """
         Finds the rowcount/length of a table based on the rowid
 
@@ -2292,6 +2308,7 @@ class StorageManagerSQLite(StorageManager):
     # region Methods dealing with filtered results
 
     def _get_number_passing_ligands(self, bookmark_name: str | None = None):
+        # TODO refactor
         """Returns count of the number of ligands that
             passed filtering criteria
 
@@ -2322,6 +2339,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def get_maxmiss_union(self, total_combinations: int):
+        # TODO refactor
         """Get results that are in union considering max miss
 
         Args:
@@ -2358,6 +2376,7 @@ class StorageManagerSQLite(StorageManager):
     def fetch_summary_data(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
     ) -> dict:
+        # TODO refactor
         """Collect summary data for database:
             Num Ligands
             Num stored poses
@@ -2411,6 +2430,7 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError("Error while fetching summary data!") from e
 
     def fetch_clustered_similars(self, ligname: str):
+        # TODO refactor
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
 
         Args:
@@ -2471,6 +2491,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(sql_query), self.bookmark_name, cluster_col_choice
 
     def fetch_passing_pose_properties(self, ligname):
+        # TODO refactor
         """fetch coordinates for poses passing filter for given ligand
 
         Args:
@@ -2486,6 +2507,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query)
 
     def fetch_nonpassing_pose_properties(self, ligname):
+        # TODO refactor
         """fetch coordinates for poses of ligname which did not pass the filter
 
         Args:
@@ -2501,6 +2523,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query)
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
+        # TODO refactor
         """Make query for percentile by calculating energy or leff cutoff
 
         Args:
@@ -2535,6 +2558,7 @@ class StorageManagerSQLite(StorageManager):
 
     # region Methods that generate SQLite query strings
     def _generate_outfield_string(self):
+        # TODO refactor
         """string describing outfields to be written
 
         Returns:
@@ -2555,6 +2579,7 @@ class StorageManagerSQLite(StorageManager):
         return ", ".join([self.field_to_column_name[field] for field in outfields_list])
 
     def _generate_result_filtering_query(self, filters_dict):
+        # TODO refactor
         """takes lists of filters, writes sql filtering string
 
         Args:
@@ -2691,7 +2716,6 @@ class StorageManagerSQLite(StorageManager):
             # this query can be joining interaction_indices on the list of indices, and all the columns matching in interactions table (index that table)
             # i think this is where things get slow
             # this method has changed from _generate_interaction_filtering_query to _generate_interaction_bv_filtering_query for testing purposes
-
             interaction_queries.append(
                 "Pose_ID {include_str} ({interaction_str})".format(
                     include_str=include_str,
@@ -3030,6 +3054,7 @@ class StorageManagerSQLite(StorageManager):
         return poseid_bv
 
     def _generate_interaction_index_filtering_query(self, interaction_list):
+        # TODO refactor
         # TODO I think this method can be combined with the next method
         """takes list of interaction info for a given ligand,
             looks up corresponding interaction index
@@ -3065,6 +3090,7 @@ class StorageManagerSQLite(StorageManager):
         return sql_string
 
     def _generate_interaction_filtering_query(self, interaction_index_list):
+        # TODO refactor
         """takes list of interaction indices and searches for ligand ids
             which have those interactions
 
@@ -3083,6 +3109,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _generate_interaction_bv_filtering_query(self, interaction_index_list):
+        # TODO take out, remove bv table
         """takes list of interaction indices and searches for ligand ids
             which have those interactions
 
@@ -3098,6 +3125,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _generate_ligand_filtering_query(self, ligand_filters):
+        # TODO refactor
         """write string to select from ligand table
 
         Args:
@@ -3147,6 +3175,7 @@ class StorageManagerSQLite(StorageManager):
     def _generate_selective_insert_query(
         self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
     ):
+        # TODO refactor
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
 
         Args:
