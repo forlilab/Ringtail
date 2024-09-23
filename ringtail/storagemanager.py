@@ -508,7 +508,6 @@ class StorageManagerSQLite(StorageManager):
         }
         self.view_suffix = None
         self.temptable_suffix = 0
-        self.filtering_window = "Results"  # TODO is this necessary?
         self.open_cursors = []
 
     # region Methods for inserting into/removing from the database
@@ -2562,7 +2561,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: SQLite-formatted string for filtering query
         """
-
+        filtering_window = "Results"
         energy_filter_col_name = {
             "eworst": "docking_score",
             "ebest": "docking_score",
@@ -2592,11 +2591,11 @@ class StorageManagerSQLite(StorageManager):
                     "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
                 )
             # filtering window can be specified bookmark, or whole database (or other reduced versions of db)
-            self.filtering_window = self.filter_bookmark
+            filtering_window = self.filter_bookmark
 
         # write energy filters and compile list of interactions to search for
         queries = []
-        interaction_filters = []
+        interaction_filters = []  # TODO only define when needed
 
         for filter_key, filter_value in filters_dict.items():
             # filter dict contains all possible filters, are None of not specified by user
@@ -2810,30 +2809,30 @@ class StorageManagerSQLite(StorageManager):
             )
         sql_string = output_str = (
             """SELECT {out_columns} FROM {window} WHERE """.format(
-                out_columns=outfield_string, window=self.filtering_window
+                out_columns=outfield_string, window=filtering_window
             )
         )
         if interaction_queries == [] and queries != []:
             joined_queries = " AND ".join(queries)
             sql_string = sql_string + joined_queries
             unclustered_query = (
-                f"SELECT Pose_id FROM {self.filtering_window} WHERE " + joined_queries
+                f"SELECT Pose_id FROM {filtering_window} WHERE " + joined_queries
             )
         elif queries == [] and interaction_queries == [] and clustering:
             # allows for clustering without filtering
-            unclustered_query = f"SELECT Pose_id FROM {self.filtering_window}"
+            unclustered_query = f"SELECT Pose_id FROM {filtering_window}"
             self.logger.info("Preparing to cluster results")
             self.logger.warning(
                 "If clustering is not performed on a pre-filtered bookmark, thhe clustering process will be very slow."
             )
         else:
-            with_stmt = f"WITH subq as (SELECT Pose_id FROM {self.filtering_window}) "
+            with_stmt = f"WITH subq as (SELECT Pose_id FROM {filtering_window}) "
             if queries != []:
                 with_stmt = with_stmt[:-2] + f" WHERE {' AND '.join(queries)}) "
             joined_interact_queries = " AND ".join(interaction_queries)
             sql_string = with_stmt + sql_string + joined_interact_queries
             unclustered_query = (
-                f"SELECT Pose_id FROM {self.filtering_window} WHERE "
+                f"SELECT Pose_id FROM {filtering_window} WHERE "
                 + joined_interact_queries
             )
 
@@ -2997,9 +2996,9 @@ class StorageManagerSQLite(StorageManager):
 
         return sql_string, sql_string.replace(
             """SELECT {out_columns} FROM {window}""".format(
-                out_columns=outfield_string, window=self.filtering_window
+                out_columns=outfield_string, window=filtering_window
             ),
-            f"SELECT * FROM {self.filtering_window}",
+            f"SELECT * FROM {filtering_window}",
         )  # sql_query, view_query
 
     def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
