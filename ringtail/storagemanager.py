@@ -2551,17 +2551,20 @@ class StorageManagerSQLite(StorageManager):
                 )
         return ", ".join([self.field_to_column_name[field] for field in outfields_list])
 
-    def _generate_result_filtering_query(self, filters_dict):
-        # TODO THE biggest one
-        """takes lists of filters, writes sql filtering string
+    def _format_filters_for_query(self, filters_dict: dict):
+        """
+        Method that reformats the filters to the specified database columns, handles less than/more than filters, etc
 
         Args:
-            filters_dict (dict): dict of filters. Keys names and value formats must match those found in the Filters class
+            filters_dict (dict): all Ringtail filters, okay to contain None
 
         Returns:
-            str: SQLite-formatted string for filtering query
+            list: list of numerical filters formatted to be inserted in a query
+            list: list of interaction filters formatted to be inserted in a query
         """
-        filtering_window = "Results"
+        # write energy filters and compile list of interactions to search for
+        queries = []
+        interaction_filters = []
         energy_filter_col_name = {
             "eworst": "docking_score",
             "ebest": "docking_score",
@@ -2570,35 +2573,6 @@ class StorageManagerSQLite(StorageManager):
             "score_percentile": "docking_score",
             "le_percentile": "leff",
         }
-        outfield_string = self._generate_outfield_string()
-
-        # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
-        if self.filter_bookmark is not None:
-            if self.filter_bookmark == self.bookmark_name:
-                # cannot write data from bookmark_a to bookmark_a
-                self.logger.error(
-                    f"Specified 'filter_bookmark' and 'bookmark_name' are the same: {self.bookmark_name}"
-                )
-                raise OptionError(
-                    "'filter_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
-                )
-            # cannot use percentile for an already reduced dataset
-            if (
-                filters_dict["score_percentile"] is not None
-                or filters_dict["le_percentile"] is not None
-            ):
-                raise OptionError(
-                    "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
-                )
-            # filtering window can be specified bookmark, or whole database (or other reduced versions of db)
-            filtering_window = self.filter_bookmark
-
-        # write energy filters and compile list of interactions to search for
-        queries = []
-        interaction_filters = []  # TODO only define when needed
-
-        # analyze and organize filters
-        # TODO make this a separate method
         for filter_key, filter_value in filters_dict.items():
             # filter dict contains all possible filters, are None if not specified by user
             if filter_value is None:
@@ -2629,11 +2603,13 @@ class StorageManagerSQLite(StorageManager):
                     if v > 0:
                         queries.append("num_hb > {value}".format(value=v))
                     else:
+                        # if value is negative, it means less than specified number of hydrogen bonds
                         queries.append("num_hb <= {value}".format(value=-1 * v))
 
             # reformat interaction filters as list
             if filter_key in Filters.get_filter_keys("interaction"):
                 for interact in filter_value:
+                    # interact has format ["chain:res:resno:resatom", bool(include or exclude interaction)]
                     interaction_string = filter_key + ":" + interact[0]
                     # add bool flag for included (T) or excluded (F) interaction
                     interaction_filters.append(
@@ -2646,6 +2622,44 @@ class StorageManagerSQLite(StorageManager):
                 interaction_filters.append(
                     ["reactive_interactions", "", "", "", "", True]
                 )
+        return queries, interaction_filters
+
+    def _generate_result_filtering_query(self, filters_dict):
+        # TODO THE biggest one
+        """takes lists of filters, writes sql filtering string
+
+        Args:
+            filters_dict (dict): dict of filters. Keys names and value formats must match those found in the Filters class
+
+        Returns:
+            str: SQLite-formatted string for filtering query
+        """
+        filtering_window = "Results"
+
+        outfield_string = self._generate_outfield_string()
+
+        # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
+        if self.filter_bookmark is not None:
+            if self.filter_bookmark == self.bookmark_name:
+                # cannot write data from bookmark_a to bookmark_a
+                self.logger.error(
+                    f"Specified 'filter_bookmark' and 'bookmark_name' are the same: {self.bookmark_name}"
+                )
+                raise OptionError(
+                    "'filter_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
+                )
+            # cannot use percentile for an already reduced dataset
+            if (
+                filters_dict["score_percentile"] is not None
+                or filters_dict["le_percentile"] is not None
+            ):
+                raise OptionError(
+                    "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
+                )
+            # filtering window can be specified bookmark, or whole database (or other reduced versions of db)
+            filtering_window = self.filter_bookmark
+
+        queries, interaction_filters = self._format_filters_for_query(filters_dict)
 
         # for each interaction filter, get the index from the interactions_indices table
         interaction_name_to_letter = {
