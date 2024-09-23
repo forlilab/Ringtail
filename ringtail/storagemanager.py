@@ -1667,7 +1667,6 @@ class StorageManagerSQLite(StorageManager):
         self.conn.commit()
 
     def _create_indices(self):
-        # TODO refactor
         """Create index containing possible filter and order by columns
 
         Raises:
@@ -2017,7 +2016,6 @@ class StorageManagerSQLite(StorageManager):
         return cursor.fetchall()
 
     def fetch_data_for_passing_results(self) -> iter:
-        # TODO refactor
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.bookmark_name
 
         Returns:
@@ -2043,9 +2041,7 @@ class StorageManagerSQLite(StorageManager):
         query = (
             "SELECT "
             + outfield_string
-            + " FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {0})".format(
-                self.bookmark_name
-            )
+            + f" FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {self.bookmark_name})"
         )
         return self._run_query(query)
 
@@ -2065,7 +2061,6 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError("Error retrieving flexible residue info") from e
 
     def fetch_passing_ligand_output_info(self):
-        # TODO refactor
         """fetch information required by vsmanager for writing out molecules
 
         Returns:
@@ -2076,7 +2071,6 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query)
 
     def fetch_single_ligand_output_info(self, ligname):
-        # TODO refactor
         """get output information for given ligand
 
         Args:
@@ -2102,7 +2096,6 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def fetch_single_pose_properties(self, pose_ID: int):
-        # TODO refactor
         """fetch coordinates for pose given by pose_ID
 
         Args:
@@ -2116,7 +2109,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query)
 
     def fetch_interaction_info_by_index(self, interaction_idx):
-        # TODO refactor
+        # TODO refactor-> make it work for one or more indices
         """Returns tuple containing interaction info for given interaction_idx
 
         Args:
@@ -2131,7 +2124,7 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query).fetchone()[1:]  # cut off interaction index
 
     def fetch_interaction_bitvector(self, pose_id):
-        # TODO refactor
+        # TODO remove
         """Returns tuple containing interaction bitvector line for given pose_id
 
         Args:
@@ -2152,7 +2145,6 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query).fetchone()[1:]  # cut off pose id
 
     def fetch_pose_interactions(self, Pose_ID):
-        # TODO refactor
         """
         Fetch all interactions parameters belonging to a Pose_ID
 
@@ -2210,7 +2202,6 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _fetch_passing_plot_data(self, bookmark_name: str | None = None):
-        # TODO refactor
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
 
@@ -2225,13 +2216,10 @@ class StorageManagerSQLite(StorageManager):
             bookmark_name = self.bookmark_name
 
         return self._run_query(
-            "SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {bookmark}) GROUP BY LigName".format(
-                bookmark=bookmark_name
-            )
+            f"SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {bookmark_name}) GROUP BY LigName"
         )
 
     def _fetch_ligand_cluster_columns(self):
-        # TODO refactor
         """fetching columns from Ligand_clusters table
 
         Raises:
@@ -2289,7 +2277,7 @@ class StorageManagerSQLite(StorageManager):
             return pd.read_sql_query(requested_data, self.conn)
 
     def _get_length_of_table(self, table_name: str):
-        # TODO refactor
+        # TODO check if index on table, and use that row if possible
         """
         Finds the rowcount/length of a table based on the rowid
 
@@ -2303,12 +2291,66 @@ class StorageManagerSQLite(StorageManager):
 
         return self._run_query(query).fetchone()[0]
 
+    def fetch_summary_data(
+        self, columns=["docking_score", "leff"], percentiles=[1, 10]
+    ) -> dict:
+        """Collect summary data for database:
+            Num Ligands
+            Num stored poses
+            Num unique interactions
+
+            min, max, percentiles for columns in columns
+
+        Args:
+            columns (list (str)): columns to be displayed and used in summary
+            percentiles (list(int)): percentiles to consider
+
+        Returns:
+            dict: of data summary
+        """
+        try:
+            summary_data = {}
+            cur = self.conn.cursor()
+            summary_data["num_ligands"] = cur.execute(
+                "SELECT COUNT(LigName) FROM Ligands"
+            ).fetchone()[0]
+            if summary_data["num_ligands"] == 0:
+                raise StorageError("There is no ligand data in the database. ")
+            summary_data["num_poses"] = cur.execute(
+                "SELECT COUNT(Pose_id) FROM Results"
+            ).fetchone()[0]
+            summary_data["num_unique_interactions"] = cur.execute(
+                "SELECT COUNT(interaction_id) FROM Interaction_indices"
+            ).fetchone()[0]
+            summary_data["num_interacting_residues"] = cur.execute(
+                "SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)"
+            ).fetchone()[0]
+
+            allowed_columns = self._fetch_results_column_names()
+            for col in columns:
+                if col not in allowed_columns:
+                    raise StorageError(
+                        f"Requested summary column {col} not found in Results table! Available columns: {allowed_columns}"
+                    )
+                summary_data[f"min_{col}"] = cur.execute(
+                    f"SELECT MIN({col}) FROM Results"
+                ).fetchone()[0]
+                summary_data[f"max_{col}"] = cur.execute(
+                    f"SELECT MAX({col}) FROM Results"
+                ).fetchone()[0]
+                for p in percentiles:
+                    summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
+
+            return summary_data
+
+        except sqlite3.OperationalError as e:
+            raise StorageError("Error while fetching summary data!") from e
+
     # endregion
 
     # region Methods dealing with filtered results
 
     def _get_number_passing_ligands(self, bookmark_name: str | None = None):
-        # TODO refactor
         """Returns count of the number of ligands that
             passed filtering criteria
 
@@ -2325,11 +2367,7 @@ class StorageManagerSQLite(StorageManager):
             bookmark_name = self.current_bookmark_name
         try:
             cur = self.conn.cursor()
-            cur.execute(
-                "SELECT COUNT(DISTINCT LigName) FROM {results_view}".format(
-                    results_view=bookmark_name
-                )
-            )
+            cur.execute(f"SELECT COUNT(DISTINCT LigName) FROM {bookmark_name}")
             n_ligands = int(cur.fetchone()[0])
             cur.close()
             return n_ligands
@@ -2339,7 +2377,8 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def get_maxmiss_union(self, total_combinations: int):
-        # TODO refactor
+        # TODO probably remove as union can happen automatically. Then if enumerating_interaction_combinations,
+        # just create the other bookmarks separately for each interaction combination through the method in the core
         """Get results that are in union considering max miss
 
         Args:
@@ -2373,64 +2412,7 @@ class StorageManagerSQLite(StorageManager):
         self.logger.debug("Running union query...")
         return self._run_query(union_select_query)
 
-    def fetch_summary_data(
-        self, columns=["docking_score", "leff"], percentiles=[1, 10]
-    ) -> dict:
-        # TODO refactor
-        """Collect summary data for database:
-            Num Ligands
-            Num stored poses
-            Num unique interactions
-
-            min, max, percentiles for columns in columns
-
-        Args:
-            columns (list (str)): columns to be displayed and used in summary
-            percentiles (list(int)): percentiles to consider
-
-        Returns:
-            dict: of data summary
-        """
-        try:
-            summary_data = {}
-            cur = self.conn.cursor()
-            summary_data["num_ligands"] = cur.execute(
-                "SELECT COUNT(*) FROM Ligands"
-            ).fetchone()[0]
-            if summary_data["num_ligands"] == 0:
-                raise StorageError("There is no ligand data in the database. ")
-            summary_data["num_poses"] = cur.execute(
-                "SELECT COUNT(*) FROM Results"
-            ).fetchone()[0]
-            summary_data["num_unique_interactions"] = cur.execute(
-                "SELECT COUNT(*) FROM Interaction_indices"
-            ).fetchone()[0]
-            summary_data["num_interacting_residues"] = cur.execute(
-                "SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)"
-            ).fetchone()[0]
-
-            allowed_columns = self._fetch_results_column_names()
-            for col in columns:
-                if col not in allowed_columns:
-                    raise StorageError(
-                        f"Requested summary column {col} not found in Results table! Available columns: {allowed_columns}"
-                    )
-                summary_data[f"min_{col}"] = cur.execute(
-                    f"SELECT MIN({col}) FROM Results"
-                ).fetchone()[0]
-                summary_data[f"max_{col}"] = cur.execute(
-                    f"SELECT MAX({col}) FROM Results"
-                ).fetchone()[0]
-                for p in percentiles:
-                    summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
-
-            return summary_data
-
-        except sqlite3.OperationalError as e:
-            raise StorageError("Error while fetching summary data!") from e
-
     def fetch_clustered_similars(self, ligname: str):
-        # TODO refactor
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
 
         Args:
@@ -2473,7 +2455,7 @@ class StorageManagerSQLite(StorageManager):
             raise ValueError(
                 f"Given cluster number {cluster_choice} cannot be converted to int. Please be sure you are specifying integer."
             )
-
+        # TODO might be able to refactor these queries
         query_ligand_cluster = cur.execute(
             f"SELECT {cluster_col_choice} FROM Ligand_clusters WHERE pose_id IN (SELECT Pose_ID FROM Results WHERE LigName LIKE '{ligname}')"
         ).fetchone()
@@ -2491,7 +2473,6 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(sql_query), self.bookmark_name, cluster_col_choice
 
     def fetch_passing_pose_properties(self, ligname):
-        # TODO refactor
         """fetch coordinates for poses passing filter for given ligand
 
         Args:
@@ -2501,13 +2482,10 @@ class StorageManagerSQLite(StorageManager):
             iter: SQLite cursor that contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM passing_temp WHERE LigName LIKE '{ligand}')".format(
-            ligand=ligname
-        )
+        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM passing_temp WHERE LigName LIKE '{ligname}')"
         return self._run_query(query)
 
     def fetch_nonpassing_pose_properties(self, ligname):
-        # TODO refactor
         """fetch coordinates for poses of ligname which did not pass the filter
 
         Args:
@@ -2517,13 +2495,10 @@ class StorageManagerSQLite(StorageManager):
             iter: SQLite cursor that contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = "SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligand}' AND Pose_ID NOT IN (SELECT Pose_ID FROM passing_temp)".format(
-            ligand=ligname,
-        )
+        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligname}' AND Pose_ID NOT IN (SELECT Pose_ID FROM passing_temp)"
         return self._run_query(query)
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
-        # TODO refactor
         """Make query for percentile by calculating energy or leff cutoff
 
         Args:
@@ -2558,7 +2533,7 @@ class StorageManagerSQLite(StorageManager):
 
     # region Methods that generate SQLite query strings
     def _generate_outfield_string(self):
-        # TODO refactor
+        # TODO this will probably need refactoring
         """string describing outfields to be written
 
         Returns:
@@ -2579,7 +2554,7 @@ class StorageManagerSQLite(StorageManager):
         return ", ".join([self.field_to_column_name[field] for field in outfields_list])
 
     def _generate_result_filtering_query(self, filters_dict):
-        # TODO refactor
+        # TODO THE biggest one
         """takes lists of filters, writes sql filtering string
 
         Args:
@@ -3054,7 +3029,6 @@ class StorageManagerSQLite(StorageManager):
         return poseid_bv
 
     def _generate_interaction_index_filtering_query(self, interaction_list):
-        # TODO refactor
         # TODO I think this method can be combined with the next method
         """takes list of interaction info for a given ligand,
             looks up corresponding interaction index
@@ -3090,7 +3064,7 @@ class StorageManagerSQLite(StorageManager):
         return sql_string
 
     def _generate_interaction_filtering_query(self, interaction_index_list):
-        # TODO refactor
+        # TODO refactor -> THIS IS ONE OF THE MAJOR ONES
         """takes list of interaction indices and searches for ligand ids
             which have those interactions
 
@@ -3109,7 +3083,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _generate_interaction_bv_filtering_query(self, interaction_index_list):
-        # TODO take out, remove bv table
+        # TODO remove
         """takes list of interaction indices and searches for ligand ids
             which have those interactions
 
@@ -3125,7 +3099,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _generate_ligand_filtering_query(self, ligand_filters):
-        # TODO refactor
+        # TODO this one is important and might be tricky, use sqlitestudio
         """write string to select from ligand table
 
         Args:
@@ -3175,7 +3149,6 @@ class StorageManagerSQLite(StorageManager):
     def _generate_selective_insert_query(
         self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
     ):
-        # TODO refactor
         """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
 
         Args:
@@ -3188,9 +3161,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: sqlite formatted query string
         """
-        return "INSERT INTO {0} SELECT Pose_ID, LigName FROM {1} WHERE LigName {2} (SELECT LigName FROM {3}.{4})".format(
-            temp_table, bookmark1_name, select_str, new_db_name, bookmark2_name
-        )
+        return f"INSERT INTO {temp_table} SELECT Pose_ID, LigName FROM {bookmark1_name} WHERE LigName {select_str} (SELECT LigName FROM {new_db_name}.{bookmark2_name})"
 
     # endregion
 

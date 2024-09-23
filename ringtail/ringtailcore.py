@@ -164,6 +164,7 @@ class RingtailCore:
                     if bit == 1:
                         interaction_indices.append(idx)
                 for int_idx in interaction_indices:
+                    # TODO refactor here if I refactor the method in storageman
                     interaction_info = self.storageman.fetch_interaction_info_by_index(
                         int_idx
                     )
