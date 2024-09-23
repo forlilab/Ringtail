@@ -2597,8 +2597,10 @@ class StorageManagerSQLite(StorageManager):
         queries = []
         interaction_filters = []  # TODO only define when needed
 
+        # analyze and organize filters
+        # TODO make this a separate method
         for filter_key, filter_value in filters_dict.items():
-            # filter dict contains all possible filters, are None of not specified by user
+            # filter dict contains all possible filters, are None if not specified by user
             if filter_value is None:
                 continue
             # if filter has to do with docking energies
@@ -2619,8 +2621,10 @@ class StorageManagerSQLite(StorageManager):
             # write hb count filter(s)
             if filter_key == "hb_count":
                 for k, v in filter_value:
-                    # NOTE here if implementing other interaction count filters
                     if k != "hb_count":
+                        self.logger.warning(
+                            f"An unrecognized interaction count filter was found: {k}, which will not be included in the filtering."
+                        )
                         continue
                     if v > 0:
                         queries.append("num_hb > {value}".format(value=v))
