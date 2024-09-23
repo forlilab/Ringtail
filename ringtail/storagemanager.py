@@ -508,8 +508,7 @@ class StorageManagerSQLite(StorageManager):
         }
         self.view_suffix = None
         self.temptable_suffix = 0
-        self.filtering_window = "Results"
-        self.index_columns = []
+        self.filtering_window = "Results"  # TODO is this necessary?
         self.open_cursors = []
 
     # region Methods for inserting into/removing from the database
@@ -2605,7 +2604,6 @@ class StorageManagerSQLite(StorageManager):
                 continue
             # if filter has to do with docking energies
             if filter_key in energy_filter_col_name:
-                self.index_columns.append(energy_filter_col_name[filter_key])
                 if filter_key == "score_percentile" or filter_key == "le_percentile":
                     # convert from percent to decimal
                     cutoff = self._calc_percentile_cutoff(
@@ -2625,7 +2623,6 @@ class StorageManagerSQLite(StorageManager):
                     # NOTE here if implementing other interaction count filters
                     if k != "hb_count":
                         continue
-                    self.index_columns.append("num_hb")
                     if v > 0:
                         queries.append("num_hb > {value}".format(value=v))
                     else:
