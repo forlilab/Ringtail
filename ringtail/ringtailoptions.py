@@ -583,7 +583,7 @@ class Filters(RTOptions):
             "description": "Maximum number of heavy atoms a ligand may have.",
         },
         "ligand_operator": {
-            "default": "OR",
+            "default": None,
             "type": str,
             "description": "Logical join operator for multiple SMARTS.",
         },
@@ -622,7 +622,9 @@ class Filters(RTOptions):
                     f"Given 'score_percentile' {self.le_percentile} not allowed. Should be within percentile range of 0-100."
                 )
 
-            if self.ligand_operator not in ["OR", "AND"]:
+            if self.ligand_operator not in ["OR", "AND"] and (
+                self.ligand_substruct or self.ligand_substruct_pos
+            ):
                 raise OptionError(
                     f"Given 'ligand_operator' {self.ligand_operator} not allowed. Must be 'OR' or 'AND'."
                 )
