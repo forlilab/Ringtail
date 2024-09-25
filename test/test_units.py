@@ -569,7 +569,6 @@ class TestStorageMan:
             eworst=-3,
             vdw_interactions=[("A:ALA:213:", True), ("A:VAL:279:", True)],
             hb_interactions=[("A:ALA:213:", True)],
-            ligand_operator="OR",
         )
         curs = dbquery(
             "SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'"
@@ -589,11 +588,11 @@ class TestStorageMan:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
+            "ligand_operator": None,
         }
         assert bookmark_filters_db_str == json.dumps(filters)
 
