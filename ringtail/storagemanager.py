@@ -2686,111 +2686,132 @@ class StorageManagerSQLite(StorageManager):
 
         # check if clustering
         clustering = bool(self.mfpt_cluster or self.interaction_cluster)
+        # if clustering without filtering
+        if clustering:
+            # allows for clustering without filtering
+            self.logger.info("Preparing to cluster results")
+            unclustered_query = f"SELECT R.Pose_id FROM {filtering_window} R "
+            if not processed_filters and filtering_window == "Results":
+                self.logger.warning(
+                    "If clustering is not performed on a pre-filtered bookmark, the clustering process will be very slow."
+                )
+        else:
+            # start with empty string, will prepend SELECT statement later
+            unclustered_query = ""
         # raise error if no filters are present and no clusterings
         if not processed_filters and not clustering:
             raise DatabaseQueryError(
                 "Query strings are empty. Please check filter options and ensure requested interactions are present."
             )
-
-        # check what filters are present, and prepare them as partial queries
-        if "num_filters" in processed_filters:
-            num_query = " AND ".join(
-                ["R." + filter for filter in processed_filters["num_filters"]]
-            )
-
-        # check for interactions and prepare for query
-        if "int_filters" in processed_filters:
-            # if interaction filters are present and valid, two lists of included and excluded interactions are returned
-            # each item in the lists to be joined by "AND", and each item within the list item (if >1) to be joined by "OR"
-            interaction_queries = []
-            include_interactions, exclude_interactions = (
-                self._prepare_interaction_indices_for_filtering(
-                    interaction_list=processed_filters["int_filters"]
-                )
-            )
-            # ensure there are interactions in the list after processing
-            if bool(exclude_interactions or include_interactions):
-                # prepare partial queries for the different interaction combinations
-                int_query = self._prepare_interaction_filtering_query(
-                    include_interactions, exclude_interactions
+        # create query string from filters if present
+        if processed_filters:
+            # start stringing together queries
+            # check what filters are present, and prepare them as partial queries
+            if "num_filters" in processed_filters:
+                num_query = " AND ".join(
+                    ["R." + filter for filter in processed_filters["num_filters"]]
                 )
 
-        # check if ligand filters and prepare for query
-        # returns ligand_queries with partial queries for the vairous ones, to be joined by AND or OR I belive
-        if "lig_filters" in processed_filters:
-            lig_filters = processed_filters["lig_filters"]
-            ligand_queries = []
-            # if straight forward ligand filters, generate partial queries
-            if (
-                lig_filters["ligand_substruct"]
-                or lig_filters["ligand_name"]
-                or lig_filters["ligand_max_atoms"]
-            ):
-                ligand_queries.append(
-                    self._generate_ligand_filtering_query(lig_filters)
+            # check for interactions and prepare for query
+            if "int_filters" in processed_filters:
+                # if interaction filters are present and valid, two lists of included and excluded interactions are returned
+                # each item in the lists to be joined by "AND", and each item within the list item (if >1) to be joined by "OR"
+                include_interactions, exclude_interactions = (
+                    self._prepare_interaction_indices_for_filtering(
+                        interaction_list=processed_filters["int_filters"]
+                    )
                 )
-            # if complex ligand filter, generate partial query
-            if lig_filters["ligand_substruct_pos"]:
-                ligand_queries.append(
-                    self._ligand_substructure_position_filter(lig_filters)
-                )
-            # join all ligand queries that are not empty
-            lig_query = " AND ".join(
-                [lig_filter for lig_filter in ligand_queries if lig_filter]
-            )
+                # ensure there are interactions in the list after processing
+                if bool(exclude_interactions or include_interactions):
+                    # prepare partial queries for the different interaction combinations
+                    int_query = self._prepare_interaction_filtering_query(
+                        include_interactions, exclude_interactions
+                    )
 
+            # check if ligand filters and prepare for query
+            if "lig_filters" in processed_filters:
+                lig_filters = processed_filters["lig_filters"]
+                ligand_queries = []
+                # if straight forward ligand filters, generate partial queries
+                if (
+                    lig_filters["ligand_substruct"]
+                    or lig_filters["ligand_name"]
+                    or lig_filters["ligand_max_atoms"]
+                ):
+                    ligand_queries.append(
+                        self._generate_ligand_filtering_query(lig_filters)
+                    )
+                # if complex ligand filter, generate partial query
+                if lig_filters["ligand_substruct_pos"]:
+                    ligand_queries.append(
+                        self._ligand_substructure_position_filter(lig_filters)
+                    )
+                # join all ligand queries that are not empty
+                lig_query = " AND ".join(
+                    [lig_filter for lig_filter in ligand_queries if lig_filter]
+                )
+            if int_query:
+                # add with a join statement
+                unclustered_query += "JOIN " + int_query + " ON R.Pose_ID = I.Pose_ID "
+            if lig_query:
+                # add with a join statement
+                unclustered_query += (
+                    "JOIN (" + lig_query + ") ON R.LigName = L.LigName "
+                )
+            if num_query:
+                unclustered_query += "WHERE " + num_query
+        # if clustering is requested, do that before saving view or filtering results for output
+        if clustering:
+            # add appropriate select
+            try:
+                query = self._prepare_cluster_query(unclustered_query)
+                query = "WHERE " + query
+            except OptionError as e:
+                raise e
+        else:
+            # if not clustering, rename query
+            query = unclustered_query
         # choose columns to be selected from filtering_window
         # TODO when to use "DISTINCT"
         query_select_string = f"""SELECT {", ".join("R." + column for column in outfield_columns)} FROM {filtering_window} R """
-        # TODO how to change the start of this for the bookmark query
-        # start stringing together queries
-        unclustered_query = query_select_string
-        if int_query:
-            # add with a join statement
-            unclustered_query += "JOIN " + int_query + " ON R.Pose_ID = I.Pose_ID "
-        if lig_query:
-            # add with a join statement
-            unclustered_query += "JOIN (" + lig_query + ") ON R.LigName = L.LigName "
-        if num_query:
-            unclustered_query += "WHERE " + num_query
-
-        print("    unclustered query: ", unclustered_query)
-        cur = self.conn.cursor()
-        cur.execute(unclustered_query, (2,))
-        print(" unknown number of hits:", (cur.fetchall()))
-
-        # if clustering only
-        if clustering and not queries and not interaction_queries:
-            # allows for clustering without filtering
-            unclustered_query = f"SELECT Pose_id FROM {filtering_window}"
-            self.logger.info("Preparing to cluster results")
-            # if filtering window is Results the clustering happens on the entire database
-            if filtering_window == "Results":
-                self.logger.warning(
-                    "If clustering is not performed on a pre-filtered bookmark, the clustering process will be very slow."
-                )
-
-        print(new_query)
-        cur = self._run_query(new_query)
-        print(" This should be 19 hits:", (cur.fetchall()))
         # adding if we only want to keep one pose per ligand (will keep first entry)
         if not self.output_all_poses:
-            sql_string += " GROUP BY LigName"
-
+            query += " GROUP BY LigName "
         # add how to order results
         if self.order_results:
-            try:
-                sql_string += (
-                    " ORDER BY " + self.field_to_column_name[self.order_results]
-                )
-            except KeyError:
-                raise RuntimeError(
-                    "Please ensure you are only requesting one option for --order_results and have written it correctly"
-                ) from None
+            query += "ORDER BY " + self.field_to_column_name[self.order_results]
 
-        # if clustering is requested, do that before saving view or filtering results for output
-        # Define clustering setup
-        def clusterFps(
+        output_query = query_select_string + query
+        view_query = f"SELECT * FROM {filtering_window} R " + query
+        print("    final query: ", query)
+
+        return output_query, view_query
+
+    def _prepare_cluster_query(self, unclustered_query: str) -> str | None:
+        """
+        These methods will take (filtered, hopefully) data, then run the cluster query and cluster the filtered data.
+        This will output pose_ids that are representative of the clusters, and these pose_ids will be returned so that
+        they can be added to the unclustered query in the main filtering method.
+        They will only return a simple string since the filters were already applied, so the returning query is now the only query!
+
+        Args:
+            unclustered_query (str): _description_
+
+        Returns:
+            str | None: _description_
+
+        Yields:
+            Iterator[str | None]: _description_
+        """
+        self.logger.warning(
+            "WARNING: Clustering can be memory-constrained. Using overly-permissive filters with clustering may cause issues."
+        )
+        if self.interaction_cluster and self.mfpt_cluster:
+            self.logger.warning(
+                "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering."
+            )
+
+        def _clusterFps(
             fps, cutoff
         ):  # https://macinchem.org/2023/03/05/options-for-clustering-large-datasets-of-molecules/
             """
@@ -2820,12 +2841,10 @@ class StorageManagerSQLite(StorageManager):
             cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)
             return cs
 
-        if self.interaction_cluster is not None:
+        cluster_query_string = None
+
+        if self.interaction_cluster:
             cluster_query = f"SELECT Pose_ID, leff FROM Results WHERE Pose_ID IN ({unclustered_query})"
-            # if interaction filters are present
-            if interaction_queries != []:
-                # include them in the clustering query
-                cluster_query = with_stmt + cluster_query
             # resulting data
             # new
             poseid_leffs = self._run_query(cluster_query).fetchall()
@@ -2842,7 +2861,7 @@ class StorageManagerSQLite(StorageManager):
                 for poseid_leff in poseid_leffs
             ]
             # index 2 is the bitvector string element
-            bclusters = clusterFps(
+            bclusters = _clusterFps(
                 [
                     DataStructs.CreateFromBitString(poseid_leff_bv[2])
                     for poseid_leff_bv in poseid_leff_bvs
@@ -2854,6 +2873,7 @@ class StorageManagerSQLite(StorageManager):
             )
 
             # select ligand from each cluster with best ligand efficiency
+            # interaction clusters representative pose ids
             int_rep_poseids = []
 
             for cluster in bclusters:
@@ -2861,8 +2881,6 @@ class StorageManagerSQLite(StorageManager):
                 c_leffs = np.array(
                     [poseid_leff_bvs[cluster_element][1] for cluster_element in cluster]
                 )
-                # beware magic numbers
-
                 # element 0 ([0]) in each leff_poseid_ifps row is the pose_id
                 best_lig_c = poseid_leff_bvs[cluster[np.argmin(c_leffs)]][0]
                 int_rep_poseids.append(str(best_lig_c))
@@ -2877,36 +2895,32 @@ class StorageManagerSQLite(StorageManager):
 
             # catch if no pose_ids returned
             if int_rep_poseids == []:
-                self.logger.warning(
+                raise OptionError(
                     "No passing results prior to clustering. Clustering not performed."
                 )
             else:
+                cluster_query_string = "R.Pose_ID = " + " OR R.Pose_ID = ".join(
+                    int_rep_poseids
+                )
+                # if no more clustering
                 if self.mfpt_cluster is None:
-                    sql_string = (
-                        output_str + "Pose_ID=" + " OR Pose_ID=".join(int_rep_poseids)
-                    )
+                    return cluster_query_string
                 else:
-                    unclustered_query = f"SELECT Pose_ID FROM Results WHERE {'Pose_ID=' + ' OR Pose_ID='.join(int_rep_poseids)}"
+                    # carry the pose ids returned by this cluster to the MFPT clustering
+                    unclustered_query = (
+                        f"SELECT R.Pose_ID FROM Results WHERE {cluster_query_string}"
+                    )
 
-        if self.mfpt_cluster is not None:
-            self.logger.warning(
-                "WARNING: Ligand morgan fingerprint clustering is memory-constrained. Using overly-permissive filters with clustering may cause issues."
-            )
-            self.logger.warning(
-                "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering."
-            )
-            cluster_query = f"SELECT Results.Pose_ID, Results.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName WHERE Results.Pose_ID IN ({unclustered_query})"
-            if interaction_queries != []:
-                cluster_query = with_stmt + cluster_query
+        if self.mfpt_cluster:
+            cluster_query = f"SELECT R.Pose_ID, R.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName WHERE R.Pose_ID IN ({unclustered_query})"
             poseid_leff_mfps = self._run_query(cluster_query).fetchall()
-            bclusters = clusterFps(
+            bclusters = _clusterFps(
                 [DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps],
                 self.mfpt_cluster,
             )
             self.logger.info(
                 f"Number of Morgan fingerprint butina clusters: {len(bclusters)}"
             )
-
             # select ligand from each cluster with best ligand efficiency
             fp_rep_poseids = []
             for c in bclusters:
@@ -2923,20 +2937,15 @@ class StorageManagerSQLite(StorageManager):
 
             # catch if no pose_ids returned
             if fp_rep_poseids == []:
-                self.logger.warning(
+                raise OptionError(
                     "No passing results prior to clustering. Clustering not performed."
                 )
             else:
-                sql_string = (
-                    output_str + "Pose_ID=" + " OR Pose_ID=".join(fp_rep_poseids)
+                cluster_query_string = "R.Pose_ID = " + " OR R.Pose_ID = ".join(
+                    fp_rep_poseids
                 )
 
-        return sql_string, sql_string.replace(
-            """SELECT {out_columns} FROM {window}""".format(
-                out_columns=outfield_string, window=filtering_window
-            ),
-            f"SELECT * FROM {filtering_window}",
-        )  # sql_query, view_query
+        return cluster_query_string
 
     def _prepare_interaction_filtering_query(
         self, include_interactions: list, exclude_interactions: list
@@ -2953,6 +2962,7 @@ class StorageManagerSQLite(StorageManager):
         """
         # nonsensical number to count an interaction if it satisfies an incomplete ("wildcard") interaction
         nonsense_counter = -10000
+        num_of_interactions = len(include_interactions) + len(exclude_interactions)
 
         def _prepare_indices_for_query(interactions: list):
             """
@@ -3033,9 +3043,7 @@ class StorageManagerSQLite(StorageManager):
                 + ") "
             )
         # 4. add grouping and wildcard for total interactions minus max_miss, essentially
-        query += (
-            ") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) = (?)) I "
-        )
+        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) = ({num_of_interactions})) I "
 
         return query
 
@@ -3237,24 +3245,6 @@ class StorageManagerSQLite(StorageManager):
         )
 
         return self._run_query(sql_string).fetchall()
-
-    def _generate_interaction_filtering_query(self, interaction_index_list):
-        # TODO refactor -> THIS IS ONE OF THE MAJOR ONES
-        """takes list of interaction indices and searches for ligand ids
-            which have those interactions
-
-        Args:
-            interaction_index_list (list): List of interaction indices
-
-        Returns:
-            str: SQLite-formatted query
-        """
-        return """SELECT Pose_id FROM (SELECT Pose_ID, interaction_id
-                                        FROM Interactions
-                                        WHERE Pose_ID IN subq) 
-                    WHERE """ + """ OR """.join(
-            [f"""interaction_id={index}""" for index in interaction_index_list]
-        )
 
     def _generate_ligand_filtering_query(self, ligand_filters: dict) -> str:
         # TODO want to clean this one up
