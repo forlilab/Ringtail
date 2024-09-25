@@ -242,11 +242,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
+            "ligand_operator": None,
         } in test_filters
 
         assert {
@@ -262,11 +262,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
+            "ligand_operator": None,
         } in test_filters
 
         assert {
@@ -282,11 +282,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
+            "ligand_operator": None,
         } in test_filters
 
         assert {
@@ -302,11 +302,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
+            "ligand_operator": None,
         } in test_filters
 
         assert {
@@ -322,11 +322,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
+            "ligand_operator": None,
         } in test_filters
 
         assert len(test_filters) == 5
