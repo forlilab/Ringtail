@@ -19,6 +19,7 @@ import numpy as np
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters
+from .util import numlist2str
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -2528,10 +2529,10 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError("Error while generating percentile query") from e
 
     def _generate_outfield_string(self):
-        """string describing outfields to be written
+        """list describing outfields to be written
 
         Returns:
-            str: query string
+            list: column names for which the data is to be displayed
 
         Raises:
             OptionError
@@ -2548,6 +2549,7 @@ class StorageManagerSQLite(StorageManager):
         return [self.field_to_column_name[field] for field in outfields_list]
 
     def _process_filters_for_query(self, filters_dict: dict):
+        # NOTE this method can maybe be a main class method once we get more database types
         """
         Method that reformats the filters to the specified database columns, handles less than/more than filters, etc
 
@@ -2561,6 +2563,7 @@ class StorageManagerSQLite(StorageManager):
         # write energy filters and compile list of interactions to search for
         numerical_filters = []
         interaction_filters = []
+        ligand_filters = {}
         energy_filter_col_name = {
             "eworst": "docking_score",
             "ebest": "docking_score",
@@ -2625,15 +2628,20 @@ class StorageManagerSQLite(StorageManager):
             # add react_any flag as interaction filter if not None
             if filter_key == "react_any" and filter_value:
                 interaction_filters.append(["R", "", "", "", "", True])
+            # if filter has to do with ligands and SMARTS
+            if filter_key in Filters.get_filter_keys("ligand"):
+                ligand_filters[filter_key] = filter_value
 
-        # make dict of just the ligand filters
-        # TODO inefficient but same as it was before
-        ligand_filters_dict = {
-            k: v
-            for k, v in filters_dict.items()
-            if k in Filters.get_filter_keys("ligand")
-        }
-        return numerical_filters, interaction_filters, ligand_filters_dict
+        # put all processed filter in a dict
+        processed_filters = {}
+        if len(numerical_filters) > 0:
+            processed_filters["num_filters"] = numerical_filters
+        if len(interaction_filters) > 0:
+            processed_filters["int_filters"] = interaction_filters
+        if len(ligand_filters) > 0:
+            processed_filters["lig_filters"] = ligand_filters
+
+        return processed_filters
 
     def _generate_result_filtering_query(self, filters_dict):
         # TODO THE biggest one
@@ -2648,6 +2656,9 @@ class StorageManagerSQLite(StorageManager):
         filtering_window = "Results"
 
         outfield_columns = self._generate_outfield_string()
+        num_query = ""
+        int_query = ""
+        lig_query = ""
 
         # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
         if self.filter_bookmark is not None:
@@ -2670,103 +2681,86 @@ class StorageManagerSQLite(StorageManager):
             # filtering window can be specified bookmark, or whole database (or other reduced versions of db)
             filtering_window = self.filter_bookmark
 
-        queries, interaction_filters, ligand_filters_dict = (
-            self._process_filters_for_query(filters_dict)
-        )
-        num_of_interactions = len(interaction_filters)
-        interaction_queries = False
-        exclude_interactions = []
-        include_interactions = []
-        if interaction_filters != []:
-            int_not_found = []
-            # figure out if each interaction is in database, make a list of list of indices for each interaction
-            for interaction in interaction_filters:
-                # get all interaction indices matching the interaction filter (returns more than one index if filter has a "wildcard")
-                interaction_index_tuples = (
-                    self._generate_interaction_index_filtering_query(interaction[:-1])
-                )
-                # make list of indices from iterable cursor tuples (should create empty list of no results)
-                interaction_indices = [i[0] for i in interaction_index_tuples]
-                # catch if interaction not found in database
-                if interaction_indices == []:
-                    if interaction == ["R", "", "", "", "", True]:
-                        self.logger.warning(
-                            "Given 'react_any' filter, no reactive interactions found. Excluded from filtering."
-                        )
-                    else:
-                        # create string representation of ecah interaction not found
-                        int_not_found.append(":".join(interaction[:4]))
-                    continue  # ends this iteration of the for loop
-
-                # create a list of lists for interactions to either include or exclude
-                if interaction[-1] is True:
-                    include_interactions.append(interaction_indices)
-                elif interaction[-1] is False:
-                    exclude_interactions.append(interaction_indices)
-                else:
-                    raise RuntimeError(
-                        "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
-                    )
-            # if one or more interactions not found, raise error
-            if int_not_found:
-                raise OptionError(
-                    f"The following interactions do not exist in the database: {int_not_found} not found in the database. Please check for spelling errors or remove from filter."
-                )
-            # set to True if any interaction filters
-            interaction_queries = bool(exclude_interactions or include_interactions)
-
-        # check if ligand filters have values
-        ligand_filters = bool(
-            ligand_filters_dict["ligand_substruct"]
-            or ligand_filters_dict["ligand_name"]
-            or ligand_filters_dict["ligand_substruct_pos"]
-            or ligand_filters_dict["ligand_max_atoms"]
-        )
-        if ligand_filters:
-            if (
-                ligand_filters_dict["ligand_substruct"] != []
-                or ligand_filters_dict["ligand_name"] != []
-            ):
-                # TODO definitely need to clean this up
-                ligand_query_str = self._generate_ligand_filtering_query(
-                    ligand_filters_dict
-                )
-                queries.append(
-                    "LigName IN ({ligand_str})".format(ligand_str=ligand_query_str)
-                )
-            # if ligand_substruct_pos has the correct number of arguments provided
-            if len(ligand_filters_dict["ligand_substruct_pos"]):
-                ligand_substruct_pos_filters = (
-                    self._ligand_substructure_position_filter(ligand_filters_dict)
-                )
-            queries.append(ligand_substruct_pos_filters)
+        # process filter values to lists and dicts that are easily incorporated in sql queries
+        processed_filters = self._process_filters_for_query(filters_dict)
 
         # check if clustering
         clustering = bool(self.mfpt_cluster or self.interaction_cluster)
-
-        # raise error if no filters are present
-        if not queries and not interaction_queries and not clustering:
+        # raise error if no filters are present and no clusterings
+        if not processed_filters and not clustering:
             raise DatabaseQueryError(
                 "Query strings are empty. Please check filter options and ensure requested interactions are present."
             )
-        # starts to prepare the overarching filtering query
-        # TODO
-        sql_string = output_str = (
-            f"""SELECT {", ".join("R." + column for column in outfield_columns)} FROM {filtering_window} R"""
-        )
-        start_of_query = f"""SELECT DISTINCT {", ".join("R." + column for column in outfield_columns)} FROM {filtering_window} R """
-        # if just num/ligand queries, build query
-        if queries and not interaction_queries:
-            joined_queries = " AND ".join(
-                queries
-            )  # TODO this might be the one I need to join in after the interaction queries
-            new_query = start_of_query + " WHERE " + joined_queries
-            sql_string += "WHERE " + joined_queries
-            unclustered_query = (
-                f"SELECT Pose_id FROM {filtering_window} WHERE " + joined_queries
+
+        # check what filters are present, and prepare them as partial queries
+        if "num_filters" in processed_filters:
+            num_query = " AND ".join(
+                ["R." + filter for filter in processed_filters["num_filters"]]
             )
+
+        # check for interactions and prepare for query
+        if "int_filters" in processed_filters:
+            # if interaction filters are present and valid, two lists of included and excluded interactions are returned
+            # each item in the lists to be joined by "AND", and each item within the list item (if >1) to be joined by "OR"
+            interaction_queries = []
+            include_interactions, exclude_interactions = (
+                self._prepare_interaction_indices_for_filtering(
+                    interaction_list=processed_filters["int_filters"]
+                )
+            )
+            # ensure there are interactions in the list after processing
+            if bool(exclude_interactions or include_interactions):
+                # prepare partial queries for the different interaction combinations
+                int_query = self._prepare_interaction_filtering_query(
+                    include_interactions, exclude_interactions
+                )
+
+        # check if ligand filters and prepare for query
+        # returns ligand_queries with partial queries for the vairous ones, to be joined by AND or OR I belive
+        if "lig_filters" in processed_filters:
+            lig_filters = processed_filters["lig_filters"]
+            ligand_queries = []
+            # if straight forward ligand filters, generate partial queries
+            if (
+                lig_filters["ligand_substruct"]
+                or lig_filters["ligand_name"]
+                or lig_filters["ligand_max_atoms"]
+            ):
+                ligand_queries.append(
+                    self._generate_ligand_filtering_query(lig_filters)
+                )
+            # if complex ligand filter, generate partial query
+            if lig_filters["ligand_substruct_pos"]:
+                ligand_queries.append(
+                    self._ligand_substructure_position_filter(lig_filters)
+                )
+            # join all ligand queries that are not empty
+            lig_query = " AND ".join(
+                [lig_filter for lig_filter in ligand_queries if lig_filter]
+            )
+
+        # choose columns to be selected from filtering_window
+        # TODO when to use "DISTINCT"
+        query_select_string = f"""SELECT {", ".join("R." + column for column in outfield_columns)} FROM {filtering_window} R """
+        # TODO how to change the start of this for the bookmark query
+        # start stringing together queries
+        unclustered_query = query_select_string
+        if int_query:
+            # add with a join statement
+            unclustered_query += "JOIN " + int_query + " ON R.Pose_ID = I.Pose_ID "
+        if lig_query:
+            # add with a join statement
+            unclustered_query += "JOIN (" + lig_query + ") ON R.LigName = L.LigName "
+        if num_query:
+            unclustered_query += "WHERE " + num_query
+
+        print("    unclustered query: ", unclustered_query)
+        cur = self.conn.cursor()
+        cur.execute(unclustered_query, (2,))
+        print(" unknown number of hits:", (cur.fetchall()))
+
         # if clustering only
-        elif clustering and not queries and not interaction_queries:
+        if clustering and not queries and not interaction_queries:
             # allows for clustering without filtering
             unclustered_query = f"SELECT Pose_id FROM {filtering_window}"
             self.logger.info("Preparing to cluster results")
@@ -2775,100 +2769,7 @@ class StorageManagerSQLite(StorageManager):
                 self.logger.warning(
                     "If clustering is not performed on a pre-filtered bookmark, the clustering process will be very slow."
                 )
-        # includes interactions
-        else:
-            joined_queries = " AND ".join("R." + query for query in queries)
-            # TODO building my new query for testing
-            # add the join and select part
-            new_query = (
-                start_of_query + "JOIN (SELECT Pose_id FROM (SELECT Pose_ID, CASE"
-            )
-            # then iteratively build the WHEN for each OR interaction and iterate through the nonsensical index
-            index_for_wildcard_interactions = -10000
-            or_part_of_query = ""
-            # if interaction id part of or statement, give nonsensical index for counting purposes
-            or_included_interactions = [
-                indices for indices in include_interactions if len(indices) > 1
-            ]
-            # # perform for included interactions
-            for indices in or_included_interactions:
-                index_for_wildcard_interactions += 1
-                or_part_of_query += (
-                    " WHEN interaction_id IN "
-                    + str(tuple(indices))
-                    + " THEN "
-                    + str(index_for_wildcard_interactions)
-                )
-            # perform for excluded interactions
-            or_excluded_interactions = [
-                indices for indices in exclude_interactions if len(indices) > 1
-            ]
-            for indices in or_excluded_interactions:
-                index_for_wildcard_interactions += 1
-                or_part_of_query += (
-                    " WHEN interaction_id NOT IN "
-                    + str(tuple(indices))
-                    + " THEN "
-                    + str(index_for_wildcard_interactions)
-                )
-            # finalize the CASE statement by counting other interactions normally
-            or_part_of_query += (
-                " ELSE interaction_id END AS filtered_interactions FROM Interactions "
-            )
-            # then prepare indices that are to be included, both from OR and AND statement
-            and_included_interactions = []
-            for index in [
-                indices for indices in include_interactions if len(indices) <= 1
-            ]:
-                # ensure no duplicates
-                if index[0] not in and_included_interactions:
-                    and_included_interactions.append(index[0])
-                    print("   AND included:", index[0])
 
-            # add the included OR indices
-            for index_list in or_included_interactions:
-                for index in index_list:
-                    if index not in and_included_interactions:
-                        and_included_interactions.append(index)
-                        print("   OR included:", index)
-
-            and_excluded_interactions = []
-            for index in [
-                indices for indices in exclude_interactions if len(indices) <= 1
-            ]:
-                # ensure no duplicates
-                if index[0] not in and_excluded_interactions:
-                    and_excluded_interactions.append(index[0])
-                    print("   AND excluded:", index[0])
-
-            # add the excluded OR indices
-            for index_list in or_excluded_interactions:
-                for index in index_list:
-                    if index not in and_excluded_interactions:
-                        and_excluded_interactions.append(index)
-                        print("   OR excluded:", index)
-
-            include_all = (
-                "WHERE interaction_id IN ("
-                + ",".join([str(x) for x in and_included_interactions])
-                + ")"
-            )
-            print("    include_all", include_all)
-            # TODO something flashy to get whether or not both statements are included
-            exclude_all = (
-                " AND interaction_id NOT IN ("
-                + ",".join([str(x) for x in and_excluded_interactions])
-                + ")"
-            )
-            print("     exclude_all", exclude_all)
-            num_of_interactions -= 1
-            new_query += (
-                or_part_of_query
-                + include_all
-                + exclude_all
-                + f") GROUP BY Pose_id HAVING COUNT (DISTINCT filtered_interactions) = {num_of_interactions}) I "
-            )
-            new_query += "ON R.pose_id = I.pose_id WHERE " + joined_queries
         print(new_query)
         cur = self._run_query(new_query)
         print(" This should be 19 hits:", (cur.fetchall()))
@@ -3037,6 +2938,107 @@ class StorageManagerSQLite(StorageManager):
             f"SELECT * FROM {filtering_window}",
         )  # sql_query, view_query
 
+    def _prepare_interaction_filtering_query(
+        self, include_interactions: list, exclude_interactions: list
+    ) -> str:
+        """
+        _summary_
+
+        Args:
+            include_interactions (list): _description_
+            exclude_interactions (list): _description_
+
+        Returns:
+            str: _description_
+        """
+        # nonsensical number to count an interaction if it satisfies an incomplete ("wildcard") interaction
+        nonsense_counter = -10000
+
+        def _prepare_indices_for_query(interactions: list):
+            """
+            Method to organize a list of indices into those to be included in an OR and an AND statement
+
+            Args:
+                interactions (list): list of indices organized by how they were queried from the db
+
+            Returns:
+                list, list: indices organized in lists appropriate for the query
+            """
+            and_interactions = []
+            or_interactions = []
+            # add the included OR indices
+            for index_list in interactions:
+                # one list per interaction, mode indices if interaction had a wildcard
+                for index in index_list:
+                    # if index not already represented
+                    if index not in and_interactions:
+                        # add to list
+                        and_interactions.append(index)
+                # if index list has more than one element, they should also be combined in an "OR" statement
+                if len(index_list) > 1:
+                    # adds a string element to the list
+                    or_interactions.append(index_list)
+            return and_interactions, or_interactions
+
+        # prepare lists of indices ready to be cast to tuples and strings
+        if include_interactions:
+            and_include_interactions, or_include_interactions = (
+                _prepare_indices_for_query(include_interactions)
+            )
+        if exclude_interactions:
+            and_exclude_interactions, or_exclude_interactions = (
+                _prepare_indices_for_query(exclude_interactions)
+            )
+
+        # building the query
+        # 1. select pose id, call CASE, in paranthesis because grouping with different query
+        query = "(SELECT Pose_ID FROM (SELECT Pose_ID "
+        if or_include_interactions or or_exclude_interactions:
+            # add the case statements
+            query += ", CASE "
+            # 2. list all OR statements
+            # TODO catch if no OR statements
+            for interactions in or_include_interactions:
+                # iterate the nonsense counter
+                nonsense_counter += 1
+                query += (
+                    "WHEN interaction_id IN ("
+                    + numlist2str(interactions, ",")
+                    + f") THEN {nonsense_counter} "
+                )
+            for interactions in or_exclude_interactions:
+                # iterate the nonsense counter
+                nonsense_counter += 1
+                query += (
+                    "WHEN interaction_id NOT IN ("
+                    + numlist2str(interactions, ",")
+                    + f") THEN {nonsense_counter} "
+                )
+            query += "ELSE interaction_id END "
+        # 3. proceed with all interactions
+        query += "AS filtered_interactions FROM Interactions WHERE "
+        if and_include_interactions:
+            query += (
+                "interaction_id IN ("
+                + numlist2str(and_include_interactions, ",")
+                + ") "
+            )
+            # if both include and exclude are there, need "AND"
+            if and_exclude_interactions:
+                query += "AND "
+        if and_exclude_interactions:
+            query += (
+                "interaction_id NOT IN ("
+                + numlist2str(and_exclude_interactions, ",")
+                + ") "
+            )
+        # 4. add grouping and wildcard for total interactions minus max_miss, essentially
+        query += (
+            ") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) = (?)) I "
+        )
+
+        return query
+
     def _ligand_substructure_position_filter(self, ligand_filters_dict: dict):
         queries = []
         nr_args_per_group = 6
@@ -3055,14 +3057,14 @@ class StorageManagerSQLite(StorageManager):
         ]
         cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
         cmd = cmd.replace(
-            "SELECT LigName FROM Ligands",
+            "SELECT L.LigName FROM Ligands L",
             "SELECT "
-            "Results.Pose_ID, "
-            "Ligands.LigName, "
-            "Ligands.ligand_smile, "
-            "Ligands.atom_index_map, "
-            "Results.ligand_coordinates "
-            "FROM Ligands INNER JOIN Results ON Results.LigName = Ligands.LigName",
+            "R.Pose_ID, "
+            "L.LigName, "
+            "L.ligand_smile, "
+            "L.atom_index_map, "
+            "R.ligand_coordinates "
+            "FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName",
         )
         cmd = "CREATE TEMP TABLE passed_smarts AS " + cmd
         cur = self.conn.cursor()
@@ -3113,7 +3115,8 @@ class StorageManagerSQLite(StorageManager):
                     if d2 <= sqdist:
                         pose_id_list.append(str(pose_id))
                         break  # add pose only once
-            queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
+            if len(pose_id_list) > 0:
+                queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
         cur.close()
         return queries
 
@@ -3149,7 +3152,59 @@ class StorageManagerSQLite(StorageManager):
         # return dict of pose id as string and bitvector
         return poseid_bv
 
-    def _generate_interaction_index_filtering_query(self, interaction_list) -> iter:
+    def _prepare_interaction_indices_for_filtering(self, interaction_list):
+        """
+        _summary_
+
+        Args:
+            interaction_list (): _description_
+
+        Raises:
+            OptionError
+
+        Returns:
+            list: two lists of indices for interactions to exclude and to include
+        """
+        # initialize variables
+        exclude_interactions = []
+        include_interactions = []
+        interaction_not_found = []
+
+        # figure out if each interaction is in database, make a list of list of indices for each interaction
+        for interaction in interaction_list:
+            # get all interaction indices matching the interaction filter (returns more than one index if filter has a "wildcard")
+            interaction_index_tuples = self._get_interaction_indices(interaction[:-1])
+            # make list of indices from iterable cursor tuples (should create empty list if no results)
+            interaction_indices = [i[0] for i in interaction_index_tuples]
+            # catch if interaction not found in database
+            if interaction_indices == []:
+                if interaction == ["R", "", "", "", "", True]:
+                    self.logger.warning(
+                        "Given 'react_any' filter, no reactive interactions found. Excluded from filtering."
+                    )
+                else:
+                    # create string representation of ecah interaction not found
+                    interaction_not_found.append(":".join(interaction[:4]))
+                continue  # ends this iteration of the for loop
+
+            # create a list of lists for interactions to either include or exclude
+            if interaction[-1] is True:
+                include_interactions.append(interaction_indices)
+            elif interaction[-1] is False:
+                exclude_interactions.append(interaction_indices)
+            else:
+                raise OptionError(
+                    "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
+                )
+        # if one or more interactions not found, raise error
+        if interaction_not_found:
+            raise OptionError(
+                f"The following interactions do not exist in the database: {interaction_not_found} not found in the database. Please check for spelling errors or remove from filter."
+            )
+        else:
+            return include_interactions, exclude_interactions
+
+    def _get_interaction_indices(self, interaction_list) -> iter:
         """takes list of interaction info for a given ligand,
             looks up corresponding interaction index
 
@@ -3194,7 +3249,6 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: SQLite-formatted query
         """
-        # this creates one blob for each interaction, where I rather need one list for all fully specified, and one list for each or statement
         return """SELECT Pose_id FROM (SELECT Pose_ID, interaction_id
                                         FROM Interactions
                                         WHERE Pose_ID IN subq) 
@@ -3202,8 +3256,8 @@ class StorageManagerSQLite(StorageManager):
             [f"""interaction_id={index}""" for index in interaction_index_list]
         )
 
-    def _generate_ligand_filtering_query(self, ligand_filters):
-        # TODO this one is important and might be tricky, use sqlitestudio
+    def _generate_ligand_filtering_query(self, ligand_filters: dict) -> str:
+        # TODO want to clean this one up
         """write string to select from ligand table
 
         Args:
@@ -3213,7 +3267,7 @@ class StorageManagerSQLite(StorageManager):
             str: SQLite-formatted query, Dict: dictionary of filters and values
         """
 
-        sql_ligand_string = "SELECT LigName FROM Ligands WHERE"
+        sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE"
         logical_operator = ligand_filters["ligand_operator"]
         if logical_operator is None:
             logical_operator = "AND"
@@ -3223,7 +3277,7 @@ class StorageManagerSQLite(StorageManager):
                 for name in fils:
                     if name == "":
                         continue
-                    name_sql_str = " LigName LIKE '%{value}%' OR".format(value=name)
+                    name_sql_str = " L.LigName LIKE '%{value}%' OR".format(value=name)
                     sql_ligand_string += name_sql_str
             if kw == "ligand_max_atoms" and ligand_filters[kw] is not None:
                 maxatom_sql_str = " mol_num_atms(ligand_rdmol) <= {} {}".format(

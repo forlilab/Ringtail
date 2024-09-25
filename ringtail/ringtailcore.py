@@ -919,10 +919,10 @@ class RingtailCore:
             "react_any": react_any,
             "max_miss": max_miss,
             "ligand_name": ligand_name,
+            "ligand_operator": ligand_operator,
             "ligand_substruct": ligand_substruct,
             "ligand_substruct_pos": ligand_substruct_pos,
             "ligand_max_atoms": ligand_max_atoms,
-            "ligand_operator": ligand_operator,
         }
 
         # Create a filter object

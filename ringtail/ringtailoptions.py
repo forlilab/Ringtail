@@ -563,17 +563,17 @@ class Filters(RTOptions):
             "description": "Will compute all possible combinations of interaction filters excluding up to 'max_miss' number of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.",
         },
         "ligand_name": {
-            "default": [],
+            "default": None,
             "type": list,
             "description": "Specify ligand name(s). Will combine name filters with 'OR'.",
         },
         "ligand_substruct": {
-            "default": [],
+            "default": None,
             "type": list,
             "description": "SMARTS pattern(s) for substructure matching.",
         },
         "ligand_substruct_pos": {
-            "default": [],
+            "default": None,
             "type": list,
             "description": "SMARTS pattern(s) for substructure matching, e.g., [''[Oh]C' 0 1.2 -5.5 10.0 15.5'] -> ['smart_string index_of_positioned_atom cutoff_distance x y z'].",
         },

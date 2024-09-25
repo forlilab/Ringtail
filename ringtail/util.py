@@ -80,3 +80,8 @@ def caller_info(skip=2):
     del parentframe
 
     return package, module, klass, caller, line
+
+
+def numlist2str(list: list, separator: str) -> str:
+
+    return separator.join([str(x) for x in list])
