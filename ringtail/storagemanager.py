@@ -246,7 +246,7 @@ class StorageManager:
         )
         self.logger.debug(f"Query for filtering results: {filter_results_str}")
 
-        # if max_miss is not 0, we want to give each passing view a new name by changing the self.bookmark_name
+        # if max_miss> and we are enumerating interaction combinations, we want to give each passing view a new name by changing the self.bookmark_name
         if self.view_suffix is not None:
             self.current_bookmark_name = self.bookmark_name + "_" + self.view_suffix
         else:
@@ -2377,8 +2377,6 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def get_maxmiss_union(self, total_combinations: int):
-        # TODO probably remove as union can happen automatically. Then if enumerating_interaction_combinations,
-        # just create the other bookmarks separately for each interaction combination through the method in the core
         """Get results that are in union considering max miss
 
         Args:
@@ -2389,10 +2387,10 @@ class StorageManagerSQLite(StorageManager):
         """
         selection_strs = []
         view_strs = []
-        outfield_str = self._generate_outfield_string()
+        outfield_list = self._generate_outfield_string()
         for i in range(total_combinations):
             selection_strs.append(
-                f"SELECT {outfield_str} FROM {self.bookmark_name + '_' + str(i)}"
+                f"""SELECT {", ".join(outfield_list)} FROM {self.bookmark_name + '_' + str(i)}"""
             )
             view_strs.append(f"SELECT * FROM {self.bookmark_name + '_' + str(i)}")
 
@@ -2787,8 +2785,6 @@ class StorageManagerSQLite(StorageManager):
 
         output_query = query_select_string + query
         view_query = f"SELECT * FROM {filtering_window} R " + query
-        print("    final query: ", output_query)
-        print("     view_query: ", view_query)
 
         return output_query, view_query
 
