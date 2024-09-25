@@ -1811,12 +1811,13 @@ class StorageManagerSQLite(StorageManager):
             temp_flag = "TEMP "
         else:
             temp_flag = ""
-        query = "CREATE {temp_flag}VIEW {name} AS {query}".format(
-            name=name, query=query, temp_flag=temp_flag
+
+        bookmark_query = f"CREATE {temp_flag}VIEW {name} AS {query}"
+        self._create_view(name, bookmark_query)
+        self._insert_bookmark_info(name, bookmark_query, filters)
+        self.logger.debug(
+            f"Created bookmark from the following query: {bookmark_query}"
         )
-        self._create_view(name=name, query=query)
-        self._insert_bookmark_info(name, query, filters)
-        self.logger.debug(f"Created bookmark from the following query: {query}")
 
     def _create_view(self, name, query):
         """takes name and selection query,
@@ -2564,6 +2565,7 @@ class StorageManagerSQLite(StorageManager):
         numerical_filters = []
         interaction_filters = []
         ligand_filters = {}
+        output_options = []
         energy_filter_col_name = {
             "eworst": "docking_score",
             "ebest": "docking_score",
@@ -2624,27 +2626,27 @@ class StorageManagerSQLite(StorageManager):
                     interaction_filters.append(
                         interaction_string.split(":") + [interact[1]]
                     )
-
             # add react_any flag as interaction filter if not None
             if filter_key == "react_any" and filter_value:
                 interaction_filters.append(["R", "", "", "", "", True])
             # if filter has to do with ligands and SMARTS
             if filter_key in Filters.get_filter_keys("ligand"):
                 ligand_filters[filter_key] = filter_value
-
+            if filter_key == "max_miss":
+                max_miss = filter_value
         # put all processed filter in a dict
         processed_filters = {}
         if len(numerical_filters) > 0:
             processed_filters["num_filters"] = numerical_filters
         if len(interaction_filters) > 0:
             processed_filters["int_filters"] = interaction_filters
+            processed_filters["max_miss"] = max_miss
         if len(ligand_filters) > 0:
             processed_filters["lig_filters"] = ligand_filters
 
         return processed_filters
 
     def _generate_result_filtering_query(self, filters_dict):
-        # TODO THE biggest one
         """takes lists of filters, writes sql filtering string
 
         Args:
@@ -2725,7 +2727,9 @@ class StorageManagerSQLite(StorageManager):
                 if bool(exclude_interactions or include_interactions):
                     # prepare partial queries for the different interaction combinations
                     int_query = self._prepare_interaction_filtering_query(
-                        include_interactions, exclude_interactions
+                        include_interactions,
+                        exclude_interactions,
+                        processed_filters["max_miss"],
                     )
 
             # check if ligand filters and prepare for query
@@ -2783,7 +2787,8 @@ class StorageManagerSQLite(StorageManager):
 
         output_query = query_select_string + query
         view_query = f"SELECT * FROM {filtering_window} R " + query
-        print("    final query: ", query)
+        print("    final query: ", output_query)
+        print("     view_query: ", view_query)
 
         return output_query, view_query
 
@@ -2948,7 +2953,7 @@ class StorageManagerSQLite(StorageManager):
         return cluster_query_string
 
     def _prepare_interaction_filtering_query(
-        self, include_interactions: list, exclude_interactions: list
+        self, include_interactions: list, exclude_interactions: list, max_miss: int
     ) -> str:
         """
         _summary_
@@ -2956,13 +2961,16 @@ class StorageManagerSQLite(StorageManager):
         Args:
             include_interactions (list): _description_
             exclude_interactions (list): _description_
+            max_miss (int): _description_
 
         Returns:
             str: _description_
         """
         # nonsensical number to count an interaction if it satisfies an incomplete ("wildcard") interaction
         nonsense_counter = -10000
-        num_of_interactions = len(include_interactions) + len(exclude_interactions)
+        num_of_interactions = (
+            len(include_interactions) + len(exclude_interactions) - max_miss
+        )
 
         def _prepare_indices_for_query(interactions: list):
             """
@@ -2995,10 +3003,16 @@ class StorageManagerSQLite(StorageManager):
             and_include_interactions, or_include_interactions = (
                 _prepare_indices_for_query(include_interactions)
             )
+        else:
+            and_include_interactions = []
+            or_include_interactions = []
         if exclude_interactions:
             and_exclude_interactions, or_exclude_interactions = (
                 _prepare_indices_for_query(exclude_interactions)
             )
+        else:
+            and_exclude_interactions = []
+            or_exclude_interactions = []
 
         # building the query
         # 1. select pose id, call CASE, in paranthesis because grouping with different query
@@ -3006,8 +3020,8 @@ class StorageManagerSQLite(StorageManager):
         if or_include_interactions or or_exclude_interactions:
             # add the case statements
             query += ", CASE "
-            # 2. list all OR statements
-            # TODO catch if no OR statements
+        # 2. list all OR statements
+        if or_include_interactions:
             for interactions in or_include_interactions:
                 # iterate the nonsense counter
                 nonsense_counter += 1
@@ -3016,6 +3030,7 @@ class StorageManagerSQLite(StorageManager):
                     + numlist2str(interactions, ",")
                     + f") THEN {nonsense_counter} "
                 )
+        if or_exclude_interactions:
             for interactions in or_exclude_interactions:
                 # iterate the nonsense counter
                 nonsense_counter += 1
@@ -3024,7 +3039,7 @@ class StorageManagerSQLite(StorageManager):
                     + numlist2str(interactions, ",")
                     + f") THEN {nonsense_counter} "
                 )
-            query += "ELSE interaction_id END "
+        query += "ELSE interaction_id END "
         # 3. proceed with all interactions
         query += "AS filtered_interactions FROM Interactions WHERE "
         if and_include_interactions:
@@ -3043,7 +3058,7 @@ class StorageManagerSQLite(StorageManager):
                 + ") "
             )
         # 4. add grouping and wildcard for total interactions minus max_miss, essentially
-        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) = ({num_of_interactions})) I "
+        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions})) I "
 
         return query
 
