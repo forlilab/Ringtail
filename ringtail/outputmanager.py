@@ -179,7 +179,7 @@ class OutputManager:
                 v = filters_dict.pop(k)
                 if v is not None:
                     if isinstance(v, list):
-                        v = ", ".join([f for f in v if f != ""])
+                        v = ", ".join([str(f) for f in v if f != ""])
                 else:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
