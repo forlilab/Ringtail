@@ -117,11 +117,12 @@ class TestRingtailCore:
         bookmarks = rtc.get_bookmark_names()
         assert len(bookmarks) == 1
         assert bookmarks[0] == "union_bookmark"
-        rtc.drop_bookmark("union_bookmark")
 
     def test_enumerate_interaction_combinations(self):
         # first test without enumerate, check number of passing union as well as number of bookmarks
         rtc = RingtailCore(db_file="output.db")
+        # get current bookmark count
+        bookmarks_old = rtc.get_bookmark_names()
         count_ligands_passing = rtc.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -132,19 +133,57 @@ class TestRingtailCore:
         )
         # make sure correct number of ligands passing
         assert count_ligands_passing == 33
+
         # make sure additional bookmarks were created for the enumerated combinations
-        bookmarks = rtc.get_bookmark_names()
-        assert len(bookmarks) == 6
+        bookmarks_with_new = rtc.get_bookmark_names()
+        # This filtering session should produce 6 bookmarks
+        assert len(bookmarks_with_new) - len(bookmarks_old) == 6
+
         # check that naming works properly
-        assert "enumerated_bookmark_0" in bookmarks
-        assert "enumerated_bookmark_union" in bookmarks
+        assert "enumerated_bookmark_0" in bookmarks_with_new
+        assert "enumerated_bookmark_union" in bookmarks_with_new
 
     def test_ligand_filters(self):
-        # ligand name
-        # ligand substruct
-        # ligand substruct pos
-        # ligand operator
-        pass
+        rtc = RingtailCore(db_file="output.db")
+
+        # tests for partial names
+        count_ligands_passing = rtc.filter(ligand_name=["88"])
+        assert count_ligands_passing == 7
+
+        # test substructure search (default 'OR' ligand_operator)
+        count_ligands_passing = rtc.filter(ligand_substruct=["C=O", "CC(C)(C)"])
+        assert count_ligands_passing == 90
+
+        # test substructure search (default 'OR' ligand_operator)
+        count_ligands_passing = rtc.filter(
+            ligand_substruct=["C=O", "CC(C)(C)"], ligand_operator="AND"
+        )
+        assert count_ligands_passing == 18
+
+        # test substructure with specified position, currently raises an error because substrcut with pos not found
+        from ringtail import exceptions as e
+
+        with pytest.raises(e.OptionError) as exc_info:
+            count_ligands_passing = rtc.filter(
+                ligand_substruct_pos=["[Oh]C", 0, 100, -5.5, 10.0, 15.5]
+            )
+            assert (
+                str(exc_info.value)
+                == "There are no ligands passing the 'ligand_substruct_pos' filter, please revise your filter query."
+            )
+
+    def test_all_filters(self):
+        rtc = RingtailCore(db_file="output.db")
+        count_ligands_passing = rtc.filter(
+            eworst=-6,
+            hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            max_miss=1,
+            bookmark_name="big_query",
+            ligand_name=["88"],
+        )
+
+        assert count_ligands_passing == 1
 
     def test_get_filterdata(self):
         rtc = RingtailCore(db_file="output.db")
