@@ -2692,7 +2692,6 @@ class StorageManagerSQLite(StorageManager):
         if self.interaction_cluster:
             cluster_query = f"SELECT Pose_ID, leff FROM Results WHERE Pose_ID IN ({unclustered_query})"
             # resulting data
-            # new
             poseid_leffs = self._run_query(cluster_query).fetchall()
             cluster_poseids = (
                 "("
@@ -2756,7 +2755,7 @@ class StorageManagerSQLite(StorageManager):
                     )
 
         if self.mfpt_cluster:
-            cluster_query = f"SELECT R.Pose_ID, R.leff, mol_morgan_bfp(Ligands.ligand_rdmol, 2, 1024) FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName WHERE R.Pose_ID IN ({unclustered_query})"
+            cluster_query = f"SELECT R.Pose_ID, R.leff, mol_morgan_bfp(L.ligand_rdmol, 2, 1024) FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName WHERE R.Pose_ID IN ({unclustered_query})"
             poseid_leff_mfps = self._run_query(cluster_query).fetchall()
             bclusters = _clusterFps(
                 [DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps],
