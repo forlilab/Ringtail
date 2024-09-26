@@ -109,9 +109,42 @@ class TestRingtailCore:
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             max_miss=1,
+            bookmark_name="union_bookmark",
         )
-
+        # make sure correct number of ligands passing
         assert count_ligands_passing == 33
+        # make sure only one bookmark was created
+        bookmarks = rtc.get_bookmark_names()
+        assert len(bookmarks) == 1
+        assert bookmarks[0] == "union_bookmark"
+        rtc.drop_bookmark("union_bookmark")
+
+    def test_enumerate_interaction_combinations(self):
+        # first test without enumerate, check number of passing union as well as number of bookmarks
+        rtc = RingtailCore(db_file="output.db")
+        count_ligands_passing = rtc.filter(
+            eworst=-6,
+            hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            max_miss=1,
+            enumerate_interaction_combs=True,
+            bookmark_name="enumerated_bookmark",
+        )
+        # make sure correct number of ligands passing
+        assert count_ligands_passing == 33
+        # make sure additional bookmarks were created for the enumerated combinations
+        bookmarks = rtc.get_bookmark_names()
+        assert len(bookmarks) == 6
+        # check that naming works properly
+        assert "enumerated_bookmark_0" in bookmarks
+        assert "enumerated_bookmark_union" in bookmarks
+
+    def test_ligand_filters(self):
+        # ligand name
+        # ligand substruct
+        # ligand substruct pos
+        # ligand operator
+        pass
 
     def test_get_filterdata(self):
         rtc = RingtailCore(db_file="output.db")
