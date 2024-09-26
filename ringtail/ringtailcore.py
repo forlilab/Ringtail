@@ -153,25 +153,18 @@ class RingtailCore:
             flexres_pose,
         ) in poses:
             # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
-            pose_bitvector = self.storageman.fetch_interaction_bitvector(Pose_ID)
+            interactions = self.storageman.fetch_pose_interactions(Pose_ID)
             # if that pose id has interactions
-            if pose_bitvector is not None:
+            if interactions is not None:
                 # make a list of all of them
-                interaction_indices = []
                 interactions_list = []
-                # for each interaction bit, make into a string according to format above
-                for idx, bit in enumerate(pose_bitvector):
-                    if bit == 1:
-                        interaction_indices.append(idx)
-                for int_idx in interaction_indices:
-                    # TODO refactor here if I refactor the method in storageman
-                    interaction_info = self.storageman.fetch_interaction_info_by_index(
-                        int_idx
-                    )
+                # for each interaction row, make into a string according to format above
+                for interaction_info in interactions:
                     interaction = (
                         interaction_info[0] + "-" + ":".join(interaction_info[1:])
                     )
                     interactions_list.append(interaction)
+
                 interactions_str = ", ".join(interactions_list)
                 properties["Interactions"].append(interactions_str)
 
@@ -1656,6 +1649,8 @@ class RingtailCore:
             )
 
         if similar_ligands is not None:
+            if not hasattr(self, "outputman"):
+                self.set_output_options()
             with self.outputman:
                 self.outputman.write_find_similar_header(query_ligname, cluster_name)
                 self.outputman.write_results_bookmark_to_log(bookmark_name)
