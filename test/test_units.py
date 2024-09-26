@@ -132,23 +132,23 @@ class TestRingtailCore:
 
         os.system(("rm " + log_file_name))
 
-    def test_similar_ligands_mfpt(self, monkeypatch):
-        rtc = RingtailCore(db_file="output.db")
-        ligand_name = "287065"
-        rtc.filter(ebest=-6, mfpt_cluster=0.5)
-        monkeypatch.setattr("builtins.input", lambda _: 0)  # provides terminal input
-        number_similar = rtc.find_similar_ligands(ligand_name)
-
-        assert number_similar == 8
-
     def test_similar_ligands_interaction(self, monkeypatch):
         rtc = RingtailCore(db_file="output.db")
         ligand_name = "287065"
         rtc.filter(ebest=-6, interaction_cluster=0.5)
-        monkeypatch.setattr("builtins.input", lambda _: 1)  # provides terminal input
+        monkeypatch.setattr("builtins.input", lambda _: 0)  # provides terminal input
         number_similar = rtc.find_similar_ligands(ligand_name)
 
         assert number_similar == 1
+
+    def test_similar_ligands_mfpt(self, monkeypatch):
+        rtc = RingtailCore(db_file="output.db")
+        ligand_name = "287065"
+        rtc.filter(ebest=-6, mfpt_cluster=0.5)
+        monkeypatch.setattr("builtins.input", lambda _: 1)  # provides terminal input
+        number_similar = rtc.find_similar_ligands(ligand_name)
+
+        assert number_similar == 8
 
     def test_create_rdkitmol(self):
         bookmark_name = "rdkit_test"
