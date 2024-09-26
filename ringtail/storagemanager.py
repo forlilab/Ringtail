@@ -2411,7 +2411,6 @@ class StorageManagerSQLite(StorageManager):
         numerical_filters = []
         interaction_filters = []
         ligand_filters = {}
-        output_options = []
         energy_filter_col_name = {
             "eworst": "docking_score",
             "ebest": "docking_score",
@@ -2582,17 +2581,16 @@ class StorageManagerSQLite(StorageManager):
             if "lig_filters" in processed_filters:
                 lig_filters = processed_filters["lig_filters"]
                 ligand_queries = []
-                # if straight forward ligand filters, generate partial queries
                 if (
-                    lig_filters["ligand_substruct"]
-                    or lig_filters["ligand_name"]
-                    or lig_filters["ligand_max_atoms"]
+                    "ligand_substruct" in lig_filters
+                    or "ligand_name" in lig_filters
+                    or "ligand_max_atoms" in lig_filters
                 ):
                     ligand_queries.append(
                         self._generate_ligand_filtering_query(lig_filters)
                     )
                 # if complex ligand filter, generate partial query
-                if lig_filters["ligand_substruct_pos"]:
+                if "ligand_substruct_pos" in lig_filters:
                     ligand_queries.append(
                         self._ligand_substructure_position_filter(lig_filters)
                     )
@@ -2606,7 +2604,7 @@ class StorageManagerSQLite(StorageManager):
             if lig_query:
                 # add with a join statement
                 unclustered_query += (
-                    "JOIN (" + lig_query + ") ON R.LigName = L.LigName "
+                    "JOIN (" + lig_query + ") L ON R.LigName = L.LigName "
                 )
             if num_query:
                 unclustered_query += "WHERE " + num_query
@@ -2626,14 +2624,14 @@ class StorageManagerSQLite(StorageManager):
         query_select_string = f"""SELECT {", ".join("R." + column for column in outfield_columns)} FROM {filtering_window} R """
         # adding if we only want to keep one pose per ligand (will keep first entry)
         if not self.output_all_poses:
-            query += " GROUP BY LigName "
+            query += " GROUP BY R.LigName "
         # add how to order results
         if self.order_results:
             query += "ORDER BY " + self.field_to_column_name[self.order_results]
 
         output_query = query_select_string + query
         view_query = f"SELECT * FROM {filtering_window} R " + query
-
+        print("      output query: ", output_query)
         return output_query, view_query
 
     def _prepare_cluster_query(self, unclustered_query: str) -> str | None:
@@ -3113,7 +3111,13 @@ class StorageManagerSQLite(StorageManager):
         """
 
         sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE"
-        logical_operator = ligand_filters["ligand_operator"]
+        if "ligand_operator" in ligand_filters:
+            logical_operator = ligand_filters["ligand_operator"]
+        else:
+            self.logger.info(
+                "A logical operator to combine ligand filters were not provided, will use the default value 'OR'."
+            )
+            logical_operator = "OR"
         if logical_operator is None:
             logical_operator = "AND"
         for kw in ligand_filters.keys():
