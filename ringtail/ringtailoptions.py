@@ -625,9 +625,10 @@ class Filters(RTOptions):
             if self.ligand_operator not in ["OR", "AND"] and (
                 self.ligand_substruct or self.ligand_substruct_pos
             ):
-                raise OptionError(
-                    f"Given 'ligand_operator' {self.ligand_operator} not allowed. Must be 'OR' or 'AND'."
+                logger.warning(
+                    f"Given 'ligand_operator' {self.ligand_operator} not allowed with 'ligand_substruct' or 'ligand_substruct_pos'. Will be set to default 'OR'."
                 )
+                self.ligand_operator = "OR"
 
             if self.max_miss < 0:
                 raise OptionError("'max_miss' must be greater than or equal to 0.")
