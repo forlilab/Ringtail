@@ -1647,16 +1647,17 @@ class RingtailCore:
             similar_ligands, bookmark_name, cluster_name = (
                 self.storageman.fetch_clustered_similars(query_ligname)
             )
-
-        if similar_ligands is not None:
-            if not hasattr(self, "outputman"):
-                self.set_output_options()
-            with self.outputman:
-                self.outputman.write_find_similar_header(query_ligname, cluster_name)
-                self.outputman.write_results_bookmark_to_log(bookmark_name)
-                number_similar = self.outputman.write_filter_log(similar_ligands)
-                self.outputman.log_num_passing_ligands(number_similar)
-                print("Number similar ligands:", number_similar)
+            if similar_ligands is not None:
+                if not hasattr(self, "outputman"):
+                    self.set_output_options()
+                with self.outputman:
+                    self.outputman.write_find_similar_header(
+                        query_ligname, cluster_name
+                    )
+                    self.outputman.write_results_bookmark_to_log(bookmark_name)
+                    number_similar = self.outputman.write_filter_log(similar_ligands)
+                    self.outputman.log_num_passing_ligands(number_similar)
+                    print("Number similar ligands:", number_similar)
         return number_similar
 
     def plot(self, save=True, bookmark_name: str = None):
