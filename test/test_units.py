@@ -637,10 +637,13 @@ class TestStorageMan:
 
     def test_bookmark_info(self, dbquery):
         rtc = RingtailCore("output.db")
+        rtc.add_results_from_files(
+            file_path="test_data/adgpu/group2",
+        )
         rtc.filter(
             eworst=-3,
-            vdw_interactions=[("A:ALA:213:", True), ("A:VAL:279:", True)],
-            hb_interactions=[("A:ALA:213:", True)],
+            hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            vdw_interactions=[("A:VAL:279:", True)],
         )
         curs = dbquery(
             "SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'"
@@ -654,8 +657,8 @@ class TestStorageMan:
             "lebest": None,
             "score_percentile": None,
             "le_percentile": None,
-            "vdw_interactions": [["A:ALA:213:", True], ["A:VAL:279:", True]],
-            "hb_interactions": [["A:ALA:213:", True]],
+            "vdw_interactions": [["A:VAL:279:", True]],
+            "hb_interactions": [["A:VAL:279:", True], ["A:LYS:162:", True]],
             "reactive_interactions": [],
             "hb_count": None,
             "react_any": None,
@@ -663,8 +666,8 @@ class TestStorageMan:
             "ligand_name": None,
             "ligand_substruct": None,
             "ligand_substruct_pos": None,
-            "ligand_max_atoms": None,
             "ligand_operator": None,
+            "ligand_max_atoms": None,
         }
         assert bookmark_filters_db_str == json.dumps(filters)
 
