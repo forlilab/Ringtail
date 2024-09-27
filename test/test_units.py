@@ -315,10 +315,10 @@ class TestRingtailCore:
             "react_any": None,
             "max_miss": 0,
             "ligand_name": None,
+            "ligand_operator": None,
             "ligand_substruct": None,
             "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": None,
         } in test_filters
 
         assert {
@@ -335,10 +335,10 @@ class TestRingtailCore:
             "react_any": None,
             "max_miss": 0,
             "ligand_name": None,
+            "ligand_operator": None,
             "ligand_substruct": None,
             "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": None,
         } in test_filters
 
         assert {
@@ -355,10 +355,10 @@ class TestRingtailCore:
             "react_any": None,
             "max_miss": 0,
             "ligand_name": None,
+            "ligand_operator": None,
             "ligand_substruct": None,
             "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": None,
         } in test_filters
 
         assert {
@@ -375,10 +375,10 @@ class TestRingtailCore:
             "react_any": None,
             "max_miss": 0,
             "ligand_name": None,
+            "ligand_operator": None,
             "ligand_substruct": None,
             "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": None,
         } in test_filters
 
         assert {
@@ -395,10 +395,10 @@ class TestRingtailCore:
             "react_any": None,
             "max_miss": 0,
             "ligand_name": None,
+            "ligand_operator": None,
             "ligand_substruct": None,
             "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": None,
         } in test_filters
 
         assert len(test_filters) == 5
@@ -664,9 +664,9 @@ class TestStorageMan:
             "react_any": None,
             "max_miss": 0,
             "ligand_name": None,
+            "ligand_operator": None,
             "ligand_substruct": None,
             "ligand_substruct_pos": None,
-            "ligand_operator": None,
             "ligand_max_atoms": None,
         }
         assert bookmark_filters_db_str == json.dumps(filters)
