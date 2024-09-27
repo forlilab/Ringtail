@@ -39,7 +39,7 @@ class StorageManager:
     _db_schema_code_compatibility = {
         "1.0.0": ["1.0.0"],
         "1.1.0": ["1.1.0"],
-        "2.0.0": ["2.0.0"],
+        "2.0.0": ["2.0.0", "2.1.0"],
     }
 
     """Base class for a generic virtual screening database object.
@@ -1753,14 +1753,15 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
 
-        query_drop = "DROP VIEW IF EXISTS {0}".format(bookmark_name)
-        query_delete = "DELETE FROM Bookmarks WHERE Bookmark_name = '{0}'".format(
-            bookmark_name
-        )
+        query_drop = f"DROP VIEW IF EXISTS {bookmark_name}"
+        query_delete = f"DELETE FROM Bookmarks WHERE Bookmark_name = '{bookmark_name}'"
 
         try:
-            self._run_query(query_drop)
-            self._run_query(query_delete)
+            cur = self.conn.execute(query_drop)
+            cur.execute(query_delete)
+            self.conn.commit()
+            cur.close()
+            self.logger.info(f"Dropped bookmark {bookmark_name}.")
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 f"Error while attempting to drop bookmark {bookmark_name}"
@@ -1978,7 +1979,6 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(query)
 
     def fetch_interaction_info_by_index(self, interaction_idx):
-        # TODO refactor-> make it work for one or more indices
         """Returns tuple containing interaction info for given interaction_idx
 
         Args:
@@ -2125,7 +2125,6 @@ class StorageManagerSQLite(StorageManager):
             return pd.read_sql_query(requested_data, self.conn)
 
     def _get_length_of_table(self, table_name: str):
-        # TODO check if index on table, and use that row if possible
         """
         Finds the rowcount/length of a table based on the rowid
 
@@ -2301,7 +2300,6 @@ class StorageManagerSQLite(StorageManager):
             raise ValueError(
                 f"Given cluster number {cluster_choice} cannot be converted to int. Please be sure you are specifying integer."
             )
-        # TODO might be able to refactor these queries
         query_ligand_cluster = cur.execute(
             f"SELECT {cluster_col_choice} FROM Ligand_clusters WHERE pose_id IN (SELECT Pose_ID FROM Results WHERE LigName LIKE '{ligname}')"
         ).fetchone()
@@ -2600,7 +2598,9 @@ class StorageManagerSQLite(StorageManager):
                 )
             if int_query:
                 # add with a join statement
-                unclustered_query += "JOIN " + int_query + " ON R.Pose_ID = I.Pose_ID "
+                unclustered_query += (
+                    "JOIN (" + int_query + ") I ON R.Pose_ID = I.Pose_ID "
+                )
             if lig_query:
                 # add with a join statement
                 unclustered_query += (
@@ -2620,7 +2620,6 @@ class StorageManagerSQLite(StorageManager):
             # if not clustering, rename query
             query = unclustered_query
         # choose columns to be selected from filtering_window
-        # TODO when to use "DISTINCT"
         query_select_string = f"""SELECT {", ".join("R." + column for column in outfield_columns)} FROM {filtering_window} R """
         # adding if we only want to keep one pose per ligand (will keep first entry)
         if not self.output_all_poses:
@@ -2631,7 +2630,6 @@ class StorageManagerSQLite(StorageManager):
 
         output_query = query_select_string + query
         view_query = f"SELECT * FROM {filtering_window} R " + query
-        print("      output query: ", output_query)
         return output_query, view_query
 
     def _prepare_cluster_query(self, unclustered_query: str) -> str | None:
@@ -2785,7 +2783,6 @@ class StorageManagerSQLite(StorageManager):
                 cluster_query_string = "R.Pose_ID = " + " OR R.Pose_ID = ".join(
                     fp_rep_poseids
                 )
-        print("      cluster_query_string: ", cluster_query_string)
         return cluster_query_string
 
     def _prepare_interaction_filtering_query(
@@ -2852,7 +2849,7 @@ class StorageManagerSQLite(StorageManager):
 
         # building the query
         # 1. select pose id, call CASE, in paranthesis because grouping with different query
-        query = "(SELECT Pose_ID FROM (SELECT Pose_ID "
+        query = "SELECT Pose_ID FROM (SELECT Pose_ID "
         if or_include_interactions or or_exclude_interactions:
             # add the case statements
             query += ", CASE "
@@ -2896,7 +2893,7 @@ class StorageManagerSQLite(StorageManager):
                 + ") "
             )
         # 4. add grouping and wildcard for total interactions minus max_miss, essentially
-        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions})) I "
+        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
 
@@ -2979,6 +2976,10 @@ class StorageManagerSQLite(StorageManager):
             if len(pose_id_list) > 0:
                 queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
         cur.close()
+        if not queries:
+            raise OptionError(
+                "There are no ligands passing the 'ligand_substruct_pos' filter, please revise your filter query."
+            )
         return queries
 
     def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
@@ -3100,7 +3101,6 @@ class StorageManagerSQLite(StorageManager):
         return self._run_query(sql_string).fetchall()
 
     def _generate_ligand_filtering_query(self, ligand_filters: dict) -> str:
-        # TODO want to clean this one up
         """write string to select from ligand table
 
         Args:
