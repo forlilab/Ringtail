@@ -577,15 +577,15 @@ class Filters(RTOptions):
             "type": list,
             "description": "SMARTS pattern(s) for substructure matching, e.g., [''[Oh]C' 0 1.2 -5.5 10.0 15.5'] -> ['smart_string index_of_positioned_atom cutoff_distance x y z'].",
         },
-        "ligand_max_atoms": {
-            "default": None,
-            "type": int,
-            "description": "Maximum number of heavy atoms a ligand may have.",
-        },
         "ligand_operator": {
             "default": None,
             "type": str,
             "description": "Logical join operator for multiple SMARTS.",
+        },
+        "ligand_max_atoms": {
+            "default": None,
+            "type": int,
+            "description": "Maximum number of heavy atoms a ligand may have.",
         },
     }
 
@@ -595,7 +595,7 @@ class Filters(RTOptions):
     def checks(self):
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
-        if hasattr(self, "ligand_operator"):
+        if hasattr(self, "ligand_max_atoms"):
             if self.eworst is not None and self.score_percentile is not None:
                 logger.warning(
                     "Cannot use 'eworst' cutoff with 'score_percentile'. Overiding 'score_percentile' with 'eworst'."
@@ -625,9 +625,7 @@ class Filters(RTOptions):
             if self.ligand_operator not in ["OR", "AND"] and (
                 self.ligand_substruct or self.ligand_substruct_pos
             ):
-                logger.warning(
-                    f"Given 'ligand_operator' {self.ligand_operator} not allowed with 'ligand_substruct' or 'ligand_substruct_pos'. Will be set to default 'OR'."
-                )
+                logger.debug(f"'ligand_operator' set to default 'OR'.")
                 self.ligand_operator = "OR"
 
             if self.max_miss < 0:
