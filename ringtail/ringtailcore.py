@@ -869,10 +869,10 @@ class RingtailCore:
         react_any=None,
         max_miss=None,
         ligand_name=None,
+        ligand_operator=None,
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
-        ligand_operator=None,
         dict: dict = None,
     ):
         """
@@ -913,8 +913,8 @@ class RingtailCore:
             "hb_count": hb_count,
             "react_any": react_any,
             "max_miss": max_miss,
-            "ligand_name": ligand_name,
             "ligand_operator": ligand_operator,
+            "ligand_name": ligand_name,
             "ligand_substruct": ligand_substruct,
             "ligand_substruct_pos": ligand_substruct_pos,
             "ligand_max_atoms": ligand_max_atoms,
@@ -1211,10 +1211,10 @@ class RingtailCore:
         react_any=None,
         max_miss=None,
         ligand_name=None,
+        ligand_operator=None,
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
-        ligand_operator=None,
         filters_dict: dict | None = None,
         # other processing options:
         enumerate_interaction_combs: bool = False,
@@ -1313,10 +1313,10 @@ class RingtailCore:
             react_any=react_any,
             max_miss=max_miss,
             ligand_name=ligand_name,
+            ligand_operator=ligand_operator,
             ligand_substruct=ligand_substruct,
             ligand_substruct_pos=ligand_substruct_pos,
             ligand_max_atoms=ligand_max_atoms,
-            ligand_operator=ligand_operator,
             dict=filters_dict,
         )
 
@@ -1405,7 +1405,6 @@ class RingtailCore:
                     self.storageman.drop_bookmark(self.storageman.bookmark_name)
             # else produce a bookmark for each interaction combination
             elif not write_one_bookmark:
-                # TODO in this case max_miss has to be the exact number of interactions in each combo
                 interaction_combs = self._generate_interaction_combinations(
                     self.filters.max_miss
                 )

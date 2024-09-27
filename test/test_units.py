@@ -117,6 +117,7 @@ class TestRingtailCore:
         bookmarks = rtc.get_bookmark_names()
         assert len(bookmarks) == 1
         assert bookmarks[0] == "union_bookmark"
+        rtc.drop_bookmark("union_bookmark")
 
     def test_enumerate_interaction_combinations(self):
         # first test without enumerate, check number of passing union as well as number of bookmarks
@@ -135,13 +136,13 @@ class TestRingtailCore:
         assert count_ligands_passing == 33
 
         # make sure additional bookmarks were created for the enumerated combinations
-        bookmarks_with_new = rtc.get_bookmark_names()
+        bookmarks = rtc.get_bookmark_names()
         # This filtering session should produce 6 bookmarks
-        assert len(bookmarks_with_new) - len(bookmarks_old) == 6
+        assert len(bookmarks) == 6
 
         # check that naming works properly
-        assert "enumerated_bookmark_0" in bookmarks_with_new
-        assert "enumerated_bookmark_union" in bookmarks_with_new
+        assert "enumerated_bookmark_0" in bookmarks
+        assert "enumerated_bookmark_union" in bookmarks
 
     def test_ligand_filters(self):
         rtc = RingtailCore(db_file="output.db")
