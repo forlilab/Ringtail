@@ -1558,6 +1558,7 @@ class RingtailCore:
                 try:
                     max_miss_present = bool(
                         bookmark_filters["max_miss"] > 0
+                        and not bookmark_filters["enumerate_interaction_combs"]
                         and not "_union" in self.storageman.bookmark_name
                     )
                 except:
