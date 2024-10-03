@@ -12,7 +12,6 @@ from .exceptions import FileParsingError
 from .logutils import LOGGER as logger
 
 
-# TODO add a second zip method (bz2), clean up duplication between dlg and pdbqt
 def parse_single_dlg(fname):
     """Parse an ADGPU DLG file uncompressed or gzipped
 
