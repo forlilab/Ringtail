@@ -4,7 +4,6 @@
 # Ringtail storage adaptors
 #
 
-from traceback import format_exc
 import sqlite3
 import time
 import json
@@ -39,7 +38,7 @@ class StorageManager:
     _db_schema_code_compatibility = {
         "1.0.0": ["1.0.0"],
         "1.1.0": ["1.1.0"],
-        "2.0.0": ["2.0.0", "2.1.0"],
+        "2.0.0": ["2.0.0", "2.0.1"],
     }
 
     """Base class for a generic virtual screening database object.
@@ -224,7 +223,7 @@ class StorageManager:
             # NOTE will cause error when any version int is > 10
             # catch version 1.0.0 where returned db_rt_version will be 0
             if db_rt_version == 0:
-                db_rt_version = 100  # TODO update this for new ringtail version and db schema version
+                db_rt_version = 100
             raise StorageError(
                 f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
             )
@@ -501,6 +500,9 @@ class StorageManagerSQLite(StorageManager):
 
     # region Methods for inserting into/removing from the database
     def _create_tables(self):
+        """
+        Creates all tables needed for a Ringtail database of a specific version
+        """
         self._create_results_table()
         self._create_ligands_table()
         self._create_receptors_table()
@@ -1392,7 +1394,6 @@ class StorageManagerSQLite(StorageManager):
         return list(interactions)
 
     def _insert_interaction_index_row(self, interaction_tuple) -> tuple:
-        # change method to _insert_interaction_index
         """
         Writes unique interactions and returns the interaction_id of the given interaction
 
@@ -1535,7 +1536,7 @@ class StorageManagerSQLite(StorageManager):
         self.conn.commit()
 
     def _create_indices(self):
-        """Create index containing possible filter and order by columns
+        """Create index for specified tables and columns. 'ak' stands for 'alternate key' and is prepended to index name to avoid naming conflicts
 
         Raises:
             StorageError
@@ -1554,6 +1555,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
             )
+            cur.execute("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(LigName)")
             self.conn.commit()
             cur.close()
             self.logger.info(
@@ -1663,6 +1665,7 @@ class StorageManagerSQLite(StorageManager):
     def create_bookmark(self, name, query, temp=False, add_poseID=False, filters={}):
         """Takes name and selection query and creates a bookmark of name.
         Bookmarks are Ringtail specific views that whose information is stored in the 'Bookmark' table.
+        #FIXME bug where ligand filter only results are not added as bookmarks
 
         Args:
             name (str): Name for bookmark which will be created
@@ -1712,7 +1715,7 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseViewCreationError(
-                "Error ({1}) creating view from query \n{0}".format(query, e)
+                f"Error ({e}) creating view from query \n{query}"
             ) from e
 
     def _insert_bookmark_info(self, name: str, sqlite_query: str, filters={}):
@@ -1930,7 +1933,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError("Error retrieving flexible residue info") from e
 
-    def fetch_passing_ligand_output_info(self):
+    def fetch_passing_ligand_output_info(self) -> iter:
         """fetch information required by vsmanager for writing out molecules
 
         Returns:
@@ -1940,7 +1943,7 @@ class StorageManagerSQLite(StorageManager):
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM passing_temp)"
         return self._run_query(query)
 
-    def fetch_single_ligand_output_info(self, ligname):
+    def fetch_single_ligand_output_info(self, ligname) -> str:
         """get output information for given ligand
 
         Args:
@@ -1965,7 +1968,7 @@ class StorageManagerSQLite(StorageManager):
                 f"Error retrieving ligand info for {ligname}"
             ) from e
 
-    def fetch_single_pose_properties(self, pose_ID: int):
+    def fetch_single_pose_properties(self, pose_ID: int) -> iter:
         """fetch coordinates for pose given by pose_ID
 
         Args:
@@ -1978,7 +1981,7 @@ class StorageManagerSQLite(StorageManager):
         query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
         return self._run_query(query)
 
-    def fetch_interaction_info_by_index(self, interaction_idx):
+    def fetch_interaction_info_by_index(self, interaction_idx) -> tuple:
         """Returns tuple containing interaction info for given interaction_idx
 
         Args:
@@ -1992,7 +1995,7 @@ class StorageManagerSQLite(StorageManager):
         )
         return self._run_query(query).fetchone()[1:]  # cut off interaction index
 
-    def fetch_pose_interactions(self, Pose_ID):
+    def fetch_pose_interactions(self, Pose_ID) -> iter:
         """
         Fetch all interactions parameters belonging to a Pose_ID
 
@@ -2234,7 +2237,7 @@ class StorageManagerSQLite(StorageManager):
         """
         selection_strs = []
         view_strs = []
-        outfield_list = self._generate_outfield_string()
+        outfield_list = self._generate_outfield_list()
         for i in range(total_combinations):
             selection_strs.append(
                 f"""SELECT {", ".join(outfield_list)} FROM {self.bookmark_name + '_' + str(i)}"""
@@ -2373,7 +2376,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
 
-    def _generate_outfield_string(self):
+    def _generate_outfield_list(self):
         """list describing outfields to be written
 
         Returns:
@@ -2387,9 +2390,7 @@ class StorageManagerSQLite(StorageManager):
         for outfield in outfields_list:
             if outfield not in self._data_kw_groups("outfield_options"):
                 raise OptionError(
-                    "{out_f} is not a valid output option. Please see rt_process_vs.py --help for allowed options".format(
-                        out_f=outfield
-                    )
+                    f"{outfield} is not a valid output option. Please see rt_process_vs.py --help for allowed options"
                 )
         return [self.field_to_column_name[field] for field in outfields_list]
 
@@ -2447,12 +2448,10 @@ class StorageManagerSQLite(StorageManager):
                         )
                         continue
                     if v > 0:
-                        numerical_filters.append("num_hb > {value}".format(value=v))
+                        numerical_filters.append(f"num_hb > {v}")
                     else:
                         # if value is negative, it means less than specified number of hydrogen bonds
-                        numerical_filters.append(
-                            "num_hb <= {value}".format(value=-1 * v)
-                        )
+                        numerical_filters.append(f"num_hb <= {-v}")
             interaction_name_to_letter = {
                 "vdw_interactions": "V",
                 "hb_interactions": "H",
@@ -2498,9 +2497,10 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: SQLite-formatted string for filtering query
         """
+        # table to filter over
         filtering_window = "Results"
 
-        outfield_columns = self._generate_outfield_string()
+        outfield_columns = self._generate_outfield_list()
         num_query = ""
         int_query = ""
         lig_query = ""
@@ -2523,11 +2523,17 @@ class StorageManagerSQLite(StorageManager):
                 raise OptionError(
                     "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
                 )
-            # filtering window can be specified bookmark, or whole database (or other reduced versions of db)
+            # filtering window can be specified bookmark, as opposed to entire database using Results table
             filtering_window = self.filter_bookmark
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
+
+        # raise error if no filters are present and no clusterings
+        if not processed_filters and not clustering:
+            raise DatabaseQueryError(
+                "Ringtail query strings are empty, please check filter options."
+            )
 
         # check if clustering
         clustering = bool(self.mfpt_cluster or self.interaction_cluster)
@@ -2538,16 +2544,12 @@ class StorageManagerSQLite(StorageManager):
             unclustered_query = f"SELECT R.Pose_id FROM {filtering_window} R "
             if not processed_filters and filtering_window == "Results":
                 self.logger.warning(
-                    "If clustering is not performed on a pre-filtered bookmark, the clustering process will be very slow."
+                    "If clustering is not performed on a pre-filtered bookmark, the clustering process can be slow."
                 )
         else:
             # start with empty string, will prepend SELECT statement later
             unclustered_query = ""
-        # raise error if no filters are present and no clusterings
-        if not processed_filters and not clustering:
-            raise DatabaseQueryError(
-                "Query strings are empty. Please check filter options and ensure requested interactions are present."
-            )
+
         # create query string from filters if present
         if processed_filters:
             # start stringing together queries
@@ -2556,7 +2558,6 @@ class StorageManagerSQLite(StorageManager):
                 num_query = " AND ".join(
                     ["R." + filter for filter in processed_filters["num_filters"]]
                 )
-
             # check for interactions and prepare for query
             if "int_filters" in processed_filters:
                 # if interaction filters are present and valid, two lists of included and excluded interactions are returned
@@ -2574,7 +2575,6 @@ class StorageManagerSQLite(StorageManager):
                         exclude_interactions,
                         processed_filters["max_miss"],
                     )
-
             # check if ligand filters and prepare for query
             if "lig_filters" in processed_filters:
                 lig_filters = processed_filters["lig_filters"]
@@ -2586,16 +2586,17 @@ class StorageManagerSQLite(StorageManager):
                 ):
                     ligand_queries.append(
                         self._generate_ligand_filtering_query(lig_filters)
-                    )
+                    )  # TODO here?
                 # if complex ligand filter, generate partial query
                 if "ligand_substruct_pos" in lig_filters:
                     ligand_queries.append(
                         self._ligand_substructure_position_filter(lig_filters)
                     )
-                # join all ligand queries that are not empty
+                # join all ligand queries that are not empty #TODO this should have ran some stuff already, no?
                 lig_query = " AND ".join(
                     [lig_filter for lig_filter in ligand_queries if lig_filter]
-                )
+                )  # TODO
+            # if filter queries exist for each group, string them together appropriately
             if int_query:
                 # add with a join statement
                 unclustered_query += (
@@ -2608,6 +2609,7 @@ class StorageManagerSQLite(StorageManager):
                 )
             if num_query:
                 unclustered_query += "WHERE " + num_query
+
         # if clustering is requested, do that before saving view or filtering results for output
         if clustering:
             # add appropriate select
@@ -2619,6 +2621,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             # if not clustering, rename query
             query = unclustered_query
+
         # choose columns to be selected from filtering_window
         query_select_string = f"""SELECT {", ".join("R." + column for column in outfield_columns)} FROM {filtering_window} R """
         # adding if we only want to keep one pose per ligand (will keep first entry)
@@ -2626,7 +2629,7 @@ class StorageManagerSQLite(StorageManager):
             query += " GROUP BY R.LigName "
         # add how to order results
         if self.order_results:
-            query += "ORDER BY " + self.field_to_column_name[self.order_results]
+            query += " ORDER BY " + self.field_to_column_name[self.order_results]
 
         output_query = query_select_string + query
         view_query = f"SELECT * FROM {filtering_window} R " + query
@@ -2634,31 +2637,28 @@ class StorageManagerSQLite(StorageManager):
 
     def _prepare_cluster_query(self, unclustered_query: str) -> str | None:
         """
-        These methods will take (filtered, hopefully) data, then run the cluster query and cluster the filtered data.
+        These methods will take data returned from unclustered filter query, then run the cluster query and cluster the filtered data.
         This will output pose_ids that are representative of the clusters, and these pose_ids will be returned so that
         they can be added to the unclustered query in the main filtering method.
-        They will only return a simple string since the filters were already applied, so the returning query is now the only query!
 
         Args:
-            unclustered_query (str): _description_
+            unclustered_query (str): query containing none or some filters that defines over which ligands the clustering should happen
 
         Returns:
-            str | None: _description_
-
-        Yields:
-            Iterator[str | None]: _description_
+            str: (reduced) query to include in overall filter query if clustering returned results
         """
         if self.interaction_cluster and self.mfpt_cluster:
             self.logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering."
             )
 
-        def _clusterFps(
-            fps, cutoff
-        ):  # https://macinchem.org/2023/03/05/options-for-clustering-large-datasets-of-molecules/
+        def _clusterFps(fps, cutoff):
             """
-            fps (): fingerprints
-            cutoff distance (float)
+            https://macinchem.org/2023/03/05/options-for-clustering-large-datasets-of-molecules/
+
+            Args:
+                fps (): fingerprints
+                cutoff distance (float)
             """
 
             # first generate the distance matrix:
@@ -2789,15 +2789,15 @@ class StorageManagerSQLite(StorageManager):
         self, include_interactions: list, exclude_interactions: list, max_miss: int
     ) -> str:
         """
-        _summary_
+        Method that prepares a partial query for interactions
 
         Args:
-            include_interactions (list): _description_
-            exclude_interactions (list): _description_
-            max_miss (int): _description_
+            include_interactions (list): interactions a pose should have
+            exclude_interactions (list): interactions a pose should not have
+            max_miss (int): max number of the provided interactions a pose_id is allowed to miss
 
         Returns:
-            str: _description_
+            str: partial query to include in main filter query
         """
         # nonsensical number to count an interaction if it satisfies an incomplete ("wildcard") interaction
         nonsense_counter = -10000
@@ -2897,7 +2897,20 @@ class StorageManagerSQLite(StorageManager):
 
         return query
 
-    def _ligand_substructure_position_filter(self, ligand_filters_dict: dict):
+    def _ligand_substructure_position_filter(self, ligand_filters_dict: dict) -> str:
+        """
+        Method that takes all ligand filters in the presence of a ligand_substruct_pos filter, and reduces the query to
+        " IN pose_ids" based on what pose_ids passed the ligand filters
+
+        Args:
+            ligand_filters_dict (dict): all specified ligand filters
+
+        Raises:
+            OptionError
+
+        Returns:
+            str: partial query that identifies pose ids passing the ligand substructure filter
+        """
         queries = []
         nr_args_per_group = 6
         nr_smarts = int(
@@ -2984,7 +2997,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
         """
-        Method to generate bitvector strings from pose_ids
+        Method to generate a dict of generate bitvector strings from pose_ids
 
         Args:
             pose_ids (str): query formatted list of pose_ids (as tuple)
@@ -3014,12 +3027,13 @@ class StorageManagerSQLite(StorageManager):
         # return dict of pose id as string and bitvector
         return poseid_bv
 
-    def _prepare_interaction_indices_for_filtering(self, interaction_list):
+    def _prepare_interaction_indices_for_filtering(self, interaction_list: list):
         """
-        _summary_
+        Prepare lists of interaction indices where they are grouped by whether or not they should be evaluated as "AND" or "OR",
+        and whether to be excluded or included in the passing filter poses
 
         Args:
-            interaction_list (): _description_
+            interaction_list (list): list of interactions
 
         Raises:
             OptionError
@@ -3067,8 +3081,7 @@ class StorageManagerSQLite(StorageManager):
             return include_interactions, exclude_interactions
 
     def _get_interaction_indices(self, interaction_list) -> iter:
-        """takes list of interaction info for a given ligand,
-            looks up corresponding interaction index
+        """takes list of interaction info and looks up corresponding interaction index
 
         Args:
             interaction_list (list): List containing interaction info
@@ -3107,7 +3120,7 @@ class StorageManagerSQLite(StorageManager):
             ligand_filters (list): List of filters on ligand table
 
         Returns:
-            str: SQLite-formatted query, Dict: dictionary of filters and values
+            str: SQLite-formatted query
         """
 
         sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE"
@@ -3287,6 +3300,13 @@ class StorageManagerSQLite(StorageManager):
             )
 
     def check_ringtaildb_version(self):
+        """
+        Checks the database version and confirms whether the code base is compatible with it
+
+        Returns:
+            bool: whether or not db is compatible with the code base
+            str: current database version
+        """
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
         db_schema_ver = ".".join([*db_version])
@@ -3373,7 +3393,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _update_db_110_to_200(self):
         """
-        Method to update from database v 1.1.0 to 2.0.0, will remove bitvetor table and create Interaction table
+        Method to update from database v 1.1.0 to 2.0.0, will remove bitvetor table and create Interactions table
 
         Raises:
             DatabaseConnectionError

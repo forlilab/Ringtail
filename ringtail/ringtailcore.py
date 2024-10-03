@@ -1579,7 +1579,7 @@ class RingtailCore:
                         self.storageman.bookmark_name + "_union"
                     )
                     self.logger.warning(
-                        "Requested 'export_sdf_path' with 'max_miss' present in the bookmark filter. Exported SDFs will be for union of interaction combinations."
+                        "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
                     )
                 # if not, raise error
                 else:

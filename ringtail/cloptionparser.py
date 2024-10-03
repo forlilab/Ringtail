@@ -508,7 +508,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     ligand_group.add_argument(
         "--ligand_substruct_pos",
-        help="SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords",
+        help='"SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, group by "',
         action="append",
         type=str,
         metavar="STRING",
