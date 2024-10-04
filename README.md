@@ -36,7 +36,7 @@ In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedoc
 
 ##### Bug fixes
 - The use of the keywords `--ligand_name`, `--ligand_substruct`, and `--ligand_substruct_pos` had ambiguous behavior where if they were invoked more than once, only the last filter value would be used (as opposed to concatenating the values). They now will work by supplying multiple values to one keyword, as well as one or more values to two or more keywords. Further, `ligand_substruct_pos` now takes input as one string (`"[C][Oh] 1 1.5 -20 42 -7.1"`)as opposed to one string and five numbers (`"[C][Oh]"" 1 1.5 -20 42 -7.1`).
-
+- `--ligand_max_atoms` counted all atoms in the ligand, including hydrogens. With bug fix it counts only heavy atoms(not hydrogens). 
 
 ### New in version 2.0
 ##### Changes in keywords used for the command line tool
