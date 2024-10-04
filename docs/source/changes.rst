@@ -3,6 +3,16 @@
 Changes in Ringtail
 ######################
 
+Changes in 2.0.1: enhanced filtering speed
+******************************************
+Enhancements to the code base
+==============================
+* The format of the queries produced to filter the database have been completely rewritten, reducing filtering time by at least a factor of 10 compared to 1.1.0. Extra indices were added to three of the tables to support the faster filtering speeds. 
+
+Bug fixes
+===========
+* The use of the keywords `--ligand_name`, `--ligand_substruct`, and `--ligand_substruct_pos` had ambiguous behavior where if they were invoked more than once, only the last filter value would be used (as opposed to concatenating the values). They now will work by supplying multiple values to one keyword, as well as one or more values to two or more keywords. Further, `ligand_substruct_pos` now takes input as one string (`"[C][Oh] 1 1.5 -20 42 -7.1"`)as opposed to one string and five numbers (`"[C][Oh]"" 1 1.5 -20 42 -7.1`).
+
 Changes in 2.0: fully developed API
 ***************************************
 

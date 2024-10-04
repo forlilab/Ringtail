@@ -161,17 +161,13 @@ class TestRingtailCore:
         )
         assert count_ligands_passing == 18
 
-        # test substructure with specified position, currently raises an error because substrcut with pos not found
-        from ringtail import exceptions as e
-
-        with pytest.raises(e.OptionError) as exc_info:
-            count_ligands_passing = rtc.filter(
-                ligand_substruct_pos=["[Oh]C", 0, 100, -5.5, 10.0, 15.5]
-            )
-            assert (
-                str(exc_info.value)
-                == "There are no ligands passing the 'ligand_substruct_pos' filter, please revise your filter query."
-            )
+        count_ligands_passing = rtc.filter(
+            ligand_substruct_pos=[
+                ["[C][Oh]", 1, 10, 102, 106, 154],
+                ["C=O", 1, 10, 102, 106, 154],
+            ]
+        )
+        assert count_ligands_passing == 12
 
     def test_all_filters(self):
         rtc = RingtailCore(db_file="output.db")
