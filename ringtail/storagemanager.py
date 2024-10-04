@@ -3172,7 +3172,7 @@ class StorageManagerSQLite(StorageManager):
                     name_sql_str = " L.LigName LIKE '%{value}%' OR".format(value=name)
                     sql_ligand_string += name_sql_str
             if kw == "ligand_max_atoms" and ligand_filters[kw] is not None:
-                maxatom_sql_str = " mol_num_atms(ligand_rdmol) <= {} {}".format(
+                maxatom_sql_str = " mol_num_hvyatms(ligand_rdmol) <= {} {}".format(
                     ligand_filters[kw], logical_operator
                 )
                 sql_ligand_string += maxatom_sql_str
