@@ -493,7 +493,7 @@ def cmdline_parser(defaults: dict = {}):
     ligand_group.add_argument(
         "-mna",
         "--ligand_max_atoms",
-        help="Maximum number of heavy atoms a ligand may have",
+        help="Maximum number of heavy atoms (non-hydrogens) a ligand may have",
         action="store",
         type=int,
         metavar="INT",
