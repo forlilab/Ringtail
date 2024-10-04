@@ -169,16 +169,17 @@ The ``max_miss`` keywords allows the user to filter by given interactions exclud
 
 Ligand filters 
 ===============
-Several filters pertaining to the SMARTS structure of the ligand can be used. For example, the ``ligand_substruct_pos`` keyword may be used to filter for a specific ligand substructure (specified with a SMARTS string) to be placed within some distance of a given cartesian coordinate. The format for this option is ``"<SMARTS pattern: str>" <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>``.
-ligand_name: Specify ligand name(s). Will combine name filters with 'OR'.
-ligand_substruct: SMARTS pattern(s) for substructure matching.
-ligand_substruct_pos: SMARTS pattern(s) for substructure matching, e.g., ['[Oh]C', 0, 1.2, -5.5, 10.0, 15.5] -> [smart_string, index_of_positioned_atom, cutoff_distance, x, y, z].
-ligand_max_atoms: Maximum number of heavy atoms a ligand may have.
-ligand_operator: Logical join operator for multiple SMARTS.
+Several filters pertaining to the SMARTS structure of the ligand can be used. For example, ligands can be filtered for presence of certain substrctures specified by their SMARTS string using ``ligand_substruct``, as well as their ligand name contaning a specific phrase ``ligand_name``. The ligand name search will include any ligand names that contain the specified phrase, and does not look for exact matches only. Use the keyword ``ligand_operator`` to determine if the ligand filters should be evaluated as this ``OR`` that (default), or combined with ``AND``. ``ligand_max_atoms`` can be used to specify maximum number of heavy atoms a ligand may have.
 
 .. code-block:: python
 
-    rtc.filter(ligand_substruct=["[Oh]C"], ligand_substruct_pos=["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5])
+    rtc.filter(ligand_substruct=["[Oh]C", "C=O"], ligand_name="cool_ligand",ligand_operator="AND", ligand_max_atoms=5)
+
+The ``ligand_substruct_pos`` option may be used to filter for a specific ligand substructure to be placed within some distance of a given cartesian coordinate. The format for this option using the API is as a list of the six elements: ``["<SMARTS pattern: str>"," <index of atom in SMARTS: int>, <cutoff distance: float>, <target x coord: float>, <target y coord: float>, <target z coord: float>]``. If seachring for more than one ``ligand_substruct_pos`` make the value a list of lists. 
+
+.. code-block:: python
+
+    rtc.filter(ligand_name="_1", ligand_substruct_pos=[["C=O", 1, 10, 102, 106, 154], ['[C][Oh]', 1, 10, 102, 106, 154]])
 
 
 Clustering

@@ -2471,9 +2471,20 @@ class StorageManagerSQLite(StorageManager):
             # add react_any flag as interaction filter if not None
             if filter_key == "react_any" and filter_value:
                 interaction_filters.append(["R", "", "", "", "", True])
+
             # if filter has to do with ligands and SMARTS
             if filter_key in Filters.get_filter_keys("ligand"):
+                if filter_key == "ligand_substruct_pos" and filter_value:
+                    # go through each item and make sure the numbers are cast from string to numbers
+                    for filter in filter_value:
+                        # cast second item to int
+                        filter[1] = int(filter[1])
+                        # cast last four items to float
+                        for index in range(2, 6):
+                            filter[index] = float(filter[index])
+
                 ligand_filters[filter_key] = filter_value
+
             if filter_key == "max_miss":
                 max_miss = filter_value
         # put all processed filter in a dict
@@ -2485,7 +2496,6 @@ class StorageManagerSQLite(StorageManager):
             processed_filters["max_miss"] = max_miss
         if len(ligand_filters) > 0:
             processed_filters["lig_filters"] = ligand_filters
-
         return processed_filters
 
     def _generate_result_filtering_query(self, filters_dict):
@@ -2504,6 +2514,8 @@ class StorageManagerSQLite(StorageManager):
         num_query = ""
         int_query = ""
         lig_query = ""
+        ligand_substruct_queries = []
+        join_stmnt = ""
 
         # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
         if self.filter_bookmark is not None:
@@ -2589,13 +2601,17 @@ class StorageManagerSQLite(StorageManager):
                     )
                 # if complex ligand filter, generate partial query
                 if "ligand_substruct_pos" in lig_filters:
-                    ligand_queries.append(
-                        self._ligand_substructure_position_filter(lig_filters)
-                    )
-                # join all ligand queries that are not empty #TODO this should have ran some stuff already, no?
+                    for substruct_pos in lig_filters["ligand_substruct_pos"]:
+                        temp_lig_filter = lig_filters
+                        temp_lig_filter["ligand_substruct_pos"] = substruct_pos
+                        ligand_substruct_queries.append(
+                            self._ligand_substructure_position_filter(temp_lig_filter)
+                        )
+                    join_stmnt = " " + lig_filters["ligand_operator"] + " "
+                # join all ligand queries that are not empty
                 lig_query = " AND ".join(
                     [lig_filter for lig_filter in ligand_queries if lig_filter]
-                )  # TODO
+                )
             # if filter queries exist for each group, string them together appropriately
             if int_query:
                 # add with a join statement
@@ -2607,8 +2623,21 @@ class StorageManagerSQLite(StorageManager):
                 unclustered_query += (
                     "JOIN (" + lig_query + ") L ON R.LigName = L.LigName "
                 )
-            if num_query:
-                unclustered_query += "WHERE " + num_query
+                # these two queries are joined on the Results table, after the multiple table spanning queries
+            if num_query or ligand_substruct_queries:
+                # add condition
+                unclustered_query += "WHERE "
+                # add numerical part of query
+                if num_query:
+                    unclustered_query += num_query
+                # if both numerical and ligand_substruct_pos handle appropriately
+                if num_query and ligand_substruct_queries:
+                    unclustered_query += " AND " + join_stmnt.join(
+                        ligand_substruct_queries
+                    )
+                # if not, only the ligand_substruct_pos sets the WHERE condition
+                else:
+                    unclustered_query += join_stmnt.join(ligand_substruct_queries)
 
         # if clustering is requested, do that before saving view or filtering results for output
         if clustering:
@@ -2987,13 +3016,14 @@ class StorageManagerSQLite(StorageManager):
                         pose_id_list.append(str(pose_id))
                         break  # add pose only once
             if len(pose_id_list) > 0:
-                queries.append("Pose_ID IN ({0})".format(",".join(pose_id_list)))
+                queries.append("R.Pose_ID IN ({0})".format(",".join(pose_id_list)))
         cur.close()
         if not queries:
             raise OptionError(
                 "There are no ligands passing the 'ligand_substruct_pos' filter, please revise your filter query."
             )
-        return queries
+
+        return "".join(queries)
 
     def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
         """

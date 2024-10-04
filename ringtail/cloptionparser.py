@@ -500,7 +500,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     ligand_group.add_argument(
         "--ligand_substruct",
-        help="SMARTS pattern(s) for substructure matching",
+        help="SMARTS pattern(s) for substructure matching, if error delimit each substructure with ''.",
         action="append",
         type=str,
         metavar="STRING",
@@ -508,7 +508,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     ligand_group.add_argument(
         "--ligand_substruct_pos",
-        help='"SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, group by "',
+        help='"SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords". Group each set of six values with "".',
         action="append",
         type=str,
         metavar="STRING",
@@ -861,7 +861,7 @@ class CLOptionParser:
                         # if more than one filter in list, go through each
                         if len(filter_list) > 1:
                             for filter in filter_list:
-                                if _type == "ligand_subtruct_pos":
+                                if _type == "ligand_substruct_pos":
                                     # make a lits of the six values
                                     ligand_filters[_type].append(
                                         [i for i in filter.split(" ")]
@@ -869,7 +869,7 @@ class CLOptionParser:
                                 else:
                                     ligand_filters[_type].append(filter)
                         else:
-                            if _type == "ligand_subtruct_pos":
+                            if _type == "ligand_substruct_pos":
                                 # if only one item in list, append to ligand list
                                 ligand_filters[_type].append(
                                     [i for i in filter_list[0].split(" ")]
@@ -878,9 +878,10 @@ class CLOptionParser:
                                 ligand_filters[_type].append(filter_list[0])
 
                 ligand_filters["ligand_operator"] = parsed_opts.ligand_operator
+                # ligand substruct pos needs six items
                 if (
                     "ligand_substruct_pos" in ligand_filters
-                    and len(ligand_filters["ligand_substruct_pos"][0]) % 6 != 0
+                    and len(ligand_filters["ligand_substruct_pos"][0]) % 6
                 ):
                     msg = "--ligand_substruct_pos needs groups of 6 values:\n"
                     msg += "  1. Ligand SMARTS\n"

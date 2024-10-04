@@ -122,7 +122,7 @@ Interaction filters
 It is possible to filter the docking results based on different types of interactions (hydrogen bonds onr van der waals) with specific residues. It is further possible to have ligands pass the filters while only fulfilling some of the interaction combinations in union (max number of interactions combinations missed, ``--max_miss``).
 The available interaction filters are ``--hb_interactions``, ``--vdw_interactions``, and ``--reactive_interactions``. Interaction filters must be specified in the order ``CHAIN:RES:NUM:ATOM_NAME``. Any combination of that information may be used, as long as 3 colons are present and the information ordering between the colons is correct. All desired interactions of a given type (e.g. ``-vdw``) may be specified with a single option tag (``-vdw B:THR:276:,B:HIS:226:``) or separate tags (``-vdw B:THR:276: -vdw B:HIS:226:``).
 
-The ``--max_miss`` option allows the user to filter by given interactions excluding up to ``max_miss`` interactions. This gives :math:`\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}` combinations for *n* interaction filters and *m* max_miss. By default, results will be given for the union of the interaction conbinations. Use with ``--enumerate_interaction_combs`` to log ligands/poses passing each separate interaction combination (can significantly increase runtime). If ``max_miss > 0`` is used during filtering, a view is created for each combination of interaction filters and is named ``<bookmark_name>_<n>`` where n is the index of the filter combination in the log file (indexing from 0).
+The ``--max_miss`` option allows the user to filter by given interactions excluding up to ``max_miss`` interactions. This gives :math:`\sum_{m=0}^{m}\frac{n!}{(n-m)!*m!}` combinations for *n* interaction filters and *m* max_miss. By default, results will be given for the union of the interaction conbinations. Use with ``--enumerate_interaction_combs`` to log ligands/poses passing each separate interaction combination (can significantly increase runtime). ßIf ``max_miss > 0`` is used during filtering, a view is created for each combination of interaction filters and is named ``<bookmark_name>_<n>`` where n is the index of the filter combination in the log file (indexing from 0).
 ``--react_any`` offers an option to filtering for poses that have reactions with any residue.
 
 .. code-block:: bash
@@ -131,12 +131,18 @@ The ``--max_miss`` option allows the user to filter by given interactions exclud
 
 Ligand filters 
 =================
-The ``--smarts_idxyz`` option may be used to filter for a specific ligand substructure (specified with a SMARTS string) to be placed within some distance of a given cartesian coordinate. The format for this option is ``"<SMARTS pattern: str>" <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>``.
+The docked ligands can be filtered for presence of certain substrctures specified by their SMARTS string using ``--ligand_substruct``, as well as their ligand name contaning a specific phrase ``--ligand_name``. The ligand name search will include any ligand names that contain the specified phrase, and does not look for exact matches only. 
+Use the keyword ``--ligand_operator`` to determine if the ligand filters should be evaluated as this ``OR`` that (default), or combined with ``AND``. ``--ligand_max_atoms`` can be used to specify maximum number of heavy atoms a ligand may have.
 
 .. code-block:: bash
 
-    $ rt_process_vs read --input_db output.db --eworst -6 --hb_interactions A:VAL:279: A:LYS:162: --vdw_interactions A:VAL:279: A:LYS:162: --max_miss 1
+    $ rt_process_vs read --input_db output.db --ligand_substruct 'C=O' 'CC(C)(C)' --ligand_operator AND --ligand_max_atoms 5
 
+The ``--ligand_substruct_pos`` option may be used to filter for a specific ligand substructure to be placed within some distance of a given cartesian coordinate. The format for this option is the six elements inside quotes and separated by spaces: ``"<SMARTS pattern: str> <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>""``. 
+
+.. code-block:: bash
+
+    $ rt_process_vs read --input_db output.db --ligand_name cool_ligand --ligand_substruct_pos "[C][Oh] 1 1.5 -20.3 42 -7.1"
 
 Clustering
 ============
