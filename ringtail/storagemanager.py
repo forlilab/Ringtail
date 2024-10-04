@@ -1710,7 +1710,7 @@ class StorageManagerSQLite(StorageManager):
         cur = self.conn.cursor()
         # drop old view if there is one
         try:
-            cur.execute("DROP VIEW IF EXISTS {name}".format(name=name))
+            cur.execute(f"DROP VIEW IF EXISTS {name}")
             cur.execute(query)
             cur.close()
         except sqlite3.OperationalError as e:
@@ -2586,7 +2586,7 @@ class StorageManagerSQLite(StorageManager):
                 ):
                     ligand_queries.append(
                         self._generate_ligand_filtering_query(lig_filters)
-                    )  # TODO here?
+                    )
                 # if complex ligand filter, generate partial query
                 if "ligand_substruct_pos" in lig_filters:
                     ligand_queries.append(
@@ -3459,8 +3459,9 @@ class StorageManagerSQLite(StorageManager):
                     "Failed to load chemicalite cartridge. Please ensure chemicalite is installed with `conda install -c conda-forge chemicalite`."
                 )
                 raise e
-            cursor = con.execute("PRAGMA synchronous = OFF")
-            cursor.execute("PRAGMA journal_mode = MEMORY")
+            cursor = con.execute("PRAGMA synchronous = OFF;")
+            cursor.execute("PRAGMA journal_mode = MEMORY;")
+            con.commit()
             cursor.close()
         except sqlite3.OperationalError as e:
             raise DatabaseConnectionError(
