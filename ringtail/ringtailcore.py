@@ -1246,9 +1246,9 @@ class RingtailCore:
                 hb_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
                 react_any (bool): check if ligand reacted with any residue
                 max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
-                ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., ["lig1", "lig2"]
-                ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., ["ccc", "CN"]
-                ligand_substruct_pos (list[str]): SMARTS pattern(s) for substructure matching, e.g., ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
+                ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., [["lig1", "lig2"]]
+                ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., [["ccc", "CN"]]
+                ligand_substruct_pos (list[list[type]]): SMARTS pattern(s) for substructure matching, e.g., [["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5]] -> [["smart_string", index_of_positioned_atom, cutoff_distance, x, y, z]]
                 ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
                 ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
                 filters_dict (dict): provide filters as a dictionary
