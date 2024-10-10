@@ -19,9 +19,10 @@ def find_files(directory):
 
     return matches
 
+
 setup(
     name="ringtail",
-    version="2.0.0",
+    version="2.1.0",
     author="Forli Lab",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/Ringtail",
@@ -55,12 +56,12 @@ setup(
         "Topic :: Software Development :: Libraries",
     ],
     entry_points={
-        'console_scripts': [
-            'rt_process_vs=ringtail.cli.rt_process_vs:main',
-            'rt_compare=ringtail.cli.rt_compare:main',
-            'rt_db_v100_to_v110=ringtail.cli.rt_db_v100_to_v110:main',
-            'rt_db_to_v200=ringtail.cli.rt_db_to_v200:main',
-            'rt_generate_config_file=ringtail.cli.rt_generate_config_file:main'
+        "console_scripts": [
+            "rt_process_vs=ringtail.cli.rt_process_vs:main",
+            "rt_compare=ringtail.cli.rt_compare:main",
+            "rt_db_v100_to_v110=ringtail.cli.rt_db_v100_to_v110:main",
+            "rt_db_to_v200=ringtail.cli.rt_db_to_v200:main",
+            "rt_generate_config_file=ringtail.cli.rt_generate_config_file:main",
         ]
-    }
+    },
 )
