@@ -3,7 +3,7 @@
 Changes in Ringtail
 ######################
 
-Changes in 2.0.1: enhanced filtering speed
+Changes in 2.1.0: enhanced filtering speed
 ******************************************
 Enhancements to the code base
 ==============================
@@ -14,7 +14,7 @@ Bug fixes
 * The use of the keywords `--ligand_name`, `--ligand_substruct`, and `--ligand_substruct_pos` had ambiguous behavior where if they were invoked more than once, only the last filter value would be used (as opposed to concatenating the values). They now will work by supplying multiple values to one keyword, as well as one or more values to two or more keywords. Further, `ligand_substruct_pos` now takes input as one string (`"[C][Oh] 1 1.5 -20 42 -7.1"`)as opposed to one string and five numbers (`"[C][Oh]"" 1 1.5 -20 42 -7.1`).
 * `--ligand_max_atoms` counted all atoms in the ligand, including hydrogens. With bug fix it counts only heavy atoms(not hydrogens). 
 
-Changes in 2.0: fully developed API
+Changes in 2.x: fully developed API
 ***************************************
 
 Changes in keywords used for the command line tool
