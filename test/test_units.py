@@ -109,9 +109,78 @@ class TestRingtailCore:
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             max_miss=1,
+            bookmark_name="union_bookmark",
+        )
+        # make sure correct number of ligands passing
+        assert count_ligands_passing == 33
+        # make sure only one bookmark was created
+        bookmarks = rtc.get_bookmark_names()
+        assert len(bookmarks) == 1
+        assert bookmarks[0] == "union_bookmark"
+        rtc.drop_bookmark("union_bookmark")
+
+    def test_enumerate_interaction_combinations(self):
+        # first test without enumerate, check number of passing union as well as number of bookmarks
+        rtc = RingtailCore(db_file="output.db")
+        # get current bookmark count
+        bookmarks_old = rtc.get_bookmark_names()
+        count_ligands_passing = rtc.filter(
+            eworst=-6,
+            hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            max_miss=1,
+            enumerate_interaction_combs=True,
+            bookmark_name="enumerated_bookmark",
+        )
+        # make sure correct number of ligands passing
+        assert count_ligands_passing == 33
+
+        # make sure additional bookmarks were created for the enumerated combinations
+        bookmarks = rtc.get_bookmark_names()
+        # This filtering session should produce 6 bookmarks
+        assert len(bookmarks) == 6
+
+        # check that naming works properly
+        assert "enumerated_bookmark_0" in bookmarks
+        assert "enumerated_bookmark_union" in bookmarks
+
+    def test_ligand_filters(self):
+        rtc = RingtailCore(db_file="output.db")
+
+        # tests for partial names
+        count_ligands_passing = rtc.filter(ligand_name=["88"])
+        assert count_ligands_passing == 7
+
+        # test substructure search (default 'OR' ligand_operator)
+        count_ligands_passing = rtc.filter(ligand_substruct=["C=O", "CC(C)(C)"])
+        assert count_ligands_passing == 90
+
+        # test substructure search (default 'OR' ligand_operator)
+        count_ligands_passing = rtc.filter(
+            ligand_substruct=["C=O", "CC(C)(C)"], ligand_operator="AND"
+        )
+        assert count_ligands_passing == 18
+
+        count_ligands_passing = rtc.filter(
+            ligand_substruct_pos=[
+                ["[C][Oh]", 1, 10, 102, 106, 154],
+                ["C=O", 1, 10, 102, 106, 154],
+            ]
+        )
+        assert count_ligands_passing == 12
+
+    def test_all_filters(self):
+        rtc = RingtailCore(db_file="output.db")
+        count_ligands_passing = rtc.filter(
+            eworst=-6,
+            hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            max_miss=1,
+            bookmark_name="big_query",
+            ligand_name=["88"],
         )
 
-        assert count_ligands_passing == 33
+        assert count_ligands_passing == 1
 
     def test_get_filterdata(self):
         rtc = RingtailCore(db_file="output.db")
@@ -132,23 +201,23 @@ class TestRingtailCore:
 
         os.system(("rm " + log_file_name))
 
-    def test_similar_ligands_mfpt(self, monkeypatch):
-        rtc = RingtailCore(db_file="output.db")
-        ligand_name = "287065"
-        rtc.filter(ebest=-6, mfpt_cluster=0.5)
-        monkeypatch.setattr("builtins.input", lambda _: 0)  # provides terminal input
-        number_similar = rtc.find_similar_ligands(ligand_name)
-
-        assert number_similar == 8
-
     def test_similar_ligands_interaction(self, monkeypatch):
         rtc = RingtailCore(db_file="output.db")
         ligand_name = "287065"
         rtc.filter(ebest=-6, interaction_cluster=0.5)
-        monkeypatch.setattr("builtins.input", lambda _: 1)  # provides terminal input
+        monkeypatch.setattr("builtins.input", lambda _: 0)  # provides terminal input
         number_similar = rtc.find_similar_ligands(ligand_name)
 
         assert number_similar == 1
+
+    def test_similar_ligands_mfpt(self, monkeypatch):
+        rtc = RingtailCore(db_file="output.db")
+        ligand_name = "287065"
+        rtc.filter(ebest=-6, mfpt_cluster=0.5)
+        monkeypatch.setattr("builtins.input", lambda _: 1)  # provides terminal input
+        number_similar = rtc.find_similar_ligands(ligand_name)
+
+        assert number_similar == 8
 
     def test_create_rdkitmol(self):
         bookmark_name = "rdkit_test"
@@ -242,11 +311,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_operator": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
         } in test_filters
 
         assert {
@@ -262,11 +331,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_operator": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
         } in test_filters
 
         assert {
@@ -282,11 +351,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_operator": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
         } in test_filters
 
         assert {
@@ -302,11 +371,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_operator": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
         } in test_filters
 
         assert {
@@ -322,11 +391,11 @@ class TestRingtailCore:
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_operator": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
         } in test_filters
 
         assert len(test_filters) == 5
@@ -483,8 +552,7 @@ class TestVinaHandling:
 
     def test_add_interactions(self, countrows):
         vina_path = "test_data/vina"
-        rtc = RingtailCore("output.db")
-        rtc.logger.set_level("DEBUG")
+        rtc = RingtailCore("output.db", logging_level="DEBUG")
         rtc.docking_mode = "vina"
         rtc.add_results_from_files(
             file_path=vina_path,
@@ -566,11 +634,13 @@ class TestStorageMan:
 
     def test_bookmark_info(self, dbquery):
         rtc = RingtailCore("output.db")
+        rtc.add_results_from_files(
+            file_path="test_data/adgpu/group2",
+        )
         rtc.filter(
             eworst=-3,
-            vdw_interactions=[("A:ALA:213:", True), ("A:VAL:279:", True)],
-            hb_interactions=[("A:ALA:213:", True)],
-            ligand_operator="OR",
+            hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            vdw_interactions=[("A:VAL:279:", True)],
         )
         curs = dbquery(
             "SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'"
@@ -584,17 +654,17 @@ class TestStorageMan:
             "lebest": None,
             "score_percentile": None,
             "le_percentile": None,
-            "vdw_interactions": [["A:ALA:213:", True], ["A:VAL:279:", True]],
-            "hb_interactions": [["A:ALA:213:", True]],
+            "vdw_interactions": [["A:VAL:279:", True]],
+            "hb_interactions": [["A:VAL:279:", True], ["A:LYS:162:", True]],
             "reactive_interactions": [],
             "hb_count": None,
             "react_any": None,
             "max_miss": 0,
-            "ligand_name": [],
-            "ligand_substruct": [],
-            "ligand_substruct_pos": [],
+            "ligand_name": None,
+            "ligand_operator": None,
+            "ligand_substruct": None,
+            "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
-            "ligand_operator": "OR",
         }
         assert bookmark_filters_db_str == json.dumps(filters)
 

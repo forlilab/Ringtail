@@ -35,9 +35,11 @@ class OutputManager:
         self.logger = LOGGER
 
     def __enter__(self):
+        """Opening outputmanager as a context manager"""
         self.open_logfile()
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """Closing outputmanager as a context manager"""
         self.close_logfile()
 
     # -#-#- Log file methods -#-#-#
@@ -63,7 +65,7 @@ class OutputManager:
             raise OutputError("Error while creating log file") from e
 
     def close_logfile(self):
-        """Closes the log file properly"""
+        """Closes the log file properly and reset file pointer to filename"""
         if self._log_open:
             self.log_file.close()
             self.log_file = os.path.basename(
@@ -100,7 +102,7 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
 
-    def _write_log_line(self, line):
+    def _write_log_line(self, line: str):
         """write a single row to the log file
 
         Args:
@@ -115,7 +117,7 @@ class OutputManager:
         except Exception as e:
             raise OutputError(f"Error writing line {line} to log") from e
 
-    def log_num_passing_ligands(self, number_passing_ligands):
+    def log_num_passing_ligands(self, number_passing_ligands: int):
         """
         Write the number of ligands which pass given filter to log file
 
@@ -128,9 +130,7 @@ class OutputManager:
         try:
             self.log_file.write("\n")
             self.log_file.write(
-                "Number passing ligands: {num} \n".format(
-                    num=str(number_passing_ligands)
-                )
+                f"Number passing ligands: {str(number_passing_ligands)} \n"
             )
             self.log_file.write("---------------\n")
         except Exception as e:
@@ -179,7 +179,7 @@ class OutputManager:
                 v = filters_dict.pop(k)
                 if v is not None:
                     if isinstance(v, list):
-                        v = ", ".join([f for f in v if f != ""])
+                        v = ", ".join([str(f) for f in v if f != ""])
                 else:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
@@ -215,10 +215,16 @@ class OutputManager:
             raise OutputError("Error occurred while writing filters to log") from e
 
     def write_maxmiss_union_header(self):
+        """
+        Properly formats header for the log file if using max_miss and enumerate_interaction_combs
+        """
         self.log_file.write("\n---------------\n")
         self.log_file.write("Max Miss Union:\n")
 
     def write_find_similar_header(self, query_ligname, cluster_name):
+        """
+        Properly formats header for the log file find_similar_ligands
+        """
         if not self._log_open:
             self.open_logfile(write_filters_header=False)
         self.log_file.write("\n---------------\n")
@@ -274,6 +280,14 @@ class OutputManager:
             raise OutputError("Error occurred while writing SDF from RDKit Mol") from e
 
     def write_receptor_pdbqt(self, recname: str, receptor_compbytes):
+        """
+        Writes a pdbqt file from receptor "blob"
+
+        Args:
+            recname (str): name of receptor to use in output filename
+            receptor_compbytes (blob): receptor blob
+        """
+
         if not recname.endswith(".pdbqt"):
             recname = recname + ".pdbqt"
         receptor_str = ReceptorManager.blob2str(receptor_compbytes)
@@ -364,9 +378,7 @@ class OutputManager:
                 mappable=cm.ScalarMappable(
                     colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts)),
                 ),
-                cax=self.ax.inset_axes(
-                    [0.85, 0.1, 0.05, 0.8]
-                ),  # TODO dimensions not quite right
+                cax=self.ax.inset_axes([0.85, 0.1, 0.05, 0.8]),
                 label="Scatterplot bin count",
             )
             self.ax.set_xlabel("Best docking score / kcal/mol")

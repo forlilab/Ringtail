@@ -80,3 +80,17 @@ def caller_info(skip=2):
     del parentframe
 
     return package, module, klass, caller, line
+
+
+def numlist2str(list: list, separator: str) -> str:
+    """
+    Joines item in a list by specified string separator
+
+    Args:
+        list (list): list to be joined
+        separator (str): string item to separate the items in the list
+
+    Returns:
+        str: list as a string separated by separator
+    """
+    return separator.join([str(x) for x in list])

@@ -145,9 +145,7 @@ class MPManager:
 
         w.join()
 
-        self.logger.info(
-            "Wrote {0} docking results to the database".format(self.num_files)
-        )
+        self.logger.info(f"Wrote {self.num_files} docking results to the database")
 
     def _process_data_sources(self):
         """Adds each docking result item to the queue, including files and data provided as string/dict.
@@ -243,6 +241,7 @@ class MPManager:
                     f.write(
                         str(datetime.now()) + f"\tRingtail failed to parse {filename}\n"
                     )
+                    self.num_files -= 1
                     self.logger.debug(tb)
 
     def _kill_all_workers(self, error, filename, tb):

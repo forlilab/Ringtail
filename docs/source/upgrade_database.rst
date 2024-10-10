@@ -1,13 +1,13 @@
 .. _upgrade_database:
 
-Updating database written with v1.0.0/v1.1.0 to work with v2.0.0
-#################################################################
+Updating database written with v1.0.0/v1.1.0 to work with v2.0
+###############################################################
 
-If you have previously written a database with Ringtail v<2.0.0, it will need to be updated to be compatible with the newest v2.0.0 Ringtail package. We have included a script ``rt_db_to_v200.py`` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
+If you have previously written a database with Ringtail v<2.0, it will need to be updated to be compatible with the newest v2.0 Ringtail package. We have included a script ``rt_db_to_v200.py`` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
 
 .. code-block:: bash
 
-    $ rt_db_to_v200.py -d <v2.0.0 database 1 (required)> <v2.0.0 database 2+ (optional)>
+    $ rt_db_to_v200.py -d old_database_1.db (required) old_database_2+.db (optional)
 
 
 Multiple databases may be specified at once. The update may take a few minutes per database.
@@ -19,7 +19,7 @@ If you have previously written a database with Ringtail v1.0.0, it will need to 
 
 .. code-block:: bash
 
-    $ rt_db_v100_to_v110.py -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (optional)>
+    $ rt_db_v100_to_v110.py -d 100_database_1.db (required) 100_database_2+.db (optional)
 
 
 Multiple databases may be specified at once. The update may take a few minutes per database.

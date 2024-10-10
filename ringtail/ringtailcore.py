@@ -231,6 +231,8 @@ class RingtailCore:
             for interaction in itype_interactions:
                 if itype + "-" + interaction[0] not in interaction_combination:
                     filters_dict[itype].remove(interaction)
+        # we want a match for all interactions when enumerating combinations
+        filters_dict["max_miss"] = 0
 
         return filters_dict
 
@@ -867,10 +869,10 @@ class RingtailCore:
         react_any=None,
         max_miss=None,
         ligand_name=None,
+        ligand_operator=None,
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
-        ligand_operator=None,
         dict: dict = None,
     ):
         """
@@ -911,11 +913,11 @@ class RingtailCore:
             "hb_count": hb_count,
             "react_any": react_any,
             "max_miss": max_miss,
+            "ligand_operator": ligand_operator,
             "ligand_name": ligand_name,
             "ligand_substruct": ligand_substruct,
             "ligand_substruct_pos": ligand_substruct_pos,
             "ligand_max_atoms": ligand_max_atoms,
-            "ligand_operator": ligand_operator,
         }
 
         # Create a filter object
@@ -1209,10 +1211,10 @@ class RingtailCore:
         react_any=None,
         max_miss=None,
         ligand_name=None,
+        ligand_operator=None,
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
-        ligand_operator=None,
         filters_dict: dict | None = None,
         # other processing options:
         enumerate_interaction_combs: bool = False,
@@ -1244,9 +1246,9 @@ class RingtailCore:
                 hb_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
                 react_any (bool): check if ligand reacted with any residue
                 max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
-                ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., ["lig1", "lig2"]
-                ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., ["ccc", "CN"]
-                ligand_substruct_pos (list[str]): SMARTS pattern(s) for substructure matching, e.g., ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
+                ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., [["lig1", "lig2"]]
+                ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., [["ccc", "CN"]]
+                ligand_substruct_pos (list[list[type]]): SMARTS pattern(s) for substructure matching, e.g., [["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5]] -> [["smart_string", index_of_positioned_atom, cutoff_distance, x, y, z]]
                 ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
                 ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
                 filters_dict (dict): provide filters as a dictionary
@@ -1289,9 +1291,11 @@ class RingtailCore:
                 bookmark_name (str): name for resulting book mark file. Default value is 'passing_results'
                 filter_bookmark (str): name of bookmark to perform filtering over
                 options_dict (dict): write options as a dict
+                return_inter (bool): return an iterable of all of the filtering results
 
         Returns:
             int: number of ligands passing filter
+            iter (optional): an iterable of all of the filtering results
 
         """
 
@@ -1309,10 +1313,10 @@ class RingtailCore:
             react_any=react_any,
             max_miss=max_miss,
             ligand_name=ligand_name,
+            ligand_operator=ligand_operator,
             ligand_substruct=ligand_substruct,
             ligand_substruct_pos=ligand_substruct_pos,
             ligand_max_atoms=ligand_max_atoms,
-            ligand_operator=ligand_operator,
             dict=filters_dict,
         )
 
@@ -1361,34 +1365,30 @@ class RingtailCore:
             self.storageopts.output_all_poses = False
 
         self.logger.info("Filtering results...")
-
-        # get possible permutations of interaction with max_miss excluded
-        interaction_combs = self._generate_interaction_combinations(
-            self.filters.max_miss
-        )
         ligands_passed = 0
-        """This for comprehension takes all combinations represented in one union of one or multiple, and filters, and goes around until all combinations have been used to filter
-        
-        """
+        # get possible permutations of interaction with max_miss excluded
+        if self.filters.max_miss > 0 and self.outputopts.enumerate_interaction_combs:
+            write_one_bookmark = False
+        else:
+            write_one_bookmark = True
+
         with self.storageman:
-            for ic_idx, combination in enumerate(interaction_combs):
-                # prepare Filter object with only desired interaction combination for storageManager
-                filters_dict = self._prepare_filters_for_storageman(combination)
-                # set storageMan's internal ic_counter to reflect current ic_idx
-                if len(interaction_combs) > 1:
-                    self.storageman.set_bookmark_suffix(ic_idx)
-                # ask storageManager to fetch results
+            # pre-process if filtering to multiple bookmark combinations
+            if write_one_bookmark:
                 filtered_results = self.storageman.filter_results(
-                    filters_dict, not self.outputopts.enumerate_interaction_combs
+                    self.filters.todict(),
                 )
+                # if there were results of the filtering
                 if filtered_results:
+                    # if retuning an iterable with the resulting pose ids
                     if return_iter:
                         return filtered_results
                     result_bookmark_name = self.storageman.get_current_bookmark_name()
+                    # write output log file
                     with self.outputman:
                         self.outputman.write_filters_to_log(
                             self.filters.todict(),
-                            combination,
+                            [],
                             f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}",
                         )
                         self.outputman.write_results_bookmark_to_log(
@@ -1400,18 +1400,57 @@ class RingtailCore:
                         self.outputman.log_num_passing_ligands(number_passing)
                         print("\nNumber of ligands passing filters:", number_passing)
                         ligands_passed = number_passing
-                elif len(interaction_combs) > 1:
-                    self.logger.warning(
-                        f"WARNING: No ligands found passing given interaction combination {combination}"
-                    )
-                    self.storageman.drop_bookmark(self.storageman.bookmark_name)
                 else:
                     self.logger.warning(f"WARNING: No ligands found passing filter.")
                     self.storageman.drop_bookmark(self.storageman.bookmark_name)
-            if len(interaction_combs) > 1:
-                maxmiss_union_results = self.storageman.get_maxmiss_union(
-                    len(interaction_combs)
+            # else produce a bookmark for each interaction combination
+            elif not write_one_bookmark:
+                interaction_combs = self._generate_interaction_combinations(
+                    self.filters.max_miss
                 )
+                for ic_idx, combination in enumerate(interaction_combs):
+                    # prepare Filter object with only desired interaction combination for storageManager
+                    filters_dict = self._prepare_filters_for_storageman(combination)
+                    # set storageMan's internal ic_counter to reflect current ic_idx
+                    if len(interaction_combs) > 1:
+                        self.storageman.set_bookmark_suffix(ic_idx)
+                    # ask storageManager to fetch results
+                    filtered_results = self.storageman.filter_results(
+                        filters_dict,
+                        not self.outputopts.enumerate_interaction_combs,
+                    )
+                    if filtered_results:
+                        if return_iter:
+                            return filtered_results
+                        result_bookmark_name = (
+                            self.storageman.get_current_bookmark_name()
+                        )
+                        with self.outputman:
+                            self.outputman.write_filters_to_log(
+                                self.filters.todict(),
+                                combination,
+                                f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}",
+                            )
+                            self.outputman.write_results_bookmark_to_log(
+                                result_bookmark_name
+                            )
+                            number_passing = self.outputman.write_filter_log(
+                                filtered_results
+                            )
+                            self.outputman.log_num_passing_ligands(number_passing)
+                            print(
+                                "\nNumber of ligands passing filters:", number_passing
+                            )
+                            ligands_passed = number_passing
+                    elif len(interaction_combs) > 1:
+                        self.logger.warning(
+                            f"WARNING: No ligands found passing given interaction combination {combination}"
+                        )
+                        self.storageman.drop_bookmark(self.storageman.bookmark_name)
+                if len(interaction_combs) > 1:
+                    maxmiss_union_results = self.storageman.get_maxmiss_union(
+                        len(interaction_combs)
+                    )
                 with self.outputman:
                     self.outputman.write_maxmiss_union_header()
                     self.outputman.write_results_bookmark_to_log(
@@ -1519,6 +1558,7 @@ class RingtailCore:
                 try:
                     max_miss_present = bool(
                         bookmark_filters["max_miss"] > 0
+                        and not bookmark_filters["enumerate_interaction_combs"]
                         and not "_union" in self.storageman.bookmark_name
                     )
                 except:
@@ -1539,7 +1579,7 @@ class RingtailCore:
                         self.storageman.bookmark_name + "_union"
                     )
                     self.logger.warning(
-                        "Requested 'export_sdf_path' with 'max_miss' present in the bookmark filter. Exported SDFs will be for union of interaction combinations."
+                        "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
                     )
                 # if not, raise error
                 else:
@@ -1607,14 +1647,17 @@ class RingtailCore:
             similar_ligands, bookmark_name, cluster_name = (
                 self.storageman.fetch_clustered_similars(query_ligname)
             )
-
-        if similar_ligands is not None:
-            with self.outputman:
-                self.outputman.write_find_similar_header(query_ligname, cluster_name)
-                self.outputman.write_results_bookmark_to_log(bookmark_name)
-                number_similar = self.outputman.write_filter_log(similar_ligands)
-                self.outputman.log_num_passing_ligands(number_similar)
-                print("Number similar ligands:", number_similar)
+            if similar_ligands is not None:
+                if not hasattr(self, "outputman"):
+                    self.set_output_options()
+                with self.outputman:
+                    self.outputman.write_find_similar_header(
+                        query_ligname, cluster_name
+                    )
+                    self.outputman.write_results_bookmark_to_log(bookmark_name)
+                    number_similar = self.outputman.write_filter_log(similar_ligands)
+                    self.outputman.log_num_passing_ligands(number_similar)
+                    print("Number similar ligands:", number_similar)
         return number_similar
 
     def plot(self, save=True, bookmark_name: str = None):

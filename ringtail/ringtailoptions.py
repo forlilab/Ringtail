@@ -563,17 +563,22 @@ class Filters(RTOptions):
             "description": "Will compute all possible combinations of interaction filters excluding up to 'max_miss' number of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.",
         },
         "ligand_name": {
-            "default": [],
+            "default": None,
             "type": list,
             "description": "Specify ligand name(s). Will combine name filters with 'OR'.",
         },
+        "ligand_operator": {
+            "default": None,
+            "type": str,
+            "description": "Logical join operator for multiple SMARTS.",
+        },
         "ligand_substruct": {
-            "default": [],
+            "default": None,
             "type": list,
             "description": "SMARTS pattern(s) for substructure matching.",
         },
         "ligand_substruct_pos": {
-            "default": [],
+            "default": None,
             "type": list,
             "description": "SMARTS pattern(s) for substructure matching, e.g., [''[Oh]C' 0 1.2 -5.5 10.0 15.5'] -> ['smart_string index_of_positioned_atom cutoff_distance x y z'].",
         },
@@ -581,11 +586,6 @@ class Filters(RTOptions):
             "default": None,
             "type": int,
             "description": "Maximum number of heavy atoms a ligand may have.",
-        },
-        "ligand_operator": {
-            "default": "OR",
-            "type": str,
-            "description": "Logical join operator for multiple SMARTS.",
         },
     }
 
@@ -595,7 +595,7 @@ class Filters(RTOptions):
     def checks(self):
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
-        if hasattr(self, "ligand_operator"):
+        if hasattr(self, "ligand_max_atoms"):
             if self.eworst is not None and self.score_percentile is not None:
                 logger.warning(
                     "Cannot use 'eworst' cutoff with 'score_percentile'. Overiding 'score_percentile' with 'eworst'."
@@ -622,10 +622,11 @@ class Filters(RTOptions):
                     f"Given 'score_percentile' {self.le_percentile} not allowed. Should be within percentile range of 0-100."
                 )
 
-            if self.ligand_operator not in ["OR", "AND"]:
-                raise OptionError(
-                    f"Given 'ligand_operator' {self.ligand_operator} not allowed. Must be 'OR' or 'AND'."
-                )
+            if self.ligand_operator not in ["OR", "AND"] and (
+                self.ligand_substruct or self.ligand_substruct_pos
+            ):
+                logger.debug(f"'ligand_operator' set to default 'OR'.")
+                self.ligand_operator = "OR"
 
             if self.max_miss < 0:
                 raise OptionError("'max_miss' must be greater than or equal to 0.")
