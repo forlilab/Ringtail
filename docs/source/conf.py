@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath("../../ringtail/"))
 project = "ringtail"
 copyright = "2024, Forli lab"
 author = "Forli lab"
-release = "2.0.0"
+release = "2.1.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -36,3 +36,5 @@ pygments_style = "sphinx"
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
+
+autodoc_mock_imports = ["matplotlib"]

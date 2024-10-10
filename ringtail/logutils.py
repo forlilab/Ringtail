@@ -110,6 +110,8 @@ class RaccoonLogger:
             return
         elif log_level != self.level():
             self.logger.setLevel(log_level)
+            if self.logger.level == "DEBUG":
+                self.add_filehandler()
             if self._log_fp is not None:
                 self._log_fp.setLevel(log_level)
             if self.log_console is not None:

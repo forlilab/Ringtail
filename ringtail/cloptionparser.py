@@ -485,7 +485,7 @@ def cmdline_parser(defaults: dict = {}):
         "-n",
         "--ligand_name",
         help="specify ligand name(s). Will combine name filters with OR",
-        action="store",
+        action="append",
         type=str,
         metavar="STRING",
         nargs="+",
@@ -493,23 +493,23 @@ def cmdline_parser(defaults: dict = {}):
     ligand_group.add_argument(
         "-mna",
         "--ligand_max_atoms",
-        help="Maximum number of heavy atoms a ligand may have",
+        help="Maximum number of heavy atoms (non-hydrogens) a ligand may have",
         action="store",
         type=int,
         metavar="INT",
     )
     ligand_group.add_argument(
         "--ligand_substruct",
-        help="SMARTS pattern(s) for substructure matching",
-        action="store",
+        help="SMARTS pattern(s) for substructure matching, if error delimit each substructure with ''.",
+        action="append",
         type=str,
         metavar="STRING",
         nargs="+",
     )
     ligand_group.add_argument(
         "--ligand_substruct_pos",
-        help="SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords",
-        action="store",
+        help='"SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords". Group each set of six values with "".',
+        action="append",
         type=str,
         metavar="STRING",
         nargs="+",
@@ -845,21 +845,43 @@ class CLOptionParser:
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")
                 ligand_filters = {}
+                # parse the ligand filters, depending on how the keywords are used they will be a list of list or list of lists
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
+                    # just a simple string
                     if _type == ("ligand_max_atoms"):
                         ligand_filters[_type] = ligand_filter_value
                         continue
+                    # don't include None values
                     if ligand_filter_value is (None):
                         continue
                     ligand_filters[_type] = []
-                    for filter in ligand_filter_value:
-                        ligand_filters[_type].append(filter)
+                    # the other ligand filters can come as [[filter1,filter2,filter3]] or [[filter1],[filter2, filter3]]
+                    for filter_list in ligand_filter_value:
+                        # if more than one filter in list, go through each
+                        if len(filter_list) > 1:
+                            for filter in filter_list:
+                                if _type == "ligand_substruct_pos":
+                                    # make a lits of the six values
+                                    ligand_filters[_type].append(
+                                        [i for i in filter.split(" ")]
+                                    )
+                                else:
+                                    ligand_filters[_type].append(filter)
+                        else:
+                            if _type == "ligand_substruct_pos":
+                                # if only one item in list, append to ligand list
+                                ligand_filters[_type].append(
+                                    [i for i in filter_list[0].split(" ")]
+                                )
+                            else:
+                                ligand_filters[_type].append(filter_list[0])
 
                 ligand_filters["ligand_operator"] = parsed_opts.ligand_operator
+                # ligand substruct pos needs six items
                 if (
-                    ligand_filters["ligand_max_atoms"] is not None
-                    and len(ligand_filters["ligand_max_atoms"]) % 6 != 0
+                    "ligand_substruct_pos" in ligand_filters
+                    and len(ligand_filters["ligand_substruct_pos"][0]) % 6
                 ):
                     msg = "--ligand_substruct_pos needs groups of 6 values:\n"
                     msg += "  1. Ligand SMARTS\n"
@@ -868,7 +890,9 @@ class CLOptionParser:
                     msg += "  4. X\n"
                     msg += "  5. Y\n"
                     msg += "  6. Z\n"
-                    msg += 'For example --ligand_substruct_pos "[C][Oh]" 1 1.5 -20. 42. -7.1'
+                    msg += (
+                        'For example --ligand_substruct_pos "[C][Oh] 1 1.5 -20 42 -7.1"'
+                    )
                     raise OptionError(msg)
 
                 for k, v in ligand_filters.items():

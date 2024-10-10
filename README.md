@@ -28,6 +28,16 @@ Ringtail is developed by the [Forli lab](https://forlilab.org/) at the
 [Center for Computational Structural Biology (CCSB)](https://ccsb.scripps.edu)
 at [Scripps Research](https://www.scripps.edu/).
 
+In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io/en/latest/).
+
+### New in version 2.0.1
+##### Enhancements to the code base
+- The format of the queries produced to filter the database have been completely rewritten, reducing filtering time by at least a factor of 10 compared to 1.1.0. Extra indices were added to three of the tables to support the faster filtering speeds. 
+
+##### Bug fixes
+- The use of the keywords `--ligand_name`, `--ligand_substruct`, and `--ligand_substruct_pos` had ambiguous behavior where if they were invoked more than once, only the last filter value would be used (as opposed to concatenating the values). They now will work by supplying multiple values to one keyword, as well as one or more values to two or more keywords. Further, `ligand_substruct_pos` now takes input as one string (`"[C][Oh] 1 1.5 -20 42 -7.1"`)as opposed to one string and five numbers (`"[C][Oh]"" 1 1.5 -20 42 -7.1`).
+- `--ligand_max_atoms` counted all atoms in the ligand, including hydrogens. With bug fix it counts only heavy atoms(not hydrogens). 
+
 ### New in version 2.0
 ##### Changes in keywords used for the command line tool
 
@@ -46,22 +56,22 @@ at [Scripps Research](https://www.scripps.edu/).
 ##### Enhancements to the codebase
 - Fully developed API can use python for scripting exclusively 
 - Can add docking results directly without using file system (for vina only as output comes as a string). 
-- The Ringtail log is now written to a logging file in addition to STDOUT
+- The Ringtail log is now written to a logging file in addition to STDOUT if logging in DEBUG mode
 
 ##### Changes to code behavior
 - Interaction tables: one new table has been added (`Interactions`) which references the interaction id from `Interaction_indices`, while the table `Interaction_bitvectors` has been discontinued.
-- A new method to update an existing database 1.1.0 (or 1.0.0) to 2.0.0 is included. However, if the existing database was created with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0 (see Bug fixes below).
+- A new method to update an existing database 1.1.0 (or 1.0.0) to 2.0 is included. However, if the existing database was created with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0 (see Bug fixes below).
 
 ##### Bug fixes
-- The option `duplicate_handling` could previously only be applied during database creation and produced inconsistent table behavior. Option can now be applied at any time results are added to a database, and will create internally consistent tables. **Please note: if you have created tables in the past and invoking the keyword `duplicate_handling` you may have errors in the "Interaction_bitvectors" table. These errors cannot be recovered, and we recommend you re-make the database with Ringtail 2.0.0.**
+- The option `duplicate_handling` could previously only be applied during database creation and produced inconsistent table behavior. Option can now be applied at any time results are added to a database, and will create internally consistent tables. **Please note: if you have created tables in the past and invoking the keyword `duplicate_handling` you may have errors in the "Interaction_bitvectors" table. These errors cannot be recovered, and we recommend you re-make the database with Ringtail 2.0.**
 - Writing SDFs from filtering bookmarks: will check that bookmark exists and has data before writing, and will now produce SDFs for any bookmarks existing bookmarks. If the bookmark results from a filtering where `max_miss` &lt; 0 it will note if the non-union bookmark is used, and if the base name for such bookmarks is provided it will default to the `basename_union` bookmark for writing the SDFs.
 - Output from filtering using `max_miss` and `output_all_poses=False`(default) now producing expected behavior of outputting only one pose per ligand. Filtering for interactions `max_miss` allows any given pose for a ligand to miss `max_miss` interactions and still be considered to pass the filter. Previously, in the resulting `union` bookmark and `output_log` text file some ligands would present with more than one pose, although the option to `output_all_poses` was `False` (and thus the expectation would be one pose outputted per ligand). This would give the wrong count for how many ligands passed a filter, as some were counted more than once. 
 
-#### Updating database to work with v2.0.0
-If you have previously written a database with Ringtail < v2.0.0, it will need to be updated to be compatible with filtering with v2.0.0. We have included a new script `rt_db_to_v200.py` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
+#### Updating database to work with v2.0
+If you have previously written a database with Ringtail < v2.0, it will need to be updated to be compatible with filtering with v2.0. We have included a new script `rt_db_to_v200` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
 
 ```
-$ rt_db_to_v200.py -d <v2.0.0 database 1 (required)> <v2.0.0 database 2+ (optional)>
+$ rt_db_to_v200 -d <v2.0 database 1 (required)> <v2.0 database 2+ (optional)>
 ```
 
 Multiple databases may be specified at once. The update may take a few minutes per database.
@@ -82,16 +92,16 @@ Code base and database schema version update
 ![rt_v11_timings](https://github.com/forlilab/Ringtail/assets/41704502/eac373fc-1324-45df-b845-6697dc9d1465)
 
 #### Updating database written with v1.0.0 to work with v1.1.0
-If you have previously written a database with Ringtail v1.0.0, it will need to be updated to be compatible with filtering with v1.1.0. We have included a new script `rt_db_v100_to_v110.py` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
+If you have previously written a database with Ringtail v1.0.0, it will need to be updated to be compatible with filtering with v1.1.0. We have included a new script `rt_db_v100_to_v110` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
 
 ```
-$ rt_db_v100_to_v110.py -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (optional)>
+$ rt_db_v100_to_v110 -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (optional)>
 ```
 
 Multiple databases may be specified at once. The update may take a few minutes per database.
 
 ### Dependencies 
-- python (> 3.9, tested up to 3.12)
+- python (> 3.9, tested up to 3.11)
 - RDKit
 - SciPy
 - Matplotlib
@@ -105,49 +115,74 @@ Multiple databases may be specified at once. The update may take a few minutes p
 - [Definitions](https://github.com/forlilab/Ringtail#definitions)
 - [Getting Started Tutorial](https://github.com/forlilab/Ringtail#getting-started)
 - [Scripts](https://github.com/forlilab/Ringtail#scripts)
-- [rt_process_vs.py Documentation](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation)
-- [rt_compare.py Documentation](https://github.com/forlilab/Ringtail#rt_comparepy-documentation)
+- [rt_process_vs Documentation](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation)
+- [rt_compare Documentation](https://github.com/forlilab/Ringtail#rt_comparepy-documentation)
 - [Python tutorials](https://github.com/forlilab/Ringtail#brief-python-tutorials)
 
-### Installation (from PyPI)
-Please note that Ringtail requires Python 3.9 or 3.10.
+### Installation 
+#### Create a Ringtail environment
+It is necessary to create a Ringtail python environment for managing the external dependencies, conda will be used in the following examples but other environment managers such as the lightweight micromamba will also work. Please note that Ringtail requires Python 3.9, 3.10, or 3.11.
+
+```bash
+$ conda create -n Ringtail python=3.11
+$ conda activate ringtail
+```
+
+#### From PyPi
+Make sure your Ringtail environment is active, then install via pip
 
 ```bash
 $ pip install ringtail
 ```
-If using conda, `pip` installs the package in the active environment.
 
-Also note that if using MacOS, you may need to install Multiprocess separately:
+You may need to install one or more of the listed dependencies, please note that multiprocess is only necessary for MacOS. 
+
 ```bash
-$ pip install multiprocess
+$ pip install <dependency>
 ```
 
-### Installation (from source code)
+Chemicalite is required and only available on conda-forge:
+
+```bash
+$ conda install -c conda-forge chemicalite
 ```
-$ conda create -n ringtail python=3.10
-$ conda activate ringtail
+
+#### From conda-forge
+Ringtail 2.0 is now available on conda-forge, and installation from conda-forge will handle all of the dependencies. 
+
+```bash
+$ conda install -c conda-forge ringtail
 ```
-After this, navigate to the desired directory for installing Ringtail and do the following:
-```
+
+#### From source code
+If wishing to install from source code, navigate to the desired directory for installing Ringtail and do the following:
+
+```bash
 $ git clone git@github.com:forlilab/Ringtail.git
 $ cd Ringtail
 $ pip install .
 ```
+
 This will automatically fetch the required modules and install them into the current conda environment.
 
 If you wish to make the code for Ringtail editable without having to re-run `pip install .`, instead use
-```
+
+```bash
 $ pip install --editable .
 ```
-### Test installation
-If you would like to test your installation of Ringtail, a set of automated tests are included with the source code. To begin, you must install pytest in the Ringtail conda environment:
+
+You can test the source code installation using the automated tests in the `Ringtail/test` directory. To begin, you must install pytest in the Ringtail environment:
+
+```bash
+$ pip install pytest
 ```
-$ pip install -U pytest
-```
-Next, navigate to the `test` subdirectory within the cloned Ringtail directory and run pytest by simply calling
-```
+
+Next, navigate to the `test` subdirectory and run pytest by calling
+
+```bash
 $ pytest
 ```
+
 The compounds used for the testing dataset were taken from the [NCI Diversity Set V](https://wiki.nci.nih.gov/display/NCIDTPdata/Compound+Sets). The receptor used was [PDB: 4J8M](https://www.rcsb.org/structure/4J8M).
 
 ## Definitions
@@ -161,25 +196,29 @@ The compounds used for the testing dataset were taken from the [NCI Diversity Se
 > Drat, I'm not a cat!  Even though this eye-catching omnivore sports a few vaguely feline characteristics such as pointy ears, a sleek body, and a fluffy tail, the ringtail is really a member of the raccoon family. https://animals.sandiegozoo.org/animals/ringtail
 
 ## Getting started with the command line interface 
-The Ringtail command line interface is orchestrated through the script `rt_process_vs.py`.
+The Ringtail command line interface is orchestrated through the script `rt_process_vs`.
 #### Create and populate a database
-Navigate to the directory containing the data, in our case test_data:
-```
-$ cd test/test_data/
+Navigate to the directory containing the data, in our case test_data/adgpu:
+
+```bash
+$ cd test/test_data/adpgu/
 ```
 To write to the database we need to specify a few things:
-- that we are using `write` mode
+- that we are operating in `write` mode
 - source of docking results files. Docking results can be added either by providing one or more single files, a .txt file containing files, or by providing a directory containing docking results files.
 - optional database name: ringtail will default to creating a database of name `output.db`
 - optional docking mode: ringtail will default to assuming the files were produced by Autodock-GPU, if they are from vina specify `--mode vina`
 
 Let us add all docking files within the path test_data (specified by `.` meaning current directory), whose folders we can traverse recursively by specifying `--recursive`
+
+```bash
+$ rt_process_vs write --file_path . --recursive
 ```
-$ rt_process_vs.py write --file_path . --recursive
-```
+
 We can print a summary of the contents of the database by using the optional tag `-su` or `--summary` and specifying the database database from which to `read`:
-```
-$ rt_process_vs.py read --input_db output.db -su
+
+```bash
+$ rt_process_vs read --input_db output.db -su
 
 Total Stored Poses: 645
 Total Unique Interactions: 183
@@ -194,39 +233,42 @@ max_leff: -0.13 kcal/mol
 1%_leff: -0.58 kcal/mol
 10%_leff: -0.47 kcal/mol
 ```
+
 #### Filtering and visualizing the data in the database
 Let us start filtering with a basic docking score cutoff of -6 kcal/mol:
+
+```bash
+$ rt_process_vs read --input_db output.db --eworst -6
 ```
-$ rt_process_vs.py read --input_db output.db --eworst -6
-```
+
 This produces an output log `output_log.txt` with the names of ligands passing the filter, as well as their binding energies. Each round of filtering is also stored in the database as a SQLite view, which we refer to as a "bookmark" (default value is `passing_results`). 
 
 We can also save a round of filtering with a specific bookmark name, and perform more filtering on this bookmark.
 For example, start out with filtering out the compounds that are within the 5th percentile in terms of docking score and save the bookmark as `ep5`:
+
+```bash
+$ rt_process_vs read --input_db output.db --score_percentile 5 --log_file ep5_log.txt --bookmark_name ep5
 ```
-$ rt_process_vs.py read --input_db output.db --score_percentile 5 --log_file ep5_log.txt --bookmark_name ep5
-```
+
 Let's then further refine the set of molecules by applying an interaction filter for van der Waals interactions with V279 on the receptor:
 
+```bash
+$ rt_process_vs read --input_db output.db --filter_bookmark ep5 --vdw_interactions A:VAL:279: --log_file ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
 ```
-$ rt_process_vs.py read --input_db output.db --filter_bookmark ep5 --vdw_interactions A:VAL:279: --log_file ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
-```
+
 The filtered molecules can then be exported as an e.g., SDF file which can be used for visual inspection in molecular graphics programs. At the same time, if pymol is installed, we can kick off a pymol session of the ligands
 
+```bash
+$ rt_process_vs read --input_db output.db --bookmark_name ep5_vdwV279 --export_sdf_path ep5_vdwV279_sdfs --pymol
 ```
-$ rt_process_vs.py read --input_db output.db --bookmark_name ep5_vdwV279 --export_sdf_path ep5_vdwV279_sdfs --pymol
-```
-#### Access help message for rt_process_vs.py
-```
-$ rt_process_vs.py --help
-```
-#### Access help message for rt_process_vs.py write mode
-```
-$ rt_process_vs.py write --help
-```
-#### Access help message for rt_process_vs.py read mode
-```
-$ rt_process_vs.py read --help
+
+#### Access help message for rt_process_vs
+```bash
+$ rt_process_vs --help
+
+$ rt_process_vs write --help
+
+$ rt_process_vs read --help
 ```
 
 #### Ringtail arguments
@@ -294,30 +336,28 @@ $ rt_process_vs.py read --help
 ---
 
 ### Scripts
-The Ringtail package includes two command line oriented scripts: `rt_process_vs.py` and `rt_compare.py`. Both may be run with options specified in the command line and/or using options specified in a JSON-formatted file given with `--config`. Command line options override any conflicting options in the config file.
+The Ringtail package includes two command line oriented scripts: `rt_process_vs` and `rt_compare`. Both may be run with options specified in the command line and/or using options specified in a JSON-formatted file given with `--config`. Command line options override any conflicting options in the config file.
 
-[rt_process_vs.py](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation) serves as the primary script for the package and is used to both write docking files to a SQLite database and to perform filtering and export tasks on the database. It is designed to handle docking output files associated with a single virtual screening in a single database.
+[rt_process_vs](https://github.com/forlilab/Ringtail#rt_process_vspy-documentation) serves as the primary script for the package and is used to both write docking files to a SQLite database and to perform filtering and export tasks on the database. It is designed to handle docking output files associated with a single virtual screening in a single database.
 
-[rt_compare.py](https://github.com/forlilab/Ringtail#rt_comparepy-documentation) is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
+[rt_compare](https://github.com/forlilab/Ringtail#rt_comparepy-documentation) is used to combine information across multiple virtual screenings (in separate databases) to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
 
-[rt_generate_config_file.py](https://github.com/forlilab/Ringtail#rt_generate_config_filepy-documentation) can be ran to create a config file template
+[rt_generate_config_file](https://github.com/forlilab/Ringtail#rt_generate_config_filepy-documentation) can be ran to create a config file template
 
-[rt_db_to_v200.py](https://github.com/forlilab/Ringtail#Updating-database-to-work-with-v200) is used to update older databases to the latest version. 
+[rt_db_to_v200](https://github.com/forlilab/Ringtail#Updating-database-to-work-with-v200) is used to update older databases to the latest version. 
 
-[rt_db_v100_to_v110.py](https://github.com/forlilab/Ringtail#Updating-database-written-with-v100-to-work-with-v110) is used to update db v1.0.0 to 1.1.0. 
+[rt_db_v100_to_v110](https://github.com/forlilab/Ringtail#Updating-database-written-with-v100-to-work-with-v110) is used to update db v1.0.0 to 1.1.0. 
 
-#### rt_compare.py Documentation
-The `rt_compare.py` script is designed to be used with databases already made and filtered. The script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (wanted) or exclusive to some screenings and not others (unwanted). The script uses a subset of commands similar to `rt_process_vs.py`.
+#### rt_compare Documentation
+The `rt_compare` script is designed to be used with databases already made and filtered. The script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (wanted) or exclusive to some screenings and not others (unwanted). The script uses a subset of commands similar to `rt_process_vs`.
 
 An example of use: select ligands found in "filter_bookmark" bookmarks of database1 but not database2 (they must both contain a bookmark named "filter1"):
-```
-rt_compare.py --wanted database1.db --unwanted database2.db --bookmark_name filter_bookmark
+
+```bash
+rt_compare --wanted database1.db --unwanted database2.db --bookmark_name filter_bookmark
 ```
 
 For more detailed description of usage, please see [the readthedocs.org site for ringtail](https://ringtail.readthedocs.io/en/latest/compare.html).
-
-#### rt_generate_config_file.py Documentation
-
 
 ## Advanced usage: scripting with Ringtail API 
 Ringtail has been re-designed to allow for direct use of its API for e.g., scripting purposes. This circumvents the use of the command line tools, and allows for more advanced usage.
@@ -325,12 +365,14 @@ The available operations and keywords are the same as for the command line inter
 
 #### Instantiating the Ringtail object
 A ringtail core is created by instantiating a `RingtailCore` object with a database. Currently, a database can only be added upon instantiation.
-```
+
+```bash
 rtc = RingtailCore("output.db")
 ```
 
 Default logging level is "WARNING", and a different logger level can be set at the time of object instantiation, or later by the log level change API:
-```
+
+```bash
 rtc = RingtailCore(db_file="output.db", logging_level="DEBUG)
 # or
 rtc.logger.set_level("INFO")
@@ -341,47 +383,33 @@ To add results to the database, use the `add_results_from_files` method that tak
 as well as a receptor path and database properties and how to handle the resutls (how many poses to save, how to deal with interactions if having vina results),
 and whether or not to print a summary after writing the results to the database.
 
-```
+```python
 rtc.add_results_from_files( file_path = "test_data/", 
                             recursive = True, 
                             save_receptor = False,
                             max_poses = 3)
 ```
-Both files (`filesources_dict`) and processing options (`optionsdict`) can be provided as dictionaries as well or instead of the the individual options. Any provided individual options will overwrite the options provided through dictionaries. The use and prioritization of dictionaries and method attributes is true for most of the available API methods.
-
-```
-file_sources = {
-    "file_path": "test_data/",
-    "recursive": True,
-}
-
-writeoptions = {
-    "store_all_poses": True,
-    "max_proc": 4
-}
-
-rtc.add_results_from_files( filesources_dict = file_sources,
-                            optionsdict = writeoptions,)
-```
 
 If at any point you wish to print a summary of the database, the method can be called directly:
-```
+
+```python
 rtc.produce_summary()
 ```
 
 The default docking mode is "dlg", and can be changed to "vina" by accessing the ringtail core property `docking_mode`. 
-```
+
+```python
 rtc_vina = RingtailCore("output_vina.db")
 rtc_vina.docking_mode = "vina"
 ```
+
 Since vina does not automatically write docking results to the file system, these can be added to the database by associating them with a ligand name in a dictionary and using this dictionary as the source of results when adding to the database:
-```
-vina_docking_result1 = "long string of results"
-vina_docking_result2 = "different string of results"
+
+```python
 
 vina_results = {
-    "ligand1": vina_docking_result1,
-    "ligand2": vina_docking_result2
+    "ligand1": vina_docking_ligand1_result,
+    "ligand2": vina_docking_ligand2_result
 }
 
 rtc_vina.add_results_from_vina_string(results_strings = vina_results,
@@ -391,26 +419,31 @@ rtc_vina.add_results_from_vina_string(results_strings = vina_results,
 #### Filtering and visualizing the data in the database
 
 To filter, simply access the API method `filter` and provide desired filter values. Names of bookmark and output log for containing filtered results can be specified in the method.
-```
+
+```python
 rtc.filter(eworst=-6, 
            bookmark_name = "e6",
            log_file = "filtered_results.txt")
 ```
+
 Just like with the command line tool, you can choose to filter over a bookmark that has already been created:
-```
+
+```python
 rtc.filter(vdw_interactions=[('A:VAL:279:', True), ('A:LYS:162:', True)],
            bookmark_name = "e6vdw279162",
            filter_bookmark = "e6",
            log_file = "filtered_results_2.txt")
 ```
+
 To export filtered molecules in a specific bookmark to SDF files use the following method, where the `sdf_path` directory will be created if it does not already exist:
 
-```
+```python
 rtc.write_molecule_sdfs(sdf_path = "sdf_files", bookmark_name = "e6vdw279162")
 ```
 
 One or more of the filtered ligands can be visualized in PyMol:
-```
+
+```python
 rtc.pymol(bookmark_name = "e6vdw279162")
 ```
 
