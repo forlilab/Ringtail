@@ -1674,11 +1674,12 @@ class RingtailCore:
             bookmark_filters = (
                 self.storageman.fetch_filters_from_bookmark()
             )  # fetches the filters used to produce the bookmark
-        max_miss = bookmark_filters["max_miss"]
-        if max_miss > 0:
-            raise OptionError(
-                "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
-            )
+        if bookmark_filters:
+            max_miss = bookmark_filters["max_miss"]
+            if max_miss > 0:
+                raise OptionError(
+                    "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
+                )
 
         logger.info("Creating plot of results")
         # get data from storageMan
