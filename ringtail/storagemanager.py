@@ -1627,7 +1627,7 @@ class StorageManagerSQLite(StorageManager):
         if not filters: 
             return {}
 
-        return json.loads(filters)
+        return json.loads(filters[0])
 
     def bookmark_has_rows(self, bookmark_name: str) -> bool:
         """
