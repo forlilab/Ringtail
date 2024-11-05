@@ -62,7 +62,7 @@ def main():
 
             # write out molecules if requested
             if outopts.export_sdf_path:
-                rtcore.write_molecule_sdfs()
+                rtcore.write_molecule_sdfs(sdf_path = outopts.export_sdf_path)
 
             # write out requested CSVs
             if readopts["export_bookmark_csv"]:

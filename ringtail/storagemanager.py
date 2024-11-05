@@ -1623,9 +1623,11 @@ class StorageManagerSQLite(StorageManager):
         sql_query = (
             f"SELECT filters FROM Bookmarks where Bookmark_name = '{bookmark_name}'"
         )
-        filters = self._run_query(sql_query).fetchone()[0]
+        filters = self._run_query(sql_query).fetchone()
+        if not filters: 
+            return {}
 
-        return json.loads(filters)
+        return json.loads(filters[0])
 
     def bookmark_has_rows(self, bookmark_name: str) -> bool:
         """
