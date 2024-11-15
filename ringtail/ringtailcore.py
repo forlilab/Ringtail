@@ -6,7 +6,8 @@
 
 import matplotlib.pyplot as plt
 import json
-from meeko import RDKitMolCreate, pdb_updated_flexres_from_rdkit
+from meeko import RDKitMolCreate
+from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 from .storagemanager import StorageManager
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
@@ -1469,7 +1470,7 @@ class RingtailCore:
 
         return ligands_passed
 
-    def write_flexres_pdbqt(
+    def write_flexres_pdb(
         self, receptor_polymer, ligname: str, filename: str, bookmark_name: str = None
     ):
         """
@@ -1495,7 +1496,7 @@ class RingtailCore:
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
 
-            _, flexres_mols, _ = self._create_rdkit_mol(
+            ligand_mol, flexres_mols, _ = self._create_rdkit_mol(
                 ligname,
                 ligand_smile,
                 atom_index_map,
@@ -1505,7 +1506,7 @@ class RingtailCore:
             )
             if filename:
                 # if providing filename, make sure it has .pdb extension
-                root, ext = os.path.splitext(path)
+                root, ext = os.path.splitext(filename)
                 if not ext:
                     ext = ".pdb"
                 path = root + ext
@@ -1517,13 +1518,15 @@ class RingtailCore:
         flexmoldict = {}
         # string in list of strings
         for index, flexres in enumerate(flexible_residues):
-            # res id is last three numbers, currently not including chain
-            flexmoldict[flexres[-3:]] = flexres_mols[index]
+            # res id is chain:resnum
+            flexmoldict[f"{flexres[4]}:{flexres[-3:]}"] = flexres_mols[index]
 
         pdb_str = pdb_updated_flexres_from_rdkit(receptor_polymer, flexmoldict)
         # write pdb string to file
         with open(path, "w") as file:
             file.write(pdb_str)
+
+        return ligand_mol, flexmoldict 
 
     def write_molecule_sdfs(
         self,
