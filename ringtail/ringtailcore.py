@@ -7,6 +7,7 @@
 import matplotlib.pyplot as plt
 import json
 from meeko import RDKitMolCreate
+from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 from .storagemanager import StorageManager
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
@@ -275,6 +276,7 @@ class RingtailCore:
         atom_indices = json.loads(atom_indices)
         ligand_saved_coords = []
         flexres_saved_coords = []
+
         # make flexible residue molecules
         for res, res_ats in zip(flexible_residues, flexres_atomnames):
             flexres_saved_coords.append([])
@@ -1467,6 +1469,64 @@ class RingtailCore:
                     ligands_passed = number_passing_union
 
         return ligands_passed
+
+    def write_flexres_pdb(
+        self, receptor_polymer, ligname: str, filename: str, bookmark_name: str = None
+    ):
+        """
+        Writes a receptor pdb with flexible residues based on the ligand provided
+
+        Args:
+            receptor_polymer (Polymer): version of receptor produced by meeko
+            ligname (str): ligand name for which the receptor flexible residue info should be collected
+            filename (str): name of the output pdb, extension is optional, will default to '.pdb'
+            bookmark_name (str, optional): will use last used bookmark if not specified, will not work in a db without any filtering performed
+        """
+        # make flexres rdkit mols for ligand-receptor docking
+        if bookmark_name is not None:
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
+
+        with self.storageman:
+            self.storageman.create_temp_table_from_bookmark()
+            ligname, ligand_smile, atom_index_map, hydrogen_parents = (
+                self.storageman.fetch_single_ligand_output_info(ligname)
+            )
+            flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
+            if flexible_residues != []:  # converts string to list
+                flexible_residues = json.loads(flexible_residues)
+                flexres_atomnames = json.loads(flexres_atomnames)
+
+            ligand_mol, flexres_mols, _ = self._create_rdkit_mol(
+                ligname,
+                ligand_smile,
+                atom_index_map,
+                hydrogen_parents,
+                flexible_residues,
+                flexres_atomnames,
+            )
+            if filename:
+                # if providing filename, make sure it has .pdb extension
+                root, ext = os.path.splitext(filename)
+                if not ext:
+                    ext = ".pdb"
+                path = root + ext
+            else:
+                # name if after the receptor
+                receptor_name, _ = self.storageman.fetch_receptor_objects()[0]
+                path = receptor_name + ".pdb"
+
+        flexmoldict = {}
+        # string in list of strings
+        for index, flexres in enumerate(flexible_residues):
+            # res id is chain:resnum
+            flexmoldict[f"{flexres[4]}:{flexres[-3:]}"] = flexres_mols[index]
+
+        pdb_str = pdb_updated_flexres_from_rdkit(receptor_polymer, flexmoldict)
+        # write pdb string to file
+        with open(path, "w") as file:
+            file.write(pdb_str)
+
+        return ligand_mol, flexmoldict 
 
     def write_molecule_sdfs(
         self,
