@@ -2608,10 +2608,11 @@ class StorageManagerSQLite(StorageManager):
                             self._ligand_substructure_position_filter(temp_lig_filter)
                         )
                     join_stmnt = " " + lig_filters["ligand_operator"] + " "
-                # join all ligand queries that are not empty
-                lig_query = " AND ".join(
-                    [lig_filter for lig_filter in ligand_queries if lig_filter]
-                )
+                else:
+                    # join all ligand queries that are not empty
+                    lig_query = " AND ".join(
+                        [lig_filter for lig_filter in ligand_queries if lig_filter]
+                    )
             # if filter queries exist for each group, string them together appropriately
             if int_query:
                 # add with a join statement
@@ -2632,8 +2633,11 @@ class StorageManagerSQLite(StorageManager):
                     unclustered_query += num_query
                 # if both numerical and ligand_substruct_pos handle appropriately
                 if num_query and ligand_substruct_queries:
-                    unclustered_query += " AND " + join_stmnt.join(
-                        ligand_substruct_queries
+                    beforelength = len(unclustered_query) + len(
+                        ligand_substruct_queries[0]
+                    )
+                    unclustered_query += (
+                        " AND (" + join_stmnt.join(ligand_substruct_queries) + ")"
                     )
                 # if not, only the ligand_substruct_pos sets the WHERE condition
                 else:
@@ -3162,7 +3166,7 @@ class StorageManagerSQLite(StorageManager):
             )
             logical_operator = "OR"
         if logical_operator is None:
-            logical_operator = "AND"
+            logical_operator = "OR"
         for kw in ligand_filters.keys():
             fils = ligand_filters[kw]
             if kw == "ligand_name":
@@ -3173,7 +3177,7 @@ class StorageManagerSQLite(StorageManager):
                     sql_ligand_string += name_sql_str
             if kw == "ligand_max_atoms" and ligand_filters[kw] is not None:
                 maxatom_sql_str = " mol_num_hvyatms(ligand_rdmol) <= {} {}".format(
-                    ligand_filters[kw], logical_operator
+                    ligand_filters[kw], "AND"
                 )
                 sql_ligand_string += maxatom_sql_str
             if kw == "ligand_substruct":
