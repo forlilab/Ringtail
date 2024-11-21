@@ -3128,6 +3128,7 @@ class StorageManagerSQLite(StorageManager):
         """
 
         sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE "
+        query_list = []
         if "ligand_operator" in ligand_filters:
             if ligand_filters["ligand_operator"] in ["OR", "AND"]:
                 logical_operator = ligand_filters["ligand_operator"]
@@ -3138,16 +3139,18 @@ class StorageManagerSQLite(StorageManager):
             logical_operator = "OR"
 
         for keyword, filter in ligand_filters.items():
-            # filters = ligand_filters[keyword]
             if keyword == "ligand_name":
                 # make each name a partial sql string in list format
                 names = [
                     f"L.LigName LIKE '%{name}%'" for name in filter if filter is not ""
                 ]
-                sql_ligand_string += " OR ".join(names)
+                query_list.append(" OR ".join(names))
+
             if keyword == "ligand_max_atoms" and filter is not None:
-                sql_ligand_string += f" mol_num_hvyatms(ligand_rdmol) <= {filter} AND"
+                query_list.append(f" mol_num_hvyatms(ligand_rdmol) <= {filter}")
+
             if keyword == "ligand_substruct":
+                smarts_query = []
                 for smarts in filter:
                     # check for hydrogens in smarts pattern
                     smarts_mol = Chem.MolFromSmarts(smarts)
@@ -3156,12 +3159,17 @@ class StorageManagerSQLite(StorageManager):
                             raise DatabaseQueryError(
                                 f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen."
                             )
-                    sql_ligand_string += f" mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}"
+                    smarts_query.append(
+                        f" mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}'))"
+                    )
+                query_list.append(
+                    "(" + f" {logical_operator} ".join(smarts_query) + ")"
+                )
 
-        if sql_ligand_string.endswith("AND"):
-            sql_ligand_string = sql_ligand_string.rstrip("AND")
-        if sql_ligand_string.endswith("OR"):
-            sql_ligand_string = sql_ligand_string.rstrip("OR")
+        if not query_list:
+            sql_ligand_string = ""
+        else:
+            sql_ligand_string += " AND ".join(query_list)
 
         return sql_ligand_string
 
