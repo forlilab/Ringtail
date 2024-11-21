@@ -565,22 +565,22 @@ class Filters(RTOptions):
         "ligand_name": {
             "default": None,
             "type": list,
-            "description": "Specify ligand name(s). Will combine name filters with 'OR'.",
+            "description": "Specify ligand name(s). Will combine name filters with 'OR'",
         },
         "ligand_operator": {
             "default": None,
             "type": str,
-            "description": "Logical join operator for multiple SMARTS.",
+            "description": "Logical join operator for multiple substruct filters. Will apply within 'ligand_substruct' filters and within 'ligand_substruct_pos' filters (the two groups are always joined by 'AND').",
         },
         "ligand_substruct": {
             "default": None,
             "type": list,
-            "description": "SMARTS pattern(s) for substructure matching.",
+            "description": "SMARTS pattern(s) for substructure matching. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator. If error delimit each substructure with ''.",
         },
         "ligand_substruct_pos": {
             "default": None,
             "type": list,
-            "description": "SMARTS pattern(s) for substructure matching, e.g., [''[Oh]C' 0 1.2 -5.5 10.0 15.5'] -> ['smart_string index_of_positioned_atom cutoff_distance x y z'].",
+            "description": "SMARTS pattern(s) for substructure matching. For API use list with six elements ['[Oh]C', 0, 1.2, -5.5, 10.0, 15.5] -> ['smart_string', index_of_positioned_atom, cutoff_distance, x, y, z]. For the CLI use as a string without comma separators, separating each filter with commas -> '[Oh]C 0 1.2 -5.5 10.0 15.5'. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator",
         },
         "ligand_max_atoms": {
             "default": None,
