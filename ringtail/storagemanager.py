@@ -2633,9 +2633,6 @@ class StorageManagerSQLite(StorageManager):
                     unclustered_query += num_query
                 # if both numerical and ligand_substruct_pos handle appropriately
                 if num_query and ligand_substruct_queries:
-                    beforelength = len(unclustered_query) + len(
-                        ligand_substruct_queries[0]
-                    )
                     unclustered_query += (
                         " AND (" + join_stmnt.join(ligand_substruct_queries) + ")"
                     )
@@ -3159,29 +3156,25 @@ class StorageManagerSQLite(StorageManager):
 
         sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE"
         if "ligand_operator" in ligand_filters:
-            logical_operator = ligand_filters["ligand_operator"]
+            if ligand_filters["ligand_operator"] in ["OR", "AND"]:
+                logical_operator = ligand_filters["ligand_operator"]
         else:
             self.logger.info(
                 "A logical operator to combine ligand filters were not provided, will use the default value 'OR'."
             )
             logical_operator = "OR"
-        if logical_operator is None:
-            logical_operator = "OR"
-        for kw in ligand_filters.keys():
-            fils = ligand_filters[kw]
-            if kw == "ligand_name":
-                for name in fils:
+
+        for keyword, filter in ligand_filters.items():
+            # filters = ligand_filters[keyword]
+            if keyword == "ligand_name":
+                for name in filter:
                     if name == "":
                         continue
-                    name_sql_str = " L.LigName LIKE '%{value}%' OR".format(value=name)
-                    sql_ligand_string += name_sql_str
-            if kw == "ligand_max_atoms" and ligand_filters[kw] is not None:
-                maxatom_sql_str = " mol_num_hvyatms(ligand_rdmol) <= {} {}".format(
-                    ligand_filters[kw], "AND"
-                )
-                sql_ligand_string += maxatom_sql_str
-            if kw == "ligand_substruct":
-                for smarts in fils:
+                    sql_ligand_string += f" L.LigName LIKE '%{name}%' OR "
+            if keyword == "ligand_max_atoms" and filter is not None:
+                sql_ligand_string += f" mol_num_hvyatms(ligand_rdmol) <= {filter} AND "
+            if keyword == "ligand_substruct":
+                for smarts in filter:
                     # check for hydrogens in smarts pattern
                     smarts_mol = Chem.MolFromSmarts(smarts)
                     for atom in smarts_mol.GetAtoms():
@@ -3189,10 +3182,8 @@ class StorageManagerSQLite(StorageManager):
                             raise DatabaseQueryError(
                                 f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen."
                             )
-                    substruct_sql_str = " mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}".format(
-                        smarts=smarts, logical_operator=logical_operator
-                    )
-                    sql_ligand_string += substruct_sql_str
+                    sql_ligand_string += f" mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}"
+
         if sql_ligand_string.endswith("AND"):
             sql_ligand_string = sql_ligand_string.rstrip("AND")
         if sql_ligand_string.endswith("OR"):
