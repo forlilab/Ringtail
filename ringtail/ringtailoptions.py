@@ -565,7 +565,7 @@ class Filters(RTOptions):
         "ligand_name": {
             "default": None,
             "type": list,
-            "description": "Specify ligand name(s). Will combine name filters with 'OR'",
+            "description": "Specify list of ligand name(s). Will combine name filters with 'OR'",
         },
         "ligand_operator": {
             "default": None,
