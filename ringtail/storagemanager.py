@@ -2942,10 +2942,6 @@ class StorageManagerSQLite(StorageManager):
             str: partial query that identifies pose ids passing the ligand substructure filter
         """
         queries = []
-        nr_args_per_group = 6
-        nr_smarts = int(
-            len(ligand_filters_dict["ligand_substruct_pos"]) / nr_args_per_group
-        )
         # create temporary table with molecules that pass all smiles
         tmp_lig_filters = {"ligand_operator": ligand_filters_dict["ligand_operator"]}
         if "ligand_max_atoms" in ligand_filters_dict:
@@ -2953,15 +2949,13 @@ class StorageManagerSQLite(StorageManager):
                 "ligand_max_atoms"
             ]
         tmp_lig_filters["ligand_substruct"] = [
-            ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group]
-            for i in range(nr_smarts)
+            ligand_filters_dict["ligand_substruct_pos"][0]
         ]
         cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
         cmd = cmd.replace(
             "SELECT L.LigName FROM Ligands L",
             "SELECT "
             "R.Pose_ID, "
-            "L.LigName, "
             "L.ligand_smile, "
             "L.atom_index_map, "
             "R.ligand_coordinates "
@@ -2972,52 +2966,31 @@ class StorageManagerSQLite(StorageManager):
         cur.execute("DROP TABLE IF EXISTS passed_smarts")
         cur.execute(cmd)
         smarts_loc_filters = []
-        for i in range(nr_smarts):
-            smarts = ligand_filters_dict["ligand_substruct_pos"][
-                i * nr_args_per_group + 0
-            ]
-            index = int(
-                ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 1]
-            )
-            sqdist = (
-                float(
-                    ligand_filters_dict["ligand_substruct_pos"][
-                        i * nr_args_per_group + 2
-                    ]
-                )
-                ** 2
-            )
-            x = float(
-                ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 3]
-            )
-            y = float(
-                ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 4]
-            )
-            z = float(
-                ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 5]
-            )
-            # save filter for bookmark
-            smarts_loc_filters.append((smarts, index, x, y, z))
-            poses = self._run_query("SELECT * FROM passed_smarts")
-            pose_id_list = []
-            smartsmol = Chem.MolFromSmarts(smarts)
-            for pose_id, ligname, smiles, idxmap, coords in poses:
-                mol = Chem.MolFromSmiles(smiles)
-                idxmap = [int(value) - 1 for value in json.loads(idxmap)]
-                idxmap = {
-                    idxmap[j * 2]: idxmap[j * 2 + 1]
-                    for j in range(int(len(idxmap) / 2))
-                }
-                for hit in mol.GetSubstructMatches(smartsmol):
-                    xyz = [
-                        float(value) for value in json.loads(coords)[idxmap[hit[index]]]
-                    ]
-                    d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
-                    if d2 <= sqdist:
-                        pose_id_list.append(str(pose_id))
-                        break  # add pose only once
-            if len(pose_id_list) > 0:
-                queries.append("R.Pose_ID IN ({0})".format(",".join(pose_id_list)))
+        smarts = ligand_filters_dict["ligand_substruct_pos"][0]
+        index = int(ligand_filters_dict["ligand_substruct_pos"][1])
+        sqdist = float(ligand_filters_dict["ligand_substruct_pos"][2]) ** 2
+        x = float(ligand_filters_dict["ligand_substruct_pos"][3])
+        y = float(ligand_filters_dict["ligand_substruct_pos"][4])
+        z = float(ligand_filters_dict["ligand_substruct_pos"][5])
+        # save filter for bookmark
+        smarts_loc_filters.append((smarts, index, x, y, z))
+        poses = self._run_query("SELECT * FROM passed_smarts")
+        pose_id_list = []
+        smartsmol = Chem.MolFromSmarts(smarts)
+        for pose_id, smiles, idxmap, coords in poses:
+            mol = Chem.MolFromSmiles(smiles)
+            idxmap = [int(value) - 1 for value in json.loads(idxmap)]
+            idxmap = {
+                idxmap[j * 2]: idxmap[j * 2 + 1] for j in range(int(len(idxmap) / 2))
+            }
+            for hit in mol.GetSubstructMatches(smartsmol):
+                xyz = [float(value) for value in json.loads(coords)[idxmap[hit[index]]]]
+                d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
+                if d2 <= sqdist:
+                    pose_id_list.append(str(pose_id))
+                    break  # add pose only once
+        if len(pose_id_list) > 0:
+            queries.append("R.Pose_ID IN ({0})".format(",".join(pose_id_list)))
         cur.close()
         if not queries:
             raise OptionError(
@@ -3170,9 +3143,9 @@ class StorageManagerSQLite(StorageManager):
                 for name in filter:
                     if name == "":
                         continue
-                    sql_ligand_string += f" L.LigName LIKE '%{name}%' OR "
+                    sql_ligand_string += f" L.LigName LIKE '%{name}%' OR"
             if keyword == "ligand_max_atoms" and filter is not None:
-                sql_ligand_string += f" mol_num_hvyatms(ligand_rdmol) <= {filter} AND "
+                sql_ligand_string += f" mol_num_hvyatms(ligand_rdmol) <= {filter} AND"
             if keyword == "ligand_substruct":
                 for smarts in filter:
                     # check for hydrogens in smarts pattern
