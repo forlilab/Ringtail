@@ -3127,7 +3127,7 @@ class StorageManagerSQLite(StorageManager):
             str: SQLite-formatted query
         """
 
-        sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE"
+        sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE "
         if "ligand_operator" in ligand_filters:
             if ligand_filters["ligand_operator"] in ["OR", "AND"]:
                 logical_operator = ligand_filters["ligand_operator"]
@@ -3140,10 +3140,11 @@ class StorageManagerSQLite(StorageManager):
         for keyword, filter in ligand_filters.items():
             # filters = ligand_filters[keyword]
             if keyword == "ligand_name":
-                for name in filter:
-                    if name == "":
-                        continue
-                    sql_ligand_string += f" L.LigName LIKE '%{name}%' OR"
+                # make each name a partial sql string in list format
+                names = [
+                    f"L.LigName LIKE '%{name}%'" for name in filter if filter is not ""
+                ]
+                sql_ligand_string += " OR ".join(names)
             if keyword == "ligand_max_atoms" and filter is not None:
                 sql_ligand_string += f" mol_num_hvyatms(ligand_rdmol) <= {filter} AND"
             if keyword == "ligand_substruct":
