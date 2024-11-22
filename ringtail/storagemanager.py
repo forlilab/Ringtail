@@ -3144,7 +3144,7 @@ class StorageManagerSQLite(StorageManager):
                 names = [
                     f"L.LigName LIKE '%{name}%'" for name in filter if filter is not ""
                 ]
-                query_list.append(" OR ".join(names))
+                query_list.append("(" + " OR ".join(names) + ")")
 
             if keyword == "ligand_max_atoms" and filter is not None:
                 query_list.append(f" mol_num_hvyatms(ligand_rdmol) <= {filter}")
