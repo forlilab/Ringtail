@@ -2599,13 +2599,17 @@ class StorageManagerSQLite(StorageManager):
                     ligand_queries.append(
                         self._generate_ligand_filtering_query(lig_filters)
                     )
+                # join all ligand queries that are not empty
+                lig_query = " AND ".join(
+                    [lig_filter for lig_filter in ligand_queries if lig_filter]
+                )
                 # if complex ligand filter, generate partial query
                 if "ligand_substruct_pos" in lig_filters:
                     for substruct_pos in lig_filters["ligand_substruct_pos"]:
-                        temp_lig_filter = lig_filters
-                        temp_lig_filter["ligand_substruct_pos"] = substruct_pos
                         ligand_substruct_queries.append(
-                            self._ligand_substructure_position_filter(temp_lig_filter)
+                            self._ligand_substructure_position_filter(
+                                substruct_pos, lig_query
+                            )
                         )
                     join_stmnt = " " + lig_filters["ligand_operator"] + " "
                 else:
@@ -2927,13 +2931,16 @@ class StorageManagerSQLite(StorageManager):
 
         return query
 
-    def _ligand_substructure_position_filter(self, ligand_filters_dict: dict) -> str:
+    def _ligand_substructure_position_filter(
+        self, substruct_pos_filter: list, lig_query: str
+    ) -> str:
         """
         Method that takes all ligand filters in the presence of a ligand_substruct_pos filter, and reduces the query to
         " IN pose_ids" based on what pose_ids passed the ligand filters
 
         Args:
-            ligand_filters_dict (dict): all specified ligand filters
+            substruct_pos_filter (list): substruct position filter
+            lig_query (str): sql formatted string for the other ligand filters
 
         Raises:
             OptionError
@@ -2941,39 +2948,28 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: partial query that identifies pose ids passing the ligand substructure filter
         """
-        queries = []
-        # create temporary table with molecules that pass all smiles
-        tmp_lig_filters = {"ligand_operator": ligand_filters_dict["ligand_operator"]}
-        if "ligand_max_atoms" in ligand_filters_dict:
-            tmp_lig_filters["ligand_max_atoms"] = ligand_filters_dict[
-                "ligand_max_atoms"
-            ]
-        tmp_lig_filters["ligand_substruct"] = [
-            ligand_filters_dict["ligand_substruct_pos"][0]
-        ]
-        cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
-        cmd = cmd.replace(
-            "SELECT L.LigName FROM Ligands L",
-            "SELECT "
-            "R.Pose_ID, "
-            "L.ligand_smile, "
-            "L.atom_index_map, "
-            "R.ligand_coordinates "
-            "FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName",
-        )
+        substructpos_select_stmnt = """SELECT R.Pose_ID, 
+            L.ligand_smile, 
+            L.atom_index_map, 
+            R.ligand_coordinates 
+            FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName"""
+        if lig_query:
+            cmd = lig_query.replace(
+                "SELECT L.LigName FROM Ligands L",
+                substructpos_select_stmnt,
+            )
+        else:
+            cmd = substructpos_select_stmnt
         cmd = "CREATE TEMP TABLE passed_smarts AS " + cmd
         cur = self.conn.cursor()
         cur.execute("DROP TABLE IF EXISTS passed_smarts")
         cur.execute(cmd)
-        smarts_loc_filters = []
-        smarts = ligand_filters_dict["ligand_substruct_pos"][0]
-        index = int(ligand_filters_dict["ligand_substruct_pos"][1])
-        sqdist = float(ligand_filters_dict["ligand_substruct_pos"][2]) ** 2
-        x = float(ligand_filters_dict["ligand_substruct_pos"][3])
-        y = float(ligand_filters_dict["ligand_substruct_pos"][4])
-        z = float(ligand_filters_dict["ligand_substruct_pos"][5])
-        # save filter for bookmark
-        smarts_loc_filters.append((smarts, index, x, y, z))
+        smarts = substruct_pos_filter[0]
+        index = int(substruct_pos_filter[1])
+        sqdist = float(substruct_pos_filter[2]) ** 2
+        x = float(substruct_pos_filter[3])
+        y = float(substruct_pos_filter[4])
+        z = float(substruct_pos_filter[5])
         poses = self._run_query("SELECT * FROM passed_smarts")
         pose_id_list = []
         smartsmol = Chem.MolFromSmarts(smarts)
@@ -2989,15 +2985,13 @@ class StorageManagerSQLite(StorageManager):
                 if d2 <= sqdist:
                     pose_id_list.append(str(pose_id))
                     break  # add pose only once
-        if len(pose_id_list) > 0:
-            queries.append("R.Pose_ID IN ({0})".format(",".join(pose_id_list)))
         cur.close()
-        if not queries:
+        if len(pose_id_list) > 0:
+            return f"R.Pose_ID IN ({','.join(pose_id_list)})"
+        else:
             raise OptionError(
                 "There are no ligands passing the 'ligand_substruct_pos' filter, please revise your filter query."
             )
-
-        return "".join(queries)
 
     def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
         """
@@ -3142,7 +3136,7 @@ class StorageManagerSQLite(StorageManager):
             if keyword == "ligand_name":
                 # make each name a partial sql string in list format
                 names = [
-                    f"L.LigName LIKE '%{name}%'" for name in filter if filter is not ""
+                    f"L.LigName LIKE '%{name}%'" for name in filter if filter != ""
                 ]
                 query_list.append("(" + " OR ".join(names) + ")")
 
