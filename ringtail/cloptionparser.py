@@ -376,10 +376,15 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-sdf",
         "--export_sdf_path",
-        help="specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.",
+        help="specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as one large SDF file unless using '--individual_sdf_files'.",
         action="store",
         type=str,
         metavar="DIRECTORY_NAME",
+    )
+    output_group.add_argument(
+        "--individual_sdf_files",
+        help="Use if you like to print chosen molecules to individual SDF files, as opposed to one big SDF.",
+        action="store_true",
     )
     output_group.add_argument(
         "-xdb",
@@ -929,6 +934,7 @@ class CLOptionParser:
         self.export_receptor = parsed_opts.export_receptor
         self.pymol = parsed_opts.pymol
         self.data_from_bookmark = parsed_opts.data_from_bookmark
+        self.individual_sdf_files = parsed_opts.individual_sdf_files
 
         # parse read and output options
         self.outputopts = {
