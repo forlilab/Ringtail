@@ -378,7 +378,7 @@ class OutputManager:
                 mappable=cm.ScalarMappable(
                     colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts)),
                 ),
-                cax=self.ax.inset_axes([0.85, 0.1, 0.05, 0.8]),
+                ax=plt.gca(),
                 label="Scatterplot bin count",
             )
             self.ax.set_xlabel("Best docking score / kcal/mol")
