@@ -476,6 +476,11 @@ class OutputOptions(RTOptions):
             "type": str,
             "description": "Specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the 'overwrite' is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.",
         },
+        "individual_sdf_files": {
+            "default": False,
+            "type": bool,
+            "description": "Use if you like to print chosen molecules to individual SDF files, as opposed to one big SDF.",
+        },
         "enumerate_interaction_combs": {
             "default": None,
             "type": bool,
