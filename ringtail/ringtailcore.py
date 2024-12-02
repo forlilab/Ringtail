@@ -1677,13 +1677,11 @@ class RingtailCore:
         max_miss = bookmark_filters["max_miss"]
         if max_miss > 0:
             raise OptionError(
-                "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
+                "Cannot use 'plot' with 'max_miss' > 0. Can plot for desired bookmark with 'bookmark_name'."
             )
 
         logger.info("Creating plot of results")
-        # get data from storageMan
-        with self.storageman:
-            all_data, passing_data = self.storageman.get_plot_data()
+        all_data, passing_data = self.get_plot_data()
         all_plot_data_binned = dict()
         # bin the all_ligands data by 1000ths to make plotting faster
         for line in all_data:
@@ -1706,6 +1704,25 @@ class RingtailCore:
             self.outputman.save_scatterplot()
         else:
             plt.show()
+
+    def get_plot_data(self, bookmark_name: str = None):
+        """
+        Get ligand efficiency and energy for all docking data and for ligands that passed
+        filtering in specified bookmark. Each tuple in the respective lists contains
+        docking_score, leff, pose_id, and ligand name.
+
+        Args:
+            bookmark_name (str):
+
+        Returns:
+            list(tuple), list(tuple): [all_data], [filtered_data]
+        """
+        if bookmark_name is not None:
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
+        with self.storageman:
+            all_data, passing_data = self.storageman.get_plot_data()
+
+        return all_data, passing_data
 
     def display_pymol(self, bookmark_name=None):
         """
