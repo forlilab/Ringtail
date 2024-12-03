@@ -1660,13 +1660,20 @@ class RingtailCore:
                     print("Number similar ligands:", number_similar)
         return number_similar
 
-    def plot(self, save=True, bookmark_name: str = None):
+    def plot(
+        self, save=True, bookmark_name: str = None, return_fig_handle: bool = False
+    ):
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
 
         Args:
             save (bool): whether to save plot to cd
+            bookmark_name (str): bookmark from which to fetch filtered data to plot
+            return_fig_handle (bool): use to return a handle to the matplotlib figure instead of saving or showing figure
+
+        Returns:
+            matplotlib.pyplot.figure (optional): will not show figure if returning figure handle
         """
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
@@ -1682,26 +1689,43 @@ class RingtailCore:
 
         logger.info("Creating plot of results")
         all_data, passing_data = self.get_plot_data()
-        all_plot_data_binned = dict()
-        # bin the all_ligands data by 1000ths to make plotting faster
+        xdata = []
+        ydata = []
+        # add to list as docking_score/energy and ligand_efficiency
         for line in all_data:
-            # add to dictionary as bin of energy and le
+            # handle empty db rows
             if None in line:
                 continue
-            data_bin = (round(line[0], 3), round(line[1], 3))
-            if data_bin not in all_plot_data_binned:
-                all_plot_data_binned[data_bin] = 1
-            else:
-                all_plot_data_binned[data_bin] += 1
+            xdata.append(line[0])
+            ydata.append(line[1])
+
+        # base number of bins on data size
+        datalength = len(xdata)
+        # don't need more than 100 bins
+        if datalength > 1e5:
+            num_of_bins = 100
+        # for smaller dataset, scale num of bins to size of dataset
+        else:
+            num_of_bins = round(datalength / 10)
+
         # plot the data
-        self.outputman.plot_all_data(all_plot_data_binned)
+        fig = self.outputman.plot_all_data(xdata, ydata, num_of_bins)
+
         if passing_data != []:  # handle if no passing ligands
+            xaxis = []
+            yaxis = []
             for line in passing_data:
-                self.outputman.plot_single_point(
-                    line[0], line[1], "red"
-                )  # energy (line[0]) on x axis, le (line[1]) on y axis
+                # energy
+                xaxis.append(line[0])
+                # leff
+                yaxis.append(line[1])
+
+        self.outputman.plot_single_points(xaxis, yaxis, "crimson")
         if save:
             self.outputman.save_scatterplot()
+
+        if return_fig_handle:
+            return fig
         else:
             plt.show()
 
