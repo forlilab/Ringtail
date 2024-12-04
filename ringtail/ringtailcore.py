@@ -600,50 +600,56 @@ class RingtailCore:
         else:
             storage_dict = None
             write_dict = None
+
         self.set_storageman_attributes(
             duplicate_handling=duplicate_handling,
             overwrite=overwrite,
             dict=storage_dict,
         )
 
-        if results_sources.save_receptor:
-            self.save_receptor(results_sources.receptor_file)
+        # Prepare the results manager with the provided docking results sources
+        if strings == False:
+            self._create_resultsmanager(file_sources=results_sources)
+        elif strings == True:
+            self._create_resultsmanager(string_sources=results_sources)
+        self.resultsman.storageman = self.storageman
+        self.resultsman.storageman_class = self.storageman.__class__
+        self.set_resultsman_attributes(
+            store_all_poses,
+            max_poses,
+            add_interactions,
+            interaction_tolerance,
+            interaction_cutoffs,
+            max_proc,
+            write_dict,
+        )
 
-        with self.storageman:
-            # Prepare the results manager with the provided docking results sources
-            if strings == False:
-                self._create_resultsmanager(file_sources=results_sources)
-            elif strings == True:
-                self._create_resultsmanager(string_sources=results_sources)
-            self.resultsman.storageman = self.storageman
-            self.resultsman.storageman_class = self.storageman.__class__
-            self.set_resultsman_attributes(
-                store_all_poses,
-                max_poses,
-                add_interactions,
-                interaction_tolerance,
-                interaction_cutoffs,
-                max_proc,
-                write_dict,
+        # Docking mode compatibility check
+        if (
+            self.docking_mode == "vina"
+            and self.resultsman.interaction_tolerance is not None
+        ):
+            self.logger.warning(
+                "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
             )
+            self.resultsman.interaction_tolerance = None
 
-            # Docking mode compatibility check
-            if (
-                self.docking_mode == "vina"
-                and self.resultsman.interaction_tolerance is not None
-            ):
-                self.logger.warning(
-                    "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
-                )
-                self.resultsman.interaction_tolerance = None
+        # Process results files and handle database versioning
+        with self.storageman:
+            if self.storageman.overwrite:
+                self.storageman.overwrite_storage()
 
-            # Process results files and handle database versioning
             self.storageman.check_storage_ready(
                 self._run_mode,
                 self.docking_mode,
                 self.resultsman.store_all_poses,
                 self.resultsman.max_poses,
             )
+
+        if results_sources.save_receptor:
+            self.save_receptor(results_sources.receptor_file)
+
+        with self.storageman:
             self.logger.info("Adding results...")
             self.resultsman.process_docking_data()
             if finalize:
