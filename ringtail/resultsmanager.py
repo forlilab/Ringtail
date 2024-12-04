@@ -109,7 +109,7 @@ class ResultsManager:
         if files_sources:
             logmsg = f"These are the file sources being processed: {str(self.file_sources.todict())}"
         else:
-            logmsg = f'This is the list of ligands whos strings ware being procssed: {str(self.string_sources.todict()["results_strings"].keys())}'
+            logmsg = f'This is the list of ligands whos strings are being procssed: {str(self.string_sources.todict()["results_strings"].keys())}'
         logger.debug(logmsg)
 
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
