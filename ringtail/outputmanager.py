@@ -414,7 +414,9 @@ class OutputManager:
 
         return fig
 
-    def plot_single_points(self, x: list, y: list, color="black"):
+    def plot_single_points(
+        self, x: list, y: list, color="black", markersize: float = 20
+    ):
         """Add points to scatter plot with given x and y coordinates and color.
 
         Args:
@@ -426,7 +428,9 @@ class OutputManager:
             OutputError
         """
         try:
-            self.ax_main.scatter(x, y, c=color, label="Single passing poses")
+            self.ax_main.scatter(
+                x, y, c=color, label="Single passing poses", alpha=0.3, s=markersize
+            )
             self.ax_main.legend()
             self.ax_main.legend().set_loc("best")
         except Exception as e:
