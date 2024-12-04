@@ -7,6 +7,7 @@
 import sqlite3
 import time
 import json
+import os.path
 import pandas as pd
 from .logutils import LOGGER as logger
 import sys
@@ -127,8 +128,6 @@ class StorageManager:
         """
         # index certain tables
         self._create_indices()
-        # set version of the database
-        self._set_ringtail_db_schema_version(self._db_schema_ver)
         self.logger.info("Database write session completed successfully.")
 
     def close_storage(self, attached_db=None, vacuum=False):
@@ -510,6 +509,8 @@ class StorageManagerSQLite(StorageManager):
         self._create_interaction_table()
         self._create_bookmark_table()
         self._create_db_properties_table()
+
+        self._set_ringtail_db_schema_version(self._db_schema_ver)
 
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> tuple:
@@ -3187,6 +3188,15 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Database operations
+
+    def overwrite_storage(self):
+        """
+        Will drop all tables in the database.
+        """
+        if not self._db_empty() and self.overwrite:
+            self._drop_existing_tables()
+            logger.info("Tables in existing database were dropped.")
+
     def _open_storage(self):
         """Create connection to db. Then, check if db needs to be created.
         If self.overwrite drop existing tables and initialize new tables
@@ -3195,16 +3205,19 @@ class StorageManagerSQLite(StorageManager):
             StorageError
         """
         try:
-            self.conn = self._create_connection()
+            # check to see if file exist, and if it does, check that version is matching
+            if os.path.isfile(self.db_file):
+                self.conn = self._create_connection()
+                compatible, version = self.check_ringtaildb_version()
+                if not compatible and not self.overwrite:
+                    raise f"The database is of version {version} which is not compatible with the code base of version {version('ringtail')}"
+            else:
+                logger.debug("Creating a new database file.")
+                self.conn = self._create_connection()
+
             signal(
                 SIGINT, self._sigint_handler
             )  # signal handler to catch keyboard interupts
-            if self._db_empty() or self.overwrite:  # write and drop tables as necessary
-                if not self._db_empty():
-                    self._drop_existing_tables()
-                self._create_tables()
-                self._set_ringtail_db_schema_version(self._db_schema_ver)
-
             self.logger.info(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
             raise StorageError(f"Errow while creating or connecting to database: {e}.")
@@ -3212,7 +3225,7 @@ class StorageManagerSQLite(StorageManager):
     def check_storage_ready(
         self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
     ):
-        """Check that storage is ready before proceeding.
+        """Check that storage is ready before proceeding, and creates new tables if needed
 
         Args:
             run_mode (str): if ringtail is ran using cmd line interface or api
@@ -3224,6 +3237,9 @@ class StorageManagerSQLite(StorageManager):
             StorageError
             OptionError: if database options are not compatible
         """
+        if self._db_empty():
+            self._create_tables()
+
         count = self.conn.execute("SELECT COUNT (*) FROM DB_properties").fetchone()[0]
 
         compatible = True
@@ -3264,7 +3280,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             number_of_poses = str(max_poses)
         self._insert_db_properties(docking_mode, number_of_poses)
-        self.logger.info("Storage compatibility has been checked.")
+        self.logger.debug("Storage compatibility has been checked and is ensured.")
 
     def clone(self, backup_name=None):
         """Creates a copy of the db
@@ -3280,7 +3296,7 @@ class StorageManagerSQLite(StorageManager):
         bck.close()
 
     def _set_ringtail_db_schema_version(self, db_version: str = "2.0.0"):
-        """Will check current stoarge manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
+        """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
 
         Raises:
             StorageError: if versions are incompatible
@@ -3313,17 +3329,10 @@ class StorageManagerSQLite(StorageManager):
         db_schema_ver = ".".join([*db_version])
         if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
             is_compatible = True
-            self.logger.debug(
-                "Database version {0} is compatible with code base version {1}".format(
-                    db_schema_ver, version("ringtail")
-                )
-            )
         else:
             is_compatible = False
             self.logger.warning(
-                "Database version {0} is NOT compatible with code base version {1}".format(
-                    db_schema_ver, version("ringtail")
-                )
+                f"Database version {db_schema_ver} is NOT compatible with code base version {version('ringtail')}"
             )
         cur.close()
         return is_compatible, db_version
@@ -3331,7 +3340,7 @@ class StorageManagerSQLite(StorageManager):
     def update_database_version(self, new_version, consent=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
-        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
+        #NOTE: If you created a version 1 database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
         the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
 
         Args:
@@ -3497,7 +3506,7 @@ class StorageManagerSQLite(StorageManager):
             bool: whether or not db is empty
         """
         cur = self.conn.execute(
-            "SELECT COUNT(*) name FROM sqlite_master WHERE type='table';"
+            "SELECT COUNT(*) name FROM sqlite_master WHERE type='table' AND name <> 'sqlite_sequence';"
         )
         tablecount = cur.fetchone()[0]
         cur.close()
