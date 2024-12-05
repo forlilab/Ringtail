@@ -1708,13 +1708,13 @@ class RingtailCore:
         # base number of bins on data size
         datalength = len(xdata)
         # scale some plot parameters to size of dataset
-        if datalength > 1e5:
+        if datalength > 1000:
             num_of_bins = 100
             markersize = 20
         # for smaller dataset, scale num of bins to size of dataset
         else:
             num_of_bins = round(datalength / 10)
-            markersize = num_of_bins * 2
+            markersize = 60 - (datalength / 25)
 
         # plot the data
         fig = self.outputman.plot_all_data(xdata, ydata, num_of_bins)
@@ -1728,7 +1728,7 @@ class RingtailCore:
                 # leff
                 yaxis.append(line[1])
 
-        self.outputman.plot_single_points(xaxis, yaxis, "crimson", markersize)
+        self.outputman.plot_single_points(xaxis, yaxis, markersize)
         if save:
             self.outputman.save_scatterplot()
 
