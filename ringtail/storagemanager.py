@@ -92,7 +92,8 @@ class StorageManager:
         try:
             self._open_storage()
         except StorageError as e:
-            raise e
+            self.logger.error(str(e))
+            raise e from None
         else:
             return self
 
@@ -110,10 +111,8 @@ class StorageManager:
         if not self.closed_connection:
             self.close_storage()
         if exc_type:
-            if exc_type == Exception:
-                self.logger.error(str(exc_value))
-            else:
-                raise
+            self.logger.error(str(exc_value))
+            raise
         return self
 
     def _sigint_handler(self, signal_received, frame):
@@ -220,9 +219,6 @@ class StorageManager:
         rt_version_same, db_rt_version = self.check_ringtaildb_version()
         if not rt_version_same:
             # NOTE will cause error when any version int is > 10
-            # catch version 1.0.0 where returned db_rt_version will be 0
-            if db_rt_version == 0:
-                db_rt_version = 100
             raise StorageError(
                 f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
             )
@@ -3208,9 +3204,11 @@ class StorageManagerSQLite(StorageManager):
             # check to see if file exist, and if it does, check that version is matching
             if os.path.isfile(self.db_file):
                 self.conn = self._create_connection()
-                compatible, version = self.check_ringtaildb_version()
+                compatible, db_version = self.check_ringtaildb_version()
                 if not compatible and not self.overwrite:
-                    raise f"The database is of version {version} which is not compatible with the code base of version {version('ringtail')}"
+                    raise StorageError(
+                        f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
+                    )
             else:
                 logger.debug("Creating a new database file.")
                 self.conn = self._create_connection()
@@ -3220,7 +3218,7 @@ class StorageManagerSQLite(StorageManager):
             )  # signal handler to catch keyboard interupts
             self.logger.info(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
-            raise StorageError(f"Errow while creating or connecting to database: {e}.")
+            raise StorageError(f"Error while creating or connecting to database: {e}.")
 
     def check_storage_ready(
         self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
@@ -3322,10 +3320,23 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             bool: whether or not db is compatible with the code base
-            str: current database version
+            str: current database versions
         """
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
+        if db_version == "0":
+            # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
+            cur.execute(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='Results');"
+            )
+            # if db version is 0 but has a results table, it is 1.0.0
+            if cur.fetchone()[0] != 0:
+                db_version = "100"
+            # else empty or corrupt database
+            else:
+                raise StorageError(
+                    f"The database requested {self.db_file} does not exist or does not have any tables. Check for spelling errors, else the database may be corrupt (delete the file before using the same name again)"
+                )
         db_schema_ver = ".".join([*db_version])
         if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
             is_compatible = True
