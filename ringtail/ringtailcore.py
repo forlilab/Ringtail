@@ -1711,7 +1711,7 @@ class RingtailCore:
         if datalength > 1000:
             num_of_bins = 100
             markersize = 20
-        # for smaller dataset, scale num of bins to size of dataset
+        # for smaller dataset, scale num of bins and markersize to size of dataset
         else:
             num_of_bins = round(datalength / 10)
             markersize = 60 - (datalength / 25)
@@ -1728,7 +1728,8 @@ class RingtailCore:
                 # leff
                 yaxis.append(line[1])
 
-        self.outputman.plot_single_points(xaxis, yaxis, markersize)
+            self.outputman.plot_single_points(xaxis, yaxis, markersize)
+
         if save:
             self.outputman.save_scatterplot()
 
