@@ -348,12 +348,14 @@ class OutputManager:
         Raises:
             OutputError
         """
+        # calculate axis ranges
+        data_xy_range = [[min(xdata), 0], [min(ydata), 0]]
         # bin data using numpy
         hist, xbins, ybins = np.histogram2d(
             xdata,
             ydata,
             bins=num_of_bins,
-            range=[[min(xdata), 0], [min(ydata), 0]],
+            range=data_xy_range,
             density=False,
         )
         try:
@@ -398,6 +400,9 @@ class OutputManager:
                 # only show bins with one or more values
                 vmin=1,
             )
+            # add 5 % padding to the lower limit of x and y axes
+            self.ax_main.set_xlim(min(xdata) * 1.05, 0)
+            self.ax_main.set_ylim(min(ydata) * 1.05, 0)
             # create colorbar for the heatmap
             cbar = fig.colorbar(
                 mappable=cm.ScalarMappable(
