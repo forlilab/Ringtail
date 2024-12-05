@@ -112,7 +112,7 @@ class StorageManager:
             self.close_storage()
         if exc_type:
             self.logger.error(str(exc_value))
-            raise
+            raise exc_value from None
         return self
 
     def _sigint_handler(self, signal_received, frame):
@@ -1620,7 +1620,14 @@ class StorageManagerSQLite(StorageManager):
         sql_query = (
             f"SELECT filters FROM Bookmarks where Bookmark_name = '{bookmark_name}'"
         )
-        filters = self._run_query(sql_query).fetchone()[0]
+        cur = self._run_query(sql_query)
+        try:
+            # will give a TypeError NoneType not subscriptable if no bookmark data
+            filters = cur.fetchone()[0]
+        except TypeError:
+            raise StorageError(
+                "Selected bookmark does not exist or does not have any data."
+            )
 
         return json.loads(filters)
 
