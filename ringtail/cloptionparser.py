@@ -7,7 +7,7 @@
 import sys
 import argparse
 import os
-from .exceptions import OptionError
+from .exceptions import OptionError, NoInputError
 import __main__
 from .ringtailcore import RingtailCore
 from .ringtailoptions import Filters
@@ -589,7 +589,7 @@ def cmdline_parser(defaults: dict = {}):
     # catch if running with no options
     if len(sys.argv) == 1:
         parser.print_help()
-        raise OptionError(
+        raise NoInputError(
             "Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details."
         )
 
@@ -656,6 +656,8 @@ class CLOptionParser:
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
+        except NoInputError:
+            raise
         except Exception as e:
             try:
                 if parsed_opts.process_mode == "write":
