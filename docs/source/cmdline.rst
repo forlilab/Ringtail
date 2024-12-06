@@ -182,6 +182,7 @@ Export results from a previous filtering as a CSV
 
 Create scatterplot highlighting ligands passing filters
 =======================================================
+It is possible to create a scatter plot of the data in the database. All the data in the database will be plotted as histograms as well as a gradient representation of the histograms in the main scatter plot. Any ligands passing the filters will be plotted as single points atop of the binned data. The plot has cutoffs at 0 for both the x and y axis. 
 
 .. code-block:: bash
 
