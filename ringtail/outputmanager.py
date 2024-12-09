@@ -294,7 +294,7 @@ class OutputManager:
         with open(recname, "w") as f:
             f.write(receptor_str)
 
-    def scatter_hist(self, x, y, z, ax, ax_histx, ax_histy):
+    def scatter_hist(self, x, y, z, ax_histx, ax_histy):
         """
         Makes scatterplot with a histogram on each axis
 
@@ -315,7 +315,7 @@ class OutputManager:
             ax_histy.tick_params(axis="y", labelleft=False)
 
             # the scatter plot:
-            ax.scatter(x, y, c=z, cmap="viridis")
+            self.ax_main.scatter(x, y, c=z, cmap="viridis")
 
             # now determine nice limits by hand:
             xbinwidth = 0.25
@@ -327,34 +327,38 @@ class OutputManager:
 
             xbins = np.arange(xminlim, xmaxlim + xbinwidth, xbinwidth)
             ybins = np.arange(yminlim, ymaxlim + ybinwidth, ybinwidth)
-
-            ax_histx.hist(x, bins=xbins)
-            ax_histy.hist(y, bins=ybins, orientation="horizontal")
+            ax_histx.hist(x, bins=xbins, color="dimgrey")
+            ax_histy.hist(y, bins=ybins, orientation="horizontal", color="dimgrey")
         except Exception as e:
             raise OutputError("Error occurred while adding all data to plot") from e
 
-    def plot_all_data(self, binned_data):
+    def plot_all_data(self, xdata, ydata, num_of_bins: int = 100):
         """Takes dictionary of binned data where key is the
         coordinates of the bin and value is the number of points in that bin.
         Adds to scatter plot colored by value
 
         Args:
-            binned_data (dict): Keys are tuples of key and y value for bin.
-                Value is the count of points falling into that bin.
+            xdata (list): list of x axis data (needs to be same length as ydata)
+            ydata (list): list of y axis data (needs to be same length as xdata)
+            num_of_bins (int): number of bins to organize data in
+
+        Returns:
+            matplotlib.pyplot.figure
 
         Raises:
             OutputError
         """
+        # calculate axis ranges
+        data_xy_range = [[min(xdata), 0], [min(ydata), 0]]
+        # bin data using numpy
+        hist, xbins, ybins = np.histogram2d(
+            xdata,
+            ydata,
+            bins=num_of_bins,
+            range=data_xy_range,
+            density=False,
+        )
         try:
-            # gather data
-            energies = []
-            leffs = []
-            bin_counts = []
-            for data_bin in binned_data.keys():
-                energies.append(data_bin[0])
-                leffs.append(data_bin[1])
-                bin_counts.append(binned_data[data_bin])
-
             # start with a square Figure
             fig = plt.figure()
 
@@ -370,26 +374,55 @@ class OutputManager:
                 wspace=0.05,
                 hspace=0.05,
             )
+            # create main axis
+            self.ax_main = fig.add_subplot(gs[1, 0])
 
-            self.ax = fig.add_subplot(gs[1, 0])
-            ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax)
-            ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax)
-            fig.colorbar(
+            # histogram, X/docking score
+            ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax_main)
+            ax_histx.hist(xdata, bins=xbins, color="dimgrey")
+            ax_histx.tick_params(axis="x", labelbottom=False)
+
+            # histogram, Y/ligand efficiency
+            ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax_main)
+            ax_histy.hist(ydata, bins=ybins, orientation="horizontal", color="dimgrey")
+            ax_histy.tick_params(axis="y", labelleft=False)
+
+            # produce the heat map as a showable image
+            cmap = plt.colormaps["plasma"]
+            # set full transparancy for bin counts below the limit (i.e., 0)
+            cmap.set_under(alpha=0)
+            self.im = self.ax_main.imshow(
+                hist.T,
+                origin="lower",
+                extent=[xbins[0], xbins[-1], ybins[0], ybins[-1]],
+                aspect="auto",
+                cmap=cmap,
+                # only show bins with one or more values
+                vmin=1,
+            )
+            # add 5 % padding to the lower limit of x and y axes
+            self.ax_main.set_xlim(min(xdata) * 1.05, 0)
+            self.ax_main.set_ylim(min(ydata) * 1.05, 0)
+            # create colorbar for the heatmap
+            cbar = fig.colorbar(
                 mappable=cm.ScalarMappable(
-                    colors.Normalize(vmin=min(bin_counts), vmax=max(bin_counts)),
+                    colors.Normalize(vmin=hist.min(), vmax=hist.max()), cmap=cmap
                 ),
-                cax=self.ax.inset_axes([0.85, 0.1, 0.05, 0.8]),
+                ax=fig.gca(),
                 label="Scatterplot bin count",
             )
-            self.ax.set_xlabel("Best docking score / kcal/mol")
-            self.ax.set_ylabel("Best Ligand Efficiency")
+            self.ax_main.set_xlabel("Best docking score (kcal/mol)")
+            self.ax_main.set_ylabel("Best ligand efficiency")
+
         except Exception as e:
             raise OutputError("Error occurred while initializing plot") from e
 
-        self.scatter_hist(energies, leffs, bin_counts, self.ax, ax_histx, ax_histy)
+        return fig
 
-    def plot_single_point(self, x, y, color="black"):
-        """Add point to scatter plot with given x and y coordinates and color.
+    def plot_single_points(
+        self, x: list, y: list, markersize: int = 20, color="crimson"
+    ):
+        """Add points to scatter plot with given x and y coordinates and color.
 
         Args:
             x (float): x coordinate
@@ -400,7 +433,16 @@ class OutputManager:
             OutputError
         """
         try:
-            self.ax.scatter([x], [y], c=color)
+            self.ax_main.scatter(
+                x,
+                y,
+                c=color,
+                label="Single passing poses",
+                edgecolors="black",
+                s=markersize,
+            )
+            self.ax_main.legend()
+            self.ax_main.legend().set_loc("best")
         except Exception as e:
             raise OutputError("Error occurred while plotting") from e
 

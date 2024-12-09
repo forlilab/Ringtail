@@ -7,6 +7,7 @@
 import sqlite3
 import time
 import json
+import os.path
 import pandas as pd
 from .logutils import LOGGER as logger
 import sys
@@ -91,7 +92,8 @@ class StorageManager:
         try:
             self._open_storage()
         except StorageError as e:
-            raise e
+            self.logger.error(str(e))
+            raise e from None
         else:
             return self
 
@@ -109,10 +111,8 @@ class StorageManager:
         if not self.closed_connection:
             self.close_storage()
         if exc_type:
-            if exc_type == Exception:
-                self.logger.error(str(exc_value))
-            else:
-                raise
+            self.logger.error(str(exc_value))
+            raise exc_value from None
         return self
 
     def _sigint_handler(self, signal_received, frame):
@@ -127,8 +127,6 @@ class StorageManager:
         """
         # index certain tables
         self._create_indices()
-        # set version of the database
-        self._set_ringtail_db_schema_version(self._db_schema_ver)
         self.logger.info("Database write session completed successfully.")
 
     def close_storage(self, attached_db=None, vacuum=False):
@@ -221,9 +219,6 @@ class StorageManager:
         rt_version_same, db_rt_version = self.check_ringtaildb_version()
         if not rt_version_same:
             # NOTE will cause error when any version int is > 10
-            # catch version 1.0.0 where returned db_rt_version will be 0
-            if db_rt_version == 0:
-                db_rt_version = 100
             raise StorageError(
                 f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
             )
@@ -510,6 +505,8 @@ class StorageManagerSQLite(StorageManager):
         self._create_interaction_table()
         self._create_bookmark_table()
         self._create_db_properties_table()
+
+        self._set_ringtail_db_schema_version(self._db_schema_ver)
 
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> tuple:
@@ -1623,6 +1620,7 @@ class StorageManagerSQLite(StorageManager):
         sql_query = (
             f"SELECT filters FROM Bookmarks where Bookmark_name = '{bookmark_name}'"
         )
+
         filters = self._run_query(sql_query).fetchone()
         if not filters: 
             return {}
@@ -2601,19 +2599,24 @@ class StorageManagerSQLite(StorageManager):
                     ligand_queries.append(
                         self._generate_ligand_filtering_query(lig_filters)
                     )
-                # if complex ligand filter, generate partial query
-                if "ligand_substruct_pos" in lig_filters:
-                    for substruct_pos in lig_filters["ligand_substruct_pos"]:
-                        temp_lig_filter = lig_filters
-                        temp_lig_filter["ligand_substruct_pos"] = substruct_pos
-                        ligand_substruct_queries.append(
-                            self._ligand_substructure_position_filter(temp_lig_filter)
-                        )
-                    join_stmnt = " " + lig_filters["ligand_operator"] + " "
                 # join all ligand queries that are not empty
                 lig_query = " AND ".join(
                     [lig_filter for lig_filter in ligand_queries if lig_filter]
                 )
+                # if complex ligand filter, generate partial query
+                if "ligand_substruct_pos" in lig_filters:
+                    for substruct_pos in lig_filters["ligand_substruct_pos"]:
+                        ligand_substruct_queries.append(
+                            self._ligand_substructure_position_filter(
+                                substruct_pos, lig_query
+                            )
+                        )
+                    join_stmnt = " " + lig_filters["ligand_operator"] + " "
+                else:
+                    # join all ligand queries that are not empty
+                    lig_query = " AND ".join(
+                        [lig_filter for lig_filter in ligand_queries if lig_filter]
+                    )
             # if filter queries exist for each group, string them together appropriately
             if int_query:
                 # add with a join statement
@@ -2634,8 +2637,8 @@ class StorageManagerSQLite(StorageManager):
                     unclustered_query += num_query
                 # if both numerical and ligand_substruct_pos handle appropriately
                 if num_query and ligand_substruct_queries:
-                    unclustered_query += " AND " + join_stmnt.join(
-                        ligand_substruct_queries
+                    unclustered_query += (
+                        " AND (" + join_stmnt.join(ligand_substruct_queries) + ")"
                     )
                 # if not, only the ligand_substruct_pos sets the WHERE condition
                 else:
@@ -2928,13 +2931,16 @@ class StorageManagerSQLite(StorageManager):
 
         return query
 
-    def _ligand_substructure_position_filter(self, ligand_filters_dict: dict) -> str:
+    def _ligand_substructure_position_filter(
+        self, substruct_pos_filter: list, lig_query: str
+    ) -> str:
         """
         Method that takes all ligand filters in the presence of a ligand_substruct_pos filter, and reduces the query to
         " IN pose_ids" based on what pose_ids passed the ligand filters
 
         Args:
-            ligand_filters_dict (dict): all specified ligand filters
+            substruct_pos_filter (list): substruct position filter
+            lig_query (str): sql formatted string for the other ligand filters
 
         Raises:
             OptionError
@@ -2942,90 +2948,50 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: partial query that identifies pose ids passing the ligand substructure filter
         """
-        queries = []
-        nr_args_per_group = 6
-        nr_smarts = int(
-            len(ligand_filters_dict["ligand_substruct_pos"]) / nr_args_per_group
-        )
-        # create temporary table with molecules that pass all smiles
-        tmp_lig_filters = {"ligand_operator": ligand_filters_dict["ligand_operator"]}
-        if "ligand_max_atoms" in ligand_filters_dict:
-            tmp_lig_filters["ligand_max_atoms"] = ligand_filters_dict[
-                "ligand_max_atoms"
-            ]
-        tmp_lig_filters["ligand_substruct"] = [
-            ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group]
-            for i in range(nr_smarts)
-        ]
-        cmd = self._generate_ligand_filtering_query(tmp_lig_filters)
-        cmd = cmd.replace(
-            "SELECT L.LigName FROM Ligands L",
-            "SELECT "
-            "R.Pose_ID, "
-            "L.LigName, "
-            "L.ligand_smile, "
-            "L.atom_index_map, "
-            "R.ligand_coordinates "
-            "FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName",
-        )
+        substructpos_select_stmnt = """SELECT R.Pose_ID, 
+            L.ligand_smile, 
+            L.atom_index_map, 
+            R.ligand_coordinates 
+            FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName"""
+        if lig_query:
+            cmd = lig_query.replace(
+                "SELECT L.LigName FROM Ligands L",
+                substructpos_select_stmnt,
+            )
+        else:
+            cmd = substructpos_select_stmnt
         cmd = "CREATE TEMP TABLE passed_smarts AS " + cmd
         cur = self.conn.cursor()
         cur.execute("DROP TABLE IF EXISTS passed_smarts")
         cur.execute(cmd)
-        smarts_loc_filters = []
-        for i in range(nr_smarts):
-            smarts = ligand_filters_dict["ligand_substruct_pos"][
-                i * nr_args_per_group + 0
-            ]
-            index = int(
-                ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 1]
-            )
-            sqdist = (
-                float(
-                    ligand_filters_dict["ligand_substruct_pos"][
-                        i * nr_args_per_group + 2
-                    ]
-                )
-                ** 2
-            )
-            x = float(
-                ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 3]
-            )
-            y = float(
-                ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 4]
-            )
-            z = float(
-                ligand_filters_dict["ligand_substruct_pos"][i * nr_args_per_group + 5]
-            )
-            # save filter for bookmark
-            smarts_loc_filters.append((smarts, index, x, y, z))
-            poses = self._run_query("SELECT * FROM passed_smarts")
-            pose_id_list = []
-            smartsmol = Chem.MolFromSmarts(smarts)
-            for pose_id, ligname, smiles, idxmap, coords in poses:
-                mol = Chem.MolFromSmiles(smiles)
-                idxmap = [int(value) - 1 for value in json.loads(idxmap)]
-                idxmap = {
-                    idxmap[j * 2]: idxmap[j * 2 + 1]
-                    for j in range(int(len(idxmap) / 2))
-                }
-                for hit in mol.GetSubstructMatches(smartsmol):
-                    xyz = [
-                        float(value) for value in json.loads(coords)[idxmap[hit[index]]]
-                    ]
-                    d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
-                    if d2 <= sqdist:
-                        pose_id_list.append(str(pose_id))
-                        break  # add pose only once
-            if len(pose_id_list) > 0:
-                queries.append("R.Pose_ID IN ({0})".format(",".join(pose_id_list)))
+        smarts = substruct_pos_filter[0]
+        index = int(substruct_pos_filter[1])
+        sqdist = float(substruct_pos_filter[2]) ** 2
+        x = float(substruct_pos_filter[3])
+        y = float(substruct_pos_filter[4])
+        z = float(substruct_pos_filter[5])
+        poses = self._run_query("SELECT * FROM passed_smarts")
+        pose_id_list = []
+        smartsmol = Chem.MolFromSmarts(smarts)
+        for pose_id, smiles, idxmap, coords in poses:
+            mol = Chem.MolFromSmiles(smiles)
+            idxmap = [int(value) - 1 for value in json.loads(idxmap)]
+            idxmap = {
+                idxmap[j * 2]: idxmap[j * 2 + 1] for j in range(int(len(idxmap) / 2))
+            }
+            for hit in mol.GetSubstructMatches(smartsmol):
+                xyz = [float(value) for value in json.loads(coords)[idxmap[hit[index]]]]
+                d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
+                if d2 <= sqdist:
+                    pose_id_list.append(str(pose_id))
+                    break  # add pose only once
         cur.close()
-        if not queries:
+        if len(pose_id_list) > 0:
+            return f"R.Pose_ID IN ({','.join(pose_id_list)})"
+        else:
             raise OptionError(
                 "There are no ligands passing the 'ligand_substruct_pos' filter, please revise your filter query."
             )
-
-        return "".join(queries)
 
     def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
         """
@@ -3155,31 +3121,31 @@ class StorageManagerSQLite(StorageManager):
             str: SQLite-formatted query
         """
 
-        sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE"
+        sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE "
+        query_list = []
         if "ligand_operator" in ligand_filters:
-            logical_operator = ligand_filters["ligand_operator"]
+            if ligand_filters["ligand_operator"] in ["OR", "AND"]:
+                logical_operator = ligand_filters["ligand_operator"]
         else:
             self.logger.info(
                 "A logical operator to combine ligand filters were not provided, will use the default value 'OR'."
             )
             logical_operator = "OR"
-        if logical_operator is None:
-            logical_operator = "AND"
-        for kw in ligand_filters.keys():
-            fils = ligand_filters[kw]
-            if kw == "ligand_name":
-                for name in fils:
-                    if name == "":
-                        continue
-                    name_sql_str = " L.LigName LIKE '%{value}%' OR".format(value=name)
-                    sql_ligand_string += name_sql_str
-            if kw == "ligand_max_atoms" and ligand_filters[kw] is not None:
-                maxatom_sql_str = " mol_num_hvyatms(ligand_rdmol) <= {} {}".format(
-                    ligand_filters[kw], logical_operator
-                )
-                sql_ligand_string += maxatom_sql_str
-            if kw == "ligand_substruct":
-                for smarts in fils:
+
+        for keyword, filter in ligand_filters.items():
+            if keyword == "ligand_name":
+                # make each name a partial sql string in list format
+                names = [
+                    f"L.LigName LIKE '%{name}%'" for name in filter if filter != ""
+                ]
+                query_list.append("(" + " OR ".join(names) + ")")
+
+            if keyword == "ligand_max_atoms" and filter is not None:
+                query_list.append(f" mol_num_hvyatms(ligand_rdmol) <= {filter}")
+
+            if keyword == "ligand_substruct":
+                smarts_query = []
+                for smarts in filter:
                     # check for hydrogens in smarts pattern
                     smarts_mol = Chem.MolFromSmarts(smarts)
                     for atom in smarts_mol.GetAtoms():
@@ -3187,14 +3153,17 @@ class StorageManagerSQLite(StorageManager):
                             raise DatabaseQueryError(
                                 f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen."
                             )
-                    substruct_sql_str = " mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}')) {logical_operator}".format(
-                        smarts=smarts, logical_operator=logical_operator
+                    smarts_query.append(
+                        f" mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}'))"
                     )
-                    sql_ligand_string += substruct_sql_str
-        if sql_ligand_string.endswith("AND"):
-            sql_ligand_string = sql_ligand_string.rstrip("AND")
-        if sql_ligand_string.endswith("OR"):
-            sql_ligand_string = sql_ligand_string.rstrip("OR")
+                query_list.append(
+                    "(" + f" {logical_operator} ".join(smarts_query) + ")"
+                )
+
+        if not query_list:
+            sql_ligand_string = ""
+        else:
+            sql_ligand_string += " AND ".join(query_list)
 
         return sql_ligand_string
 
@@ -3218,6 +3187,15 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Database operations
+
+    def overwrite_storage(self):
+        """
+        Will drop all tables in the database.
+        """
+        if not self._db_empty() and self.overwrite:
+            self._drop_existing_tables()
+            logger.info("Tables in existing database were dropped.")
+
     def _open_storage(self):
         """Create connection to db. Then, check if db needs to be created.
         If self.overwrite drop existing tables and initialize new tables
@@ -3226,24 +3204,29 @@ class StorageManagerSQLite(StorageManager):
             StorageError
         """
         try:
-            self.conn = self._create_connection()
+            # check to see if file exist, and if it does, check that version is matching
+            if os.path.isfile(self.db_file):
+                self.conn = self._create_connection()
+                compatible, db_version = self.check_ringtaildb_version()
+                if not compatible and not self.overwrite:
+                    raise StorageError(
+                        f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
+                    )
+            else:
+                logger.debug("Creating a new database file.")
+                self.conn = self._create_connection()
+
             signal(
                 SIGINT, self._sigint_handler
             )  # signal handler to catch keyboard interupts
-            if self._db_empty() or self.overwrite:  # write and drop tables as necessary
-                if not self._db_empty():
-                    self._drop_existing_tables()
-                self._create_tables()
-                self._set_ringtail_db_schema_version(self._db_schema_ver)
-
             self.logger.info(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
-            raise StorageError(f"Errow while creating or connecting to database: {e}.")
+            raise StorageError(f"Error while creating or connecting to database: {e}.")
 
     def check_storage_ready(
         self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
     ):
-        """Check that storage is ready before proceeding.
+        """Check that storage is ready before proceeding, and creates new tables if needed
 
         Args:
             run_mode (str): if ringtail is ran using cmd line interface or api
@@ -3255,6 +3238,9 @@ class StorageManagerSQLite(StorageManager):
             StorageError
             OptionError: if database options are not compatible
         """
+        if self._db_empty():
+            self._create_tables()
+
         count = self.conn.execute("SELECT COUNT (*) FROM DB_properties").fetchone()[0]
 
         compatible = True
@@ -3295,7 +3281,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             number_of_poses = str(max_poses)
         self._insert_db_properties(docking_mode, number_of_poses)
-        self.logger.info("Storage compatibility has been checked.")
+        self.logger.debug("Storage compatibility has been checked and is ensured.")
 
     def clone(self, backup_name=None):
         """Creates a copy of the db
@@ -3311,7 +3297,7 @@ class StorageManagerSQLite(StorageManager):
         bck.close()
 
     def _set_ringtail_db_schema_version(self, db_version: str = "2.0.0"):
-        """Will check current stoarge manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
+        """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
 
         Raises:
             StorageError: if versions are incompatible
@@ -3337,24 +3323,30 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             bool: whether or not db is compatible with the code base
-            str: current database version
+            str: current database versions
         """
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
+        if db_version == "0":
+            # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
+            cur.execute(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='Results');"
+            )
+            # if db version is 0 but has a results table, it is 1.0.0
+            if cur.fetchone()[0] != 0:
+                db_version = "100"
+            # else empty or corrupt database
+            else:
+                raise StorageError(
+                    f"The database requested {self.db_file} does not exist or does not have any tables. Check for spelling errors, else the database may be corrupt (delete the file before using the same name again)"
+                )
         db_schema_ver = ".".join([*db_version])
         if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
             is_compatible = True
-            self.logger.debug(
-                "Database version {0} is compatible with code base version {1}".format(
-                    db_schema_ver, version("ringtail")
-                )
-            )
         else:
             is_compatible = False
             self.logger.warning(
-                "Database version {0} is NOT compatible with code base version {1}".format(
-                    db_schema_ver, version("ringtail")
-                )
+                f"Database version {db_schema_ver} is NOT compatible with code base version {version('ringtail')}"
             )
         cur.close()
         return is_compatible, db_version
@@ -3362,7 +3354,7 @@ class StorageManagerSQLite(StorageManager):
     def update_database_version(self, new_version, consent=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
-        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
+        #NOTE: If you created a version 1 database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
         the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
 
         Args:
@@ -3528,7 +3520,7 @@ class StorageManagerSQLite(StorageManager):
             bool: whether or not db is empty
         """
         cur = self.conn.execute(
-            "SELECT COUNT(*) name FROM sqlite_master WHERE type='table';"
+            "SELECT COUNT(*) name FROM sqlite_master WHERE type='table' AND name <> 'sqlite_sequence';"
         )
         tablecount = cur.fetchone()[0]
         cur.close()

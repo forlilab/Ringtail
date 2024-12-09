@@ -72,7 +72,7 @@ Make sure your Ringtail environment is active, then install via pip
 $ pip install ringtail
 ```
 
-You may need to install one or more of the listed dependencies, please note that multiprocess is only necessary for MacOS. 
+You may need to install one or more of the listed dependencies, including matplotlib, multiprocess, rdkit, scipy, pandas, and meeko (a Forli lab tool). 
 
 ```bash
 $ pip install <dependency>

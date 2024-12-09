@@ -8,6 +8,7 @@ import time
 from ringtail import CLOptionParser
 from ringtail import RingtailCore
 from ringtail import logutils
+from ringtail.exceptions import NoInputError
 import traceback
 
 
@@ -20,6 +21,10 @@ def main():
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
+    except NoInputError as e:
+        sys.tracebacklimit = 0
+        logger.critical("ERROR: " + str(e))
+        sys.exit(1)
     except Exception as e:
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
@@ -62,7 +67,8 @@ def main():
 
             # write out molecules if requested
             if outopts.export_sdf_path:
-                rtcore.write_molecule_sdfs(sdf_path = outopts.export_sdf_path)
+                rtcore.write_molecule_sdfs(sdf_path = outopts.export_sdf_path,
+                                           all_in_one=not cmdinput.individual_sdf_files)
 
             # write out requested CSVs
             if readopts["export_bookmark_csv"]:

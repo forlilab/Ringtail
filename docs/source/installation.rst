@@ -17,9 +17,10 @@ A few dependencies may be needed, including:
 
 * meeko (another Forli lab tool)
 * rdkit 
-* multiprocess (only needed on MacOS)
+* multiprocess
 * scipy
 * pandas
+* matplotlib 
 * chemicalite (only available through conda-forge)
 
 .. code-block:: bash
@@ -36,7 +37,7 @@ If you have a previous version of Ringtail installed you can update the package 
 
     $ pip install -U ringtail
 
-    $ pip install ringtail==2.0
+    $ pip install ringtail==2.1.0
 
 Make sure to :ref:`upgrade any databases <upgrade_database>` made with Ringtail v1 if you intend to use them with Ringtail v2.0.
 
