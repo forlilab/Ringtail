@@ -7,7 +7,7 @@
 import sys
 import argparse
 import os
-from .exceptions import OptionError
+from .exceptions import OptionError, NoInputError
 import __main__
 from .ringtailcore import RingtailCore
 from .ringtailoptions import Filters
@@ -376,10 +376,15 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-sdf",
         "--export_sdf_path",
-        help="specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.",
+        help="specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as one large SDF file unless using '--individual_sdf_files'.",
         action="store",
         type=str,
         metavar="DIRECTORY_NAME",
+    )
+    output_group.add_argument(
+        "--individual_sdf_files",
+        help="Use if you like to print chosen molecules to individual SDF files, as opposed to one big SDF.",
+        action="store_true",
     )
     output_group.add_argument(
         "-xdb",
@@ -500,7 +505,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     ligand_group.add_argument(
         "--ligand_substruct",
-        help="SMARTS pattern(s) for substructure matching, if error delimit each substructure with ''.",
+        help="SMARTS pattern(s) for substructure matching. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator. If error delimit each substructure with ''.",
         action="append",
         type=str,
         metavar="STRING",
@@ -508,7 +513,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     ligand_group.add_argument(
         "--ligand_substruct_pos",
-        help='"SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords". Group each set of six values with "".',
+        help="SMARTS pattern(s) for substructure matching, e.g., '[Oh]C 0 1.2 -5.5 10.0 15.5' -> 'smart_string index_of_positioned_atom cutoff_distance x y z'. Multiple can be specified by separating each filter string with a comma. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator. Group each set of six values with ''.",
         action="append",
         type=str,
         metavar="STRING",
@@ -518,7 +523,7 @@ def cmdline_parser(defaults: dict = {}):
         "-sj",
         "--ligand_operator",
         choices=["AND", "OR"],
-        help="logical join operator for multiple SMARTS (default: OR)",
+        help="Logical join operator for multiple substruct filters. Will apply within 'ligand_substruct' filters and within 'ligand_substruct_pos' filters (the two groups are always joined by 'AND').",
         action="store",
         type=str,
         metavar="STRING",
@@ -584,7 +589,7 @@ def cmdline_parser(defaults: dict = {}):
     # catch if running with no options
     if len(sys.argv) == 1:
         parser.print_help()
-        raise OptionError(
+        raise NoInputError(
             "Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details."
         )
 
@@ -651,6 +656,8 @@ class CLOptionParser:
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
+        except NoInputError:
+            raise
         except Exception as e:
             try:
                 if parsed_opts.process_mode == "write":
@@ -929,6 +936,7 @@ class CLOptionParser:
         self.export_receptor = parsed_opts.export_receptor
         self.pymol = parsed_opts.pymol
         self.data_from_bookmark = parsed_opts.data_from_bookmark
+        self.individual_sdf_files = parsed_opts.individual_sdf_files
 
         # parse read and output options
         self.outputopts = {

@@ -602,50 +602,56 @@ class RingtailCore:
         else:
             storage_dict = None
             write_dict = None
+
         self.set_storageman_attributes(
             duplicate_handling=duplicate_handling,
             overwrite=overwrite,
             dict=storage_dict,
         )
 
-        if results_sources.save_receptor:
-            self.save_receptor(results_sources.receptor_file)
+        # Prepare the results manager with the provided docking results sources
+        if strings == False:
+            self._create_resultsmanager(file_sources=results_sources)
+        elif strings == True:
+            self._create_resultsmanager(string_sources=results_sources)
+        self.resultsman.storageman = self.storageman
+        self.resultsman.storageman_class = self.storageman.__class__
+        self.set_resultsman_attributes(
+            store_all_poses,
+            max_poses,
+            add_interactions,
+            interaction_tolerance,
+            interaction_cutoffs,
+            max_proc,
+            write_dict,
+        )
 
-        with self.storageman:
-            # Prepare the results manager with the provided docking results sources
-            if strings == False:
-                self._create_resultsmanager(file_sources=results_sources)
-            elif strings == True:
-                self._create_resultsmanager(string_sources=results_sources)
-            self.resultsman.storageman = self.storageman
-            self.resultsman.storageman_class = self.storageman.__class__
-            self.set_resultsman_attributes(
-                store_all_poses,
-                max_poses,
-                add_interactions,
-                interaction_tolerance,
-                interaction_cutoffs,
-                max_proc,
-                write_dict,
+        # Docking mode compatibility check
+        if (
+            self.docking_mode == "vina"
+            and self.resultsman.interaction_tolerance is not None
+        ):
+            self.logger.warning(
+                "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
             )
+            self.resultsman.interaction_tolerance = None
 
-            # Docking mode compatibility check
-            if (
-                self.docking_mode == "vina"
-                and self.resultsman.interaction_tolerance is not None
-            ):
-                self.logger.warning(
-                    "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
-                )
-                self.resultsman.interaction_tolerance = None
+        # Process results files and handle database versioning
+        with self.storageman:
+            if self.storageman.overwrite:
+                self.storageman.overwrite_storage()
 
-            # Process results files and handle database versioning
             self.storageman.check_storage_ready(
                 self._run_mode,
                 self.docking_mode,
                 self.resultsman.store_all_poses,
                 self.resultsman.max_poses,
             )
+
+        if results_sources.save_receptor:
+            self.save_receptor(results_sources.receptor_file)
+
+        with self.storageman:
             self.logger.info("Adding results...")
             self.resultsman.process_docking_data()
             if finalize:
@@ -1720,13 +1726,20 @@ class RingtailCore:
                     print("Number similar ligands:", number_similar)
         return number_similar
 
-    def plot(self, save=True, bookmark_name: str = None):
+    def plot(
+        self, save=True, bookmark_name: str = None, return_fig_handle: bool = False
+    ):
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
 
         Args:
             save (bool): whether to save plot to cd
+            bookmark_name (str): bookmark from which to fetch filtered data to plot
+            return_fig_handle (bool): use to return a handle to the matplotlib figure instead of saving or showing figure
+
+        Returns:
+            matplotlib.pyplot.figure (optional): will not show figure if returning figure handle
         """
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
@@ -1734,6 +1747,7 @@ class RingtailCore:
             bookmark_filters = (
                 self.storageman.fetch_filters_from_bookmark()
             )  # fetches the filters used to produce the bookmark
+
         if bookmark_filters:
             max_miss = bookmark_filters["max_miss"]
             if max_miss > 0:
@@ -1742,31 +1756,68 @@ class RingtailCore:
                 )
 
         logger.info("Creating plot of results")
-        # get data from storageMan
-        with self.storageman:
-            all_data, passing_data = self.storageman.get_plot_data()
-        all_plot_data_binned = dict()
-        # bin the all_ligands data by 1000ths to make plotting faster
+        all_data, passing_data = self.get_plot_data()
+        xdata = []
+        ydata = []
+        # add to list as docking_score/energy and ligand_efficiency
         for line in all_data:
-            # add to dictionary as bin of energy and le
+            # handle empty db rows
             if None in line:
                 continue
-            data_bin = (round(line[0], 3), round(line[1], 3))
-            if data_bin not in all_plot_data_binned:
-                all_plot_data_binned[data_bin] = 1
-            else:
-                all_plot_data_binned[data_bin] += 1
+            xdata.append(line[0])
+            ydata.append(line[1])
+
+        # base number of bins on data size
+        datalength = len(xdata)
+        # scale some plot parameters to size of dataset
+        if datalength > 1000:
+            num_of_bins = 100
+            markersize = 20
+        # for smaller dataset, scale num of bins and markersize to size of dataset
+        else:
+            num_of_bins = round(datalength / 10)
+            markersize = 60 - (datalength / 25)
+
         # plot the data
-        self.outputman.plot_all_data(all_plot_data_binned)
+        fig = self.outputman.plot_all_data(xdata, ydata, num_of_bins)
+
         if passing_data != []:  # handle if no passing ligands
+            xaxis = []
+            yaxis = []
             for line in passing_data:
-                self.outputman.plot_single_point(
-                    line[0], line[1], "red"
-                )  # energy (line[0]) on x axis, le (line[1]) on y axis
+                # energy
+                xaxis.append(line[0])
+                # leff
+                yaxis.append(line[1])
+
+            self.outputman.plot_single_points(xaxis, yaxis, markersize)
+
         if save:
             self.outputman.save_scatterplot()
+
+        if return_fig_handle:
+            return fig
         else:
             plt.show()
+
+    def get_plot_data(self, bookmark_name: str = None):
+        """
+        Get ligand efficiency and energy for all docking data and for ligands that passed
+        filtering in specified bookmark. Each tuple in the respective lists contains
+        docking_score, leff, pose_id, and ligand name.
+
+        Args:
+            bookmark_name (str):
+
+        Returns:
+            list(tuple), list(tuple): [all_data], [filtered_data]
+        """
+        if bookmark_name is not None:
+            self.set_storageman_attributes(bookmark_name=bookmark_name)
+        with self.storageman:
+            all_data, passing_data = self.storageman.get_plot_data()
+
+        return all_data, passing_data
 
     def display_pymol(self, bookmark_name=None):
         """

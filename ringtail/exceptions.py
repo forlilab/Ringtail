@@ -55,3 +55,7 @@ class ResultsProcessingError(Exception):
 
 class OutputError(Exception):
     pass
+
+
+class NoInputError(OptionError):
+    pass

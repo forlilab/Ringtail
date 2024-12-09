@@ -3,6 +3,21 @@
 Changes in Ringtail
 ######################
 
+Changes in 2.1.1: bug fixes and result plot enhancements
+********************************************************
+Enhancements
+============
+* Data used for plotting, and a handle to the matplotlib.figure object is available through the API for personalized plotting
+* The appearance of the standard Ringtail docking results plot has been improved with hard cutoffs for docking scores and ligand efficiency above 0, and it has been made clearer the difference between plotted data that has been binned and plotted data that are single data points. The number of bins used to bin data as well as marker size is scaled to the amount of data for databases of less than 10,000 ligands for enhanced visibility. 
+* Plotting faster for large databases. 
+* Possible to choose printing all filtered ligands to one large, or multiple individual SDF files for the CLI using `--invidual_sdf_files`.
+
+Bug fixes
+=========
+* There was a bug when using "overwrite" a database with the CLI where Ringtail would overwrite the database at the wrong time, leading to issues with data in the receptor table and functions like "add_interactions". This has now been fixed.
+* Multiple bugs related to the ligand filters have been fixed, where the main issue was if the `ligand_operator` was set to "OR", "OR" would be used not only between ligand substructures but also between other parts of the query (leading to more ligands passing filtering). 
+
+
 Changes in 2.1.0: enhanced filtering speed
 ******************************************
 Enhancements to the code base
