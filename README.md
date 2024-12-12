@@ -29,6 +29,10 @@ at [Scripps Research](https://www.scripps.edu/).
 ### Documentation
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
+### Version 2.1.1 bug fixes
+- bugs related to ligand filtering and certain uses of the `overwrite` option in the command line have been fixed
+- enhancements to the result plotting feature
+
 ### New in version 2.0.0 and 2.1.0
 
 - changes in keywords used for the command line tool
