@@ -4,6 +4,7 @@
 # Ringtail multiprocess workers
 #
 
+import platform
 import time
 import sys
 from .logutils import LOGGER as logger
@@ -32,14 +33,11 @@ class DockingFileReader(multiprocess.Process):
         storageman (StorageManager): storageman object
         storageman_class (StorageManager): storagemanager child class/database type
         docking_mode (str): describes what docking engine was used to produce the results
-        storageman_class (StorageManager): storagemanager child class/database type
         max_poses (int): max number of poses to store for each ligand
+        interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
         store_all_poses (bool): Store all poses from docking results
         add_interactions (bool): find and save interactions between ligand poses and receptor
-        interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
         interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
-        interaction_finder (InteractionFinder): object that processes ligand and receptor data to find interactions
-        receptor_blob (str): the complete receptor description
         target (str): receptor name
     """
 
@@ -48,6 +46,7 @@ class DockingFileReader(multiprocess.Process):
         queueIn,
         queueOut,
         pipe_conn,
+        storageman,
         storageman_class,
         docking_mode,
         max_poses,
@@ -58,24 +57,21 @@ class DockingFileReader(multiprocess.Process):
         interaction_cutoffs,
         receptor_file,
     ):
-        # initialize parent Process class
-        multiprocessing.Process.__init__(self)
-        # attributes related to multiprocessing
-        self.queueIn = queueIn
-        self.queueOut = queueOut
-        self.pipe = pipe_conn
-        # attributes related to the database
+        # set docking_mode for which file parser to use (and for vina, '_string' if parsing string output directly)
         self.docking_mode = docking_mode
-        self.storageman_class = storageman_class
-        self.string_processing = string_processing
-        # attributes related to data processing
+        # set number of clusters to write
         self.max_poses = max_poses
         self.store_all_poses_flag = store_all_poses
+        # set interaction_tolerance cutoff
         self.interaction_tolerance = interaction_tolerance
-        self.interaction_cutoffs = interaction_cutoffs
+        # set options for finding interactions
         self.add_interactions = add_interactions
-        # receptor information, needed if adding interactions
-        self.receptor_blob = receptor_blob
+        self.interaction_cutoffs = interaction_cutoffs
+        self.receptor_file = receptor_file
+        # set storagemanager and class
+        self.storageman = storageman
+        self.storageman_class = storageman_class
+        # set target name to check against
         self.target = target
         # initialize the parent class to inherit all multiprocess methods
         multiprocess.Process.__init__(self)
@@ -165,10 +161,20 @@ class DockingFileReader(multiprocess.Process):
                 )
                 # Calculate interactions if requested
                 if self.add_interactions:
-                    from .receptormanager import ReceptorManager as rm
+                    try:
+                        from .receptormanager import ReceptorManager as rm
 
-                    receptor_string = rm.blob2str(self.receptor_blob)
-
+                        with self.storageman:
+                            # grab receptor info from database, this assumes there is only one receptor in the database
+                            receptor_blob = self.storageman.fetch_receptor_objects()[0][
+                                1
+                            ]  # method returns and iter of tuples, blob is the second tuple element in the first list element
+                            # convert receptor blob to string
+                            receptor_string = rm.blob2str(receptor_blob)
+                    except:
+                        raise ResultsProcessingError(
+                            "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                        )
                     if self.interaction_finder is None:
                         self.interaction_finder = InteractionFinder(
                             receptor_string, self.interaction_cutoffs
@@ -215,15 +221,6 @@ class DockingFileReader(multiprocess.Process):
                 )
 
     def _add_to_queueout(self, obj):
-        """
-        Method that adds processed data packet to queue out, which will then be written to database by the Writer class
-
-        Args:
-            obj (any): Data packet that is ready to be added to out queue and written to db
-
-        Raises:
-            MultiprocessingError
-        """
         max_attempts = 750
         timeout = 0.5  # seconds
         attempts = 0
@@ -284,41 +281,20 @@ class DockingFileReader(multiprocess.Process):
 
 class Writer(multiprocess.Process):
     """This class is a listener that retrieves data from the queue and writes it
-    into datbase
-
-    Attributes:
-        queue (multiprocessing.Manager.Queue): incoming queue of objects to be written to db
-        num_readers (int): number of CPUs on which where Writer class is active
-        pipe_conn (multiprocessing.Pipe connection):
-        chunksize (int): decides how many docking results are processed before writing to database
-        docking_mode (str): docking mode used for the results
-        storageman_class (StorageManager): type of database used so data is correctly formatted before writing
-        duplicate_handling (bool): how to handle duplicate entries in the database
-        db_file (str): database file for which to connect and write results to
-        results_array (list): holds db-specific formatted data for the results table
-        ligands_array (list): holds db-specific formatted data for the ligands table
-        interactions_list (list): holds db-specific formatted data for the interactions table
-        receptor_array (list): holds db-specific formatted data for the receptor table
-        first_insert (bool): first db writing is slightly different than the remainders
-        self.counter (int): keeps track of how many docking results are in the processed data lists
-        num_files_written (int): how many files/docking results have been written to the database
-        time0 (time): start time for the first file written to db
-        last_write_time (time): end time for the last file written to db
-    """
+    into datbase"""
 
     def __init__(
         self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
     ):
         multiprocess.Process.__init__(self)
         self.queue = queue
+        # this class knows about how many multi-processing workers there are and where the pipe to the parent is
         self.num_readers = num_readers
         self.pipe = pipe_conn
-        self.chunksize = chunksize
-        # attributes related to the database
+        # assign pointer to storage object, set chunksize
         self.docking_mode = docking_mode
-        self.storageman_class = storageman_class
-        self.duplicate_handling = duplicate_handling
-        self.db_file = db_file
+        self.storageman = storageman
+        self.chunksize = chunksize
         # initialize data array (stack of dictionaries)
         self.results_array = []
         self.ligands_array = []
@@ -339,23 +315,20 @@ class Writer(multiprocess.Process):
         Raises:
             WriteToStorageError
         """
-        self.storageman = self.storageman_class(self.db_file)
-        self.storageman.duplicate_handling = self.duplicate_handling
-        with self.storageman:
-            try:
-                while True:
 
-                    # retrieve the next task from the queue
-                    next_task = self.queue.get()
-                    if next_task is None:
-                        # if a poison pill is found, it means one of the workers quit
-                        self.num_readers -= 1
-                        logger.debug(
-                            "Closing process. Remaining open processes: "
-                            + str(self.num_readers)
-                        )
-                    else:
-                        # if not a poison pill, process the task item
+        try:
+            while True:
+                # retrieve the next task from the queue
+                next_task = self.queue.get()
+                if next_task is None:
+                    # if a poison pill is found, it means one of the workers quit
+                    self.num_readers -= 1
+                    logger.debug(
+                        "Closing process. Remaining open processes: "
+                        + str(self.num_readers)
+                    )
+                else:
+                    # if not a poison pill, process the task item
 
                     # after every n (chunksize) files, write to storage
                     if self.counter >= self.chunksize:
@@ -395,7 +368,6 @@ class Writer(multiprocess.Process):
     def write_to_storage(self):
         """Inserting data to the database through the designated storagemanager."""
         # insert result, ligand, and receptor data
-
         self.storageman.insert_data(
             self.results_array,
             self.ligands_array,

@@ -6,6 +6,7 @@
 
 from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
+from .storagemanager import StorageManager
 from .logutils import LOGGER as logger
 
 
@@ -39,13 +40,12 @@ class ResultsManager:
         add_interactions: bool = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        db_file: str = None,
-        storageman_class=None,
+        storageman: StorageManager = None,
+        storageman_class: StorageManager = None,
         chunk_size: int = 1,
         parser_manager: str = "multiprocess",
         file_sources=None,
         string_sources=None,
-        receptor_blob=None,
     ):
         self.parser_manager = parser_manager
         self.docking_mode = docking_mode
@@ -59,10 +59,8 @@ class ResultsManager:
         self.receptor_file = None
         self.file_pattern = None
         self.max_proc = max_proc
-        self.receptor_blob = receptor_blob
-        # will be used to create individual db connections in multiprocessing
         self.storageman_class = storageman_class
-        self.db_file = db_file
+        self.storageman = storageman
         # if results are provided as files
         self.file_sources = file_sources
         if file_sources is not None:
@@ -75,14 +73,13 @@ class ResultsManager:
             self.target = self.string_sources.target
             self.receptor_file = self.string_sources.receptor_file
 
-    def process_docking_data(self, duplicate_handling: bool = None):
+    def process_docking_data(self):
         """Processes docking data in the form of files or strings
 
         Raises:
             ResultsProcessingError: if no file or string sources are provided, or if both are provided
         """
         # check that we have results source(s)
-        self.duplicate_handling = duplicate_handling
         files_sources = bool(self.file_sources)
         if files_sources:
             files_present = not bool(

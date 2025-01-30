@@ -7,19 +7,10 @@ class RaccoonLogger:
     """This class implements the common functionalities for classes that need to
     provide logging facilities"""
 
-    def __init__(self, **kwargs):
+    def __init__(self):
         """Initialize the logger"""
         self._owner = None
-        self._log_fp = None
-        self.log_console = None
-        setup_args = inspect.getfullargspec(self.setup_logger)[0]
-        if kwargs is not None:
-            bad_keys = [k for k in kwargs if k not in setup_args]
-            for key in bad_keys:
-                self.warning('Warning: unexpected key "%s" in logger setup' % key)
-            self.setup_logger(**kwargs)
-        else:
-            self.setup_logger()
+        self.setup_logger()
 
     def setup_logger(
         self,
@@ -42,9 +33,7 @@ class RaccoonLogger:
         if self._owner is not None:
             return
         self._owner = caller_info()
-        if "Ui_MainWindow" in caller_info(3):
-            print("     CALLED BY GUI")
-            log_console = False
+
         # access the logger; the logger module implements the named
         # singleton for logging, so if the logger is already available, it
         # will pass the existing one, or initialize it if necessary
@@ -58,7 +47,11 @@ class RaccoonLogger:
             self._log_fp = None
         # initialize the console
         if log_console is True:
-            self.add_consolehandler(log_level_console)
+            self.log_console = logging.StreamHandler()
+            self.log_console.setLevel(log_level_console)
+            console_formatter = logging.Formatter("%(levelname)s - %(message)s")
+            self.log_console.setFormatter(console_formatter)
+            self.logger.addHandler(self.log_console)
         else:
             self.log_console = None
 
@@ -74,19 +67,7 @@ class RaccoonLogger:
         levels = {10: "DEBUG", 20: "INFO", 30: "WARNING", 40: "ERROR", 50: "CRITICAL"}
         return levels[self.logger.level]
 
-    def add_consolehandler(self, level: str = None):
-        self.log_console = logging.StreamHandler()
-
-        if level is not None:
-            self.log_console.setLevel(level)
-        else:
-            self.log_console.setLevel(self.level())
-
-        console_formatter = logging.Formatter("%(levelname)s - %(message)s")
-        self.log_console.setFormatter(console_formatter)
-        self.logger.addHandler(self.log_console)
-
-    def add_filehandler(self, log_file: str = "ringtail", level: str = None):
+    def add_filehandler(self, log_file: str = "ringtail", level: str = logging.DEBUG):
         """
         Will add file handler to an existing logging object and produce a '.log' file.
 

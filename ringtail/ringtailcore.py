@@ -57,7 +57,6 @@ class RingtailCore:
 
         # Initiate logging
         self.logger = LOGGER
-        self.logger.add_consolehandler()
         self.logger.set_level(logging_level)
         # create log file handler if log level is debug
         if self.logger.level() == "DEBUG":
@@ -80,9 +79,6 @@ class RingtailCore:
         self._run_mode = "api"
         self._docking_mode = docking_mode
         self.set_storageman_attributes()
-        self.logger.warning(
-            f"[     New RingtailCore object initialized with database file: {db_file}    ]"
-        )
 
     def update_database_version(self, consent=False, new_version="2.0.0"):
         """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
@@ -612,9 +608,6 @@ class RingtailCore:
             overwrite=overwrite,
             dict=storage_dict,
         )
-        # Process results files and handle database versioning
-        with self.storageman:
-            self.storageman.prepare_storage(self.storageopts.overwrite)
 
         # Prepare the results manager with the provided docking results sources
         if strings == False:
@@ -1130,7 +1123,6 @@ class RingtailCore:
         """
         receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
         with self.storageman:
-            self.storageman.prepare_storage(self.storageopts.overwrite)
             for rec, rec_name in receptor_list:
                 # NOTE: in current implementation, only one receptor allowed per database
                 # Check that any receptor row is incomplete (needs receptor blob) before inserting

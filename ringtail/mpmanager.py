@@ -9,7 +9,8 @@ import queue
 import fnmatch
 import os
 import glob
-from .mpreaderwriter import DockingFileReader, Writer
+from .mpreaderwriter import DockingFileReader
+from .mpreaderwriter import Writer
 from .logutils import LOGGER
 from .exceptions import MultiprocessingError, RTCoreError
 import traceback
@@ -51,13 +52,11 @@ class MPManager:
         add_interactions,
         interaction_cutoffs,
         max_proc,
-        duplicate_handling,
-        db_file,
+        storageman,
         storageman_class,
         chunk_size,
         target,
         receptor_file,
-        receptor_blob,
         file_pattern=None,
         file_sources=None,
         string_sources=None,
@@ -70,12 +69,11 @@ class MPManager:
         self.target = target
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
-        self.duplicate_handling = duplicate_handling
         self.receptor_file = receptor_file
         self.file_sources = file_sources
         self.file_pattern = file_pattern
         self.string_sources = string_sources
-        self.db_file = db_file
+        self.storageman = storageman
         self.storageman_class = storageman_class
         self.num_files = 0
         self.max_proc = max_proc
@@ -96,27 +94,13 @@ class MPManager:
         self.logger.info(
             "Starting {0} docking results readers".format(self.num_readers)
         )
-        self.managed_queue_in = multiprocessing.Manager().Queue(
-            maxsize=2 * self.max_proc
-        )
-        self.managed_queue_out = multiprocessing.Manager().Queue(
-            maxsize=2 * self.max_proc
-        )
-
-    def process_results(self, string_processing=False):
-        """Processes results data (files or string sources) by adding them to the queue
-        and starting their processing in multiprocessing.
-
-        Args:
-            string_sources (bool, optional): Switch for processing results that are provided as strings instead of files.
-        """
-        # exception comment: "Queue objects should only be shared between processes through inheritance"
-        for _ in range(self.num_readers):
+        for i in range(self.num_readers):
             # one worker is started for each processor to be used
             s = DockingFileReader(
-                self.managed_queue_in,
-                self.managed_queue_out,
+                self.queueIn,
+                self.queueOut,
                 self.c_conn,
+                self.storageman,
                 self.storageman_class,
                 self.docking_mode,
                 self.max_poses,
@@ -127,20 +111,18 @@ class MPManager:
                 self.interaction_cutoffs,
                 self.receptor_file,
             )
-
             # this method calls .run() internally
             s.start()
             self.workers.append(s)
 
+        # start the writer to process the data from the workers
         w = Writer(
-            self.managed_queue_out,
+            self.queueOut,
             self.num_readers,
             self.c_conn,
             self.chunk_size,
+            self.storageman,
             self.docking_mode,
-            self.duplicate_handling,
-            self.db_file,
-            self.storageman_class,
         )
 
         w.start()
@@ -154,7 +136,7 @@ class MPManager:
             self._kill_all_workers(e, "results sources processing", tb)
         # put as many poison pills in the queue as there are workers
         for i in range(self.num_readers):
-            self.managed_queue_in.put(None)
+            self.queueIn.put(None)
 
         # check for exceptions
         while w.is_alive():
@@ -239,7 +221,7 @@ class MPManager:
                     "Something is blocking the progressing of results data reading. Exiting program."
                 ) from queue.Full
             try:
-                self.managed_queue_in.put(results_data, block=True, timeout=timeout)
+                self.queueIn.put(results_data, block=True, timeout=timeout)
                 self.num_files += 1
                 self._check_for_worker_exceptions()
                 break
