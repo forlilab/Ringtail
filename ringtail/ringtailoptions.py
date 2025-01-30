@@ -476,6 +476,11 @@ class OutputOptions(RTOptions):
             "type": str,
             "description": "Specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the 'overwrite' is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.",
         },
+        "individual_sdf_files": {
+            "default": False,
+            "type": bool,
+            "description": "Use if you like to print chosen molecules to individual SDF files, as opposed to one big SDF.",
+        },
         "enumerate_interaction_combs": {
             "default": None,
             "type": bool,
@@ -563,29 +568,29 @@ class Filters(RTOptions):
             "description": "Will compute all possible combinations of interaction filters excluding up to 'max_miss' number of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.",
         },
         "ligand_name": {
-            "default": [],
+            "default": None,
             "type": list,
-            "description": "Specify ligand name(s). Will combine name filters with 'OR'.",
+            "description": "Specify list of ligand name(s). Will combine name filters with 'OR'",
+        },
+        "ligand_operator": {
+            "default": None,
+            "type": str,
+            "description": "Logical join operator for multiple substruct filters. Will apply within 'ligand_substruct' filters and within 'ligand_substruct_pos' filters (the two groups are always joined by 'AND').",
         },
         "ligand_substruct": {
-            "default": [],
+            "default": None,
             "type": list,
-            "description": "SMARTS pattern(s) for substructure matching.",
+            "description": "SMARTS pattern(s) for substructure matching. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator. If error delimit each substructure with ''.",
         },
         "ligand_substruct_pos": {
-            "default": [],
+            "default": None,
             "type": list,
-            "description": "SMARTS pattern(s) for substructure matching, e.g., [''[Oh]C' 0 1.2 -5.5 10.0 15.5'] -> ['smart_string index_of_positioned_atom cutoff_distance x y z'].",
+            "description": "SMARTS pattern(s) for substructure matching. For API use list with six elements ['[Oh]C', 0, 1.2, -5.5, 10.0, 15.5] -> ['smart_string', index_of_positioned_atom, cutoff_distance, x, y, z]. For the CLI use as a string without comma separators, separating each filter with commas -> '[Oh]C 0 1.2 -5.5 10.0 15.5'. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator",
         },
         "ligand_max_atoms": {
             "default": None,
             "type": int,
             "description": "Maximum number of heavy atoms a ligand may have.",
-        },
-        "ligand_operator": {
-            "default": "OR",
-            "type": str,
-            "description": "Logical join operator for multiple SMARTS.",
         },
     }
 
@@ -595,7 +600,7 @@ class Filters(RTOptions):
     def checks(self):
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
-        if hasattr(self, "ligand_operator"):
+        if hasattr(self, "ligand_max_atoms"):
             if self.eworst is not None and self.score_percentile is not None:
                 logger.warning(
                     "Cannot use 'eworst' cutoff with 'score_percentile'. Overiding 'score_percentile' with 'eworst'."
@@ -622,10 +627,11 @@ class Filters(RTOptions):
                     f"Given 'score_percentile' {self.le_percentile} not allowed. Should be within percentile range of 0-100."
                 )
 
-            if self.ligand_operator not in ["OR", "AND"]:
-                raise OptionError(
-                    f"Given 'ligand_operator' {self.ligand_operator} not allowed. Must be 'OR' or 'AND'."
-                )
+            if self.ligand_operator not in ["OR", "AND"] and (
+                self.ligand_substruct or self.ligand_substruct_pos
+            ):
+                logger.debug(f"'ligand_operator' set to default 'OR'.")
+                self.ligand_operator = "OR"
 
             if self.max_miss < 0:
                 raise OptionError("'max_miss' must be greater than or equal to 0.")

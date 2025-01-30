@@ -27,13 +27,7 @@ Ringtail is developed by the `Forli lab <https://forlilab.org/>`_ at the `Center
 
 Ringtail offers a wealth of database creation and filtering options. The different sections linked below will describe each option in detail. 
 To get started, first follow the instructions to :ref:`install Ringtail <installation>`, then navigate to :ref:`Getting started with Ringtail <get_started>` for a quick overview of the basic usage of Ringtail from the command line.
-Fpr more advanced and customizable use, learn how to use the :ref:`Ringtail API <api>`.
-
-
-Indices and tables
-********************
-
-* :ref:`search`
+For more advanced and customizable use, learn how to use the :ref:`Ringtail API <api>`.
 
 .. toctree::
    :maxdepth: 2

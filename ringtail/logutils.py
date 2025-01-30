@@ -1,9 +1,6 @@
 import logging
-import traceback as tb
-import sys
 import os
 from .util import caller_info
-import inspect
 
 
 class RaccoonLogger:
@@ -26,8 +23,8 @@ class RaccoonLogger:
 
     def setup_logger(
         self,
-        log_file: str = None,
-        log_console: bool = False,
+        log_file: str = "RingtailLogger",
+        log_console: bool = True,
         log_level: str = logging.WARNING,
         log_level_console: str = logging.WARNING,
         custom_logger_name: str = "RingtailLogger",
@@ -55,8 +52,10 @@ class RaccoonLogger:
         # set the log level for the overal logger
         self.logger.setLevel(log_level)
         # configure the optional log file, if provided
-        if log_file is not None:
-            self.add_filehandler(log_file, log_level)
+        if self.logger.level == "DEBUG":
+            self.add_filehandler(log_file)
+        else:
+            self._log_fp = None
         # initialize the console
         if log_console is True:
             self.add_consolehandler(log_level_console)
@@ -130,6 +129,8 @@ class RaccoonLogger:
             return
         elif log_level != self.level():
             self.logger.setLevel(log_level)
+            if self.logger.level == "DEBUG":
+                self.add_filehandler()
             if self._log_fp is not None:
                 self._log_fp.setLevel(log_level)
             if self.log_console is not None:
@@ -137,6 +138,8 @@ class RaccoonLogger:
             self.logger.debug("Log level changed to " + str(log_level))
 
     def get_caller(self, stack_level: int = 2):
+        import inspect
+
         """
         Method to get basic information about the module and line no calling a certain function.
 

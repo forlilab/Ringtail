@@ -140,8 +140,7 @@ def cmdline_parser(defaults={}):
 
     return args
 
-
-if __name__ == "__main__":
+def main():
     time0 = time.perf_counter()
     logger = logutils.LOGGER
     logger.info("Starting a ringtail database compare process")
@@ -211,9 +210,8 @@ if __name__ == "__main__":
 
         last_db = None
         num_wanted_dbs = len(wanted_dbs)
-        with (
-            dbman
-        ):  # storageman is a context manager, and keeps connection to the database open within the `with` statmenet
+        # storageman is a context manager, and keeps connection to the database open within the `with` statement
+        with dbman:
             for idx, db in enumerate(wanted_dbs):
                 logger.info(f"cross-referencing {db}")
                 if not os.path.exists(db):
@@ -252,11 +250,11 @@ if __name__ == "__main__":
                 if args.save_bookmark is not None:
                     output_manager.write_results_bookmark_to_log(args.save_bookmark)
                 output_manager.log_num_passing_ligands(number_passing_ligands)
-                final_bookmark = dbman.fetch_view(previous_bookmarkname)
+                final_bookmark = dbman.fetch_bookmark(previous_bookmarkname)
                 output_manager.write_filter_log(final_bookmark)
 
             if args.save_bookmark is not None:
-                dbman.save_temp_table(
+                dbman.create_bookmark_from_temp_table(
                     previous_bookmarkname,
                     args.save_bookmark,
                     original_bookmark_name,
@@ -288,3 +286,7 @@ if __name__ == "__main__":
             "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
         )
         sys.exit(1)
+    return
+
+if __name__ == "__main__":
+    sys.exit(main())

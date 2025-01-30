@@ -28,12 +28,12 @@ class TestInputs:
 
     def test_files(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --file test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz"
+            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --file test_data/adgpu/group1/173101.dlg.gz --file test_data/adgpu/group1/100729.dlg.gz"
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz test_data/group1/173101.dlg.gz --file test_data/group1/100729.dlg.gz --append_results"
+            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz test_data/adgpu/group1/173101.dlg.gz --file test_data/adgpu/group1/100729.dlg.gz --append_results"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -43,14 +43,14 @@ class TestInputs:
 
     def test_file_paths(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 --file_path test_data/group2"
+            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1 --file_path test_data/adgpu/group2"
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system("rm output.db")
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1 test_data/group2"
+            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1 test_data/adgpu/group2"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -60,14 +60,14 @@ class TestInputs:
 
     def test_file_list(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --file_list filelist2.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --file_list test_data/filelist2.txt"
         )
         count1 = countrows("SELECT COUNT(*) FROM Ligands")
 
         os.system("rm output.db")
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt filelist2.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt test_data/filelist2.txt"
         )
         count2 = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -77,7 +77,7 @@ class TestInputs:
 
     def test_all_file_inputs(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --file test_data/group2/361056.dlg.gz test_data/group2/53506.dlg.gz --file_path test_data/group3"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --file test_data/adgpu/group2/361056.dlg.gz test_data/adgpu/group2/53506.dlg.gz --file_path test_data/adgpu/group3"
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -87,7 +87,7 @@ class TestInputs:
 
     def test_vina_input(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d -m vina --file_path test_data/vina -rf test_data/vina/receptor.pdbqt -sr"
+            "python ../ringtail/cli/rt_process_vs.py write -m vina --file_path test_data/vina -rf test_data/vina/receptor.pdbqt -sr"
         )
 
         count = countrows("SELECT COUNT(*) FROM Results")
@@ -98,7 +98,7 @@ class TestInputs:
 
         count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --overwrite"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --overwrite"
         )
         count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
         assert count_old_db == 2
@@ -111,7 +111,7 @@ class TestInputs:
         assert count_old_db == 3
 
         code = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
         )
         assert (
             code == 256
@@ -125,13 +125,13 @@ class TestInputs:
 
         with open(filepath, "r") as f:
             data = json.load(f)
-        # all fields I want to change
-        data["file_list"] = [["filelist1.txt"]]
+        # all fields to be changed
+        data["file_list"] = [["test_data/filelist1.txt"]]
 
         with open(filepath, "w") as f:
             f.write(json.dumps(data, indent=4))
 
-        os.system("python ../scripts/rt_process_vs.py write -d --config config.json")
+        os.system("python ../ringtail/cli/rt_process_vs.py write --config config.json")
 
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -141,17 +141,17 @@ class TestInputs:
 
     def test_duplicate_handling(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
+            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1"
         )
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group1 --append_results --duplicate_handling ignore"
+            "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --file_path test_data/adgpu/group1 --append_results --duplicate_handling ignore"
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
         assert count == 138
 
     def test_append_results(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --input_db output.db --file_path test_data/group2 --append_results"
+            "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --file_path test_data/adgpu/group2 --append_results"
         )
         count = countrows("SELECT COUNT(*) FROM Ligands")
 
@@ -160,7 +160,7 @@ class TestInputs:
     def test_save_rec_file(self, countrows):
 
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --input_db output.db --receptor_file test_data/4j8m.pdbqt --save_receptor --append_results"
+            "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --receptor_file test_data/adgpu/4j8m.pdbqt --save_receptor --append_results"
         )
         count = countrows(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
@@ -172,7 +172,7 @@ class TestInputs:
 
     def test_save_rec_file_gz(self, countrows):
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --receptor_file test_data/adgpu/4j8m.pdbqt.gz --save_receptor"
         )
         count = countrows(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
@@ -186,10 +186,10 @@ class TestInputs:
 class TestOutputs:
     def test_export_bookmark_csv(self):
         status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --export_bookmark_csv Ligands"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --export_bookmark_csv Ligands"
         )
 
         assert status1 == status2 == 0
@@ -200,7 +200,7 @@ class TestOutputs:
     def test_export_query_csv(self):
 
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --export_query_csv 'SELECT * FROM Results'"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --export_query_csv 'SELECT * FROM Results'"
         )
 
         assert status == 0
@@ -210,9 +210,8 @@ class TestOutputs:
         os.system("rm query.csv")
 
     def test_interaction_tolerance(self):
-        # TODO rewrite
         status_notol = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz"
+            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz"
         )
 
         conn = sqlite3.connect("output.db")
@@ -229,7 +228,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status_tol = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --interaction_tolerance"
+            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance"
         )
 
         conn = sqlite3.connect("output.db")
@@ -245,7 +244,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status_tol2 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file test_data/group1/127458.dlg.gz --interaction_tolerance 2.0"
+            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance 2.0"
         )
 
         conn = sqlite3.connect("output.db")
@@ -270,7 +269,7 @@ class TestOutputs:
     def test_max_poses(self):
         os.system("rm output.db")
         status3 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -283,7 +282,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --max_poses 1"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --max_poses 1"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -299,7 +298,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status5 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --max_poses 5"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --max_poses 5"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -319,7 +318,7 @@ class TestOutputs:
 
     def test_store_all(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt --store_all_poses"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --store_all_poses"
         )
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
@@ -342,265 +341,274 @@ class TestFilters:
 
     def test_eworst(self):
         status1 = os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_list filelist1.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
         )
         status2 = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -15"
         )
 
         assert status1 == status2 == 0
 
     def test_ebest(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --ebest -15"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --ebest -15"
         )
 
         assert status == 0
 
     def test_leworst(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --leworst -0.4"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --leworst -0.4"
         )
 
         assert status == 0
 
     def test_lebest(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --leworst -0.4"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --leworst -0.4"
         )
 
         assert status == 0
 
     def test_epercentile(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 0.1"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --score_percentile 0.1"
         )
 
         assert status == 0
 
     def test_lepercentile(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --le_percentile 0.1"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --le_percentile 0.1"
         )
 
         assert status == 0
 
     def test_epercentile_eworst(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 0.1 --eworst -14"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --score_percentile 0.1 --eworst -14"
         )
 
         assert status == 0
 
     def test_lepercentile_leworst(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --le_percentile 0.1 --leworst -0.4"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --le_percentile 0.1 --leworst -0.4"
         )
 
         assert status == 0
 
     def test_name(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input output.db --ligand_name 127458"
+            "python ../ringtail/cli/rt_process_vs.py read --input output.db --ligand_name 127458"
+        )
+
+        assert status == 0
+
+    def test_ligand_filters(self, countrows):
+        status = os.system(
+            """python ../ringtail/cli/rt_process_vs.py read --input output.db --ligand_substruct "NC" --ligand_operator AND"""
         )
 
         assert status == 0
 
     def test_hbcount(self, countrows):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --hb_count 5"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --hb_count 5"
         )
         count = countrows("SELECT COUNT(*) FROM passing_results")
 
         assert status == 0
         assert count == 1
 
-    def test_react_any(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --react_any"
-        )
-
-        assert status == 0
-
-    def test_react1(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions A:TYR:169:"
-        )
-
-        assert status == 0
-
-    def test_react2(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db  --reactive_interactions :TYR:169:"
-        )
-
-        assert status == 0
-
-    def test_react3(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions :TYR::"
-        )
-
-        assert status == 0
-
-    def test_react4(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:TYR::"
-        )
-
-        assert status == 0
-
-    def test_react5(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A::169:"
-        )
-
-        assert status == 0
-
-    def test_react6(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions A:::"
-        )
-
-        assert status == 0
-
-    def test_react7(self):
-        status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --reactive_interactions ::169:"
-        )
-
-        assert status == 0
-
     def test_hb1(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -hb A:LYS:162:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb A:LYS:162:"
         )
 
         assert status == 0
 
     def test_hb2(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -hb :LYS:162:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb :LYS:162:"
         )
 
         assert status == 0
 
     def test_hb3(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -hb :LYS::"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb :LYS::"
         )
 
         assert status == 0
 
     def test_hb4(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -hb A:LYS::"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb A:LYS::"
         )
 
         assert status == 0
 
     def test_hb5(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -hb A::162:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb A::162:"
         )
 
         assert status == 0
 
     def test_hb6(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -hb A:::"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb A:::"
         )
 
         assert status == 0
 
     def test_hb7(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -hb ::162:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb ::162:"
         )
 
         assert status == 0
 
     def test_vdw1(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -vdw A:VAL:279:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw A:VAL:279:"
         )
 
         assert status == 0
 
     def test_vdw2(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -vdw :VAL:279:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw :VAL:279:"
         )
 
         assert status == 0
 
     def test_vdw3(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -vdw :VAL::"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw :VAL::"
         )
 
         assert status == 0
 
     def test_vdw4(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -vdw A:VAL::"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw A:VAL::"
         )
 
         assert status == 0
 
     def test_vdw5(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -vdw A::279:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw A::279:"
         )
 
         assert status == 0
 
     def test_vdw6(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -vdw A:::"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw A:::"
         )
 
         assert status == 0
 
     def test_vdw7(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db -vdw ::279:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw ::279:"
         )
 
         assert status == 0
 
     def test_all_filters(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --ligand_name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279: --reactive_interactions A:TYR:169:"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --ligand_name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279:"
         )
 
         assert status == 0
 
     def test_export_sdf(self):
         status = os.system(
-            "python ../scripts/rt_process_vs.py read --input_db output.db -e -4 -sdf . -d "
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -e -4 -sdf . "
         )
 
         import glob
 
         sdf_files = glob.glob("*.sdf")
-        expected = ["127458.sdf", "100729.sdf", "173101.sdf"]
 
-        assert len(sdf_files) == len(expected)
-
-        for f in sdf_files:
-            assert f in expected
-            os.remove(f)
+        assert len(sdf_files) == 1
+        os.remove(sdf_files[0])
 
         assert status == 0
 
     def test_filters_value_error(self):
 
         status = os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --score_percentile 109"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --score_percentile 109"
         )
         # checking that code exited with error since a percentile cannot be above 100
         assert status != 0
+        os.system("rm output_log.txt output.db")
+
+    def test_react_any(self):
+        # write new db with reactive data
+        os.system(
+            "python ../ringtail/cli/rt_process_vs.py write --output_db output.db --file_path test_data/reactive --receptor_file test_data/reactive/4j8m_m_rigid.pdbqt"
+        )
+
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --react_any"
+        )
+
+        assert status == 0
+
+    def test_react1(self):
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db  --reactive_interactions A:TYR:212:"
+        )
+
+        assert status == 0
+
+    def test_react2(self):
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db  --reactive_interactions :TYR:212:"
+        )
+
+        assert status == 0
+
+    def test_react3(self):
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions :TYR::"
+        )
+
+        assert status == 0
+
+    def test_react4(self):
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions A:TYR::"
+        )
+
+        assert status == 0
+
+    def test_react5(self):
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions A::212:"
+        )
+
+        assert status == 0
+
+    def test_react6(self):
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions A:::"
+        )
+
+        assert status == 0
+
+    def test_react7(self):
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions ::212:"
+        )
+
+        assert status == 0
         os.system("rm output_log.txt output.db")
 
 
@@ -609,23 +617,23 @@ class TestOtherScripts:
     def test_rt_compare(self):
         # first database
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --file_path test_data/group1"
+            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1"
         )
         # second database
         os.system(
-            "python ../scripts/rt_process_vs.py write -d --output_db output2.db --file_path test_data/group1"
+            "python ../ringtail/cli/rt_process_vs.py write --output_db output2.db --file_path test_data/adgpu/group1"
         )
         # filter producing 30 ligands
         os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output.db --eworst -6"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -6"
         )
         # filter producing 5 ligands
         os.system(
-            "python ../scripts/rt_process_vs.py read -d --input_db output2.db --eworst -7"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output2.db --eworst -7"
         )
         # should produce 25 ligands
         os.system(
-            "python ../scripts/rt_compare.py --wanted output.db --unwanted output2.db --log compared_ligands.txt"
+            "python ../ringtail/cli/rt_compare.py --wanted output.db --unwanted output2.db --log compared_ligands.txt"
         )
         with open("compared_ligands.txt") as f:
             for pos, line in enumerate(f):

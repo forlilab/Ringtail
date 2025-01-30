@@ -4,11 +4,11 @@
 API procedures
 ###############
 
-The Ringtail API allows for a more advanced, flexible use of ringtail where the user can create their own scripts. In the case of the docking engine AutoDock-Vina that outputs docking results as strings, Ringtail can be directly integrated in the virtual screen pipeline (LINK TO STUFF). 
+The Ringtail API allows for a more advanced, flexible use of ringtail where the user can create their own scripts. In the case of the docking engine AutoDock-Vina that outputs docking results as strings, Ringtail can be directly integrated in the virtual screen pipeline and add docking results to the database as soon as the docking engine outputs the results. 
 
-The Ringtail API can thus process output files from both AutoDock-GPU (DLGs) and vina (PDBQTs), as well as vina strings. Ringtail is intended to be used for a set of docking results for a single target and binding site. This may include multiple ligand libraries as long as the target and binding site is the same. Be cautious when adding results from multiple screening runs, since some target information is checked and some is not. One receptor PDBQT may also be saved to the database.
+The Ringtail API can thus process output files from both AutoDock-GPU (DLGs) and vina (PDBQTs), as well as vina strings. Ringtail is intended to be used for a set of docking results for a single target and binding site. This may include multiple ligand libraries as long as the target and binding site is the same. e cautious when adding results from multiple screening runs. Ringtail only allows one receptor per database, and will do this by checking that the receptor name is the same. However, if you do multiple screens with e.g., different binding pockets for the same receptor, this information will not be checked, and Ringtail will allow any data to be appended to a database as long as the receptor name is the same. One receptor PDBQT may also be saved to the database.
 
-Unlike the command line interace (LINK) the API does not need to be specified for a write or read mode. It works by instantiating a RingtailCore object, and performing actions on that object. The API also offers some extra flexibility compared to the command line interface, for example it is possible to produce an internally inconsistent database that includes docking results from both AutoDock-GPU and vina, or saving docking results with different number of poses. Due to the nature of how the Ringtail API can be used, as long as a RingtailCore object has been instantiated you can keep adding results (METHOD LINK) without e.g., specifying that you are appending to an existing database. 
+Unlike the command line interace (:ref:`cmdline`) the API does not need to be specified for a write or read mode. It works by instantiating a RingtailCore object, and performing actions on that object. The API also offers some extra flexibility compared to the command line interface, for example it is possible to produce an internally inconsistent database that includes docking results from both AutoDock-GPU and vina, or saving docking results with different number of poses. Due to the nature of how the Ringtail API can be used, as long as a RingtailCore object has been instantiated you can keep adding results without e.g., specifying that you are appending to an existing database. 
 
 Please note that Ringtail does not automatically have permission to perform changes outside of the working directory, so be advised that any folders or documents that Ringtail outputs will be saved in the current working directory. 
 
@@ -82,7 +82,7 @@ ADGPU is capable of performing interaction analysis at runtime, with these resul
 .. code-block:: python
 
     rtc.docking_mode = "vina"
-    rtc.add_results_from_files( file = ["lig1.pdbqt"]
+    rtc.add_results_from_files( file = "lig1.pdbqt"
                                 add_interactions = True,
                                 receptor_file = "receptor.pdbqt",
                                 save_receptor = True,
@@ -105,6 +105,18 @@ By default (for DLGs), Ringtail will store the best-scored (lowest energy) bindi
 
     rtc.add_results_from_files( file_path = "path2"
                                 max_poses = 5)
+
+Iteratively appending to a database
+------------------------------------
+When results are added to the database, there is a final step where some tables are indexed, and some database properties saved. If you are adding data iteratively through e.g., a for-loop and adding some number at files at once, it is time-consuming (and not necessary) to do this every iteration. Instead, you can invoke the keyword ``finalize=False``, and run the finalization method separately at the end:
+
+.. code-block:: python
+
+    for folder in enumerate("path_with_many_folders"):
+        rtc.add_results_from_files( file_path = folder,
+                                    finalize = False)
+    
+    rtc.finalize_write()
 
 Filtering
 **********
@@ -157,16 +169,17 @@ The ``max_miss`` keywords allows the user to filter by given interactions exclud
 
 Ligand filters 
 ===============
-Several filters pertaining to the SMARTS structure of the ligand can be used. For example, the ``ligand_substruct_pos`` keyword may be used to filter for a specific ligand substructure (specified with a SMARTS string) to be placed within some distance of a given cartesian coordinate. The format for this option is ``"<SMARTS pattern: str>" <index of atom in SMARTS: int> <cutoff distance: float> <target x coord: float> <target y coord: float> <target z coord: float>``.
-ligand_name: Specify ligand name(s). Will combine name filters with 'OR'.
-ligand_substruct: SMARTS pattern(s) for substructure matching.
-ligand_substruct_pos: SMARTS pattern(s) for substructure matching, e.g., [''[Oh]C' 0 1.2 -5.5 10.0 15.5'] -> ['smart_string index_of_positioned_atom cutoff_distance x y z'].
-ligand_max_atoms: Maximum number of heavy atoms a ligand may have.
-ligand_operator: Logical join operator for multiple SMARTS.
+Several filters pertaining to the SMARTS structure of the ligand can be used. For example, ligands can be filtered for presence of certain substrctures specified by their SMARTS string using ``ligand_substruct``, as well as their ligand name contaning a specific phrase ``ligand_name``. The ligand name search will include any ligand names that contain the specified phrase, and does not look for exact matches only. Use the keyword ``ligand_operator`` to determine if the ligand filters should be evaluated as this ``OR`` that (default), or combined with ``AND``. ``ligand_max_atoms`` can be used to specify maximum number of heavy atoms a ligand may have.
 
-.. code-block:: bash
+.. code-block:: python
 
-    $ python ../scripts/rt_process_vs.py read --input_db output.db --ligand_substruct_pos ["'[Oh]C' 0 1.2 -5.5 10.0 15.5"]
+    rtc.filter(ligand_substruct=["[Oh]C", "C=O"], ligand_name="cool_ligand",ligand_operator="AND", ligand_max_atoms=5)
+
+The ``ligand_substruct_pos`` option may be used to filter for a specific ligand substructure to be placed within some distance of a given cartesian coordinate. The format for this option using the API is as a list of the six elements: ``["<SMARTS pattern: str>"," <index of atom in SMARTS: int>, <cutoff distance: float>, <target x coord: float>, <target y coord: float>, <target z coord: float>]``. If seachring for more than one ``ligand_substruct_pos`` make the value a list of lists. 
+
+.. code-block:: python
+
+    rtc.filter(ligand_name="_1", ligand_substruct_pos=[["C=O", 1, 10, 102, 106, 154], ['[C][Oh]', 1, 10, 102, 106, 154]])
 
 
 Clustering
@@ -329,5 +342,5 @@ Keywords pertaining to output of data
     "output_all_poses","Flag that if mutiple poses for same ligand pass filters, log all poses",FALSE
     "mfpt_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm",0.5
     "interaction_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm (*)",0.5
-    "enumerate_interactions_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)",FALSE
+    "enumerate_interactions_combs","When used with ``max_miss`` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)",FALSE
 

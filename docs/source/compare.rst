@@ -4,27 +4,27 @@ Compare docking results from different virtual screenings
 ##########################################################
 
 
-The script ``rt_compare.py`` is designed to be used with databases already made and filtered. It is used to combine information across multiple virtual screenings to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
+The script ``rt_compare`` is designed to be used with databases already made and filtered. It is used to combine information across multiple virtual screenings to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
 
-Programmatically, the ``rt_compare.py`` script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (``--wanted``) or exclusive to some screenings and not others (``--unwanted``). The script uses a subset of commands similar to ``rt_process_vs.py``.
+Programmatically, the ``rt_compare`` script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (``--wanted``) or exclusive to some screenings and not others (``--unwanted``). The script uses a subset of commands similar to ``rt_process_vs``.
 
 The basic process of preparing to use this script and the concept behind it is thus:
 
 Let us assume that kinase1 is our target of interest. It has related proteins kinase1a and kinase1b. protein2 is an unrelated protein.
 1. Create a database for each virtual screening on each target (kinase1.db, kinase1a.db, kinase1b.db, protein2.db)
 2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues). The bookmark within each database may be given as a single string (same bookmark name in every database) or multiple bookmark names (one per database) with the ``--bookmark_name`` option. If specifying multiple names, the order should match the order that the databases were provided in, beginning with wanted, then unwanted databases. The default name is ``passing_results``.
-3. Use ``rt_compare.py`` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from ``rt_process_vs.py``.
+3. Use ``rt_compare`` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will create a log file of the same format as that output from ``rt_process_vs``.
 
 .. code-block:: bash
 
-    $ rt_compare.py --wanted kinase1.db --unwanted kinase1a.db kinase1b.db
+    $ rt_compare --wanted kinase1.db --unwanted kinase1a.db kinase1b.db
 
 4. Other usage examples and output options given below. For example, one can also select for potential dual-target ligands with
 
 
 .. code-block:: bash
 
-    $ rt_compare.py --wanted kinase1.db protein2.db --unwanted kinase1a.db kinase1b.db
+    $ rt_compare --wanted kinase1.db protein2.db --unwanted kinase1a.db kinase1b.db
 
 
 Usage examples
@@ -35,48 +35,48 @@ Select ligands found in "passing_results" bookmarks of vs1 but not vs2 or vs3
 
 .. code-block:: bash
 
-    $ rt_compare.py --wanted vs1.db --unwanted vs2.db vs3.db
+    $ rt_compare --wanted vs1.db --unwanted vs2.db vs3.db
 
 Select ligands found in "passing_results" bookmarks of vs1 and vs2 but not vs3 or vs4
 ======================================================================================
 
 .. code-block:: bash
 
-    $ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db
+    $ rt_compare --wanted vs1.db vs2.db --unwanted vs3.db vs4.db
 
 Select ligands found in "passing_results" bookmarks of every vs except vs4
 ============================================================================
 
 .. code-block:: bash
 
-    $ rt_compare.py --wanted vs1.db vs2.db vs3.db --unwanted vs4.db
+    $ rt_compare --wanted vs1.db vs2.db vs3.db --unwanted vs4.db
 
 Select ligands found in "filter1" bookmarks of vs1 but not vs2
 ==============================================================
 
 .. code-block:: bash
 
-    $ rt_compare.py --wanted vs1.db --unwanted vs2.db --bookmark_name filter1
+    $ rt_compare --wanted vs1.db --unwanted vs2.db --bookmark_name filter1
 
 Save bookmark of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as "selective_bookmark" in vs1.db
 ==========================================================================================================================
 
 .. code-block:: bash
 
-    $ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --save_bookmark selective_bookmark
+    $ rt_compare --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --save_bookmark selective_bookmark
 
 Export bookmark set of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as CSV
 =====================================================================================================
 .. code-block:: bash
 
-    $ rt_compare.py --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --export_csv
+    $ rt_compare --wanted vs1.db vs2.db --unwanted vs3.db vs4.db --export_csv
 
-Access help message for rt_compare.py
-*************************************
+Access help message for rt_compare
+**********************************
 
 .. code-block:: bash
 
-    $ rt_compare.py --help
+    $ rt_compare --help
 
 
 Supported arguments for the comparison script

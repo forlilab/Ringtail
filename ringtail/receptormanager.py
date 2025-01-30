@@ -9,7 +9,6 @@ from .logutils import LOGGER as logger
 
 
 class ReceptorManager:
-    # TODO add b2z method too?
     """Class with methods dealing with formatting of receptor information"""
 
     @staticmethod

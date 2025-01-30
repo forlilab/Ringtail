@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail multiprocessing workers
+# Ringtail multiprocess workers
 #
 
 import time
@@ -17,20 +17,20 @@ from .exceptions import (
     ResultsProcessingError,
 )
 from .interactions import InteractionFinder
-from .storagemanager import *
-import multiprocessing
+
+import multiprocess
 
 
-class DockingFileReader(
-    multiprocessing.Process,
-):
+class DockingFileReader(multiprocess.Process):
     """This class is the individual worker for processing docking results.
     One instance of this class is instantiated for each available processor.
 
     Attributes:
-        queueIn (multiprocessing.Manager.Queue): current queue for the processor/file reader
-        queueOut (multiprocessing.Manager.Queue): queue for the processor/file reader after adding or removing an item
-        pipe_conn (multiprocessing.Pipe): pipe connection to the reader
+        queueIn (multiprocess.Queue): current queue for the processor/file reader
+        queueOut (multiprocess.Queue): queue for the processor/file reader after adding or removing an item
+        pipe_conn (multiprocess.Pipe): pipe connection to the reader
+        storageman (StorageManager): storageman object
+        storageman_class (StorageManager): storagemanager child class/database type
         docking_mode (str): describes what docking engine was used to produce the results
         storageman_class (StorageManager): storagemanager child class/database type
         max_poses (int): max number of poses to store for each ligand
@@ -56,8 +56,7 @@ class DockingFileReader(
         target,
         add_interactions,
         interaction_cutoffs,
-        string_processing=False,
-        receptor_blob=None,
+        receptor_file,
     ):
         # initialize parent Process class
         multiprocessing.Process.__init__(self)
@@ -78,8 +77,16 @@ class DockingFileReader(
         # receptor information, needed if adding interactions
         self.receptor_blob = receptor_blob
         self.target = target
+        # initialize the parent class to inherit all multiprocess methods
+        multiprocess.Process.__init__(self)
+        # each worker knows the queue in (where data to process comes from)
+        self.queueIn = queueIn
+        # ...and a queue out (where to send the results)
+        self.queueOut = queueOut
+        # ...and a pipe to the parent
+        self.pipe = pipe_conn
         self.interaction_finder = None
-        # self.exception = None
+        self.exception = None
 
     def _find_best_cluster_poses(self, ligand_dict):
         """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run"
@@ -101,7 +108,7 @@ class DockingFileReader(
 
     def run(self):
         """Method overload from parent class .This is where the task of this class is performed.
-        Each multiprocessing.Process class must have a "run" method which is called by the
+        Each multiprocess.Process class must have a "run" method which is called by the
         initialization (see below) with start()
 
         Raises:
@@ -131,9 +138,7 @@ class DockingFileReader(
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
                 elif self.docking_mode == "vina":
-                    parsed_file_dict = parse_vina_result(
-                        next_task, self.string_processing
-                    )
+                    parsed_file_dict = parse_vina_result(next_task)
 
                 # Example code for calling user-implemented docking_mode
                 # elif self.docking_mode == "my_docking_mode":
@@ -277,7 +282,7 @@ class DockingFileReader(
         return tolerated_runs
 
 
-class Writer(multiprocessing.Process):
+class Writer(multiprocess.Process):
     """This class is a listener that retrieves data from the queue and writes it
     into datbase
 
@@ -302,19 +307,9 @@ class Writer(multiprocessing.Process):
     """
 
     def __init__(
-        self,
-        queue,
-        num_readers,
-        pipe_conn,
-        chunksize,
-        docking_mode,
-        duplicate_handling,
-        db_file,
-        storageman_class,
+        self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
     ):
-        # initialize parent Process class
-        multiprocessing.Process.__init__(self)
-        # attributes related to multiprocessing
+        multiprocess.Process.__init__(self)
         self.queue = queue
         self.num_readers = num_readers
         self.pipe = pipe_conn
@@ -338,7 +333,7 @@ class Writer(multiprocessing.Process):
 
     def run(self):
         """Method overload from parent class. This is where the task of this class
-        is performed. Each multiprocessing.Process class must have a "run" method which
+        is performed. Each multiprocess.Process class must have a "run" method which
         is called by the initialization (see below) with start()
 
         Raises:
@@ -362,47 +357,43 @@ class Writer(multiprocessing.Process):
                     else:
                         # if not a poison pill, process the task item
 
-                        # after every n (chunksize) files, write to storage
-                        if self.counter >= self.chunksize:
-                            self.write_to_storage()
-                            # print info about files and time remaining
-                            sys.stdout.write("\r")
-                            sys.stdout.write(
-                                "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
-                                    self.num_files_written,
-                                    self.num_files_written * 60 / self.total_runtime,
-                                    self.total_runtime,
-                                )
+                    # after every n (chunksize) files, write to storage
+                    if self.counter >= self.chunksize:
+                        self.write_to_storage()
+                        # print info about files and time remaining
+                        sys.stdout.write("\r")
+                        sys.stdout.write(
+                            "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
+                                self.num_files_written + 1,
+                                self.num_files_written * 60 / self.total_runtime,
+                                self.total_runtime,
                             )
-                            sys.stdout.flush()
+                        )
+                        sys.stdout.flush()
 
-                        # process next file
-                        self.process_file(next_task)
-                    if self.num_readers == 0:
-                        # received as many poison pills as workers
-                        logger.info("Performing final database write")
-                        # perform final storage write
-                        self.write_to_storage(final=True)
-                        # no workers left, no job to do
-                        logger.info("File processing completed")
-                        self.close()
-                        break
-            except Exception:
-                tb = traceback.format_exc()
-                self.pipe.send(
-                    (
-                        WriteToStorageError("Error occured while writing database"),
-                        tb,
-                        "Database",
-                    )
+                    # process next file
+                    self.process_data(next_task)
+                if self.num_readers == 0:
+                    # received as many poison pills as workers
+                    logger.info("Performing final database write")
+                    # perform final storage write
+                    self.write_to_storage()
+                    # no workers left, no job to do
+                    logger.info("File processing completed")
+                    self.close()
+                    break
+        except Exception:
+            tb = traceback.format_exc()
+            self.pipe.send(
+                (
+                    WriteToStorageError("Error occured while writing database"),
+                    tb,
+                    "Database",
                 )
+            )
 
-    def write_to_storage(self, final=False):
-        """Inserting data to the database through the designated storagemanager.
-
-        Args:
-            final (bool): if last data entry, finalize database
-        """
+    def write_to_storage(self):
+        """Inserting data to the database through the designated storagemanager."""
         # insert result, ligand, and receptor data
 
         self.storageman.insert_data(
@@ -427,19 +418,14 @@ class Writer(multiprocessing.Process):
         self.receptor_array = []
         self.counter = 0
 
-        if final:
-            # if final write, tell storageman to index
-            self.storageman.create_indices()
-            self.storageman.set_ringtail_db_schema_version()
-
-    def process_file(self, file_packet):
-        """Breaks up the data in the file_packet to distribute between
+    def process_data(self, data_packet):
+        """Breaks up the data in the data_packet to distribute between
         the different arrays to be inserted in the database.
 
         Args:
-            file_packet (any): File packet to be processed
+            data_packet (any): File packet to be processed
         """
-        results_rows, ligand_row, interaction_rows, receptor_row = file_packet
+        results_rows, ligand_row, interaction_rows, receptor_row = data_packet
         for pose in results_rows:
             self.results_array.append(pose)
         for pose in interaction_rows:

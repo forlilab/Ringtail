@@ -1,0 +1,2246 @@
+AutoDock-GPU version: v1.5.3-104-g2e658c318d60806bc6bb361f11f8535d5fb1fe1f-dirty
+
+**********************************************************
+**    AutoDock-GPU AUTODOCKTOOLS-COMPATIBLE DLG FILE    **
+**********************************************************
+
+
+    DOCKING PARAMETERS
+    ________________________
+
+
+Ligand file:                               docking_ligands/Z3337573231.pdbqt
+Flexible residue file:                     4j8m_m_flex.pdbqt
+Grid fld file:                             4j8m_m_rigid.maps.fld
+
+Random seed:                               1723484416, 33974
+Number of runs:                            20
+Number of energy evaluations:              1132076
+Number of generations:                     42000
+Size of population:                        150
+Rate of crossover:                         80.000000%
+Tournament selection probability limit:    60.000000%
+Rate of mutation:                          2.000000%
+Maximal allowed delta movement:            +/- 6.000000A
+Maximal allowed delta angle:               +/- 90.000000
+
+Rate of local search:                      100.000000%
+Maximal number of local search iterations: 300
+Rho lower bound:                           0.010000
+Spread of local search delta movement:     2.000000A
+Spread of local search delta angle:        74.999999
+Limit of consecutive successes/failures:   4
+
+Handle symmetry during clustering:         YES
+RMSD tolerance:                            2.000000A
+
+Program call in command line was:          ../../AutoDock-GPU/bin/autodock_gpu_128wi -M 4j8m_m_rigid.maps.fld -F 4j8m_m_flex.pdbqt -B ligands.lst -I 4j8m_m.reactive_config -C 1 
+
+
+    GRID PARAMETERS
+    ________________________
+
+
+Receptor name:                             4j8m_m_rigid
+Number of grid points (x, y, z):           81, 81, 81
+Grid center (x, y, z):                     120.260000, 108.194000, 165.142000A
+Grid size (x, y, z):                       30.000000, 30.000000, 30.000000A
+Grid spacing:                              0.375000A
+
+
+    LIGAND+FLEXRES PARAMETERS
+    ________________________
+
+
+Ligand name:                               docking_ligands/Z3337573231
+Flexres name:                              4j8m_m_flex
+Number of ligand atoms:                    22
+Number of flexres atoms:                   10
+Number of ligand rotatable bonds:          3
+Number of flexres rotatable bonds:         3
+Number of atoms:                           32
+Number of rotatable bonds:                 6
+Number of atom types:                      15
+
+
+    DUMMY DATA (only for ADT-compatibility)
+    ________________________
+
+
+DPF> outlev 1
+DPF> ga_run 20
+DPF> fld 4j8m_m_rigid.maps.fld
+DPF> move docking_ligands/Z3337573231.pdbqt
+DPF> flexres 4j8m_m_flex.pdbqt
+
+
+    COUNTER STATES
+    ________________________
+
+
+Number of energy evaluations performed:    839809
+Number of generations used:                75
+
+
+    INPUT LIGAND PDBQT FILE:
+    ________________________
+
+
+ANALYSIS: COUNT 0
+INPUT-LIGAND-PDBQT: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+INPUT-LIGAND-PDBQT: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+INPUT-LIGAND-PDBQT: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+INPUT-LIGAND-PDBQT: REMARK H PARENT
+INPUT-LIGAND-PDBQT: REMARK Flexibility Score: inf
+INPUT-LIGAND-PDBQT: ROOT
+INPUT-LIGAND-PDBQT: ATOM      1  N   UNL     1       3.025  -1.232   0.184  1.00  0.00    -0.337 N 
+INPUT-LIGAND-PDBQT: ATOM      2  C   UNL     1       2.470  -2.547  -0.063  1.00  0.00     0.121 C 
+INPUT-LIGAND-PDBQT: ATOM      3  C   UNL     1       3.250  -3.476   0.854  1.00  0.00     0.046 C3
+INPUT-LIGAND-PDBQT: ATOM      4  C   UNL     1       4.594  -2.780   1.040  1.00  0.00     0.162 C2
+INPUT-LIGAND-PDBQT: ATOM      5  C   UNL     1       4.287  -1.301   0.907  1.00  0.00     0.142 C3
+INPUT-LIGAND-PDBQT: ENDROOT
+INPUT-LIGAND-PDBQT: BRANCH   1   6
+INPUT-LIGAND-PDBQT: ATOM      6  C   UNL     1       2.395  -0.104  -0.312  1.00  0.00     0.256 C 
+INPUT-LIGAND-PDBQT: ATOM      7  O   UNL     1       1.246  -0.111  -0.747  1.00  0.00    -0.269 OA
+INPUT-LIGAND-PDBQT: BRANCH   6   8
+INPUT-LIGAND-PDBQT: ATOM      8  C   UNL     1       3.112   1.186  -0.271  1.00  0.00     0.066 A 
+INPUT-LIGAND-PDBQT: ATOM      9  C   UNL     1       2.589   2.185   0.558  1.00  0.00     0.017 A 
+INPUT-LIGAND-PDBQT: ATOM     10  C   UNL     1       4.212   1.397  -1.110  1.00  0.00     0.084 A 
+INPUT-LIGAND-PDBQT: ATOM     11  C   UNL     1       3.197   3.431   0.586  1.00  0.00     0.017 A 
+INPUT-LIGAND-PDBQT: ATOM     12  N   UNL     1       4.667   0.404  -1.909  1.00  0.00    -0.255 NA
+INPUT-LIGAND-PDBQT: ATOM     13  C   UNL     1       4.830   2.669  -1.085  1.00  0.00     0.015 A 
+INPUT-LIGAND-PDBQT: ATOM     14  C   UNL     1       4.308   3.674  -0.225  1.00  0.00     0.027 A 
+INPUT-LIGAND-PDBQT: ATOM     15  C   UNL     1       5.730   0.622  -2.706  1.00  0.00     0.112 A 
+INPUT-LIGAND-PDBQT: ATOM     16  C   UNL     1       5.944   2.850  -1.940  1.00  0.00     0.013 A 
+INPUT-LIGAND-PDBQT: ATOM     17  Br  UNL     1       5.067   5.419  -0.116  1.00  0.00    -0.050 Br
+INPUT-LIGAND-PDBQT: ATOM     18  C   UNL     1       6.398   1.821  -2.757  1.00  0.00     0.021 A 
+INPUT-LIGAND-PDBQT: ENDBRANCH   6   8
+INPUT-LIGAND-PDBQT: ENDBRANCH   1   6
+INPUT-LIGAND-PDBQT: BRANCH   4  19
+INPUT-LIGAND-PDBQT: ATOM     19  S   UNL     1       5.818  -3.285  -0.147  1.00  0.00     0.307 S1
+INPUT-LIGAND-PDBQT: ATOM     20  O   UNL     1       5.280  -3.249  -1.490  1.00  0.00    -0.194 O5
+INPUT-LIGAND-PDBQT: ATOM     21  O   UNL     1       7.074  -2.648   0.194  1.00  0.00    -0.194 O5
+INPUT-LIGAND-PDBQT: ATOM     22  F   UNL     1       6.057  -4.828   0.150  1.00  0.00    -0.104 F2
+INPUT-LIGAND-PDBQT: ENDBRANCH   4  19
+INPUT-LIGAND-PDBQT: TORSDOF 3
+
+
+    INPUT FLEXRES PDBQT FILE:
+    ________________________
+
+
+INPUT-FLEXRES-PDBQT: BEGIN_RES TYR A 212
+INPUT-FLEXRES-PDBQT: REMARK Flexibility Score: inf
+INPUT-FLEXRES-PDBQT: ROOT
+INPUT-FLEXRES-PDBQT: ATOM      1  CA  TYR A 212     120.168 111.582 163.874  1.00  0.00     0.175 C
+INPUT-FLEXRES-PDBQT: ENDROOT
+INPUT-FLEXRES-PDBQT: BRANCH   1   2
+INPUT-FLEXRES-PDBQT: ATOM      2  CB  TYR A 212     121.686 111.680 163.998  1.00  0.00     0.070 C
+INPUT-FLEXRES-PDBQT: BRANCH   2   3
+INPUT-FLEXRES-PDBQT: ATOM      3  CG  TYR A 212     122.340 110.343 164.288  1.00  0.00    -0.045 A
+INPUT-FLEXRES-PDBQT: ATOM      4 CD1  TYR A 212     122.208 109.279 163.397  1.00  0.00     0.007 A
+INPUT-FLEXRES-PDBQT: ATOM      5 CD2  TYR A 212     123.091 110.141 165.439  1.00  0.00     0.007 A
+INPUT-FLEXRES-PDBQT: ATOM      6 CE1  TYR A 212     122.802 108.045 163.654  1.00  0.00     0.046 1A3
+INPUT-FLEXRES-PDBQT: ATOM      7 CE2  TYR A 212     123.677 108.902 165.710  1.00  0.00     0.046 1A3
+INPUT-FLEXRES-PDBQT: ATOM      8  CZ  TYR A 212     123.517 107.862 164.816  1.00  0.00     0.115 1A2
+INPUT-FLEXRES-PDBQT: BRANCH   8   9
+INPUT-FLEXRES-PDBQT: ATOM      9  OH  TYR A 212     124.109 106.642 165.047  1.00  0.00    -0.507 1O4
+INPUT-FLEXRES-PDBQT: ATOM     10  HH  TYR A 212     123.814 106.313 165.738  1.00  0.00     0.294 1H5
+INPUT-FLEXRES-PDBQT: ENDBRANCH   8   9
+INPUT-FLEXRES-PDBQT: ENDBRANCH   2   3
+INPUT-FLEXRES-PDBQT: ENDBRANCH   1   2
+INPUT-FLEXRES-PDBQT: END_RES TYR A 212
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   1 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 24
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   21 ,    1 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    6 ,    8 ,    9 ,   10 ,   11 ,   11 ,   15 ,   15 ,   17 ,   17 ,    1 ,    5 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",   "N",   "C",   "C"}
+ANALYSIS: RECID   {  915 , 2911 , 2944 , 1422 , 1422 ,  912 ,  936 ,  161 ,  160 ,  159 ,  161 , 1421 , 1421 ,  371 , 1421 ,  232 ,  371 , 1422 , 1421 ,  896 ,  389 ,    6 ,    6 ,    4 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW", "CD2", "CD2",   "C",  "CA", "CD2", "CD1",  "CG", "CD2", "CD1", "CD1",  "CB", "CD1", "CG1",  "CB", "CD2", "CD1", "CD1",  "CE", "CE1", "CE1", "CD1"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "HOH", "LEU", "LEU", "ALA", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "VAL", "ALA", "LEU", "LEU", "LEU", "LYS", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  682 ,  693 ,  263 ,  263 ,  213 ,  216 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  160 ,  263 ,  147 ,  160 ,  263 ,  263 ,  210 ,  162 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        1
+DOCKED: USER    Run = 1
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.36 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.25 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.43 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.08 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.52 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.73 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.67 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.67 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 14.294088 13.263777 10.057777
+DOCKED: USER    NEWDPF axisangle0 -0.38401136 0.85119965 -0.35776309 81.499153
+DOCKED: USER    NEWDPF dihe0 330.243164 43.039017 314.587799 353.281311 0.749567 359.037292
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.730 106.424 162.114 -0.15 -0.06    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.243 105.739 163.294 -0.10 +0.01    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.266 104.645 163.558 -0.39 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.864 104.350 162.187 -0.22 +0.05    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.764 105.660 161.430 -0.13 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.167 107.626 161.722 -0.30 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.118 108.615 162.449 -0.91 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.646 107.751 160.347 -0.28 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     118.804 108.988 159.711 -0.35 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.947 106.686 159.769 -0.20 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.281 109.169 158.439 -0.37 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.804 105.516 160.434 -0.06 -0.05    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.409 106.871 158.474 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.591 108.122 157.823 -0.28 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     117.133 104.499 159.861 -0.14 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.713 105.773 157.913 -0.21 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     116.907 108.474 156.078 -0.72 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.572 104.579 158.610 -0.22 -0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     120.022 103.047 161.318 -0.21 +0.13    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     118.884 102.573 162.075 -0.71 -0.13    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.913 103.426 159.923 -0.19 -0.07    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     121.045 101.830 161.324 -0.06 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.338 110.347 164.311 -0.17 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.218 109.273 163.430 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.075 110.159 165.474 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.810 108.043 163.708 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.659 108.924 165.766 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.511 107.874 164.881 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.101 106.657 165.133 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.866 106.377 165.867 -0.20 +0.12    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   2 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 38
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   20 ,   20 ,    1 ,    1 ,    1 ,    3 ,    5 ,    5 ,    6 ,    6 ,    6 ,    6 ,    8 ,    8 ,    8 ,    9 ,    9 ,    9 ,   10 ,   11 ,   13 ,   14 ,   15 ,   17 ,   17 ,   18 ,   19 ,   19 ,   22 ,   22 ,   22 ,   22 ,   16 ,   16 ,   18 ,   18 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "O",   "N",   "N",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",   "C",   "S",   "S",   "F",   "F",   "F",   "F",   "C",   "C",   "C",   "C"}
+ANALYSIS: RECID   {  165 , 2683 , 3067 , 1506 ,  231 ,  232 ,  233 , 1509 ,  233 ,  232 ,  231 ,  232 ,  160 ,  158 ,  160 ,  159 ,  158 ,  159 ,  160 ,  158 ,  160 ,  161 ,  160 , 1422 ,  371 ,  936 , 1422 ,  371 ,  724 , 1502 ,  896 ,  895 ,  724 ,  894 ,    5 ,    7 ,    1 ,    5 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW",   "N",  "CB", "CG1", "CG2",  "CG", "CG2", "CG1",  "CB", "CG1", "CD1",  "CB", "CD1",  "CG",  "CB",  "CG", "CD1",  "CB", "CD1", "CD2", "CD1", "CD2",  "CB",  "CA", "CD2",  "CB", "CD2",  "CB", "CD1",  "CG", "CD2",  "CB", "CD2", "CE2",  "CA", "CD2"}
+ANALYSIS: RESIDUE { "GLY", "HOH", "HOH", "ASP", "VAL", "VAL", "VAL", "ASP", "VAL", "VAL", "VAL", "VAL", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "GLY", "LEU", "ALA", "LEU", "ALA", "LEU", "LEU", "LEU", "LEU", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  140 ,  606 ,  734 ,  274 ,  147 ,  147 ,  147 ,  274 ,  147 ,  147 ,  147 ,  147 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  263 ,  160 ,  216 ,  263 ,  160 ,  194 ,  273 ,  210 ,  210 ,  194 ,  210 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        2
+DOCKED: USER    Run = 2
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.22 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.12 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.29 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.13 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.42 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.69 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.57 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.57 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.768647 14.595464 8.187086
+DOCKED: USER    NEWDPF axisangle0 -0.60144498 -0.76776960 -0.22089315 169.217392
+DOCKED: USER    NEWDPF dihe0 235.581299 82.835159 252.628220 171.766693 183.008682 359.867920
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     118.274 106.702 156.934 -0.09 -0.05    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     117.134 105.861 156.633 -0.22 -0.03    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     116.148 106.781 155.931 -0.03 -0.03    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     116.479 108.169 156.468 -0.30 -0.00    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     117.960 108.117 156.792 -0.25 +0.03    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.461 106.139 157.369 -0.21 +0.08    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     120.406 105.897 156.622 -0.08 -0.12    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     119.629 105.860 158.810 -0.20 +0.02    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     119.887 104.536 159.182 -0.25 +0.01    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     119.440 106.886 159.743 -0.19 +0.02    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     119.997 104.218 160.527 -0.24 +0.01    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     119.172 108.147 159.332 -0.17 -0.05    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     119.548 106.561 161.115 -0.29 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     119.831 105.219 161.487 -0.25 +0.01    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     118.998 109.124 160.243 -0.27 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     119.357 107.621 162.034 -0.42 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     119.997 104.677 163.307 -0.68 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     119.080 108.911 161.597 -0.46 +0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     115.529 108.612 157.905 -0.38 -0.00    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     114.112 108.586 157.614 -0.91 +0.01    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     116.091 107.927 159.052 -0.27 -0.00    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     115.862 110.147 158.152 -0.13 -0.03    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.340 110.344 164.291 -0.18 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     123.032 110.137 165.483 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.263 109.289 163.390 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.639 108.915 165.763 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.882 108.065 163.657 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.574 107.895 164.840 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.166 106.690 165.138 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.910 106.425 165.871 -0.19 +0.13    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   3 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 25
+ANALYSIS: TYPE    {   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {   20 ,   21 ,    3 ,    6 ,    8 ,    8 ,    8 ,    8 ,    9 ,    9 ,   10 ,   11 ,   13 ,   14 ,   17 ,   18 ,   19 ,   22 ,   22 ,   22 ,   22 ,   16 ,   16 ,   17 ,   18 }
+ANALYSIS: LIGNAME {   "O",   "O",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",   "C",   "S",   "F",   "F",   "F",   "F",   "C",   "C",  "Br",   "C"}
+ANALYSIS: RECID   { 2728 , 3049 , 1591 ,  158 ,  159 ,  161 ,  158 ,  160 ,  161 ,  158 ,  160 ,  161 ,  160 ,  161 ,  936 , 1421 ,  945 , 1384 , 1386 ,  945 , 1389 ,    5 ,    7 ,    7 ,    5 }
+ANALYSIS: RECNAME {  "OW",  "OW",  "CB",  "CB",  "CG", "CD2",  "CB", "CD1", "CD2",  "CB", "CD1", "CD2", "CD1", "CD2",  "CA", "CD1", "CG2",   "C",  "CA", "CG2",  "CB", "CD2", "CE2", "CE2", "CD2"}
+ANALYSIS: RESIDUE { "HOH", "HOH", "SER", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "GLY", "LEU", "THR", "GLU", "GLU", "THR", "GLU", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  621 ,  728 ,  283 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  216 ,  263 ,  217 ,  260 ,  260 ,  217 ,  260 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        3
+DOCKED: USER    Run = 3
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.23 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.13 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.24 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.14 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.37 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.75 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.38 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.38 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 12.746480 11.722125 9.197977
+DOCKED: USER    NEWDPF axisangle0 -0.09986045 -0.97184846 -0.21339744 142.255280
+DOCKED: USER    NEWDPF dihe0 185.135315 67.479973 351.159058 173.028305 183.055344 359.944702
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     118.283 104.030 157.656 -0.05 -0.06    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     118.449 102.715 157.072 -0.19 +0.04    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     117.053 102.308 156.627 -0.28 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     116.123 103.074 157.562 -0.20 -0.03    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     116.884 104.335 157.921 -0.16 -0.02    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.390 104.804 157.959 -0.21 +0.07    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.986 105.482 157.125 -0.27 -0.10    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     119.851 104.866 159.360 -0.22 +0.02    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     120.451 103.718 159.890 -0.25 +0.01    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     119.599 106.011 160.125 -0.20 +0.02    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     120.849 103.712 161.218 -0.23 +0.01    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     118.997 107.088 159.571 -0.14 -0.05    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     120.001 106.003 161.481 -0.28 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     120.630 104.842 162.009 -0.26 +0.01    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     118.767 108.184 160.319 -0.28 +0.02    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     119.738 107.177 162.227 -0.39 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     121.210 104.730 163.821 -0.74 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     119.116 108.276 161.644 -0.44 +0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     115.684 102.158 159.022 -0.25 +0.04    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     116.820 101.418 159.528 -0.72 -0.10    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     114.884 103.015 159.874 -0.33 +0.00    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     114.672 101.044 158.512 -0.17 -0.01    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.340 110.343 164.289 -0.18 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     123.032 110.135 165.482 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.264 109.290 163.386 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.639 108.912 165.759 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.883 108.066 163.652 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.574 107.894 164.835 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.167 106.688 165.131 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.898 106.414 165.856 -0.19 +0.13    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   4 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 29
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   20 ,    1 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    5 ,    8 ,    8 ,    9 ,    9 ,   10 ,   11 ,   11 ,   15 ,   15 ,   15 ,   16 ,   17 ,   17 ,   17 ,    1 ,    2 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",   "N",   "C",   "C"}
+ANALYSIS: RECID   {  915 , 2911 ,  942 ,  160 ,  912 , 1422 ,  936 ,  161 ,  158 ,  161 ,  159 ,  160 , 1421 ,  160 ,  160 ,  371 , 1421 ,  371 ,  232 , 1420 , 1421 , 1422 , 1509 ,  232 ,  896 ,  389 ,    6 ,    6 ,    4 }
+ANALYSIS: RECNAME {   "N",  "OW",   "N", "CD1",   "C", "CD2",  "CA", "CD2",  "CB", "CD2",  "CG", "CD1", "CD1", "CD1", "CD1",  "CB", "CD1",  "CB", "CG1",  "CG", "CD1", "CD2",  "CG", "CG1", "CD1",  "CE", "CE1", "CE1", "CD1"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "THR", "LEU", "ALA", "LEU", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "ALA", "VAL", "LEU", "LEU", "LEU", "ASP", "VAL", "LEU", "LYS", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  682 ,  217 ,  139 ,  213 ,  263 ,  216 ,  139 ,  139 ,  139 ,  139 ,  139 ,  263 ,  139 ,  139 ,  160 ,  263 ,  160 ,  147 ,  263 ,  263 ,  263 ,  274 ,  147 ,  210 ,  162 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        4
+DOCKED: USER    Run = 4
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.55 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.45 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.63 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.10 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.73 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.72 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.61 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.61 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.746878 12.880224 10.123408
+DOCKED: USER    NEWDPF axisangle0 0.38862683 -0.87771216 0.28034007 254.430161
+DOCKED: USER    NEWDPF dihe0 341.607483 15.742665 330.841797 351.954895 2.152082 359.032623
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.955 106.165 161.936 -0.13 -0.07    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.969 105.608 163.273 -0.27 +0.02    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.962 104.458 163.204 -0.35 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.929 104.019 161.744 -0.21 +0.06    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.581 105.274 160.968 -0.15 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.333 107.376 161.691 -0.28 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.244 108.270 162.529 -0.91 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.792 107.637 160.342 -0.28 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     119.097 108.871 159.755 -0.32 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.937 106.705 159.743 -0.20 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.565 109.182 158.513 -0.36 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.657 105.534 160.361 -0.06 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.391 107.023 158.478 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.721 108.269 157.877 -0.29 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     116.837 104.645 159.769 -0.15 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.535 106.057 157.895 -0.22 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     117.040 108.793 156.176 -0.73 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.255 104.860 158.544 -0.22 -0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.749 102.727 161.425 -0.21 +0.15    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     118.761 102.658 162.481 -0.85 -0.15    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.375 102.786 160.027 -0.14 -0.08    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     120.579 101.378 161.562 -0.06 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.338 110.347 164.311 -0.17 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.243 109.282 163.417 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.050 110.150 165.487 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.835 108.052 163.695 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.634 108.915 165.779 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.511 107.874 164.881 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.102 106.657 165.133 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.866 106.377 165.866 -0.20 +0.12    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   5 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 27
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {   20 ,   21 ,   21 ,   21 ,    3 ,    3 ,    6 ,    6 ,    8 ,    8 ,    9 ,    9 ,   10 ,   10 ,   11 ,   13 ,   14 ,   15 ,   16 ,   17 ,   18 ,   19 ,   22 ,   16 ,   16 ,   17 ,   18 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "O",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",   "C",   "S",   "F",   "C",   "C",  "Br",   "C"}
+ANALYSIS: RECID   { 2728 , 1592 , 3049 , 2728 , 1591 , 1578 ,  158 ,  153 ,  158 ,  160 ,  158 ,  161 ,  160 ,  158 ,  161 ,  160 ,  161 ,  160 ,  160 ,  936 , 1421 , 1591 , 1591 ,    5 ,    7 ,    7 ,    5 }
+ANALYSIS: RECNAME {  "OW",  "OG",  "OW",  "OW",  "CB",  "CB",  "CB",   "C",  "CB", "CD1",  "CB", "CD2", "CD1",  "CB", "CD2", "CD1", "CD2", "CD1", "CD1",  "CA", "CD1",  "CB",  "CB", "CD2", "CE2", "CE2", "CD2"}
+ANALYSIS: RESIDUE { "HOH", "SER", "HOH", "HOH", "SER", "ALA", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "GLY", "LEU", "SER", "SER", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  621 ,  283 ,  728 ,  621 ,  283 ,  281 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  216 ,  263 ,  283 ,  283 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        5
+DOCKED: USER    Run = 5
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.21 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.10 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.30 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.15 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.45 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.66 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.38 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.38 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.210922 10.765542 9.072557
+DOCKED: USER    NEWDPF axisangle0 -0.02394118 0.90209824 0.43086609 238.868973
+DOCKED: USER    NEWDPF dihe0 183.344040 32.312782 84.400955 173.648026 183.238708 359.901489
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     118.218 103.976 157.308 -0.05 -0.05    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     118.257 103.114 156.144 -0.28 +0.03    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     116.820 102.657 155.952 -0.35 +0.00    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     116.214 102.722 157.349 -0.20 -0.02    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     116.974 103.831 158.051 -0.16 -0.01    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.313 104.756 157.637 -0.22 +0.07    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.926 105.435 156.817 -0.32 -0.10    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     119.740 104.822 159.048 -0.22 +0.02    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     120.298 103.665 159.605 -0.26 +0.01    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     119.498 105.981 159.794 -0.21 +0.02    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     120.662 103.664 160.943 -0.23 +0.01    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     118.937 107.067 159.214 -0.14 -0.05    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     119.865 105.979 161.160 -0.27 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     120.451 104.808 161.716 -0.24 +0.01    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     118.715 108.176 159.945 -0.27 +0.02    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     119.613 107.167 161.887 -0.38 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     120.982 104.702 163.544 -0.74 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     119.033 108.274 161.277 -0.41 +0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     116.348 101.193 158.247 -0.23 +0.09    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     116.835 101.423 159.589 -0.71 -0.11    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     115.159 100.406 157.986 -0.32 -0.05    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     117.520 100.400 157.523 -0.09 -0.04    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.340 110.343 164.290 -0.18 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     123.028 110.135 165.485 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.267 109.291 163.386 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.635 108.912 165.763 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.886 108.067 163.653 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.574 107.895 164.838 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.166 106.689 165.135 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.889 106.410 165.855 -0.19 +0.13    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   6 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 44
+ANALYSIS: TYPE    {   "R",   "H",   "H",   "H",   "H",   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {   19 ,   20 ,   20 ,   20 ,   20 ,   21 ,   20 ,   21 ,    1 ,    2 ,    3 ,    4 ,    5 ,    5 ,    6 ,    8 ,    8 ,    9 ,    9 ,    9 ,   11 ,   14 ,   16 ,   17 ,   17 ,   17 ,   17 ,   18 ,   18 ,   18 ,   22 ,   22 ,   22 ,   22 ,   19 ,   19 ,   19 ,   19 ,   22 ,   22 ,   22 ,   22 ,   22 ,   22 }
+ANALYSIS: LIGNAME {   "S",   "O",   "O",   "O",   "O",   "O",   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",  "Br",   "C",   "C",   "C",   "F",   "F",   "F",   "F",   "S",   "S",   "S",   "S",   "F",   "F",   "F",   "F",   "F",   "F"}
+ANALYSIS: RECID   {    9 , 3016 , 2680 , 3037 , 2845 , 2845 ,   10 ,   10 , 1422 ,  161 ,  936 ,  936 ,  936 , 1422 , 1422 , 1421 , 1422 , 1421 , 1420 , 1422 , 1421 , 1421 ,  232 ,  896 ,  894 ,  371 ,  724 ,  232 ,  233 ,  231 ,  921 ,  914 ,  920 ,  912 ,    5 ,    6 ,    7 ,    8 ,    3 ,    4 ,    5 ,    6 ,    7 ,    8 }
+ANALYSIS: RECNAME {  "OH",  "OW",  "OW",  "OW",  "OW",  "OW",  "HH",  "HH", "CD2", "CD2",  "CA",  "CA",  "CA", "CD2", "CD2", "CD1", "CD2", "CD1",  "CG", "CD2", "CD1", "CD1", "CG1", "CD1",  "CB",  "CB", "CD2", "CG1", "CG2",  "CB",   "N",  "CA",  "CA",   "C", "CD2", "CE1", "CE2",  "CZ",  "CG", "CD1", "CD2", "CE1", "CE2",  "CZ"}
+ANALYSIS: RESIDUE { "TYR", "HOH", "HOH", "HOH", "HOH", "HOH", "TYR", "TYR", "LEU", "LEU", "GLY", "GLY", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "VAL", "LEU", "LEU", "ALA", "LEU", "VAL", "VAL", "VAL", "PRO", "ALA", "PRO", "ALA", "TYR", "TYR", "TYR", "TYR", "TYR", "TYR", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  212 ,  717 ,  605 ,  724 ,  660 ,  660 ,  212 ,  212 ,  263 ,  139 ,  216 ,  216 ,  216 ,  263 ,  263 ,  263 ,  263 ,  263 ,  263 ,  263 ,  263 ,  263 ,  147 ,  210 ,  210 ,  160 ,  194 ,  147 ,  147 ,  147 ,  214 ,  213 ,  214 ,  213 ,  212 ,  212 ,  212 ,  212 ,  212 ,  212 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        6
+DOCKED: USER    Run = 6
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -8.22 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -9.12 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -5.48 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.09 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -5.57 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -3.55 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -2.06 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -2.06 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 14.043494 13.042663 12.249066
+DOCKED: USER    NEWDPF axisangle0 0.15814717 -0.51329224 0.84351677 79.556900
+DOCKED: USER    NEWDPF dihe0 66.333992 53.571716 211.690247 167.056442 217.045135 1.390229
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.886 104.405 162.329 -0.10 -0.11    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     121.050 103.585 162.062 -0.23 +0.04    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     121.677 103.344 163.426 -0.27 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     121.250 104.551 164.255 -0.36 +0.03    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     119.916 104.972 163.670 -0.27 +0.03    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     118.944 104.625 161.339 -0.08 +0.08    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     118.215 103.741 160.895 -0.14 -0.09    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.763 105.996 160.824 -0.21 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     118.635 107.024 161.765 -0.28 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     118.635 106.210 159.446 -0.21 +0.02    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.408 108.321 161.327 -0.42 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     118.746 105.178 158.578 -0.11 -0.05    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     118.399 107.531 159.000 -0.28 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     118.292 108.576 159.959 -0.35 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     118.627 105.402 157.256 -0.22 +0.02    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     118.281 107.717 157.601 -0.28 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     117.975 110.389 159.462 -0.67 -0.00    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     118.395 106.646 156.722 -0.24 +0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     122.419 105.890 164.200 -0.15 +0.09    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     123.249 105.899 165.386 -0.62 -0.09    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     122.984 105.948 162.867 -0.12 -0.10    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     121.534 107.205 164.318 +0.12 +0.00    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.343 110.338 164.255 -0.20 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.407 109.813 165.544 -0.27 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.892 109.592 163.219 -0.32 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.010 108.581 165.793 -0.03 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.511 108.364 163.463 -0.02 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.572 107.876 164.753 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.151 106.656 165.014 -0.13 -0.29    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.653 106.203 165.481 -0.04 +0.15    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   7 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 40
+ANALYSIS: TYPE    {   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {   20 ,   21 ,    2 ,    3 ,    3 ,    4 ,    5 ,    5 ,    6 ,    6 ,    6 ,    8 ,    8 ,    8 ,    9 ,    9 ,   10 ,   11 ,   11 ,   13 ,   14 ,   15 ,   15 ,   16 ,   16 ,   16 ,   16 ,   17 ,   17 ,   17 ,   17 ,   18 ,   18 ,   18 ,   19 ,   19 ,   22 ,   22 ,   22 ,   19 }
+ANALYSIS: LIGNAME {   "O",   "O",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",  "Br",   "C",   "C",   "C",   "S",   "S",   "F",   "F",   "F",   "S"}
+ANALYSIS: RECID   {  915 ,  915 , 1421 , 1421 ,  724 ,  371 ,  160 ,  371 ,  232 ,  158 ,  160 ,  233 ,  231 ,  232 ,  232 ,  233 ,  233 ,  233 ,  389 ,  233 ,  233 ,  153 ,  164 , 1585 , 1584 , 1578 , 1582 , 1575 ,  389 , 1585 , 1578 , 1579 , 1585 ,  164 ,  917 , 1421 , 1421 , 1420 , 1422 ,    1 }
+ANALYSIS: RECNAME {   "N",   "N", "CD1", "CD1", "CD2",  "CB", "CD1",  "CB", "CG1",  "CB", "CD1", "CG2",  "CB", "CG1", "CG1", "CG2", "CG2", "CG2",  "CE", "CG2", "CG2",   "C",  "CA",  "CD",  "CG",  "CB",   "N",  "CA",  "CE",  "CD",  "CB",   "C",  "CD",  "CA",  "CB", "CD1", "CD1",  "CG", "CD2",  "CA"}
+ANALYSIS: RESIDUE { "ALA", "ALA", "LEU", "LEU", "LEU", "ALA", "LEU", "ALA", "VAL", "LEU", "LEU", "VAL", "VAL", "VAL", "VAL", "VAL", "VAL", "VAL", "LYS", "VAL", "VAL", "LEU", "GLY", "PRO", "PRO", "ALA", "PRO", "ALA", "LYS", "PRO", "ALA", "PRO", "PRO", "GLY", "ALA", "LEU", "LEU", "LEU", "LEU", "TYR"}
+ANALYSIS: RESID   {  213 ,  213 ,  263 ,  263 ,  194 ,  160 ,  139 ,  160 ,  147 ,  139 ,  139 ,  147 ,  147 ,  147 ,  147 ,  147 ,  147 ,  147 ,  162 ,  147 ,  147 ,  139 ,  140 ,  282 ,  282 ,  281 ,  282 ,  281 ,  162 ,  282 ,  281 ,  282 ,  282 ,  140 ,  213 ,  263 ,  263 ,  263 ,  263 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        7
+DOCKED: USER    Run = 7
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -7.15 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -8.04 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -7.61 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.07 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -7.68 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.36 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -2.81 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -2.81 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 15.012125 13.617322 9.132695
+DOCKED: USER    NEWDPF axisangle0 -0.86586876 -0.36906009 -0.33773649 122.178024
+DOCKED: USER    NEWDPF dihe0 135.830505 219.073990 124.304993 335.985687 16.990021 358.710541
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     118.590 107.550 158.707 -0.09 -0.06    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     117.194 107.634 159.086 -0.26 +0.01    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     117.079 108.941 159.854 -0.32 +0.00    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     118.473 109.162 160.433 -0.37 +0.01    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     119.412 108.498 159.446 -0.26 +0.03    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.009 106.598 157.794 -0.19 +0.06    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.925 105.810 158.016 -0.21 -0.09    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.291 106.481 156.509 -0.22 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     117.557 107.593 156.081 -0.30 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     118.291 105.263 155.821 -0.24 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     116.822 107.511 154.908 -0.31 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     119.001 104.210 156.289 -0.21 -0.07    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.538 105.176 154.627 -0.32 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     116.811 106.316 154.184 -0.32 -0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     118.994 103.046 155.611 -0.25 +0.04    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     117.562 103.933 153.950 -0.39 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     115.767 106.304 152.590 -0.84 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     118.294 102.860 154.444 -0.46 +0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     118.674 108.478 162.062 -0.41 +0.04    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     120.054 108.563 162.490 -0.75 -0.03    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     117.583 108.948 162.892 -0.74 -0.02    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     118.403 106.922 161.884 -0.14 -0.02    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.337 110.349 164.319 -0.16 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.513 109.386 163.326 -0.46 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.781 110.052 165.601 -0.41 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.107 108.158 163.609 -0.36 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.365 108.817 165.895 -0.30 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.513 107.878 164.895 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.111 106.666 165.154 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.888 106.396 165.896 -0.21 +0.12    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   8 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 25
+ANALYSIS: TYPE    {   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,    1 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    6 ,    8 ,    9 ,   10 ,   11 ,   11 ,   15 ,   15 ,   15 ,   16 ,   17 ,   17 ,    1 ,    5 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",   "N",   "C",   "C"}
+ANALYSIS: RECID   {  915 , 2911 , 1422 , 1422 ,  912 ,  936 ,  161 ,  159 ,  160 ,  161 , 1421 , 1421 ,  371 , 1421 ,  232 ,  371 , 1420 , 1422 , 1421 , 1509 ,  389 ,  896 ,    6 ,    6 ,    4 }
+ANALYSIS: RECNAME {   "N",  "OW", "CD2", "CD2",   "C",  "CA", "CD2",  "CG", "CD1", "CD2", "CD1", "CD1",  "CB", "CD1", "CG1",  "CB",  "CG", "CD2", "CD1",  "CG",  "CE", "CD1", "CE1", "CE1", "CD1"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "LEU", "LEU", "ALA", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "VAL", "ALA", "LEU", "LEU", "LEU", "ASP", "LYS", "LEU", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  682 ,  263 ,  263 ,  213 ,  216 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  160 ,  263 ,  147 ,  160 ,  263 ,  263 ,  263 ,  274 ,  162 ,  210 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        8
+DOCKED: USER    Run = 8
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.41 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.31 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.49 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.09 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.59 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.72 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.68 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.68 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 14.098769 13.263907 10.011809
+DOCKED: USER    NEWDPF axisangle0 -0.39333846 0.85865297 -0.32863344 85.872276
+DOCKED: USER    NEWDPF dihe0 334.999268 36.190350 312.847290 356.533112 359.065735 358.976807
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.698 106.454 162.047 -0.15 -0.06    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.319 105.783 163.273 -0.14 +0.01    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.369 104.700 163.464 -0.39 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.850 104.389 162.051 -0.22 +0.05    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.675 105.687 161.287 -0.13 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.094 107.646 161.687 -0.30 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     118.993 108.606 162.448 -0.92 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.592 107.800 160.307 -0.28 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     118.803 109.035 159.682 -0.35 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.859 106.766 159.715 -0.19 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.300 109.244 158.407 -0.37 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.666 105.598 160.370 -0.06 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.342 106.981 158.416 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.577 108.229 157.776 -0.29 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     116.963 104.611 159.783 -0.14 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.610 105.914 157.840 -0.21 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     116.925 108.618 156.028 -0.71 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.418 104.721 158.527 -0.22 -0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.948 103.067 161.276 -0.21 +0.13    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     118.908 102.570 162.151 -0.74 -0.13    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.681 103.442 159.902 -0.17 -0.07    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     120.991 101.873 161.170 -0.06 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.338 110.347 164.312 -0.17 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.189 109.262 163.450 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.103 110.170 165.458 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.781 108.032 163.730 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.687 108.936 165.752 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.510 107.875 164.886 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.100 106.658 165.140 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.847 106.369 165.865 -0.21 +0.12    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   9 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 34
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   20 ,   21 ,    1 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    5 ,    6 ,    6 ,    8 ,    8 ,    9 ,    9 ,   10 ,   11 ,   11 ,   14 ,   15 ,   15 ,   15 ,   16 ,   17 ,   17 ,   17 ,   17 ,    1 ,    2 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",  "Br",   "N",   "C",   "C"}
+ANALYSIS: RECID   {  915 , 2911 , 2944 , 2911 , 1422 ,  936 , 1422 ,  936 ,  161 ,  158 ,  161 ,  159 ,  160 , 1421 , 1422 , 1421 ,  160 ,  160 ,  371 , 1421 ,  371 ,  232 ,  232 , 1420 , 1421 , 1422 , 1509 ,  389 ,  896 ,  233 ,  232 ,    6 ,    6 ,    4 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW",  "OW", "CD2",  "CA", "CD2",  "CA", "CD2",  "CB", "CD2",  "CG", "CD1", "CD1", "CD2", "CD1", "CD1", "CD1",  "CB", "CD1",  "CB", "CG1", "CG1",  "CG", "CD1", "CD2",  "CG",  "CE", "CD1", "CG2", "CG1", "CE1", "CE1", "CD1"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "HOH", "HOH", "LEU", "GLY", "LEU", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "ALA", "VAL", "VAL", "LEU", "LEU", "LEU", "ASP", "LYS", "LEU", "VAL", "VAL", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  682 ,  693 ,  682 ,  263 ,  216 ,  263 ,  216 ,  139 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  263 ,  139 ,  139 ,  160 ,  263 ,  160 ,  147 ,  147 ,  263 ,  263 ,  263 ,  274 ,  162 ,  210 ,  147 ,  147 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        9
+DOCKED: USER    Run = 9
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.40 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.30 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.53 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.09 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.63 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.67 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.59 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.59 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.872156 12.835274 10.060306
+DOCKED: USER    NEWDPF axisangle0 0.40028542 -0.87023603 0.28715997 262.883514
+DOCKED: USER    NEWDPF dihe0 343.428558 20.996593 196.601791 5.142755 355.689484 359.043579
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.842 106.098 161.988 -0.13 -0.07    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.706 105.489 163.295 -0.27 +0.02    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.759 104.392 163.324 -0.37 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.945 104.011 161.859 -0.21 +0.06    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.638 105.278 161.086 -0.16 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.194 107.287 161.701 -0.27 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.029 108.180 162.529 -0.93 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.722 107.524 160.323 -0.27 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     119.052 108.749 159.733 -0.33 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.901 106.578 159.697 -0.19 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.582 109.038 158.460 -0.36 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.594 105.416 160.319 -0.06 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.419 106.874 158.401 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.775 108.112 157.797 -0.29 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     116.809 104.515 159.700 -0.15 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.597 105.896 157.791 -0.20 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     117.179 108.606 156.055 -0.72 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.288 104.708 158.444 -0.21 -0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.889 102.677 161.340 -0.20 +0.14    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     120.668 101.512 160.982 -0.12 -0.10    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     118.768 102.600 162.255 -0.78 -0.14    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     119.255 103.174 159.969 -0.06 -0.04    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.338 110.347 164.311 -0.17 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.132 109.244 163.484 -0.46 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.160 110.188 165.419 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.724 108.013 163.763 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.744 108.953 165.713 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.510 107.874 164.884 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.098 106.656 165.136 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.793 106.335 165.826 -0.20 +0.12    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   10 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 30
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   21 ,   21 ,    3 ,    3 ,    6 ,    6 ,    8 ,    8 ,    8 ,    9 ,    9 ,   10 ,   10 ,   10 ,   11 ,   13 ,   13 ,   14 ,   15 ,   16 ,   17 ,   18 ,   19 ,   22 ,   22 ,   16 ,   16 ,   17 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "O",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",   "C",   "S",   "F",   "F",   "C",   "C",  "Br"}
+ANALYSIS: RECID   {  165 , 2728 , 3049 , 1592 , 1591 , 1578 ,  158 ,  153 ,  160 ,  159 ,  158 ,  158 ,  161 ,  160 ,  158 ,  159 ,  161 ,  160 ,  161 ,  161 ,  160 ,  160 ,  936 ,  160 , 1591 , 1588 , 1591 ,    4 ,    6 ,    6 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW",  "OG",  "CB",  "CB",  "CB",   "C", "CD1",  "CG",  "CB",  "CB", "CD2", "CD1",  "CB",  "CG", "CD2", "CD1", "CD2", "CD2", "CD1", "CD1",  "CA", "CD1",  "CB",  "CA",  "CB", "CD1", "CE1", "CE1"}
+ANALYSIS: RESIDUE { "GLY", "HOH", "HOH", "SER", "SER", "ALA", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "GLY", "LEU", "SER", "SER", "SER", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  140 ,  621 ,  728 ,  283 ,  283 ,  281 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  216 ,  139 ,  283 ,  283 ,  283 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        10
+DOCKED: USER    Run = 10
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.10 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -6.99 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.24 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.15 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.38 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.61 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.40 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.40 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.278043 10.656625 8.969564
+DOCKED: USER    NEWDPF axisangle0 -0.01734928 -0.90385838 -0.42747986 123.516777
+DOCKED: USER    NEWDPF dihe0 188.244522 28.985060 79.695610 351.849945 2.006400 358.973694
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     118.307 103.807 157.203 -0.06 -0.06    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     118.296 102.898 156.075 -0.28 +0.03    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     116.831 102.537 155.882 -0.35 +0.00    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     116.217 102.703 157.268 -0.21 -0.02    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     117.048 103.782 157.934 -0.16 -0.00    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.452 104.519 157.514 -0.23 +0.07    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     120.153 105.069 156.669 -0.29 -0.10    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     119.828 104.675 158.934 -0.22 +0.02    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     120.359 103.555 159.584 -0.25 +0.01    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     119.563 105.880 159.594 -0.20 +0.02    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     120.674 103.639 160.932 -0.23 +0.01    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     119.029 106.928 158.924 -0.15 -0.06    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     119.880 105.965 160.970 -0.26 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     120.440 104.831 161.621 -0.24 +0.01    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     118.786 108.082 159.574 -0.25 +0.02    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     119.607 107.199 161.609 -0.36 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     120.903 104.842 163.470 -0.73 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     119.056 108.265 160.908 -0.38 +0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     116.230 101.206 158.227 -0.24 +0.09    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     116.821 101.433 159.529 -0.72 -0.10    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     114.946 100.553 158.071 -0.34 -0.03    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     117.259 100.254 157.478 -0.09 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.338 110.347 164.313 -0.17 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.240 109.280 163.421 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.053 110.153 165.488 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.832 108.050 163.700 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.636 108.918 165.781 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.511 107.874 164.885 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.102 106.658 165.138 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.868 106.380 165.873 -0.20 +0.12    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   11 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 33
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {   20 ,   20 ,   20 ,    1 ,    2 ,    2 ,    3 ,    3 ,    3 ,    4 ,    4 ,    5 ,    5 ,    6 ,    6 ,    8 ,   10 ,   10 ,   10 ,   11 ,   13 ,   15 ,   16 ,   17 ,   18 ,   18 ,   22 ,   22 ,   22 ,    6 ,    9 ,    9 ,   11 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",   "C",   "C",   "F",   "F",   "F",   "C",   "C",   "C",   "C"}
+ANALYSIS: RECID   { 1506 , 2683 , 3067 ,  371 ,  371 ,  232 ,  371 ,  896 ,  894 ,  724 ,  896 , 1421 ,  724 ,  160 ,  371 ,  160 ,  158 ,  159 ,  160 , 1422 ,  161 ,  158 ,  158 ,  936 ,  158 ,  153 , 1420 , 1421 , 1502 ,    5 ,    5 ,    7 ,    7 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW",  "CB",  "CB", "CG1",  "CB", "CD1",  "CB", "CD2", "CD1", "CD1", "CD2", "CD1",  "CB", "CD1",  "CB",  "CG", "CD1", "CD2", "CD2",  "CB",  "CB",  "CA",  "CB",   "C",  "CG", "CD1",  "CB", "CD2", "CD2", "CE2", "CE2"}
+ANALYSIS: RESIDUE { "ASP", "HOH", "HOH", "ALA", "ALA", "VAL", "ALA", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "GLY", "LEU", "LEU", "LEU", "LEU", "ALA", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  274 ,  606 ,  734 ,  160 ,  160 ,  147 ,  160 ,  210 ,  210 ,  194 ,  210 ,  263 ,  194 ,  139 ,  160 ,  139 ,  139 ,  139 ,  139 ,  263 ,  139 ,  139 ,  139 ,  216 ,  139 ,  139 ,  263 ,  263 ,  273 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        11
+DOCKED: USER    Run = 11
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -5.63 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -6.52 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -5.90 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  +0.09 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -5.80 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.72 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.33 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.33 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 12.850482 14.313695 10.836232
+DOCKED: USER    NEWDPF axisangle0 -0.07544367 0.60604552 0.79184410 204.202744
+DOCKED: USER    NEWDPF dihe0 338.163666 63.209572 201.744598 87.576012 187.167511 1.391119
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     118.767 108.893 159.817 -0.15 -0.05    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.045 109.178 158.424 -0.25 +0.03    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     117.789 109.865 157.911 -0.32 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     116.675 109.330 158.805 -0.24 +0.02    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     117.351 109.028 160.128 -0.29 +0.01    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.782 108.476 160.660 -0.20 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     120.619 109.240 161.135 -0.21 -0.04    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     119.838 107.055 161.056 -0.25 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     120.094 106.773 162.402 -0.36 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     119.728 106.057 160.081 -0.17 +0.02    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     120.211 105.452 162.809 -0.33 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     119.500 106.382 158.787 -0.16 -0.07    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     119.851 104.710 160.494 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     120.090 104.428 161.867 -0.24 +0.01    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     119.391 105.410 157.863 -0.25 +0.03    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     119.729 103.723 159.486 -0.25 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     120.271 102.649 162.527 -0.41 -0.03    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     119.498 104.073 158.161 -0.28 +0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     115.883 107.879 158.150 -0.33 -0.04    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     114.534 108.178 157.718 -0.66 +0.06    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     116.828 107.191 157.293 -0.21 +0.03    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     115.702 106.917 159.402 -0.09 +0.01    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.343 110.338 164.255 -0.20 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.964 110.072 165.474 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.341 109.337 163.292 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.573 108.843 165.721 -0.36 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.963 108.108 163.527 -0.38 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.582 107.878 164.739 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.176 106.666 165.004 -0.13 -0.29    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     124.808 106.769 165.516 +0.00 +0.16    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   12 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 25
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   21 ,    1 ,    2 ,    2 ,    3 ,    3 ,    4 ,    5 ,    5 ,    5 ,    6 ,    8 ,    9 ,   10 ,   11 ,   11 ,   15 ,   15 ,   17 ,   17 ,    1 ,    5 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",   "N",   "C",   "C"}
+ANALYSIS: RECID   {  915 , 2911 , 2944 , 1422 , 1422 ,  912 ,  936 , 1422 ,  161 ,  160 ,  159 ,  161 , 1421 , 1421 ,  371 , 1421 ,  371 ,  232 , 1422 , 1421 ,  233 ,  389 ,    7 ,    7 ,    5 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW", "CD2", "CD2",   "C",  "CA", "CD2", "CD2", "CD1",  "CG", "CD2", "CD1", "CD1",  "CB", "CD1",  "CB", "CG1", "CD2", "CD1", "CG2",  "CE", "CE2", "CE2", "CD2"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "HOH", "LEU", "LEU", "ALA", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "ALA", "VAL", "LEU", "LEU", "VAL", "LYS", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  682 ,  693 ,  263 ,  263 ,  213 ,  216 ,  263 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  160 ,  263 ,  160 ,  147 ,  263 ,  263 ,  147 ,  162 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        12
+DOCKED: USER    Run = 12
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.34 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.23 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.43 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.08 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.51 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.72 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.65 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.65 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 14.251523 13.264874 10.033265
+DOCKED: USER    NEWDPF axisangle0 -0.39675765 0.84487122 -0.35885372 82.087830
+DOCKED: USER    NEWDPF dihe0 330.201477 42.020817 315.957764 172.203384 182.477737 359.874817
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.699 106.464 162.089 -0.15 -0.06    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.223 105.798 163.284 -0.10 +0.01    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.255 104.717 163.564 -0.39 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.847 104.399 162.195 -0.22 +0.05    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.734 105.693 161.413 -0.14 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.126 107.654 161.677 -0.30 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.058 108.651 162.392 -0.90 -0.04    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.616 107.756 160.295 -0.28 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     118.765 108.987 159.646 -0.36 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.936 106.676 159.724 -0.20 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.251 109.147 158.368 -0.37 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.802 105.512 160.401 -0.06 -0.05    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.408 106.839 158.421 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.581 108.085 157.757 -0.28 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     117.149 104.480 159.834 -0.14 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.731 105.726 157.867 -0.20 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     116.909 108.407 156.003 -0.71 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.599 104.538 158.577 -0.21 -0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     120.009 103.074 161.356 -0.21 +0.13    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     118.860 102.629 162.114 -0.71 -0.13    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.918 103.410 159.949 -0.18 -0.07    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     121.026 101.853 161.412 -0.06 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.340 110.344 164.291 -0.18 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     123.041 110.141 165.478 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.254 109.286 163.395 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.649 108.918 165.757 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.873 108.062 163.661 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.574 107.895 164.839 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.166 106.690 165.137 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.912 106.425 165.871 -0.19 +0.13    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   13 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 35
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   20 ,   21 ,   21 ,    1 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    5 ,    6 ,    8 ,    8 ,    9 ,    9 ,   10 ,   11 ,   11 ,   14 ,   15 ,   15 ,   15 ,   16 ,   17 ,   17 ,   17 ,   17 ,    1 ,    2 ,    3 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",  "Br",   "N",   "C",   "C",   "C"}
+ANALYSIS: RECID   {  915 , 2944 , 2911 ,  942 , 2911 ,  160 ,  912 , 1422 ,  161 ,  161 ,  158 ,  161 ,  159 ,  160 , 1421 , 1421 ,  160 ,  371 ,  160 , 1421 ,  371 ,  232 ,  232 , 1420 , 1421 , 1422 , 1509 ,  389 ,  232 ,  233 ,  896 ,    6 ,    6 ,    6 ,    4 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW",   "N",  "OW", "CD1",   "C", "CD2", "CD2", "CD2",  "CB", "CD2",  "CG", "CD1", "CD1", "CD1", "CD1",  "CB", "CD1", "CD1",  "CB", "CG1", "CG1",  "CG", "CD1", "CD2",  "CG",  "CE", "CG1", "CG2", "CD1", "CE1", "CE1", "CE1", "CD1"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "HOH", "THR", "HOH", "LEU", "ALA", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "LEU", "ALA", "VAL", "VAL", "LEU", "LEU", "LEU", "ASP", "LYS", "VAL", "VAL", "LEU", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  693 ,  682 ,  217 ,  682 ,  139 ,  213 ,  263 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  139 ,  160 ,  139 ,  263 ,  160 ,  147 ,  147 ,  263 ,  263 ,  263 ,  274 ,  162 ,  147 ,  147 ,  210 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        13
+DOCKED: USER    Run = 13
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.51 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.40 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.55 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.12 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.67 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.73 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.50 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.50 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.565450 12.764246 10.246011
+DOCKED: USER    NEWDPF axisangle0 0.42448030 -0.86987845 0.25125280 247.280930
+DOCKED: USER    NEWDPF dihe0 350.866638 2.734228 192.337326 353.399323 2.023922 359.152893
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.976 106.177 161.913 -0.13 -0.07    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     120.185 105.697 163.264 -0.26 +0.01    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     121.210 104.582 163.124 -0.34 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     121.009 104.060 161.706 -0.20 +0.06    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.510 105.257 160.919 -0.16 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.275 107.349 161.690 -0.28 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.062 108.184 162.567 -0.92 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.801 107.645 160.323 -0.28 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     119.212 108.853 159.749 -0.29 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.905 106.774 159.694 -0.20 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.748 109.199 158.489 -0.35 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.522 105.626 160.301 -0.05 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.427 107.127 158.411 -0.25 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.865 108.346 157.823 -0.30 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     116.663 104.796 159.680 -0.15 +0.00    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.527 106.223 157.798 -0.23 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     117.282 108.914 156.099 -0.72 -0.02    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.140 105.050 158.435 -0.20 -0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.855 102.710 161.610 -0.21 +0.15    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     120.493 101.523 161.082 -0.13 -0.10    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.080 102.686 162.834 -0.84 -0.16    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     118.818 103.144 160.486 -0.06 -0.04    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.338 110.347 164.308 -0.17 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.241 109.282 163.413 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.053 110.148 165.483 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.834 108.052 163.688 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.637 108.913 165.772 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.512 107.872 164.873 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.103 106.655 165.122 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.853 106.365 165.847 -0.20 +0.12    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   14 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 30
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   20 ,   21 ,    1 ,    1 ,    2 ,    2 ,    3 ,    3 ,    4 ,    4 ,    5 ,    6 ,    8 ,    8 ,    9 ,   10 ,   10 ,   13 ,   15 ,   15 ,   16 ,   18 ,   19 ,    9 ,    9 ,    9 ,   11 ,   11 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "O",   "N",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "S",   "C",   "C",   "C",   "C",   "C"}
+ANALYSIS: RECID   {  915 , 3067 , 2683 , 2683 ,  371 , 1421 ,  160 ,  371 ,  371 ,  232 ,  724 ,  896 ,  724 , 1421 , 1422 , 1421 ,  912 , 1422 , 1421 , 1422 , 1421 , 1422 , 1422 , 1422 ,  896 ,    4 ,    6 ,    8 ,    6 ,    8 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW",  "OW",  "CB", "CD1", "CD1",  "CB",  "CB", "CG1", "CD2", "CD1", "CD2", "CD1", "CD2", "CD1",   "C", "CD2", "CD1", "CD2", "CD1", "CD2", "CD2", "CD2", "CD1", "CD1", "CE1",  "CZ", "CE1",  "CZ"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "HOH", "HOH", "ALA", "LEU", "LEU", "ALA", "ALA", "VAL", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "TYR", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  734 ,  606 ,  606 ,  160 ,  263 ,  139 ,  160 ,  160 ,  147 ,  194 ,  210 ,  194 ,  263 ,  263 ,  263 ,  213 ,  263 ,  263 ,  263 ,  263 ,  263 ,  263 ,  263 ,  210 ,  212 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        14
+DOCKED: USER    Run = 14
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.69 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.59 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.66 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  +0.05 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.61 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.98 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.18 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.18 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 11.286761 15.397747 10.832558
+DOCKED: USER    NEWDPF axisangle0 -0.05634667 0.74827607 0.66099015 157.190109
+DOCKED: USER    NEWDPF dihe0 239.556000 146.851624 125.914543 267.192383 359.499146 21.768795
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     118.314 108.809 160.249 -0.17 -0.04    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.212 108.269 159.249 -0.30 +0.03    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     119.012 109.154 158.029 -0.33 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     117.587 109.677 158.174 -0.31 +0.04    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     117.340 109.722 159.669 -0.21 +0.01    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     118.402 108.390 161.565 -0.32 +0.03    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     117.929 109.023 162.506 -0.84 -0.02    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     119.048 107.095 161.857 -0.34 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     120.104 107.096 162.775 -0.34 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     118.655 105.949 161.156 -0.13 +0.02    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     120.776 105.912 163.038 -0.32 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.640 106.004 160.262 -0.09 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     119.343 104.742 161.421 -0.23 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     120.401 104.744 162.371 -0.27 +0.01    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     117.271 104.892 159.601 -0.15 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     118.918 103.599 160.701 -0.20 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     121.390 103.172 162.800 -0.55 -0.02    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     117.876 103.672 159.784 -0.18 +0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     116.377 108.660 157.360 -0.34 +0.03    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     115.036 109.126 157.641 -0.63 -0.02    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     116.832 108.403 156.008 -0.32 -0.04    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     116.475 107.252 158.090 -0.11 +0.02    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.382 110.354 163.762 -0.41 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.243 109.684 162.547 -0.51 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.180 109.773 164.740 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.875 108.464 162.320 -0.23 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.805 108.542 164.523 -0.30 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.637 107.895 163.316 -0.14 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.267 106.697 163.069 -0.48 -0.39    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     124.977 106.664 163.477 +0.15 +0.24    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   15 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 29
+ANALYSIS: TYPE    {   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,    1 ,    2 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    5 ,    6 ,    8 ,    9 ,    9 ,   10 ,   11 ,   11 ,   14 ,   15 ,   15 ,   16 ,   17 ,   17 ,   17 ,   17 ,    1 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",  "Br",   "N",   "C"}
+ANALYSIS: RECID   {  915 , 2911 , 1422 ,  936 ,  912 , 1422 ,  936 ,  161 ,  158 ,  161 ,  159 ,  160 , 1421 , 1421 ,  160 ,  371 , 1421 ,  371 ,  232 ,  232 , 1422 , 1421 , 1509 ,  389 ,  896 ,  233 ,  232 ,    7 ,    5 }
+ANALYSIS: RECNAME {   "N",  "OW", "CD2",  "CA",   "C", "CD2",  "CA", "CD2",  "CB", "CD2",  "CG", "CD1", "CD1", "CD1", "CD1",  "CB", "CD1",  "CB", "CG1", "CG1", "CD2", "CD1",  "CG",  "CE", "CD1", "CG2", "CG1", "CE2", "CD2"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "LEU", "GLY", "ALA", "LEU", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "ALA", "VAL", "VAL", "LEU", "LEU", "ASP", "LYS", "LEU", "VAL", "VAL", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  682 ,  263 ,  216 ,  213 ,  263 ,  216 ,  139 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  139 ,  160 ,  263 ,  160 ,  147 ,  147 ,  263 ,  263 ,  274 ,  162 ,  210 ,  147 ,  147 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        15
+DOCKED: USER    Run = 15
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.50 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.40 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.62 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.09 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.71 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.69 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.65 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.65 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.956074 13.023986 10.025613
+DOCKED: USER    NEWDPF axisangle0 -0.37954526 0.87346935 -0.30495358 93.043503
+DOCKED: USER    NEWDPF dihe0 338.742126 26.118439 322.735809 172.315460 182.163986 359.986969
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.794 106.217 162.002 -0.14 -0.07    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.553 105.568 163.274 -0.27 +0.02    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.583 104.452 163.343 -0.37 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.869 104.114 161.884 -0.21 +0.06    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.641 105.411 161.133 -0.15 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.189 107.426 161.708 -0.28 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.061 108.331 162.529 -0.93 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.719 107.669 160.330 -0.28 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     119.005 108.917 159.765 -0.33 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.943 106.703 159.679 -0.20 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.535 109.211 158.494 -0.36 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.677 105.519 160.277 -0.09 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.460 107.004 158.384 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.771 108.265 157.806 -0.29 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     116.933 104.598 159.635 -0.16 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.683 106.005 157.749 -0.21 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     117.170 108.767 156.068 -0.71 -0.02    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.416 104.794 158.378 -0.21 -0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.832 102.818 161.245 -0.21 +0.14    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     118.752 102.522 162.162 -0.75 -0.14    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.597 103.074 159.838 -0.16 -0.07    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     120.748 101.519 161.269 -0.06 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.340 110.343 164.288 -0.18 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     123.047 110.140 165.472 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.249 109.285 163.393 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.655 108.917 165.749 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.868 108.061 163.657 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.574 107.893 164.832 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.168 106.688 165.127 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.915 106.423 165.861 -0.19 +0.13    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   16 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 33
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   20 ,   21 ,    1 ,    1 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    5 ,    6 ,    8 ,    8 ,    9 ,    9 ,   10 ,   11 ,   11 ,   14 ,   15 ,   15 ,   16 ,   17 ,   17 ,   17 ,   17 ,    1 ,    2 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "O",   "N",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",  "Br",   "N",   "C",   "C"}
+ANALYSIS: RECID   {  915 ,  942 , 2911 , 2944 ,  160 , 1422 ,  912 , 1422 ,  936 ,  161 ,  158 ,  161 ,  159 ,  160 , 1421 , 1421 ,  160 ,  160 ,  371 , 1421 ,  371 ,  232 ,  232 , 1422 , 1421 , 1509 ,  389 ,  896 ,  233 ,  232 ,    6 ,    6 ,    4 }
+ANALYSIS: RECNAME {   "N",   "N",  "OW",  "OW", "CD1", "CD2",   "C", "CD2",  "CA", "CD2",  "CB", "CD2",  "CG", "CD1", "CD1", "CD1", "CD1", "CD1",  "CB", "CD1",  "CB", "CG1", "CG1", "CD2", "CD1",  "CG",  "CE", "CD1", "CG2", "CG1", "CE1", "CE1", "CD1"}
+ANALYSIS: RESIDUE { "ALA", "THR", "HOH", "HOH", "LEU", "LEU", "ALA", "LEU", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "ALA", "VAL", "VAL", "LEU", "LEU", "ASP", "LYS", "LEU", "VAL", "VAL", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  217 ,  682 ,  693 ,  139 ,  263 ,  213 ,  263 ,  216 ,  139 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  139 ,  139 ,  160 ,  263 ,  160 ,  147 ,  147 ,  263 ,  263 ,  274 ,  162 ,  210 ,  147 ,  147 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        16
+DOCKED: USER    Run = 16
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.49 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.39 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.59 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.10 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.68 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.70 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.62 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.62 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.834097 12.830043 10.095059
+DOCKED: USER    NEWDPF axisangle0 -0.40140670 0.86873117 -0.29013584 101.418190
+DOCKED: USER    NEWDPF dihe0 342.869019 17.103088 333.870483 1.350748 357.493591 359.206055
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.917 106.137 161.972 -0.13 -0.07    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.850 105.575 163.305 -0.24 +0.02    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.879 104.455 163.307 -0.36 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.964 104.020 161.848 -0.21 +0.06    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.636 105.268 161.051 -0.15 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.278 107.330 161.684 -0.27 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.124 108.228 162.509 -0.92 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.801 107.567 160.307 -0.27 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     119.129 108.793 159.716 -0.32 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.980 106.621 159.683 -0.20 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.656 109.081 158.445 -0.36 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.675 105.459 160.305 -0.08 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.494 106.917 158.388 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.848 108.154 157.783 -0.29 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     116.888 104.557 159.689 -0.15 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.671 105.938 157.780 -0.21 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     117.246 108.649 156.043 -0.72 -0.02    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.364 104.750 158.434 -0.21 -0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.849 102.696 161.443 -0.21 +0.15    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     118.751 102.639 162.384 -0.82 -0.14    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.631 102.704 160.010 -0.15 -0.08    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     120.681 101.369 161.715 -0.06 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.338 110.346 164.307 -0.17 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.163 109.255 163.457 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.130 110.174 165.435 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.755 108.024 163.732 -0.40 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.715 108.938 165.724 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.512 107.872 164.872 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.101 106.654 165.120 -0.13 -0.28    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.816 106.342 165.823 -0.20 +0.12    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   17 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 27
+ANALYSIS: TYPE    {   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,    1 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    6 ,    8 ,    9 ,    9 ,   10 ,   11 ,   11 ,   14 ,   15 ,   15 ,   16 ,   17 ,   17 ,   17 ,   17 ,    1 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",  "Br",   "N",   "C"}
+ANALYSIS: RECID   {  915 , 2911 , 1422 , 1422 ,  912 ,  936 ,  161 ,  161 ,  160 ,  159 , 1421 , 1421 ,  160 ,  371 , 1421 ,  371 ,  232 ,  232 , 1422 , 1421 , 1509 ,  389 ,  896 ,  233 ,  232 ,    7 ,    5 }
+ANALYSIS: RECNAME {   "N",  "OW", "CD2", "CD2",   "C",  "CA", "CD2", "CD2", "CD1",  "CG", "CD1", "CD1", "CD1",  "CB", "CD1",  "CB", "CG1", "CG1", "CD2", "CD1",  "CG",  "CE", "CD1", "CG2", "CG1", "CE2", "CD2"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "LEU", "LEU", "ALA", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "ALA", "VAL", "VAL", "LEU", "LEU", "ASP", "LYS", "LEU", "VAL", "VAL", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  682 ,  263 ,  263 ,  213 ,  216 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  139 ,  160 ,  263 ,  160 ,  147 ,  147 ,  263 ,  263 ,  274 ,  162 ,  210 ,  147 ,  147 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        17
+DOCKED: USER    Run = 17
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.53 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.43 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.61 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.09 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.71 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.72 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.62 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.62 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.950296 13.046484 10.033050
+DOCKED: USER    NEWDPF axisangle0 -0.38678286 0.86963058 -0.30682516 91.961594
+DOCKED: USER    NEWDPF dihe0 340.152588 25.703609 323.620819 168.044922 174.838165 3.080701
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.754 106.251 162.020 -0.14 -0.07    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.496 105.604 163.289 -0.24 +0.02    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.538 104.500 163.381 -0.38 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.856 104.161 161.928 -0.21 +0.06    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.626 105.454 161.169 -0.16 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.140 107.452 161.711 -0.29 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     118.979 108.355 162.528 -0.94 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.701 107.690 160.321 -0.28 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     119.011 108.931 159.754 -0.33 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.930 106.726 159.662 -0.20 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.571 109.219 158.471 -0.36 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.640 105.549 160.263 -0.09 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.477 107.022 158.355 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.812 108.276 157.774 -0.29 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     116.901 104.631 159.612 -0.16 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.704 106.025 157.711 -0.21 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     117.253 108.771 156.021 -0.71 -0.02    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.413 104.822 158.342 -0.20 -0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.847 102.851 161.274 -0.21 +0.14    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     118.742 102.559 162.162 -0.76 -0.13    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.652 103.089 159.858 -0.16 -0.07    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     120.769 101.558 161.341 -0.06 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.347 110.332 164.214 -0.23 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     123.184 110.118 165.308 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.134 109.275 163.338 -0.48 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.799 108.885 165.515 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.759 108.041 163.532 -0.39 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.595 107.863 164.617 -0.34 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.198 106.647 164.844 -0.12 -0.31    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     124.076 106.414 165.621 -0.11 +0.15    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   18 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 29
+ANALYSIS: TYPE    {   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {   20 ,   21 ,    3 ,    6 ,    8 ,    8 ,    8 ,    8 ,    9 ,    9 ,    9 ,   10 ,   11 ,   13 ,   14 ,   15 ,   17 ,   18 ,   19 ,   22 ,   22 ,   22 ,   22 ,   13 ,   16 ,   16 ,   17 ,   17 ,   18 }
+ANALYSIS: LIGNAME {   "O",   "O",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",   "C",   "S",   "F",   "F",   "F",   "F",   "C",   "C",   "C",  "Br",  "Br",   "C"}
+ANALYSIS: RECID   { 2728 , 3049 , 1591 ,  158 ,  159 ,  161 ,  158 ,  160 ,  159 ,  158 ,  161 ,  160 ,  161 ,  160 ,  161 , 1421 ,  936 , 1421 ,  945 , 1384 , 1386 , 1389 ,  945 ,    7 ,    5 ,    7 ,    7 ,    8 ,    5 }
+ANALYSIS: RECNAME {  "OW",  "OW",  "CB",  "CB",  "CG", "CD2",  "CB", "CD1",  "CG",  "CB", "CD2", "CD1", "CD2", "CD1", "CD2", "CD1",  "CA", "CD1", "CG2",   "C",  "CA",  "CB", "CG2", "CE2", "CD2", "CE2", "CE2",  "CZ", "CD2"}
+ANALYSIS: RESIDUE { "HOH", "HOH", "SER", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "GLY", "LEU", "THR", "GLU", "GLU", "GLU", "THR", "TYR", "TYR", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  621 ,  728 ,  283 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  139 ,  263 ,  216 ,  263 ,  217 ,  260 ,  260 ,  260 ,  217 ,  212 ,  212 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        18
+DOCKED: USER    Run = 18
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.37 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.27 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.34 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.13 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.47 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.79 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.35 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.35 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 12.644348 11.863925 9.240509
+DOCKED: USER    NEWDPF axisangle0 0.07642739 0.97640612 0.20196518 216.351791
+DOCKED: USER    NEWDPF dihe0 183.719879 70.889778 347.412384 175.997437 176.884064 1.966161
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     118.276 104.169 157.718 -0.05 -0.05    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     118.518 102.858 157.153 -0.20 +0.04    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     117.157 102.387 156.667 -0.28 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     116.163 103.119 157.562 -0.20 -0.03    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     116.857 104.415 157.933 -0.16 -0.02    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.337 104.994 158.049 -0.20 +0.07    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.891 105.735 157.241 -0.29 -0.09    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     119.797 105.031 159.452 -0.22 +0.02    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     120.435 103.889 159.948 -0.25 +0.01    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     119.506 106.143 160.250 -0.22 +0.02    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     120.835 103.857 161.276 -0.22 +0.01    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     118.868 107.216 159.727 -0.14 -0.05    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     119.910 106.110 161.605 -0.29 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     120.577 104.956 162.099 -0.26 +0.01    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     118.601 108.280 160.507 -0.30 +0.02    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     119.608 107.252 162.385 -0.40 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     121.162 104.811 163.907 -0.74 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     118.949 108.345 161.834 -0.45 +0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     115.716 102.198 159.017 -0.25 +0.04    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     116.844 101.444 159.517 -0.72 -0.10    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     114.925 103.058 159.875 -0.33 +0.00    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     114.693 101.097 158.499 -0.16 -0.01    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.344 110.336 164.241 -0.21 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     123.146 110.129 165.363 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.165 109.275 163.362 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.758 108.899 165.595 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.788 108.043 163.582 -0.39 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.588 107.872 164.694 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.187 106.660 164.946 -0.13 -0.30    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.955 106.379 165.681 -0.13 +0.14    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   19 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 36
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {   20 ,   21 ,   21 ,    2 ,    3 ,    3 ,    6 ,    8 ,    8 ,    9 ,   10 ,   10 ,   11 ,   13 ,   13 ,   14 ,   15 ,   15 ,   15 ,   16 ,   17 ,   18 ,   18 ,   18 ,   19 ,   19 ,   19 ,   22 ,   22 ,   22 ,   22 ,   16 ,   16 ,   17 ,   18 ,   18 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",   "C",   "C",   "C",   "S",   "S",   "S",   "F",   "F",   "F",   "F",   "C",   "C",  "Br",   "C",   "C"}
+ANALYSIS: RECID   {  165 ,  165 , 3139 , 1509 , 1509 ,  233 , 1421 , 1421 , 1422 , 1422 , 1421 , 1422 , 1422 ,  160 , 1422 , 1422 ,  724 ,  371 , 1421 ,  160 ,  161 ,  371 ,  898 ,  908 ,  164 ,  233 ,  153 ,  233 ,  164 ,  231 ,  162 ,    5 ,    7 ,    7 ,    1 ,    5 }
+ANALYSIS: RECNAME {   "N",   "N",  "OW",  "CG",  "CG", "CG2", "CD1", "CD1", "CD2", "CD2", "CD1", "CD2", "CD2", "CD1", "CD2", "CD2", "CD2",  "CB", "CD1", "CD1", "CD2",  "CB",   "C",   "C",  "CA", "CG2",   "C", "CG2",  "CA",  "CB",   "C", "CD2", "CE2", "CE2",  "CA", "CD2"}
+ANALYSIS: RESIDUE { "GLY", "GLY", "HOH", "ASP", "ASP", "VAL", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "LEU", "LEU", "ALA", "GLU", "TYR", "GLY", "VAL", "LEU", "VAL", "GLY", "VAL", "GLY", "TYR", "TYR", "TYR", "TYR", "TYR"}
+ANALYSIS: RESID   {  140 ,  140 ,  758 ,  274 ,  274 ,  147 ,  263 ,  263 ,  263 ,  263 ,  263 ,  263 ,  263 ,  139 ,  263 ,  263 ,  194 ,  160 ,  263 ,  139 ,  139 ,  160 ,  211 ,  212 ,  140 ,  147 ,  139 ,  147 ,  140 ,  147 ,  140 ,  212 ,  212 ,  212 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        19
+DOCKED: USER    Run = 19
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.31 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.20 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.50 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.06 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.55 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.65 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.28 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.28 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 12.713990 11.422167 8.489179
+DOCKED: USER    NEWDPF axisangle0 0.85460605 -0.37645409 -0.35767418 120.113533
+DOCKED: USER    NEWDPF dihe0 54.473576 56.378574 6.442869 170.886688 183.906738 0.862465
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     116.889 105.665 157.440 -0.06 +0.10    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     116.981 106.618 156.352 -0.25 -0.03    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     116.887 105.775 155.089 -0.32 -0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     117.420 104.409 155.508 -0.25 -0.00    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     117.085 104.297 156.982 -0.17 -0.02    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     116.707 106.105 158.739 -0.16 -0.03    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     115.657 106.599 159.142 -0.23 +0.06    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     117.806 105.927 159.709 -0.19 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     118.239 104.619 159.956 -0.19 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     118.306 107.034 160.404 -0.21 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     119.230 104.398 160.900 -0.21 +0.01    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.839 108.277 160.144 -0.18 -0.03    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     119.314 106.809 161.371 -0.32 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     119.766 105.481 161.602 -0.26 +0.01    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     118.335 109.332 160.817 -0.36 +0.00    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     119.804 107.949 162.053 -0.42 +0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     121.118 105.071 162.881 -0.64 -0.01    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     119.313 109.219 161.776 -0.46 +0.00    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.167 104.223 155.237 -0.34 +0.11    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     119.907 105.282 155.888 -0.38 -0.08    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.510 102.826 155.415 -0.68 -0.11    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     119.366 104.489 153.683 -0.21 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.342 110.340 164.267 -0.20 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     123.020 110.108 165.463 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     122.282 109.307 163.340 -0.47 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     123.629 108.881 165.721 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     122.903 108.080 163.586 -0.39 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.580 107.884 164.773 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.174 106.674 165.050 -0.13 -0.29    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     123.919 106.396 165.778 -0.16 +0.13    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    FINAL DOCKED STATE:
+    ________________________
+
+
+Run:   20 / 20
+Time taken for this run:   1.043s
+
+ANALYSIS: COUNT 28
+ANALYSIS: TYPE    {   "H",   "H",   "H",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V",   "V"}
+ANALYSIS: LIGID   {    7 ,   20 ,   21 ,    1 ,    2 ,    2 ,    3 ,    4 ,    5 ,    5 ,    5 ,    6 ,    8 ,    8 ,    9 ,    9 ,   10 ,   11 ,   11 ,   14 ,   15 ,   15 ,   17 ,   17 ,   17 ,   17 ,    1 ,    6 }
+ANALYSIS: LIGNAME {   "O",   "O",   "O",   "N",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",   "C",  "Br",  "Br",  "Br",  "Br",   "N",   "C"}
+ANALYSIS: RECID   {  915 , 2911 , 2944 , 1422 ,  912 , 1422 ,  936 ,  161 ,  161 ,  159 ,  160 , 1421 , 1421 ,  160 ,  371 ,  160 , 1421 ,  371 ,  232 ,  232 , 1422 , 1421 ,  389 ,  896 ,  233 ,  232 ,    6 ,    4 }
+ANALYSIS: RECNAME {   "N",  "OW",  "OW", "CD2",   "C", "CD2",  "CA", "CD2", "CD2",  "CG", "CD1", "CD1", "CD1", "CD1",  "CB", "CD1", "CD1",  "CB", "CG1", "CG1", "CD2", "CD1",  "CE", "CD1", "CG2", "CG1", "CE1", "CD1"}
+ANALYSIS: RESIDUE { "ALA", "HOH", "HOH", "LEU", "ALA", "LEU", "GLY", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "LEU", "ALA", "LEU", "LEU", "ALA", "VAL", "VAL", "LEU", "LEU", "LYS", "LEU", "VAL", "VAL", "TYR", "TYR"}
+ANALYSIS: RESID   {  213 ,  682 ,  693 ,  263 ,  213 ,  263 ,  216 ,  139 ,  139 ,  139 ,  139 ,  263 ,  263 ,  139 ,  160 ,  139 ,  263 ,  160 ,  147 ,  147 ,  263 ,  263 ,  162 ,  210 ,  147 ,  147 ,  212 ,  212 }
+ANALYSIS: CHAIN   {   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A",   "A"}
+
+DOCKED: MODEL        20
+DOCKED: USER    Run = 20
+DOCKED: USER
+DOCKED: USER    Estimated Free Energy of Binding    =  -6.54 kcal/mol  [=(1)+(2)+(3)-(4)]
+DOCKED: USER
+DOCKED: USER    (1) Final Intermolecular Energy     =  -7.44 kcal/mol
+DOCKED: USER        vdW + Hbond + desolv Energy     =  -6.61 kcal/mol
+DOCKED: USER        Electrostatic Energy            =  -0.09 kcal/mol
+DOCKED: USER        Moving Ligand-Fixed Receptor    =  -6.70 kcal/mol
+DOCKED: USER        Moving Ligand-Moving Receptor   =  -0.74 kcal/mol
+DOCKED: USER    (2) Final Total Internal Energy     =  -3.60 kcal/mol
+DOCKED: USER    (3) Torsional Free Energy           =  +0.89 kcal/mol
+DOCKED: USER    (4) Unbound System's Energy         =  -3.60 kcal/mol
+DOCKED: USER
+DOCKED: USER    NEWDPF about 0.0 0.0 0.0
+DOCKED: USER    NEWDPF tran0 13.981017 13.059435 10.027861
+DOCKED: USER    NEWDPF axisangle0 -0.38372570 0.87087224 -0.30714186 91.882500
+DOCKED: USER    NEWDPF dihe0 339.476593 26.146250 324.372314 326.486908 359.074646 2.943712
+DOCKED: USER
+DOCKED: REMARK SMILES O=C(c1ccc(Br)c2cccnc12)N1CC[C@@H](S(=O)(=O)F)C1
+DOCKED: REMARK SMILES IDX 14 1 15 2 16 3 17 4 22 5 2 6 1 7 3 8 4 9 13 10 5 11 12 12
+DOCKED: REMARK SMILES IDX 8 13 6 14 11 15 9 16 7 17 10 18 18 19 19 20 20 21 21 22
+DOCKED: REMARK H PARENT
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  N   UNL     1     119.783 106.256 162.015 -0.14 -0.07    -0.337 N  
+DOCKED: ATOM      2  C   UNL     1     119.522 105.604 163.282 -0.25 +0.02    +0.121 C  
+DOCKED: ATOM      3  C   UNL     1     120.560 104.497 163.370 -0.38 +0.01    +0.046 C3 
+DOCKED: ATOM      4  C   UNL     1     120.878 104.162 161.917 -0.21 +0.06    +0.162 C2 
+DOCKED: ATOM      5  C   UNL     1     120.653 105.458 161.162 -0.14 +0.04    +0.142 C3 
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   6
+DOCKED: ATOM      6  C   UNL     1     119.173 107.460 161.710 -0.29 +0.04    +0.256 C  
+DOCKED: ATOM      7  O   UNL     1     119.020 108.363 162.529 -0.94 -0.05    -0.269 OA 
+DOCKED: BRANCH   6   8
+DOCKED: ATOM      8  C   UNL     1     118.727 107.700 160.323 -0.28 +0.01    +0.066 A  
+DOCKED: ATOM      9  C   UNL     1     119.027 108.945 159.759 -0.33 +0.00    +0.017 A  
+DOCKED: ATOM     10  C   UNL     1     117.959 106.734 159.663 -0.20 +0.01    +0.084 A  
+DOCKED: ATOM     11  C   UNL     1     118.580 109.235 158.479 -0.36 +0.00    +0.017 A  
+DOCKED: ATOM     12  N   UNL     1     117.679 105.553 160.260 -0.09 -0.04    -0.255 NA 
+DOCKED: ATOM     13  C   UNL     1     117.500 107.032 158.359 -0.24 +0.00    +0.015 A  
+DOCKED: ATOM     14  C   UNL     1     117.825 108.290 157.781 -0.30 +0.00    +0.027 A  
+DOCKED: ATOM     15  C   UNL     1     116.944 104.632 159.608 -0.16 +0.01    +0.112 A  
+DOCKED: ATOM     16  C   UNL     1     116.731 106.033 157.714 -0.21 -0.00    +0.013 A  
+DOCKED: ATOM     17  Br  UNL     1     117.256 108.788 156.032 -0.71 -0.02    -0.050 Br 
+DOCKED: ATOM     18  C   UNL     1     116.449 104.825 158.342 -0.20 -0.01    +0.021 A  
+DOCKED: ENDBRANCH   6   8
+DOCKED: ENDBRANCH   1   6
+DOCKED: BRANCH   4  19
+DOCKED: ATOM     19  S   UNL     1     119.866 102.858 161.257 -0.21 +0.14    +0.307 S1 
+DOCKED: ATOM     20  O   UNL     1     118.749 102.578 162.134 -0.75 -0.13    -0.194 O5 
+DOCKED: ATOM     21  O   UNL     1     119.688 103.092 159.838 -0.16 -0.07    -0.194 O5 
+DOCKED: ATOM     22  F   UNL     1     120.777 101.558 161.338 -0.06 -0.05    -0.104 F2 
+DOCKED: ENDBRANCH   4  19
+DOCKED: TORSDOF 3
+DOCKED: BEGIN_RES TYR A 212
+DOCKED: REMARK Flexibility Score: inf
+DOCKED: USER                              x       y       z     vdW  Elec       q    Type
+DOCKED: USER                           _______ _______ _______ _____ _____    ______ ____
+DOCKED: ROOT
+DOCKED: ATOM      1  CA  TYR A 212     120.168 111.582 163.874 +0.00 +0.00    +0.175 C  
+DOCKED: ENDROOT
+DOCKED: BRANCH   1   2
+DOCKED: ATOM      2  CB  TYR A 212     121.686 111.680 163.998 +0.00 +0.00    +0.070 C  
+DOCKED: BRANCH   2   3
+DOCKED: ATOM      3  CG  TYR A 212     122.346 110.333 164.217 -0.23 -0.00    -0.045 A  
+DOCKED: ATOM      4 CD1  TYR A 212     122.200 109.309 163.283 -0.48 +0.00    +0.007 A  
+DOCKED: ATOM      5 CD2  TYR A 212     123.118 110.082 165.345 -0.43 +0.00    +0.007 A  
+DOCKED: ATOM      6 CE1  TYR A 212     122.800 108.066 163.474 -0.39 +0.01    +0.046 1A3
+DOCKED: ATOM      7 CE2  TYR A 212     123.710 108.833 165.551 -0.37 +0.01    +0.046 1A3
+DOCKED: ATOM      8  CZ  TYR A 212     123.535 107.833 164.615 -0.35 +0.04    +0.115 1A2
+DOCKED: BRANCH   8   9
+DOCKED: ATOM      9  OH  TYR A 212     124.133 106.605 164.781 -0.10 -0.31    -0.507 1O4
+DOCKED: ATOM     10  HH  TYR A 212     124.229 106.446 165.580 -0.09 +0.15    +0.294 1H5
+DOCKED: ENDBRANCH   8   9
+DOCKED: ENDBRANCH   2   3
+DOCKED: ENDBRANCH   1   2
+DOCKED: END_RES TYR A 212
+DOCKED: TER
+DOCKED: ENDMDL
+________________________________________________________________________________
+
+
+    CLUSTERING HISTOGRAM
+    ____________________
+
+
+________________________________________________________________________________
+     |           |     |           |     |
+Clus | Lowest    | Run | Mean      | Num | Histogram
+-ter | Binding   |     | Binding   | in  |
+Rank | Energy    |     | Energy    | Clus|    5    10   15   20   25   30   35
+_____|___________|_____|___________|_____|____:____|____:____|____:____|____:___
+   1 |     -8.22 |   6 |     -8.22 |   1 |#
+   2 |     -7.15 |   7 |     -7.15 |   1 |#
+   3 |     -6.69 |  14 |     -6.16 |   2 |##
+   4 |     -6.55 |   4 |     -6.46 |  10 |##########
+   5 |     -6.37 |  18 |     -6.23 |   4 |####
+   6 |     -6.31 |  19 |     -6.31 |   1 |#
+   7 |     -6.22 |   2 |     -6.22 |   1 |#
+_____|___________|_____|___________|_____|______________________________________
+
+
+    RMSD TABLE
+    __________
+
+
+_______________________________________________________________________
+     |      |      |           |         |                 |
+Rank | Sub- | Run  | Binding   | Cluster | Reference       | Grep
+     | Rank |      | Energy    | RMSD    | RMSD            | Pattern
+_____|______|______|___________|_________|_________________|___________
+   1      1      6       -8.22      0.00    224.51           RANKING
+   2      1      7       -7.15      0.00    221.44           RANKING
+   3      1     14       -6.69      0.00    223.55           RANKING
+   3      2     11       -5.63      1.57    223.36           RANKING
+   4      1      4       -6.55      0.00    223.31           RANKING
+   4      2     20       -6.54      0.26    223.29           RANKING
+   4      3     17       -6.53      0.26    223.28           RANKING
+   4      4     13       -6.51      0.74    223.34           RANKING
+   4      5     15       -6.50      0.23    223.27           RANKING
+   4      6     16       -6.49      0.15    223.29           RANKING
+   4      7      8       -6.41      0.42    223.32           RANKING
+   4      8      9       -6.40      0.75    223.22           RANKING
+   4      9      1       -6.36      0.46    223.36           RANKING
+   4     10     12       -6.34      0.48    223.34           RANKING
+   5      1     18       -6.37      0.00    222.07           RANKING
+   5      2      3       -6.23      0.18    221.98           RANKING
+   5      3      5       -6.21      1.03    221.60           RANKING
+   5      4     10       -6.10      1.09    221.49           RANKING
+   6      1     19       -6.31      0.00    221.96           RANKING
+   7      1      2       -6.22      0.00    222.64           RANKING
+
+Run time 1.906 sec
+Idle time 0.000 sec

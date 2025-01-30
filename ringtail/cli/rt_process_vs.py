@@ -8,24 +8,28 @@ import time
 from ringtail import CLOptionParser
 from ringtail import RingtailCore
 from ringtail import logutils
+from ringtail.exceptions import NoInputError
 import traceback
 
-if __name__ == "__main__":
-    """Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries
-    and options that are then used with the ringtail core api.
-    This script will allow either a write or a read session at the time.
-    Available database operations are described in the readme.md document of this codebase.
-    """
+
+def main():
     time0 = time.perf_counter()
 
     try:
         # set up the logger
         logger = logutils.LOGGER
+<<<<<<< HEAD:scripts/rt_process_vs.py
         logger.add_consolehandler(level="INFO")
         logger.add_filehandler(log_file="ringtail", level="DEBUG")
+=======
+>>>>>>> release:ringtail/cli/rt_process_vs.py
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
+    except NoInputError as e:
+        sys.tracebacklimit = 0
+        logger.critical("ERROR: " + str(e))
+        sys.exit(1)
     except Exception as e:
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
@@ -68,7 +72,8 @@ if __name__ == "__main__":
 
             # write out molecules if requested
             if outopts.export_sdf_path:
-                rtcore.write_molecule_sdfs()
+                rtcore.write_molecule_sdfs(sdf_path = outopts.export_sdf_path,
+                                           all_in_one=not cmdinput.individual_sdf_files)
 
             # write out requested CSVs
             if readopts["export_bookmark_csv"]:
@@ -114,3 +119,13 @@ if __name__ == "__main__":
     )
     if logger.level() in ["DEBUG", "INFO"]:
         print(cmdinput.parser.epilog)
+    return
+
+
+if __name__ == "__main__":
+    """Script that sets up a command line option parser (cloptionparser) and processes all arguments into dictionaries
+    and options that are then used with the ringtail core api.
+    This script will allow either a write or a read session at the time.
+    Available database operations are described in the readme.md document of this codebase.
+    """
+    sys.exit(main())

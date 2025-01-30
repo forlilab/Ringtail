@@ -7,7 +7,7 @@
 import sys
 import argparse
 import os
-from .exceptions import OptionError
+from .exceptions import OptionError, NoInputError
 import __main__
 from .ringtailcore import RingtailCore
 from .ringtailoptions import Filters
@@ -376,10 +376,15 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-sdf",
         "--export_sdf_path",
-        help="specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.",
+        help="specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as one large SDF file unless using '--individual_sdf_files'.",
         action="store",
         type=str,
         metavar="DIRECTORY_NAME",
+    )
+    output_group.add_argument(
+        "--individual_sdf_files",
+        help="Use if you like to print chosen molecules to individual SDF files, as opposed to one big SDF.",
+        action="store_true",
     )
     output_group.add_argument(
         "-xdb",
@@ -485,7 +490,7 @@ def cmdline_parser(defaults: dict = {}):
         "-n",
         "--ligand_name",
         help="specify ligand name(s). Will combine name filters with OR",
-        action="store",
+        action="append",
         type=str,
         metavar="STRING",
         nargs="+",
@@ -493,23 +498,23 @@ def cmdline_parser(defaults: dict = {}):
     ligand_group.add_argument(
         "-mna",
         "--ligand_max_atoms",
-        help="Maximum number of heavy atoms a ligand may have",
+        help="Maximum number of heavy atoms (non-hydrogens) a ligand may have",
         action="store",
         type=int,
         metavar="INT",
     )
     ligand_group.add_argument(
         "--ligand_substruct",
-        help="SMARTS pattern(s) for substructure matching",
-        action="store",
+        help="SMARTS pattern(s) for substructure matching. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator. If error delimit each substructure with ''.",
+        action="append",
         type=str,
         metavar="STRING",
         nargs="+",
     )
     ligand_group.add_argument(
         "--ligand_substruct_pos",
-        help="SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords",
-        action="store",
+        help="SMARTS pattern(s) for substructure matching, e.g., '[Oh]C 0 1.2 -5.5 10.0 15.5' -> 'smart_string index_of_positioned_atom cutoff_distance x y z'. Multiple can be specified by separating each filter string with a comma. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator. Group each set of six values with ''.",
+        action="append",
         type=str,
         metavar="STRING",
         nargs="+",
@@ -518,7 +523,7 @@ def cmdline_parser(defaults: dict = {}):
         "-sj",
         "--ligand_operator",
         choices=["AND", "OR"],
-        help="logical join operator for multiple SMARTS (default: OR)",
+        help="Logical join operator for multiple substruct filters. Will apply within 'ligand_substruct' filters and within 'ligand_substruct_pos' filters (the two groups are always joined by 'AND').",
         action="store",
         type=str,
         metavar="STRING",
@@ -584,7 +589,7 @@ def cmdline_parser(defaults: dict = {}):
     # catch if running with no options
     if len(sys.argv) == 1:
         parser.print_help()
-        raise OptionError(
+        raise NoInputError(
             "Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details."
         )
 
@@ -651,6 +656,8 @@ class CLOptionParser:
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
+        except NoInputError:
+            raise
         except Exception as e:
             try:
                 if parsed_opts.process_mode == "write":
@@ -757,6 +764,9 @@ class CLOptionParser:
             optional_filters.append(
                 "hb_count"
             )  # hb/interaction count is not part of the three formal list but works as a filter on its own
+            optional_filters.append(
+                "react_any"
+            )  # react_any is not part of the three formal list but works as a filter on its own
             for f in optional_filters:
                 if (
                     getattr(parsed_opts, f) is not None
@@ -842,21 +852,43 @@ class CLOptionParser:
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")
                 ligand_filters = {}
+                # parse the ligand filters, depending on how the keywords are used they will be a list of list or list of lists
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
+                    # just a simple string
                     if _type == ("ligand_max_atoms"):
                         ligand_filters[_type] = ligand_filter_value
                         continue
+                    # don't include None values
                     if ligand_filter_value is (None):
                         continue
                     ligand_filters[_type] = []
-                    for filter in ligand_filter_value:
-                        ligand_filters[_type].append(filter)
+                    # the other ligand filters can come as [[filter1,filter2,filter3]] or [[filter1],[filter2, filter3]]
+                    for filter_list in ligand_filter_value:
+                        # if more than one filter in list, go through each
+                        if len(filter_list) > 1:
+                            for filter in filter_list:
+                                if _type == "ligand_substruct_pos":
+                                    # make a lits of the six values
+                                    ligand_filters[_type].append(
+                                        [i for i in filter.split(" ")]
+                                    )
+                                else:
+                                    ligand_filters[_type].append(filter)
+                        else:
+                            if _type == "ligand_substruct_pos":
+                                # if only one item in list, append to ligand list
+                                ligand_filters[_type].append(
+                                    [i for i in filter_list[0].split(" ")]
+                                )
+                            else:
+                                ligand_filters[_type].append(filter_list[0])
 
                 ligand_filters["ligand_operator"] = parsed_opts.ligand_operator
+                # ligand substruct pos needs six items
                 if (
-                    ligand_filters["ligand_max_atoms"] is not None
-                    and len(ligand_filters["ligand_max_atoms"]) % 6 != 0
+                    "ligand_substruct_pos" in ligand_filters
+                    and len(ligand_filters["ligand_substruct_pos"][0]) % 6
                 ):
                     msg = "--ligand_substruct_pos needs groups of 6 values:\n"
                     msg += "  1. Ligand SMARTS\n"
@@ -865,7 +897,9 @@ class CLOptionParser:
                     msg += "  4. X\n"
                     msg += "  5. Y\n"
                     msg += "  6. Z\n"
-                    msg += 'For example --ligand_substruct_pos "[C][Oh]" 1 1.5 -20. 42. -7.1'
+                    msg += (
+                        'For example --ligand_substruct_pos "[C][Oh] 1 1.5 -20 42 -7.1"'
+                    )
                     raise OptionError(msg)
 
                 for k, v in ligand_filters.items():
@@ -896,12 +930,13 @@ class CLOptionParser:
             "max_proc": parsed_opts.max_proc,
         }
 
-        # parse read methods
+        # parse read methods without inputs
         self.plot = parsed_opts.plot
         self.export_bookmark_db = parsed_opts.export_bookmark_db
         self.export_receptor = parsed_opts.export_receptor
         self.pymol = parsed_opts.pymol
         self.data_from_bookmark = parsed_opts.data_from_bookmark
+        self.individual_sdf_files = parsed_opts.individual_sdf_files
 
         # parse read and output options
         self.outputopts = {

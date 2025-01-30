@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail multiprocessing manager
+# Ringtail multiprocess manager
 #
 
-import platform
 from time import sleep
 import queue
 import fnmatch
@@ -15,7 +14,8 @@ from .logutils import LOGGER
 from .exceptions import MultiprocessingError, RTCoreError
 import traceback
 from datetime import datetime
-import multiprocessing
+
+import multiprocess
 
 
 class MPManager:
@@ -80,15 +80,19 @@ class MPManager:
         self.num_files = 0
         self.max_proc = max_proc
         self.logger = LOGGER
-        self.receptor_blob = receptor_blob
 
-        # set up queue
+    def process_results(self):
+        """Processes results data (files or string sources) by adding them to the queue
+        and starting their processing in multiprocess.
+        """
         if self.max_proc is None:
-            self.max_proc = multiprocessing.cpu_count()
+            self.max_proc = multiprocess.cpu_count()
         self.num_readers = self.max_proc - 1
+        self.queueIn = multiprocess.Queue(maxsize=2 * self.max_proc)
+        self.queueOut = multiprocess.Queue(maxsize=2 * self.max_proc)
         # start the workers in background
         self.workers = []
-        self.p_conn, self.c_conn = multiprocessing.Pipe(True)
+        self.p_conn, self.c_conn = multiprocess.Pipe(True)
         self.logger.info(
             "Starting {0} docking results readers".format(self.num_readers)
         )
@@ -121,9 +125,7 @@ class MPManager:
                 self.target,
                 self.add_interactions,
                 self.interaction_cutoffs,
-                string_processing,
-                # need to pass receptor blob object of add interactions
-                self.receptor_blob,
+                self.receptor_file,
             )
 
             # this method calls .run() internally
@@ -146,10 +148,7 @@ class MPManager:
 
         # process items in the queue
         try:
-            if string_processing == True:
-                self._process_string_sources()
-            else:
-                self._process_file_sources()
+            self._process_data_sources()
         except Exception as e:
             tb = traceback.format_exc()
             self._kill_all_workers(e, "results sources processing", tb)
@@ -164,59 +163,58 @@ class MPManager:
 
         w.join()
 
-        self.logger.info(
-            "Wrote {0} docking results to the database".format(self.num_files)
-        )
+        self.logger.info(f"Wrote {self.num_files} docking results to the database")
 
-    def _process_file_sources(self):
-        """Adds each results file item to the queue, and processes lists of files,
-        recursively traveresed filepaths, and individually listed file paths.
+    def _process_data_sources(self):
+        """Adds each docking result item to the queue, including files and data provided as string/dict.
+        For files, processes lists of files, recursively traveresed filepaths, and individually listed file paths.
         """
-        # add individual file(s)
-        if self.file_sources.file != (None and [[]]):
-            for file_list in self.file_sources.file:
-                for file in file_list:
-                    if (
-                        fnmatch.fnmatch(file, self.file_pattern)
-                        and file != self.receptor_file
-                    ):
-                        self._add_to_queue(file)
 
-        # add files from file path(s)
-        if self.file_sources.file_path != (None and [[]]):
-            for path_list in self.file_sources.file_path:
-                for path in path_list:
-                    # scan for ligand dlgs
-                    for files in self._scan_dir(
-                        path, self.file_pattern, recursive=True
-                    ):
-                        for f in files:
-                            self._add_to_queue(f)
-        # add files from file list(s)
-        if self.file_sources.file_list != (None and [[]]):
-            for filelist_list in self.file_sources.file_list:
-                for filelist in filelist_list:
-                    self._scan_file_list(filelist, self.file_pattern.replace("*", ""))
+        if self.file_sources:
+            # add individual file(s)
+            if self.file_sources.file != (None and [[]]):
+                for file_list in self.file_sources.file:
+                    for file in file_list:
+                        if (
+                            fnmatch.fnmatch(file, self.file_pattern)
+                            and file != self.receptor_file
+                        ):
+                            self._add_to_queue(file)
 
-    def _process_string_sources(self):
-        """Adds each results string dictionary item to the queue
+            # add files from file path(s)
+            if self.file_sources.file_path != (None and [[]]):
+                for path_list in self.file_sources.file_path:
+                    for path in path_list:
+                        # scan for ligand dlgs
+                        for files in self._scan_dir(
+                            path, self.file_pattern, recursive=True
+                        ):
+                            for file in files:
+                                self._add_to_queue(file)
 
-        Raises:
-            RTCoreError
-        """
-        if self.string_sources != None:
-            for (
-                ligand_name,
-                docking_result,
-            ) in self.string_sources.results_strings.items():
-                string_data = {ligand_name: docking_result}
-                self._add_to_queue(string_data, string=True)
-        else:
-            raise RTCoreError(
-                "There was an error while reading the results string input."
-            )
+            # add files from file list(s)
+            if self.file_sources.file_list != (None and [[]]):
+                for filelist_list in self.file_sources.file_list:
+                    for filelist in filelist_list:
+                        self._scan_file_list(
+                            filelist, self.file_pattern.replace("*", "")
+                        )
 
-    def _add_to_queue(self, results_data, string=False):
+        # add docking data from input strings
+        if self.string_sources:
+            try:
+                for (
+                    ligand_name,
+                    docking_result,
+                ) in self.string_sources.results_strings.items():
+                    string_data = {ligand_name: docking_result}
+                    self._add_to_queue(string_data)
+            except:
+                raise RTCoreError(
+                    "There was an error while reading the results string input."
+                )
+
+    def _add_to_queue(self, results_data):
         """_summary_
 
         Args:
@@ -226,10 +224,10 @@ class MPManager:
         Raises:
             MultiprocessingError
         """
-        # adds result file to the multiprocessing queue
+        # adds result file to the multiprocess queue
         max_attempts = 750
         timeout = 0.5  # seconds
-        if string == False and self.receptor_file is not None:
+        if not isinstance(results_data, dict) and self.receptor_file is not None:
             if (
                 os.path.split(results_data)[-1] == os.path.split(self.receptor_file)[-1]
             ):  # check that we don't try to add the receptor
@@ -252,7 +250,7 @@ class MPManager:
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
             error, tb, filename = self.p_conn.recv()
-            self.logger.error(f"Caught error in multiprocessing from {filename}")
+            self.logger.error(f"Caught error in multiprocess from {filename}")
             # don't kill parser errors, only database error
             if filename == "Database":
                 self._kill_all_workers(error, filename, tb)
@@ -261,6 +259,7 @@ class MPManager:
                     f.write(
                         str(datetime.now()) + f"\tRingtail failed to parse {filename}\n"
                     )
+                    self.num_files -= 1
                     self.logger.debug(tb)
 
     def _kill_all_workers(self, error, filename, tb):
@@ -288,7 +287,7 @@ class MPManager:
         if recursive:
             path = os.path.normpath(path)
             path = os.path.expanduser(path)
-            for dirpath, dirnames, filenames in os.walk(path):
+            for dirpath, _, filenames in os.walk(path):
                 yield (  # <----
                     os.path.join(dirpath, f)
                     for f in fnmatch.filter(filenames, "*" + pattern)

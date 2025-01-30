@@ -42,7 +42,7 @@ class ResultsManager:
         db_file: str = None,
         storageman_class=None,
         chunk_size: int = 1,
-        parser_manager: str = "multiprocessing",
+        parser_manager: str = "multiprocess",
         file_sources=None,
         string_sources=None,
         receptor_blob=None,
@@ -112,12 +112,12 @@ class ResultsManager:
         if files_sources:
             logmsg = f"These are the file sources being processed: {str(self.file_sources.todict())}"
         else:
-            logmsg = f'This is the list of ligands whos strings ware being procssed: {str(self.string_sources.todict()["results_strings"].keys())}'
+            logmsg = f'This is the list of ligands whos strings are being procssed: {str(self.string_sources.todict()["results_strings"].keys())}'
         logger.debug(logmsg)
 
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {
-            "multiprocessing": MPManager,
+            "multiprocess": MPManager,
         }
         parser_opts = {}
         for k, v in self.__dict__.items():
@@ -125,4 +125,4 @@ class ResultsManager:
                 continue
             parser_opts[k] = v
         self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
-        self.parser.process_results(string_processing=strings_present)
+        self.parser.process_results()
