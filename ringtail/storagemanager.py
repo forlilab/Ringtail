@@ -3205,7 +3205,7 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             # check to see if file exist, and if it does, check that version is matching
-            if os.path.isfile(self.db_file):
+            if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
                 self.conn = self._create_connection()
                 compatible, db_version = self.check_ringtaildb_version()
                 if not compatible and not self.overwrite:
@@ -3327,6 +3327,7 @@ class StorageManagerSQLite(StorageManager):
         """
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
+        print("Database version", db_version)
         if db_version == "0":
             # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
             cur.execute(
