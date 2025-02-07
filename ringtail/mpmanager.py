@@ -152,35 +152,55 @@ class MPManager:
         For files, processes lists of files, recursively traveresed filepaths, and individually listed file paths.
         """
 
+        def _iterate_nested(obj):
+            """
+            File inputs can come in multiple levels of nested lists, this method unpacks them
+
+            Args:
+                obj (list[list[list[etc]]]): None or nested lists
+
+            Returns:
+                None: if input is None
+
+            Yields:
+                str: should be unpacked paths to docking results
+            """
+            if obj is None:
+                return None
+            elif isinstance(obj, list):
+                for item in obj:
+                    yield from _iterate_nested(item)
+            else:
+                yield obj
+
         if self.file_sources:
             # add individual file(s)
-            if self.file_sources.file != (None and [[]]):
-                for file_list in self.file_sources.file:
-                    for file in file_list:
-                        if (
-                            fnmatch.fnmatch(file, self.file_pattern)
-                            and file != self.receptor_file
-                        ):
-                            self._add_to_queue(file)
+            files = list(_iterate_nested(self.file_sources.file))
+            if files:
+                for file in files:
+                    print("each individual file: ", file)
+                    if (
+                        fnmatch.fnmatch(file, self.file_pattern)
+                        and file != self.receptor_file
+                    ):
+                        self._add_to_queue(file)
 
             # add files from file path(s)
-            if self.file_sources.file_path != (None and [[]]):
-                for path_list in self.file_sources.file_path:
-                    for path in path_list:
-                        # scan for ligand dlgs
-                        for files in self._scan_dir(
-                            path, self.file_pattern, recursive=True
-                        ):
-                            for file in files:
-                                self._add_to_queue(file)
+            path_list = list(_iterate_nested(self.file_sources.file_path))
+            if path_list:
+                for path in path_list:
+                    # scan for ligand dlgs
+                    for files in self._scan_dir(
+                        path, self.file_pattern, recursive=True
+                    ):
+                        for file in files:
+                            self._add_to_queue(file)
 
             # add files from file list(s)
-            if self.file_sources.file_list != (None and [[]]):
-                for filelist_list in self.file_sources.file_list:
-                    for filelist in filelist_list:
-                        self._scan_file_list(
-                            filelist, self.file_pattern.replace("*", "")
-                        )
+            file_lists = list(_iterate_nested(self.file_sources.file_list))
+            if file_lists:
+                for file_list in file_lists:
+                    self._scan_file_list(file_list, self.file_pattern.replace("*", ""))
 
         # add docking data from input strings
         if self.string_sources:

@@ -407,33 +407,6 @@ class RingtailCore:
             InputFiles
         """
 
-        # Method to deal with the file read manager currently expecting file data to be presented as double [[]] lists
-        def ensure_double_list(object) -> list:
-            """Most of ringtail is set up to handle files, file paths, and file lists as double lists [[items]].
-            Instead of changing that for now, the input is checked to ensure they are presented as, or can be
-            converted to a double list. Really only matters for using API."""
-            if type(object) == list:
-                if type(object[0]) == list:
-                    if type(object[0][0]) == str:
-                        pass
-                    else:
-                        raise OptionError(
-                            f"error, object is more than two encapsulated lists: '{object[0][0]}' should be a string."
-                        )
-                elif type(object[0]) == str:
-                    object = [object]
-                else:
-                    self.logger.error("Unable to parse file input.")
-            elif type(object) == str:
-                object = [[object]]
-            else:
-                self.logger.error("Unable to parse file input.")
-
-            return object
-
-        # keywords this pertains to
-        need_to_be_double_list = ["file", "file_path", "file_list"]
-
         # Set file format automatically if not specified
         if file_pattern is None:
             if self.docking_mode == "dlg":
@@ -463,8 +436,6 @@ class RingtailCore:
         # Set options from dict if provided
         if dict is not None:
             for k, v in dict.items():
-                if k in need_to_be_double_list and v is not None:
-                    v = ensure_double_list(v)
                 setattr(files, k, v)
             self.logger.debug(
                 f"File attributes {dict} were assigned from provided option dictionary."
@@ -474,8 +445,6 @@ class RingtailCore:
         # NOTE Will overwrite provided dictionary
         for k, v in individual_options.items():
             if v is not None:
-                if k in need_to_be_double_list:
-                    v = ensure_double_list(v)
                 setattr(files, k, v)
         self.logger.debug(
             f"File attributes {individual_options} were assigned from provided individual options."
