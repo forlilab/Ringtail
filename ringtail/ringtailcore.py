@@ -757,7 +757,7 @@ class RingtailCore:
         # Assign attributes to storage manager
         for k, v in self.storageopts.todict().items():
             setattr(self.storageman, k, v)
-        self.logger.info("Options for storage manager have been changed.")
+        self.logger.debug("Options for storage manager have been changed.")
 
     def set_resultsman_attributes(
         self,

@@ -117,7 +117,7 @@ class RTOptions:
                 item,
                 TypeSafe(default=info["default"], type=info["type"], object_name=item),
             )
-        logger.info(
+        logger.debug(
             f"A {name} object was created with default values for all attributes."
         )
 

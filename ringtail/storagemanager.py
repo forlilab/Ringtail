@@ -3213,13 +3213,13 @@ class StorageManagerSQLite(StorageManager):
                         f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
                     )
             else:
-                logger.debug("Creating a new database file.")
+                logger.info("Creating a new database file.")
                 self.conn = self._create_connection()
 
             signal(
                 SIGINT, self._sigint_handler
             )  # signal handler to catch keyboard interupts
-            self.logger.info(f"Ringtail connected to database {self.db_file}.")
+            self.logger.debug(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
             raise StorageError(f"Error while creating or connecting to database: {e}.")
 
@@ -3327,7 +3327,6 @@ class StorageManagerSQLite(StorageManager):
         """
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
-        print("Database version", db_version)
         if db_version == "0":
             # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
             cur.execute(
@@ -3502,7 +3501,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _close_connection(self):
         """Closes connection to database"""
-        self.logger.info("Closing database")
+        self.logger.debug("Closing database")
         self.conn.close()
 
     def _close_open_cursors(self):
