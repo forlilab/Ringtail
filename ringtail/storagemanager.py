@@ -2376,6 +2376,32 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
 
+    def calculate_percentile_from_value(self, docking_score_max=None, leff_max=None):
+        # TODO can replace with kwargs, and check in the create table statement or something if the column
+        # name is actually a numerical column or not
+        if docking_score_max and leff_max:
+            self.logger.warning(
+                "Can not calculate percentil for both docking score and ligand efficienct, will proceed with just docking score"
+            )
+            leff_max = None
+        if docking_score_max:
+            column = "docking_score"
+            value = docking_score_max
+        elif leff_max:
+            column = "leff"
+            value = leff_max
+
+        cur = self.conn.cursor()
+        cur.execute("SELECT COUNT(LigName) FROM Ligands")
+        n_ligands_total = int(cur.fetchone()[0])
+
+        cur.execute(
+            f"SELECT COUNT(*) FROM (SELECT Pose_ID FROM Results WHERE {column} < {value} GROUP BY LigName);"
+        )
+        n_ligands_passing = int(cur.fetchone()[0])
+
+        return n_ligands_passing / n_ligands_total * 100
+
     def _generate_outfield_list(self):
         """list describing outfields to be written
 
