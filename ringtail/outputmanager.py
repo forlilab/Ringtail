@@ -455,6 +455,6 @@ class OutputManager:
         """
         try:
             plt.savefig("scatter.png", bbox_inches="tight")
-            plt.close()
+            # plt.close()
         except Exception as e:
             raise OutputError("Error while saving figure") from e
