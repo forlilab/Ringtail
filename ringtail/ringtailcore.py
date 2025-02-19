@@ -1779,7 +1779,7 @@ class RingtailCore:
             markersize = 20
         # for smaller dataset, scale num of bins and markersize to size of dataset
         else:
-            num_of_bins = round(datalength / 10)
+            num_of_bins = max(1, round(datalength / 10))
             markersize = 60 - (datalength / 25)
 
         # plot the data
