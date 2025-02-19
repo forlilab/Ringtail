@@ -1498,7 +1498,9 @@ class RingtailCore:
                 self.storageman.fetch_single_ligand_output_info(ligname)
             )
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-            if flexible_residues != []:  # converts string to list
+            if flexible_residues is None:
+                flexible_residues, flexres_atomnames = [], []
+            elif flexible_residues != []:  # converts string to list
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
 
@@ -1532,7 +1534,7 @@ class RingtailCore:
         with open(path, "w") as file:
             file.write(pdb_str)
 
-        return ligand_mol, flexmoldict 
+        return ligand_mol, flexmoldict
 
     def write_molecule_sdfs(
         self,
@@ -1665,7 +1667,9 @@ class RingtailCore:
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
 
-            if flexible_residues != []:
+            if flexible_residues is None:
+                flexible_residues, flexres_atomnames = [], []
+            elif flexible_residues != []:
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
 
@@ -1879,7 +1883,9 @@ class RingtailCore:
                 flexible_residues, flexres_atomnames = (
                     self.storageman.fetch_flexres_info()
                 )
-                if flexible_residues != []:  # converts string to list
+                if flexible_residues is None:
+                    flexible_residues, flexres_atomnames = [], []
+                elif flexible_residues != []:  # converts string to list
                     flexible_residues = json.loads(flexible_residues)
                     flexres_atomnames = json.loads(flexres_atomnames)
 
