@@ -18,11 +18,6 @@ def main():
     try:
         # set up the logger
         logger = logutils.LOGGER
-<<<<<<< HEAD:scripts/rt_process_vs.py
-        logger.add_consolehandler(level="INFO")
-        logger.add_filehandler(log_file="ringtail", level="DEBUG")
-=======
->>>>>>> release:ringtail/cli/rt_process_vs.py
         # parse command line options and config file (if given)
         cmdinput = CLOptionParser()
         rtcore: RingtailCore = cmdinput.rtcore
@@ -72,8 +67,10 @@ def main():
 
             # write out molecules if requested
             if outopts.export_sdf_path:
-                rtcore.write_molecule_sdfs(sdf_path = outopts.export_sdf_path,
-                                           all_in_one=not cmdinput.individual_sdf_files)
+                rtcore.write_molecule_sdfs(
+                    sdf_path=outopts.export_sdf_path,
+                    all_in_one=not cmdinput.individual_sdf_files,
+                )
 
             # write out requested CSVs
             if readopts["export_bookmark_csv"]:
