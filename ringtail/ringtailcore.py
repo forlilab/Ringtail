@@ -574,7 +574,7 @@ class RingtailCore:
         interaction_tolerance: float = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        options_dict: dict | None = None,
+        options_dict: dict = None,
         finalize: bool = True,
     ):
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
@@ -1223,7 +1223,7 @@ class RingtailCore:
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
-        filters_dict: dict | None = None,
+        filters_dict: dict = None,
         # other processing options:
         enumerate_interaction_combs: bool = False,
         output_all_poses: bool = None,
@@ -1235,7 +1235,7 @@ class RingtailCore:
         outfields: str = None,
         bookmark_name: str = None,
         filter_bookmark: str = None,
-        options_dict: dict | None = None,
+        options_dict: dict = None,
         return_iter=False,
     ):
         """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
@@ -1532,11 +1532,11 @@ class RingtailCore:
         with open(path, "w") as file:
             file.write(pdb_str)
 
-        return ligand_mol, flexmoldict 
+        return ligand_mol, flexmoldict
 
     def write_molecule_sdfs(
         self,
-        sdf_path: str | None = None,
+        sdf_path: str = None,
         all_in_one: bool = True,
         bookmark_name: str = None,
         write_nonpassing: bool = None,
