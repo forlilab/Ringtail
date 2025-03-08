@@ -1736,9 +1736,10 @@ class RingtailCore:
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
+        Option to save the plot and close it immediately, or keep it open and save it manually later.
 
         Args:
-            save (bool): whether to save plot to cd
+            save (bool): whether to save plot to cd. Will save and close figure
             bookmark_name (str): bookmark from which to fetch filtered data to plot
             return_fig_handle (bool): use to return a handle to the matplotlib figure instead of saving or showing figure
 
