@@ -448,13 +448,13 @@ class OutputManager:
 
     def save_scatterplot(self):
         """
-        Saves current figure as scatter.png
+        Saves and closes current figure as scatter.png
 
         Raises:
             OutputError
         """
         try:
             plt.savefig("scatter.png", bbox_inches="tight")
-            # plt.close()
+            plt.close()
         except Exception as e:
             raise OutputError("Error while saving figure") from e
