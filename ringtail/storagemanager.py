@@ -3058,7 +3058,7 @@ class StorageManagerSQLite(StorageManager):
                     )
                 else:
                     # create string representation of ecah interaction not found
-                    interaction_not_found.append(":".join(interaction[:4]))
+                    interaction_not_found.append(":".join(interaction[:5]))
                 continue  # ends this iteration of the for loop
 
             # create a list of lists for interactions to either include or exclude
