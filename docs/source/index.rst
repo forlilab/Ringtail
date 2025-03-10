@@ -29,6 +29,10 @@ Ringtail offers a wealth of database creation and filtering options. The differe
 To get started, first follow the instructions to :ref:`install Ringtail <installation>`, then navigate to :ref:`Getting started with Ringtail <get_started>` for a quick overview of the basic usage of Ringtail from the command line.
 For more advanced and customizable use, learn how to use the :ref:`Ringtail API <api>`.
 
+
+Ringtail v2 comes with improved database write and filtering speeds. This includes preparing a database of 2 million ligands in less than an hour (tested on a Macbook Pro with Apple silicon chip)! Filtering the docked ligands based on the docking score, or more complex interaction filtering criteria, can be completed in a matter of seconds. 
+
+
 .. toctree::
    :maxdepth: 2
    :hidden:
