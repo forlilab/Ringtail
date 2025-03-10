@@ -1498,7 +1498,9 @@ class RingtailCore:
                 self.storageman.fetch_single_ligand_output_info(ligname)
             )
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-            if flexible_residues != []:  # converts string to list
+            if flexible_residues is None:
+                flexible_residues, flexres_atomnames = [], []
+            elif flexible_residues != []:  # converts string to list
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
 
@@ -1665,7 +1667,9 @@ class RingtailCore:
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
 
-            if flexible_residues != []:
+            if flexible_residues is None:
+                flexible_residues, flexres_atomnames = [], []
+            elif flexible_residues != []:
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
 
@@ -1732,9 +1736,10 @@ class RingtailCore:
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
+        Option to save the plot and close it immediately, or keep it open and save it manually later.
 
         Args:
-            save (bool): whether to save plot to cd
+            save (bool): whether to save plot to cd. Will save and close figure
             bookmark_name (str): bookmark from which to fetch filtered data to plot
             return_fig_handle (bool): use to return a handle to the matplotlib figure instead of saving or showing figure
 
@@ -1775,7 +1780,7 @@ class RingtailCore:
             markersize = 20
         # for smaller dataset, scale num of bins and markersize to size of dataset
         else:
-            num_of_bins = round(datalength / 10)
+            num_of_bins = max(1, round(datalength / 10))
             markersize = 60 - (datalength / 25)
 
         # plot the data
@@ -1879,7 +1884,9 @@ class RingtailCore:
                 flexible_residues, flexres_atomnames = (
                     self.storageman.fetch_flexres_info()
                 )
-                if flexible_residues != []:  # converts string to list
+                if flexible_residues is None:
+                    flexible_residues, flexres_atomnames = [], []
+                elif flexible_residues != []:  # converts string to list
                     flexible_residues = json.loads(flexible_residues)
                     flexres_atomnames = json.loads(flexres_atomnames)
 
