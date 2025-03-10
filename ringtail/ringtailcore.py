@@ -1834,6 +1834,7 @@ class RingtailCore:
 
         import subprocess
         from rdkit.Chem import PyMol
+        from rdkit import Chem
 
         # launch pymol session
         p = subprocess.Popen(
@@ -1868,6 +1869,27 @@ class RingtailCore:
                 raise RTCoreError(
                     "Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window."
                 ) from e
+
+            # check if receptor in db
+            receptor = self.storageman.fetch_receptor_objects()[0]
+            if receptor[1]:
+                rec_name = receptor[0]
+                rec_string = ReceptorManager.blob2str(receptor[1])
+                import tempfile
+
+                rec_string = ReceptorManager.blob2str(receptor[1])
+                # with the rdkit pymol api, easiest to read receptor from file
+                with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
+                    temp_file.write(rec_string.encode("utf-8"))
+                    temp_file.flush()
+                    temp_file_path = temp_file.name
+                    pymol.LoadFile(temp_file_path, rec_name)
+                    # center view on receptor
+                    pymol.server.do("zoom")
+            else:
+                self.logger.debug(
+                    "No receptor information in the database, receptor will not be displayed."
+                )
 
             def onpick(event):
                 line = event.artist

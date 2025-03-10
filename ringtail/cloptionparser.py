@@ -427,7 +427,7 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-py",
         "--pymol",
-        help="Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.",
+        help="Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will open receptor if one is saved in the database.",
         action="store_true",
     )
 
