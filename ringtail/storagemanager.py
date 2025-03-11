@@ -251,7 +251,7 @@ class StorageManager:
         )
         return filtered_results
 
-    def check_passing_bookmark_exists(self, bookmark_name: str | None = None):
+    def check_passing_bookmark_exists(self, bookmark_name: str = None):
         """Checks if bookmark name is in database
 
         Args:
@@ -1606,7 +1606,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             self.view_suffix = suffix
 
-    def fetch_filters_from_bookmark(self, bookmark_name: str | None = None):
+    def fetch_filters_from_bookmark(self, bookmark_name: str = None):
         """Method that will retrieve filter values used to construct bookmark
 
         Args:
@@ -2052,7 +2052,7 @@ class StorageManagerSQLite(StorageManager):
             "SELECT docking_score, leff FROM Results GROUP BY LigName"
         )
 
-    def _fetch_passing_plot_data(self, bookmark_name: str | None = None):
+    def _fetch_passing_plot_data(self, bookmark_name: str = None):
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
 
@@ -2200,7 +2200,7 @@ class StorageManagerSQLite(StorageManager):
 
     # region Methods dealing with filtered results
 
-    def _get_number_passing_ligands(self, bookmark_name: str | None = None):
+    def _get_number_passing_ligands(self, bookmark_name: str = None):
         """Returns count of the number of ligands that
             passed filtering criteria
 
@@ -2695,7 +2695,7 @@ class StorageManagerSQLite(StorageManager):
         view_query = f"SELECT * FROM {filtering_window} R " + query
         return output_query, view_query
 
-    def _prepare_cluster_query(self, unclustered_query: str) -> str | None:
+    def _prepare_cluster_query(self, unclustered_query: str) -> str:
         """
         These methods will take data returned from unclustered filter query, then run the cluster query and cluster the filtered data.
         This will output pose_ids that are representative of the clusters, and these pose_ids will be returned so that
@@ -3084,7 +3084,7 @@ class StorageManagerSQLite(StorageManager):
                     )
                 else:
                     # create string representation of ecah interaction not found
-                    interaction_not_found.append(":".join(interaction[:4]))
+                    interaction_not_found.append(":".join(interaction[:5]))
                 continue  # ends this iteration of the for loop
 
             # create a list of lists for interactions to either include or exclude

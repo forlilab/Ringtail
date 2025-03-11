@@ -543,7 +543,7 @@ class RingtailCore:
         interaction_tolerance: float = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        options_dict: dict | None = None,
+        options_dict: dict = None,
         finalize: bool = True,
     ):
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
@@ -1192,7 +1192,7 @@ class RingtailCore:
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
-        filters_dict: dict | None = None,
+        filters_dict: dict = None,
         # other processing options:
         enumerate_interaction_combs: bool = False,
         output_all_poses: bool = None,
@@ -1204,7 +1204,7 @@ class RingtailCore:
         outfields: str = None,
         bookmark_name: str = None,
         filter_bookmark: str = None,
-        options_dict: dict | None = None,
+        options_dict: dict = None,
         return_iter=False,
     ):
         """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
@@ -1467,7 +1467,9 @@ class RingtailCore:
                 self.storageman.fetch_single_ligand_output_info(ligname)
             )
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-            if flexible_residues != []:  # converts string to list
+            if flexible_residues is None:
+                flexible_residues, flexres_atomnames = [], []
+            elif flexible_residues != []:  # converts string to list
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
 
@@ -1505,7 +1507,7 @@ class RingtailCore:
 
     def write_molecule_sdfs(
         self,
-        sdf_path: str | None = None,
+        sdf_path: str = None,
         all_in_one: bool = True,
         bookmark_name: str = None,
         write_nonpassing: bool = None,
@@ -1634,7 +1636,9 @@ class RingtailCore:
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
 
-            if flexible_residues != []:
+            if flexible_residues is None:
+                flexible_residues, flexres_atomnames = [], []
+            elif flexible_residues != []:
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
 
@@ -1701,9 +1705,10 @@ class RingtailCore:
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
+        Option to save the plot and close it immediately, or keep it open and save it manually later.
 
         Args:
-            save (bool): whether to save plot to cd
+            save (bool): whether to save plot to cd. Will save and close figure
             bookmark_name (str): bookmark from which to fetch filtered data to plot
             return_fig_handle (bool): use to return a handle to the matplotlib figure instead of saving or showing figure
 
@@ -1744,7 +1749,7 @@ class RingtailCore:
             markersize = 20
         # for smaller dataset, scale num of bins and markersize to size of dataset
         else:
-            num_of_bins = round(datalength / 10)
+            num_of_bins = max(1, round(datalength / 10))
             markersize = 60 - (datalength / 25)
 
         # plot the data
@@ -1798,6 +1803,7 @@ class RingtailCore:
 
         import subprocess
         from rdkit.Chem import PyMol
+        from rdkit import Chem
 
         # launch pymol session
         p = subprocess.Popen(
@@ -1807,7 +1813,7 @@ class RingtailCore:
         # ensure pymol was opened
         import time
 
-        time.sleep(2)
+        time.sleep(10)
 
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
@@ -1833,6 +1839,27 @@ class RingtailCore:
                     "Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window."
                 ) from e
 
+            # check if receptor in db
+            receptor = self.storageman.fetch_receptor_objects()[0]
+            if receptor[1]:
+                rec_name = receptor[0]
+                rec_string = ReceptorManager.blob2str(receptor[1])
+                import tempfile
+
+                rec_string = ReceptorManager.blob2str(receptor[1])
+                # with the rdkit pymol api, easiest to read receptor from file
+                with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
+                    temp_file.write(rec_string.encode("utf-8"))
+                    temp_file.flush()
+                    temp_file_path = temp_file.name
+                    pymol.LoadFile(temp_file_path, rec_name)
+                    # center view on receptor
+                    pymol.server.do("zoom")
+            else:
+                self.logger.debug(
+                    "No receptor information in the database, receptor will not be displayed."
+                )
+
             def onpick(event):
                 line = event.artist
                 coords = tuple([c[0] for c in line.get_data()])
@@ -1848,7 +1875,9 @@ class RingtailCore:
                 flexible_residues, flexres_atomnames = (
                     self.storageman.fetch_flexres_info()
                 )
-                if flexible_residues != []:  # converts string to list
+                if flexible_residues is None:
+                    flexible_residues, flexres_atomnames = [], []
+                elif flexible_residues != []:  # converts string to list
                     flexible_residues = json.loads(flexible_residues)
                     flexres_atomnames = json.loads(flexres_atomnames)
 

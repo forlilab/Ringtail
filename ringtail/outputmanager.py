@@ -448,7 +448,7 @@ class OutputManager:
 
     def save_scatterplot(self):
         """
-        Saves current figure as scatter.png
+        Saves and closes current figure as scatter.png
 
         Raises:
             OutputError
