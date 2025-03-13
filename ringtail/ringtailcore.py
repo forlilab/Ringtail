@@ -1834,7 +1834,6 @@ class RingtailCore:
 
         import subprocess
         from rdkit.Chem import PyMol
-        from rdkit import Chem
 
         # launch pymol session
         p = subprocess.Popen(
