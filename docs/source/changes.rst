@@ -3,6 +3,13 @@
 Changes in Ringtail
 ######################
 
+Changes in 2.1.2: bug fixes
+****************************
+* Removing of union operand that made Ringtail incompatible with python=3.9
+* Pymol now displays receptor if present in database
+* Proper handling in preparing rdkit Mols in absence of flexible residues
+* Enhanced error messages and docs related to plotting and pymol
+
 Changes in 2.1.1: bug fixes and result plot enhancements
 ********************************************************
 Enhancements
