@@ -1819,6 +1819,16 @@ class RingtailCore:
         """
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
+        else:
+            if self.storageman.bookmark_name in self.get_bookmark_names():
+                self.logger.debug(
+                    f"No bookmark specified, using bookmark '{self.storageman.bookmark_name}'."
+                )
+            else:
+                self.logger.info(
+                    "No bookmark specified or available, passing_data will return empty."
+                )
+
         with self.storageman:
             all_data, passing_data = self.storageman.get_plot_data()
 
@@ -1829,7 +1839,7 @@ class RingtailCore:
         Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
 
         Args:
-            bookmark_name (str): bookmark name to use in pymol. 'None' uses the whole db?
+            bookmark_name (str): bookmark name to use in pymol. Will look for the default bookmark 'passing_results' (or last used bookmark) if None is provided.
         """
 
         import subprocess
@@ -1847,6 +1857,15 @@ class RingtailCore:
 
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
+        else:
+            if self.storageman.bookmark_name in self.get_bookmark_names():
+                self.logger.debug(
+                    f"No bookmark specified, using bookmark '{self.storageman.bookmark_name}'."
+                )
+            else:
+                self.logger.error(
+                    "No bookmark specified or available. display_pymol() currently only works for filtered data. "
+                )
 
         poseIDs = {}
         with self.storageman:
