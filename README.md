@@ -29,6 +29,12 @@ at [Scripps Research](https://www.scripps.edu/).
 ### Documentation
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
+### Version 2.1.2 bug fixes
+- Removing of union operand that made Ringtail incompatible with python=3.9
+- Pymol now displays receptor if present in database
+- Proper handling in preparing rdkit Mols in absence of flexible residues
+- Enhanced error messages and docs related to plotting and pymol
+
 ### Version 2.1.1 bug fixes
 - bugs related to ligand filtering and certain uses of the `overwrite` option in the command line have been fixed
 - enhancements to the result plotting feature
