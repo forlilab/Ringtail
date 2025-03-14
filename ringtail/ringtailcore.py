@@ -7,7 +7,6 @@
 import matplotlib.pyplot as plt
 import json
 from meeko import RDKitMolCreate
-from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 from .storagemanager import StorageManager
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
@@ -574,7 +573,7 @@ class RingtailCore:
         interaction_tolerance: float = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        options_dict: dict | None = None,
+        options_dict: dict = None,
         finalize: bool = True,
     ):
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
@@ -1223,7 +1222,7 @@ class RingtailCore:
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
-        filters_dict: dict | None = None,
+        filters_dict: dict = None,
         # other processing options:
         enumerate_interaction_combs: bool = False,
         output_all_poses: bool = None,
@@ -1235,7 +1234,7 @@ class RingtailCore:
         outfields: str = None,
         bookmark_name: str = None,
         filter_bookmark: str = None,
-        options_dict: dict | None = None,
+        options_dict: dict = None,
         return_iter=False,
     ):
         """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
@@ -1476,67 +1475,9 @@ class RingtailCore:
 
         return ligands_passed
 
-    def write_flexres_pdb(
-        self, receptor_polymer, ligname: str, filename: str, bookmark_name: str = None
-    ):
-        """
-        Writes a receptor pdb with flexible residues based on the ligand provided
-
-        Args:
-            receptor_polymer (Polymer): version of receptor produced by meeko
-            ligname (str): ligand name for which the receptor flexible residue info should be collected
-            filename (str): name of the output pdb, extension is optional, will default to '.pdb'
-            bookmark_name (str, optional): will use last used bookmark if not specified, will not work in a db without any filtering performed
-        """
-        # make flexres rdkit mols for ligand-receptor docking
-        if bookmark_name is not None:
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
-
-        with self.storageman:
-            self.storageman.create_temp_table_from_bookmark()
-            ligname, ligand_smile, atom_index_map, hydrogen_parents = (
-                self.storageman.fetch_single_ligand_output_info(ligname)
-            )
-            flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
-            if flexible_residues != []:  # converts string to list
-                flexible_residues = json.loads(flexible_residues)
-                flexres_atomnames = json.loads(flexres_atomnames)
-
-            ligand_mol, flexres_mols, _ = self._create_rdkit_mol(
-                ligname,
-                ligand_smile,
-                atom_index_map,
-                hydrogen_parents,
-                flexible_residues,
-                flexres_atomnames,
-            )
-            if filename:
-                # if providing filename, make sure it has .pdb extension
-                root, ext = os.path.splitext(filename)
-                if not ext:
-                    ext = ".pdb"
-                path = root + ext
-            else:
-                # name if after the receptor
-                receptor_name, _ = self.storageman.fetch_receptor_objects()[0]
-                path = receptor_name + ".pdb"
-
-        flexmoldict = {}
-        # string in list of strings
-        for index, flexres in enumerate(flexible_residues):
-            # res id is chain:resnum
-            flexmoldict[f"{flexres[4]}:{flexres[-3:]}"] = flexres_mols[index]
-
-        pdb_str = pdb_updated_flexres_from_rdkit(receptor_polymer, flexmoldict)
-        # write pdb string to file
-        with open(path, "w") as file:
-            file.write(pdb_str)
-
-        return ligand_mol, flexmoldict 
-
     def write_molecule_sdfs(
         self,
-        sdf_path: str | None = None,
+        sdf_path: str = None,
         all_in_one: bool = True,
         bookmark_name: str = None,
         write_nonpassing: bool = None,
@@ -1665,7 +1606,9 @@ class RingtailCore:
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
 
-            if flexible_residues != []:
+            if flexible_residues is None:
+                flexible_residues, flexres_atomnames = [], []
+            elif flexible_residues != []:
                 flexible_residues = json.loads(flexible_residues)
                 flexres_atomnames = json.loads(flexres_atomnames)
 
@@ -1732,9 +1675,10 @@ class RingtailCore:
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
+        Option to save the plot and close it immediately, or keep it open and save it manually later.
 
         Args:
-            save (bool): whether to save plot to cd
+            save (bool): whether to save plot to cd. Will save and close figure
             bookmark_name (str): bookmark from which to fetch filtered data to plot
             return_fig_handle (bool): use to return a handle to the matplotlib figure instead of saving or showing figure
 
@@ -1775,7 +1719,7 @@ class RingtailCore:
             markersize = 20
         # for smaller dataset, scale num of bins and markersize to size of dataset
         else:
-            num_of_bins = round(datalength / 10)
+            num_of_bins = max(1, round(datalength / 10))
             markersize = 60 - (datalength / 25)
 
         # plot the data
@@ -1814,6 +1758,16 @@ class RingtailCore:
         """
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
+        else:
+            if self.storageman.bookmark_name in self.get_bookmark_names():
+                self.logger.debug(
+                    f"No bookmark specified, using bookmark '{self.storageman.bookmark_name}'."
+                )
+            else:
+                self.logger.info(
+                    "No bookmark specified or available, passing_data will return empty."
+                )
+
         with self.storageman:
             all_data, passing_data = self.storageman.get_plot_data()
 
@@ -1824,7 +1778,7 @@ class RingtailCore:
         Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
 
         Args:
-            bookmark_name (str): bookmark name to use in pymol. 'None' uses the whole db?
+            bookmark_name (str): bookmark name to use in pymol. Will look for the default bookmark 'passing_results' (or last used bookmark) if None is provided.
         """
 
         import subprocess
@@ -1838,10 +1792,19 @@ class RingtailCore:
         # ensure pymol was opened
         import time
 
-        time.sleep(2)
+        time.sleep(10)
 
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
+        else:
+            if self.storageman.bookmark_name in self.get_bookmark_names():
+                self.logger.debug(
+                    f"No bookmark specified, using bookmark '{self.storageman.bookmark_name}'."
+                )
+            else:
+                self.logger.error(
+                    "No bookmark specified or available. display_pymol() currently only works for filtered data. "
+                )
 
         poseIDs = {}
         with self.storageman:
@@ -1864,6 +1827,27 @@ class RingtailCore:
                     "Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window."
                 ) from e
 
+            # check if receptor in db
+            receptor = self.storageman.fetch_receptor_objects()[0]
+            if receptor[1]:
+                rec_name = receptor[0]
+                rec_string = ReceptorManager.blob2str(receptor[1])
+                import tempfile
+
+                rec_string = ReceptorManager.blob2str(receptor[1])
+                # with the rdkit pymol api, easiest to read receptor from file
+                with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
+                    temp_file.write(rec_string.encode("utf-8"))
+                    temp_file.flush()
+                    temp_file_path = temp_file.name
+                    pymol.LoadFile(temp_file_path, rec_name)
+                    # center view on receptor
+                    pymol.server.do("zoom")
+            else:
+                self.logger.debug(
+                    "No receptor information in the database, receptor will not be displayed."
+                )
+
             def onpick(event):
                 line = event.artist
                 coords = tuple([c[0] for c in line.get_data()])
@@ -1879,7 +1863,9 @@ class RingtailCore:
                 flexible_residues, flexres_atomnames = (
                     self.storageman.fetch_flexres_info()
                 )
-                if flexible_residues != []:  # converts string to list
+                if flexible_residues is None:
+                    flexible_residues, flexres_atomnames = [], []
+                elif flexible_residues != []:  # converts string to list
                     flexible_residues = json.loads(flexible_residues)
                     flexres_atomnames = json.loads(flexres_atomnames)
 
