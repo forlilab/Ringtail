@@ -178,7 +178,6 @@ class MPManager:
             files = list(_iterate_nested(self.file_sources.file))
             if files:
                 for file in files:
-                    print("each individual file: ", file)
                     if (
                         fnmatch.fnmatch(file, self.file_pattern)
                         and file != self.receptor_file
