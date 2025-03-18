@@ -1850,7 +1850,7 @@ class RingtailCore:
 
         pymol = mol_viewer
         if canvas is None:
-            axes = plt.axes
+            axes = plt.axes()
         else:
             axes = canvas.axes
         poseIDs = {}
@@ -1927,10 +1927,12 @@ class RingtailCore:
                         showOnly=False,
                     )
 
-            cid = canvas.mpl_connect("pick_event", _onpick)
             if not canvas:
+                fig = plt.gcf()
+                cid = fig.canvas.mpl_connect("pick_event", _onpick)
                 plt.show()
             else:
+                cid = canvas.mpl_connect("pick_event", _onpick)
                 return canvas
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):
