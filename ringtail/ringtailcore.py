@@ -1793,7 +1793,7 @@ class RingtailCore:
 
         return all_data, passing_data
 
-    def display_pymol(self, bookmark_name=None):
+    def display_pymol(self, bookmark_name=None, integrate: bool = False, canvas=None):
         """
         Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
 
@@ -1801,43 +1801,71 @@ class RingtailCore:
             bookmark_name (str): bookmark name to use in pymol. 'None' uses the whole db?
         """
 
+        pymol = self.launch_pymol()
+        self.make_clickable_plot(pymol, bookmark_name)
+
+    def launch_pymol(self):
         import subprocess
         from rdkit.Chem import PyMol
-        from rdkit import Chem
+        import socket
+        import time
 
         # launch pymol session
         p = subprocess.Popen(
-            ["pymol", "-R"],
-            stdout=subprocess.PIPE,
+            ["pymol", "-R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
+
         # ensure pymol was opened
-        import time
+        def _is_pymol_running(host="localhost", port=9123):
+            """Check if PyMOL's remote server is responding."""
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                return sock.connect_ex((host, port)) == 0
 
-        time.sleep(10)
+        # Wait until PyMOL is fully loaded
+        timeout = 10  # max wait time in seconds
+        start_time = time.time()
 
+        while not _is_pymol_running():
+            if time.time() - start_time > timeout:
+                break
+            time.sleep(0.5)
+
+        if not _is_pymol_running():
+            self.logger.error("PyMOL failed to start.")
+
+        try:
+            pymol = PyMol.MolViewer()
+        except ConnectionRefusedError as e:
+            raise RTCoreError(
+                "Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window."
+            ) from e
+        return pymol
+
+    def make_clickable_plot(self, mol_viewer, bookmark_name, canvas=None):
+        """should be handed a molecular viewer, plot requested data, and
+        have the plotted data be clickable which click will display them
+        in the molecular viewer"""
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
 
+        pymol = mol_viewer
+        if canvas is None:
+            axes = plt.axes()
+        else:
+            axes = canvas.axes
         poseIDs = {}
         with self.storageman:
             # fetch data for passing ligands
             _, passing_data = self.storageman.get_plot_data(only_passing=True)
             for line in passing_data:
-                plt.plot(line[0], line[1], ".r", mfc="None", picker=5)
+                axes.plot(line[0], line[1], ".r", mfc="None", picker=5)
                 poseIDs[(line[0], line[1])] = (
                     line[2],
                     line[3],
                 )  # line[0] is LE, line[1] is docking score, line[2] is pose_ID, line[3] is LigName
-            plt.ylabel("Ligand Efficiency (kcal/mol/heavy atom)")
-            plt.xlabel("Docking Score (kcal/mol)")
-            plt.title("Passing Docking Poses")
-
-            try:
-                pymol = PyMol.MolViewer()
-            except ConnectionRefusedError as e:
-                raise RTCoreError(
-                    "Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window."
-                ) from e
+            axes.set_ylabel("Ligand Efficiency (kcal/mol/heavy atom)")
+            axes.set_xlabel("Docking Score (kcal/mol)")
+            axes.set_title("Passing Docking Poses")
 
             # check if receptor in db
             receptor = self.storageman.fetch_receptor_objects()[0]
@@ -1860,7 +1888,7 @@ class RingtailCore:
                     "No receptor information in the database, receptor will not be displayed."
                 )
 
-            def onpick(event):
+            def _onpick(event):
                 line = event.artist
                 coords = tuple([c[0] for c in line.get_data()])
                 chosen_pose = poseIDs[coords]
@@ -1899,9 +1927,13 @@ class RingtailCore:
                         showOnly=False,
                     )
 
-            fig = plt.gcf()
-            cid = fig.canvas.mpl_connect("pick_event", onpick)
-            plt.show()
+            if not canvas:
+                fig = plt.gcf()
+                cid = fig.canvas.mpl_connect("pick_event", _onpick)
+                plt.show()
+            else:
+                cid = canvas.mpl_connect("pick_event", _onpick)
+                return canvas
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV
