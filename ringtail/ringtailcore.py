@@ -1845,6 +1845,9 @@ class RingtailCore:
         """should be handed a molecular viewer, plot requested data, and
         have the plotted data be clickable which click will display them
         in the molecular viewer"""
+        if hasattr(self, "cid"):
+            # disconnect any old connections
+            canvas.mpl_disconnect(self.cid)
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
 
@@ -1932,7 +1935,8 @@ class RingtailCore:
                 cid = fig.canvas.mpl_connect("pick_event", _onpick)
                 plt.show()
             else:
-                cid = canvas.mpl_connect("pick_event", _onpick)
+                # the connection ID terminates once a new plot is made, need to keep track of
+                self.cid = canvas.mpl_connect("pick_event", _onpick)
                 return canvas
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):
