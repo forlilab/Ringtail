@@ -1811,7 +1811,7 @@ class RingtailCore:
         import time
 
         # launch pymol session
-        p = subprocess.Popen(
+        process = subprocess.Popen(
             ["pymol", "-R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
 
@@ -1839,7 +1839,7 @@ class RingtailCore:
             raise RTCoreError(
                 "Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window."
             ) from e
-        return pymol
+        return pymol, process
 
     def make_clickable_plot(self, mol_viewer, bookmark_name, canvas=None):
         """should be handed a molecular viewer, plot requested data, and
