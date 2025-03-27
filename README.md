@@ -29,6 +29,7 @@ at [Scripps Research](https://www.scripps.edu/).
 ### Documentation
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
+
 ### Version 2.1.3 enhancement and bug fix
 - New method added to enable exporting receptor pdb with flexible residues given ligand
 - Initializing ringtail with full path to a database could result in issues exporting SDFs to specified folder, this has been fixed
@@ -49,7 +50,7 @@ In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedoc
 - fully developed API can add docking results without using file system (for Vina)
 - much faster filtering (v2.1.0)
 - bug fixes
-- see detailed list of changes on [ReadTheDocs](/https://ringtail.readthedocs.io)
+- see detailed list of changes on [ReadTheDocs](https://ringtail.readthedocs.io)
 
 #### Updating database to work with v2.0
 If you have previously written a database with Ringtail < v2, it will need to be updated to be compatible with filtering with v2. We have included a new script `rt_db_to_v200` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
