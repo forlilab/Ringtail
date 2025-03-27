@@ -1549,7 +1549,7 @@ class RingtailCore:
             # determine filename
             if all_in_one:
                 # will write one SDF file for all molecules in bookmark (_None if no bookmark present)
-                db_file_name = os.path.splitext(self.db_file)[0]
+                db_file_name = os.path.splitext(os.path.basename(self.db_file))[0]
                 sdf_file_name = ("{0}_{1}.sdf").format(
                     db_file_name, str(self.storageman.bookmark_name)
                 )
