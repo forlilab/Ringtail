@@ -29,6 +29,10 @@ at [Scripps Research](https://www.scripps.edu/).
 ### Documentation
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
+### Version 2.1.3 enhancement and bug fix
+- New method added to enable exporting receptor pdb with flexible residues given ligand
+- Initializing ringtail with full path to a database could result in issues exporting SDFs to specified folder, this has been fixed
+
 ### Version 2.1.2 bug fixes
 - Removing of union operand that made Ringtail incompatible with python=3.9
 - Pymol now displays receptor if present in database
