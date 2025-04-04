@@ -3669,4 +3669,13 @@ class StorageManagerSQLite(StorageManager):
             ) from e
         return cur
 
+    def _insert_data_tuple(self, query: str, data: tuple):
+        try:
+            cur = self.conn.cursor()
+            cur.execute(query, data)
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(f"Error while executing insert query") from e
+
     # endregion
