@@ -3669,11 +3669,10 @@ class StorageManagerSQLite(StorageManager):
             ) from e
         return cur
 
-    def _insert_data_tuple(self, query: str, data: tuple):
-        # TODO give better name
+    def execute_with_params(self, query: str, parameters: tuple):
         try:
             cur = self.conn.cursor()
-            cur.execute(query, data)
+            cur.execute(query, parameters)
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
