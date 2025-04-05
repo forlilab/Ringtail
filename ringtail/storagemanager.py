@@ -3670,6 +3670,7 @@ class StorageManagerSQLite(StorageManager):
         return cur
 
     def _insert_data_tuple(self, query: str, data: tuple):
+        # TODO give better name
         try:
             cur = self.conn.cursor()
             cur.execute(query, data)
