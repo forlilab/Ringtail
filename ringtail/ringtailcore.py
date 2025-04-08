@@ -7,7 +7,6 @@
 import matplotlib.pyplot as plt
 import json
 from meeko import RDKitMolCreate
-from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 from .storagemanager import StorageManager
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
@@ -1448,6 +1447,9 @@ class RingtailCore:
     def write_flexres_pdb(
         self, receptor_polymer, ligname: str, filename: str, bookmark_name: str = None
     ):
+
+        from meeko.export_flexres import pdb_updated_flexres_from_rdkit
+
         """
         Writes a receptor pdb with flexible residues based on the ligand provided
 
@@ -1841,17 +1843,18 @@ class RingtailCore:
             ) from e
         return pymol, process
 
-    def make_clickable_plot(self, 
-                            mol_viewer, 
-                            bookmark_name, 
-                            canvas=None, 
-                            viewer=None, 
-                            viewer_mol=None, 
-                            command=None):
+    def make_clickable_plot(
+        self,
+        mol_viewer,
+        bookmark_name,
+        canvas=None,
+        viewer=None,
+        viewer_mol=None,
+        command=None,
+    ):
         """should be handed a molecular viewer, plot requested data, and
         have the plotted data be clickable which click will display them
         in the molecular viewer"""
-
 
         if hasattr(self, "cid"):
             # disconnect any old connections
@@ -1882,19 +1885,21 @@ class RingtailCore:
             # check if receptor in db
             receptor = self.storageman.fetch_receptor_objects()[0]
             if receptor[1]:
-                rec_name = receptor[0]
-                rec_string = ReceptorManager.blob2str(receptor[1])
-                import tempfile
+                # load receptor if it exist in database
+                pass
+                # rec_name = receptor[0]
+                # rec_string = ReceptorManager.blob2str(receptor[1])
+                # import tempfile
 
-                rec_string = ReceptorManager.blob2str(receptor[1])
-                # with the rdkit pymol api, easiest to read receptor from file
-                with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
-                    temp_file.write(rec_string.encode("utf-8"))
-                    temp_file.flush()
-                    temp_file_path = temp_file.name
-                    pymol.LoadFile(temp_file_path, rec_name)
-                    # center view on receptor
-                    pymol.server.do("zoom")
+                # rec_string = ReceptorManager.blob2str(receptor[1])
+                # # with the rdkit pymol api, easiest to read receptor from file
+                # with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
+                #     temp_file.write(rec_string.encode("utf-8"))
+                #     temp_file.flush()
+                #     temp_file_path = temp_file.name
+                #     pymol.LoadFile(temp_file_path, rec_name)
+                #     # center view on receptor
+                #     pymol.server.do("zoom")
             else:
                 self.logger.debug(
                     "No receptor information in the database, receptor will not be displayed."
@@ -1936,14 +1941,20 @@ class RingtailCore:
                 # also leave the pymol option available
                 if viewer != None:
                     viewer.hidesticks(None)
-                    
-                    # this prop is required by _load_rdkit   
-                    mol.SetProp("_Name",f"{Chem.MolToSmiles(mol)}")
+
+                    # this prop is required by _load_rdkit
+                    mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
                     metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
                     self.new_mol = command(mol, metadata)
                     print(f"#debug, self.newmol inside onpick{self.new_mol}")
                     viewer.objects.add(self.new_mol)
-                    viewer.showsticks(self.new_mol, style={'balls':{"shading": "fresnel"},'sticks':{"shading": "phong"}})
+                    viewer.showsticks(
+                        self.new_mol,
+                        style={
+                            "balls": {"shading": "fresnel"},
+                            "sticks": {"shading": "phong"},
+                        },
+                    )
                     viewer.autozoom()
                     viewer.colorbyelement(self.new_mol, carbon_color="grey")
                 else:
@@ -1954,6 +1965,7 @@ class RingtailCore:
                             name=ligname + "_" + flexible_residues[idx],
                             showOnly=False,
                         )
+
             print(f"#jani debug, canvas: {canvas}")
             if not canvas:
                 fig = plt.gcf()
@@ -1965,8 +1977,6 @@ class RingtailCore:
                 self.cid = canvas.mpl_connect("pick_event", _onpick)
                 # need to return updated mol
                 return canvas
-
-
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV
