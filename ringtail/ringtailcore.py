@@ -1841,10 +1841,18 @@ class RingtailCore:
             ) from e
         return pymol, process
 
-    def make_clickable_plot(self, mol_viewer, bookmark_name, canvas=None):
+    def make_clickable_plot(self, 
+                            mol_viewer, 
+                            bookmark_name, 
+                            canvas=None, 
+                            viewer=None, 
+                            viewer_mol=None, 
+                            command=None):
         """should be handed a molecular viewer, plot requested data, and
         have the plotted data be clickable which click will display them
         in the molecular viewer"""
+
+
         if hasattr(self, "cid"):
             # disconnect any old connections
             canvas.mpl_disconnect(self.cid)
@@ -1852,6 +1860,7 @@ class RingtailCore:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
 
         pymol = mol_viewer
+        self.new_mol = None
         if canvas is None:
             axes = plt.axes()
         else:
@@ -1922,22 +1931,42 @@ class RingtailCore:
                     pose_ID=chosen_pose[0],
                 )
                 self.logger.debug(Chem.MolToSmiles(mol))
-                pymol.ShowMol(mol, name=ligname, showOnly=False)
-                for idx, resmol in enumerate(flexres_mols):
-                    pymol.ShowMol(
-                        resmol,
-                        name=ligname + "_" + flexible_residues[idx],
-                        showOnly=False,
-                    )
 
+                # update custom viewer
+                # also leave the pymol option available
+                if viewer != None:
+                    viewer.hidesticks(None)
+                    
+                    # this prop is required by _load_rdkit   
+                    mol.SetProp("_Name",f"{Chem.MolToSmiles(mol)}")
+                    metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
+                    self.new_mol = command(mol, metadata)
+                    print(f"#debug, self.newmol inside onpick{self.new_mol}")
+                    viewer.objects.add(self.new_mol)
+                    viewer.showsticks(self.new_mol, style={'balls':{"shading": "fresnel"},'sticks':{"shading": "phong"}})
+                    viewer.autozoom()
+                    viewer.colorbyelement(self.new_mol, carbon_color="grey")
+                else:
+                    pymol.ShowMol(mol, name=ligname, showOnly=False)
+                    for idx, resmol in enumerate(flexres_mols):
+                        pymol.ShowMol(
+                            resmol,
+                            name=ligname + "_" + flexible_residues[idx],
+                            showOnly=False,
+                        )
+            print(f"#jani debug, canvas: {canvas}")
             if not canvas:
                 fig = plt.gcf()
                 cid = fig.canvas.mpl_connect("pick_event", _onpick)
                 plt.show()
+
             else:
                 # the connection ID terminates once a new plot is made, need to keep track of
                 self.cid = canvas.mpl_connect("pick_event", _onpick)
+                # need to return updated mol
                 return canvas
+
+
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV
