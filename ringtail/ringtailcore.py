@@ -1885,10 +1885,16 @@ class RingtailCore:
             # check if receptor in db
             receptor = self.storageman.fetch_receptor_objects()[0]
             if receptor[1]:
+                print("jani debug recepter", receptor[0], len(receptor))
+                
                 # load receptor if it exist in database
+                rec_name = receptor[0]
+                rec_string = ReceptorManager.blob2str(receptor[1])
+                # print("jani debug, rec_string:", rec_string)
+                
+                # m = Chem.Mol(rec_string)
+                # print ("jani debug m object:", m)
                 pass
-                # rec_name = receptor[0]
-                # rec_string = ReceptorManager.blob2str(receptor[1])
                 # import tempfile
 
                 # rec_string = ReceptorManager.blob2str(receptor[1])
@@ -1940,12 +1946,12 @@ class RingtailCore:
                 # update custom viewer
                 # also leave the pymol option available
                 if viewer != None:
-                    viewer.hidesticks(None)
+                    viewer.hidesticks("*")
 
                     # this prop is required by _load_rdkit
                     mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
                     metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
-                    self.new_mol = command(mol, metadata)
+                    self.new_mol = command(mol)
                     print(f"#debug, self.newmol inside onpick{self.new_mol}")
                     viewer.objects.add(self.new_mol)
                     viewer.showsticks(
