@@ -1885,16 +1885,34 @@ class RingtailCore:
             # check if receptor in db
             receptor = self.storageman.fetch_receptor_objects()[0]
             if receptor[1]:
-                print("jani debug recepter", receptor[0], len(receptor))
+                # print("####### jani debug receptor", receptor[0], len(receptor))
                 
                 # load receptor if it exist in database
                 rec_name = receptor[0]
                 rec_string = ReceptorManager.blob2str(receptor[1])
+                
+                rec_string_list = rec_string.split('\n')
+                # print(f"receptor type: {type(rec_string_list)}")
+                # print(f"receptor contents: {rec_string_list}")
+                
+
+                viewer.addpdbqt(
+                    rec_string_list,
+                    name="receptor",
+                    parent=None,
+                    metadata=None,
+                    assign_radii_and_bonds=True,
+                )
+
+                print("### Viewer.objects.summary")
+                o = viewer.objects
+                viewer.showspheres(o[0])
+                viewer.autozoom()
                 # print("jani debug, rec_string:", rec_string)
                 
                 # m = Chem.Mol(rec_string)
                 # print ("jani debug m object:", m)
-                pass
+                # pass
                 # import tempfile
 
                 # rec_string = ReceptorManager.blob2str(receptor[1])
@@ -1946,20 +1964,19 @@ class RingtailCore:
                 # update custom viewer
                 # also leave the pymol option available
                 if viewer != None:
+
                     viewer.hidesticks("*")
 
                     # this prop is required by _load_rdkit
                     mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
                     metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
-                    self.new_mol = command(mol)
-                    print(f"#debug, self.newmol inside onpick{self.new_mol}")
-                    viewer.objects.add(self.new_mol)
+                    # self.new_mol = command(mol)
+                    viewer.addrdkit(mol, "ligand smiles:" + Chem.MolToSmiles(mol))
+                    o = viewer.objects
+                    print("### Objects Summary in interactive plot")
+                    o.summary
                     viewer.showsticks(
-                        self.new_mol,
-                        style={
-                            "balls": {"shading": "fresnel"},
-                            "sticks": {"shading": "phong"},
-                        },
+                        o[len(o) - 1]
                     )
                     viewer.autozoom()
                     viewer.colorbyelement(self.new_mol, carbon_color="grey")
@@ -1972,7 +1989,6 @@ class RingtailCore:
                             showOnly=False,
                         )
 
-            print(f"#jani debug, canvas: {canvas}")
             if not canvas:
                 fig = plt.gcf()
                 cid = fig.canvas.mpl_connect("pick_event", _onpick)
