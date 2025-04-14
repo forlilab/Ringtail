@@ -1978,7 +1978,7 @@ class RingtailCore:
                     viewer.showsticks(
                         o[len(o) - 1]
                     )
-                    viewer.autozoom()
+                    viewer.autozoom(o[-1])
                     viewer.colorbyelement(self.new_mol, carbon_color="grey")
                 else:
                     pymol.ShowMol(mol, name=ligname, showOnly=False)
