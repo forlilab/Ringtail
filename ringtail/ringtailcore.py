@@ -1906,8 +1906,13 @@ class RingtailCore:
 
                 print("### Viewer.objects.summary")
                 o = viewer.objects
+                o.summary
+                # add transparency 
+                print(o[0])
+
                 viewer.showspheres(o[0])
                 viewer.autozoom()
+
                 # print("jani debug, rec_string:", rec_string)
                 
                 # m = Chem.Mol(rec_string)
@@ -1964,22 +1969,31 @@ class RingtailCore:
                 # update custom viewer
                 # also leave the pymol option available
                 if viewer != None:
+                    o = viewer.objects
 
-                    viewer.hidesticks("*")
 
                     # this prop is required by _load_rdkit
                     mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
                     metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
                     # self.new_mol = command(mol)
+                    viewer.hidesticks(o[-1])
                     viewer.addrdkit(mol, "ligand smiles:" + Chem.MolToSmiles(mol))
-                    o = viewer.objects
                     print("### Objects Summary in interactive plot")
                     o.summary
+                    
                     viewer.showsticks(
-                        o[len(o) - 1]
+                        o[-1]
                     )
                     viewer.autozoom(o[-1])
-                    viewer.colorbyelement(self.new_mol, carbon_color="grey")
+                    viewer.colorbyelement(o[-1], carbon_color="grey")
+
+                    # Also take care of the transparency of the receptor
+                    # viewer.showspheres(self.o[0])
+                    # p = o[0].representations["spheres"].renderers["spheres"]
+                    # p.colors[:,3]=100 # alpha value of rgba
+                    # p.has_transparency=True
+                    # p.set_buffers()
+                    # viewer.graphics.backend.update() 
                 else:
                     pymol.ShowMol(mol, name=ligname, showOnly=False)
                     for idx, resmol in enumerate(flexres_mols):
