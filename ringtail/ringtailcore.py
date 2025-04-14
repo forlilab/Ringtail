@@ -7,7 +7,6 @@
 import matplotlib.pyplot as plt
 import json
 from meeko import RDKitMolCreate
-from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 from .storagemanager import StorageManager
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
@@ -1448,6 +1447,9 @@ class RingtailCore:
     def write_flexres_pdb(
         self, receptor_polymer, ligname: str, filename: str, bookmark_name: str = None
     ):
+
+        from meeko.export_flexres import pdb_updated_flexres_from_rdkit
+
         """
         Writes a receptor pdb with flexible residues based on the ligand provided
 
@@ -1841,10 +1843,19 @@ class RingtailCore:
             ) from e
         return pymol, process
 
-    def make_clickable_plot(self, mol_viewer, bookmark_name, canvas=None):
+    def make_clickable_plot(
+        self,
+        mol_viewer,
+        bookmark_name,
+        canvas=None,
+        viewer=None,
+        viewer_mol=None,
+        command=None,
+    ):
         """should be handed a molecular viewer, plot requested data, and
         have the plotted data be clickable which click will display them
         in the molecular viewer"""
+
         if hasattr(self, "cid"):
             # disconnect any old connections
             canvas.mpl_disconnect(self.cid)
@@ -1852,6 +1863,7 @@ class RingtailCore:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
 
         pymol = mol_viewer
+        self.new_mol = None
         if canvas is None:
             axes = plt.axes()
         else:
@@ -1873,19 +1885,50 @@ class RingtailCore:
             # check if receptor in db
             receptor = self.storageman.fetch_receptor_objects()[0]
             if receptor[1]:
+                # print("####### jani debug receptor", receptor[0], len(receptor))
+                
+                # load receptor if it exist in database
                 rec_name = receptor[0]
                 rec_string = ReceptorManager.blob2str(receptor[1])
-                import tempfile
+                
+                rec_string_list = rec_string.split('\n')
+                # print(f"receptor type: {type(rec_string_list)}")
+                # print(f"receptor contents: {rec_string_list}")
+                
 
-                rec_string = ReceptorManager.blob2str(receptor[1])
-                # with the rdkit pymol api, easiest to read receptor from file
-                with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
-                    temp_file.write(rec_string.encode("utf-8"))
-                    temp_file.flush()
-                    temp_file_path = temp_file.name
-                    pymol.LoadFile(temp_file_path, rec_name)
-                    # center view on receptor
-                    pymol.server.do("zoom")
+                viewer.addpdbqt(
+                    rec_string_list,
+                    name="receptor",
+                    parent=None,
+                    metadata=None,
+                    assign_radii_and_bonds=True,
+                )
+
+                print("### Viewer.objects.summary")
+                o = viewer.objects
+                o.summary
+                # add transparency 
+                print(o[0])
+
+                viewer.showspheres(o[0])
+                viewer.autozoom()
+
+                # print("jani debug, rec_string:", rec_string)
+                
+                # m = Chem.Mol(rec_string)
+                # print ("jani debug m object:", m)
+                # pass
+                # import tempfile
+
+                # rec_string = ReceptorManager.blob2str(receptor[1])
+                # # with the rdkit pymol api, easiest to read receptor from file
+                # with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
+                #     temp_file.write(rec_string.encode("utf-8"))
+                #     temp_file.flush()
+                #     temp_file_path = temp_file.name
+                #     pymol.LoadFile(temp_file_path, rec_name)
+                #     # center view on receptor
+                #     pymol.server.do("zoom")
             else:
                 self.logger.debug(
                     "No receptor information in the database, receptor will not be displayed."
@@ -1922,21 +1965,53 @@ class RingtailCore:
                     pose_ID=chosen_pose[0],
                 )
                 self.logger.debug(Chem.MolToSmiles(mol))
-                pymol.ShowMol(mol, name=ligname, showOnly=False)
-                for idx, resmol in enumerate(flexres_mols):
-                    pymol.ShowMol(
-                        resmol,
-                        name=ligname + "_" + flexible_residues[idx],
-                        showOnly=False,
+
+                # update custom viewer
+                # also leave the pymol option available
+                if viewer != None:
+                    o = viewer.objects
+
+
+                    # this prop is required by _load_rdkit
+                    mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
+                    metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
+                    # self.new_mol = command(mol)
+                    viewer.hidesticks(o[-1])
+                    viewer.addrdkit(mol, "ligand smiles:" + Chem.MolToSmiles(mol))
+                    print("### Objects Summary in interactive plot")
+                    o.summary
+                    
+                    viewer.showsticks(
+                        o[-1]
                     )
+                    viewer.autozoom(o[-1])
+                    viewer.colorbyelement(o[-1], carbon_color="grey")
+
+                    # Also take care of the transparency of the receptor
+                    # viewer.showspheres(self.o[0])
+                    # p = o[0].representations["spheres"].renderers["spheres"]
+                    # p.colors[:,3]=100 # alpha value of rgba
+                    # p.has_transparency=True
+                    # p.set_buffers()
+                    # viewer.graphics.backend.update() 
+                else:
+                    pymol.ShowMol(mol, name=ligname, showOnly=False)
+                    for idx, resmol in enumerate(flexres_mols):
+                        pymol.ShowMol(
+                            resmol,
+                            name=ligname + "_" + flexible_residues[idx],
+                            showOnly=False,
+                        )
 
             if not canvas:
                 fig = plt.gcf()
                 cid = fig.canvas.mpl_connect("pick_event", _onpick)
                 plt.show()
+
             else:
                 # the connection ID terminates once a new plot is made, need to keep track of
                 self.cid = canvas.mpl_connect("pick_event", _onpick)
+                # need to return updated mol
                 return canvas
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):

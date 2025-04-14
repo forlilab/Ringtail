@@ -207,3 +207,13 @@ rtc.pymol(bookmark_name = "passing_results")
 
 ### Arguments used for API vs command line
 All of the arguments used for the command line tool applies to the Ringtail API in some form. For example, bookmark names and filter values are provided when an API method is called, while the log level can be sat at instantiation or at any time during the scripting process. When using the API, instead of differentiating between an `--input_db` and `--output_db`, only one database file is operated on in a given instantiated `RingtailCore` object. A subset of the command line arguments are actual API methods (such as `--plot` or `--find_similar_ligands`) that will be called directly as methods, with optional input arguments (typically a `bookmark_name` or `ligand_name`). Each API method comes with type hints and extensive documentation. Additionally, extensive example of the use of both can be found on [readthedocs](https://ringtail.readthedocs.io/). 
+
+
+# Testing with the Salticidae viewer
+
+- Clone the PrivateRingtail repository and switch to `salticidae_viewer` branch
+- In the root directory of PrivateRingtail, clone the `forlilab/salticidae` repo
+- In `salticidae` switch to the `pyside` branch 
+- Run `python GUI/ringtail_gui.py` as usual. 
+
+This should open two windows, the Ringtail gui and the Salticidae viewer. If you load the database as usual and generate the interactive plot, clicking in the dots should display the molecule on the viewer, just like in the pymol implementation. 
