@@ -2540,6 +2540,8 @@ class StorageManagerSQLite(StorageManager):
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
+        # check if clustering
+        clustering = bool(self.mfpt_cluster or self.interaction_cluster)
 
         # raise error if no filters are present and no clusterings
         if not processed_filters and not clustering:
@@ -2547,8 +2549,6 @@ class StorageManagerSQLite(StorageManager):
                 "Ringtail query strings are empty, please check filter options."
             )
 
-        # check if clustering
-        clustering = bool(self.mfpt_cluster or self.interaction_cluster)
         # if clustering without filtering
         if clustering:
             # allows for clustering without filtering
