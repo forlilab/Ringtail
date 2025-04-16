@@ -79,6 +79,7 @@ class StorageManager:
         """Initialize instance variables common to all StorageManager subclasses"""
         self.logger = logger
         self.closed_connection = False
+        self.keyboard_interrupt_allowed = False
 
     def __enter__(self):
         """Used to access the database if using storage manager as a context manager
@@ -3241,10 +3242,10 @@ class StorageManagerSQLite(StorageManager):
             else:
                 logger.info("Creating a new database file.")
                 self.conn = self._create_connection()
-
-            signal(
-                SIGINT, self._sigint_handler
-            )  # signal handler to catch keyboard interupts
+            if self.keyboard_interrupt_allowed:
+                signal(
+                    SIGINT, self._sigint_handler
+                )  # signal handler to catch keyboard interupts
             self.logger.debug(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
             raise StorageError(f"Error while creating or connecting to database: {e}.")
@@ -3298,7 +3299,7 @@ class StorageManagerSQLite(StorageManager):
         if not compatible:
             if run_mode == "cmd":
                 raise OptionError(compatibility_string)
-            elif run_mode == "api":
+            else:  # run_mode == "api":
                 self.logger.warning(compatibility_string)
 
         # write current database properties to database
@@ -3308,6 +3309,9 @@ class StorageManagerSQLite(StorageManager):
             number_of_poses = str(max_poses)
         self._insert_db_properties(docking_mode, number_of_poses)
         self.logger.debug("Storage compatibility has been checked and is ensured.")
+        # cannot use Signal/keyboard interrupt in the GUI bc it uses multiple threads
+        if run_mode != "gui":
+            self.keyboard_interrupt_allowed = True
 
     def clone(self, backup_name=None):
         """Creates a copy of the db
