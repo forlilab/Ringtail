@@ -1678,7 +1678,6 @@ class StorageManagerSQLite(StorageManager):
 
         if add_poseID:
             query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
-        self.logger.info("Creating bookmark...")
 
         if temp:
             temp_flag = "TEMP "
@@ -2067,8 +2066,11 @@ class StorageManagerSQLite(StorageManager):
         if bookmark_name is None:
             bookmark_name = self.bookmark_name
 
+        # return self._run_query(
+        #     f"SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {bookmark_name}) GROUP BY LigName"
+        # )
         return self._run_query(
-            f"SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {bookmark_name}) GROUP BY LigName"
+            f"SELECT docking_score, leff, Pose_ID, LigName FROM {bookmark_name};"
         )
 
     def _fetch_ligand_cluster_columns(self):
