@@ -1886,15 +1886,14 @@ class RingtailCore:
             receptor = self.storageman.fetch_receptor_objects()[0]
             if receptor[1]:
                 # print("####### jani debug receptor", receptor[0], len(receptor))
-                
+
                 # load receptor if it exist in database
                 rec_name = receptor[0]
                 rec_string = ReceptorManager.blob2str(receptor[1])
-                
-                rec_string_list = rec_string.split('\n')
+
+                rec_string_list = rec_string.split("\n")
                 # print(f"receptor type: {type(rec_string_list)}")
                 # print(f"receptor contents: {rec_string_list}")
-                
 
                 viewer.addpdbqt(
                     rec_string_list,
@@ -1907,14 +1906,14 @@ class RingtailCore:
                 print("### Viewer.objects.summary")
                 o = viewer.objects
                 o.summary
-                # add transparency 
+                # add transparency
                 print(o[0])
 
                 viewer.showspheres(o[0])
                 viewer.autozoom()
 
                 # print("jani debug, rec_string:", rec_string)
-                
+
                 # m = Chem.Mol(rec_string)
                 # print ("jani debug m object:", m)
                 # pass
@@ -1935,42 +1934,24 @@ class RingtailCore:
                 )
 
             def _onpick(event):
+                # get info about the point
                 line = event.artist
+                # coordinates is x (leff) and y (e) axis
                 coords = tuple([c[0] for c in line.get_data()])
                 chosen_pose = poseIDs[coords]
-                self.logger.info(
-                    f"LigName: {chosen_pose[1]}; Pose_ID: {chosen_pose[0]}"
-                )
+                ligname = chosen_pose[1]
+                pose_id = chosen_pose[0]
+                self.logger.info(f"LigName: {ligname}; Pose_ID: {pose_id}")
 
                 # make rdkit mol for poseid
-                ligname, ligand_smile, atom_index_map, hydrogen_parents = (
-                    self.storageman.fetch_single_ligand_output_info(chosen_pose[1])
+                mol, flexres_mols, flexible_residues = self._pose_to_mol(
+                    pose_id, ligname
                 )
-                flexible_residues, flexres_atomnames = (
-                    self.storageman.fetch_flexres_info()
-                )
-                if flexible_residues is None:
-                    flexible_residues, flexres_atomnames = [], []
-                elif flexible_residues != []:  # converts string to list
-                    flexible_residues = json.loads(flexible_residues)
-                    flexres_atomnames = json.loads(flexres_atomnames)
-
-                mol, flexres_mols, _ = self._create_rdkit_mol(
-                    ligname,
-                    ligand_smile,
-                    atom_index_map,
-                    hydrogen_parents,
-                    flexible_residues,
-                    flexres_atomnames,
-                    pose_ID=chosen_pose[0],
-                )
-                self.logger.debug(Chem.MolToSmiles(mol))
 
                 # update custom viewer
                 # also leave the pymol option available
                 if viewer != None:
                     o = viewer.objects
-
 
                     # this prop is required by _load_rdkit
                     mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
@@ -1980,20 +1961,11 @@ class RingtailCore:
                     viewer.addrdkit(mol, "ligand smiles:" + Chem.MolToSmiles(mol))
                     print("### Objects Summary in interactive plot")
                     o.summary
-                    
-                    viewer.showsticks(
-                        o[-1]
-                    )
+
+                    viewer.showsticks(o[-1])
                     viewer.autozoom(o[-1])
                     viewer.colorbyelement(o[-1], carbon_color="grey")
 
-                    # Also take care of the transparency of the receptor
-                    # viewer.showspheres(self.o[0])
-                    # p = o[0].representations["spheres"].renderers["spheres"]
-                    # p.colors[:,3]=100 # alpha value of rgba
-                    # p.has_transparency=True
-                    # p.set_buffers()
-                    # viewer.graphics.backend.update() 
                 else:
                     pymol.ShowMol(mol, name=ligname, showOnly=False)
                     for idx, resmol in enumerate(flexres_mols):
@@ -2013,6 +1985,30 @@ class RingtailCore:
                 self.cid = canvas.mpl_connect("pick_event", _onpick)
                 # need to return updated mol
                 return canvas
+
+    def _pose_to_mol(self, pose_id, ligname):
+        # make rdkit mol for poseid
+        ligname, ligand_smile, atom_index_map, hydrogen_parents = (
+            self.storageman.fetch_single_ligand_output_info(ligname)
+        )
+        flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
+        if flexible_residues is None:
+            flexible_residues, flexres_atomnames = [], []
+        elif flexible_residues != []:  # converts string to list
+            flexible_residues = json.loads(flexible_residues)
+            flexres_atomnames = json.loads(flexres_atomnames)
+
+        mol, flexres_mols, _ = self._create_rdkit_mol(
+            ligname,
+            ligand_smile,
+            atom_index_map,
+            hydrogen_parents,
+            flexible_residues,
+            flexres_atomnames,
+            pose_ID=pose_id,
+        )
+        self.logger.debug(f"Mol object of the pose: -{Chem.MolToSmiles(mol)}-")
+        return mol, flexres_mols, flexible_residues
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV
