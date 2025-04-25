@@ -177,4 +177,3 @@ util_files/
 test/test_data/.DS_Store
 test/.DS_Store
 *_ringtail-process-log.txt
-*.db
