@@ -1585,7 +1585,8 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             cur = self.conn.cursor()
-            cur.execute("SELECT Bookmark_name FROM Bookmarks;")
+            # cur.execute("SELECT Bookmark_name FROM Bookmarks;")
+            cur.execute("SELECT view_name FROM Filters;")
             bookmark_names = [name[0] for name in cur.fetchall()]
             cur.close()
 
@@ -3315,6 +3316,11 @@ class StorageManagerSQLite(StorageManager):
         if run_mode != "gui":
             self.keyboard_interrupt_allowed = True
 
+    def get_filterid_from_name(self, bookmark_name: str) -> int:
+        return self._run_query(
+            f"""SELECT filter_id FROM Filters WHERE view_name = '{bookmark_name}';"""
+        ).fetchone()[0]
+
     def clone(self, backup_name=None):
         """Creates a copy of the db
 
@@ -3679,9 +3685,18 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             cur.execute(query, parameters)
+            return cur
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(
+                f"Error while executing query with parameters"
+            ) from e
+
+    def insert_with_params(self, query: str, parameters: tuple):
+        try:
+            cur = self.execute_with_params(query, parameters)
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(f"Error while executing insert query") from e
+            raise DatabaseInsertionError(f"Error while committing insert query") from e
 
     # endregion
