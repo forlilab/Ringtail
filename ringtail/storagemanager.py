@@ -3691,11 +3691,12 @@ class StorageManagerSQLite(StorageManager):
                 f"Error while executing query with parameters"
             ) from e
 
-    def insert_with_params(self, query: str, parameters: tuple):
+    def insert_with_params(self, query: str, parameters: tuple, commit=True):
         try:
             cur = self.execute_with_params(query, parameters)
-            self.conn.commit()
-            cur.close()
+            if commit:
+                self.conn.commit()
+                cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while committing insert query") from e
 
