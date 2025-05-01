@@ -12,7 +12,7 @@ import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .logutils import LOGGER
-from .exceptions import MultiprocessingError, RTCoreError
+from .exceptions import MultiprocessingError, RTCoreError, OptionError
 import traceback
 from datetime import datetime
 
@@ -157,22 +157,32 @@ class MPManager:
             if self.file_sources.file != (None and [[]]):
                 for file_list in self.file_sources.file:
                     for file in file_list:
-                        if (
-                            fnmatch.fnmatch(file, self.file_pattern)
-                            and file != self.receptor_file
-                        ):
-                            self._add_to_queue(file)
+                        if os.path.isfile(file):
+                            if (
+                                fnmatch.fnmatch(file, self.file_pattern)
+                                and file != self.receptor_file
+                            ):
+                                self._add_to_queue(file)
+                        else:
+                            raise OptionError(
+                                f"The file {file} is not a a file (or does not exist), and will not be processed."
+                            )
 
             # add files from file path(s)
             if self.file_sources.file_path != (None and [[]]):
                 for path_list in self.file_sources.file_path:
                     for path in path_list:
                         # scan for ligand dlgs
-                        for files in self._scan_dir(
-                            path, self.file_pattern, recursive=True
-                        ):
-                            for file in files:
-                                self._add_to_queue(file)
+                        if os.path.isdir(path):
+                            for files in self._scan_dir(
+                                path, self.file_pattern, recursive=True
+                            ):
+                                for file in files:
+                                    self._add_to_queue(file)
+                        else:
+                            raise OptionError(
+                                f"The path {path} is not a directory (or does note exist), and will not be processed."
+                            )
 
             # add files from file list(s)
             if self.file_sources.file_list != (None and [[]]):
