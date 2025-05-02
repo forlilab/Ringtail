@@ -224,8 +224,8 @@ class StorageManager:
                 f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
             )
         # create view of passing results
-        filter_results_str, view_query = self._generate_result_filtering_query(
-            all_filters
+        filter_results_str, view_query, new_filtertable_query = (
+            self._generate_result_filtering_query(all_filters)
         )
         logger.debug(f"Query for filtering results: {filter_results_str}")
 
@@ -236,8 +236,15 @@ class StorageManager:
             self.current_bookmark_name = self.bookmark_name
 
         # make sure we keep Pose_ID in view
+        # TODO main place to institute the filter tables
         self.create_bookmark(
             name=self.current_bookmark_name, query=view_query, filters=all_filters
+        )
+        # NOTE add poses to new table
+        self.populate_filter_tables(
+            name=self.current_bookmark_name,
+            query=new_filtertable_query,
+            filters=all_filters,
         )
 
         # perform filtering
@@ -652,11 +659,6 @@ class StorageManagerSQLite(StorageManager):
         input_model
         ) VALUES
         (?,?,?,?,?,?)"""
-
-        ## repeat smiles in the third position of ligand array, to create rdmol
-        for ligand_entry in ligand_array:
-            smiles = ligand_entry[1]
-            ligand_entry.insert(2, smiles)
 
         try:
             cur = self.conn.cursor()
@@ -1501,7 +1503,7 @@ class StorageManagerSQLite(StorageManager):
         sql_str = """CREATE TABLE IF NOT EXISTS Bookmarks (
         Bookmark_name       VARCHAR[] PRIMARY KEY,
         Query               VARCHAR[],
-        filters             VARCHAR[])"""
+        filters             VARCHAR[]);"""
 
         try:
             cur = self.conn.cursor()
@@ -1513,7 +1515,28 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _create_filtering_tables(self):
-        pass
+        # Create filters table keeping track of filter id etc
+        filters_sql = """CREATE TABLE IF NOT EXISTS Filters (
+        filter_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        name                VARCHAR[],
+        query               VARCHAR[],
+        filters             VARCHAR[]);"""
+
+        filter_pose_sql = """CREATE TABLE IF NOT EXISTS Filtered_poses (
+        filter_id           INTEGER,
+        pose_id             INTEGER,
+        FOREIGN KEY(filter_id) REFERENCES Filters(filter_id),
+        FOREIGN KEY(pose_id) REFERENCES Results(pose_id));"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(filters_sql)
+            cur.execute(filter_pose_sql)
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
+                "Error while creating bookmark table. If database already exists, use --overwrite to drop existing tables"
+            ) from e
 
     def _insert_cluster_data(
         self, clusters: list, poseid_list: list, cluster_type: str, cluster_cutoff: str
@@ -1630,7 +1653,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             # cur.execute("SELECT Bookmark_name FROM Bookmarks;")
-            cur.execute("SELECT view_name FROM Filters;")
+            cur.execute("SELECT name FROM Filters;")
             bookmark_names = [name[0] for name in cur.fetchall()]
             cur.close()
 
@@ -1735,6 +1758,30 @@ class StorageManagerSQLite(StorageManager):
         self._create_view(name, bookmark_query)
         self._insert_bookmark_info(name, bookmark_query, filters)
         logger.debug(f"Created bookmark from the following query: {bookmark_query}")
+
+    def populate_filter_tables(self, name, query, filters={}):
+        # insert into filters
+        # will take name and filters and query string
+        filter_sql = """INSERT INTO Filters (name,query,filters) VALUES (?,?,?) RETURNING filter_id;"""
+
+        cur = self.conn.cursor()
+        cur.execute(
+            filter_sql,
+            (
+                name,
+                query,
+                json.dumps(filters),
+            ),
+        )
+        filter_id = cur.fetchone()
+
+        filter_pose_sql = f"""
+            INSERT INTO Filtered_poses (filter_id, pose_id)
+            {query};"""
+
+        cur.execute(filter_pose_sql, filter_id)
+        self.conn.commit()
+        cur.close()
 
     def _create_view(self, name, query):
         """takes name and selection query,
@@ -1902,7 +1949,7 @@ class StorageManagerSQLite(StorageManager):
 
     def get_filterid_from_name(self, bookmark_name: str) -> int:
         return self._run_query(
-            f"""SELECT filter_id FROM Filters WHERE view_name = '{bookmark_name}';"""
+            f"""SELECT filter_id FROM Filters WHERE name = '{bookmark_name}';"""
         ).fetchone()[0]
 
     # endregion
@@ -2314,6 +2361,7 @@ class StorageManagerSQLite(StorageManager):
             union_select_query = (
                 "SELECT * FROM (" + union_select_query + ") GROUP BY LigName"
             )
+        # TODO maybe don't need a separate row for the union thing, maybe that can be stored as a separate filter still, and just query the union of the filter ids?
         self.create_bookmark(bookmark_name, union_view_query)
         logger.debug("Running union query...")
         return self._run_query(union_select_query)
@@ -2374,6 +2422,7 @@ class StorageManagerSQLite(StorageManager):
         view_query = f"SELECT * FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
 
         self.bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
+        # TODO what to do here?
         self.create_bookmark(self.bookmark_name, view_query)
 
         return self._run_query(sql_query), self.bookmark_name, cluster_col_choice
@@ -2756,8 +2805,11 @@ class StorageManagerSQLite(StorageManager):
 
         output_query = query_select_string + query
         view_query = f"SELECT * FROM {filtering_window} R " + query
+        new_filtertable_query = (
+            f"SELECT ? AS filter_id, R.Pose_ID FROM {filtering_window} R " + query
+        )
 
-        return output_query, view_query
+        return output_query, view_query, new_filtertable_query
 
     def _perform_rdkit_filtering(
         self, partial_query: str, ligand_filters: dict
