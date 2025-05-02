@@ -3081,9 +3081,7 @@ class StorageManagerSQLite(StorageManager):
                 dists.extend([1 - x for x in sims])
 
             picks = lp.LazyBitVectorPick(fps, nfps, 0.5)
-            print("Length of picks: ", len(picks))
             pickfps = [fps[x] for x in picks]
-            print(len(pickfps))
             # now cluster the data:
             cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)
             return cs
@@ -4166,7 +4164,6 @@ class StorageManagerSQLite(StorageManager):
             StorageError
         """
         detach_str = f"DETACH DATABASE {new_db_alias}"
-        print(detach_str)
         try:
             cur = self.conn.cursor()
             cur.execute(detach_str)
