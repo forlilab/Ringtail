@@ -7,7 +7,7 @@
 import sys
 import argparse
 import os
-from .exceptions import OptionError, NoInputError
+from .exceptions import OptionError
 import __main__
 from .ringtailcore import RingtailCore
 from .ringtailoptions import Filters
@@ -505,7 +505,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     ligand_group.add_argument(
         "--ligand_substruct",
-        help="SMARTS pattern(s) for substructure matching. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator. If error delimit each substructure with ''.",
+        help="SMARTS pattern(s) for substructure matching, if error delimit each substructure with ''.",
         action="append",
         type=str,
         metavar="STRING",
@@ -513,7 +513,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     ligand_group.add_argument(
         "--ligand_substruct_pos",
-        help="SMARTS pattern(s) for substructure matching, e.g., '[Oh]C 0 1.2 -5.5 10.0 15.5' -> 'smart_string index_of_positioned_atom cutoff_distance x y z'. Multiple can be specified by separating each filter string with a comma. Will be evaluated as 'this' OR 'that' unless specified by using the ligand_operator. Group each set of six values with ''.",
+        help='"SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords". Group each set of six values with "".',
         action="append",
         type=str,
         metavar="STRING",
@@ -523,7 +523,7 @@ def cmdline_parser(defaults: dict = {}):
         "-sj",
         "--ligand_operator",
         choices=["AND", "OR"],
-        help="Logical join operator for multiple substruct filters. Will apply within 'ligand_substruct' filters and within 'ligand_substruct_pos' filters (the two groups are always joined by 'AND').",
+        help="logical join operator for multiple SMARTS (default: OR)",
         action="store",
         type=str,
         metavar="STRING",
@@ -589,7 +589,7 @@ def cmdline_parser(defaults: dict = {}):
     # catch if running with no options
     if len(sys.argv) == 1:
         parser.print_help()
-        raise NoInputError(
+        raise OptionError(
             "Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details."
         )
 
@@ -656,8 +656,6 @@ class CLOptionParser:
             raise OptionError(
                 "Invalid option or option ordering. Be sure to put read/write mode before any other arguments"
             ) from e
-        except NoInputError:
-            raise
         except Exception as e:
             try:
                 if parsed_opts.process_mode == "write":

@@ -268,7 +268,7 @@ class RingtailCore:
 
         Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
         """
-
+        # TODO can just use rdkit mol?
         mol = Chem.MolFromSmiles(smiles)
         flexres_mols = []
         flexres_info = []
@@ -1777,6 +1777,7 @@ class RingtailCore:
             plt.show()
 
     def get_plot_data(self, bookmark_name: str = None):
+        # TODO this might not be used in GUI anymore
         """
         Get ligand efficiency and energy for all docking data and for ligands that passed
         filtering in specified bookmark. Each tuple in the respective lists contains
@@ -1796,6 +1797,7 @@ class RingtailCore:
         return all_data, passing_data
 
     def display_pymol(self, bookmark_name=None, integrate: bool = False, canvas=None):
+        # TODO update to new gui viewer paradigm
         """
         Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
 
@@ -1988,6 +1990,7 @@ class RingtailCore:
 
     def _pose_to_mol(self, pose_id, ligname):
         # make rdkit mol for poseid
+        # TODO can prob be discontinued espe after rdkit update and new plot
         ligname, ligand_smile, atom_index_map, hydrogen_parents = (
             self.storageman.fetch_single_ligand_output_info(ligname)
         )
@@ -2053,6 +2056,15 @@ class RingtailCore:
             db_clone.close_storage(vacuum=True)
 
         return bookmark_db_name
+
+    def merge_databases(self, merging_db: str, backup: bool = True):
+
+        self.logger.warning(
+            "If you have performed clustering, this data will be lost in the new, merged database. "
+        )
+        # create merge tables
+        with self.storageman as sm:
+            sm.merge_databases(**{"merging_db": merging_db, "backup": backup})
 
     def export_receptors(self):
         """

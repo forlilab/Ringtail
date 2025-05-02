@@ -25,14 +25,15 @@ from .exceptions import (
     DatabaseInsertionError,
     DatabaseConnectionError,
     DatabaseTableCreationError,
+    DatabaseQueryError,
+    DatabaseViewCreationError,
+    OptionError,
+    MergeError,
 )
-from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError
-
-import multiprocess
 
 
 class StorageManager:
-
+    # TODO gotta be careful with schema
     _db_schema_ver = "2.0.0"
 
     # "db_schema_ver":list("compatible code versions")
@@ -296,6 +297,7 @@ class StorageManager:
         selection_type="-",
         old_db=None,
     ) -> tuple:
+        # TODO can clean this method with new aliasing method
         """Selects ligands found or not found in the given bookmark in both current db and new_db. Stores as temp view
 
         Args:
@@ -338,12 +340,15 @@ class StorageManager:
         return temp_name, num_passing
 
     def prune(self):
+        # TODO check name, could be prune_nonpassing
         """Deletes rows from results, ligands, and interactions in a bookmark
         if they do not pass filtering criteria
         """
         self._delete_from_results()
         self._delete_from_ligands()
         self._delete_from_interactions_not_in_view()
+        # TODO this should check to make sure only relevant interaction indices are present in interaction_indices table
+        # should remove bookmarks, retain db_properties
 
     # endregion
 
@@ -469,6 +474,7 @@ class StorageManagerSQLite(StorageManager):
         bookmark_name: str = None,
         duplicate_handling: str = None,
     ):
+        # TODO reconsider what are class properties and what are method inputs
         self.db_file = db_file
         self.overwrite = overwrite
         self.order_results = order_results
@@ -568,6 +574,7 @@ class StorageManagerSQLite(StorageManager):
         """Create table for ligands. Columns are:
         LigName             VARCHAR NOT NULL,
         ligand_smile        VARCHAR[],
+        ligand_rdmol        BLOB,
         atom_index_map      VARCHAR[],
         hydrogen_parents    VARCHAR[],
         input_model         VARCHAR[]
@@ -579,7 +586,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_table = """CREATE TABLE IF NOT EXISTS Ligands (
             LigName             VARCHAR NOT NULL PRIMARY KEY ON CONFLICT IGNORE,
             ligand_smile        VARCHAR[],
-            ligand_rdmol        MOL,
+            ligand_rdmol        BLOB,
             atom_index_map      VARCHAR[],
             hydrogen_parents    VARCHAR[],
             input_model         VARCHAR[])"""
@@ -602,11 +609,15 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             List: List of data to be written as row in ligand table. Format:
-                [ligand_name, ligand_smile, ligand_index_map,
+                [ligand_name, ligand_smile, ligand_rdbin, ligand_index_map,
                 ligand_h_parents, input_model]
         """
         ligand_name = ligand_dict["ligname"]
         ligand_smile = ligand_dict["ligand_smile_string"]
+        ligand_mol = Chem.MolFromSmiles(ligand_smile)
+        # sanitize the ligand
+        Chem.SanitizeMol(ligand_mol)
+        ligand_rdbin = ligand_mol.ToBinary()
         ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
         ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
         input_model = json.dumps(ligand_dict["ligand_input_model"])
@@ -614,6 +625,7 @@ class StorageManagerSQLite(StorageManager):
         return [
             ligand_name,
             ligand_smile,
+            ligand_rdbin,
             ligand_index_map,
             ligand_h_parents,
             input_model,
@@ -639,7 +651,7 @@ class StorageManagerSQLite(StorageManager):
         hydrogen_parents,
         input_model
         ) VALUES
-        (?,?,mol_from_smiles(?),?,?,?)"""
+        (?,?,?,?,?,?)"""
 
         ## repeat smiles in the third position of ligand array, to create rdmol
         for ligand_entry in ligand_array:
@@ -1478,6 +1490,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _create_bookmark_table(self):
+        # TODO update this to be filter id, filter name, and filter query
         """Create table of bookmark names and their queries. Columns are:
         Bookmark_name
         Query
@@ -1563,7 +1576,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error occurred while indexing") from e
 
-    def _delete_table(self, table_name: str):
+    def _delete_table(self, table_name: str, db_alias: str = None):
         """
         Method to delete a table
 
@@ -1571,8 +1584,38 @@ class StorageManagerSQLite(StorageManager):
             table_name (str): table to be dropped
 
         """
-        query = f"""DROP TABLE IF EXISTS {table_name};"""
+
+        if db_alias:
+            alias_str = db_alias + "."
+        else:
+            alias_str = None
+        query = f"""DROP TABLE IF EXISTS {alias_str}{table_name};"""
         return self._run_query(query)
+
+    def create_merge_tables(self) -> str:
+        try:
+            cur = self.conn.cursor()
+            # create mergedata table: merge_id (PK), dbfile, timestamp, numofrows table
+            mergetbl_sql = """CREATE TABLE IF NOT EXISTS merged_tables (
+            merge_id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            dbfile                  VARCHAR[],
+            merge_start             DATETIME DEFAULT CURRENT_TIMESTAMP);"""
+            cur.execute(mergetbl_sql)
+
+            # create PK table: merge_id(FK), table, original_val, merge_val
+            pktable_sql = """CREATE TABLE IF NOT EXISTS PK_conversions (
+            merge_id        INTEGER,
+            table_name      VARCHAR[],
+            original_PK     INTEGER,
+            merged_PK       INTEGER,
+            FOREIGN KEY(merge_id) REFERENCES merged_tables(merge_id));"""
+            cur.execute(pktable_sql)
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS ak_merge ON PK_conversions(merge_id, original_PK)"
+            )
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError(e) from e
 
     # endregion
 
@@ -1669,6 +1712,8 @@ class StorageManagerSQLite(StorageManager):
         """Takes name and selection query and creates a bookmark of name.
         Bookmarks are Ringtail specific views that whose information is stored in the 'Bookmark' table.
         #FIXME bug where ligand filter only results are not added as bookmarks
+        #TODO one of the issues here will be fixed by new filter storage paradigm
+        #TODO #TODO remember that new filter table should also have filter dict, query would be more for debugging probably
 
         Args:
             name (str): Name for bookmark which will be created
@@ -1855,6 +1900,11 @@ class StorageManagerSQLite(StorageManager):
                 f"Error while inserting into temporary table"
             ) from e
 
+    def get_filterid_from_name(self, bookmark_name: str) -> int:
+        return self._run_query(
+            f"""SELECT filter_id FROM Filters WHERE view_name = '{bookmark_name}';"""
+        ).fetchone()[0]
+
     # endregion
 
     # region Methods for getting information from database
@@ -1960,6 +2010,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(
                 f"SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
             )
+            # TODO can this just get the rdmol now?
             info = cur.fetchone()
             cur.close()
             return info
@@ -1969,6 +2020,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def fetch_single_pose_properties(self, pose_ID: int) -> iter:
+        # TODO where is this used
         """fetch coordinates for pose given by pose_ID
 
         Args:
@@ -2069,6 +2121,7 @@ class StorageManagerSQLite(StorageManager):
         # return self._run_query(
         #     f"SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {bookmark_name}) GROUP BY LigName"
         # )
+        # TODO update to new filter storage paradigm
         return self._run_query(
             f"SELECT docking_score, leff, Pose_ID, LigName FROM {bookmark_name};"
         )
@@ -2114,6 +2167,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
+        # TODO cna probably be optimized a bit
         """Returns a panda dataframe of table or query given as requested_data
 
         Args:
@@ -2124,9 +2178,7 @@ class StorageManagerSQLite(StorageManager):
             pd.DataFrame: dataframe of requested data
         """
         if table:
-            return pd.read_sql_query(
-                "SELECT * FROM {0}".format(requested_data), self.conn
-            )
+            return pd.read_sql_query(f"SELECT * FROM {requested_data}", self.conn)
         else:
             return pd.read_sql_query(requested_data, self.conn)
 
@@ -2143,6 +2195,8 @@ class StorageManagerSQLite(StorageManager):
         query = """SELECT COUNT(rowid) from {0}""".format(table_name)
 
         return self._run_query(query).fetchone()[0]
+
+    # TODO method to get length of filter results? store at the time of filtering?
 
     def fetch_summary_data(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
@@ -2204,6 +2258,7 @@ class StorageManagerSQLite(StorageManager):
     # region Methods dealing with filtered results
 
     def _get_number_passing_ligands(self, bookmark_name: str = None):
+        # TODO update for new filter paradigm
         """Returns count of the number of ligands that
             passed filtering criteria
 
@@ -2314,6 +2369,7 @@ class StorageManagerSQLite(StorageManager):
                 f"Requested ligand name {ligname} not found in cluster {cluster_col_choice}!"
             )
         query_ligand_cluster = query_ligand_cluster[0]  # extract from tuple
+        # TODO cna this be optimized? group by not awesome but may be relevant here
         sql_query = f"SELECT LigName FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
         view_query = f"SELECT * FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
 
@@ -2542,9 +2598,8 @@ class StorageManagerSQLite(StorageManager):
         outfield_columns = self._generate_outfield_list()
         num_query = ""
         int_query = ""
-        lig_query = ""
-        ligand_substruct_queries = []
-        join_stmnt = ""
+        ligname_query = ""
+        rdkit_query = False
 
         # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
         if self.filter_bookmark is not None:
@@ -2599,6 +2654,7 @@ class StorageManagerSQLite(StorageManager):
                 num_query = " AND ".join(
                     ["R." + filter for filter in processed_filters["num_filters"]]
                 )
+
             # check for interactions and prepare for query
             if "int_filters" in processed_filters:
                 # if interaction filters are present and valid, two lists of included and excluded interactions are returned
@@ -2619,66 +2675,70 @@ class StorageManagerSQLite(StorageManager):
             # check if ligand filters and prepare for query
             if "lig_filters" in processed_filters:
                 lig_filters = processed_filters["lig_filters"]
-                ligand_queries = []
+                if "ligand_name" in lig_filters:
+                    lig_names = lig_filters["ligand_name"]
+                    ligname_query = " OR ".join(
+                        [
+                            f"LigName LIKE '%{ligname}%' "
+                            for ligname in lig_names
+                            if ligname
+                        ]
+                    )
+                    ligname_query = "SELECT LigName FROM Ligands WHERE " + ligname_query
+                # rdkit queries need to be handled in memory separate from the main query
                 if (
                     "ligand_substruct" in lig_filters
-                    or "ligand_name" in lig_filters
+                    or "ligand_substruct_pos" in lig_filters
                     or "ligand_max_atoms" in lig_filters
                 ):
-                    ligand_queries.append(
-                        self._generate_ligand_filtering_query(lig_filters)
-                    )
-                # join all ligand queries that are not empty
-                lig_query = " AND ".join(
-                    [lig_filter for lig_filter in ligand_queries if lig_filter]
-                )
-                # if complex ligand filter, generate partial query
-                if "ligand_substruct_pos" in lig_filters:
-                    for substruct_pos in lig_filters["ligand_substruct_pos"]:
-                        ligand_substruct_queries.append(
-                            self._ligand_substructure_position_filter(
-                                substruct_pos, lig_query
-                            )
-                        )
-                    join_stmnt = " " + lig_filters["ligand_operator"] + " "
-                else:
-                    # join all ligand queries that are not empty
-                    lig_query = " AND ".join(
-                        [lig_filter for lig_filter in ligand_queries if lig_filter]
-                    )
+                    rdkit_query = True
+
+            ### Join each of the filter groups
             # if filter queries exist for each group, string them together appropriately
             if int_query:
                 # add with a join statement
                 unclustered_query += (
                     "JOIN (" + int_query + ") I ON R.Pose_ID = I.Pose_ID "
                 )
-            if lig_query:
+            if ligname_query:
                 # add with a join statement
                 unclustered_query += (
-                    "JOIN (" + lig_query + ") L ON R.LigName = L.LigName "
+                    "JOIN (" + ligname_query + ") L ON R.LigName = L.LigName "
                 )
                 # these two queries are joined on the Results table, after the multiple table spanning queries
-            if num_query or ligand_substruct_queries:
+            if num_query:
                 # add condition
-                unclustered_query += "WHERE "
-                # add numerical part of query
-                if num_query:
-                    unclustered_query += num_query
-                # if both numerical and ligand_substruct_pos handle appropriately
-                if num_query and ligand_substruct_queries:
-                    unclustered_query += (
-                        " AND (" + join_stmnt.join(ligand_substruct_queries) + ")"
-                    )
-                # if not, only the ligand_substruct_pos sets the WHERE condition
-                else:
-                    unclustered_query += join_stmnt.join(ligand_substruct_queries)
+                unclustered_query += "WHERE " + num_query
+
+        # run the rdkit queries first
+        if rdkit_query:
+            lignames_poseids_with_substructs = {}
+            # run the unclustered_query with appropriate select statement, keeping track of passing pose ids
+            partial_rdkit_query = f" FROM {filtering_window} R JOIN Ligands ON Ligands.LigName = R.LigName {unclustered_query}"
+
+            # get dict of ligands and pose ids passing all filters including substruct
+            lignames_poseids_with_substructs = self._perform_rdkit_filtering(
+                partial_rdkit_query, lig_filters
+            )
+            # make one list of all pose_ids passing so far
+            passing_pose_ids = []
+            for _, poseids in lignames_poseids_with_substructs.items():
+                # loop through each list of pose ids and join them into a query
+                passing_pose_ids.extend(poseids)
+
+            # create new unclustered_query with passing pose ids from the ligand queries
+            unclustered_query = " R.Pose_ID IN ({0})".format(
+                ",".join(map(str, passing_pose_ids))
+            )
+
+            unclustered_query = " WHERE " + unclustered_query
 
         # if clustering is requested, do that before saving view or filtering results for output
         if clustering:
-            # add appropriate select
+            # if substruct, unclustered query is now mostly pose_ids. If not, it is a full normal query
             try:
                 query = self._prepare_cluster_query(unclustered_query)
-                query = "WHERE " + query
+                query = " WHERE " + query
             except OptionError as e:
                 raise e
         else:
@@ -2696,9 +2756,243 @@ class StorageManagerSQLite(StorageManager):
 
         output_query = query_select_string + query
         view_query = f"SELECT * FROM {filtering_window} R " + query
+
         return output_query, view_query
 
-    def _prepare_cluster_query(self, unclustered_query: str) -> str:
+    def _perform_rdkit_filtering(
+        self, partial_query: str, ligand_filters: dict
+    ) -> dict:
+        """Will run a filtering query with regular filters, then and perform in-memory filtering on
+        whichever of the three RDKit filters substruct, substruct_pos, and maxheavtatoms.
+        The method streams 100 ligands into memory at once from the cursor (while the cursor is
+        still reading if database is big) and performs filtering on the one batch at the time.
+        One row/ligand-pose_id from the stream is evaluated at once, from fastest to slowest filter:
+        First, check if passing max_heavy_atoms filter if specified,
+        Second, check if passing substructure filter if specified (does not account for substruct_pos substructures),
+        Third, check if passing substruct_pos filter if specified
+        Ligand-pose_id will only advance through the queries if it passes prior specified filter.
+        If using logical operator "OR" to combine a set of substructs or substruct_pos', it will only test a ligand-pose_id
+        until it passes one of the given filters, and will not test the remaining filter values for that filter.
+        If a ligand passes a filter where pose is not relevant, it will add all pose_ids for that ligand
+        in the resuling filtered_ligand dict.
+
+        This method has several internal, private methods including
+        _smarts_to_mol: creates mol object of substructure/SMARTS and checks for explicit hydrogens
+        _stream_query: method that "streams" from the database and yields db cursor rows
+        _substructure_position_calculation: checks if a substructure is in the right location
+        _ligand_indexmap: calculates an index map for the ligand.
+
+        Args:
+            partial_query (str): partial query string for regular filters without a SELECT statement
+            ligand_filters (dict): List of filters on ligand table
+
+        Returns:
+            dict: dict of ligand names and all their pose ids passing regular+rdkit filters
+        """
+        maxatoms = 0
+        position = False
+        substruct_mols = []
+        # handle single value filters
+        if "ligand_operator" in ligand_filters:
+            logical_operator = ligand_filters["ligand_operator"]
+        if "ligand_max_atoms" in ligand_filters:
+            maxatoms = ligand_filters["ligand_max_atoms"]
+
+        def _smarts_to_mol(smarts: str) -> Chem.Mol:
+            """
+            creates a mol object from a smarts pattern if no explicit hydrogens
+
+            Args:
+                smarts (str): substructure smarts to match
+
+            Raises:
+                OptionError
+
+            Returns:
+                Mol: rdkit mol object
+            """
+            smarts_mol = Chem.MolFromSmarts(smarts)
+            # make sure SMARTS is valid
+            for atom in smarts_mol.GetAtoms():
+                if atom.GetAtomicNum() == 1:
+                    raise OptionError(
+                        f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen."
+                    )
+            return smarts_mol
+
+        select_statement = "SELECT R.Pose_id, Ligands.LigName, Ligands.Ligand_rdmol "
+        # handle substruct
+        if "ligand_substruct" in ligand_filters:
+            for substruct in ligand_filters["ligand_substruct"]:
+                substruct_mols.append(_smarts_to_mol(substruct))
+        # whether or not doing a substruct position filter
+        if "ligand_substruct_pos" in ligand_filters:
+            substruct_pos = ligand_filters["ligand_substruct_pos"]
+            position = True
+            # we need additional info if doing position search
+            select_statement += ", Ligands.atom_index_map, R.ligand_coordinates "
+        # build full query
+        query = select_statement + partial_query
+
+        def _stream_query(query: str, batch_size: int = 100):
+            """
+            cursor stream generator
+
+            Args:
+                query (str): sql query
+                batch_size (int): how many cursor hits to read into memory at once
+
+            Yields:
+                cursor batch: cursor results for the query in batch increments, where row can be read
+            """
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+
+            while True:
+                batch = cursor.fetchmany(batch_size)
+                if not batch:
+                    break
+                for row in batch:
+                    yield row
+
+        def _substructure_position_calculation(
+            idxmap, ligand_coordinates, smartsmol, filter
+        ) -> bool:
+            """
+            Method that checks whether or not a substructure specified by smarts
+            is present on a ligand in the specified location (by means of the filter values).
+
+            Args:
+                idxmap (dict): index map of the ligand
+                ligand_coordinates (json): ligand coordinates
+                smartsmol (mol): mol object of the smarts pattern
+                filter (list[str]): filter values from user
+
+            Returns:
+                bool: whether or not the smarts in the pose qualified in the right position
+            """
+            # unpack filter values
+            index = filter[0]
+            sqdist = filter[1] ** 2
+            x = filter[2]
+            y = filter[3]
+            z = filter[4]
+
+            # calculate xyz space coordinates
+            xyz = [
+                float(value)
+                for value in json.loads(ligand_coordinates)[idxmap[smartsmol[index]]]
+            ]
+            # calculate the sum of squares distances
+            d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
+            if d2 <= sqdist:
+                return True
+            else:
+                return False
+
+        def _ligand_indexmap(atom_index_map) -> dict:
+            """
+            Method that converts the atom index mapping in the database to one usable by the filter method
+
+            Args:
+                atom_index_map (json): indices of all atoms in the ligand
+
+            Returns:
+                dict: filter ready index map of the ligand
+            """
+            idxmap = [int(value) - 1 for value in json.loads(atom_index_map)]
+
+            return {
+                idxmap[j * 2]: idxmap[j * 2 + 1] for j in range(int(len(idxmap) / 2))
+            }
+
+        ligands_checked = 0
+        filtered_ligands = {}
+        for ligandrow in _stream_query(query):
+            # substruct and maxatoms do not discriminate on poses, check if ligand has already been accounted for
+            if not position and ligandrow[1] in filtered_ligands:
+                # append pose_id (ligandrow[0]) to ligname ligandrow[1] list
+                filtered_ligands[ligandrow[1]].append(ligandrow[0])
+            # the real workhorse
+            else:
+                # deserialize binary rdmol
+                ligand_mol = Chem.Mol(ligandrow[2])
+                # check if qualify for maxatoms
+                if maxatoms > 0:
+                    if not ligand_mol.GetNumHeavyAtoms() <= maxatoms:
+                        # continue for ligandrow in _stream_query, ligand did not pass
+                        continue
+
+                # if there are substructures in the search
+                if substruct_mols:
+                    # count how many matches
+                    SMARTS_match = 0
+                    # check for each SMARTS if is substruct
+                    for smarts_mol in substruct_mols:
+                        # is_substruct = ligand_mol.GetSubstructMatch(smarts_mol)
+                        if ligand_mol.GetSubstructMatch(smarts_mol):
+                            SMARTS_match += 1
+                            ligands_checked += 1
+                            # if ligand substruct operator is OR, only one match is needed to qualify the ligand
+                            if logical_operator == "OR":
+                                # breaks the smarts_mol in substruct_mols loop
+                                break
+                    # check if ligand passed enough substruct queries
+                    if (logical_operator == "OR" and SMARTS_match < 1) or (
+                        logical_operator == "AND" and SMARTS_match < len(substruct_mols)
+                    ):
+                        # continue for ligandrow in _stream_query, ligand did not pass
+                        continue
+
+                # queries with substructure in a certain position
+                if position:
+                    # count how many matches
+                    SMARTS_pos_match = 0
+                    # check for each SMARTS if is substruct
+                    for filterrow in substruct_pos:
+                        # filterrow[0] should be the smarts pattern
+                        smarts_mol = _smarts_to_mol(filterrow[0])
+                        # ligandrow[3] should be the ligand atom_index_map
+                        ligand_index_map = _ligand_indexmap(ligandrow[3])
+                        # ligandrow[4] should be the ligand coordinates
+                        ligand_coordinates = ligandrow[4]
+                        # filterrow [1:] should be indices, distance allowance, and coordinates for smarts match
+                        substruct_pos_filter = filterrow[1:]
+                        for hit in ligand_mol.GetSubstructMatches(smarts_mol):
+                            filter_match = _substructure_position_calculation(
+                                ligand_index_map,
+                                ligand_coordinates,
+                                hit,
+                                substruct_pos_filter,
+                            )
+                            if filter_match:
+                                # count each passing filter
+                                SMARTS_pos_match += 1
+                                # break for hit in ligand_mol.GetSubstructMatches
+                                break
+                        if logical_operator == "OR" and SMARTS_pos_match == 1:
+                            # break for filterrow in substruct_pos
+                            break
+                    # check if ligand passed enough substruct queries
+                    if (logical_operator == "OR" and SMARTS_pos_match < 1) or (
+                        logical_operator == "AND"
+                        and SMARTS_pos_match < len(substruct_pos)
+                    ):
+                        # continue for ligandrow in _stream_query, ligand did not pass
+                        continue
+
+            # ligand only makes it here if it passed all specified rdkit filters
+            # add pose id to list if ligand already in the list
+            if ligandrow[1] in filtered_ligands:
+
+                filtered_ligands[ligandrow[1]].append(ligandrow[0])
+            # add new ligand in the list of passing ligands
+            else:
+                filtered_ligands[ligandrow[1]] = [ligandrow[0]]
+
+        return filtered_ligands
+
+    def _prepare_cluster_query(self, unclustered_query: str) -> str | None:
         """
         These methods will take data returned from unclustered filter query, then run the cluster query and cluster the filtered data.
         This will output pose_ids that are representative of the clusters, and these pose_ids will be returned so that
@@ -2723,25 +3017,21 @@ class StorageManagerSQLite(StorageManager):
                 fps (): fingerprints
                 cutoff distance (float)
             """
+            from rdkit.SimDivFilters import rdSimDivPickers
 
+            lp = rdSimDivPickers.LeaderPicker()
             # first generate the distance matrix:
             dists = []
             nfps = len(fps)
-            inputs = []
 
-            def gen(fps):
-                for i in range(1, len(fps)):
-                    yield (i, fps)
+            for i in range(1, nfps):
+                sims = DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
+                dists.extend([1 - x for x in sims])
 
-            def mp_wrapper(input_tpl):
-                i, fps = input_tpl
-                return DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
-
-            with multiprocess.Pool() as p:
-                inputs = gen(fps)
-                for sims in p.imap(mp_wrapper, inputs):
-                    dists.extend([1 - x for x in sims])
-
+            picks = lp.LazyBitVectorPick(fps, nfps, 0.5)
+            print("Length of picks: ", len(picks))
+            pickfps = [fps[x] for x in picks]
+            print(len(pickfps))
             # now cluster the data:
             cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)
             return cs
@@ -2814,10 +3104,28 @@ class StorageManagerSQLite(StorageManager):
                     )
 
         if self.mfpt_cluster:
-            cluster_query = f"SELECT R.Pose_ID, R.leff, mol_morgan_bfp(L.ligand_rdmol, 2, 1024) FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName WHERE R.Pose_ID IN ({unclustered_query})"
+            # get relevant data based on all filters specified
+            cluster_query = f"SELECT R.Pose_ID, R.leff, L.ligand_rdmol FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName WHERE R.Pose_ID IN ({unclustered_query})"
             poseid_leff_mfps = self._run_query(cluster_query).fetchall()
+
+            # create morgan fingerprint generator
+            from rdkit.Chem import rdFingerprintGenerator
+
+            mfpgenerator = rdFingerprintGenerator.GetMorganGenerator(
+                radius=2, fpSize=1024
+            )
+            mfps = []
+            # prepare each mol json to fingerprint
+            for rdmol in poseid_leff_mfps:
+                # deserialize mols (JSONToMols returns tuple, hence the [0] subscript)])
+                mol = Chem.Mol(rdmol[2])
+                # need to sanitize each mol like this (as opposed to inline) as the method has a return value of 'santize_flag'
+                Chem.SanitizeMol(mol)
+                mfps.append(mfpgenerator.GetFingerprint(mol))
+
+            # run the butina clustering
             bclusters = _clusterFps(
-                [DataStructs.CreateFromBinaryText(mol[2]) for mol in poseid_leff_mfps],
+                mfps,
                 self.mfpt_cluster,
             )
             logger.info(
@@ -2843,9 +3151,10 @@ class StorageManagerSQLite(StorageManager):
                     "No passing results prior to clustering. Clustering not performed."
                 )
             else:
-                cluster_query_string = "R.Pose_ID = " + " OR R.Pose_ID = ".join(
-                    fp_rep_poseids
+                cluster_query_string = " R.Pose_ID IN ({0})".format(
+                    ",".join(fp_rep_poseids)
                 )
+
         return cluster_query_string
 
     def _prepare_interaction_filtering_query(
@@ -2960,68 +3269,6 @@ class StorageManagerSQLite(StorageManager):
 
         return query
 
-    def _ligand_substructure_position_filter(
-        self, substruct_pos_filter: list, lig_query: str
-    ) -> str:
-        """
-        Method that takes all ligand filters in the presence of a ligand_substruct_pos filter, and reduces the query to
-        " IN pose_ids" based on what pose_ids passed the ligand filters
-
-        Args:
-            substruct_pos_filter (list): substruct position filter
-            lig_query (str): sql formatted string for the other ligand filters
-
-        Raises:
-            OptionError
-
-        Returns:
-            str: partial query that identifies pose ids passing the ligand substructure filter
-        """
-        substructpos_select_stmnt = """SELECT R.Pose_ID, 
-            L.ligand_smile, 
-            L.atom_index_map, 
-            R.ligand_coordinates 
-            FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName"""
-        if lig_query:
-            cmd = lig_query.replace(
-                "SELECT L.LigName FROM Ligands L",
-                substructpos_select_stmnt,
-            )
-        else:
-            cmd = substructpos_select_stmnt
-        cmd = "CREATE TEMP TABLE passed_smarts AS " + cmd
-        cur = self.conn.cursor()
-        cur.execute("DROP TABLE IF EXISTS passed_smarts")
-        cur.execute(cmd)
-        smarts = substruct_pos_filter[0]
-        index = int(substruct_pos_filter[1])
-        sqdist = float(substruct_pos_filter[2]) ** 2
-        x = float(substruct_pos_filter[3])
-        y = float(substruct_pos_filter[4])
-        z = float(substruct_pos_filter[5])
-        poses = self._run_query("SELECT * FROM passed_smarts")
-        pose_id_list = []
-        smartsmol = Chem.MolFromSmarts(smarts)
-        for pose_id, smiles, idxmap, coords in poses:
-            mol = Chem.MolFromSmiles(smiles)
-            idxmap = [int(value) - 1 for value in json.loads(idxmap)]
-            idxmap = {
-                idxmap[j * 2]: idxmap[j * 2 + 1] for j in range(int(len(idxmap) / 2))
-            }
-            for hit in mol.GetSubstructMatches(smartsmol):
-                xyz = [float(value) for value in json.loads(coords)[idxmap[hit[index]]]]
-                d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
-                if d2 <= sqdist:
-                    pose_id_list.append(str(pose_id))
-                    break  # add pose only once
-        cur.close()
-        if len(pose_id_list) > 0:
-            return f"R.Pose_ID IN ({','.join(pose_id_list)})"
-        else:
-            raise OptionError(
-                "There are no ligands passing the 'ligand_substruct_pos' filter, please revise your filter query."
-            )
-
     def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
         """
         Method to generate a dict of generate bitvector strings from pose_ids
@@ -3087,7 +3334,7 @@ class StorageManagerSQLite(StorageManager):
                     )
                 else:
                     # create string representation of ecah interaction not found
-                    interaction_not_found.append(":".join(interaction[:5]))
+                    interaction_not_found.append(":".join(interaction[:4]))
                 continue  # ends this iteration of the for loop
 
             # create a list of lists for interactions to either include or exclude
@@ -3139,62 +3386,6 @@ class StorageManagerSQLite(StorageManager):
         )
 
         return self._run_query(sql_string).fetchall()
-
-    def _generate_ligand_filtering_query(self, ligand_filters: dict) -> str:
-        """write string to select from ligand table
-
-        Args:
-            ligand_filters (list): List of filters on ligand table
-
-        Returns:
-            str: SQLite-formatted query
-        """
-
-        sql_ligand_string = "SELECT L.LigName FROM Ligands L WHERE "
-        query_list = []
-        if "ligand_operator" in ligand_filters:
-            if ligand_filters["ligand_operator"] in ["OR", "AND"]:
-                logical_operator = ligand_filters["ligand_operator"]
-        else:
-            logger.info(
-                "A logical operator to combine ligand filters were not provided, will use the default value 'OR'."
-            )
-            logical_operator = "OR"
-
-        for keyword, filter in ligand_filters.items():
-            if keyword == "ligand_name":
-                # make each name a partial sql string in list format
-                names = [
-                    f"L.LigName LIKE '%{name}%'" for name in filter if filter != ""
-                ]
-                query_list.append("(" + " OR ".join(names) + ")")
-
-            if keyword == "ligand_max_atoms" and filter is not None:
-                query_list.append(f" mol_num_hvyatms(ligand_rdmol) <= {filter}")
-
-            if keyword == "ligand_substruct":
-                smarts_query = []
-                for smarts in filter:
-                    # check for hydrogens in smarts pattern
-                    smarts_mol = Chem.MolFromSmarts(smarts)
-                    for atom in smarts_mol.GetAtoms():
-                        if atom.GetAtomicNum() == 1:
-                            raise DatabaseQueryError(
-                                f"Given ligand substructure filter {smarts} contains explicit hydrogens. Please re-run query with SMARTs without hydrogen."
-                            )
-                    smarts_query.append(
-                        f" mol_is_substruct(ligand_rdmol, mol_from_smarts('{smarts}'))"
-                    )
-                query_list.append(
-                    "(" + f" {logical_operator} ".join(smarts_query) + ")"
-                )
-
-        if not query_list:
-            sql_ligand_string = ""
-        else:
-            sql_ligand_string += " AND ".join(query_list)
-
-        return sql_ligand_string
 
     def _generate_selective_insert_query(
         self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
@@ -3301,7 +3492,7 @@ class StorageManagerSQLite(StorageManager):
         if not compatible:
             if run_mode == "cmd":
                 raise OptionError(compatibility_string)
-            else:  # run_mode == "api":
+            else:
                 logger.warning(compatibility_string)
 
         # write current database properties to database
@@ -3315,11 +3506,6 @@ class StorageManagerSQLite(StorageManager):
         if run_mode != "gui":
             self.keyboard_interrupt_allowed = True
 
-    def get_filterid_from_name(self, bookmark_name: str) -> int:
-        return self._run_query(
-            f"""SELECT filter_id FROM Filters WHERE view_name = '{bookmark_name}';"""
-        ).fetchone()[0]
-
     def clone(self, backup_name=None):
         """Creates a copy of the db
 
@@ -3332,6 +3518,7 @@ class StorageManagerSQLite(StorageManager):
         with bck:
             self.conn.backup(bck, pages=1)
         bck.close()
+        logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
 
     def _set_ringtail_db_schema_version(self, db_version: str = "2.0.0"):
         """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
@@ -3360,7 +3547,7 @@ class StorageManagerSQLite(StorageManager):
 
         Returns:
             bool: whether or not db is compatible with the code base
-            str: current database versions
+            str: current database version
         """
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
@@ -3388,10 +3575,329 @@ class StorageManagerSQLite(StorageManager):
         cur.close()
         return is_compatible, db_version
 
+    def merge_databases(self, merging_db: str, backup: bool = True):
+        # back up main database
+        if backup:
+            self.clone()
+        # attach incoming database and check compatibility
+        merging_db_alias = self._attach_db(merging_db, "merging")
+        if not self._check_if_db_is_compatible(merging_db_alias, 200):
+            raise StorageError(
+                "Trying to merge two databases of incompatible or too old versions, cannot proceed."
+            )
+        # create new tables to keep track of merger
+        self.create_merge_tables()
+        # add to merging table the absolute path
+        mergedb_abspath = str(os.path.abspath(merging_db))
+        # insert merging db name first
+        cur = self.conn.execute(
+            """INSERT INTO merged_tables(dbfile) VALUES (?)""",
+            (mergedb_abspath,),
+        )
+        # receptor compatibility check
+        receptorcheck_sql = """
+        SELECT CASE 
+            WHEN Receptors.RecName = merging_receptors.RecName THEN 'True'
+            ELSE 'False'
+        END AS comparison_result 
+        FROM Receptors 
+        JOIN merging.Receptors AS merging_receptors 
+            ON Receptors.receptor_id = merging_receptors.receptor_id"""
+
+        try:
+            assert self._run_query(receptorcheck_sql).fetchone()[0] == "True"
+        except AssertionError:
+            raise StorageError(
+                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
+            )
+        else:
+            self.logger.info(
+                "The two databases are of compatible version and receptors. Merging will proceed."
+            )
+
+        # get the active merge_id to ensure we use the correct merge data moving forward
+        merge_id = self._run_query(
+            "SELECT last_insert_rowid() FROM merged_tables"
+        ).fetchone()[0]
+
+        # delete incompatible tables
+        # for main db
+        self._drop_views()
+        self._delete_table("Ligand_clusters")
+        # for attached db
+        self._drop_views(merging_db_alias)
+        self._delete_table("Ligand_clusters", merging_db_alias)
+
+        # merge tables
+        try:
+            self._merge_db_properties_table(merge_id)
+            self.logger.info("The 'db_properties' table has been merged.")
+
+            self._merge_ligands_table()
+            self.logger.info("The 'Ligands' table has been merged.")
+
+            self._merge_results_table(merge_id)
+            self.logger.info("The 'Results' table has been merged.")
+
+            self._merge_interaction_tables(merge_id)
+            self.logger.info(
+                "The 'Interaction_indices' and 'Interactions' tables have been merged."
+            )
+            # self._detach_db(merging_db_alias)
+        except Exception as e:
+            raise MergeError(f"Error during database merging: {e}") from e
+        else:
+            self.logger.info(
+                f"The database {merging_db} has been successfully merged into {self.db_file}."
+            )
+        finally:
+            cur.close()
+
+    def _merge_interaction_tables(self, merge_id):
+        # Interaction definitions are unique and results independent, so we only insert those that are new with updated PK,
+        # and assign existing interaction_ids to those already described in primary db
+        convert_ii_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        "Interaction_indices", 
+        interaction_id,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    ) 
+                THEN (
+                    SELECT main.Interaction_indices.interaction_id
+                    FROM main.Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    )
+                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
+            END AS new_interaction_id
+        FROM merging.Interaction_indices;"""
+
+        # then inserting only those that aren't already in the table
+        insert_interaction_indices = """INSERT INTO Interaction_indices (
+        interaction_id,
+        interaction_type,
+        rec_chain,
+        rec_resname,
+        rec_resid,
+        rec_atom,
+        rec_atomid)
+        SELECT 
+            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
+            interaction_type,
+            rec_chain,
+            rec_resname,
+            rec_resid,
+            rec_atom,
+            rec_atomid
+        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
+        """
+
+        # Adding new data to Interactions table with (updated) pose_id and interaction_id
+        insert_interactions = """
+        INSERT INTO Interactions (
+        Pose_ID,
+        interaction_id
+        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
+                FROM merging.Interactions I
+                LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
+            LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Interaction_indices' 
+                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                convert_ii_sql,
+                (merge_id,),
+            )
+            cur.execute(insert_interaction_indices, (merge_id,))
+            cur.execute(
+                insert_interactions,
+                (
+                    merge_id,
+                    merge_id,
+                ),
+            )
+            self.conn.commit()
+        except Exception as e:
+            raise Exception(
+                f"Error during update and insertion of interactions: {e}"
+            ) from e
+
+    def _merge_results_table(self, merge_id):
+
+        cur = self.conn.cursor()
+        convert_poseid_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        "Results", 
+        Pose_ID,
+        Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
+        FROM merging.Results;"""
+
+        # insert results with updated pose_ids
+        insert_Results = """INSERT INTO Results (
+            Pose_ID,
+            LigName,
+            receptor,
+            pose_rank,
+            run_number,
+            docking_score,
+            leff,
+            deltas,
+            cluster_rmsd,
+            cluster_size,
+            reference_rmsd,
+            energies_inter,
+            energies_vdw,
+            energies_electro,
+            energies_flexLig,
+            energies_flexLR,
+            energies_intra,
+            energies_torsional,
+            unbound_energy,
+            nr_interactions,
+            num_hb,
+            about_x,
+            about_y,
+            about_z,
+            trans_x,
+            trans_y,
+            trans_z,
+            axisangle_x,
+            axisangle_y,
+            axisangle_z,
+            axisangle_w,
+            dihedrals,
+            ligand_coordinates,
+            flexible_res_coordinates) 
+        SELECT 
+            II.merged_PK as pose_id,
+            I.LigName,
+            I.receptor,
+            I.pose_rank,
+            I.run_number,
+            I.docking_score,
+            I.leff,
+            I.deltas,
+            I.cluster_rmsd,
+            I.cluster_size,
+            I.reference_rmsd,
+            I.energies_inter,
+            I.energies_vdw,
+            I.energies_electro,
+            I.energies_flexLig,
+            I.energies_flexLR,
+            I.energies_intra,
+            I.energies_torsional,
+            I.unbound_energy,
+            I.nr_interactions,
+            I.num_hb,
+            I.about_x,
+            I.about_y,
+            I.about_z,
+            I.trans_x,
+            I.trans_y,
+            I.trans_z,
+            I.axisangle_x,
+            I.axisangle_y,
+            I.axisangle_z,
+            I.axisangle_w,
+            I.dihedrals,
+            I.ligand_coordinates,
+            I.flexible_res_coordinates
+        FROM merging.Results I
+                LEFT JOIN (SELECT original_PK, merged_PK 
+                FROM PK_conversions 
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) II ON II.original_PK = I.Pose_ID;"""
+
+        try:
+            cur.execute(
+                convert_poseid_sql,
+                (merge_id,),
+            )
+            cur.execute(insert_Results, (merge_id,))
+            # commit after each large table in case there are memory constraints
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError(f"Error during insertion of results: {e}") from e
+
+    def _merge_ligands_table(self):
+        try:
+            cur = self.conn.cursor()
+            # Ligand table has unique constraints and primary key is LigName so no checks needed
+            merge_ligands = """INSERT INTO Ligands 
+                SELECT * FROM merging.Ligands"""
+            cur.execute(merge_ligands)
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError("Error encountered while merging Ligands table") from e
+
+    def _merge_db_properties_table(self, merge_id):
+        try:
+            cur = self.conn.cursor()
+            convert_dbprop_sql = """INSERT INTO PK_conversions (
+                merge_id,
+                table_name,
+                original_PK,
+                merged_PK) SELECT 
+                ?,
+                "db_properties", 
+                DB_write_session,
+                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
+                FROM merging.db_properties;"""
+            cur.execute(
+                convert_dbprop_sql,
+                (merge_id,),
+            )
+
+            insert_dbprops_sql = """INSERT INTO DB_properties (
+                DB_write_session,
+                docking_mode,
+                number_of_poses)
+                SELECT 
+                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
+                    docking_mode,
+                    number_of_poses
+                FROM merging.DB_properties;"""
+            cur.execute(insert_dbprops_sql, (merge_id,))
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError(
+                "Error encountered while merging db_properties table"
+            ) from e
+
     def update_database_version(self, new_version, consent=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
-        #NOTE: If you created a version 1 database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
+        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
         the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
 
         Args:
@@ -3415,13 +3921,7 @@ class StorageManagerSQLite(StorageManager):
 
         # get views and drop them
         logger.info(f"Updating {self.db_file}...")
-        views = cur.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'view'"
-        ).fetchall()
-        for v in views:
-            cur.execute(f"DROP VIEW IF EXISTS {v[0]}")
-        # delete all rows in bookmarks table
-        cur.execute("DELETE FROM Bookmarks")
+        self._drop_views()
 
         # if current version is 1.0.0
         if self.check_ringtaildb_version()[1] == "1.0.0":
@@ -3506,6 +4006,19 @@ class StorageManagerSQLite(StorageManager):
                 f"Error while setting the database schema version: {e}"
             ) from e
 
+    def _drop_views(self, db_alias: str = None):
+        if db_alias:
+            alias_string = db_alias + "."
+        else:
+            alias_string = ""
+        query = f"SELECT name FROM {alias_string}sqlite_master WHERE type = 'view'"
+        cur = self.conn.execute(query)
+        views = cur.fetchall()
+        for v in views:
+            cur.execute(f"DROP VIEW IF EXISTS {alias_string}{v[0]}")
+        # delete all rows in bookmarks table
+        cur.execute(f"DELETE FROM {alias_string}Bookmarks")
+
     def _create_connection(self):
         """Creates database connection to self.db_file
 
@@ -3517,15 +4030,6 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             con = sqlite3.connect(self.db_file)
-            try:
-                con.enable_load_extension(True)
-                con.load_extension("chemicalite")
-                con.enable_load_extension(False)
-            except sqlite3.OperationalError as e:
-                logger.critical(
-                    "Failed to load chemicalite cartridge. Please ensure chemicalite is installed with `conda install -c conda-forge chemicalite`."
-                )
-                raise e
             cursor = con.execute("PRAGMA synchronous = OFF;")
             cursor.execute("PRAGMA journal_mode = MEMORY;")
             con.commit()
@@ -3577,7 +4081,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while vacuuming DB") from e
 
-    def _attach_db(self, new_db, new_db_name):
+    def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
         """Attaches new database file to current database
 
         Args:
@@ -3587,7 +4091,7 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             StorageError
         """
-        attach_str = f"ATTACH DATABASE '{new_db}' AS {new_db_name}"
+        attach_str = f"ATTACH DATABASE '{new_db}' AS {new_db_alias}"
 
         try:
             cur = self.conn.cursor()
@@ -3596,8 +4100,11 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError(f"Error occurred while attaching {new_db}") from e
+        else:
+            self.logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
+            return new_db_alias
 
-    def _detach_db(self, new_db_name):
+    def _detach_db(self, new_db_alias):
         """Detaches new database file from current database
 
         Args:
@@ -3606,15 +4113,17 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             StorageError
         """
-        detach_str = f"DETACH DATABASE {new_db_name}"
-
+        detach_str = f"DETACH DATABASE {new_db_alias}"
+        print(detach_str)
         try:
             cur = self.conn.cursor()
             cur.execute(detach_str)
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
-            raise StorageError(f"Error occurred while detaching {new_db_name}") from e
+            raise StorageError(f"Error occurred while detaching {new_db_alias}") from e
+        else:
+            self.logger.info(f"Detached database aliased as {new_db_alias}.")
 
     def _drop_existing_tables(self):
         """drop any existing tables.

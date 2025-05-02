@@ -9,6 +9,10 @@ class StorageError(Exception):
     pass
 
 
+class MergeError(StorageError):
+    pass
+
+
 class DatabaseInsertionError(StorageError):
     pass
 
@@ -54,8 +58,4 @@ class ResultsProcessingError(Exception):
 
 
 class OutputError(Exception):
-    pass
-
-
-class NoInputError(OptionError):
     pass
