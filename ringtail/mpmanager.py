@@ -11,12 +11,15 @@ import os
 import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
-from .logutils import LOGGER
-from .exceptions import MultiprocessingError, RTCoreError
+from .logutils import LOGGER as logger
+from .exceptions import MultiprocessingError, RTCoreError, ResultsProcessingError
 import traceback
 from datetime import datetime
+import pickle
+import multiprocessing as mp
+import threading
 
-import multiprocess
+mp.set_start_method("spawn", force=True)
 
 
 class MPManager:
@@ -32,7 +35,6 @@ class MPManager:
         interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
         max_proc (int): Maximum number of processes to create during parallel file parsing.
         storageman (StorageManager): storageman object
-        storageman_class (StorageManager): storagemanager child class/database type
         chunk_size (int): how many tasks ot send to a processor at the time
         target (str): name of receptor
         receptor_file (str): file path to receptor
@@ -53,7 +55,6 @@ class MPManager:
         interaction_cutoffs,
         max_proc,
         storageman,
-        storageman_class,
         chunk_size,
         target,
         receptor_file,
@@ -61,91 +62,99 @@ class MPManager:
         file_sources=None,
         string_sources=None,
     ):
-        self.docking_mode = docking_mode
+        self.storageman = storageman
         self.chunk_size = chunk_size
-        self.max_poses = max_poses
-        self.store_all_poses = store_all_poses
-        self.interaction_tolerance = interaction_tolerance
-        self.target = target
-        self.add_interactions = add_interactions
-        self.interaction_cutoffs = interaction_cutoffs
+        self.docking_mode = docking_mode
+
+        # shared memory
+        manager = mp.Manager()
+        self.shared = manager.dict()
+        # general docking info
+        self.shared["docking_mode"] = docking_mode
+        self.shared["max_poses"] = max_poses
+        self.shared["store_all_poses"] = store_all_poses
+        self.shared["format_method"] = self.storageman.format_for_storage
+
+        # interaction info
+        self.shared["add_interactions"] = add_interactions
+        if add_interactions:
+            self.shared["receptor_string"] = self._get_receptor_string()
+        self.shared["interaction_tolerance"] = interaction_tolerance
+        self.shared["interaction_cutoffs"] = interaction_cutoffs
+        self.shared["target"] = target
         self.receptor_file = receptor_file
         self.file_sources = file_sources
         self.file_pattern = file_pattern
         self.string_sources = string_sources
-        self.storageman = storageman
-        self.storageman_class = storageman_class
         self.num_files = 0
         self.max_proc = max_proc
-        self.logger = LOGGER
 
     def process_results(self):
-        """Processes results data (files or string sources) by adding them to the queue
-        and starting their processing in multiprocess.
-        """
         if self.max_proc is None:
-            self.max_proc = multiprocess.cpu_count()
+            self.max_proc = mp.cpu_count()
         self.num_readers = self.max_proc - 1
-        self.queueIn = multiprocess.Queue(maxsize=2 * self.max_proc)
-        self.queueOut = multiprocess.Queue(maxsize=2 * self.max_proc)
-        # start the workers in background
+        self.queueIn = mp.Queue(maxsize=2 * self.max_proc)
+        self.queueOut = mp.Queue(maxsize=2 * self.max_proc)
+
+        logger.info(f"Starting {self.num_readers} docking results readers")
+
+        # Start reader processes
         self.workers = []
-        self.p_conn, self.c_conn = multiprocess.Pipe(True)
-        self.logger.info(
-            "Starting {0} docking results readers".format(self.num_readers)
-        )
-        for i in range(self.num_readers):
-            # one worker is started for each processor to be used
-            s = DockingFileReader(
+        self.p_conn, self.c_conn = mp.Pipe(duplex=True)
+        for _ in range(self.num_readers):
+            reader = DockingFileReader(
                 self.queueIn,
                 self.queueOut,
                 self.c_conn,
-                self.storageman,
-                self.storageman_class,
-                self.docking_mode,
-                self.max_poses,
-                self.interaction_tolerance,
-                self.store_all_poses,
-                self.target,
-                self.add_interactions,
-                self.interaction_cutoffs,
-                self.receptor_file,
+                self.shared,
             )
-            # this method calls .run() internally
-            s.start()
-            self.workers.append(s)
-
-        # start the writer to process the data from the workers
-        w = Writer(
+            reader.start()
+            self.workers.append(reader)
+        # Start writer in a thread (pulls from queueOut)
+        dbfile = self.storageman.db_file
+        writer = Writer(
             self.queueOut,
             self.num_readers,
-            self.c_conn,
             self.chunk_size,
-            self.storageman,
+            dbfile,
             self.docking_mode,
         )
-
-        w.start()
-        self.workers.append(w)
-
-        # process items in the queue
+        writer.start()
+        self.workers.append(writer)
         try:
             self._process_data_sources()
         except Exception as e:
             tb = traceback.format_exc()
             self._kill_all_workers(e, "results sources processing", tb)
-        # put as many poison pills in the queue as there are workers
-        for i in range(self.num_readers):
+
+        # Now safe to shut down readers
+        for _ in range(self.num_readers):
             self.queueIn.put(None)
 
         # check for exceptions
-        while w.is_alive():
+        while writer.is_alive():
             sleep(0.5)
             self._check_for_worker_exceptions()
 
-        w.join()
+        writer.join()
 
-        self.logger.info(f"Wrote {self.num_files} docking results to the database")
+        logger.info(f"Wrote {self.num_files} docking results to the database")
+
+    def _get_receptor_string(self) -> str:
+        try:
+            from .receptormanager import ReceptorManager as rm
+
+            with self.storageman:
+                # grab receptor info from database, this assumes there is only one receptor in the database
+                receptor_blob = self.storageman.fetch_receptor_objects()[0][
+                    1
+                ]  # method returns an iter of tuples, blob is the second tuple element in the first list element
+                # convert receptor blob to string
+                return rm.blob2str(receptor_blob)
+        except:
+            raise ResultsProcessingError(
+                "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+            )
 
     def _process_data_sources(self):
         """Adds each docking result item to the queue, including files and data provided as string/dict.
@@ -251,7 +260,7 @@ class MPManager:
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
             error, tb, filename = self.p_conn.recv()
-            self.logger.error(f"Caught error in multiprocess from {filename}")
+            logger.error(f"Caught error in multiprocess from {filename}")
             # don't kill parser errors, only database error
             if filename == "Database":
                 self._kill_all_workers(error, filename, tb)
@@ -261,13 +270,13 @@ class MPManager:
                         str(datetime.now()) + f"\tRingtail failed to parse {filename}\n"
                     )
                     self.num_files -= 1
-                    self.logger.debug(tb)
+                    logger.debug(tb)
 
     def _kill_all_workers(self, error, filename, tb):
         for s in self.workers:
             s.kill()
-        self.logger.debug(f"Error encountered while handling {filename}")
-        self.logger.debug(tb)
+        logger.debug(f"Error encountered while handling {filename}")
+        logger.debug(tb)
         raise error
 
     def _scan_dir(self, path, pattern, recursive=False):
@@ -282,7 +291,7 @@ class MPManager:
         Yields:
             list: of file paths found in the search
         """
-        self.logger.info(
+        logger.info(
             "Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern)
         )
         if recursive:
@@ -320,12 +329,12 @@ class MPManager:
                     ):  # NOTE if adding zip option change here
                         lig_accepted.append(line)
                 else:
-                    self.logger.warning("Warning! file |%s| does not exist" % line)
+                    logger.warning("Warning! file |%s| does not exist" % line)
         if len(lig_accepted) == 0:
             raise MultiprocessingError(
                 "*ERROR* No valid files were found when reading from |%s|" % filename
             )
-        self.logger.info(
+        logger.info(
             "# [ %5.3f%% files in list accepted (%d) ]"
             % ((len(lig_accepted) / c * 100, c))
         )

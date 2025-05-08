@@ -583,7 +583,6 @@ class RingtailCore:
         elif strings == True:
             self._create_resultsmanager(string_sources=results_sources)
         self.resultsman.storageman = self.storageman
-        self.resultsman.storageman_class = self.storageman.__class__
         self.set_resultsman_attributes(
             store_all_poses,
             max_poses,
@@ -619,9 +618,9 @@ class RingtailCore:
         if results_sources.save_receptor:
             self.save_receptor(results_sources.receptor_file)
 
+        self.logger.info("Adding results...")
+        self.resultsman.process_docking_data()
         with self.storageman:
-            self.logger.info("Adding results...")
-            self.resultsman.process_docking_data()
             if finalize:
                 self.storageman.finalize_database_write()
 

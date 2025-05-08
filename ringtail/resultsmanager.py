@@ -21,7 +21,6 @@ class ResultsManager:
         interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
         max_proc (int): Maximum number of processes to create during parallel file parsing.
         storageman (StorageManager): storageman object
-        storageman_class (StorageManager): storagemanager child class/database type
         chunk_size (int): how many tasks ot send to a processor at the time
         parser_manager (str, optional): what paralellization or multiprocessing package to use
         file_sources (InputFiles, optional): given file sources including the receptor file
@@ -41,7 +40,6 @@ class ResultsManager:
         interaction_cutoffs: list = None,
         max_proc: int = None,
         storageman: StorageManager = None,
-        storageman_class: StorageManager = None,
         chunk_size: int = 1,
         parser_manager: str = "multiprocess",
         file_sources=None,
@@ -59,7 +57,6 @@ class ResultsManager:
         self.receptor_file = None
         self.file_pattern = None
         self.max_proc = max_proc
-        self.storageman_class = storageman_class
         self.storageman = storageman
         # if results are provided as files
         self.file_sources = file_sources
@@ -116,6 +113,7 @@ class ResultsManager:
         implemented_parser_managers = {
             "multiprocess": MPManager,
         }
+        # TODO HERE I CAN SEND IN THE SHARED MEMORY ACTUALLY
         parser_opts = {}
         for k, v in self.__dict__.items():
             if k == "parser_manager":

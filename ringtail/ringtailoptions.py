@@ -45,9 +45,9 @@ class TypeSafe:
         """
 
         if name == "value":
-            if type(value) == self.type:
+            if type(value) in self.type:
                 self.__dict__["value"] = value
-            elif self.type == float and type(value) in [float, int]:
+            elif float in self.type and type(value) in [float, int]:
                 self.__dict__["value"] = float(value)
             else:
                 self.__dict__["value"] = self.default
@@ -65,7 +65,7 @@ class RTOptions:
     options = {
         "":{
             "default":'',
-            "type":'',
+            "type":[''],
             "description": ""
         },
     }
@@ -165,22 +165,22 @@ class InputStrings(RTOptions):
     options = {
         "results_strings": {
             "default": None,
-            "type": dict,
+            "type": [dict],
             "description": "A dictionary of ligand names and ligand docking output results. Currently only valid for vina docking",
         },
         "receptor_file": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Use with Vina mode. Give file for receptor PDBQT.",
         },
         "save_receptor": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Saves receptor PDBQT to database. Receptor location must be specied with in 'receptor_file'.",
         },
         "target": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Name of receptor. This field is autopopulated if 'receptor_file' is supplied.",
         },
     }
@@ -218,42 +218,42 @@ class InputFiles(RTOptions):
     options = {
         "file": {
             "default": None,
-            "type": list,
+            "type": [list, str],
             "description": "Ligand docking output file to save. Compressed (.gz) files allowed. Only results files associated the same receptor allowed.",
         },
         "file_path": {
             "default": None,
-            "type": list,
+            "type": [list, str],
             "description": "Directory(s) containing docking output files to save. Compressed (.gz) files allowed",
         },
         "file_list": {
             "default": None,
-            "type": list,
+            "type": [list, str],
             "description": "Text file(s) containing the list of docking output files to save; relative or absolute paths are allowed. Compressed (.gz) files allowed.",
         },
         "file_pattern": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Specify which pattern to use when searching for result files to process (only with 'file_path').",
         },
         "recursive": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Enable recursive directory scan when 'file_path' is used.",
         },
         "receptor_file": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Use with Vina mode. Give file for receptor PDBQT.",
         },
         "save_receptor": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Saves receptor PDBQT to database. Receptor location must be specied with in 'receptor_file'.",
         },
         "target": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Name of receptor. This field is autopopulated if 'receptor_file' is supplied.",
         },
     }
@@ -288,32 +288,32 @@ class ResultsProcessingOptions(RTOptions):
     options = {
         "store_all_poses": {
             "default": False,
-            "type": bool,
+            "type": [bool],
             "description": "Store all poses from input files. Overrides 'max_poses'.",
         },
         "max_poses": {
             "default": 3,
-            "type": int,
+            "type": [int],
             "description": "Store top pose for top n clusters.",
         },
         "add_interactions": {
             "default": False,
-            "type": bool,
+            "type": [bool],
             "description": "Find interactions between ligand poses and receptor and save to database. Requires receptor PDBQT to be given with input files (all modes) and 'receptor_file' to be specified with Vina mode. SIGNIFICANTLY INCREASES DATBASE WRITE TIME.",
         },
         "interaction_tolerance": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8 for cmd line tool, or give other value as desired (cmd line and api). Only compatible with ADGPU mode.",
         },
         "interaction_cutoffs": {
             "default": [3.7, 4.0],
-            "type": list,
+            "type": [list],
             "description": "Use with 'add_interactions', specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. These are the default cutoffs.",
         },
         "max_proc": {
             "default": None,
-            "type": int,
+            "type": [int],
             "description": "Maximum number of processes to create during parallel file parsing. Defaults to number of CPU processors.",
         },
     }
@@ -339,22 +339,22 @@ class StorageOptions(RTOptions):
     options = {
         "duplicate_handling": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Specify how duplicate Results rows should be handled when inserting into database. Options are 'ignore' or 'replace'. Default behavior (no option provided) will allow duplicate entries.",
         },
         "filter_bookmark": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Perform filtering over specified bookmark.",
         },
         "overwrite": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "This option will allow overwriting of the database (in 'write'/add files-mode) and filtering log_file (in 'read'/filtering mode).",
         },
         "order_results": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": """Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION.
                             available fields are:  
                             'e' (docking_score), 
@@ -372,7 +372,7 @@ class StorageOptions(RTOptions):
         },
         "outfields": {
             "default": "Ligand_name,e",
-            "type": str,
+            "type": [str],
             "description": """Defines which fields are used when reporting the results (to stdout and to the log file). Fields are specified as comma-separated values, e.g. 'outfields=e,le,hb'; by default, docking_score (energy) and ligand name are reported. Ligand always reported in first column available fields are: \n
                             'Ligand_name' (Ligand name), 
                             'e' (docking_score), 
@@ -392,22 +392,22 @@ class StorageOptions(RTOptions):
         },
         "output_all_poses": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.",
         },
         "mfpt_cluster": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Useful for selecting chemically dissimilar ligands.",
         },
         "interaction_cluster": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Useful for enhancing selection of ligands with diverse interactions.",
         },
         "bookmark_name": {
             "default": "passing_results",
-            "type": str,
+            "type": [str],
             "description": "name for resulting book mark file. Default value is 'passing_results'",
         },
     }
@@ -468,22 +468,22 @@ class OutputOptions(RTOptions):
     options = {
         "log_file": {
             "default": "output_log.txt",
-            "type": str,
+            "type": [str],
             "description": "By default, read and filtering results are saved in 'output_log.txt'; if this option is used, ligands and requested info passing the filters will be written to specified file.",
         },
         "export_sdf_path": {
             "default": "",
-            "type": str,
+            "type": [str],
             "description": "Specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the 'overwrite' is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.",
         },
         "individual_sdf_files": {
             "default": False,
-            "type": bool,
+            "type": [bool],
             "description": "Use if you like to print chosen molecules to individual SDF files, as opposed to one big SDF.",
         },
         "enumerate_interaction_combs": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "When used with 'max_miss' > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.",
         },
     }
@@ -509,87 +509,87 @@ class Filters(RTOptions):
     options = {
         "eworst": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Specify the worst energy value accepted.",
         },
         "ebest": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Specify the best energy value accepted.",
         },
         "leworst": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Specify the worst ligand efficiency value accepted.",
         },
         "lebest": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Specify the best ligand efficiency value accepted.",
         },
         "score_percentile": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.",
         },
         "le_percentile": {
             "default": None,
-            "type": float,
+            "type": [float],
             "description": "Specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.",
         },
         "vdw_interactions": {
             "default": [],
-            "type": list,
+            "type": [list],
             "description": "Define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)].",
         },
         "hb_interactions": {
             "default": [],
-            "type": list,
+            "type": [list],
             "description": "Define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)].",
         },
         "reactive_interactions": {
             "default": [],
-            "type": list,
+            "type": [list],
             "description": "Check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)].",
         },
         "hb_count": {
             "default": None,
-            "type": list,
+            "type": [list],
             "description": "Accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)].",
         },
         "react_any": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Check if ligand reacted with any residue.",
         },
         "max_miss": {
             "default": 0,
-            "type": int,
+            "type": [int],
             "description": "Will compute all possible combinations of interaction filters excluding up to 'max_miss' number of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.",
         },
         "ligand_name": {
             "default": None,
-            "type": list,
+            "type": [list],
             "description": "Specify list of ligand name(s). Will combine name filters with 'OR'",
         },
         "ligand_operator": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Logical join operator for multiple substruct filters. Will apply within 'ligand_substruct' filters and within 'ligand_substruct_pos' filters (the two groups are always joined by 'AND').",
         },
         "ligand_substruct": {
             "default": None,
-            "type": list,
+            "type": [list],
             "description": "SMARTS pattern(s) for substructure matching.",
         },
         "ligand_substruct_pos": {
             "default": None,
-            "type": list,
+            "type": [list],
             "description": "SMARTS pattern(s) for substructure matching, e.g., [''[Oh]C' 0 1.2 -5.5 10.0 15.5'] -> ['smart_string index_of_positioned_atom cutoff_distance x y z'].",
         },
         "ligand_max_atoms": {
             "default": None,
-            "type": int,
+            "type": [int],
             "description": "Maximum number of heavy atoms a ligand may have.",
         },
     }
@@ -688,42 +688,42 @@ class ReadOptions(RTOptions):
     options = {
         "plot": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Makes scatterplot of LE vs Best Energy, saves as scatter.png.",
         },
         "pymol": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will also open receptor if given.",
         },
         "export_bookmark_db": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Export a database containing only the results found in the bookmark specified by --bookmark_name. Will save as <input_db>_<bookmark_name>.db",
         },
         "export_receptor": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Export stored receptor pdbqt. Will write to current directory.",
         },
         "data_from_bookmark": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Write log of --outfields data for bookmark specified by --bookmark_name. Must use without any filters.",
         },
         "find_similar_ligands": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.",
         },
         "export_bookmark_csv": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables.",
         },
         "export_query_csv": {
             "default": None,
-            "type": str,
+            "type": [str],
             "description": "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]",
         },
     }
@@ -743,27 +743,27 @@ class GeneralOptions(RTOptions):
     options = {
         "docking_mode": {
             "default": "dlg",
-            "type": str,
+            "type": [str],
             "description": "specify AutoDock program used to generate results. Available options are 'DLG' and 'vina'. Will automatically change --file_pattern to *.dlg* for DLG and *.pdbqt* for vina.",
         },
         "db_file": {
             "default": "output.db",
-            "type": str,
+            "type": [str],
             "description": "DB file for which to use for all Ringtail activities.",
         },
         "verbose": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Print results passing filtering criteria to STDOUT and to log. NOTE: runtime may be slower option used.",
         },
         "debug": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "Print additional error information to STDOUT and to log.",
         },
         "print_summary": {
             "default": None,
-            "type": bool,
+            "type": [bool],
             "description": "prints summary information about stored data to STDOUT.",
         },
     }

@@ -17,12 +17,13 @@ from .exceptions import (
     MultiprocessingError,
     ResultsProcessingError,
 )
+from .storagemanager import StorageManager
 from .interactions import InteractionFinder
 
-import multiprocess
+import multiprocessing as mp
 
 
-class DockingFileReader(multiprocess.Process):
+class DockingFileReader(mp.Process):
     """This class is the individual worker for processing docking results.
     One instance of this class is instantiated for each available processor.
 
@@ -30,8 +31,6 @@ class DockingFileReader(multiprocess.Process):
         queueIn (multiprocess.Queue): current queue for the processor/file reader
         queueOut (multiprocess.Queue): queue for the processor/file reader after adding or removing an item
         pipe_conn (multiprocess.Pipe): pipe connection to the reader
-        storageman (StorageManager): storageman object
-        storageman_class (StorageManager): storagemanager child class/database type
         docking_mode (str): describes what docking engine was used to produce the results
         max_poses (int): max number of poses to store for each ligand
         interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
@@ -46,35 +45,11 @@ class DockingFileReader(multiprocess.Process):
         queueIn,
         queueOut,
         pipe_conn,
-        storageman,
-        storageman_class,
-        docking_mode,
-        max_poses,
-        interaction_tolerance,
-        store_all_poses,
-        target,
-        add_interactions,
-        interaction_cutoffs,
-        receptor_file,
+        shared_dict,
     ):
-        # set docking_mode for which file parser to use (and for vina, '_string' if parsing string output directly)
-        self.docking_mode = docking_mode
-        # set number of clusters to write
-        self.max_poses = max_poses
-        self.store_all_poses_flag = store_all_poses
-        # set interaction_tolerance cutoff
-        self.interaction_tolerance = interaction_tolerance
-        # set options for finding interactions
-        self.add_interactions = add_interactions
-        self.interaction_cutoffs = interaction_cutoffs
-        self.receptor_file = receptor_file
-        # set storagemanager and class
-        self.storageman = storageman
-        self.storageman_class = storageman_class
-        # set target name to check against
-        self.target = target
+        self.shared = shared_dict
         # initialize the parent class to inherit all multiprocess methods
-        multiprocess.Process.__init__(self)
+        mp.Process.__init__(self)
         # each worker knows the queue in (where data to process comes from)
         self.queueIn = queueIn
         # ...and a queue out (where to send the results)
@@ -83,6 +58,7 @@ class DockingFileReader(multiprocess.Process):
         self.pipe = pipe_conn
         self.interaction_finder = None
         self.exception = None
+        self.docking_mode = self.shared.get("docking_mode")
 
     def _find_best_cluster_poses(self, ligand_dict):
         """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run"
@@ -145,39 +121,29 @@ class DockingFileReader(multiprocess.Process):
                     )
                 # check receptor name from file against that which we expect
                 if (
-                    parsed_file_dict["receptor"] != self.target
-                    and self.target is not None
+                    parsed_file_dict["receptor"] != self.shared["target"]
+                    and self.shared.get("target") is not None
                     and self.docking_mode == "dlg"
                 ):
                     raise FileParsingError(
                         "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
-                            parsed_file_dict["receptor"], next_task, self.target
+                            parsed_file_dict["receptor"],
+                            next_task,
+                            self.shared.get("target"),
                         )
                     )
 
                 # find run numbers for poses we want to save
+                # NOTE where num poses plays in
                 parsed_file_dict["poses_to_save"] = self._find_poses_to_save(
                     parsed_file_dict
                 )
                 # Calculate interactions if requested
-                if self.add_interactions:
-                    try:
-                        from .receptormanager import ReceptorManager as rm
-
-                        with self.storageman:
-                            # grab receptor info from database, this assumes there is only one receptor in the database
-                            receptor_blob = self.storageman.fetch_receptor_objects()[0][
-                                1
-                            ]  # method returns and iter of tuples, blob is the second tuple element in the first list element
-                            # convert receptor blob to string
-                            receptor_string = rm.blob2str(receptor_blob)
-                    except:
-                        raise ResultsProcessingError(
-                            "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
-                        )
+                if self.shared.get("add_interactions"):
                     if self.interaction_finder is None:
                         self.interaction_finder = InteractionFinder(
-                            receptor_string, self.interaction_cutoffs
+                            self.shared.get("receptor_string"),
+                            self.shared.get("interaction_cutoffs"),
                         )
                     if parsed_file_dict["interactions"] == []:
                         for pose in parsed_file_dict["pose_coordinates"]:
@@ -201,14 +167,14 @@ class DockingFileReader(multiprocess.Process):
                                 )
                             )
                 # find poses we want to save tolerated interactions for
-                if self.interaction_tolerance is not None:
+                if self.shared.get("interaction_tolerance") is not None:
                     parsed_file_dict["tolerated_interaction_runs"] = (
                         self._find_tolerated_interactions(parsed_file_dict)
                     )
                 else:
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 # put the result in the out queue
-                data_packet = self.storageman_class.format_for_storage(parsed_file_dict)
+                data_packet = self.shared.get("format_method")(parsed_file_dict)
                 self._add_to_queueout(data_packet)
             except Exception:
                 tb = traceback.format_exc()
@@ -248,14 +214,16 @@ class DockingFileReader(multiprocess.Process):
         Returns:
             list: List of run numbers to save
         """
-        if self.store_all_poses_flag:
+        if self.shared.get("store_all_poses"):
             poses_to_save = ligand_dict["sorted_runs"]
         elif self.docking_mode == "dlg":
             # will only select top n clusters. Default 3
-            poses_to_save = ligand_dict["cluster_top_poses"][: self.max_poses]
+            poses_to_save = ligand_dict["cluster_top_poses"][
+                : self.shared.get("max_poses")
+            ]
         # if not adgpu, save top n poses
         else:
-            poses_to_save = ligand_dict["sorted_runs"][: self.max_poses]
+            poses_to_save = ligand_dict["sorted_runs"][: self.shared.get("max_poses")]
 
         return poses_to_save
 
@@ -274,26 +242,27 @@ class DockingFileReader(multiprocess.Process):
         """
         tolerated_runs = []
         for idx, run in enumerate(ligand_dict["sorted_runs"]):
-            if float(ligand_dict["cluster_rmsds"][idx]) <= self.interaction_tolerance:
+            if float(ligand_dict["cluster_rmsds"][idx]) <= self.shared.get(
+                "interaction_tolerance"
+            ):
                 tolerated_runs.append(run)
         return tolerated_runs
 
 
-class Writer(multiprocess.Process):
+class Writer(mp.Process):
     """This class is a listener that retrieves data from the queue and writes it
     into datbase"""
 
-    def __init__(
-        self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
-    ):
-        multiprocess.Process.__init__(self)
+    def __init__(self, queue, num_readers, chunksize, dbfile, docking_mode):
+        mp.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
         self.num_readers = num_readers
-        self.pipe = pipe_conn
         # assign pointer to storage object, set chunksize
         self.docking_mode = docking_mode
-        self.storageman = storageman
+        self.dbfile = dbfile
+        storageman = StorageManager.check_storage_compatibility("sqlite")
+        self.storageman = storageman(dbfile)
         self.chunksize = chunksize
         # initialize data array (stack of dictionaries)
         self.results_array = []
@@ -305,82 +274,61 @@ class Writer(multiprocess.Process):
         self.counter = 0
         self.num_files_written = 0
         self.time0 = time.perf_counter()
+        self.total_runtime = 0
         self.last_write_time = 0
 
     def run(self):
-        """Method overload from parent class. This is where the task of this class
-        is performed. Each multiprocess.Process class must have a "run" method which
-        is called by the initialization (see below) with start()
-
-        Raises:
-            WriteToStorageError
-        """
+        self.time0 = time.perf_counter()
 
         try:
             while True:
-                # retrieve the next task from the queue
                 next_task = self.queue.get()
                 if next_task is None:
-                    # if a poison pill is found, it means one of the workers quit
                     self.num_readers -= 1
                     logger.debug(
-                        "Closing process. Remaining open processes: "
-                        + str(self.num_readers)
+                        f"Closing process. Remaining open processes: {self.num_readers}"
                     )
-                else:
-                    # if not a poison pill, process the task item
-
-                    # after every n (chunksize) files, write to storage
-                    if self.counter >= self.chunksize:
+                    if self.num_readers == 0:
+                        logger.info("Performing final database write")
                         self.write_to_storage()
-                        # print info about files and time remaining
-                        sys.stdout.write("\r")
-                        sys.stdout.write(
-                            "{0} files written to database. Writing {1:.0f} files/minute. Elapsed time {2:.0f} seconds.".format(
-                                self.num_files_written + 1,
-                                self.num_files_written * 60 / self.total_runtime,
-                                self.total_runtime,
-                            )
-                        )
-                        sys.stdout.flush()
+                        logger.info("File processing completed")
+                        break
+                    continue
 
-                    # process next file
-                    self.process_data(next_task)
-                if self.num_readers == 0:
-                    # received as many poison pills as workers
-                    logger.info("Performing final database write")
-                    # perform final storage write
+                # Process data and increment counter within process_data
+                self.process_data(next_task)
+
+                # After every n (chunksize) files, write to storage
+                if self.counter >= self.chunksize:
+                    self._log_progress()
                     self.write_to_storage()
-                    # no workers left, no job to do
-                    logger.info("File processing completed")
-                    self.close()
-                    break
+            if self.counter > 0:
+                logger.info("Performing final database write")
+                self.write_to_storage()
+                logger.info("File processing completed")
+
         except Exception:
             tb = traceback.format_exc()
-            self.pipe.send(
-                (
-                    WriteToStorageError("Error occured while writing database"),
-                    tb,
-                    "Database",
-                )
-            )
+            logger.error("Exception during writing:\n" + tb)
+            raise WriteToStorageError("Error occurred while writing to the database.")
 
     def write_to_storage(self):
         """Inserting data to the database through the designated storagemanager."""
         # insert result, ligand, and receptor data
-        self.storageman.insert_data(
-            self.results_array,
-            self.ligands_array,
-            self.interactions_list,
-            self.receptor_array,
-            self.first_insert,
-        )
+        with self.storageman as sm:
+            sm.insert_data(
+                self.results_array,
+                self.ligands_array,
+                self.interactions_list,
+                self.receptor_array,
+                self.first_insert,
+            )
         # So at this point the ligand array is empty
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
 
         # calulate time for processing/writing speed
-        self.num_files_written += self.chunksize
+        self.num_files_written += self.counter
         self.total_runtime = time.perf_counter() - self.time0
 
         # reset data holder for next chunk
@@ -406,3 +354,11 @@ class Writer(multiprocess.Process):
         self.receptor_array.append(receptor_row)
 
         self.counter += 1
+
+    def _log_progress(self):
+        rate = self.num_files_written * 60 / (self.total_runtime or 1)
+        sys.stdout.write(
+            f"\r{self.num_files_written} files written. {rate:.0f} files/min. "
+            f"Elapsed: {self.total_runtime:.0f}s."
+        )
+        sys.stdout.flush()
