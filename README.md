@@ -76,16 +76,10 @@ Make sure your Ringtail environment is active, then install via pip
 $ pip install ringtail
 ```
 
-You may need to install one or more of the listed dependencies, including matplotlib, multiprocess, rdkit, scipy, pandas, and meeko (a Forli lab tool). 
+You may need to install one or more of the listed dependencies, including matplotlib, rdkit, scipy, pandas, and meeko (a Forli lab tool). 
 
 ```bash
 $ pip install <dependency>
-```
-
-Chemicalite is required and only available on conda-forge:
-
-```bash
-$ conda install -c conda-forge chemicalite
 ```
 
 #### From conda-forge

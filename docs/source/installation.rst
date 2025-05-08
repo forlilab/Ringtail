@@ -18,17 +18,13 @@ A few dependencies may be needed, including:
 
 * meeko (another Forli lab tool)
 * rdkit 
-* multiprocess
 * scipy
 * pandas
 * matplotlib 
-* chemicalite (only available through conda-forge)
 
 .. code-block:: bash
 
     $ pip install <dependency>
-
-    $ conda install -c conda-forge chemicalite
 
 Upgrading to a newer Ringtail version
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
