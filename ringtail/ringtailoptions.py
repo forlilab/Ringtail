@@ -8,6 +8,7 @@ import os
 from .exceptions import OptionError
 from .logutils import LOGGER as logger
 import copy
+from .util import iterate_nested
 
 
 class TypeSafe:
@@ -157,127 +158,46 @@ class RTOptions:
         self.checks()
 
 
-class InputStrings(RTOptions):
-    """Class that handles docking results strings from vina docking, with options to store receptor.
-    Takes docking results string as a dictionary of:
-    {ligand_name: docking_result}"""
-
-    options = {
-        "results_strings": {
-            "default": None,
-            "type": [dict],
-            "description": "A dictionary of ligand names and ligand docking output results. Currently only valid for vina docking",
-        },
-        "receptor_file": {
-            "default": None,
-            "type": [str],
-            "description": "Use with Vina mode. Give file for receptor PDBQT.",
-        },
-        "save_receptor": {
-            "default": None,
-            "type": [bool],
-            "description": "Saves receptor PDBQT to database. Receptor location must be specied with in 'receptor_file'.",
-        },
-        "target": {
-            "default": None,
-            "type": [str],
-            "description": "Name of receptor. This field is autopopulated if 'receptor_file' is supplied.",
-        },
-    }
-
-    def __init__(self):
-        super().initialize_from_dict(self.options, self.__class__.__name__)
-
-    def checks(self):
-        """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
-        then every time a value is changed."""
-        if hasattr(
-            self, "target"
-        ):  # ensures last item in the option dictionary has been
-            if type(self.results_strings) == str:
-                pass
-                self.results_strings = list(self.results_strings)
-            if type(self.target) != str:
-                if self.receptor_file is None:
-                    pass
-                elif self.receptor_file is not None and self.is_valid_path(
-                    self.receptor_file
-                ):
-                    self.target = os.path.basename(self.receptor_file).split(".")[0]
-                else:
-                    raise OptionError(
-                        "The receptor PDBQT file path is not valid. Please check location of receptor file and 'receptor_file' option."
-                    )
-
-
-class InputFiles(RTOptions):
+class ResultsObject:
     """Class that handles sources of data to be written including ligand data paths and how
     to traverse them, and options to store receptor.
     """
 
-    options = {
-        "file": {
-            "default": None,
-            "type": [list, str],
-            "description": "Ligand docking output file to save. Compressed (.gz) files allowed. Only results files associated the same receptor allowed.",
-        },
-        "file_path": {
-            "default": None,
-            "type": [list, str],
-            "description": "Directory(s) containing docking output files to save. Compressed (.gz) files allowed",
-        },
-        "file_list": {
-            "default": None,
-            "type": [list, str],
-            "description": "Text file(s) containing the list of docking output files to save; relative or absolute paths are allowed. Compressed (.gz) files allowed.",
-        },
-        "file_pattern": {
-            "default": None,
-            "type": [str],
-            "description": "Specify which pattern to use when searching for result files to process (only with 'file_path').",
-        },
-        "recursive": {
-            "default": None,
-            "type": [bool],
-            "description": "Enable recursive directory scan when 'file_path' is used.",
-        },
-        "receptor_file": {
-            "default": None,
-            "type": [str],
-            "description": "Use with Vina mode. Give file for receptor PDBQT.",
-        },
-        "save_receptor": {
-            "default": None,
-            "type": [bool],
-            "description": "Saves receptor PDBQT to database. Receptor location must be specied with in 'receptor_file'.",
-        },
-        "target": {
-            "default": None,
-            "type": [str],
-            "description": "Name of receptor. This field is autopopulated if 'receptor_file' is supplied.",
-        },
-    }
-
     def __init__(self):
-        super().initialize_from_dict(self.options, self.__class__.__name__)
+        self.file = None
+        self.file_path = None
+        self.file_list = None
+        self.recursive_path_traverse: bool = None
+        self.receptor_file_path: str = None
+        self.save_receptor: bool = None
+        self.receptor_string: str = None
+        self.strings: dict = None
 
-    def checks(self):
-        """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
-        then every time a value is changed."""
-        if hasattr(
-            self, "target"
-        ):  # ensures last item in the option dictionary has been
-            if type(self.target) != str:
-                if self.receptor_file is None:
-                    pass
-                elif self.receptor_file is not None and self.is_valid_path(
-                    self.receptor_file
-                ):
-                    self.target = os.path.basename(self.receptor_file).split(".")[0]
-                else:
-                    raise OptionError(
-                        "The receptor PDBQT file path is not valid. Please check location of receptor file and 'receptor_file' option."
-                    )
+    @property
+    def target_name(self):
+        if os.path.exists(self.receptor_file_path):
+            return os.path.basename(self.receptor_file_path).split(".")[0]
+        else:
+            return None
+
+    @property
+    def has_results(self):
+        results = bool(
+            iterate_nested(self.file)
+            or iterate_nested(self.file_path)
+            or iterate_nested(self.file_list)
+            or self.strings
+        )
+        return results
+
+    @property
+    def has_file_results(self):
+        results = bool(
+            iterate_nested(self.file)
+            or iterate_nested(self.file_path)
+            or iterate_nested(self.file_list)
+        )
+        return results
 
 
 class ResultsProcessingOptions(RTOptions):

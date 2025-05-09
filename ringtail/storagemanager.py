@@ -158,6 +158,7 @@ class StorageManager:
         interaction_list,
         receptor_array=[],
         insert_receptor=False,
+        write_options={},
     ):
         """Inserts data from all arrays returned from results manager.
 
@@ -168,7 +169,7 @@ class StorageManager:
             receptor_array (list): list of data to be stored in Receptors table
             insert_receptor (bool, optional): flag indicating that receptor info should inserted
         """
-        Pose_IDs, duplicates = self._insert_results(results_array)
+        Pose_IDs, duplicates = self._insert_results(results_array, write_options)
         self._insert_ligands(ligands_array)
         if insert_receptor and receptor_array != []:
             # first checks if there is receptor info already in the db
@@ -178,9 +179,20 @@ class StorageManager:
                 self._insert_receptors(receptor_array)
         # insert interactions if they are present
         if interaction_list != []:
-            self.insert_interactions(Pose_IDs, interaction_list, duplicates)
+            self.insert_interactions(
+                Pose_IDs,
+                interaction_list,
+                duplicates,
+                write_options.get("duplicate_handling"),
+            )
 
-    def insert_interactions(self, Pose_IDs: list, interactions_list, duplicates):
+    def insert_interactions(
+        self,
+        Pose_IDs: list,
+        interactions_list: list,
+        duplicates: list,
+        duplicate_handling: str = None,
+    ):
         """Takes list of interactions, inserts into database
 
         Args:
@@ -201,12 +213,14 @@ class StorageManager:
             ]
             # adds each pose_interaction row to list
             interaction_rows.extend(pose_interactions)
-        self._insert_interaction_rows(interaction_rows, duplicates)
+        self._insert_interaction_rows(interaction_rows, duplicates, duplicate_handling)
 
     # endregion
 
     # region read data
-    def filter_results(self, all_filters: dict, suppress_output=False) -> iter:
+    def filter_results(
+        self, all_filters: dict, filter_options: dict, suppress_output=False
+    ) -> iter:
         """Generate and execute database queries from given filters.
 
         Args:
@@ -225,7 +239,7 @@ class StorageManager:
             )
         # create view of passing results
         filter_results_str, view_query, new_filtertable_query = (
-            self._generate_result_filtering_query(all_filters)
+            self._generate_result_filtering_query(all_filters, filter_options)
         )
         logger.debug(f"Query for filtering results: {filter_results_str}")
 
@@ -450,7 +464,6 @@ class StorageManagerSQLite(StorageManager):
         open_cursors (list): list of cursors that were not closed by the function that created them.
             Will be closed by close_connection method.
         db_file (str): database name
-        overwrite (bool): switch to overwrite database if it exists
         order_results (str): what column name will be used to order results once read
         outfields (str): data fields/columns to include when reading and outputting data
         filter_bookmark (str): name of bookmark that filtering will be performed over
@@ -458,7 +471,6 @@ class StorageManagerSQLite(StorageManager):
         mfpt_cluster (float): distance in ångströms to cluster ligands based on morgan fingerprints
         interaction_cluster (float): distance in ångströms to cluster ligands based on interactions
         bookmark_name (str): name of current bookmark being written to or read from
-        duplicate_handling (str): optional attribute to deal with insertion of ligands already in the database
 
         current_bookmark_name (str): name of last view to have been written to in the database
         filtering_window (str): name of bookmark/view being filtered on
@@ -471,7 +483,6 @@ class StorageManagerSQLite(StorageManager):
     def __init__(
         self,
         db_file: str = None,
-        overwrite: bool = None,
         order_results: str = None,
         outfields: str = None,
         filter_bookmark: str = None,
@@ -479,11 +490,9 @@ class StorageManagerSQLite(StorageManager):
         mfpt_cluster: float = None,
         interaction_cluster: float = None,
         bookmark_name: str = None,
-        duplicate_handling: str = None,
     ):
         # TODO reconsider what are class properties and what are method inputs
         self.db_file = db_file
-        self.overwrite = overwrite
         self.order_results = order_results
         self.outfields = outfields
         self.output_all_poses = output_all_poses
@@ -491,7 +500,6 @@ class StorageManagerSQLite(StorageManager):
         self.interaction_cluster = interaction_cluster
         self.filter_bookmark = filter_bookmark
         self.bookmark_name = bookmark_name
-        self.duplicate_handling = duplicate_handling
         super().__init__()
 
         self.energy_filter_sqlite_call_dict = {
@@ -974,7 +982,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while looking for unique result row."
             ) from e
 
-    def _insert_results(self, results_array):
+    def _insert_results(self, results_array, options: dict):
         """Takes array of database rows to insert, adds data to results table. Will handle duplicates if specified
 
         Args:
@@ -1034,16 +1042,17 @@ class StorageManagerSQLite(StorageManager):
                 Pose_ID = (
                     -1
                 )  # nonsensical table index to initialize row index if checking for duplicates
-                if self.duplicate_handling:
+                # TODO duplicate handling stuff
+                if options.get("duplicate_handling"):
                     Pose_ID = self._check_unique_results_row(result)
 
                 if Pose_ID != -1:  # row exists in table
                     duplicates.append(Pose_ID)
                     # row exist, evaluate if ignore or replace
-                    if self.duplicate_handling.upper() == "IGNORE":
+                    if options.get("duplicate_handling").upper() == "IGNORE":
                         # do not add the new, duplicated row
                         pass
-                    elif self.duplicate_handling.upper() == "REPLACE":
+                    elif options.get("duplicate_handling").upper() == "REPLACE":
                         # update the existing row with the new results
                         # reformat sqlite query to update
                         sql_replace = sql_insert.replace(
@@ -1324,14 +1333,16 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
 
-    def _insert_interaction_rows(self, interaction_rows, duplicates):
+    def _insert_interaction_rows(
+        self, interaction_rows, duplicates, duplicate_handling
+    ):
         """Inserts the interaction data into a "tall-and-skinny" table, with a primary autoincremented key and a Pose_ID that is 1-to-1 with Results table.
         Table will contain as many rows with the same Pose_ID as that pose has interactions.
 
         Args:
             interaction_rows (list(tuple)): list of tuples containing the interaction data
-            duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones, will be treated according to self.duplicate_handling
-
+            duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones, will be treated according to duplicate_handling
+            duplicate_handling (str): how to handle duplicates
         Raises:
             DatabaseInsertionError
         """
@@ -1341,7 +1352,7 @@ class StorageManagerSQLite(StorageManager):
                             VALUES (?,?);"""
         try:
             cur = self.conn.cursor()
-            if not self.duplicate_handling:  # add all results
+            if not duplicate_handling:  # add all results
                 cur.executemany(sql_insert, interaction_rows)
             else:
                 # first, add any poses that are not duplicates
@@ -1355,7 +1366,7 @@ class StorageManagerSQLite(StorageManager):
                 cur.executemany(sql_insert, non_duplicates)
 
                 # only look for values to replace if there are duplicate pose ids
-                if self.duplicate_handling == "REPLACE" and duplicates_exist:
+                if duplicate_handling == "REPLACE" and duplicates_exist:
                     # delete all rows pertaining to duplicated pose_ids
                     duplicated_pose_ids = [id for id in duplicates if id is not None]
                     self._delete_interactions(duplicated_pose_ids)
@@ -1367,7 +1378,7 @@ class StorageManagerSQLite(StorageManager):
                     ]
                     cur.executemany(sql_insert, duplicates_only)
 
-                elif self.duplicate_handling == "IGNORE":
+                elif duplicate_handling == "IGNORE":
                     # ignore and don't add any poses that are duplicates
                     pass
             self.conn.commit()
@@ -2632,7 +2643,7 @@ class StorageManagerSQLite(StorageManager):
             processed_filters["lig_filters"] = ligand_filters
         return processed_filters
 
-    def _generate_result_filtering_query(self, filters_dict):
+    def _generate_result_filtering_query(self, filters_dict, options: dict):
         """takes lists of filters, writes sql filtering string
 
         Args:
@@ -3462,7 +3473,7 @@ class StorageManagerSQLite(StorageManager):
         """
         Will drop all tables in the database.
         """
-        if not self._db_empty() and self.overwrite:
+        if not self._db_empty():
             self._drop_existing_tables()
             logger.info("Tables in existing database were dropped.")
 
@@ -3478,6 +3489,7 @@ class StorageManagerSQLite(StorageManager):
             if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
                 self.conn = self._create_connection()
                 compatible, db_version = self.check_ringtaildb_version()
+                # TODO this one is a problem
                 if not compatible and not self.overwrite:
                     raise StorageError(
                         f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
@@ -4176,7 +4188,6 @@ class StorageManagerSQLite(StorageManager):
 
     def _drop_existing_tables(self):
         """drop any existing tables.
-        Will only be called if self.overwrite is true
 
         Raises:
             StorageError

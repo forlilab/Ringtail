@@ -613,7 +613,7 @@ class TestFilters:
 
 
 class TestOtherScripts:
-
+    # TODO failing
     def test_rt_compare(self):
         # first database
         os.system(

@@ -59,6 +59,8 @@ class DockingFileReader(mp.Process):
         self.interaction_finder = None
         self.exception = None
         self.docking_mode = self.shared.get("docking_mode")
+        # TODO test reassigning all shared mode stuff to internal object vars vs keeping in shared dict
+        # TODO maybe even try just handing copies of the same dict, dont need
 
     def _find_best_cluster_poses(self, ligand_dict):
         """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run"
@@ -253,17 +255,18 @@ class Writer(mp.Process):
     """This class is a listener that retrieves data from the queue and writes it
     into datbase"""
 
-    def __init__(self, queue, num_readers, chunksize, dbfile, docking_mode):
+    def __init__(self, queue, num_readers: int, options: dict):
         mp.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
         self.num_readers = num_readers
         # assign pointer to storage object, set chunksize
-        self.docking_mode = docking_mode
-        self.dbfile = dbfile
-        storageman = StorageManager.check_storage_compatibility("sqlite")
-        self.storageman = storageman(dbfile)
-        self.chunksize = chunksize
+        db_file = options.pop("db_file")
+        storage_class = options.pop("storageman_class")
+        storageman = StorageManager.check_storage_compatibility(storage_class)
+        self.storageman = storageman(db_file)
+        self.chunk_size = options.pop("chunk_size")
+        self.options = options
         # initialize data array (stack of dictionaries)
         self.results_array = []
         self.ligands_array = []
@@ -298,8 +301,8 @@ class Writer(mp.Process):
                 # Process data and increment counter within process_data
                 self.process_data(next_task)
 
-                # After every n (chunksize) files, write to storage
-                if self.counter >= self.chunksize:
+                # After every n (chunk size) files, write to storage
+                if self.counter >= self.chunk_size:
                     self._log_progress()
                     self.write_to_storage()
             if self.counter > 0:
@@ -322,8 +325,10 @@ class Writer(mp.Process):
                 self.interactions_list,
                 self.receptor_array,
                 self.first_insert,
+                self.options,
             )
         # So at this point the ligand array is empty
+        # TODO unnecessary to carry this variable
         if self.first_insert:  # will only insert receptor for first insertion
             self.first_insert = False
 

@@ -378,172 +378,18 @@ class RingtailCore:
 
         return mol, flexres_mols, properties
 
-    def _set_file_sources(
-        self,
-        file=None,
-        file_path=None,
-        file_list=None,
-        file_pattern=None,
-        recursive=None,
-        receptor_file=None,
-        save_receptor=None,
-        dict: dict = None,
-    ) -> InputFiles:
-        """
-        Object holding all ligand docking results files.
-
-        Args:
-            file (str, optional: list(str)): ligand result file
-            file_path (str, optional: list(str)): list of folders containing one or more result files
-            file_list (str, optional: list(str)): list of ligand result file(s)
-            file_pattern (str): file pattern to use with recursive search in a file_path, "*.dlg*" for AutoDock-GDP and "*.pdbqt*" for vina
-            recursive (bool): used to recursively search file_path for folders inside folders
-            receptor_file (str): string containing the receptor .pdbqt
-            save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-
-        Returns:
-            InputFiles
-        """
-
-        # Set file format automatically if not specified
-        if file_pattern is None:
-            if self.docking_mode == "dlg":
-                file_pattern = "*.dlg*"
-
-            elif self.docking_mode == "vina":
-                file_pattern = "*.pdbqt*"
-            else:
-                self.logger.error(
-                    "Docking mode and file pattern was not specified, can not continue."
-                )
-
-        # Dict of individual arguments
-        individual_options = {
-            "file": file,
-            "file_path": file_path,
-            "file_list": file_list,
-            "file_pattern": file_pattern,
-            "recursive": recursive,
-            "receptor_file": receptor_file,
-            "save_receptor": save_receptor,
-        }
-
-        # Create option object with default values if needed
-        files = InputFiles()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                setattr(files, k, v)
-            self.logger.debug(
-                f"File attributes {dict} were assigned from provided option dictionary."
-            )
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite provided dictionary
-        for k, v in individual_options.items():
-            if v is not None:
-                setattr(files, k, v)
-        self.logger.debug(
-            f"File attributes {individual_options} were assigned from provided individual options."
-        )
-
-        return files
-
-    def _set_results_sources(
-        self,
-        results_strings: dict = None,
-        receptor_file: str = None,
-        save_receptor: bool = None,
-        dict: dict = None,
-    ) -> InputStrings:
-        """
-        Object holding all ligand vina docking results string and corresponding receptor.
-
-        Args:
-            results_string (dict): string containing the ligand identified and docking results as a dictionary
-            receptor_file (str): string containing the receptor .pdbqt
-            save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-
-        Return:
-            InputStrings object
-        """
-        # Dict of individual arguments
-        individual_options = {
-            "results_strings": results_strings,
-            "receptor_file": receptor_file,
-            "save_receptor": save_receptor,
-        }
-        # Create option object with default values if needed
-        strings = InputStrings()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                setattr(strings, k, v)
-            self.logger.debug(f"Docking string results attributes {dict} were set.")
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in individual_options.items():
-            if v is not None:
-                setattr(strings, k, v)
-        self.logger.debug(
-            f"Docking string results attributes {individual_options} were set."
-        )
-
-        return strings
-
-    def _create_resultsmanager(
-        self, file_sources: InputFiles = None, string_sources: InputStrings = None
-    ) -> ResultsManager:
-        """Creates a results manager object based on results provided either as files or as strings (currently only for vina).
-        Will create a new object each time results are added, and use the docking mode specified as an attribute of the core.
-        In its current state it assumes only one source of results will be provided.
-        If both are provided, it will only process the strings.
-
-        Args:
-            file_sources (InputFiles): used if docking results are provided through files
-            string_sources (InputStrings): used if docking results are provided through strings
-
-        Raises:
-            RTCoreError
-        """
-        if file_sources is not None:
-            self.resultsman = ResultsManager(
-                file_sources=file_sources, docking_mode=self.docking_mode
-            )
-            self.logger.debug(
-                "Results manager object has been created with results files."
-            )
-        elif string_sources is not None:
-            self.resultsman = ResultsManager(
-                string_sources=string_sources, docking_mode=self.docking_mode
-            )
-            self.logger.debug(
-                "Results manager object has been created with results strings."
-            )
-        else:
-            raise RTCoreError(
-                "No results sources were provided, a results manager object could not be created."
-            )
-
     def _add_results(
         self,
-        results_sources,
-        strings=False,
-        duplicate_handling: str = None,
-        overwrite: bool = None,
-        store_all_poses: bool = None,
-        max_poses: int = None,
-        add_interactions: bool = None,
-        interaction_tolerance: float = None,
-        interaction_cutoffs: list = None,
-        max_proc: int = None,
-        options_dict: dict = None,
-        finalize: bool = True,
+        results: ResultsObject,
+        duplicate_handling: str,
+        overwrite: bool,
+        store_all_poses: bool,
+        max_poses: int,
+        add_interactions: bool,
+        interaction_tolerance: float,
+        interaction_cutoffs: list,
+        max_proc: int,
+        finalize: bool,
     ):
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
 
@@ -557,69 +403,52 @@ class RingtailCore:
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
-            options_dict (dict): write options as a dict
+            finalize (bool): whether or not this is last db write, will add indices
 
         Raises:
             OptionError
         """
-        # if dictionary of options provided, attribute to appropriate managers
-        if options_dict is not None:
-            write_dict, storage_dict = split_dict(
-                options_dict, ["duplicate_handling", "overwrite"]
-            )
-        else:
-            storage_dict = None
-            write_dict = None
-
-        self.set_storageman_attributes(
-            duplicate_handling=duplicate_handling,
-            overwrite=overwrite,
-            dict=storage_dict,
-        )
-
-        # Prepare the results manager with the provided docking results sources
-        if strings == False:
-            self._create_resultsmanager(file_sources=results_sources)
-        elif strings == True:
-            self._create_resultsmanager(string_sources=results_sources)
-        self.resultsman.storageman = self.storageman
-        self.set_resultsman_attributes(
-            store_all_poses,
-            max_poses,
-            add_interactions,
-            interaction_tolerance,
-            interaction_cutoffs,
-            max_proc,
-            write_dict,
-        )
-
         # Docking mode compatibility check
-        if (
-            self.docking_mode == "vina"
-            and self.resultsman.interaction_tolerance is not None
-        ):
+        if self.docking_mode == "vina" and interaction_tolerance:
             self.logger.warning(
                 "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
             )
-            self.resultsman.interaction_tolerance = None
+            interaction_tolerance = None
+
+        processing_options = {
+            "max_poses": max_poses,
+            "store_all_poses": store_all_poses,
+            "add_interactions": add_interactions,
+            "interaction_tolerance": interaction_tolerance,
+            "interaction_cutoffs": interaction_cutoffs,
+            "max_proc": max_proc,
+        }
 
         # Process results files and handle database versioning
         with self.storageman:
-            if self.storageman.overwrite:
+            if overwrite:
                 self.storageman.overwrite_storage()
 
             self.storageman.check_storage_ready(
                 self._run_mode,
                 self.docking_mode,
-                self.resultsman.store_all_poses,
-                self.resultsman.max_poses,
+                store_all_poses,
+                max_poses,
             )
 
-        if results_sources.save_receptor:
-            self.save_receptor(results_sources.receptor_file)
+        if results.save_receptor:
+            self.save_receptor(results.receptor_file_path)
+
+        # Prepare the results manager with the provided docking results sources
+        self.resultsman = ResultsManager(
+            self.db_file,
+            self.docking_mode,
+            self.storagetype,
+            duplicate_handling,
+        )
 
         self.logger.info("Adding results...")
-        self.resultsman.process_docking_data()
+        self.resultsman.process_docking_data(results, processing_options)
         with self.storageman:
             if finalize:
                 self.storageman.finalize_database_write()
@@ -636,7 +465,6 @@ class RingtailCore:
         self,
         filter_bookmark: str = None,
         duplicate_handling: str = None,
-        overwrite: bool = None,
         order_results: str = None,
         outfields: str = None,
         output_all_poses: str = None,
@@ -651,7 +479,6 @@ class RingtailCore:
         Args:
             filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
-            overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
             order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
                     "available fields are:  "
                     '"e" (docking_score), '
@@ -694,7 +521,6 @@ class RingtailCore:
         individual_options = {
             "filter_bookmark": filter_bookmark,
             "duplicate_handling": duplicate_handling,
-            "overwrite": overwrite,
             "order_results": order_results,
             "outfields": outfields,
             "output_all_poses": output_all_poses,
@@ -725,62 +551,6 @@ class RingtailCore:
         for k, v in self.storageopts.todict().items():
             setattr(self.storageman, k, v)
         self.logger.debug("Options for storage manager have been changed.")
-
-    def set_resultsman_attributes(
-        self,
-        store_all_poses: bool = None,
-        max_poses: int = None,
-        add_interactions: bool = None,
-        interaction_tolerance: float = None,
-        interaction_cutoffs: list = None,
-        max_proc: int = None,
-        dict: dict = None,
-    ):
-        """
-        Create results_manager_options object if needed, sets options, and assigns them to the results manager object.
-
-        Args:
-            store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
-            max_poses (int): how many poses to save (ordered by soem score?)
-            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
-            interaction_tolerance (float): longest ångström distance that is considered interaction?
-            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
-            max_proc (int): max number of computer processors to use for file reading
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-        # Dict of individual arguments
-        individual_options = {
-            "store_all_poses": store_all_poses,
-            "max_poses": max_poses,
-            "add_interactions": add_interactions,
-            "interaction_tolerance": interaction_tolerance,
-            "interaction_cutoffs": interaction_cutoffs,
-            "max_proc": max_proc,
-        }
-
-        # Create option object with default values if needed
-        if not hasattr(self, "resultsmanopts"):
-            self.resultsmanopts = ResultsProcessingOptions()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                if v is not None:
-                    setattr(self.resultsmanopts, k, v)
-            self.logger.debug(f"Results manager attributes {dict} were set.")
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in individual_options.items():
-            if v is not None:
-                setattr(self.resultsmanopts, k, v)
-        self.logger.debug(f"Results manager attributes {individual_options} were set.")
-
-        # Assigns options to the results manager object
-        for k, v in self.resultsmanopts.todict().items():
-            if v is not None:
-                setattr(self.resultsman, k, v)
-        self.logger.info("Options for results manager have been changed.")
 
     def set_output_options(
         self,
@@ -922,11 +692,9 @@ class RingtailCore:
         file: str = None,
         file_path: str = None,
         file_list: str = None,
-        file_pattern: str = None,
         recursive: bool = None,
         receptor_file: str = None,
         save_receptor: bool = None,
-        filesources_dict: dict = None,
         duplicate_handling: str = None,
         overwrite: bool = None,
         store_all_poses: bool = None,
@@ -935,7 +703,6 @@ class RingtailCore:
         interaction_tolerance: float = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        options_dict: dict = None,
         finalize: bool = True,
     ):
         """
@@ -950,7 +717,6 @@ class RingtailCore:
             recursive (bool): used to recursively search file_path for folders inside folders
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            filesources_dict (dict): file sources already as an object
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
@@ -958,39 +724,28 @@ class RingtailCore:
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
-            options_dict (dict): write options as a dict
 
         Raises:
             OptionError
 
         """
+        results_data = ResultsObject()
+        results_data.file = file
+        results_data.file_path = file_path
+        results_data.file_list = file_list
+        results_data.recursive_path_traverse = recursive
+        results_data.receptor_file_path = receptor_file
+        results_data.save_receptor = save_receptor
 
-        files = self._set_file_sources(
-            file,
-            file_path,
-            file_list,
-            file_pattern,
-            recursive,
-            receptor_file,
-            save_receptor,
-            filesources_dict,
-        )
-        results_files_given = (
-            files.file is not None
-            or files.file_path is not None
-            or files.file_list is not None
-        )
-
-        if not results_files_given and not files.save_receptor:
+        if not results_data.has_results and not results_data.save_receptor:
             raise OptionError(
                 "At least one input option needs to be used: file, file_path, file_list, or save_receptor"
             )
 
         # If there are ligand files present, process ligand data
-        if results_files_given or files.save_receptor:
+        if results_data.has_results or results_data.save_receptor:
             self._add_results(
-                files,
-                False,
+                results_data,
                 duplicate_handling,
                 overwrite,
                 store_all_poses,
@@ -999,16 +754,14 @@ class RingtailCore:
                 interaction_tolerance,
                 interaction_cutoffs,
                 max_proc,
-                options_dict,
                 finalize,
             )
 
     def add_results_from_vina_string(
         self,
-        results_strings: dict = None,
+        results: dict = None,
         receptor_file: str = None,
         save_receptor: bool = None,
-        resultsources_dict: dict = None,
         duplicate_handling: str = None,
         overwrite: bool = None,
         store_all_poses: bool = None,
@@ -1016,7 +769,6 @@ class RingtailCore:
         add_interactions: bool = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        options_dict: dict = None,
         finalize: bool = True,
     ):
         """
@@ -1028,14 +780,12 @@ class RingtailCore:
             results_string (dict): string containing the ligand identified and docking results as a dictionary
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            resultsources_dict (dict): file sources already as an object
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
-            options_dict (dict): write options as a dict
 
         Raises:
             OptionError
@@ -1046,21 +796,20 @@ class RingtailCore:
             self.docking_mode = "vina"
 
         # create results string object
-        results = self._set_results_sources(
-            results_strings, receptor_file, save_receptor, resultsources_dict
-        )
-        results_strings_given = bool(results.results_strings)
+        results_data = ResultsObject()
+        results_data.strings = results
+        results_data.receptor_file_path = receptor_file
+        results_data.save_receptor = save_receptor
 
-        if not results_strings_given and not results.save_receptor:
+        if not results_data.strings and not results_data.save_receptor:
             raise OptionError(
-                "At least one input option needs to be used: 'results_strings', or 'save_receptor'"
+                "At least one input option needs to be used: 'results', or 'save_receptor'"
             )
 
         # If there are any docking data strings, process docking results
-        if results_strings_given or results.save_receptor:
+        if results_data.strings or results_data.save_receptor:
             self._add_results(
-                results,
-                True,
+                results_data,
                 duplicate_handling,
                 overwrite,
                 store_all_poses,
@@ -1069,7 +818,6 @@ class RingtailCore:
                 None,
                 interaction_cutoffs,
                 max_proc,
-                options_dict,
                 finalize,
             )
 
@@ -1197,7 +945,6 @@ class RingtailCore:
         mfpt_cluster: float = None,
         interaction_cluster: float = None,
         log_file: str = None,
-        overwrite: bool = None,
         order_results: str = None,
         outfields: str = None,
         bookmark_name: str = None,
@@ -1233,7 +980,6 @@ class RingtailCore:
                 mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
                 interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
                 log_file (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
-                overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
                 order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION. Available fields are:\n
                     "e" (docking_score),
                     "le" (ligand efficiency),
@@ -1302,11 +1048,29 @@ class RingtailCore:
         else:
             storage_dict = None
             output_dict = None
+
+        # assemble filter options
+
+        filter_options = {
+            "output_all_poses": output_all_poses,
+        }
+
+        # enumerate_interaction_combs: bool = (False,)
+        # output_all_poses: bool = (None,)
+        # mfpt_cluster: float = (None,)
+        # interaction_cluster: float = (None,)
+        # log_file: str = (None,)
+        # order_results: str = (None,)
+        # outfields: str = (None,)
+        # bookmark_name: str = (None,)
+        # filter_bookmark: str = (None,)
+        # options_dict: dict = (None,)
+        # return_iter = (False,)
+
         self.set_storageman_attributes(
             output_all_poses=output_all_poses,
             mfpt_cluster=mfpt_cluster,
             interaction_cluster=interaction_cluster,
-            overwrite=overwrite,
             order_results=order_results,
             outfields=outfields,
             bookmark_name=bookmark_name,
@@ -1351,7 +1115,7 @@ class RingtailCore:
             # pre-process if filtering to multiple bookmark combinations
             if write_one_bookmark:
                 filtered_results = self.storageman.filter_results(
-                    self.filters.todict(),
+                    self.filters.todict(), filter_options
                 )
                 # if there were results of the filtering
                 if filtered_results:
@@ -1392,6 +1156,7 @@ class RingtailCore:
                     # ask storageManager to fetch results
                     filtered_results = self.storageman.filter_results(
                         filters_dict,
+                        filter_options,
                         not self.outputopts.enumerate_interaction_combs,
                     )
                     if filtered_results:
@@ -2141,7 +1906,6 @@ class RingtailCore:
         defaults.update(ResultsProcessingOptions().todict())
         defaults.update(StorageOptions().todict())
         defaults.update(Filters().todict())
-        defaults.update(InputFiles().todict())
         defaults.update(ReadOptions().todict())
         defaults.update(GeneralOptions().todict())
 
@@ -2177,7 +1941,7 @@ class RingtailCore:
         options.update(ResultsProcessingOptions.options)
         options.update(StorageOptions.options)
         options.update(Filters.options)
-        options.update(InputFiles.options)
+        options.update(ResultsObject.options)
         options.update(ReadOptions.options)
         options.update(GeneralOptions.options)
 

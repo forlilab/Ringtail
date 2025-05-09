@@ -33,9 +33,7 @@ def main():
         if cmdinput.process_mode == "write":
             logger.debug("Starting write process")
             # -#-#- Processes results, will add receptor if "save_receptor" is true
-            rtcore.add_results_from_files(
-                filesources_dict=cmdinput.file_sources, options_dict=cmdinput.writeopts
-            )
+            rtcore.add_results_from_files(**cmdinput.file_sources, **cmdinput.writeopts)
         time1 = time.perf_counter()
 
         # -#-#- Print database summary

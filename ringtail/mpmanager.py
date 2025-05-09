@@ -12,12 +12,13 @@ import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .logutils import LOGGER as logger
-from .exceptions import MultiprocessingError, RTCoreError, ResultsProcessingError
+from .exceptions import MultiprocessingError, RTCoreError
 import traceback
 from datetime import datetime
-import pickle
 import multiprocessing as mp
-import threading
+from .util import docking_mode_file_ext, iterate_nested
+from .ringtailoptions import ResultsObject
+from .storagemanager import StorageManager
 
 mp.set_start_method("spawn", force=True)
 
@@ -27,80 +28,54 @@ class MPManager:
     multiprocessors.
 
     Attributes:
-        docking_mode (str): describes what docking engine was used to produce the results
-        max_poses (int): max number of poses to store for each ligand
-        interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
-        store_all_poses (bool): Store all poses from docking results
-        add_interactions (bool): find and save interactions between ligand poses and receptor
-        interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
-        max_proc (int): Maximum number of processes to create during parallel file parsing.
-        storageman (StorageManager): storageman object
+    #TODO update
         chunk_size (int): how many tasks ot send to a processor at the time
-        target (str): name of receptor
-        receptor_file (str): file path to receptor
-        file_pattern (str, optional): file pattern to look for if recursively finding results files to process
-        file_sources (InputFiles, optional): RingtailOption object that holds all attributes related to results files
-        string_sources (InputStrings, optional): RingtailOption object that holds all attributes related to results strings
         num_files (int): number of files processed at any given time
 
     """
 
     def __init__(
         self,
-        docking_mode,
-        max_poses,
-        interaction_tolerance,
-        store_all_poses,
-        add_interactions,
-        interaction_cutoffs,
-        max_proc,
-        storageman,
-        chunk_size,
-        target,
-        receptor_file,
-        file_pattern=None,
-        file_sources=None,
-        string_sources=None,
+        results: ResultsObject,  # also has receptor information
+        writer_options: dict,  # has mostly settings for Writer
+        max_proc: int,
     ):
-        self.storageman = storageman
-        self.chunk_size = chunk_size
-        self.docking_mode = docking_mode
-
-        # shared memory
-        manager = mp.Manager()
-        self.shared = manager.dict()
-        # general docking info
-        self.shared["docking_mode"] = docking_mode
-        self.shared["max_poses"] = max_poses
-        self.shared["store_all_poses"] = store_all_poses
-        self.shared["format_method"] = self.storageman.format_for_storage
-
-        # interaction info
-        self.shared["add_interactions"] = add_interactions
-        if add_interactions:
-            self.shared["receptor_string"] = self._get_receptor_string()
-        self.shared["interaction_tolerance"] = interaction_tolerance
-        self.shared["interaction_cutoffs"] = interaction_cutoffs
-        self.shared["target"] = target
-        self.receptor_file = receptor_file
-        self.file_sources = file_sources
-        self.file_pattern = file_pattern
-        self.string_sources = string_sources
-        self.num_files = 0
-        self.max_proc = max_proc
-
-    def process_results(self):
-        if self.max_proc is None:
-            self.max_proc = mp.cpu_count()
-        self.num_readers = self.max_proc - 1
-        self.queueIn = mp.Queue(maxsize=2 * self.max_proc)
-        self.queueOut = mp.Queue(maxsize=2 * self.max_proc)
-
-        logger.info(f"Starting {self.num_readers} docking results readers")
-
+        self.results = results
+        # initialize multiprocessing variables
+        # number of processors
+        if max_proc is None:
+            max_proc = mp.cpu_count()
+        self.num_readers = max_proc - 1
+        # shared queue
+        self.queueIn = mp.Queue(maxsize=2 * max_proc)
+        self.queueOut = mp.Queue(maxsize=2 * max_proc)
         # Start reader processes
         self.workers = []
         self.p_conn, self.c_conn = mp.Pipe(duplex=True)
+        self.num_files = 0
+
+        self.writer_options = writer_options
+        self.shared = {}
+        # populate read only dict
+        self.shared["docking_mode"] = self.writer_options.pop("docking_mode")
+        # method that the Docking File Reader will use to reformat the data
+        storageman = StorageManager.check_storage_compatibility(
+            self.writer_options.get("storageman_class")
+        )
+        self.shared["format_method"] = storageman.format_for_storage
+        self.shared["receptor_string"] = results.receptor_string
+        self.shared["target"] = results.target_name
+
+        # these two variables are needed for queueing files
+        self.receptor_file = results.receptor_file_path
+        self.file_pattern = (
+            "*." + docking_mode_file_ext[self.shared["docking_mode"]] + "*"
+        )
+
+    def process_results(self, reader_options: dict):
+        logger.info(f"Starting {self.num_readers} docking results readers")
+        self.shared.update(reader_options)
+
         for _ in range(self.num_readers):
             reader = DockingFileReader(
                 self.queueIn,
@@ -111,14 +86,8 @@ class MPManager:
             reader.start()
             self.workers.append(reader)
         # Start writer in a thread (pulls from queueOut)
-        dbfile = self.storageman.db_file
-        writer = Writer(
-            self.queueOut,
-            self.num_readers,
-            self.chunk_size,
-            dbfile,
-            self.docking_mode,
-        )
+        # TODO make writer options method var
+        writer = Writer(self.queueOut, self.num_readers, self.writer_options)
         writer.start()
         self.workers.append(writer)
         try:
@@ -140,51 +109,14 @@ class MPManager:
 
         logger.info(f"Wrote {self.num_files} docking results to the database")
 
-    def _get_receptor_string(self) -> str:
-        try:
-            from .receptormanager import ReceptorManager as rm
-
-            with self.storageman:
-                # grab receptor info from database, this assumes there is only one receptor in the database
-                receptor_blob = self.storageman.fetch_receptor_objects()[0][
-                    1
-                ]  # method returns an iter of tuples, blob is the second tuple element in the first list element
-                # convert receptor blob to string
-                return rm.blob2str(receptor_blob)
-        except:
-            raise ResultsProcessingError(
-                "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
-            )
-
     def _process_data_sources(self):
         """Adds each docking result item to the queue, including files and data provided as string/dict.
         For files, processes lists of files, recursively traveresed filepaths, and individually listed file paths.
         """
 
-        def _iterate_nested(obj):
-            """
-            File inputs can come in multiple levels of nested lists, this method unpacks them
-
-            Args:
-                obj (list[list[list[etc]]]): None or nested lists
-
-            Returns:
-                None: if input is None
-
-            Yields:
-                str: should be unpacked paths to docking results
-            """
-            if obj is None:
-                return None
-            elif isinstance(obj, list):
-                for item in obj:
-                    yield from _iterate_nested(item)
-            else:
-                yield obj
-
-        if self.file_sources:
+        if self.results.has_file_results:
             # add individual file(s)
-            files = list(_iterate_nested(self.file_sources.file))
+            files = list(iterate_nested(self.results.file))
             if files:
                 for file in files:
                     if (
@@ -194,29 +126,29 @@ class MPManager:
                         self._add_to_queue(file)
 
             # add files from file path(s)
-            path_list = list(_iterate_nested(self.file_sources.file_path))
+            path_list = list(iterate_nested(self.results.file_path))
             if path_list:
                 for path in path_list:
                     # scan for ligand dlgs
                     for files in self._scan_dir(
-                        path, self.file_pattern, recursive=True
+                        path, self.file_pattern, self.results.recursive_path_traverse
                     ):
                         for file in files:
                             self._add_to_queue(file)
 
             # add files from file list(s)
-            file_lists = list(_iterate_nested(self.file_sources.file_list))
+            file_lists = list(iterate_nested(self.results.file_list))
             if file_lists:
                 for file_list in file_lists:
                     self._scan_file_list(file_list, self.file_pattern.replace("*", ""))
 
         # add docking data from input strings
-        if self.string_sources:
+        if self.results.strings:
             try:
                 for (
                     ligand_name,
                     docking_result,
-                ) in self.string_sources.results_strings.items():
+                ) in self.results.strings.items():
                     string_data = {ligand_name: docking_result}
                     self._add_to_queue(string_data)
             except:
@@ -260,7 +192,8 @@ class MPManager:
     def _check_for_worker_exceptions(self):
         if self.p_conn.poll():
             error, tb, filename = self.p_conn.recv()
-            logger.error(f"Caught error in multiprocess from {filename}")
+            logger.error(f"Caught error in multiprocess from {filename}:")
+            logger.error(f"{tb}")
             # don't kill parser errors, only database error
             if filename == "Database":
                 self._kill_all_workers(error, filename, tb)
@@ -303,7 +236,7 @@ class MPManager:
                     for f in fnmatch.filter(filenames, "*" + pattern)
                 )
         else:
-            yield glob(os.path.join(path, pattern))  # <----
+            yield glob.glob(os.path.join(path, pattern))  # <----
 
     def _scan_file_list(self, filename, pattern):
         """read file names from file list and ensures they exist,

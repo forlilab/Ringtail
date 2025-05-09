@@ -120,6 +120,7 @@ class TestRingtailCore:
         rtc.drop_bookmark("union_bookmark")
 
     def test_enumerate_interaction_combinations(self):
+        # TODO failing
         # first test without enumerate, check number of passing union as well as number of bookmarks
         rtc = RingtailCore(db_file="output.db")
         # get current bookmark count
@@ -137,6 +138,7 @@ class TestRingtailCore:
 
         # make sure additional bookmarks were created for the enumerated combinations
         bookmarks = rtc.get_bookmark_names()
+        bookmarks = [element for element in bookmarks if element not in bookmarks_old]
         # This filtering session should produce 6 bookmarks
         assert len(bookmarks) == 6
 
@@ -437,6 +439,7 @@ class TestRingtailCore:
         os.system("rm " + bookmark_db_name)
 
     def test_duplicate_handling(self, countrows):
+        # TODO failing
         os.system("rm output.db output_log.txt")
 
         rtc = RingtailCore(db_file="output.db")
@@ -597,7 +600,7 @@ class TestStorageMan:
             receptor_file="test_data/adgpu/4j8m.pdbqt",
             save_receptor=True,
         )
-
+        # TODO
         storageman_attributes = {
             "duplicate_handling": rtc.storageman.duplicate_handling,
             "filter_bookmark": rtc.storageman.filter_bookmark,

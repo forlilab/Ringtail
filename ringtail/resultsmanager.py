@@ -8,6 +8,8 @@ from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
 from .storagemanager import StorageManager
 from .logutils import LOGGER as logger
+from .util import iterate_nested
+from .ringtailoptions import ResultsObject
 
 
 class ResultsManager:
@@ -32,92 +34,80 @@ class ResultsManager:
 
     def __init__(
         self,
-        docking_mode: str = None,
-        max_poses: int = None,
-        interaction_tolerance: float = None,
-        store_all_poses: bool = None,
-        add_interactions: bool = None,
-        interaction_cutoffs: list = None,
-        max_proc: int = None,
-        storageman: StorageManager = None,
+        db_file: str,
+        docking_mode: str,
+        storageman_class: StorageManager,
+        duplicate_handling: str,
         chunk_size: int = 1,
-        parser_manager: str = "multiprocess",
-        file_sources=None,
-        string_sources=None,
     ):
-        self.parser_manager = parser_manager
-        self.docking_mode = docking_mode
-        self.chunk_size = chunk_size
-        self.max_poses = max_poses
-        self.store_all_poses = store_all_poses
-        self.interaction_tolerance = interaction_tolerance
-        self.add_interactions = add_interactions
-        self.interaction_cutoffs = interaction_cutoffs
-        self.target = None
-        self.receptor_file = None
-        self.file_pattern = None
-        self.max_proc = max_proc
-        self.storageman = storageman
-        # if results are provided as files
-        self.file_sources = file_sources
-        if file_sources is not None:
-            self.file_pattern = file_sources.file_pattern
-            self.target = file_sources.target
-            self.receptor_file = file_sources.receptor_file
-        # if results are provided as strings
-        self.string_sources = string_sources
-        if self.string_sources is not None:
-            self.target = self.string_sources.target
-            self.receptor_file = self.string_sources.receptor_file
 
-    def process_docking_data(self):
+        self.writer_options = {
+            "db_file": db_file,
+            "docking_mode": docking_mode,
+            "storageman_class": storageman_class,
+            "chunk_size": chunk_size,
+            "duplicate_handling": duplicate_handling,
+        }
+
+    def process_docking_data(
+        self,
+        results: ResultsObject,
+        processing_options: dict = {},
+        parser_manager: str = "multiprocessing",
+    ):
         """Processes docking data in the form of files or strings
 
         Raises:
             ResultsProcessingError: if no file or string sources are provided, or if both are provided
         """
-        # check that we have results source(s)
-        files_sources = bool(self.file_sources)
-        if files_sources:
-            files_present = not bool(
-                self.file_sources.file == (None and [[]])
-                and self.file_sources.file_path == (None and [[]])
-                and self.file_sources.file_list == (None and [[]])
-            )
-
-        strings_present = bool(self.string_sources)
 
         # if no results are given
-        if not files_sources and not strings_present:
+        if not results.has_results:
             raise ResultsProcessingError(
                 "No results sources given. Docking results sources must be given for writing results to database."
             )
-        if files_sources is True and files_present is False:
-            raise ResultsProcessingError(
-                "Indicated docking results files would be processed, but the results file object is empty. Please add results files."
-            )
         # if results are given as both types of results
-        if files_sources and strings_present:
+        if results.has_file_results and results.strings:
             raise ResultsProcessingError(
                 "Docking results were provided as both file sources and string sources. Currently only one results type is accepeted at the time."
             )
 
-        # start MP process
-        if files_sources:
-            logmsg = f"These are the file sources being processed: {str(self.file_sources.todict())}"
+        if results.has_file_results:
+            logmsg = f"These are the provided files: {results.file}, directories: {results.file_path}, and file lists: {results.file_list} provided for database storage."
         else:
-            logmsg = f'This is the list of ligands whos strings are being procssed: {str(self.string_sources.todict()["results_strings"].keys())}'
+            logmsg = f"This is the list of ligands whos strings are being procssed: {str(results.strings.keys())}"
         logger.debug(logmsg)
 
+        # need receptor file contents if adding interaction
+        if processing_options.get("add_interactions"):
+            # build local storageman to retrieve receptor
+            db_file = self.writer_options.get("db_file")
+            docking_mode = self.writer_options.get("docking_mode")
+            print(f"The writer options: {self.writer_options}")
+            storageman = StorageManager.check_storage_compatibility(
+                self.writer_options.get("storageman_class")
+            )
+            with storageman(db_file, docking_mode) as sm:
+                try:
+                    from .receptormanager import ReceptorManager as rm
+
+                    # grab receptor info from database, this assumes there is only one receptor in the database
+                    receptor_blob = sm.fetch_receptor_objects()[0][
+                        1
+                    ]  # method returns an iter of tuples, blob is the second tuple element in the first list element
+                    # convert receptor blob to string
+                    results.receptor_string = rm.blob2str(receptor_blob)
+                except:
+                    raise ResultsProcessingError(
+                        "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                    )
+        # TODO still messy, should only initialize once and provide inputs once, not all over the place
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {
-            "multiprocess": MPManager,
+            "multiprocessing": MPManager,
         }
-        # TODO HERE I CAN SEND IN THE SHARED MEMORY ACTUALLY
-        parser_opts = {}
-        for k, v in self.__dict__.items():
-            if k == "parser_manager":
-                continue
-            parser_opts[k] = v
-        self.parser = implemented_parser_managers[self.parser_manager](**parser_opts)
-        self.parser.process_results()
+        self.parser: MPManager = implemented_parser_managers[parser_manager](
+            results, self.writer_options, processing_options.pop("max_proc")
+        )
+        # start MP process
+        self.parser.process_results(processing_options)
