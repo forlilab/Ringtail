@@ -32,6 +32,14 @@ def main():
         outopts = rtcore.outputopts
         if cmdinput.process_mode == "write":
             logger.debug("Starting write process")
+            # TODO doing this for now, need to chat if we can discontinue file pattern
+            fp = cmdinput.file_sources.pop("file_pattern")
+            if fp:
+                if not "dlg" in fp.lower() or not "pdbqt" in fp.lower():
+                    logger.warning(
+                        f"File pattern {fp} was specified, but is not supported. If docking mode dlg/adgpu or vina is used, file_pattern is not needed."
+                    )
+
             # -#-#- Processes results, will add receptor if "save_receptor" is true
             rtcore.add_results_from_files(**cmdinput.file_sources, **cmdinput.writeopts)
         time1 = time.perf_counter()

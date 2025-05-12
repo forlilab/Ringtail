@@ -743,7 +743,7 @@ class CLOptionParser:
             self.file_sources = {
                 "file": parsed_opts.file,
                 "file_path": parsed_opts.file_path,
-                # "file_pattern": parsed_opts.file_pattern,
+                "file_pattern": parsed_opts.file_pattern,
                 "recursive": parsed_opts.recursive,
                 "file_list": parsed_opts.file_list,
                 "receptor_file": parsed_opts.receptor_file,
