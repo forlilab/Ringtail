@@ -118,6 +118,22 @@ def iterate_nested(obj):
         yield obj
 
 
+def valid_bookmark_name(name) -> bool:
+    """Checks that bookmark name adheres to sqlite naming conventions of alphanumerical and limited symbols.
+
+    Args:
+        name (str): bookmark name
+
+    Returns:
+        bool: true if bookmark name is valid
+
+    """
+    import re
+
+    regex = "^[A-Za-z0-9_]*$"
+    return re.match(regex, name)
+
+
 docking_mode_file_ext = {"dlg": "dlg", "vina": "pdbqt"}
 
 
