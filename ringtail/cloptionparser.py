@@ -11,6 +11,8 @@ from .exceptions import OptionError
 import __main__
 from .ringtailcore import RingtailCore
 from .ringtailoptions import Filters
+from .util import docking_mode_file_ext
+from types import SimpleNamespace
 
 
 def cmdline_parser(defaults: dict = {}):
@@ -619,18 +621,15 @@ class CLOptionParser:
     Attributes:
         process_mode (str): operating in 'write' or 'read' mode
         rtcore (RingtailCore): ringtail core object initialized with the provided db_file
-        filters (dict): fully parsed and organied optional filters
-        file_sources (dict): fully parsed docking results and receptor files
-        writeopts (dict): fully parsed arguments related to database writing
-        storageopts (dict): fully parsed arguments related to how the storage system behaves
-        outputopts (dict): fully parsed arguments related to output and reading from the database
+        file_sources (dict): paths to docking results and receptor files
         print_summary (bool): switch to print database summary
         filtering (bool): switch to run filtering method
-        plot (bool): switch to plot the data
-        export_bookmark_db (bool): switch to export bookmark as a new database
-        export_receptor (bool): switch to export receptor information to pdbqt
-        pymol (bool): switch to visualize ligands in pymol
-        data_from_bookmark (bool): switch to write bookmark data to the output log file
+        in write mode:
+            write_options (SimpleNamespace)
+        in read mode:
+            filters (dict): parsed and organized filters
+            filter_options (SimpleNamespace)
+            output_options (SimpleNamespace)
 
     Raises:
         OptionError: Error when an option cannot be parsed correctly
@@ -640,7 +639,7 @@ class CLOptionParser:
         # create parser
         try:
             # add default values from ringtailoptions
-            defaults_dict = RingtailCore.default_dict()
+            defaults_dict = RingtailCore.defaults()
 
             (
                 parsed_opts,
@@ -690,7 +689,9 @@ class CLOptionParser:
         # Check database options
         if parsed_opts.input_db is not None:
             if not os.path.exists(parsed_opts.input_db):
-                raise OptionError("WARNING: input database does not exist!")
+                raise OptionError(
+                    f"WARNING: input database -{parsed_opts.input_db}- does not exist or cannot be found!"
+                )
             db_file = parsed_opts.input_db
         elif self.process_mode == "read" and parsed_opts.input_db is None:
             raise OptionError(
@@ -726,35 +727,41 @@ class CLOptionParser:
                     f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
                 )
 
-            # set read-only rt_process options to None to prevent errors
-            parsed_opts.plot = None
-            parsed_opts.find_similar_ligands = None
-            parsed_opts.export_bookmark_csv = None
-            parsed_opts.export_query_csv = None
-            parsed_opts.export_bookmark_db = None
-            parsed_opts.export_receptor = None
-            parsed_opts.data_from_bookmark = None
-            parsed_opts.pymol = None
-            parsed_opts.log_file = None
-            parsed_opts.export_sdf_path = None
-            parsed_opts.enumerate_interaction_combs = None
-
+            if parsed_opts.file_path and parsed_opts.file_pattern:
+                if (
+                    parsed_opts.file_pattern
+                    not in docking_mode_file_ext[parsed_opts.docking_mode]
+                ):
+                    raise OptionError(
+                        f"The specified file pattern {parsed_opts.file_pattern} is not in agreement with the chosen docking mode {parsed_opts.docking_mode}, whose file extension must be {docking_mode_file_ext[parsed_opts.docking_mode]}."
+                    )
             # Create dictionary of all file sources
             self.file_sources = {
                 "file": parsed_opts.file,
                 "file_path": parsed_opts.file_path,
-                "file_pattern": parsed_opts.file_pattern,
                 "recursive": parsed_opts.recursive,
                 "file_list": parsed_opts.file_list,
                 "receptor_file": parsed_opts.receptor_file,
                 "save_receptor": parsed_opts.save_receptor,
             }
 
-        elif self.process_mode == "read":
-            # set write-only rt_process options to None to prevent errors
-            parsed_opts.receptor_file = None
-            parsed_opts.save_receptor = None
+            if isinstance(parsed_opts.interaction_tolerance, str):
+                parsed_opts.interaction_tolerance = [
+                    float(val) for val in parsed_opts.interaction_cutoffs.split(",")
+                ]
 
+            self.write_options = SimpleNamespace(
+                duplicate_handling=parsed_opts.duplicate_handling,
+                overwrite=parsed_opts.overwrite,
+                store_all_poses=parsed_opts.store_all_poses,
+                max_poses=parsed_opts.max_poses,
+                add_interactions=parsed_opts.add_interactions,
+                interaction_tolerance=parsed_opts.interaction_tolerance,
+                interaction_cutoffs=parsed_opts.interaction_cutoffs,
+                max_proc=parsed_opts.max_proc,
+            )
+
+        elif self.process_mode == "read":
             # set up filters
             filters = {}
             # empty lists are counted as filters, and the default keyword "OR" too
@@ -911,54 +918,27 @@ class CLOptionParser:
             if parsed_opts.mfpt_cluster or parsed_opts.interaction_cluster:
                 self.filtering = True
 
-        if isinstance(parsed_opts.interaction_tolerance, str):
-            parsed_opts.interaction_tolerance = [
-                float(val) for val in parsed_opts.interaction_cutoffs.split(",")
-            ]
+            self.filter_options = SimpleNamespace(
+                bookmark_name=parsed_opts.bookmark_name,
+                filter_bookmark=parsed_opts.filter_bookmark,
+                enumerate_interaction_combs=parsed_opts.enumerate_interaction_combs,
+                mfpt_cluster=parsed_opts.mfpt_cluster,
+                interaction_cluster=parsed_opts.interaction_cluster,
+            )
 
-        # combine all options used in write mode
-        self.writeopts = {
-            "duplicate_handling": parsed_opts.duplicate_handling,
-            "overwrite": parsed_opts.overwrite,
-            "store_all_poses": parsed_opts.store_all_poses,
-            "max_poses": parsed_opts.max_poses,
-            "add_interactions": parsed_opts.add_interactions,
-            "interaction_tolerance": parsed_opts.interaction_tolerance,
-            "interaction_cutoffs": parsed_opts.interaction_cutoffs,
-            "max_proc": parsed_opts.max_proc,
-        }
-
-        # parse read methods without inputs
-        self.plot = parsed_opts.plot
-        self.export_bookmark_db = parsed_opts.export_bookmark_db
-        self.export_receptor = parsed_opts.export_receptor
-        self.pymol = parsed_opts.pymol
-        self.data_from_bookmark = parsed_opts.data_from_bookmark
-        self.individual_sdf_files = parsed_opts.individual_sdf_files
-
-        # parse read and output options
-        self.outputopts = {
-            "log_file": parsed_opts.log_file,
-            "export_sdf_path": parsed_opts.export_sdf_path,
-            "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
-        }
-
-        # combine all options for the storage manager
-        self.storageopts = {
-            "filter_bookmark": parsed_opts.filter_bookmark,
-            "duplicate_handling": parsed_opts.duplicate_handling,
-            "overwrite": parsed_opts.overwrite,
-            "order_results": parsed_opts.order_results,
-            "outfields": parsed_opts.outfields,
-            "output_all_poses": parsed_opts.output_all_poses,
-            "mfpt_cluster": parsed_opts.mfpt_cluster,
-            "interaction_cluster": parsed_opts.interaction_cluster,
-            "bookmark_name": parsed_opts.bookmark_name,
-        }
-
-        # read methods that require inputs
-        self.readopts = {
-            "export_query_csv": parsed_opts.export_query_csv,
-            "find_similar_ligands": parsed_opts.find_similar_ligands,
-            "export_bookmark_csv": parsed_opts.export_bookmark_csv,
-        }
+            self.output_options = SimpleNamespace(
+                plot=parsed_opts.plot,
+                export_bookmark_db=parsed_opts.export_bookmark_db,
+                export_receptor=parsed_opts.export_receptor,
+                pymol=parsed_opts.pymol,
+                data_from_bookmark=parsed_opts.data_from_bookmark,
+                individual_sdf_files=parsed_opts.individual_sdf_files,
+                log_file=parsed_opts.log_file,
+                export_sdf_path=parsed_opts.export_sdf_path,
+                export_query_csv=parsed_opts.export_query_csv,
+                find_similar_ligands=parsed_opts.find_similar_ligands,
+                export_bookmark_csv=parsed_opts.export_bookmark_csv,
+                outfields=parsed_opts.outfields,
+                order_results=parsed_opts.order_results,
+                output_all_poses=parsed_opts.output_all_poses,
+            )
