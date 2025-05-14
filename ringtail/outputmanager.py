@@ -16,7 +16,6 @@ from matplotlib import cm
 from matplotlib import colors
 from rdkit.Chem import SDWriter
 from meeko import RDKitMolCreate
-from .logutils import LOGGER
 
 
 class OutputManager:
@@ -24,15 +23,12 @@ class OutputManager:
 
     Attributes:
         log_file (str): name for log file
-        export_sdf_path (str): path for exporting SDF molecule files
         _log_open (bool): if log file is open or not
     """
 
-    def __init__(self, log_file=None, export_sdf_path=None):
+    def __init__(self, log_file: str = "output_log.txt"):
         self.log_file = log_file
-        self.export_sdf_path = export_sdf_path
         self._log_open = False
-        self.logger = LOGGER
 
     def __enter__(self):
         """Opening outputmanager as a context manager"""
@@ -87,7 +83,7 @@ class OutputManager:
             int: number of ligands passing that are written to log file
         """
         try:
-            time0 = time.perf_counter()
+
             num_passing = 0
             for line in lines:
                 self._write_log_line(
@@ -95,9 +91,6 @@ class OutputManager:
                 )  # strip parens from line, which is natively a tuple
                 num_passing += 1
             self._write_log_line("***************\n")
-            self.logger.debug(
-                f"Time to write log: {time.perf_counter() - time0:.2f} seconds"
-            )
             return num_passing
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
@@ -234,7 +227,9 @@ class OutputManager:
 
     # -#-#- Non-logfile methods -#-#-#
 
-    def write_out_mol(self, filename, mol, flexres_mols, properties):
+    def write_out_mol(
+        self, filename, mol, flexres_mols, properties, export_sdf_directory: str
+    ):
         """Writes out given mol as sdf. Will create the specified sdf folder in
         current working directory if needed.
 
@@ -247,16 +242,8 @@ class OutputManager:
         Raises:
             OutputError
         """
-        if (
-            self.export_sdf_path is not None
-            and not self.export_sdf_path == ""
-            and not os.path.isdir(self.export_sdf_path)
-        ):
-            os.makedirs(self.export_sdf_path)
-            self.logger.info(
-                "Specified directory for SDF files was created in current working directory."
-            )
-        filename = self.export_sdf_path + "/" + filename
+
+        filename = export_sdf_directory + "/" + filename
         try:
             mol_flexres_list = [mol]
             mol_flexres_list += flexres_mols
