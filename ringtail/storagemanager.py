@@ -16,6 +16,7 @@ from rdkit import Chem
 from rdkit import DataStructs
 from rdkit.ML.Cluster import Butina
 import numpy as np
+from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters
@@ -202,7 +203,12 @@ class StorageManager:
             duplicates (list(Pose_ID)): any duplicates identified in "insert_results", if duplicate handling has been specified
 
         """
-
+        if duplicate_handling:
+            if duplicate_handling.lower() not in ["ignore", "replace"]:
+                logger.warning(
+                    f"duplicate_handling option {self.duplicate_handling} not allowed. Reverting to default behavior."
+                )
+                duplicate_handling = None
         # for each pose id, list
         interaction_rows = []
         for index, Pose_ID in enumerate(Pose_IDs):
@@ -219,7 +225,11 @@ class StorageManager:
 
     # region read data
     def filter_results(
-        self, all_filters: dict, filter_options: dict, suppress_output=False
+        self,
+        all_filters: Filters,
+        bookmark_name: str,
+        filtering_bookmark: str = None,
+        clustering: dict = {},
     ) -> iter:
         """Generate and execute database queries from given filters.
 
@@ -237,68 +247,65 @@ class StorageManager:
             raise StorageError(
                 f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
             )
-        # create view of passing results
-        filter_results_str, view_query, new_filtertable_query = (
-            self._generate_result_filtering_query(all_filters, filter_options)
+        # get the final filter query, has a {selection} place holder
+        filter_query: str = self._generate_result_filtering_query(
+            all_filters, bookmark_name, filtering_bookmark
         )
-        logger.debug(f"Query for filtering results: {filter_results_str}")
+        filtered_poses = filter_query.format(selection="? AS filter_id, R.Pose_ID ")
 
-        # if max_miss> and we are enumerating interaction combinations, we want to give each passing view a new name by changing the self.bookmark_name
-        if self.view_suffix is not None:
-            self.current_bookmark_name = self.bookmark_name + "_" + self.view_suffix
-        else:
-            self.current_bookmark_name = self.bookmark_name
-
-        # make sure we keep Pose_ID in view
-        # TODO main place to institute the filter tables
-        self.create_bookmark(
-            name=self.current_bookmark_name, query=view_query, filters=all_filters
-        )
-        # NOTE add poses to new table
-        self.populate_filter_tables(
-            name=self.current_bookmark_name,
-            query=new_filtertable_query,
-            filters=all_filters,
-        )
+        # TODO do clustering here
+        if clustering:
+            # cluster the query, making a new query without selection to carry on with
+            pass
+        logger.debug(f"Query for filtering results: {filter_query}")
 
         # perform filtering
-        if suppress_output:
-            return None
-
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
-        filtered_results = self._run_query(filter_results_str).fetchall()
-        logger.debug(f"Time to run query: {time.perf_counter() - time0:.2f} seconds")
-        return filtered_results
+        # TODO I am making this too messy, don't do this
+        self.populate_filter_tables(
+            name=bookmark_name,
+            query=filtered_poses,
+            filters=all_filters,
+        )
+        logger.debug(
+            f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
+        )
+        count = self.get_passing_poses_count(bookmark_name, True)
+        editable_query = self.format_editable_filter_query(bookmark_name)
+        # TODO main place to institute the filter tables
+        self.create_bookmark(
+            name=bookmark_name,
+            query=editable_query.format(selection="*", group_statement=""),
+            filters=all_filters,
+        )
+        return editable_query, count
 
-    def check_passing_bookmark_exists(self, bookmark_name: str = None):
+    def check_passing_bookmark_exists(self, bookmark_name: str):
         """Checks if bookmark name is in database
 
         Args:
-            bookmark_name (str, optional): name of bookmark name to check if exist, or else will use storageman bookmark_name attribute
+            bookmark_name (str): name of bookmark name to check if exist
 
         Returns:
             bool: indicates if bookmark_name exists in the current database
         """
-        if bookmark_name is None:
-            bookmark_name = self.bookmark_name
-
         bookmark_exists = bookmark_name in self.get_all_bookmark_names()
 
         return bookmark_exists
 
-    def get_plot_data(self, bookmark_name: str = None, only_passing=False):
+    def get_plot_data(self, bookmark_name: str, only_passing=False):
         """This function is expected to return an ascii plot
         representation of the results
 
         Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Will use default bookmark name if None. Returns empty list if bookmark does not exist.
+            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
             only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
 
         Returns:
             tuple: cursors as (<all data cursor>, <passing data cursor>)
         """
-
+        # TODO messy method
         # checks if we have filtered by looking for view name in list of view names
         if self.check_passing_bookmark_exists(bookmark_name):
             if only_passing:
@@ -360,14 +367,15 @@ class StorageManager:
 
         return temp_name, num_passing
 
-    def prune(self):
+    def prune(self, bookmark: str):
         # TODO check name, could be prune_nonpassing
         """Deletes rows from results, ligands, and interactions in a bookmark
         if they do not pass filtering criteria
         """
-        self._delete_from_results()
-        self._delete_from_ligands()
-        self._delete_from_interactions_not_in_view()
+        # TODO uses methods that use bookmarks
+        self._delete_from_results(bookmark)
+        self._delete_from_ligands(bookmark)
+        self._delete_from_interactions_not_in_view(bookmark)
         # TODO this should check to make sure only relevant interaction indices are present in interaction_indices table
         # should remove bookmarks, retain db_properties
 
@@ -464,42 +472,14 @@ class StorageManagerSQLite(StorageManager):
         open_cursors (list): list of cursors that were not closed by the function that created them.
             Will be closed by close_connection method.
         db_file (str): database name
-        order_results (str): what column name will be used to order results once read
-        outfields (str): data fields/columns to include when reading and outputting data
-        filter_bookmark (str): name of bookmark that filtering will be performed over
-        output_all_poses (bool): whether or not to output all poses of a ligand
-        mfpt_cluster (float): distance in ångströms to cluster ligands based on morgan fingerprints
-        interaction_cluster (float): distance in ångströms to cluster ligands based on interactions
-        bookmark_name (str): name of current bookmark being written to or read from
-
-        current_bookmark_name (str): name of last view to have been written to in the database
-        filtering_window (str): name of bookmark/view being filtered on
-        index_columns (list)
-        view_suffix (int): current suffix for views
-        temptable_suffix (int): current suffix for temporary tables
         field_to_column_name (dict): Dictionary for converting ringtail options into DB column names
     """
 
     def __init__(
         self,
         db_file: str = None,
-        order_results: str = None,
-        outfields: str = None,
-        filter_bookmark: str = None,
-        output_all_poses: bool = None,
-        mfpt_cluster: float = None,
-        interaction_cluster: float = None,
-        bookmark_name: str = None,
     ):
-        # TODO reconsider what are class properties and what are method inputs
         self.db_file = db_file
-        self.order_results = order_results
-        self.outfields = outfields
-        self.output_all_poses = output_all_poses
-        self.mfpt_cluster = mfpt_cluster
-        self.interaction_cluster = interaction_cluster
-        self.filter_bookmark = filter_bookmark
-        self.bookmark_name = bookmark_name
         super().__init__()
 
         self.energy_filter_sqlite_call_dict = {
@@ -508,7 +488,6 @@ class StorageManagerSQLite(StorageManager):
             "leworst": "leff < {value}",
             "lebest": "leff > {value}",
         }
-        self.view_suffix = None
         self.temptable_suffix = 0
         self.open_cursors = []
 
@@ -677,7 +656,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting ligands.") from e
 
-    def _delete_from_ligands(self):
+    def _delete_from_ligands(self, bookmark: str):
         """Remove rows from ligands table if they did not pass filtering
 
         Raises:
@@ -687,14 +666,14 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Ligands WHERE LigName NOT IN (SELECT LigName from Results WHERE Pose_ID IN (SELECT Pose_ID FROM {view}))".format(
-                    view=self.bookmark_name
+                    view=bookmark
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError(
-                f"Error occured while pruning Ligands not in {self.bookmark_name}"
+                f"Error occured while pruning Ligands not in {bookmark}"
             ) from e
 
     def _create_results_table(self):
@@ -1080,7 +1059,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting results.") from e
 
-    def _delete_from_results(self):
+    def _delete_from_results(self, bookmark: str):
         """Remove rows from results table if they did not pass filtering
 
         Raises:
@@ -1090,14 +1069,14 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Results WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
-                    view=self.bookmark_name
+                    view=bookmark
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError(
-                f"Error occured while pruning Results not in {self.bookmark_name}"
+                f"Error occured while pruning Results not in {bookmark}"
             ) from e
 
     def _create_receptors_table(self):
@@ -1482,7 +1461,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while deleting rows in the Interaction table"
             ) from e
 
-    def _delete_from_interactions_not_in_view(self):
+    def _delete_from_interactions_not_in_view(self, bookmark: str):
         """Remove rows from interactions table if they did not pass filtering.
 
         Raises:
@@ -1492,14 +1471,14 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(
                 "DELETE FROM Interactions WHERE Pose_ID NOT IN (SELECT Pose_ID FROM {view})".format(
-                    view=self.bookmark_name
+                    view=bookmark
                 )
             )
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise StorageError(
-                f"Error occured while pruning Interactions not in {self.bookmark_name}"
+                f"Error occured while pruning Interactions not in {bookmark}"
             ) from e
 
     def _create_bookmark_table(self):
@@ -1550,7 +1529,12 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _insert_cluster_data(
-        self, clusters: list, poseid_list: list, cluster_type: str, cluster_cutoff: str
+        self,
+        clusters: list,
+        poseid_list: list,
+        cluster_type: str,
+        cluster_cutoff: str,
+        bookmark_name: str,
     ):
         """Insert cluster data into ligand cluster table
 
@@ -1559,14 +1543,16 @@ class StorageManagerSQLite(StorageManager):
             poseid_list (list)
             cluster_type (str)
             cluster_cutoff (str)
+            bookmark_name (str)
         """
         cur = self.conn.cursor()
         cur.execute(
             "CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)"
         )
         ligand_cluster_columns = self._fetch_ligand_cluster_columns()
+        # TODO doesnt have to be this way
         column_name = (
-            f"{self.bookmark_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
+            f"{bookmark_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
         )
         if column_name not in ligand_cluster_columns:
             cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
@@ -1620,11 +1606,11 @@ class StorageManagerSQLite(StorageManager):
         """
 
         if db_alias:
-            alias_str = db_alias + "."
+            name = db_alias + "." + table_name
         else:
-            alias_str = None
-        query = f"""DROP TABLE IF EXISTS {alias_str}{table_name};"""
-        return self._run_query(query)
+            name = table_name
+        query = f"""DROP TABLE IF EXISTS {name};"""
+        return self.db_query(query)
 
     def create_merge_tables(self) -> str:
         try:
@@ -1675,18 +1661,33 @@ class StorageManagerSQLite(StorageManager):
 
         return bookmark_names
 
-    def set_bookmark_suffix(self, suffix):
-        """Sets internal bookmark_suffix variable
-
-        Args:
-            suffix (str): suffix to attached to bookmark-related queries or creation
-        """
-        if not isinstance(suffix, str):
-            self.view_suffix = str(suffix)
+    def get_passing_poses_count(
+        self, bookmark_name, grouped_by_ligand: bool = False
+    ) -> int:
+        if grouped_by_ligand:
+            group_statement = "GROUP BY LigName"
         else:
-            self.view_suffix = suffix
+            group_statement = ""
 
-    def fetch_filters_from_bookmark(self, bookmark_name: str = None):
+        new_query = self.format_editable_filter_query(bookmark_name).format(
+            selection="COUNT(*)", group_statement=group_statement
+        )
+        if self.db_query(new_query).fetchone():
+            return self.db_query(new_query).fetchone()[0]
+        else:
+            return 0
+
+    def format_editable_filter_query(self, bookmark_name) -> str:
+        query = """SELECT {{selection}} FROM 
+                    Results R JOIN ( 
+                            SELECT Pose_id FROM filtered_poses 
+                            WHERE filter_id = 
+                                (SELECT filter_id FROM Filters 
+                                WHERE name = '{bookmark_name}')) f            
+                    ON R.Pose_ID = f.Pose_ID {{group_statement}};"""
+        return query.format(bookmark_name=bookmark_name)
+
+    def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark
 
         Args:
@@ -1695,13 +1696,9 @@ class StorageManagerSQLite(StorageManager):
             Returns:
                 dict: containing the filter data
         """
-        if bookmark_name is None:
-            bookmark_name = self.bookmark_name
-        sql_query = (
-            f"SELECT filters FROM Bookmarks where Bookmark_name = '{bookmark_name}'"
-        )
+        sql_query = "SELECT filters FROM Bookmarks where Bookmark_name = ?"
 
-        filters = self._run_query(sql_query).fetchone()
+        filters = self.db_query(sql_query, (bookmark_name,)).fetchone()
         if not filters:
             return {}
 
@@ -1718,18 +1715,8 @@ class StorageManagerSQLite(StorageManager):
             bool: True if more than zero rows in bookmark
         """
 
-        count = self._run_query(
-            "SELECT COUNT(*) FROM {0};".format(bookmark_name)
-        ).fetchone()[0]
+        count = self.db_query(f"SELECT COUNT(*) FROM {bookmark_name};").fetchone()[0]
         return bool(count > 0)
-
-    def get_current_bookmark_name(self):
-        """returns current bookmark name
-
-        Returns:
-            str: name of last passing results bookmark used by database
-        """
-        return self.current_bookmark_name
 
     def fetch_bookmark(self, bookmark_name: str) -> sqlite3.Cursor:
         """returns SQLite cursor of all fields in bookmark
@@ -1740,7 +1727,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             sqlite3.Cursor: cursor of requested view
         """
-        return self._run_query(f"SELECT * FROM {bookmark_name}")
+        return self.db_query(f"SELECT * FROM {bookmark_name}")
 
     def create_bookmark(self, name, query, temp=False, add_poseID=False, filters={}):
         """Takes name and selection query and creates a bookmark of name.
@@ -1774,7 +1761,7 @@ class StorageManagerSQLite(StorageManager):
         # insert into filters
         # will take name and filters and query string
         filter_sql = """INSERT INTO Filters (name,query,filters) VALUES (?,?,?) RETURNING filter_id;"""
-
+        # TODO wrap in try except
         cur = self.conn.cursor()
         cur.execute(
             filter_sql,
@@ -1789,7 +1776,6 @@ class StorageManagerSQLite(StorageManager):
         filter_pose_sql = f"""
             INSERT INTO Filtered_poses (filter_id, pose_id)
             {query};"""
-
         cur.execute(filter_pose_sql, filter_id)
         self.conn.commit()
         cur.close()
@@ -1873,14 +1859,13 @@ class StorageManagerSQLite(StorageManager):
                 f"Error while attempting to drop bookmark {bookmark_name}"
             ) from e
 
-    def create_temp_table_from_bookmark(self):
+    def create_temp_table_from_bookmark(self, bookmark_name: str):
         """Method that creates a temporary table named "passing_temp".
         Please note that this table will be dropped as soon as the database connection closes.
         """
+        # TODo does not have to be like this
         cur = self.conn.cursor()
-        cur.execute(
-            f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {self.bookmark_name}"
-        )
+        cur.execute(f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {bookmark_name}")
         cur.close()
         logger.debug(
             "Creating a temporary table of passing ligands named 'passing_temp'."
@@ -1894,7 +1879,7 @@ class StorageManagerSQLite(StorageManager):
         wanted_list,
         unwanted_list=[],
     ):
-        """Resaves temp bookmark stored in self.current_bookmark_name as new permenant bookmark
+        """Resaves temp bookmark stored in bookmark_name as new permenant bookmark
 
         Args:
             bookmark_name (str): name of bookmark to save last temp bookmark as
@@ -1905,9 +1890,7 @@ class StorageManagerSQLite(StorageManager):
         """
         self._create_view(
             bookmark_name,
-            "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {1})".format(
-                original_bookmark_name, temp_table_name
-            ),
+            f"SELECT * FROM {original_bookmark_name} WHERE Pose_ID in (SELECT Pose_ID FROM {temp_table_name})",
             add_poseID=False,
         )
         compare_bookmark_str = "Comparison. Wanted: "
@@ -1959,8 +1942,11 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def get_filterid_from_name(self, bookmark_name: str) -> int:
-        return self._run_query(
-            f"""SELECT filter_id FROM Filters WHERE name = '{bookmark_name}';"""
+        return self.db_query(
+            f"""SELECT filter_id FROM Filters WHERE name = ?;""",
+            {
+                bookmark_name,
+            },
         ).fetchone()[0]
 
     # endregion
@@ -1976,10 +1962,9 @@ class StorageManagerSQLite(StorageManager):
         str: receptor object as a string
         """
 
-        cursor = self._run_query(
-            """SELECT receptor_object FROM Receptors WHERE RecName LIKE '{0}'""".format(
-                rec_name
-            )
+        cursor = self.db_query(
+            """SELECT receptor_object FROM Receptors WHERE RecName LIKE ?""",
+            (rec_name,),
         )
         return str(cursor.fetchone()[0])
 
@@ -1993,11 +1978,13 @@ class StorageManagerSQLite(StorageManager):
             iter (tuple): of receptor names and objects
         """
 
-        cursor = self._run_query("SELECT RecName, receptor_object FROM Receptors")
+        cursor = self.db_query("SELECT RecName, receptor_object FROM Receptors")
         return cursor.fetchall()
 
-    def fetch_data_for_passing_results(self) -> iter:
-        """Will return SQLite cursor with requested data for outfields for poses that passed filter in self.bookmark_name
+    def fetch_data_for_passing_results(
+        self, bookmark_name: str, outfields: Union[str, list] = []
+    ) -> iter:
+        """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
 
         Returns:
             iter: sqlite cursor of data from passing data
@@ -2005,26 +1992,17 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             OptionError
         """
-        output_fields = self.outfields
-        if type(output_fields) == str:
-            output_fields = output_fields.replace(" ", "")
-            output_fields_list = output_fields.split(",")
-        elif type(output_fields) == list:
-            output_fields_list = output_fields
+        if outfields:
+            output_fields_list = self.format_output_fields(outfields)
         else:
-            raise OptionError(
-                f"The output fields {outfield_string} were provided in the wrong format {type(output_fields)}. Please provide a string or a list."
-            )
-        outfield_string = "LigName, " + ", ".join(
-            [self.field_to_column_name[field] for field in output_fields_list]
-        )
-
+            output_fields_list = ["*"]
+        outfield_string = ", ".join(output_fields_list)
         query = (
             "SELECT "
             + outfield_string
-            + f" FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM {self.bookmark_name})"
+            + f" FROM Results R WHERE Pose_ID IN (SELECT Pose_ID FROM {bookmark_name})"
         )
-        return self._run_query(query)
+        return self.db_query(query)
 
     def fetch_flexres_info(self):
         """fetch flexible residues names and atomname lists
@@ -2049,7 +2027,7 @@ class StorageManagerSQLite(StorageManager):
                 atom_index_map, hydrogen_parents
         """
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM passing_temp)"
-        return self._run_query(query)
+        return self.db_query(query)
 
     def fetch_single_ligand_output_info(self, ligname) -> str:
         """get output information for given ligand
@@ -2088,8 +2066,8 @@ class StorageManagerSQLite(StorageManager):
             iter: SQLite cursor that contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
-        return self._run_query(query)
+        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID=?"
+        return self.db_query(query, (pose_ID,))
 
     def fetch_interaction_info_by_index(self, interaction_idx) -> tuple:
         """Returns tuple containing interaction info for given interaction_idx
@@ -2100,10 +2078,10 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             tuple: tuple of info for requested interaction
         """
-        query = "SELECT * FROM Interaction_indices WHERE interaction_id = {0}".format(
-            interaction_idx
-        )
-        return self._run_query(query).fetchone()[1:]  # cut off interaction index
+        query = "SELECT * FROM Interaction_indices WHERE interaction_id = ?"
+        return self.db_query(query, (interaction_idx,)).fetchone()[
+            1:
+        ]  # cut off interaction index
 
     def fetch_pose_interactions(self, Pose_ID) -> iter:
         """
@@ -2116,7 +2094,7 @@ class StorageManagerSQLite(StorageManager):
             iter: of interaction information for given Pose_ID
         """
         # check if table exist
-        cur = self._run_query(
+        cur = self.db_query(
             """SELECT name FROM sqlite_master WHERE type='table' AND name='Interactions';"""
         )
         if len(cur.fetchall()) == 0:
@@ -2125,9 +2103,9 @@ class StorageManagerSQLite(StorageManager):
         query = f"""SELECT ii.interaction_type, ii.rec_chain, ii.rec_resname, ii.rec_resid, ii.rec_atom, ii.rec_atomid 
         FROM Interaction_indices ii 
         JOIN Interactions i ON i.interaction_id = ii.interaction_id
-        WHERE i.Pose_ID = {Pose_ID}"""
+        WHERE i.Pose_ID = ?"""
 
-        return self._run_query(query).fetchall()
+        return self.db_query(query, (Pose_ID,)).fetchall()
 
     def count_receptors_in_db(self):
         """returns number of rows in Receptors table where receptor_object already has blob
@@ -2158,11 +2136,9 @@ class StorageManagerSQLite(StorageManager):
              iter: SQLite Cursor containing docking_score,
                 leff for the first pose for each ligand
         """
-        return self._run_query(
-            "SELECT docking_score, leff FROM Results GROUP BY LigName"
-        )
+        return self.db_query("SELECT docking_score, leff FROM Results GROUP BY LigName")
 
-    def _fetch_passing_plot_data(self, bookmark_name: str = None):
+    def _fetch_passing_plot_data(self, bookmark_name: str):
         """Fetches cursor for best energies and leffs for
             ligands passing filtering
 
@@ -2173,14 +2149,8 @@ class StorageManagerSQLite(StorageManager):
             iter: SQL Cursor containing docking_score,
                 leff for the first pose for passing ligands
         """
-        if bookmark_name is None:
-            bookmark_name = self.bookmark_name
-
-        # return self._run_query(
-        #     f"SELECT docking_score, leff, Pose_ID, LigName FROM Results WHERE LigName IN (SELECT DISTINCT LigName FROM {bookmark_name}) GROUP BY LigName"
-        # )
         # TODO update to new filter storage paradigm
-        return self._run_query(
+        return self.db_query(
             f"SELECT docking_score, leff, Pose_ID, LigName FROM {bookmark_name};"
         )
 
@@ -2196,9 +2166,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             return [
                 c[1]
-                for c in self._run_query(
-                    "PRAGMA table_info(Ligand_clusters)"
-                ).fetchall()
+                for c in self.db_query("PRAGMA table_info(Ligand_clusters)").fetchall()
             ][1:]
         except IndexError:
             raise IndexError(
@@ -2250,9 +2218,9 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             int: length of the table
         """
-        query = """SELECT COUNT(rowid) from {0}""".format(table_name)
+        query = f"""SELECT COUNT(rowid) from {table_name}"""
 
-        return self._run_query(query).fetchone()[0]
+        return self.db_query(query).fetchone()[0]
 
     # TODO method to get length of filter results? store at the time of filtering?
 
@@ -2315,7 +2283,7 @@ class StorageManagerSQLite(StorageManager):
 
     # region Methods dealing with filtered results
 
-    def _get_number_passing_ligands(self, bookmark_name: str = None):
+    def _get_number_passing_ligands(self, bookmark_name: str):
         # TODO update for new filter paradigm
         """Returns count of the number of ligands that
             passed filtering criteria
@@ -2329,8 +2297,6 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseQueryError
         """
-        if bookmark_name is None:
-            bookmark_name = self.current_bookmark_name
         try:
             cur = self.conn.cursor()
             cur.execute(f"SELECT COUNT(DISTINCT LigName) FROM {bookmark_name}")
@@ -2342,7 +2308,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while getting number of passing ligands"
             ) from e
 
-    def get_maxmiss_union(self, total_combinations: int):
+    def get_maxmiss_union(self, total_combinations: int, bookmark_name: str):
         """Get results that are in union considering max miss
 
         Args:
@@ -2351,31 +2317,26 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             iter: of passing results
         """
+        # TODO unnecessary
         selection_strs = []
         view_strs = []
-        outfield_list = self._generate_outfield_list()
+        # TODO this is only here because it assumes it will write to log file as part of the method (i.e., select_query)
+        outfield_list = self.format_output_fields("Ligand_name")
         for i in range(total_combinations):
             selection_strs.append(
-                f"""SELECT {", ".join(outfield_list)} FROM {self.bookmark_name + '_' + str(i)}"""
+                f"""SELECT {", ".join(outfield_list)} FROM {bookmark_name + '_' + str(i)}"""
             )
-            view_strs.append(f"SELECT * FROM {self.bookmark_name + '_' + str(i)}")
+            view_strs.append(f"SELECT * FROM {bookmark_name + '_' + str(i)}")
 
-        bookmark_name = f"{self.bookmark_name}_union"
+        bookmark_name = f"{bookmark_name}_union"
         logger.debug("Saving union bookmark...")
         union_view_query = " UNION ".join(view_strs)
         union_select_query = " UNION ".join(selection_strs)
-        if not self.output_all_poses:
-            # if not outputting all poses, it is necessary to "create" the view (each of which had a grouping statement), then group by in the final view
-            union_view_query = (
-                "SELECT * FROM (" + union_view_query + ") GROUP BY LigName"
-            )
-            union_select_query = (
-                "SELECT * FROM (" + union_select_query + ") GROUP BY LigName"
-            )
+
         # TODO maybe don't need a separate row for the union thing, maybe that can be stored as a separate filter still, and just query the union of the filter ids?
         self.create_bookmark(bookmark_name, union_view_query)
         logger.debug("Running union query...")
-        return self._run_query(union_select_query)
+        return self.db_query(union_select_query)
 
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
@@ -2431,12 +2392,12 @@ class StorageManagerSQLite(StorageManager):
         # TODO cna this be optimized? group by not awesome but may be relevant here
         sql_query = f"SELECT LigName FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
         view_query = f"SELECT * FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
-
-        self.bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
+        # TODO def unnecessary
+        bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
         # TODO what to do here?
-        self.create_bookmark(self.bookmark_name, view_query)
+        self.create_bookmark(bookmark_name, view_query)
 
-        return self._run_query(sql_query), self.bookmark_name, cluster_col_choice
+        return self.db_query(sql_query), bookmark_name, cluster_col_choice
 
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
@@ -2448,10 +2409,10 @@ class StorageManagerSQLite(StorageManager):
             iter: SQLite cursor that contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM passing_temp WHERE LigName LIKE '{ligname}')"
-        return self._run_query(query)
+        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM passing_temp WHERE LigName = ?)"
+        return self.db_query(query, (ligname,))
 
-    def fetch_nonpassing_pose_properties(self, ligname):
+    def fetch_nonpassing_pose_properties(self, ligname: str):
         """fetch coordinates for poses of ligname which did not pass the filter
 
         Args:
@@ -2461,8 +2422,8 @@ class StorageManagerSQLite(StorageManager):
             iter: SQLite cursor that contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName LIKE '{ligname}' AND Pose_ID NOT IN (SELECT Pose_ID FROM passing_temp)"
-        return self._run_query(query)
+        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName = ? AND Pose_ID NOT IN (SELECT Pose_ID FROM passing_temp)"
+        return self.db_query(query, (ligname,))
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
@@ -2521,8 +2482,9 @@ class StorageManagerSQLite(StorageManager):
 
         return n_ligands_passing / n_ligands_total * 100
 
-    def _generate_outfield_list(self):
-        """list describing outfields to be written
+    def format_output_fields(self, outfields):
+        """Handles string or list input of column names to be outputted, will make sure LigName
+        is in the list, and make sure all options are valid
 
         Returns:
             list: column names for which the data is to be displayed
@@ -2530,14 +2492,45 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             OptionError
         """
-        # parse requested output fields and convert to column names in database
-        outfields_list = self.outfields.split(",")
-        for outfield in outfields_list:
+        if type(outfields) == str:
+            outfields = outfields.replace(" ", "")
+            outfields_list = outfields.split(",")
+
+        for outfield in outfields_list[:]:
             if outfield not in self._data_kw_groups("outfield_options"):
-                raise OptionError(
-                    f"{outfield} is not a valid output option. Please see rt_process_vs.py --help for allowed options"
+                logger.warning(
+                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
                 )
-        return [self.field_to_column_name[field] for field in outfields_list]
+                outfields_list.remove(outfield)
+        if "ligand_name" not in [field.lower() for field in outfields_list]:
+            outfields_list.insert(0, "Ligand_name")
+
+        return ["R." + self.field_to_column_name[field] for field in outfields_list]
+
+    def get_numeric_columns(self, table_name: str) -> iter:
+        """
+        Method to get the names of all numeric columns, for example for allowable sorting options
+
+        Args:
+            table_name (str): table name to evaluate
+
+        Returns:
+            iter: column names that has a numeric type
+        """
+        return self.db_query(
+            f"""SELECT
+                            name
+                        FROM
+                            pragma_table_info('{table_name}')
+                            WHERE CASE 
+                                WHEN UPPER(type) LIKE '%INT%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%REAL%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%NUM%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%DEC%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%FLOAT%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%DOUBLE%' THEN 'numerical'
+                            END ='numerical';"""
+        ).fetchall()
 
     def _process_filters_for_query(self, filters_dict: dict):
         # NOTE this method can maybe be a main class method once we get more database types
@@ -2643,7 +2636,9 @@ class StorageManagerSQLite(StorageManager):
             processed_filters["lig_filters"] = ligand_filters
         return processed_filters
 
-    def _generate_result_filtering_query(self, filters_dict, options: dict):
+    def _generate_result_filtering_query(
+        self, filters_dict, bookmark_name: str, filter_bookmark: str
+    ):
         """takes lists of filters, writes sql filtering string
 
         Args:
@@ -2654,19 +2649,18 @@ class StorageManagerSQLite(StorageManager):
         """
         # table to filter over
         filtering_window = "Results"
-
-        outfield_columns = self._generate_outfield_list()
         num_query = ""
         int_query = ""
         ligname_query = ""
+        partial_filter_query = ""
         rdkit_query = False
 
         # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
-        if self.filter_bookmark is not None:
-            if self.filter_bookmark == self.bookmark_name:
+        if filter_bookmark is not None:
+            if filter_bookmark == bookmark_name:
                 # cannot write data from bookmark_a to bookmark_a
                 logger.error(
-                    f"Specified 'filter_bookmark' and 'bookmark_name' are the same: {self.bookmark_name}"
+                    f"Specified 'filter_bookmark' and 'bookmark_name' are the same: {bookmark_name}"
                 )
                 raise OptionError(
                     "'filter_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
@@ -2680,101 +2674,74 @@ class StorageManagerSQLite(StorageManager):
                     "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
-            filtering_window = self.filter_bookmark
+            filtering_window = filter_bookmark
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
 
-        # raise error if no filters are present and no clusterings
-        if not processed_filters and not clustering:
-            raise DatabaseQueryError(
-                "Ringtail query strings are empty, please check filter options."
+        if not processed_filters:
+            raise OptionError("No filters were provided, cannot filter.")
+
+        # check what filters are present, and prepare them as partial queries
+        if "num_filters" in processed_filters:
+            num_query = " AND ".join(
+                ["R." + filter for filter in processed_filters["num_filters"]]
             )
 
-        # check if clustering
-        clustering = bool(self.mfpt_cluster or self.interaction_cluster)
-        # if clustering without filtering
-        if clustering:
-            # allows for clustering without filtering
-            logger.info("Preparing to cluster results")
-            unclustered_query = f"SELECT R.Pose_id FROM {filtering_window} R "
-            if not processed_filters and filtering_window == "Results":
-                logger.warning(
-                    "If clustering is not performed on a pre-filtered bookmark, the clustering process can be slow."
+        # check for interactions and prepare for query
+        if "int_filters" in processed_filters:
+            # if interaction filters are present and valid, two lists of included and excluded interactions are returned
+            # each item in the lists to be joined by "AND", and each item within the list item (if >1) to be joined by "OR"
+            include_interactions, exclude_interactions = (
+                self._prepare_interaction_indices_for_filtering(
+                    interaction_list=processed_filters["int_filters"]
                 )
-        else:
-            # start with empty string, will prepend SELECT statement later
-            unclustered_query = ""
+            )
+            # ensure there are interactions in the list after processing
+            if bool(exclude_interactions or include_interactions):
+                # prepare partial queries for the different interaction combinations
+                int_query = self._prepare_interaction_filtering_query(
+                    include_interactions,
+                    exclude_interactions,
+                    processed_filters["max_miss"],
+                )
+        # check if ligand filters and prepare for query
+        if "lig_filters" in processed_filters:
+            lig_filters = processed_filters["lig_filters"]
+            if "ligand_name" in lig_filters:
+                lig_names = lig_filters["ligand_name"]
+                ligname_query = " OR ".join(
+                    [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
+                )
+                ligname_query = "SELECT LigName FROM Ligands WHERE " + ligname_query
+            # rdkit queries need to be handled in memory separate from the main query
+            if (
+                "ligand_substruct" in lig_filters
+                or "ligand_substruct_pos" in lig_filters
+                or "ligand_max_atoms" in lig_filters
+            ):
+                rdkit_query = True
 
-        # create query string from filters if present
-        if processed_filters:
-            # start stringing together queries
-            # check what filters are present, and prepare them as partial queries
-            if "num_filters" in processed_filters:
-                num_query = " AND ".join(
-                    ["R." + filter for filter in processed_filters["num_filters"]]
-                )
-
-            # check for interactions and prepare for query
-            if "int_filters" in processed_filters:
-                # if interaction filters are present and valid, two lists of included and excluded interactions are returned
-                # each item in the lists to be joined by "AND", and each item within the list item (if >1) to be joined by "OR"
-                include_interactions, exclude_interactions = (
-                    self._prepare_interaction_indices_for_filtering(
-                        interaction_list=processed_filters["int_filters"]
-                    )
-                )
-                # ensure there are interactions in the list after processing
-                if bool(exclude_interactions or include_interactions):
-                    # prepare partial queries for the different interaction combinations
-                    int_query = self._prepare_interaction_filtering_query(
-                        include_interactions,
-                        exclude_interactions,
-                        processed_filters["max_miss"],
-                    )
-            # check if ligand filters and prepare for query
-            if "lig_filters" in processed_filters:
-                lig_filters = processed_filters["lig_filters"]
-                if "ligand_name" in lig_filters:
-                    lig_names = lig_filters["ligand_name"]
-                    ligname_query = " OR ".join(
-                        [
-                            f"LigName LIKE '%{ligname}%' "
-                            for ligname in lig_names
-                            if ligname
-                        ]
-                    )
-                    ligname_query = "SELECT LigName FROM Ligands WHERE " + ligname_query
-                # rdkit queries need to be handled in memory separate from the main query
-                if (
-                    "ligand_substruct" in lig_filters
-                    or "ligand_substruct_pos" in lig_filters
-                    or "ligand_max_atoms" in lig_filters
-                ):
-                    rdkit_query = True
-
-            ### Join each of the filter groups
-            # if filter queries exist for each group, string them together appropriately
-            if int_query:
-                # add with a join statement
-                unclustered_query += (
-                    "JOIN (" + int_query + ") I ON R.Pose_ID = I.Pose_ID "
-                )
-            if ligname_query:
-                # add with a join statement
-                unclustered_query += (
-                    "JOIN (" + ligname_query + ") L ON R.LigName = L.LigName "
-                )
-                # these two queries are joined on the Results table, after the multiple table spanning queries
-            if num_query:
-                # add condition
-                unclustered_query += "WHERE " + num_query
+        ### Join each of the filter groups
+        # if filter queries exist for each group, string them together appropriately
+        if int_query:
+            # add with a join statement
+            partial_filter_query += f"JOIN ({int_query}) I ON R.Pose_ID = I.Pose_ID "
+        if ligname_query:
+            # add with a join statement
+            partial_filter_query += (
+                f"JOIN ({ligname_query}) L ON R.LigName = L.LigName "
+            )
+            # these two queries are joined on the Results table, after the multiple table spanning queries
+        if num_query:
+            # add quantitative condition
+            partial_filter_query += "WHERE " + num_query
 
         # run the rdkit queries first
         if rdkit_query:
             lignames_poseids_with_substructs = {}
-            # run the unclustered_query with appropriate select statement, keeping track of passing pose ids
-            partial_rdkit_query = f" FROM {filtering_window} R JOIN Ligands ON Ligands.LigName = R.LigName {unclustered_query}"
+            # run the partial_filter_query with appropriate select statement, keeping track of passing pose ids
+            partial_rdkit_query = f" FROM {filtering_window} R JOIN Ligands ON Ligands.LigName = R.LigName {partial_filter_query}"
 
             # get dict of ligands and pose ids passing all filters including substruct
             lignames_poseids_with_substructs = self._perform_rdkit_filtering(
@@ -2786,41 +2753,18 @@ class StorageManagerSQLite(StorageManager):
                 # loop through each list of pose ids and join them into a query
                 passing_pose_ids.extend(poseids)
 
-            # create new unclustered_query with passing pose ids from the ligand queries
-            unclustered_query = " R.Pose_ID IN ({0})".format(
+            # create new partial_filter_query with passing pose ids from the ligand queries
+            partial_filter_query = " R.Pose_ID IN ({0})".format(
                 ",".join(map(str, passing_pose_ids))
             )
 
-            unclustered_query = " WHERE " + unclustered_query
+            partial_filter_query = " WHERE " + partial_filter_query
 
-        # if clustering is requested, do that before saving view or filtering results for output
-        if clustering:
-            # if substruct, unclustered query is now mostly pose_ids. If not, it is a full normal query
-            try:
-                query = self._prepare_cluster_query(unclustered_query)
-                query = " WHERE " + query
-            except OptionError as e:
-                raise e
-        else:
-            # if not clustering, rename query
-            query = unclustered_query
-
-        # choose columns to be selected from filtering_window
-        query_select_string = f"""SELECT {", ".join("R." + column for column in outfield_columns)} FROM {filtering_window} R """
-        # adding if we only want to keep one pose per ligand (will keep first entry)
-        if not self.output_all_poses:
-            query += " GROUP BY R.LigName "
-        # add how to order results
-        if self.order_results:
-            query += " ORDER BY " + self.field_to_column_name[self.order_results]
-
-        output_query = query_select_string + query
-        view_query = f"SELECT * FROM {filtering_window} R " + query
-        new_filtertable_query = (
-            f"SELECT ? AS filter_id, R.Pose_ID FROM {filtering_window} R " + query
+        filter_query = (
+            f"SELECT {{selection}} FROM {filtering_window} R {partial_filter_query}"
         )
 
-        return output_query, view_query, new_filtertable_query
+        return filter_query
 
     def _perform_rdkit_filtering(
         self, partial_query: str, ligand_filters: dict
@@ -3055,7 +2999,30 @@ class StorageManagerSQLite(StorageManager):
 
         return filtered_ligands
 
-    def _prepare_cluster_query(self, unclustered_query: str) -> str | None:
+    def cluster_data(
+        self,
+        data,
+        bookmark_name: str = "Results",
+        type: str = "mfpt",
+        cutoff: float = 0.5,
+    ):
+        # allows for clustering without filtering
+        logger.info("Preparing to cluster results")
+        unclustered_query = f"SELECT R.Pose_id FROM {data} R "
+        if data == "Results":
+            logger.warning(
+                "If clustering is not performed on a pre-filtered bookmark, the clustering process can be slow."
+            )
+
+        try:
+            query = self._prepare_cluster_query(unclustered_query, bookmark_name)
+            query = " WHERE " + query
+        except OptionError as e:
+            raise e
+
+    def _prepare_cluster_query(
+        self, unclustered_query: str, bookmark_name
+    ) -> str | None:
         """
         These methods will take data returned from unclustered filter query, then run the cluster query and cluster the filtered data.
         This will output pose_ids that are representative of the clusters, and these pose_ids will be returned so that
@@ -3067,6 +3034,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: (reduced) query to include in overall filter query if clustering returned results
         """
+        # TODO
         if self.interaction_cluster and self.mfpt_cluster:
             logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering."
@@ -3102,12 +3070,8 @@ class StorageManagerSQLite(StorageManager):
         if self.interaction_cluster:
             cluster_query = f"SELECT Pose_ID, leff FROM Results WHERE Pose_ID IN ({unclustered_query})"
             # resulting data
-            poseid_leffs = self._run_query(cluster_query).fetchall()
-            cluster_poseids = (
-                "("
-                + ",".join(map(str, [(poseid_leff[0]) for poseid_leff in poseid_leffs]))
-                + ")"
-            )
+            poseid_leffs = self.db_query(cluster_query).fetchall()
+            cluster_poseids = [(poseid_leff[0]) for poseid_leff in poseid_leffs]
             poseid_bvs = self._generate_interaction_bitvectors(cluster_poseids)
 
             # create a list of tuples from the query data and bitvector
@@ -3146,6 +3110,7 @@ class StorageManagerSQLite(StorageManager):
                 [l[0] for l in poseid_leff_bvs],
                 "ifp",
                 str(self.interaction_cluster),
+                bookmark_name,
             )
 
             # catch if no pose_ids returned
@@ -3167,7 +3132,7 @@ class StorageManagerSQLite(StorageManager):
         if self.mfpt_cluster:
             # get relevant data based on all filters specified
             cluster_query = f"SELECT R.Pose_ID, R.leff, L.ligand_rdmol FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName WHERE R.Pose_ID IN ({unclustered_query})"
-            poseid_leff_mfps = self._run_query(cluster_query).fetchall()
+            poseid_leff_mfps = self.db_query(cluster_query).fetchall()
 
             # create morgan fingerprint generator
             from rdkit.Chem import rdFingerprintGenerator
@@ -3204,6 +3169,7 @@ class StorageManagerSQLite(StorageManager):
                 [l[0] for l in poseid_leff_mfps],
                 "mfp",
                 str(self.mfpt_cluster),
+                bookmark_name,
             )
 
             # catch if no pose_ids returned
@@ -3330,7 +3296,7 @@ class StorageManagerSQLite(StorageManager):
 
         return query
 
-    def _generate_interaction_bitvectors(self, pose_ids: str) -> dict:
+    def _generate_interaction_bitvectors(self, pose_ids: list) -> dict:
         """
         Method to generate a dict of generate bitvector strings from pose_ids
 
@@ -3343,14 +3309,13 @@ class StorageManagerSQLite(StorageManager):
         # create a list of 0 items the length of interaction_indices table
         ii_length = self._get_length_of_table("Interaction_indices")
         # for each pose id, get a list of interaction_indices from joining the two tables i and ii
+        placeholders = ",".join("?" for _ in pose_ids)
         poseid_intind_query = f"""SELECT Pose_ID, interaction_id
                                     FROM Interactions
-                                    WHERE Pose_ID IN {pose_ids}"""
-        poseid_intinds = self._run_query(poseid_intind_query).fetchall()
-        # cast string to list
-        pose_id_list = list((pose_ids.strip("()")).split(","))
+                                    WHERE Pose_ID IN ({placeholders});"""
+        poseid_intinds = self.db_query(poseid_intind_query, pose_ids).fetchall()
         # make dict of pose id and bitvector
-        poseid_bvlist = {(pose_id): [0] * ii_length for pose_id in pose_id_list}
+        poseid_bvlist = {(pose_id): [0] * ii_length for pose_id in pose_ids}
         # iterate over the tuple results from the query
         for poseid_intind in poseid_intinds:
             poseid_bvlist[str(poseid_intind[0])][poseid_intind[1] - 1] = 1
@@ -3446,7 +3411,7 @@ class StorageManagerSQLite(StorageManager):
             ]
         )
 
-        return self._run_query(sql_string).fetchall()
+        return self.db_query(sql_string).fetchall()
 
     def _generate_selective_insert_query(
         self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
@@ -3667,18 +3632,18 @@ class StorageManagerSQLite(StorageManager):
             ON Receptors.receptor_id = merging_receptors.receptor_id"""
 
         try:
-            assert self._run_query(receptorcheck_sql).fetchone()[0] == "True"
+            assert self.db_query(receptorcheck_sql).fetchone()[0] == "True"
         except AssertionError:
             raise StorageError(
                 f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
             )
         else:
-            self.logger.info(
+            logger.info(
                 "The two databases are of compatible version and receptors. Merging will proceed."
             )
 
         # get the active merge_id to ensure we use the correct merge data moving forward
-        merge_id = self._run_query(
+        merge_id = self.db_query(
             "SELECT last_insert_rowid() FROM merged_tables"
         ).fetchone()[0]
 
@@ -3693,23 +3658,23 @@ class StorageManagerSQLite(StorageManager):
         # merge tables
         try:
             self._merge_db_properties_table(merge_id)
-            self.logger.info("The 'db_properties' table has been merged.")
+            logger.info("The 'db_properties' table has been merged.")
 
             self._merge_ligands_table()
-            self.logger.info("The 'Ligands' table has been merged.")
+            logger.info("The 'Ligands' table has been merged.")
 
             self._merge_results_table(merge_id)
-            self.logger.info("The 'Results' table has been merged.")
+            logger.info("The 'Results' table has been merged.")
 
             self._merge_interaction_tables(merge_id)
-            self.logger.info(
+            logger.info(
                 "The 'Interaction_indices' and 'Interactions' tables have been merged."
             )
             # self._detach_db(merging_db_alias)
         except Exception as e:
             raise MergeError(f"Error during database merging: {e}") from e
         else:
-            self.logger.info(
+            logger.info(
                 f"The database {merging_db} has been successfully merged into {self.db_file}."
             )
         finally:
@@ -4163,7 +4128,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError(f"Error occurred while attaching {new_db}") from e
         else:
-            self.logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
+            logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
             return new_db_alias
 
     def _detach_db(self, new_db_alias):
@@ -4184,7 +4149,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError(f"Error occurred while detaching {new_db_alias}") from e
         else:
-            self.logger.info(f"Detached database aliased as {new_db_alias}.")
+            logger.info(f"Detached database aliased as {new_db_alias}.")
 
     def _drop_existing_tables(self):
         """drop any existing tables.
@@ -4229,7 +4194,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while getting names of existing database tables"
             ) from e
 
-    def _run_query(self, query):
+    def db_query(self, query, params: tuple = ()):
         """Executes provided SQLite query. Returns cursor for results.
             Since cursor remains open, added to list of open cursors
 
@@ -4241,27 +4206,17 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             cur = self.conn.cursor()
-            cur.execute(query)
+            cur.execute(query, params)
             self.open_cursors.append(cur)
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(
-                "Unable to execute query {0}: {1}".format(query, e)
+                f"Unable to execute query {query} with given parameters {params}: {e}"
             ) from e
         return cur
 
-    def execute_with_params(self, query: str, parameters: tuple):
+    def db_insert(self, query: str, parameters: tuple, commit=True):
         try:
-            cur = self.conn.cursor()
-            cur.execute(query, parameters)
-            return cur
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                f"Error while executing query with parameters"
-            ) from e
-
-    def insert_with_params(self, query: str, parameters: tuple, commit=True):
-        try:
-            cur = self.execute_with_params(query, parameters)
+            cur = self.db_query(query, parameters)
             if commit:
                 self.conn.commit()
                 cur.close()

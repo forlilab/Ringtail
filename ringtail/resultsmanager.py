@@ -78,6 +78,14 @@ class ResultsManager:
             logmsg = f"This is the list of ligands whos strings are being procssed: {str(results.strings.keys())}"
         logger.debug(logmsg)
 
+        if processing_options.get("store_all_poses") and processing_options.get(
+            "interaction_tolerance"
+        ):
+            logger.warning(
+                "Cannot use 'interaction_tolerance' with 'store_all_poses'. Removing 'interaction_tolerance'."
+            )
+            processing_options["interaction_tolerance"] = None
+
         # need receptor file contents if adding interaction
         if processing_options.get("add_interactions"):
             # build local storageman to retrieve receptor

@@ -140,6 +140,7 @@ def cmdline_parser(defaults={}):
 
     return args
 
+
 def main():
     time0 = time.perf_counter()
     logger = logutils.LOGGER
@@ -248,10 +249,10 @@ def main():
             output_manager = OutputManager(log_file=args.log)
             with output_manager:
                 if args.save_bookmark is not None:
-                    output_manager.write_results_bookmark_to_log(args.save_bookmark)
+                    output_manager.write_bookmarkname_in_log(args.save_bookmark)
                 output_manager.log_num_passing_ligands(number_passing_ligands)
                 final_bookmark = dbman.fetch_bookmark(previous_bookmarkname)
-                output_manager.write_filter_log(final_bookmark)
+                output_manager.write_filter_results_in_log(final_bookmark)
 
             if args.save_bookmark is not None:
                 dbman.create_bookmark_from_temp_table(
@@ -287,6 +288,7 @@ def main():
         )
         sys.exit(1)
     return
+
 
 if __name__ == "__main__":
     sys.exit(main())

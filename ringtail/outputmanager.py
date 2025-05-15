@@ -26,9 +26,10 @@ class OutputManager:
         _log_open (bool): if log file is open or not
     """
 
-    def __init__(self, log_file: str = "output_log.txt"):
+    def __init__(self, log_file: str = "output_log.txt", append_to_file: bool = True):
         self.log_file = log_file
         self._log_open = False
+        self.append = append_to_file
 
     def __enter__(self):
         """Opening outputmanager as a context manager"""
@@ -49,8 +50,12 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if self.append:
+            open_mode = "a"
+        else:
+            open_mode = "w"
         self.log_file = open(
-            self.log_file, "w"
+            self.log_file, open_mode
         )  # makes log_file attribute a file pointer from the string path name
         self._log_open = True
         try:
@@ -69,7 +74,7 @@ class OutputManager:
             )  # returns log_file attribute from file pointer to string path name
             self._log_open = False
 
-    def write_filter_log(self, lines):
+    def write_filter_results_in_log(self, lines):
         """Writes lines from results iterable into log file
 
         Args:
@@ -78,20 +83,13 @@ class OutputManager:
 
         Raises:
             OutputError
-
-        Returns:
-            int: number of ligands passing that are written to log file
         """
         try:
-
-            num_passing = 0
             for line in lines:
                 self._write_log_line(
                     str(line).replace("(", "").replace(")", "")
                 )  # strip parens from line, which is natively a tuple
-                num_passing += 1
             self._write_log_line("***************\n")
-            return num_passing
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
 
@@ -129,7 +127,7 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
 
-    def write_results_bookmark_to_log(self, bookmark_name):
+    def write_bookmarkname_in_log(self, bookmark_name):
         """Write the name of the result bookmark into log
 
         Args:
@@ -145,8 +143,8 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
-    def write_filters_to_log(
-        self, filters_dict, included_interactions, additional_info=""
+    def write_filtervalues_in_log(
+        self, filters_dict, included_interactions, bookmark_name, additional_info=""
     ):
         """Takes dictionary of filters, formats as string and writes to log file
 
@@ -203,6 +201,8 @@ class OutputManager:
 
             for line in buff:
                 self._write_log_line(line)
+
+            self.write_bookmarkname_in_log(bookmark_name)
 
         except Exception as e:
             raise OutputError("Error occurred while writing filters to log") from e

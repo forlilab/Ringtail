@@ -41,15 +41,7 @@ def main():
 
             # -#-#- Perform filtering
             if cli.filtering:
-                filtered_data = rtcore.filter(**cli.filters, **vars(cli.filter_options))
-                if cli.output_options.log_file:
-                    rtcore.write_filter_log(
-                        filtered_data,
-                        cli.output_options.outfields,
-                        cli.output_options.order_results,
-                        not cli.output_options.output_all_poses,
-                        cli.output_options.log_file,
-                    )
+                rtcore.filter(**cli.filters, **vars(cli.filter_options))
 
             # Write log with new data for previous filtering results
             if cli.output_options.data_from_bookmark and not cli.filtering:
