@@ -883,7 +883,7 @@ class RingtailCore:
                     temp_filters = self._prepare_filters_for_storageman(
                         filters_copy, combination
                     )
-                    iterated_bookmark_name = bookmark_name + str(ic_idx)
+                    iterated_bookmark_name = bookmark_name + "_" + str(ic_idx)
                     self._filter_and_output(
                         temp_filters,
                         iterated_bookmark_name,
