@@ -897,22 +897,20 @@ class RingtailCore:
                         combi_info=str(combination),
                         append_to_log=True,
                     )
-                maxmiss_union_results = self.storageman.get_maxmiss_union(
-                    len(interaction_combs), bookmark_name
+
+                self._filter_and_output(
+                    filters.asdict(),
+                    bookmark_name,
+                    None,
+                    clustering,
+                    log_file,
+                    outfields,
+                    output_all_poses,
+                    order_results,
+                    return_iter,
+                    append_to_log=True,
+                    max_miss_combs=interaction_combs,
                 )
-                with outputmanager:
-                    outputmanager.write_maxmiss_union_header()
-                    outputmanager.write_bookmarkname_in_log(bookmark_name + "_union")
-                    # TODO outfields method
-                    number_passing_union = outputmanager.write_filter_results_in_log(
-                        maxmiss_union_results
-                    )
-                    outputmanager.log_num_passing_ligands(number_passing_union)
-                    print(
-                        "\nNumber passing ligands in max_miss union:",
-                        number_passing_union,
-                    )
-                    ligands_passed = number_passing_union
 
         return ligands_passed
 
@@ -929,14 +927,22 @@ class RingtailCore:
         return_iter: bool = False,
         combi_info: str = None,
         append_to_log: bool = None,
+        max_miss_combs=None,
     ) -> Union[int, iter]:
-        # with self.storageman as sm:
-        editable_query, num_passing_ligands = self.storageman.filter_results(
-            all_filters=filters,
-            bookmark_name=bookmark_name,
-            filtering_bookmark=filtering_bookmark,
-            clustering=clustering,
-        )
+        if not max_miss_combs:
+            editable_query, num_passing_ligands = self.storageman.filter_results(
+                all_filters=filters,
+                bookmark_name=bookmark_name,
+                filtering_bookmark=filtering_bookmark,
+                clustering=clustering,
+            )
+        else:
+            editable_query, num_passing_ligands, bookmark_name = (
+                self.storageman.get_maxmiss_union(
+                    len(max_miss_combs), bookmark_name, filters
+                )
+            )
+        # TODO this is repeated in max_miss, maybe make this separate method?
         if num_passing_ligands:
             # format the filter query
             if output_fields and output_fields != "*":
@@ -949,6 +955,7 @@ class RingtailCore:
             log_filter_query = editable_query.format(
                 selection=output_fields, group_statement=group_by
             )
+            print("The query: ", log_filter_query)
 
             if order_results:
                 # TODO add statement to order by, after grouping
@@ -963,15 +970,26 @@ class RingtailCore:
                     cluster_string = "No clustering performed."
                 opm = OutputManager(log_file, append_to_log)
                 with opm:
-                    opm.write_filtervalues_in_log(
-                        filters, [], bookmark_name, cluster_string
-                    )
+                    if max_miss_combs:
+                        opm.write_maxmiss_union_header()
+                        opm.write_bookmarkname_in_log(bookmark_name)
+                    else:
+                        opm.write_filtervalues_in_log(
+                            filters, [], bookmark_name, cluster_string
+                        )
                     opm.write_filter_results_in_log(
                         self.storageman.db_query(log_filter_query).fetchall()
                     )
                     opm.log_num_passing_ligands(num_passing_ligands)
-
-                    print("\nNumber of ligands passing filters:", num_passing_ligands)
+                    if not max_miss_combs:
+                        print(
+                            "\nNumber of ligands passing filters:", num_passing_ligands
+                        )
+                    else:
+                        print(
+                            "\nNumber passing ligands in max_miss union:",
+                            num_passing_ligands,
+                        )
             return num_passing_ligands
         else:
             self.logger.warning(

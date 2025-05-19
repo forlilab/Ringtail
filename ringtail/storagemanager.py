@@ -272,6 +272,8 @@ class StorageManager:
             f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
         )
         count = self.get_passing_poses_count(bookmark_name, True)
+
+        print(f"\n\nCOUNT from the bookmark {bookmark_name} is {count}\n\n")
         editable_query = self.format_editable_filter_query(bookmark_name)
         # TODO main place to institute the filter tables
         self.create_bookmark(
@@ -1669,23 +1671,34 @@ class StorageManagerSQLite(StorageManager):
         else:
             group_statement = ""
 
-        new_query = self.format_editable_filter_query(bookmark_name).format(
-            selection="COUNT(*)", group_statement=group_statement
+        new_query = (
+            "SELECT COUNT(*) FROM ("
+            + self.format_editable_filter_query(bookmark_name).format(
+                selection="R.Pose_ID", group_statement=group_statement
+            )
+            + ")"
         )
         if self.db_query(new_query).fetchone():
             return self.db_query(new_query).fetchone()[0]
         else:
             return 0
 
-    def format_editable_filter_query(self, bookmark_name) -> str:
+    def format_editable_filter_query(
+        self, bookmark_name, results_str="R", filter_str="f"
+    ) -> str:
         query = """SELECT {{selection}} FROM 
-                    Results R JOIN ( 
+                    Results {result_alias} JOIN ( 
                             SELECT Pose_id FROM filtered_poses 
                             WHERE filter_id = 
                                 (SELECT filter_id FROM Filters 
-                                WHERE name = '{bookmark_name}')) f            
-                    ON R.Pose_ID = f.Pose_ID {{group_statement}};"""
-        return query.format(bookmark_name=bookmark_name)
+                                WHERE name = '{bookmark_name}')) {filter_alias}            
+                    ON {result_alias}.Pose_ID = {filter_alias}.Pose_ID {{group_statement}}"""
+        formatted_query = query.format(
+            bookmark_name=bookmark_name,
+            result_alias=results_str,
+            filter_alias=filter_str,
+        )
+        return formatted_query
 
     def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark
@@ -1757,7 +1770,7 @@ class StorageManagerSQLite(StorageManager):
         self._insert_bookmark_info(name, bookmark_query, filters)
         logger.debug(f"Created bookmark from the following query: {bookmark_query}")
 
-    def populate_filter_tables(self, name, query, filters={}):
+    def populate_filter_tables(self, name, query: str, filters={}):
         # insert into filters
         # will take name and filters and query string
         filter_sql = """INSERT INTO Filters (name,query,filters) VALUES (?,?,?) RETURNING filter_id;"""
@@ -1772,13 +1785,21 @@ class StorageManagerSQLite(StorageManager):
             ),
         )
         filter_id = cur.fetchone()
-
+        question_marks = query.count("?")
+        params = filter_id * question_marks
         filter_pose_sql = f"""
             INSERT INTO Filtered_poses (filter_id, pose_id)
             {query};"""
-        cur.execute(filter_pose_sql, filter_id)
-        self.conn.commit()
-        cur.close()
+        try:
+            cur.execute(filter_pose_sql, params)
+            self.conn.commit()
+            cur.close()
+        except Exception as e:
+            raise StorageError(
+                f"Problems while writing filtered poses to database: {e}"
+            ) from e
+        else:
+            logger.info("Successfully wrote filtered poses to database.")
 
     def _create_view(self, name, query):
         """takes name and selection query,
@@ -2308,7 +2329,9 @@ class StorageManagerSQLite(StorageManager):
                 "Error while getting number of passing ligands"
             ) from e
 
-    def get_maxmiss_union(self, total_combinations: int, bookmark_name: str):
+    def get_maxmiss_union(
+        self, total_combinations: int, bookmark_name: str, all_filters={}
+    ):
         """Get results that are in union considering max miss
 
         Args:
@@ -2317,26 +2340,44 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             iter: of passing results
         """
-        # TODO unnecessary
-        selection_strs = []
+        # TODO so what we want to accomplish, is to get a union of the enumerated bookmarks
+        # 1. find all bookmarks that were created
+        # 1a. if one did not have passing results, this bookmark will not exist
+        # 2. select all poses that are present in all of the passing combos
+
         view_strs = []
-        # TODO this is only here because it assumes it will write to log file as part of the method (i.e., select_query)
-        outfield_list = self.format_output_fields("Ligand_name")
+        existing_bookmarks = self.get_all_bookmark_names()
         for i in range(total_combinations):
-            selection_strs.append(
-                f"""SELECT {", ".join(outfield_list)} FROM {bookmark_name + '_' + str(i)}"""
-            )
-            view_strs.append(f"SELECT * FROM {bookmark_name + '_' + str(i)}")
+            bmn = bookmark_name + "_" + str(i)
+            if bmn in existing_bookmarks:
+                result_alias = "R_" + str(i)
+                filter_alias = "f_" + str(i)
+                selection = f" ? AS filter_id, {result_alias}.pose_id"
+                partial_query = self.format_editable_filter_query(
+                    bmn, result_alias, filter_alias
+                ).format(selection=selection, group_statement="")
+                view_strs.append(partial_query)
 
         bookmark_name = f"{bookmark_name}_union"
         logger.debug("Saving union bookmark...")
         union_view_query = " UNION ".join(view_strs)
-        union_select_query = " UNION ".join(selection_strs)
-
-        # TODO maybe don't need a separate row for the union thing, maybe that can be stored as a separate filter still, and just query the union of the filter ids?
-        self.create_bookmark(bookmark_name, union_view_query)
+        updated_query = union_view_query
         logger.debug("Running union query...")
-        return self.db_query(union_select_query)
+        self.populate_filter_tables(
+            name=bookmark_name,
+            query=updated_query,
+        )
+
+        editable_query = self.format_editable_filter_query(bookmark_name).format(
+            selection="*", group_statement=""
+        )
+        self.create_bookmark(
+            name=bookmark_name,
+            query=editable_query.format(selection="*", group_statement=""),
+            filters=all_filters,
+        )
+        count = self.get_passing_poses_count(bookmark_name, True)
+        return editable_query, count, bookmark_name
 
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
