@@ -716,3 +716,4 @@ class TestOptions:
         # Alter this method if you wish to not delete all log files after testing automatically
         os.system("rm *_ringtail.log")
         os.system("rm output.db")
+        os.system("rm different_log.txt")
