@@ -274,7 +274,7 @@ class TestRingtailCore:
 
     def test_export_csv(self):
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, log_file="different_log.txt")
+        rtc.filter(eworst=-7, log_file="different_log.txt", bookmark_name="export_csv")
         rtc.export_csv("Ligands", "Ligands.csv", True)
 
         assert os.path.exists("Ligands.csv")
@@ -413,7 +413,7 @@ class TestRingtailCore:
 
         with open("different_log.txt") as f:
             for line_no, line_content in enumerate(f):
-                if line_no == 27:
+                if line_no == 28:
                     break
 
         assert line_content == "'11128', -7.25\n"
@@ -701,9 +701,18 @@ class TestOptions:
         assert rtc.filters.eworst == -6
         assert rtc.filters.score_percentile == None
 
+    def test_order_output(self):
+        pass
+
+    def test_outfields(self):
+        pass
+
+    def test_groupby(self):
+        pass
+
     def test_overwrite_db(self, tablecount):
         rtc = RingtailCore()
-        results = rtc.add_results_from_files(file_list="test_data/filelist1.txt")
+        rtc.add_results_from_files(file_list="test_data/filelist1.txt")
         count_old_db = tablecount("Ligands")
 
         rtc.add_results_from_files(file_list="test_data/filelist2.txt", overwrite=True)

@@ -718,7 +718,7 @@ class RingtailCore:
         bookmark_name: str = "passing_results",
         filter_bookmark: str = None,
         return_iter: bool = False,
-    ):
+    ) -> Union[int, iter]:
         """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
 
         Args:
@@ -855,17 +855,33 @@ class RingtailCore:
 
         with self.storageman:
             if write_one_bookmark:
-                count, iterable = self._filter_and_output(
-                    filter_dict,
-                    bookmark_name,
-                    filter_bookmark,
-                    clustering,
-                    log_file,
-                    outfields,
-                    output_all_poses,
-                    order_results,
-                    return_iter,
+                editable_query, num_passing_ligands = self.storageman.filter_results(
+                    all_filters=filter_dict,
+                    bookmark_name=bookmark_name,
+                    filtering_bookmark=filter_bookmark,
+                    clustering=clustering,
                 )
+                if num_passing_ligands:
+                    print(
+                        "\nNumber passing ligands in max_miss union:",
+                        num_passing_ligands,
+                    )
+                    formatted_query = self.write_filter_output(
+                        bookmark_name,
+                        filter_dict,
+                        editable_query,
+                        num_passing_ligands,
+                        log_file,
+                        outfields,
+                        output_all_poses,
+                        order_results,
+                        clustering,
+                    )
+                else:
+                    print("\nNo ligands passing filters")
+                    self.logger.warning(f"WARNING: No ligands found passing filters.")
+                    self.storageman.drop_bookmark(bookmark_name)
+
             # else produce a bookmark for each interaction combination
             elif not write_one_bookmark:
                 for ic_idx, combination in enumerate(interaction_combs):
@@ -876,121 +892,116 @@ class RingtailCore:
                     )
                     iterated_bookmark_name = bookmark_name + "_" + str(ic_idx)
                     # process each interaction combination filter
-                    self._filter_and_output(
-                        temp_filters,
-                        iterated_bookmark_name,
-                        filter_bookmark,
-                        clustering={},
-                        log_file=log_file,
-                        outfields=outfields,
-                        output_all_poses=output_all_poses,
-                        order_results=order_results,
-                        return_iter=False,
-                        combi_info=str(combination),
-                        append_to_log=True,
-                    )
-                # Process the union of the max miss combinations of interactions
-                count, iterable = self._filter_and_output(
-                    filters.asdict(),
-                    bookmark_name,
-                    None,
-                    clustering,
-                    log_file,
-                    outfields,
-                    output_all_poses,
-                    order_results,
-                    return_iter,
-                    append_to_log=True,
-                    max_miss_combs=interaction_combs,
-                )
-        if return_iter:
-            return iterable
-        else:
-            return count
-
-    def _filter_and_output(
-        self,
-        filters: dict,
-        bookmark_name: str,
-        filtering_bookmark: str,
-        clustering: dict,
-        log_file: str,
-        output_fields: Union[str, list],
-        output_all_poses: bool = False,
-        order_results: str = None,
-        return_iter: bool = False,
-        combi_info: str = None,
-        append_to_log: bool = None,
-        max_miss_combs=None,
-    ) -> Union[int, iter]:
-        if not max_miss_combs:
-            editable_query, num_passing_ligands = self.storageman.filter_results(
-                all_filters=filters,
-                bookmark_name=bookmark_name,
-                filtering_bookmark=filtering_bookmark,
-                clustering=clustering,
-            )
-        else:
-            editable_query, num_passing_ligands, bookmark_name = (
-                self.storageman.get_maxmiss_union(
-                    len(max_miss_combs), bookmark_name, filters
-                )
-            )
-        if num_passing_ligands:
-            # Now cluster
-
-            # format the filter query
-            if output_fields and output_fields != "*":
-                output_fields = self.storageman.format_output_fields(output_fields)
-            if not output_all_poses:
-                group_by = " GROUP BY R.LigName"
-            else:
-                group_by = ""
-            log_filter_query = editable_query.format(
-                selection=output_fields, group_statement=group_by
-            )
-
-            if order_results:
-                # TODO add statement to order by, after grouping
-                pass
-
-            if return_iter:
-                return num_passing_ligands, self.storageman.db_query(log_filter_query)
-            else:
-                # format output_log string
-                if clustering:
-                    cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfpt_cluster')}\nInteraction Fingerprints clustering cutoff: {clustering.get('interaction_cluster')}"
-                else:
-                    cluster_string = "No clustering performed."
-                with OutputManager(log_file, append_to_log) as opm:
-                    if max_miss_combs:
-                        opm.write_maxmiss_union_header()
-                        opm.write_bookmarkname_in_log(bookmark_name)
-                    else:
-                        opm.write_filtervalues_in_log(
-                            filters, [], bookmark_name, cluster_string
+                    editable_query, num_passing_ligands = (
+                        self.storageman.filter_results(
+                            temp_filters,
+                            iterated_bookmark_name,
+                            filter_bookmark,
+                            clustering={},
                         )
-                    opm.write_filter_results_in_log(
-                        self.storageman.db_query(log_filter_query).fetchall()
                     )
-                    opm.log_num_passing_ligands(num_passing_ligands)
-                    if not max_miss_combs:
+                    if num_passing_ligands:
                         print(
-                            "\nNumber of ligands passing filters:", num_passing_ligands
-                        )
-                    else:
-                        print(
-                            "\nNumber passing ligands in max_miss union:",
+                            f"\nNumber passing ligands filter combination {str(combination)}:",
                             num_passing_ligands,
                         )
-            return num_passing_ligands, None
+                        self.write_filter_output(
+                            iterated_bookmark_name,
+                            temp_filters,
+                            editable_query,
+                            num_passing_ligands,
+                            log_file,
+                            outfields,
+                            output_all_poses,
+                            order_results,
+                        )
+                    else:
+                        print("\nNo ligands passing filters")
+                        self.logger.warning(
+                            f"WARNING: No ligands found passing filter combination {str(combination)}."
+                        )
+                        self.storageman.drop_bookmark(iterated_bookmark_name)
+
+                # Process the union of the max miss combinations of interactions
+                editable_query, num_passing_ligands, bookmark_name = (
+                    self.storageman.get_maxmiss_union(
+                        len(interaction_combs), bookmark_name, filters_copy
+                    )
+                )
+                if num_passing_ligands:
+                    print(
+                        "\nNumber passing ligands in max_miss union:",
+                        num_passing_ligands,
+                    )
+                    formatted_query = self.write_filter_output(
+                        bookmark_name,
+                        filters_copy,
+                        editable_query,
+                        num_passing_ligands,
+                        log_file,
+                        outfields,
+                        output_all_poses,
+                        order_results,
+                        clustering=clustering,
+                    )
+                else:
+                    print("\nNo ligands passing filters of max_miss union")
+                    self.storageman.drop_bookmark(bookmark_name)
+
+        if return_iter:
+            return self.storageman.db_query(formatted_query)
         else:
-            self.logger.warning(
-                f"WARNING: No ligands found passing filter combination {combi_info}."
+            return num_passing_ligands
+
+    def write_filter_output(
+        self,
+        bookmark_name: str,
+        filters: dict,
+        editable_query: str,
+        num_passing_ligands: int,
+        log_file: str,
+        output_fields: Union[str, list],
+        output_all_poses: bool,
+        order_results: str,
+        clustering: dict = {},
+        max_miss_combs=None,
+        append_to_log: bool = None,
+    ) -> str:
+
+        # format the filter query
+        if output_fields and output_fields != "*":
+            output_fields = self.storageman.format_output_fields(output_fields)
+        if not output_all_poses:
+            group_by = " GROUP BY R.LigName"
+        else:
+            group_by = ""
+        formatted_query = editable_query.format(
+            selection=output_fields, group_statement=group_by
+        )
+
+        if order_results:
+            # TODO add statement to order by, after grouping
+            pass
+
+        # format output_log string
+        if clustering:
+            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfpt_cluster')}\nInteraction Fingerprints clustering cutoff: {clustering.get('interaction_cluster')}"
+        else:
+            cluster_string = "No clustering performed\n."
+        with OutputManager(log_file, append_to_log) as opm:
+            if max_miss_combs:
+                opm.write_maxmiss_union_header()
+                opm.write_bookmarkname_in_log(bookmark_name)
+            else:
+                opm.write_filtervalues_in_log(
+                    filters, [], bookmark_name, cluster_string
+                )
+            opm.write_filter_results_in_log(
+                self.storageman.db_query(formatted_query).fetchall()
             )
-            self.storageman.drop_bookmark(bookmark_name)
-            print("\nNo ligands passing filters")
-            return 0, None
+            opm.log_num_passing_ligands(num_passing_ligands)
+
+        return formatted_query
 
     def cluster(self, data, type: str = "mfpt", cutoff: float = 0.5):
         pass
