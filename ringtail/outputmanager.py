@@ -39,6 +39,7 @@ class OutputManager:
     def __exit__(self, exc_type, exc_value, traceback):
         """Closing outputmanager as a context manager"""
         self.close_logfile()
+        return self
 
     # -#-#- Log file methods -#-#-#
     def open_logfile(self, write_filters_header=True):
