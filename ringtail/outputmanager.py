@@ -34,6 +34,7 @@ class OutputManager:
     def __enter__(self):
         """Opening outputmanager as a context manager"""
         self.open_logfile()
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Closing outputmanager as a context manager"""

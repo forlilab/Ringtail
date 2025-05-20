@@ -849,17 +849,10 @@ class RingtailCore:
         clustering = {}
         if mfpt_cluster or interaction_cluster:
             if mfpt_cluster:
-                clustering["mfpt":mfpt_cluster]
+                clustering["mfpt"] = mfpt_cluster
             if interaction_cluster:
-                clustering["interaction_cluster":interaction_cluster]
+                clustering["interaction_cluster"] = interaction_cluster
 
-        # 1, filter results
-        # 1a. if clustering, cluster in sm filter method
-        # 2 write passing poses to filtered_poses table
-        # 3 check if there are passing poses, and how many ligands do they constitute?
-        # 4.I return iterable if requested, else
-        # 4.II write log file if requested
-        # pre-process if filtering to multiple bookmark combinations
         with self.storageman:
             if write_one_bookmark:
                 count, iterable = self._filter_and_output(
@@ -887,11 +880,11 @@ class RingtailCore:
                         temp_filters,
                         iterated_bookmark_name,
                         filter_bookmark,
-                        clustering,
-                        log_file,
-                        outfields,
-                        output_all_poses,
-                        order_results,
+                        clustering={},
+                        log_file=log_file,
+                        outfields=outfields,
+                        output_all_poses=output_all_poses,
+                        order_results=order_results,
                         return_iter=False,
                         combi_info=str(combination),
                         append_to_log=True,
@@ -943,8 +936,9 @@ class RingtailCore:
                     len(max_miss_combs), bookmark_name, filters
                 )
             )
-        # TODO this is repeated in max_miss, maybe make this separate method?
         if num_passing_ligands:
+            # Now cluster
+
             # format the filter query
             if output_fields and output_fields != "*":
                 output_fields = self.storageman.format_output_fields(output_fields)
@@ -963,12 +957,12 @@ class RingtailCore:
             if return_iter:
                 return num_passing_ligands, self.storageman.db_query(log_filter_query)
             else:
+                # format output_log string
                 if clustering:
                     cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfpt_cluster')}\nInteraction Fingerprints clustering cutoff: {clustering.get('interaction_cluster')}"
                 else:
                     cluster_string = "No clustering performed."
-                opm = OutputManager(log_file, append_to_log)
-                with opm:
+                with OutputManager(log_file, append_to_log) as opm:
                     if max_miss_combs:
                         opm.write_maxmiss_union_header()
                         opm.write_bookmarkname_in_log(bookmark_name)
