@@ -7,17 +7,26 @@
 import sqlite3
 import os
 import pytest
+from ringtail import RingtailCore
 
 
 @pytest.fixture
-def countrows():
-    def __dbconnect(query):
-        conn = sqlite3.connect("output.db")
-        curs = conn.cursor()
-        curs.execute(query)
-        count = curs.fetchone()[0]
-        curs.close()
-        conn.close()
+def passingcount():
+    def __dbconnect(bookmark):
+        rtc = RingtailCore("output.db")
+        with rtc.storageman as sm:
+            count = sm.get_passing_poses_count(bookmark, True)
+        return count
+
+    return __dbconnect
+
+
+@pytest.fixture
+def tablecount():
+    def __dbconnect(table):
+        rtc = RingtailCore("output.db")
+        with rtc.storageman as sm:
+            count = sm.db_query(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         return count
 
     return __dbconnect
@@ -26,88 +35,88 @@ def countrows():
 class TestInputs:
     os.system("rm output.db")
 
-    def test_files(self, countrows):
+    def test_files(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --file test_data/adgpu/group1/173101.dlg.gz --file test_data/adgpu/group1/100729.dlg.gz"
         )
-        count1 = countrows("SELECT COUNT(*) FROM Ligands")
+        count1 = tablecount("Ligands")
 
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz test_data/adgpu/group1/173101.dlg.gz --file test_data/adgpu/group1/100729.dlg.gz --append_results"
         )
-        count2 = countrows("SELECT COUNT(*) FROM Ligands")
+        count2 = tablecount("Ligands")
 
         os.system("rm output.db")
 
         assert count1 == count2 == 3
 
-    def test_file_paths(self, countrows):
+    def test_file_paths(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1 --file_path test_data/adgpu/group2"
         )
-        count1 = countrows("SELECT COUNT(*) FROM Ligands")
+        count1 = tablecount("Ligands")
 
         os.system("rm output.db")
 
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1 test_data/adgpu/group2"
         )
-        count2 = countrows("SELECT COUNT(*) FROM Ligands")
+        count2 = tablecount("Ligands")
 
         os.system("rm output.db")
 
         assert count1 == count2 == 217
 
-    def test_file_list(self, countrows):
+    def test_file_list(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --file_list test_data/filelist2.txt"
         )
-        count1 = countrows("SELECT COUNT(*) FROM Ligands")
+        count1 = tablecount("Ligands")
 
         os.system("rm output.db")
 
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt test_data/filelist2.txt"
         )
-        count2 = countrows("SELECT COUNT(*) FROM Ligands")
+        count2 = tablecount("Ligands")
 
         os.system("rm output.db")
 
         assert count1 == count2 == 5
 
-    def test_all_file_inputs(self, countrows):
+    def test_all_file_inputs(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --file test_data/adgpu/group2/361056.dlg.gz test_data/adgpu/group2/53506.dlg.gz --file_path test_data/adgpu/group3"
         )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
+        count = tablecount("Ligands")
 
         os.system("rm output.db")
 
         assert count == 75
 
-    def test_vina_input(self, countrows):
+    def test_vina_input(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write -m vina --file_path test_data/vina -rf test_data/vina/receptor.pdbqt -sr"
         )
 
-        count = countrows("SELECT COUNT(*) FROM Results")
+        count = tablecount("Results")
         assert count == 6
 
-    def test_overwrite(self, countrows):
+    def test_overwrite(self, tablecount):
         # count result rows in database to be overwritten
 
-        count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
+        count_old_db = tablecount("Ligands")
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --overwrite"
         )
-        count_new_db = countrows("SELECT COUNT(*) FROM Ligands")
+        count_new_db = tablecount("Ligands")
         assert count_old_db == 2
         assert count_new_db == 3
 
-    def test_overwrite_false(self, countrows):
+    def test_overwrite_false(self, tablecount):
         # count result rows in database to be overwritten
 
-        count_old_db = countrows("SELECT COUNT(*) FROM Ligands")
+        count_old_db = tablecount("Ligands")
         assert count_old_db == 3
 
         code = os.system(
@@ -117,7 +126,7 @@ class TestInputs:
             code == 256
         )  # indicates failure of rt_process_vs.py, log file will have error w traceback
 
-    def test_cmdline_config_file(self, countrows):
+    def test_cmdline_config_file(self, tablecount):
         from ringtail import RingtailCore
         import json
 
@@ -133,50 +142,46 @@ class TestInputs:
 
         os.system("python ../ringtail/cli/rt_process_vs.py write --config config.json")
 
-        count = countrows("SELECT COUNT(*) FROM Ligands")
+        count = tablecount("Ligands")
 
         os.system("rm output.db config.json")
 
         assert count == 3
 
-    def test_duplicate_handling(self, countrows):
+    def test_duplicate_handling(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1"
         )
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --file_path test_data/adgpu/group1 --append_results --duplicate_handling ignore"
         )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
+        count = tablecount("Ligands")
         assert count == 138
 
-    def test_append_results(self, countrows):
+    def test_append_results(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --file_path test_data/adgpu/group2 --append_results"
         )
-        count = countrows("SELECT COUNT(*) FROM Ligands")
+        count = tablecount("Ligands")
 
         assert count == 217
 
-    def test_save_rec_file(self, countrows):
+    def test_save_rec_file(self, tablecount):
 
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --receptor_file test_data/adgpu/4j8m.pdbqt --save_receptor --append_results"
         )
-        count = countrows(
-            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
-        )
+        count = tablecount("Receptors")
 
         os.system("rm output.db")
 
         assert count == 1
 
-    def test_save_rec_file_gz(self, countrows):
+    def test_save_rec_file_gz(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --receptor_file test_data/adgpu/4j8m.pdbqt.gz --save_receptor"
         )
-        count = countrows(
-            "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
-        )
+        count = tablecount("Receptors")
 
         os.system("rm output.db")
 
@@ -405,18 +410,18 @@ class TestFilters:
 
         assert status == 0
 
-    def test_ligand_filters(self, countrows):
+    def test_ligand_filters(self):
         status = os.system(
             """python ../ringtail/cli/rt_process_vs.py read --input output.db --ligand_substruct "NC" --ligand_operator AND"""
         )
 
         assert status == 0
 
-    def test_hbcount(self, countrows):
+    def test_hbcount(self, passingcount):
         status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --hb_count 5"
+            "python ../ringtail/cli/rt_process_vs.py read -s hb_count --input_db output.db --hb_count 5"
         )
-        count = countrows("SELECT COUNT(*) FROM passing_results")
+        count = passingcount("hb_count")
 
         assert status == 0
         assert count == 1
@@ -528,7 +533,7 @@ class TestFilters:
 
     def test_export_sdf(self):
         status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -e -4 -sdf . "
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -s sdf_test -e -4 -sdf . "
         )
 
         import glob
