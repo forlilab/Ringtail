@@ -470,7 +470,7 @@ class RingtailCore:
         max_poses: int = 3,
         add_interactions: bool = None,
         interaction_tolerance: float = None,
-        interaction_cutoffs: list = None,
+        interaction_cutoffs: list = [3.7, 4.0],
         max_proc: int = None,
         finalize: bool = True,
     ):

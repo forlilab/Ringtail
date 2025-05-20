@@ -8,7 +8,6 @@ from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
 from .storagemanager import StorageManager
 from .logutils import LOGGER as logger
-from .util import iterate_nested
 from .ringtailoptions import ResultsObject
 
 
@@ -16,6 +15,7 @@ class ResultsManager:
     """Class that handles the processing of the results, including passing on the docking results to the appropriate paralell/multi-processing unit
 
     Args:
+    #TODO not accurate anymore
         max_poses (int): max number of poses to store for each ligand
         interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
         store_all_poses (bool): Store all poses from docking results
@@ -90,12 +90,11 @@ class ResultsManager:
         if processing_options.get("add_interactions"):
             # build local storageman to retrieve receptor
             db_file = self.writer_options.get("db_file")
-            docking_mode = self.writer_options.get("docking_mode")
             print(f"The writer options: {self.writer_options}")
             storageman = StorageManager.check_storage_compatibility(
                 self.writer_options.get("storageman_class")
             )
-            with storageman(db_file, docking_mode) as sm:
+            with storageman(db_file) as sm:
                 try:
                     from .receptormanager import ReceptorManager as rm
 

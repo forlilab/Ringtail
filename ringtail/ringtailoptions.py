@@ -63,6 +63,8 @@ class TypeSafe:
 
 @dataclass
 class RingtailDefaults:
+    # TODO some of these are formatted to work only with cloptionparser,
+    # maybe reconsider
     docking_mode: str = "dlg"
     output_db: str = "output.db"
     max_proc: int = None
@@ -88,7 +90,7 @@ class RingtailDefaults:
     overwrite: bool = None
     interaction_tolerance: float = None
     add_interactions: bool = None
-    interaction_cutoffs: str = None
+    interaction_cutoffs: str = "3.7,4.0"
     outfields: str = None
     order_results: str = None
     mfpt_cluster: float = None
@@ -135,9 +137,9 @@ class ResultsObject:
     @property
     def has_results(self):
         results = bool(
-            iterate_nested(self.file)
-            or iterate_nested(self.file_path)
-            or iterate_nested(self.file_list)
+            any(iterate_nested(self.file))
+            or any(iterate_nested(self.file_path))
+            or any(iterate_nested(self.file_list))
             or self.strings
         )
         return results
@@ -145,9 +147,9 @@ class ResultsObject:
     @property
     def has_file_results(self):
         results = bool(
-            iterate_nested(self.file)
-            or iterate_nested(self.file_path)
-            or iterate_nested(self.file_list)
+            any(iterate_nested(self.file))
+            or any(iterate_nested(self.file_path))
+            or any(iterate_nested(self.file_list))
         )
         return results
 
