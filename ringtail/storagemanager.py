@@ -268,6 +268,7 @@ class StorageManager:
             query=filtered_poses,
             filters=all_filters,
         )
+        # TODO #TODO #TODO problems with overwriting bookmark name
         logger.debug(
             f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
         )
@@ -2013,10 +2014,10 @@ class StorageManagerSQLite(StorageManager):
             OptionError
         """
         if outfields:
-            output_fields_list = self.format_output_fields(outfields)
+            outfield_string = self.format_output_fields(outfields)
         else:
-            output_fields_list = ["*"]
-        outfield_string = ", ".join(output_fields_list)
+            outfield_string = "*"
+
         query = (
             "SELECT "
             + outfield_string
@@ -2522,7 +2523,7 @@ class StorageManagerSQLite(StorageManager):
 
         return n_ligands_passing / n_ligands_total * 100
 
-    def format_output_fields(self, outfields):
+    def format_output_fields(self, outfields: Union[str, list]) -> str:
         """Handles string or list input of column names to be outputted, will make sure LigName
         is in the list, and make sure all options are valid
 
@@ -2545,7 +2546,9 @@ class StorageManagerSQLite(StorageManager):
         if "ligand_name" not in [field.lower() for field in outfields_list]:
             outfields_list.insert(0, "Ligand_name")
 
-        return ["R." + self.field_to_column_name[field] for field in outfields_list]
+        return ", ".join(
+            ["R." + self.field_to_column_name[field] for field in outfields_list]
+        )
 
     def get_numeric_columns(self, table_name: str) -> iter:
         """

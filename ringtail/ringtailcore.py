@@ -713,7 +713,7 @@ class RingtailCore:
         mfpt_cluster: float = None,
         interaction_cluster: float = None,
         log_file: str = "output_log.txt",
-        outfields: str = "*",
+        outfields: str = "Ligand_name,e",
         order_results: str = None,
         bookmark_name: str = "passing_results",
         filter_bookmark: str = None,
@@ -831,7 +831,6 @@ class RingtailCore:
         filters.checks()
 
         self.logger.info("Starting to filter results")
-        ligands_passed = 0
         # get possible permutations of interaction with max_miss excluded
         if max_miss > 0 and enumerate_interaction_combs:
             interaction_combs = self._generate_interaction_combinations(
@@ -847,7 +846,6 @@ class RingtailCore:
         else:
             filter_dict = filters.asdict()
             write_one_bookmark = True
-        outputmanager = OutputManager(log_file)
         clustering = {}
         if mfpt_cluster or interaction_cluster:
             if mfpt_cluster:
@@ -864,7 +862,7 @@ class RingtailCore:
         # pre-process if filtering to multiple bookmark combinations
         with self.storageman:
             if write_one_bookmark:
-                self._filter_and_output(
+                count, iterable = self._filter_and_output(
                     filter_dict,
                     bookmark_name,
                     filter_bookmark,
@@ -884,6 +882,7 @@ class RingtailCore:
                         filters_copy, combination
                     )
                     iterated_bookmark_name = bookmark_name + "_" + str(ic_idx)
+                    # process each interaction combination filter
                     self._filter_and_output(
                         temp_filters,
                         iterated_bookmark_name,
@@ -897,8 +896,8 @@ class RingtailCore:
                         combi_info=str(combination),
                         append_to_log=True,
                     )
-
-                self._filter_and_output(
+                # Process the union of the max miss combinations of interactions
+                count, iterable = self._filter_and_output(
                     filters.asdict(),
                     bookmark_name,
                     None,
@@ -911,8 +910,10 @@ class RingtailCore:
                     append_to_log=True,
                     max_miss_combs=interaction_combs,
                 )
-
-        return ligands_passed
+        if return_iter:
+            return iterable
+        else:
+            return count
 
     def _filter_and_output(
         self,
@@ -951,18 +952,16 @@ class RingtailCore:
                 group_by = " GROUP BY R.LigName"
             else:
                 group_by = ""
-
             log_filter_query = editable_query.format(
                 selection=output_fields, group_statement=group_by
             )
-            print("The query: ", log_filter_query)
 
             if order_results:
                 # TODO add statement to order by, after grouping
                 pass
 
             if return_iter:
-                return self.storageman.db_query(log_filter_query)
+                return num_passing_ligands, self.storageman.db_query(log_filter_query)
             else:
                 if clustering:
                     cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfpt_cluster')}\nInteraction Fingerprints clustering cutoff: {clustering.get('interaction_cluster')}"
@@ -990,14 +989,14 @@ class RingtailCore:
                             "\nNumber passing ligands in max_miss union:",
                             num_passing_ligands,
                         )
-            return num_passing_ligands
+            return num_passing_ligands, None
         else:
             self.logger.warning(
                 f"WARNING: No ligands found passing filter combination {combi_info}."
             )
             self.storageman.drop_bookmark(bookmark_name)
             print("\nNo ligands passing filters")
-            return 0
+            return 0, None
 
     def cluster(self, data, type: str = "mfpt", cutoff: float = 0.5):
         pass
