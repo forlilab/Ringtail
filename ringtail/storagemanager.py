@@ -273,7 +273,6 @@ class StorageManager:
         )
         count = self.get_passing_poses_count(bookmark_name, True)
 
-        print(f"\n\nCOUNT from the bookmark {bookmark_name} is {count}\n\n")
         editable_query = self.format_editable_filter_query(bookmark_name)
         # TODO main place to institute the filter tables
         self.create_bookmark(
