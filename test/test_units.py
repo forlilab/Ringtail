@@ -427,8 +427,8 @@ class TestRingtailCore:
 
     def test_export_bookmark_db(self):
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, bookmark_name="passing_results")
-        bookmark_db_name = rtc.export_bookmark_db("passing_results")
+        rtc.filter(eworst=-7, bookmark_name="export_db")
+        bookmark_db_name = rtc.export_bookmark_db("export_db")
 
         assert os.path.exists(bookmark_db_name)
 
@@ -688,7 +688,7 @@ class TestOptions:
         # checking that incompatible options are handled
         from ringtail.ringtailoptions import Filters
 
-        rtc = RingtailCore("options.db")
+        rtc = RingtailCore()
         rtc.add_results_from_files(file_list="test_data/filelist1.txt")
         rtc.filters = Filters({"score_percentile": 20})
         assert rtc.filters.eworst == None
@@ -697,31 +697,22 @@ class TestOptions:
         # conflicting options, score percentile should be set to none
         rtc.filters = Filters({"score_percentile": 20, "eworst": -6})
         rtc.filters.checks()
+
         assert rtc.filters.eworst == -6
         assert rtc.filters.score_percentile == None
 
-    def test_set_order(self):
-        return
-        rtc = RingtailCore("options.db")
-        rtc.set_filters(dict={"eworst": -5})
-        assert rtc.filters.eworst == -5
-        # ensure single options overwrite dict options
-        rtc.set_filters(eworst=-6, dict={"eworst": -5})
-        assert rtc.filters.eworst == -6
-
     def test_overwrite_db(self, tablecount):
-        rtc = RingtailCore("options.db")
-        rtc.add_results_from_files(file_list="test_data/filelist1.txt")
+        rtc = RingtailCore()
+        results = rtc.add_results_from_files(file_list="test_data/filelist1.txt")
         count_old_db = tablecount("Ligands")
 
         rtc.add_results_from_files(file_list="test_data/filelist2.txt", overwrite=True)
         count_new_db = tablecount("Ligands")
 
-        os.system("rm options.db")
-
         assert count_old_db == 3
         assert count_new_db == 2
 
-    def test_remove_test_log_files(self):
+    def test_cleanup(self):
         # Alter this method if you wish to not delete all log files after testing automatically
         os.system("rm *_ringtail.log")
+        os.system("rm output.db")

@@ -1580,7 +1580,6 @@ class RingtailCore:
         Returns:
             str: name of the new, exported database
         """
-        # TODO this method also needs update with new filtering stuff
         bookmark_db_name = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
         self.logger.info("Exporting bookmark database")
         if os.path.exists(bookmark_db_name):
@@ -1591,11 +1590,8 @@ class RingtailCore:
         with self.storageman:
             self.storageman.clone(bookmark_db_name)
         # connect to cloned database
-        # TODO
-        dictionary = self.storageopts.todict()
-        dictionary["db_file"] = bookmark_db_name
         temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
-        with temp_storageman(**dictionary) as db_clone:
+        with temp_storageman(bookmark_db_name) as db_clone:
             db_clone.prune(bookmark_name)
             db_clone.close_storage(vacuum=True)
 
