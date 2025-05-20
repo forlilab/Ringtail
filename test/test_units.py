@@ -629,9 +629,11 @@ class TestStorageMan:
             eworst=-3,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True)],
+            bookmark_name="bookmark_info",
         )
+        # TODO I might want to move the filter data to the other table so bookmark table can be discontinued easily
         curs = dbquery(
-            "SELECT filters FROM Bookmarks WHERE Bookmark_name LIKE 'passing_results'"
+            "SELECT filters FROM Bookmarks WHERE Bookmark_name = 'bookmark_info'"
         )
         bookmark_filters_db_str = curs.fetchone()[0]
 
@@ -654,7 +656,7 @@ class TestStorageMan:
             "ligand_substruct_pos": None,
             "ligand_max_atoms": None,
         }
-        assert bookmark_filters_db_str == json.dumps(filters)
+        assert json.loads(bookmark_filters_db_str) == filters
 
     def test_version_info(self):
         rtc = RingtailCore("output.db")
