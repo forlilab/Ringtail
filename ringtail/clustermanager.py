@@ -5,6 +5,15 @@ from rdkit.Chem import rdFingerprintGenerator
 
 
 class MorganFingerprintCluster:
+    """
+    Class to handle clustering based on Morgan fingerprints
+    Attributes:
+        unclustered_data: identifiers for the data being clustered
+        rating_data: data used to identify the top scoring/representative item per cluster
+        cutoff: cutoff distance (å) for each cluster
+        rdmols: of the data, will be used to create the bitvectors
+    """
+
     def __init__(
         self,
         unclustered_items: iter,
@@ -17,24 +26,38 @@ class MorganFingerprintCluster:
         self.cutoff = cutoff_distance
         self.rdmols = rdmols
 
-    def cluster(self):
-        bv_clusters = cluster_fingerprints(
+    def cluster(self) -> tuple[list, list]:
+        """
+        Clusters self.unclustered_items using morgan finger prints
+
+        Returns:
+            list: of clusters
+            list: of top rated item for each cluster
+        """
+        clusters = butina_cluster_fingerprints(
             self.generate_morgan_fingerprints(),
             self.cutoff,
         )
 
-        return bv_clusters, top_leff_per_cluster(
-            bv_clusters, self.rating_data, self.unclustered_items
+        return clusters, top_score_per_cluster(
+            clusters, self.rating_data, self.unclustered_items
         )
 
-    def generate_morgan_fingerprints(self):
+    def generate_morgan_fingerprints(
+        self,
+    ) -> list[DataStructs.cDataStructs.ExplicitBitVect]:
+        """
+        Generates morgan fingerprints from a serialized rd Mol
+
+        Returns:
+            list[DataStructs.cDataStructs.ExplicitBitVect]: list of morgan fingerprints as bitvectors
+        """
         mfpgenerator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
         mfps = []
         # prepare each mol json to fingerprint
         for rdmol in self.rdmols:
-            # deserialize mols (JSONToMols returns tuple, hence the [0] subscript)])
+            # deserialize mols
             mol = Chem.Mol(rdmol)
-            # need to sanitize each mol like this (as opposed to inline) as the method has a return value of 'santize_flag'
             Chem.SanitizeMol(mol)
             mfps.append(mfpgenerator.GetFingerprint(mol))
 
@@ -42,6 +65,14 @@ class MorganFingerprintCluster:
 
 
 class InteractionBitvectorCluster:
+    """
+    Class to handle clustering based on ligand-receptor interaction bitvectors
+    Attributes:
+        unclustered_data: identifiers for the data being clustered
+        rating_data: data used to identify the top scoring/representative item per cluster
+        cutoff: cutoff distance (å) for each cluster
+        bitvectors: created based on interactions
+    """
 
     def __init__(
         self,
@@ -56,36 +87,55 @@ class InteractionBitvectorCluster:
         self.bitvectors = bitvectors
 
     def cluster(self):
-        bv_clusters = cluster_fingerprints(
+        """
+        Clusters self.unclustered_items using interaction bitvectors
+
+        Returns:
+            list: of clusters
+            list: of top rated item for each cluster
+        """
+        clusters = butina_cluster_fingerprints(
             [
                 DataStructs.CreateFromBitString(bitvector)
                 for bitvector in self.bitvectors
             ],
             self.cutoff,
         )
-        return bv_clusters, top_leff_per_cluster(
-            bv_clusters, self.rating_data, self.unclustered_items
+        return clusters, top_score_per_cluster(
+            clusters, self.rating_data, self.unclustered_items
         )
 
 
-def top_leff_per_cluster(bv_clusters, rating_data, unclustered_items):
-    # interaction clusters representative pose ids
-    int_rep_poseids = []
+def top_score_per_cluster(
+    clusters: list[list], rating_data: list, unclustered_items: list
+) -> list[int]:
+    """
+    _summary_
 
-    for cluster in bv_clusters:
-        # element 1 in individual pose id item is the ligand efficiency (leff)
-        c_leffs = np.array(
+    Args:
+        clusters (list[list]): list of clusters
+        rating_data (list): data used to rate top scoring item
+        unclustered_items (list): original data from before clustering
+
+    Returns:
+        list[int]: list of items that are representative (best rating) for each cluster
+    """
+
+    cluster_representatives = []
+
+    for cluster in clusters:
+        cluster_scores = np.array(
             [rating_data[cluster_element] for cluster_element in cluster]
         )
-        best_lig_c = unclustered_items[cluster[np.argmin(c_leffs)]]
-        int_rep_poseids.append(str(best_lig_c))
+        best_rep_score = unclustered_items[cluster[np.argmin(cluster_scores)]]
+        cluster_representatives.append(str(best_rep_score))
 
-    # prepare packet to write to db
-    return int_rep_poseids
+    return cluster_representatives
 
 
-def cluster_fingerprints(fps, cutoff):
+def butina_cluster_fingerprints(fps, cutoff):
     """
+    Uses Butina algorithm to cluster the provided bitvectors/fingerprints
     https://macinchem.org/2023/03/05/options-for-clustering-large-datasets-of-molecules/
 
     Args:
