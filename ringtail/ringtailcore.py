@@ -849,9 +849,9 @@ class RingtailCore:
         clustering = {}
         if mfpt_cluster or interaction_cluster:
             if mfpt_cluster:
-                clustering["mfpt"] = mfpt_cluster
+                clustering["mfp"] = mfpt_cluster
             if interaction_cluster:
-                clustering["interaction_cluster"] = interaction_cluster
+                clustering["ifp"] = interaction_cluster
 
         with self.storageman:
             if write_one_bookmark:
@@ -985,7 +985,7 @@ class RingtailCore:
 
         # format output_log string
         if clustering:
-            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfpt_cluster')}\nInteraction Fingerprints clustering cutoff: {clustering.get('interaction_cluster')}"
+            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
         else:
             cluster_string = "No clustering performed\n."
         with OutputManager(log_file, append_to_log) as opm:
@@ -1003,7 +1003,7 @@ class RingtailCore:
 
         return formatted_query
 
-    def cluster(self, data, type: str = "mfpt", cutoff: float = 0.5):
+    def cluster(self, data, type: str = "mfp", cutoff: float = 0.5):
         pass
 
     def write_flexres_pdb(

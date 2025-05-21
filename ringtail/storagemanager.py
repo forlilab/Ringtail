@@ -273,26 +273,25 @@ class StorageManager:
         count = self.get_passing_poses_count(bookmark_name, True)
         editable_query = self.format_editable_filter_query(bookmark_name)
 
-        # TODO do clustering here
         if count and clustering:
             logger.info(f"Preparing to cluster {count} passing poses.")
             if len(clustering) > 1:
                 logger.warning(
                     "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
                 )
-            if clustering.get("interaction_cluster"):
+            if clustering.get("ifp"):
                 editable_query, count = self.cluster_data(
                     editable_query,
                     bookmark_name,
-                    "interaction",
-                    clustering.get("interaction_cluster"),
+                    "ifp",
+                    clustering.get("ifp"),
                 )
-            if clustering.get("mfpt"):
+            if clustering.get("mfp"):
                 clustered_editable_query = self.cluster_data(
                     editable_query.format(selection=" R.Pose_ID", group_statement=""),
                     bookmark_name,
-                    "mfpt",
-                    clustering.get("mfpt"),
+                    "mfp",
+                    clustering.get("mfp"),
                 )
         elif clustering and not count:
             logger.warning(
@@ -3083,8 +3082,7 @@ class StorageManagerSQLite(StorageManager):
         logger.debug("Preparing to cluster")
         time0 = time.perf_counter()
 
-        if cluster_type.lower() == "interaction":
-            cluster_key = "ifp"
+        if cluster_type.lower() == "ifp":
             pose_ids, leffs = zip(
                 *self.db_query(
                     data_selection_query.format(
@@ -3100,8 +3098,7 @@ class StorageManagerSQLite(StorageManager):
             ibc = InteractionBitvectorCluster(pose_ids, leffs, bitvectors, cutoff)
             clusters, representatives = ibc.cluster()
 
-        elif cluster_type.lower() == "mfpt":
-            cluster_key = "mfp"
+        elif cluster_type.lower() == "mfp":
             data_selection_query_formatted = data_selection_query.format(
                 selection=" R.Pose_ID", group_statement=""
             )
@@ -3128,7 +3125,7 @@ class StorageManagerSQLite(StorageManager):
         self._insert_cluster_data(
             clusters,
             pose_ids,
-            cluster_key,
+            cluster_type.lower(),
             str(cutoff),
             data_window,
         )
