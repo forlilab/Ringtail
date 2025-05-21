@@ -1,14 +1,44 @@
 import numpy as np
 from rdkit import DataStructs
+from rdkit import Chem
+from rdkit.Chem import rdFingerprintGenerator
 
 
 class MorganFingerprintCluster:
     def __init__(
-        self, unclustered_items: iter, rating_data: iter, cutoff_distance: float = 0.5
+        self,
+        unclustered_items: iter,
+        rating_data: iter,
+        rdmols: iter,
+        cutoff_distance: float = 0.5,
     ):
         self.unclustered_items = unclustered_items
         self.rating_data = rating_data
-        self.radius = cutoff_distance
+        self.cutoff = cutoff_distance
+        self.rdmols = rdmols
+
+    def cluster(self):
+        bv_clusters = cluster_fingerprints(
+            self.generate_morgan_fingerprints(),
+            self.cutoff,
+        )
+
+        return bv_clusters, top_leff_per_cluster(
+            bv_clusters, self.rating_data, self.unclustered_items
+        )
+
+    def generate_morgan_fingerprints(self):
+        mfpgenerator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
+        mfps = []
+        # prepare each mol json to fingerprint
+        for rdmol in self.rdmols:
+            # deserialize mols (JSONToMols returns tuple, hence the [0] subscript)])
+            mol = Chem.Mol(rdmol)
+            # need to sanitize each mol like this (as opposed to inline) as the method has a return value of 'santize_flag'
+            Chem.SanitizeMol(mol)
+            mfps.append(mfpgenerator.GetFingerprint(mol))
+
+        return mfps
 
 
 class InteractionBitvectorCluster:
@@ -33,22 +63,25 @@ class InteractionBitvectorCluster:
             ],
             self.cutoff,
         )
-        return bv_clusters, self.rate_clusters(bv_clusters)
+        return bv_clusters, top_leff_per_cluster(
+            bv_clusters, self.rating_data, self.unclustered_items
+        )
 
-    def rate_clusters(self, bv_clusters):
-        # interaction clusters representative pose ids
-        int_rep_poseids = []
 
-        for cluster in bv_clusters:
-            # element 1 in individual pose id item is the ligand efficiency (leff)
-            c_leffs = np.array(
-                [self.rating_data[cluster_element] for cluster_element in cluster]
-            )
-            best_lig_c = self.unclustered_items[cluster[np.argmin(c_leffs)]]
-            int_rep_poseids.append(str(best_lig_c))
+def top_leff_per_cluster(bv_clusters, rating_data, unclustered_items):
+    # interaction clusters representative pose ids
+    int_rep_poseids = []
 
-        # prepare packet to write to db
-        return int_rep_poseids
+    for cluster in bv_clusters:
+        # element 1 in individual pose id item is the ligand efficiency (leff)
+        c_leffs = np.array(
+            [rating_data[cluster_element] for cluster_element in cluster]
+        )
+        best_lig_c = unclustered_items[cluster[np.argmin(c_leffs)]]
+        int_rep_poseids.append(str(best_lig_c))
+
+    # prepare packet to write to db
+    return int_rep_poseids
 
 
 def cluster_fingerprints(fps, cutoff):

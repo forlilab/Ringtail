@@ -287,16 +287,12 @@ class StorageManager:
                     "interaction",
                     clustering.get("interaction_cluster"),
                 )
-
-            if clustering.get("mfpt_cluster"):
-                pass
+            if clustering.get("mfpt"):
                 clustered_editable_query = self.cluster_data(
-                    editable_query.format(
-                        selection=" R.Pose_ID, R.leff ", group_statement=""
-                    ),
+                    editable_query.format(selection=" R.Pose_ID", group_statement=""),
                     bookmark_name,
                     "mfpt",
-                    clustering.get("mfpt_cluster"),
+                    clustering.get("mfpt"),
                 )
         elif clustering and not count:
             logger.warning(
@@ -2420,7 +2416,8 @@ class StorageManagerSQLite(StorageManager):
             "N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters."
         )
         cur = self.conn.cursor()
-
+        # TODO should be able to just check what clusters the ligand is a part of, and then offer them here
+        # nothing somehow what filters were involved before the clustering perhaps?
         ligand_cluster_columns = self._fetch_ligand_cluster_columns()
         print(
             "Here are the existing clustering groups. Please ensure that you query ligand(s) is a part of the group you select."
@@ -3085,8 +3082,9 @@ class StorageManagerSQLite(StorageManager):
     ):
         logger.debug("Preparing to cluster")
         time0 = time.perf_counter()
-        # TODO If I use cluster classes, I should format the query in here. No need to expose
+
         if cluster_type.lower() == "interaction":
+            cluster_key = "ifp"
             pose_ids, leffs = zip(
                 *self.db_query(
                     data_selection_query.format(
@@ -3102,190 +3100,42 @@ class StorageManagerSQLite(StorageManager):
             ibc = InteractionBitvectorCluster(pose_ids, leffs, bitvectors, cutoff)
             clusters, representatives = ibc.cluster()
 
-            self._insert_cluster_data(
-                clusters,
-                pose_ids,
-                "ifp",
-                str(cutoff),
-                data_window,
-            )
-            # update query to now just use the representatives of the clusters
-            editable_clustered_query = """SELECT {{selection}} FROM Results R WHERE R.Pose_ID IN ({pose_ids}) {{group_statement}}""".format(
-                pose_ids=",".join(representatives)
-            )
-            max_len = max(len(lst) for lst in clusters)
-            min_len = min(len(lst) for lst in clusters)
-            logger.info(f"Number of interaction clusters: {len(clusters)}")
-            logger.info(
-                f"Biggest interaction cluster contains {max_len} poses while the smallest cluster contains {min_len} poses."
-            )
         elif cluster_type.lower() == "mfpt":
+            cluster_key = "mfp"
+            data_selection_query_formatted = data_selection_query.format(
+                selection=" R.Pose_ID", group_statement=""
+            )
+            rdmol_query = f"""SELECT R.Pose_ID, R.leff, L.ligand_rdmol FROM Ligands L 
+            INNER JOIN Results R ON R.LigName = L.LigName 
+            WHERE R.Pose_ID IN ({data_selection_query_formatted})"""
 
-            editable_clustered_query = ""
-            clusters = []
+            pose_ids, leffs, rdmols = zip(*self.db_query(rdmol_query).fetchall())
+            mfpc = MorganFingerprintCluster(pose_ids, leffs, rdmols, cutoff)
+            clusters, representatives = mfpc.cluster()
+
+        # update query to now just use the representatives of the clusters
+        editable_clustered_query = """SELECT {{selection}} FROM Results R WHERE R.Pose_ID IN ({pose_ids}) {{group_statement}}""".format(
+            pose_ids=",".join(representatives)
+        )
+        # print some stats
+        max_len = max(len(lst) for lst in clusters)
+        min_len = min(len(lst) for lst in clusters)
+        logger.info(f"Number of {cluster_type} clusters: {len(clusters)}")
+        logger.info(
+            f"Biggest {cluster_type} cluster contains {max_len} poses while the smallest cluster contains {min_len} poses."
+        )
+        # write to db
+        self._insert_cluster_data(
+            clusters,
+            pose_ids,
+            cluster_key,
+            str(cutoff),
+            data_window,
+        )
 
         logger.info(f"Time to cluster data: {time.perf_counter() - time0:.2f} seconds")
 
         return editable_clustered_query, len(clusters)
-
-    def _prepare_cluster_query(
-        self, unclustered_query: str, bookmark_name
-    ) -> str | None:
-        """
-        These methods will take data returned from unclustered filter query, then run the cluster query and cluster the filtered data.
-        This will output pose_ids that are representative of the clusters, and these pose_ids will be returned so that
-        they can be added to the unclustered query in the main filtering method.
-
-        Args:
-            unclustered_query (str): query containing none or some filters that defines over which ligands the clustering should happen
-
-        Returns:
-            str: (reduced) query to include in overall filter query if clustering returned results
-        """
-
-        def _clusterFps(fps, cutoff):
-            """
-            https://macinchem.org/2023/03/05/options-for-clustering-large-datasets-of-molecules/
-
-            Args:
-                fps (): fingerprints
-                cutoff distance (float)
-            """
-            from rdkit.SimDivFilters import rdSimDivPickers
-
-            lp = rdSimDivPickers.LeaderPicker()
-            # first generate the distance matrix:
-            dists = []
-            nfps = len(fps)
-
-            for i in range(1, nfps):
-                sims = DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
-                dists.extend([1 - x for x in sims])
-
-            picks = lp.LazyBitVectorPick(fps, nfps, 0.5)
-            pickfps = [fps[x] for x in picks]
-            # now cluster the data:
-            cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)
-            return cs
-
-        cluster_query_string = None
-
-        if self.interaction_cluster:
-            cluster_query = f"SELECT Pose_ID, leff FROM Results WHERE Pose_ID IN ({unclustered_query})"
-            # resulting data
-            poseid_leffs = self.db_query(cluster_query).fetchall()
-            cluster_poseids = [(poseid_leff[0]) for poseid_leff in poseid_leffs]
-            poseid_bvs = self._generate_interaction_bitvectors(cluster_poseids)
-
-            # create a list of tuples from the query data and bitvector
-            poseid_leff_bvs = [
-                (poseid_leff[0], poseid_leff[1], poseid_bvs[str(poseid_leff[0])])
-                for poseid_leff in poseid_leffs
-            ]
-            # index 2 is the bitvector string element
-            bclusters = _clusterFps(
-                [
-                    DataStructs.CreateFromBitString(poseid_leff_bv[2])
-                    for poseid_leff_bv in poseid_leff_bvs
-                ],
-                self.interaction_cluster,
-            )
-            logger.info(
-                f"Number of interaction fingerprint butina clusters: {len(bclusters)}"
-            )
-
-            # select ligand from each cluster with best ligand efficiency
-            # interaction clusters representative pose ids
-            int_rep_poseids = []
-
-            for cluster in bclusters:
-                # element 1 in individual pose id item is the ligand efficiency (leff)
-                c_leffs = np.array(
-                    [poseid_leff_bvs[cluster_element][1] for cluster_element in cluster]
-                )
-                # element 0 ([0]) in each leff_poseid_ifps row is the pose_id
-                best_lig_c = poseid_leff_bvs[cluster[np.argmin(c_leffs)]][0]
-                int_rep_poseids.append(str(best_lig_c))
-
-            # element 0 ([0]) in each leff_poseid_ifps row is the pose_id
-            self._insert_cluster_data(
-                bclusters,
-                [l[0] for l in poseid_leff_bvs],
-                "ifp",
-                str(self.interaction_cluster),
-                bookmark_name,
-            )
-
-            # catch if no pose_ids returned
-            if int_rep_poseids == []:
-                raise OptionError(
-                    "No passing results prior to clustering. Clustering not performed."
-                )
-            else:
-                cluster_query_string = "R.Pose_ID = " + " OR R.Pose_ID = ".join(
-                    int_rep_poseids
-                )
-                # if more clustering
-                if self.mfpt_cluster is not None:
-                    # carry the pose ids returned by this cluster to the MFPT clustering
-                    unclustered_query = (
-                        f"SELECT R.Pose_ID FROM Results WHERE {cluster_query_string}"
-                    )
-
-        if self.mfpt_cluster:
-            # get relevant data based on all filters specified
-            cluster_query = f"SELECT R.Pose_ID, R.leff, L.ligand_rdmol FROM Ligands L INNER JOIN Results R ON R.LigName = L.LigName WHERE R.Pose_ID IN ({unclustered_query})"
-            poseid_leff_mfps = self.db_query(cluster_query).fetchall()
-
-            # create morgan fingerprint generator
-            from rdkit.Chem import rdFingerprintGenerator
-
-            mfpgenerator = rdFingerprintGenerator.GetMorganGenerator(
-                radius=2, fpSize=1024
-            )
-            mfps = []
-            # prepare each mol json to fingerprint
-            for rdmol in poseid_leff_mfps:
-                # deserialize mols (JSONToMols returns tuple, hence the [0] subscript)])
-                mol = Chem.Mol(rdmol[2])
-                # need to sanitize each mol like this (as opposed to inline) as the method has a return value of 'santize_flag'
-                Chem.SanitizeMol(mol)
-                mfps.append(mfpgenerator.GetFingerprint(mol))
-
-            # run the butina clustering
-            bclusters = _clusterFps(
-                mfps,
-                self.mfpt_cluster,
-            )
-            logger.info(
-                f"Number of Morgan fingerprint butina clusters: {len(bclusters)}"
-            )
-            # select ligand from each cluster with best ligand efficiency
-            fp_rep_poseids = []
-            for c in bclusters:
-                c_leffs = np.array([poseid_leff_mfps[i][1] for i in c])
-                best_lig_c = poseid_leff_mfps[c[np.argmin(c_leffs)]][0]
-                fp_rep_poseids.append(str(best_lig_c))
-
-            self._insert_cluster_data(
-                bclusters,
-                [l[0] for l in poseid_leff_mfps],
-                "mfp",
-                str(self.mfpt_cluster),
-                bookmark_name,
-            )
-
-            # catch if no pose_ids returned
-            if fp_rep_poseids == []:
-                raise OptionError(
-                    "No passing results prior to clustering. Clustering not performed."
-                )
-            else:
-                cluster_query_string = " R.Pose_ID IN ({0})".format(
-                    ",".join(fp_rep_poseids)
-                )
-
-        return cluster_query_string
 
     def _prepare_interaction_filtering_query(
         self, include_interactions: list, exclude_interactions: list, max_miss: int
