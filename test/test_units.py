@@ -209,12 +209,12 @@ class TestRingtailCore:
 
     def test_similar_ligands_interaction(self, monkeypatch):
         rtc = RingtailCore(db_file="output.db")
-        ligand_name = "287065"
+        ligand_name = "28837"
         rtc.filter(ebest=-6, interaction_cluster=0.5)
         monkeypatch.setattr("builtins.input", lambda _: 0)  # provides terminal input
         number_similar = rtc.find_similar_ligands(ligand_name)
 
-        assert number_similar == 1
+        assert number_similar == 13
 
     def test_similar_ligands_mfpt(self, monkeypatch):
         rtc = RingtailCore(db_file="output.db")
@@ -670,6 +670,10 @@ class TestStorageMan:
         # TODO test returning the iterable
         pass
 
+    def test_filter_bookmark(self):
+        # TODO
+        pass
+
 
 class TestLogger:
 
@@ -726,3 +730,4 @@ class TestOptions:
         os.system("rm *_ringtail.log")
         os.system("rm output.db")
         os.system("rm different_log.txt")
+        os.system("rm cluster_log.txt")

@@ -863,7 +863,7 @@ class RingtailCore:
                 )
                 if num_passing_ligands:
                     print(
-                        "\nNumber passing ligands in max_miss union:",
+                        "\nNumber passing ligands:",
                         num_passing_ligands,
                     )
                     formatted_query = self.write_filter_output(
@@ -1225,7 +1225,9 @@ class RingtailCore:
 
         return all_mols
 
-    def find_similar_ligands(self, query_ligname: str):
+    def find_similar_ligands(
+        self, query_ligname: str, log_file: str = "cluster_log.txt"
+    ):
         """
         Find ligands in cluster with query_ligname
 
@@ -1241,20 +1243,17 @@ class RingtailCore:
             similar_ligands, bookmark_name, cluster_name = (
                 self.storageman.fetch_clustered_similars(query_ligname)
             )
-            # TODO needs outputman
             if similar_ligands is not None:
-                if not hasattr(self, "outputman"):
-                    self.set_output_options()
-                with self.outputman:
-                    self.outputman.write_find_similar_header(
-                        query_ligname, cluster_name
-                    )
-                    self.outputman.write_bookmarkname_in_log(bookmark_name)
-                    number_similar = self.outputman.write_filter_results_in_log(
-                        similar_ligands
-                    )
-                    self.outputman.log_num_passing_ligands(number_similar)
-                    print("Number similar ligands:", number_similar)
+                number_similar = len(similar_ligands)
+                with OutputManager(log_file) as opm:
+                    opm.write_find_similar_header(query_ligname, cluster_name)
+                    opm.write_bookmarkname_in_log(bookmark_name)
+                    opm.write_filter_results_in_log(similar_ligands)
+                    opm.log_num_passing_ligands(number_similar)
+            print(
+                "\nNumber of similar ligands:",
+                number_similar,
+            )
         return number_similar
 
     def plot(self, bookmark_name: str, save=True, return_fig_handle: bool = False):

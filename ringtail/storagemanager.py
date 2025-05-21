@@ -31,6 +31,7 @@ from .exceptions import (
     OptionError,
     MergeError,
 )
+from .clustermanager import *
 
 
 class StorageManager:
@@ -251,18 +252,15 @@ class StorageManager:
         filter_query: str = self._generate_result_filtering_query(
             all_filters, bookmark_name, filtering_bookmark
         )
-        filtered_poses = filter_query.format(selection="? AS filter_id, R.Pose_ID ")
 
-        # TODO do clustering here
-        if clustering:
-            # cluster the query, making a new query without selection to carry on with
-            pass
+        filtered_poses = filter_query.format(selection="? AS filter_id, R.Pose_ID ")
         logger.debug(f"Query for filtering results: {filter_query}")
 
         # perform filtering
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
         # TODO I am making this too messy, don't do this
+        # TODO when filter is empty, what do
         self.populate_filter_tables(
             name=bookmark_name,
             query=filtered_poses,
@@ -273,8 +271,37 @@ class StorageManager:
             f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
         )
         count = self.get_passing_poses_count(bookmark_name, True)
-
         editable_query = self.format_editable_filter_query(bookmark_name)
+
+        # TODO do clustering here
+        if count and clustering:
+            logger.info(f"Preparing to cluster {count} passing poses.")
+            if len(clustering) > 1:
+                logger.warning(
+                    "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
+                )
+            if clustering.get("interaction_cluster"):
+                editable_query, count = self.cluster_data(
+                    editable_query,
+                    bookmark_name,
+                    "interaction",
+                    clustering.get("interaction_cluster"),
+                )
+
+            if clustering.get("mfpt_cluster"):
+                pass
+                clustered_editable_query = self.cluster_data(
+                    editable_query.format(
+                        selection=" R.Pose_ID, R.leff ", group_statement=""
+                    ),
+                    bookmark_name,
+                    "mfpt",
+                    clustering.get("mfpt_cluster"),
+                )
+        elif clustering and not count:
+            logger.warning(
+                "No ligands passed filtering, clustering will not be performed."
+            )
         # TODO main place to institute the filter tables
         self.create_bookmark(
             name=bookmark_name,
@@ -2430,15 +2457,22 @@ class StorageManagerSQLite(StorageManager):
                 f"Requested ligand name {ligname} not found in cluster {cluster_col_choice}!"
             )
         query_ligand_cluster = query_ligand_cluster[0]  # extract from tuple
-        # TODO cna this be optimized? group by not awesome but may be relevant here
-        sql_query = f"SELECT LigName FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
-        view_query = f"SELECT * FROM Results WHERE Pose_ID IN (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) GROUP BY LigName"
-        # TODO def unnecessary
+
+        # TODO this is not ideal or optimized, but it does what it needs to do.
+        # This is definitely an output place where group by ligname is needed
+        sql_query = f"""
+        SELECT LigName FROM Results WHERE Pose_ID IN 
+        (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) 
+        GROUP BY LigName"""
+
+        view_query = f"""
+        SELECT * FROM Results WHERE Pose_ID IN 
+        (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}) 
+        GROUP BY LigName"""
         bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
-        # TODO what to do here?
         self.create_bookmark(bookmark_name, view_query)
 
-        return self.db_query(sql_query), bookmark_name, cluster_col_choice
+        return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
 
     def fetch_passing_pose_properties(self, ligname):
         """fetch coordinates for poses passing filter for given ligand
@@ -3044,24 +3078,55 @@ class StorageManagerSQLite(StorageManager):
 
     def cluster_data(
         self,
-        data,
-        bookmark_name: str = "Results",
-        type: str = "mfpt",
+        data_selection_query: str,
+        data_window: str,
+        cluster_type: str = "mfpt",
         cutoff: float = 0.5,
     ):
-        # allows for clustering without filtering
-        logger.info("Preparing to cluster results")
-        unclustered_query = f"SELECT R.Pose_id FROM {data} R "
-        if data == "Results":
-            logger.warning(
-                "If clustering is not performed on a pre-filtered bookmark, the clustering process can be slow."
+        logger.debug("Preparing to cluster")
+        time0 = time.perf_counter()
+        # TODO If I use cluster classes, I should format the query in here. No need to expose
+        if cluster_type.lower() == "interaction":
+            pose_ids, leffs = zip(
+                *self.db_query(
+                    data_selection_query.format(
+                        selection=" R.Pose_ID, R.leff ", group_statement=""
+                    )
+                ).fetchall()
             )
+            leffs = list(leffs)
+            pose_id_bitvectors = self._generate_interaction_bitvectors(pose_ids)
+            pose_ids = list(pose_ids)
+            bitvectors = list(pose_id_bitvectors.values())
 
-        try:
-            query = self._prepare_cluster_query(unclustered_query, bookmark_name)
-            query = " WHERE " + query
-        except OptionError as e:
-            raise e
+            ibc = InteractionBitvectorCluster(pose_ids, leffs, bitvectors, cutoff)
+            clusters, representatives = ibc.cluster()
+
+            self._insert_cluster_data(
+                clusters,
+                pose_ids,
+                "ifp",
+                str(cutoff),
+                data_window,
+            )
+            # update query to now just use the representatives of the clusters
+            editable_clustered_query = """SELECT {{selection}} FROM Results R WHERE R.Pose_ID IN ({pose_ids}) {{group_statement}}""".format(
+                pose_ids=",".join(representatives)
+            )
+            max_len = max(len(lst) for lst in clusters)
+            min_len = min(len(lst) for lst in clusters)
+            logger.info(f"Number of interaction clusters: {len(clusters)}")
+            logger.info(
+                f"Biggest interaction cluster contains {max_len} poses while the smallest cluster contains {min_len} poses."
+            )
+        elif cluster_type.lower() == "mfpt":
+
+            editable_clustered_query = ""
+            clusters = []
+
+        logger.info(f"Time to cluster data: {time.perf_counter() - time0:.2f} seconds")
+
+        return editable_clustered_query, len(clusters)
 
     def _prepare_cluster_query(
         self, unclustered_query: str, bookmark_name
@@ -3077,11 +3142,6 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: (reduced) query to include in overall filter query if clustering returned results
         """
-        # TODO
-        if self.interaction_cluster and self.mfpt_cluster:
-            logger.warning(
-                "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed on the results staus post interaction fingerprint clustering."
-            )
 
         def _clusterFps(fps, cutoff):
             """
@@ -3339,7 +3399,7 @@ class StorageManagerSQLite(StorageManager):
 
         return query
 
-    def _generate_interaction_bitvectors(self, pose_ids: list) -> dict:
+    def _generate_interaction_bitvectors(self, pose_ids: tuple[str]) -> dict:
         """
         Method to generate a dict of generate bitvector strings from pose_ids
 
@@ -3352,16 +3412,17 @@ class StorageManagerSQLite(StorageManager):
         # create a list of 0 items the length of interaction_indices table
         ii_length = self._get_length_of_table("Interaction_indices")
         # for each pose id, get a list of interaction_indices from joining the two tables i and ii
-        placeholders = ",".join("?" for _ in pose_ids)
-        poseid_intind_query = f"""SELECT Pose_ID, interaction_id
+        poseid_intind_query = """SELECT Pose_ID, interaction_id
                                     FROM Interactions
-                                    WHERE Pose_ID IN ({placeholders});"""
+                                    WHERE Pose_ID IN ({placeholders});""".format(
+            placeholders=",".join(["?"] * len(pose_ids))
+        )
         poseid_intinds = self.db_query(poseid_intind_query, pose_ids).fetchall()
         # make dict of pose id and bitvector
         poseid_bvlist = {(pose_id): [0] * ii_length for pose_id in pose_ids}
         # iterate over the tuple results from the query
         for poseid_intind in poseid_intinds:
-            poseid_bvlist[str(poseid_intind[0])][poseid_intind[1] - 1] = 1
+            poseid_bvlist[(poseid_intind[0])][poseid_intind[1] - 1] = 1
 
         # join list as string without any delimiter
         poseid_bv = {
