@@ -28,8 +28,6 @@ from .exceptions import (
 )
 from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError
 
-import multiprocess
-
 
 class StorageManager:
 
