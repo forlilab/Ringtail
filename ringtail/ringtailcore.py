@@ -1526,8 +1526,11 @@ class RingtailCore:
         flexmoldict = {}
         # string in list of strings
         for index, flexres in enumerate(flexible_residues):
+            residue = flexres.split(":")[1]
+            chain = residue[0]
+            resnum = residue[1:]
             # res id is chain:resnum
-            flexmoldict[f"{flexres[4]}:{flexres[-3:]}"] = flexres_mols[index]
+            flexmoldict[f"{chain}:{resnum}"] = flexres_mols[index]
 
         pdb_str = pdb_updated_flexres_from_rdkit(receptor_polymer, flexmoldict)
         # write pdb string to file
