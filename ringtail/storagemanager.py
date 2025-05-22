@@ -273,7 +273,7 @@ class StorageManager:
         count = self.get_passing_poses_count(bookmark_name, True)
         editable_query = self.format_editable_filter_query(bookmark_name)
 
-        if count and clustering:
+        if clustering and count:
             logger.info(f"Preparing to cluster {count} passing poses.")
             if len(clustering) > 1:
                 logger.warning(

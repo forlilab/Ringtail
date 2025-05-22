@@ -881,7 +881,10 @@ class RingtailCore:
                     print("\nNo ligands passing filters")
                     self.logger.warning(f"WARNING: No ligands found passing filters.")
                     self.storageman.drop_bookmark(bookmark_name)
-
+                if clustering:
+                    self._parse_clustering(
+                        clustering, bookmark_name, num_passing_ligands
+                    )
             # else produce a bookmark for each interaction combination
             elif not write_one_bookmark:
                 for ic_idx, combination in enumerate(interaction_combs):
@@ -928,6 +931,11 @@ class RingtailCore:
                         len(interaction_combs), bookmark_name, filters_copy
                     )
                 )
+                if clustering:
+                    self._parse_clustering(
+                        clustering, bookmark_name, num_passing_ligands
+                    )
+                    # this needs to produce an editable query
                 if num_passing_ligands:
                     print(
                         "\nNumber passing ligands in max_miss union:",
@@ -952,6 +960,34 @@ class RingtailCore:
             return self.storageman.db_query(formatted_query)
         else:
             return num_passing_ligands
+
+    def _parse_clustering(self, cluster_data, bookmark_name, count_passing):
+        # TODO I need to handle the bookmarks produced by each cluster somehow,
+        # right now it is not right
+        if count_passing:
+            logger.info(f"Preparing to cluster {count_passing} passing poses.")
+            if len(cluster_data) > 1:
+                logger.warning(
+                    "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
+                )
+            if cluster_data.get("ifp"):
+                editable_query = self.cluster(
+                    bookmark_name,
+                    "ifp",
+                    cluster_data.get("ifp"),
+                )
+            if cluster_data.get("mfp"):
+                editable_query = self.cluster(
+                    bookmark_name,
+                    "mfp",
+                    cluster_data.get("mfp"),
+                )
+            return editable_query
+        elif not count_passing:
+            logger.warning(
+                "No ligands passed filtering, clustering will not be performed."
+            )
+            return None
 
     def write_filter_output(
         self,
@@ -1003,8 +1039,16 @@ class RingtailCore:
 
         return formatted_query
 
-    def cluster(self, data, type: str = "mfp", cutoff: float = 0.5):
-        pass
+    def cluster(self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5):
+        with self.storageman as sm:
+            editable_query = sm.format_editable_filter_query(bookmark_name)
+            clustered_editable_query, _ = sm.cluster_data(
+                editable_query,
+                bookmark_name,
+                type,
+                cutoff,
+            )
+        return clustered_editable_query
 
     def write_flexres_pdb(
         self, receptor_polymer, ligname: str, filename: str, bookmark_name: str
