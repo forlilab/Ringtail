@@ -2695,23 +2695,11 @@ class StorageManagerSQLite(StorageManager):
                 cutoff distance (float)
             """
 
-            # first generate the distance matrix:
             dists = []
             nfps = len(fps)
-            inputs = []
-
-            def gen(fps):
-                for i in range(1, len(fps)):
-                    yield (i, fps)
-
-            def mp_wrapper(input_tpl):
-                i, fps = input_tpl
-                return DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
-
-            with multiprocess.Pool() as p:
-                inputs = gen(fps)
-                for sims in p.imap(mp_wrapper, inputs):
-                    dists.extend([1 - x for x in sims])
+            for i in range(1, nfps):
+                sims = DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
+                dists.extend([1 - x for x in sims])
 
             # now cluster the data:
             cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)
