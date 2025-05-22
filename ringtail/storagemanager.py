@@ -28,8 +28,6 @@ from .exceptions import (
 )
 from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError
 
-import multiprocess
-
 
 class StorageManager:
 
@@ -39,7 +37,7 @@ class StorageManager:
     _db_schema_code_compatibility = {
         "1.0.0": ["1.0.0"],
         "1.1.0": ["1.1.0"],
-        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2"],
+        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2", "2.2.0"],
     }
 
     """Base class for a generic virtual screening database object.
@@ -1958,7 +1956,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             cur.execute(
-                f"SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName LIKE '{ligname}'"
+                f"SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
             )
             info = cur.fetchone()
             cur.close()
@@ -2540,6 +2538,8 @@ class StorageManagerSQLite(StorageManager):
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
+        # check if clustering
+        clustering = bool(self.mfpt_cluster or self.interaction_cluster)
 
         # raise error if no filters are present and no clusterings
         if not processed_filters and not clustering:
@@ -2547,8 +2547,6 @@ class StorageManagerSQLite(StorageManager):
                 "Ringtail query strings are empty, please check filter options."
             )
 
-        # check if clustering
-        clustering = bool(self.mfpt_cluster or self.interaction_cluster)
         # if clustering without filtering
         if clustering:
             # allows for clustering without filtering
@@ -2695,23 +2693,11 @@ class StorageManagerSQLite(StorageManager):
                 cutoff distance (float)
             """
 
-            # first generate the distance matrix:
             dists = []
             nfps = len(fps)
-            inputs = []
-
-            def gen(fps):
-                for i in range(1, len(fps)):
-                    yield (i, fps)
-
-            def mp_wrapper(input_tpl):
-                i, fps = input_tpl
-                return DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
-
-            with multiprocess.Pool() as p:
-                inputs = gen(fps)
-                for sims in p.imap(mp_wrapper, inputs):
-                    dists.extend([1 - x for x in sims])
+            for i in range(1, nfps):
+                sims = DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
+                dists.extend([1 - x for x in sims])
 
             # now cluster the data:
             cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)

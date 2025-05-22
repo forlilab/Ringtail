@@ -29,6 +29,16 @@ at [Scripps Research](https://www.scripps.edu/).
 ### Documentation
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
+
+
+### Version 2.2.0: enhancements and bug fixes
+- New method added to enable exporting receptor pdb with flexible residues given ligand (currently for API only)
+- During results writing: check to ensure files provided with `file` option, and directories provided with `file_path` option
+- Multiprocess removed from clustering methods, speeding up the process significantly
+- Minor sqlite query updates for enhanced query speed, such as replacing `LIKE` with `=` where possible when matching text
+- Initializing ringtail with full path to a database could result in issues exporting SDFs to specified folder, this has been fixed
+- Clustering without filtering could result in error, this has been fixed
+
 ### Version 2.1.2 bug fixes
 - Removing of union operand that made Ringtail incompatible with python=3.9
 - Pymol now displays receptor if present in database

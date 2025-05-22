@@ -241,6 +241,27 @@ It is also possible to write a database query and export the results of the quer
     query_string = "SELECT docking_score, leff, Pose_ID, LigName FROM Results"
     rtc.export_csv(requested_data = query_string, csv_name = "query_results.csv", table = False)
 
+Exporting flexible residues (as PDB) of a receptor given a docked ligand
+========================================================================
+When processing docking data for a receptor docked with flexible residues, it might be of interest to produce a PDB of the flexible residues for a given docked ``ligand``. This is currently possible using the following method (only through API).
+The user needs to provide a meeko.Polymer object, and the ligand has to be part of a filtered bookmark ``bookmark_name``. Finally, a file output name must be provided, and the extension ``.pdb`` will be added if not provided. 
+The meeko.Polymer object available with meeko>=0.6.1. The polymer is a deserialized version of the receptor/polymer json which can be produced by the method ``mk_prepare_receptor.py`` with the flag ``--write_json`` (see the `meeko documentation <https://meeko.readthedocs.io/en/release-doc/rec_overview.html>`_ for more details on how to prepare the receptor).
+
+.. code-block:: python 
+
+    rtc.write_flexres_pdb(receptor_polymer = polymer, ligname = "best_ligand", filename = "flexres_receptor", bookmark_name = "eworst6")
+
+    #results in creation of flexres_receptor.pdb
+
+A polymer can then be prepared using the following code snippet, given ``receptor.json``:
+
+.. code-block:: python 
+
+    with open("recptor.json") as f:
+        json_string = f.read()
+    polymer = meeko.Polymer.from_json(json_string)
+
+
 Creating a new database from a bookmark
 =======================================
 A bookmark may also be exported as a separate SQLite dabase with the ``export_bookmark_db`` method. This will create a database of name ``<current_db_name>_<bookmark_name>.db``. This is currently only possible if using SQLite.
