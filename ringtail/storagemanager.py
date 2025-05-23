@@ -1987,9 +1987,7 @@ class StorageManagerSQLite(StorageManager):
     def get_filterid_from_name(self, bookmark_name: str) -> int:
         return self.db_query(
             f"""SELECT filter_id FROM Filters WHERE name = ?;""",
-            {
-                bookmark_name,
-            },
+            (bookmark_name,),
         ).fetchone()[0]
 
     # endregion
