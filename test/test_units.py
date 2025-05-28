@@ -595,6 +595,13 @@ class TestVinaHandling:
 
 class TestStorageMan:
 
+    def test_connection(self):
+        # TODO
+        # test row factory in the connection, ie that you can access row data by index and name (code will depend on it)
+        # might be other stuff I need to test too, if the db handling depends on it. Good to check that here
+
+        pass
+
     def test_fetch_summary_data(self):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
