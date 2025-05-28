@@ -1736,7 +1736,7 @@ class StorageManagerSQLite(StorageManager):
             Returns:
                 dict: containing the filter data
         """
-        sql_query = "SELECT filters FROM Bookmarks where Bookmark_name = ?"
+        sql_query = "SELECT filters FROM Filters where name = ?"
 
         filters = self.db_query(sql_query, (bookmark_name,)).fetchone()
         if not filters:
@@ -1909,8 +1909,13 @@ class StorageManagerSQLite(StorageManager):
         Please note that this table will be dropped as soon as the database connection closes.
         """
         # TODo does not have to be like this
+        bookmark_query = self.format_editable_filter_query(bookmark_name).format(
+            selection="R.*", group_statement=""
+        )
         cur = self.conn.cursor()
-        cur.execute(f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {bookmark_name}")
+        cur.execute(
+            f"CREATE TEMP TABLE passing_temp AS SELECT * FROM ({bookmark_query})"
+        )
         cur.close()
         logger.debug(
             "Creating a temporary table of passing ligands named 'passing_temp'."
