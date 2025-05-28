@@ -1640,7 +1640,7 @@ class RingtailCore:
         # connect to cloned database
         temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
         with temp_storageman(bookmark_db_name) as db_clone:
-            db_clone.prune(bookmark_name)
+            db_clone.prune_nonpassing(bookmark_name)
             db_clone.close_storage(vacuum=True)
 
         return bookmark_db_name

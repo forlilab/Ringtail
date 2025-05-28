@@ -166,7 +166,6 @@ class MPManager:
 
         Args:
             results_data (string or dict): results data provided as a file path or a dictionary kw pair
-            string (bool, optional): switch if results provided as a string
 
         Raises:
             MultiprocessingError

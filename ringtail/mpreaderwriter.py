@@ -111,8 +111,10 @@ class DockingFileReader(mp.Process):
                     parsed_file_dict = parse_single_dlg(next_task)
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
+                    # TODO then this should too
                 elif self.docking_mode == "vina":
                     parsed_file_dict = parse_vina_result(next_task)
+                    # TODO this dict has "ligname" in it I can use
 
                 # Example code for calling user-implemented docking_mode
                 # elif self.docking_mode == "my_docking_mode":
@@ -176,7 +178,12 @@ class DockingFileReader(mp.Process):
                 else:
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 # put the result in the out queue
-                data_packet = self.shared.get("format_method")(parsed_file_dict)
+                # the result is a dict where the singular key is the ligand name
+                data_packet = {
+                    parsed_file_dict["ligname"]: self.shared.get("format_method")(
+                        parsed_file_dict
+                    )
+                }
                 self._add_to_queueout(data_packet)
             except Exception:
                 tb = traceback.format_exc()
@@ -265,15 +272,14 @@ class Writer(mp.Process):
         storage_class = options.pop("storageman_class")
         storageman = StorageManager.check_storage_compatibility(storage_class)
         self.storageman = storageman(db_file)
-        self.chunk_size = options.pop("chunk_size")
+        self.chunk_size = 3  # options.pop("chunk_size")
         self.options = options
         # initialize data array (stack of dictionaries)
-        self.results_array = []
-        self.ligands_array = []
-        self.interactions_list = []
-        self.receptor_array = []
+        self.data_chunks = {}
+        self.receptor_written_to_db = False
+        self.receptor_row = None
+        # TODO get receptor ID from table, maybe overkill
         # progress tracking instance variables
-        self.first_insert = True
         self.counter = 0
         self.num_files_written = 0
         self.time0 = time.perf_counter()
@@ -299,7 +305,11 @@ class Writer(mp.Process):
                     continue
 
                 # Process data and increment counter within process_data
-                self.process_data(next_task)
+                # TODO this method is where things are divided in lists of lists
+                # this is my own method, where the dict from the file is added to the data_chunks attribute, and the current_chunk_size counter is increased
+                self.data_chunks.update(next_task)
+                self.counter += 1
+                # self.process_data(next_task)
 
                 # After every n (chunk size) files, write to storage
                 if self.counter >= self.chunk_size:
@@ -319,28 +329,22 @@ class Writer(mp.Process):
         """Inserting data to the database through the designated storagemanager."""
         # insert result, ligand, and receptor data
         with self.storageman as sm:
+            if not self.receptor_written_to_db and self.receptor_row:
+                sm.insert_receptor(self.receptor_row)
+                self.receptor_written_to_db = True
+                self.receptor_row = None
+
             sm.insert_data(
-                self.results_array,
-                self.ligands_array,
-                self.interactions_list,
-                self.receptor_array,
-                self.first_insert,
+                self.data_chunks,
                 self.options,
             )
-        # So at this point the ligand array is empty
-        # TODO unnecessary to carry this variable
-        if self.first_insert:  # will only insert receptor for first insertion
-            self.first_insert = False
 
         # calulate time for processing/writing speed
         self.num_files_written += self.counter
         self.total_runtime = time.perf_counter() - self.time0
 
         # reset data holder for next chunk
-        self.results_array = []
-        self.ligands_array = []
-        self.interactions_list = []
-        self.receptor_array = []
+        self.data_chunks = {}
         self.counter = 0
 
     def process_data(self, data_packet):
@@ -350,13 +354,16 @@ class Writer(mp.Process):
         Args:
             data_packet (any): File packet to be processed
         """
-        results_rows, ligand_row, interaction_rows, receptor_row = data_packet
-        for pose in results_rows:
-            self.results_array.append(pose)
-        for pose in interaction_rows:
-            self.interactions_list.append(pose)
-        self.ligands_array.append(ligand_row)
-        self.receptor_array.append(receptor_row)
+        # NOTE now here could just come the dict, and instead of parsing each row, I want to add my dict to a super dict,
+        # where the key is the filename
+        # TODO TODO TODO now this data packet is actually a dict, and the dict should be updated
+        # to the data_cunks dict that is an attribute of this class. Then, it can be parsed into rows in storageman later
+        if self.receptor_row is None and not self.receptor_written_to_db:
+            self.receptor_row = data_packet.pop("receptor_row")
+        else:
+            del data_packet["receptor_row"]
+
+        self.data_chunks.update(data_packet)
 
         self.counter += 1
 
