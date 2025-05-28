@@ -218,13 +218,18 @@ class TestOutputs:
         status_notol = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz"
         )
+        query_to_check = """
+        SELECT * FROM Interactions 
+        WHERE Pose_ID in 
+        (SELECT Pose_ID FROM Results 
+            WHERE ligand_id = 
+                (SELECT ligand_id from Ligands WHERE LigName = '127458')
+            AND run_number = 13)"""
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
 
-        cur.execute(
-            "SELECT * FROM Interactions WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
-        )
+        cur.execute(query_to_check)
         count_notol = len(cur.fetchall())
 
         cur.close()
@@ -238,9 +243,7 @@ class TestOutputs:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        cur.execute(
-            "SELECT * FROM Interactions WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
-        )
+        cur.execute(query_to_check)
         count_tol = len(cur.fetchall())
 
         cur.close()
@@ -254,9 +257,7 @@ class TestOutputs:
 
         conn = sqlite3.connect("output.db")
         cur = conn.cursor()
-        cur.execute(
-            "SELECT * FROM Interactions WHERE Pose_ID in (SELECT Pose_ID FROM Results WHERE LigName LIKE '127458' AND run_number = 13)"
-        )
+        cur.execute(query_to_check)
         count_tol2 = len(cur.fetchall())
 
         cur.close()
