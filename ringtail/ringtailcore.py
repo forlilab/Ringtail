@@ -880,7 +880,6 @@ class RingtailCore:
                 else:
                     print("\nNo ligands passing filters")
                     self.logger.warning(f"WARNING: No ligands found passing filters.")
-                    self.storageman.drop_bookmark(bookmark_name)
                 if clustering:
                     self._parse_clustering(
                         clustering, bookmark_name, num_passing_ligands
@@ -1151,7 +1150,7 @@ class RingtailCore:
                 # will write one SDF file for all molecules in bookmark (_None if no bookmark present)
                 db_file_name = os.path.splitext(os.path.basename(self.db_file))[0]
                 sdf_file_name = f"{db_file_name}_{bookmark_name}.sdf"
-                self.logger.info(f"Writing " + ligname + " to {sdf_file_name}")
+                self.logger.info(f"Writing {ligname} to {sdf_file_name}")
             else:
                 # filename is name of ligand
                 sdf_file_name = ligname + ".sdf"
@@ -1225,7 +1224,7 @@ class RingtailCore:
                         )
                     )
 
-            if not self.storageman.bookmark_has_rows(bookmark_name):
+            if not self.storageman.get_passing_poses_count(bookmark_name):
                 raise StorageError(
                     "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
                 )
