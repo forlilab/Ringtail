@@ -304,12 +304,13 @@ class Writer(mp.Process):
                         break
                     continue
 
-                # Process data and increment counter within process_data
                 # TODO this method is where things are divided in lists of lists
                 # this is my own method, where the dict from the file is added to the data_chunks attribute, and the current_chunk_size counter is increased
+                if self.receptor_row is None and not self.receptor_written_to_db:
+                    self.receptor_row = list(next_task.values())[0].get("receptor_row")
+
                 self.data_chunks.update(next_task)
                 self.counter += 1
-                # self.process_data(next_task)
 
                 # After every n (chunk size) files, write to storage
                 if self.counter >= self.chunk_size:
@@ -346,26 +347,6 @@ class Writer(mp.Process):
         # reset data holder for next chunk
         self.data_chunks = {}
         self.counter = 0
-
-    def process_data(self, data_packet):
-        """Breaks up the data in the data_packet to distribute between
-        the different arrays to be inserted in the database.
-
-        Args:
-            data_packet (any): File packet to be processed
-        """
-        # NOTE now here could just come the dict, and instead of parsing each row, I want to add my dict to a super dict,
-        # where the key is the filename
-        # TODO TODO TODO now this data packet is actually a dict, and the dict should be updated
-        # to the data_cunks dict that is an attribute of this class. Then, it can be parsed into rows in storageman later
-        if self.receptor_row is None and not self.receptor_written_to_db:
-            self.receptor_row = data_packet.pop("receptor_row")
-        else:
-            del data_packet["receptor_row"]
-
-        self.data_chunks.update(data_packet)
-
-        self.counter += 1
 
     def _log_progress(self):
         rate = self.num_files_written * 60 / (self.total_runtime or 1)
