@@ -1003,10 +1003,12 @@ class RingtailCore:
 
         # format the filter query
         if output_fields and output_fields != "*":
-            # TODO problem with the output formatting
-            outfield_dict = self.storageman.format_output_fields(output_fields)
-            outfield_string = outfield_dict.get("selection")
-            join = outfield_dict.get("join")
+            outfields_list = self.storageman.format_output_fields(
+                output_fields, "ligands", "results"
+            )
+            outfield_string = ",".join(outfields_list)
+            join = "Results JOIN Ligands ON Ligands.ligand_id = Results.ligand_id"
+
         if not output_all_poses:
             group_by = " GROUP BY results.ligand_id"
         else:
@@ -1711,7 +1713,7 @@ class RingtailCore:
             output_manager.write_receptor_pdbqt(recname, recblob)
 
     def get_previous_filter_data(
-        self, bookmark_name, outfields: str = "*", log_file=None
+        self, bookmark_name, outfields: str = "Ligname,docking_score", log_file=None
     ):
         """Get data requested in self.out_opts['outfields'] from the
         results bookmark of a previous filtering
@@ -1722,14 +1724,13 @@ class RingtailCore:
         """
         if bookmark_name is None:
             raise OptionError("A bookmark name has to be provided")
-
+        print("outfields in the core: ", outfields)
         with self.storageman:
             new_data = self.storageman.fetch_data_for_passing_results(
                 bookmark_name, outfields
             )
-        output_manager = OutputManager(log_file)
-        with output_manager:
-            output_manager.write_filter_results_in_log(new_data)
+        with OutputManager(log_file) as opm:
+            opm.write_filter_results_in_log(new_data)
 
     def drop_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database

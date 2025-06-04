@@ -1944,15 +1944,18 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             OptionError
         """
-        if outfields:
-            outfield_string = self.format_output_fields(outfields)
-        else:
-            outfield_string = "*"
+        outfields_list = self.format_output_fields(
+            outfields, ligands_alias="L", results_alias="R"
+        )
 
         bookmark_selection = self.get_bookmark_selection(bookmark_name, "pose_id")
+        query = QueryBuilder()
+        query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
+            f"R.pose_id IN ({bookmark_selection})"
+        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
+        query_string = query.build()[0]
 
-        query = f"SELECT {outfield_string} FROM (SELECT * FROM Results WHERE Pose_ID IN ({bookmark_selection})) R JOIN Ligands L ON L.ligand_id = R.ligand_id"
-        return self.db_query(query)
+        return self.db_query(query_string)
 
     def add_output_fields_to_query(self, outfields, bookmark_name):
         bookmark_selection = self.format_editable_filter_query(bookmark_name).format(
@@ -2480,26 +2483,19 @@ class StorageManagerSQLite(StorageManager):
 
         return n_ligands_passing / n_ligands_total * 100
 
-    def format_output_fields(self, outfields: Union[str, list]) -> str:
-        # TODO I need to allow output to include basically any column, and it needs to allow for join on the Ligands table
+    def format_output_fields(
+        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
+    ) -> str:
         """Handles string or list input of column names to be outputted, will make sure LigName
         is in the list, and make sure all options are valid
 
         Returns:
-            list: column names for which the data is to be displayed
+            list: column names for which the data is to be displayed that needs formatting with table alias
+                for which table they belong to
 
         Raises:
             OptionError
         """
-        # TODO
-        """
-        maybe one way to do this is:
-        1. format the fields
-        2. if other than R are required, join to the table
-        3. output a query wrapper, starting phrase and ending phrase
-        4. if only R table, then ending phrase is empty
-        """
-        print("Incoming outfields: ", outfields)
         if type(outfields) == str:
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
@@ -2513,6 +2509,7 @@ class StorageManagerSQLite(StorageManager):
         if "ligname" not in [field.lower() for field in outfields_list]:
             outfields_list.insert(0, "LigName")
         possible_columns, table_formatted_columns = self.get_possible_output_columns()
+
         for outfield in outfields_list:
             if outfield.lower() in possible_columns:
                 table_formatted_outfields.append(
@@ -2522,28 +2519,41 @@ class StorageManagerSQLite(StorageManager):
                 logger.warning(
                     f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
                 )
-        if any("ligands." in field.lower() for field in table_formatted_outfields):
-            join_statement = (
-                "Results JOIN Ligands ON Ligands.ligand_id = Results.ligand_id"
-            )
-        query_adds = {
-            "selection": ", ".join(table_formatted_outfields),
-            "join": join_statement,
-        }
-        return query_adds
+        formatted_outfields = [
+            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
+            for outfield in table_formatted_outfields
+        ]
+
+        return formatted_outfields
 
     def get_possible_output_columns(self, tables=["Results", "Ligands"]):
+        """
+        _summary_
+
+        Args:
+            tables (list, optional): _description_. Defaults to ["Results", "Ligands"].
+
+        Returns:
+            columns (list[str]): _description_
+            columns_with_tablename (list[str.format]): needs formatted with table_alias for use
+        """
         columns = []
         columns_with_tablename = []
         for table in tables:
             columns_info = self.db_query(f"PRAGMA table_info({table})").fetchall()
             columns.extend([col[1].lower() for col in columns_info])
             columns_with_tablename.extend(
-                [(table + "." + col[1]) for col in columns_info]
+                [
+                    (
+                        "{{{table_alias}_alias}}.{col}".format(
+                            col=col[1], table_alias=table
+                        )
+                    )
+                    for col in columns_info
+                ]
             )
 
         return columns, columns_with_tablename
-        # get columns
 
     def get_numeric_columns(self, table_name: str) -> iter:
         """
