@@ -216,9 +216,6 @@ def main():
                 logger.info(f"cross-referencing {db}")
                 if not os.path.exists(db):
                     logger.critical("Wanted database {0} not found!".format(db))
-                print(
-                    f"passing in these parameters: {db}, {previous_bookmarkname}, {bookmark_list[idx]}, {last_db}"
-                )
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                     db,
                     previous_bookmarkname,
@@ -256,11 +253,9 @@ def main():
                 opm.log_num_passing_ligands(number_passing_ligands)
 
                 log_query = QueryBuilder()
-                log_query.SELECT("bm.pose_id", "l.ligname").FROM(
+                log_query.SELECT("pose_id", "ligname").FROM(
                     previous_bookmarkname, "bm"
-                ).JOIN("Results", "r", "pose_id", previous_bookmarkname).JOIN(
-                    "ligands", "l", "ligand_id", "results"
-                )
+                ).GROUP_BY("ligname").ORDER_BY("ligname")
 
                 all_bookmark_data = dbman.db_query(log_query.build()[0])
                 opm.write_filter_results_in_log(all_bookmark_data)

@@ -365,7 +365,7 @@ class StorageManager:
             raise StorageError(f"Unrecognized selection type {selection}")
 
         temp_name = "temp_" + str(temp_table_suffix)
-        self._create_temp_table(temp_name)
+        self._create_crossref_temp_table(temp_name)
         temp_insert_query = self._generate_selective_insert_query(
             bookmark1_name, bookmark2_name, selection, new_db_name, temp_name
         )
@@ -384,6 +384,7 @@ class StorageManager:
             "count_pool", "cp"
         )
         num_passing = tuple(self.db_query(counting.build()[0]).fetchone())[0]
+        print("\n\n Number passing the cross referenced filters: ", num_passing)
 
         return temp_name, num_passing
 
@@ -1873,7 +1874,7 @@ class StorageManagerSQLite(StorageManager):
 
         self.populate_filter_tables(bookmark_name, query_string, filters)
 
-    def _create_temp_table(self, table_name):
+    def _create_crossref_temp_table(self, table_name):
         """create temporary table with given name and with ligand name and pose_id information
 
         Args:
@@ -1883,7 +1884,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError
         """
 
-        create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID)"
+        create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID, ligname)"
         try:
             cur = self.conn.cursor()
             cur.execute(create_table_str)
@@ -3348,18 +3349,29 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: sqlite formatted query string
         """
+        # DUh, #TODO, they won't have the same pose ids for the same poses, so I hve to do this based on ligand name!
+        # ligand id will also be different
         query = QueryBuilder()
         subq = QueryBuilder()
         subq_string = (
-            subq.SELECT("bm2.pose_id")
+            subq.SELECT("l.ligname")
             .FROM_BOOKMARK(f"{bookmark2_name}", "bm2", new_db_name)
+            .JOIN(
+                f"{new_db_name}.results",
+                "r",
+                "pose_Id",
+                f"bm2",
+            )
+            .JOIN(f"{new_db_name}.ligands", "l", "ligand_id", f"{new_db_name}.results")
             .build()[0]
         )
         query_string = (
             query.INSERT_INTO(temp_table)
-            .SELECT("bm1.pose_id")
+            .SELECT("bm1.pose_id", "l.ligname")
             .FROM_BOOKMARK(bookmark1_name, "bm1")
-            .WHERE(f"bm1.pose_id {select_str} ({subq_string})")
+            .JOIN("results", "r", "pose_id", "bm1")
+            .JOIN("ligands", "l", "ligand_id", "results")
+            .WHERE(f"l.ligname {select_str} ({subq_string})")
         ).build()[0]
 
         return query_string
