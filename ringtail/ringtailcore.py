@@ -1004,11 +1004,14 @@ class RingtailCore:
         # format the filter query
         if output_fields and output_fields != "*":
             outfields_list = self.storageman.format_output_fields(
-                output_fields, "ligands", "results"
+                output_fields, "L", "R"
             )
             outfield_string = ",".join(outfields_list)
             join = "Results JOIN Ligands ON Ligands.ligand_id = Results.ligand_id"
-
+        elif output_fields == "*":
+            raise OptionError(
+                "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
+            )
         if not output_all_poses:
             group_by = " GROUP BY results.ligand_id"
         else:
@@ -1724,7 +1727,6 @@ class RingtailCore:
         """
         if bookmark_name is None:
             raise OptionError("A bookmark name has to be provided")
-        print("outfields in the core: ", outfields)
         with self.storageman:
             new_data = self.storageman.fetch_data_for_passing_results(
                 bookmark_name, outfields

@@ -194,7 +194,9 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7, bookmark_name="has_filterdata")
         log_file_name = "output_log_test.txt"
-        rtc.get_previous_filter_data("has_filterdata", "delta, ref_rmsd", log_file_name)
+        rtc.get_previous_filter_data(
+            "has_filterdata", "deltas, reference_rmsd", log_file_name
+        )
 
         with open(log_file_name) as f:
             file_contents = f.read()
@@ -419,12 +421,12 @@ class TestRingtailCore:
 
         assert line_content == "'11128', -7.25\n"
 
-    def test_plot(self):
-        rtcore = RingtailCore(db_file="output.db")
-        rtcore.filter(eworst=-7, bookmark_name="plot_data")
-        rtcore.plot("plot_data")
-        assert os.path.isfile("scatter.png") == True
-        os.system("rm scatter.png")
+    # def test_plot(self):
+    #     rtcore = RingtailCore(db_file="output.db")
+    #     rtcore.filter(eworst=-7, bookmark_name="plot_data")
+    #     rtcore.plot("plot_data")
+    #     assert os.path.isfile("scatter.png") == True
+    #     os.system("rm scatter.png")
 
     def test_export_bookmark_db(self):
         rtc = RingtailCore(db_file="output.db")

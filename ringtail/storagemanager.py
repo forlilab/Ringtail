@@ -395,7 +395,7 @@ class StorageManager:
         self._delete_from_results(bookmark_name)
         self._delete_from_ligands(bookmark_name)
         self._delete_from_interactions_not_in_view(bookmark_name)
-        self._clear_bookmarks()
+        # self._clear_bookmarks()
         # TODO probably needs to clea Filters and filtered_results
 
     # endregion
@@ -653,9 +653,11 @@ class StorageManagerSQLite(StorageManager):
             StorageError
         """
         passing_poses_query = self.get_bookmark_poses_query(bookmark_name)
+
         try:
             self.db_update(
-                f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query})"
+                f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query}))",
+                (),
             )
         except sqlite3.OperationalError as e:
             raise StorageError(
@@ -1054,7 +1056,7 @@ class StorageManagerSQLite(StorageManager):
         passing_poses_query = self.get_bookmark_poses_query(bookmark_name)
         try:
             self.db_update(
-                f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})"
+                f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})", ()
             )
         except sqlite3.OperationalError as e:
             raise StorageError(
@@ -1471,14 +1473,16 @@ class StorageManagerSQLite(StorageManager):
         passing_poses_query = self.get_bookmark_poses_query(bookmark_name)
         try:
             self.db_update(
-                f"DELETE FROM Interactions WHERE Pose_ID NOT IN ({passing_poses_query})"
+                f"DELETE FROM Interactions WHERE Pose_ID NOT IN ({passing_poses_query})",
+                (),
             )
             # remove unused interaction indices, if any
             self.db_update(
                 """DELETE FROM Interaction_indices WHERE interaction_id IN
                             (SELECT ii.interaction_id FROM Interaction_indices ii 
                             LEFT JOIN Interactions i ON ii.interaction_id=i.interaction_id 
-                            WHERE i.interaction_id IS NULL);"""
+                            WHERE i.interaction_id IS NULL);""",
+                (),
             )
 
         except sqlite3.OperationalError as e:
@@ -1664,9 +1668,8 @@ class StorageManagerSQLite(StorageManager):
             return 0
 
     def get_bookmark_poses_query(self, bookmark_name: str):
-        return self.format_editable_filter_query(bookmark_name).format(
-            selection="R.Pose_id", group_statement=""
-        )
+        query = QueryBuilder()
+        return query.SELECT("pose_id").FROM_BOOKMARK(bookmark_name).build()[0]
 
     def delete_bookmark(self, bookmark_name: str):
         # get filter id
@@ -1948,14 +1951,14 @@ class StorageManagerSQLite(StorageManager):
             outfields, ligands_alias="L", results_alias="R"
         )
 
-        bookmark_selection = self.get_bookmark_selection(bookmark_name, "pose_id")
+        bookmark_selection = self.get_bookmark_poses_query(bookmark_name)
+
         query = QueryBuilder()
         query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
             f"R.pose_id IN ({bookmark_selection})"
         ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
-        query_string = query.build()[0]
 
-        return self.db_query(query_string)
+        return self.db_query(query.build()[0])
 
     def add_output_fields_to_query(self, outfields, bookmark_name):
         bookmark_selection = self.format_editable_filter_query(bookmark_name).format(
