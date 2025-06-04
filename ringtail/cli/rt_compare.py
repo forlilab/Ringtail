@@ -8,10 +8,11 @@ import argparse
 import json
 import sys
 import os
-from ringtail import StorageManager, StorageManagerSQLite
+from ringtail import StorageManager
 from ringtail import OutputManager, OptionError
 from ringtail import OptionError
 from ringtail import logutils
+from ringtail import QueryBuilder
 import traceback
 
 
@@ -161,14 +162,11 @@ def main():
                 raise IOError("Must specify at least two databases for comparison.")
 
         # set logging level
-        debug = True
-        if debug:
+        if args.verbose:
             level = logger.set_level("DEBUG")
-        elif args.verbose:
-            level = logger.set_level("INFO")
+            logger.add_filehandler("ringtail", level)
         else:
             level = logger.set_level("WARNING")
-        logger.add_filehandler("ringtail", level)
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
 
@@ -211,6 +209,7 @@ def main():
 
         last_db = None
         num_wanted_dbs = len(wanted_dbs)
+        temp_table_count = 0
         # storageman is a context manager, and keeps connection to the database open within the `with` statement
         with dbman:
             for idx, db in enumerate(wanted_dbs):
@@ -224,10 +223,12 @@ def main():
                     db,
                     previous_bookmarkname,
                     bookmark_list[idx],
-                    selection_type="+",
+                    temp_table_count,
+                    selection="IN",
                     old_db=last_db,
                 )
                 last_db = db
+                temp_table_count += 1
 
             if unwanted_dbs is not None:
                 for idx, db in enumerate(unwanted_dbs):
@@ -239,20 +240,30 @@ def main():
                             db,
                             previous_bookmarkname,
                             bookmark_list[idx + num_wanted_dbs],
-                            selection_type="-",
+                            temp_table_count,
+                            selection="NOT IN",
                             old_db=last_db,
                         )
                     )
                     last_db = db
+                temp_table_count += 1
 
-            logger.info("Writing log")
-            output_manager = OutputManager(log_file=args.log)
-            with output_manager:
+            logger.info("Writing log for comparing filtered databases")
+
+            with OutputManager(log_file=args.log) as opm:
                 if args.save_bookmark is not None:
-                    output_manager.write_bookmarkname_in_log(args.save_bookmark)
-                output_manager.log_num_passing_ligands(number_passing_ligands)
-                final_bookmark = dbman.fetch_bookmark(previous_bookmarkname)
-                output_manager.write_filter_results_in_log(final_bookmark)
+                    opm.write_bookmarkname_in_log(args.save_bookmark)
+                opm.log_num_passing_ligands(number_passing_ligands)
+
+                log_query = QueryBuilder()
+                log_query.SELECT("bm.pose_id", "l.ligname").FROM(
+                    previous_bookmarkname, "bm"
+                ).JOIN("Results", "r", "pose_id", previous_bookmarkname).JOIN(
+                    "ligands", "l", "ligand_id", "results"
+                )
+
+                all_bookmark_data = dbman.db_query(log_query.build()[0])
+                opm.write_filter_results_in_log(all_bookmark_data)
 
             if args.save_bookmark is not None:
                 dbman.create_bookmark_from_temp_table(

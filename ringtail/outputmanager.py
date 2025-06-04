@@ -89,7 +89,7 @@ class OutputManager:
         try:
             for line in lines:
                 self._write_log_line(
-                    str(line).replace("(", "").replace(")", "")
+                    str(tuple(line)).replace("(", "").replace(")", "")
                 )  # strip parens from line, which is natively a tuple
             self._write_log_line("***************\n")
         except Exception as e:
@@ -244,7 +244,6 @@ class OutputManager:
         Raises:
             OutputError
         """
-
         filename = export_sdf_directory + "/" + filename
         try:
             mol_flexres_list = [mol]

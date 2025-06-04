@@ -3,7 +3,7 @@
 #
 # Ringtail unit testing
 #
-from ringtail import RingtailCore, ringtailoptions
+from ringtail import RingtailCore, ringtailoptions, QueryBuilder
 import sqlite3
 import os
 import json
@@ -49,6 +49,7 @@ def dbquery():
 class TestRingtailCore:
 
     def test_add_folder(self, tablecount):
+        os.system("rm output.db")
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file_path="test_data/adgpu/group1")
         count = tablecount("Ligands")
@@ -639,9 +640,14 @@ class TestStorageMan:
             bookmark_name="bookmark_info",
         )
         # TODO I might want to move the filter data to the other table so bookmark table can be discontinued easily
-        curs = dbquery(
-            "SELECT filters FROM Bookmarks WHERE Bookmark_name = 'bookmark_info'"
+        qb = QueryBuilder()
+        query_string = (
+            qb.SELECT("filters")
+            .FROM("Filters")
+            .WHERE("name='bookmark_info'")
+            .build()[0]
         )
+        curs = dbquery(query_string)
         bookmark_filters_db_str = curs.fetchone()[0]
 
         filters = {
@@ -735,6 +741,6 @@ class TestOptions:
     def test_cleanup(self):
         # Alter this method if you wish to not delete all log files after testing automatically
         os.system("rm *_ringtail.log")
-        os.system("rm output.db")
+        os.system("rm output.db output2.db")
         os.system("rm different_log.txt")
         os.system("rm cluster_log.txt")

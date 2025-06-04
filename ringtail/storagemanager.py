@@ -32,6 +32,7 @@ from .exceptions import (
     MergeError,
 )
 from .clustermanager import *
+from .querybuilder import QueryBuilder
 
 
 class StorageManager:
@@ -279,14 +280,14 @@ class StorageManager:
                 )
             if clustering.get("ifp"):
                 editable_query, count = self.cluster_data(
-                    self.get_bookmark_poses_query(bookmark_name),
+                    editable_query,
                     bookmark_name,
                     "ifp",
                     clustering.get("ifp"),
                 )
             if clustering.get("mfp"):
-                editable_query = self.cluster_data(
-                    self.get_bookmark_poses_query(bookmark_name),
+                editable_query, count = self.cluster_data(
+                    editable_query,
                     bookmark_name,
                     "mfp",
                     clustering.get("mfp"),
@@ -298,7 +299,7 @@ class StorageManager:
 
         return editable_query, count
 
-    def check_passing_bookmark_exists(self, bookmark_name: str):
+    def bookmark_exists(self, bookmark_name: str):
         """Checks if bookmark name is in database
 
         Args:
@@ -307,9 +308,8 @@ class StorageManager:
         Returns:
             bool: indicates if bookmark_name exists in the current database
         """
-        bookmark_exists = bookmark_name in self.get_all_bookmark_names()
 
-        return bookmark_exists
+        return bool(bookmark_name in self.get_all_bookmark_names())
 
     def get_plot_data(self, bookmark_name: str, only_passing=False):
         """This function is expected to return an ascii plot
@@ -324,7 +324,7 @@ class StorageManager:
         """
         # TODO messy method
         # checks if we have filtered by looking for view name in list of view names
-        if self.check_passing_bookmark_exists(bookmark_name):
+        if self.bookmark_exists(bookmark_name):
             if only_passing:
                 return [], self._fetch_passing_plot_data(bookmark_name)
             else:
@@ -334,55 +334,56 @@ class StorageManager:
         else:
             return self._fetch_all_plot_data(), []
 
-    # TODO
     def crossref_filter(
         self,
         new_db: str,
         bookmark1_name: str,
         bookmark2_name: str,
-        selection_type="-",
+        temp_table_suffix: int,
+        selection="NOT IN",
         old_db=None,
     ) -> tuple:
-        # TODO can clean this method with new aliasing method
-        # TODO this method needs quite a bit of work, if dropping bookmarks
         """Selects ligands found or not found in the given bookmark in both current db and new_db. Stores as temp view
 
         Args:
             new_db (str): file name for database to attach
             bookmark1_name (str): string for name of first bookmark/temp table to compare
             bookmark2_name (str): string for name of second bookmark to compare
-            selection_type (str): "+" or "-" indicating if ligand names should ("+") or should not "-" be in both databases
+            selection (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
             old_db (str, optional): file name for previous database
 
         Returns:
             tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
         """
-
         if old_db is not None:
             self._detach_db(old_db.split(".")[0])  # remove file extension
-
         new_db_name = new_db.split(".")[0]  # remove file extension
-
         self._attach_db(new_db, new_db_name)
 
-        if selection_type == "-":
-            select_str = "NOT IN"
-        elif selection_type == "+":
-            select_str = "IN"
-        else:
-            raise StorageError(f"Unrecognized selection type {selection_type}")
+        selection = selection.upper().strip()
+        if selection not in ["NOT IN", "IN"]:
+            raise StorageError(f"Unrecognized selection type {selection}")
 
-        temp_name = "temp_" + str(self.temptable_suffix)
+        temp_name = "temp_" + str(temp_table_suffix)
         self._create_temp_table(temp_name)
         temp_insert_query = self._generate_selective_insert_query(
-            bookmark1_name, bookmark2_name, select_str, new_db_name, temp_name
+            bookmark1_name, bookmark2_name, selection, new_db_name, temp_name
         )
+        self.db_update(temp_insert_query, ())
 
-        self._insert_into_temp_table(temp_insert_query)
-        # TODO use other method
-        num_passing = self._get_number_passing_ligands(temp_name)
-        # TODO I don't think this is needed but gotta go through carefully
-        self.temptable_suffix += 1
+        counting = QueryBuilder()
+        count_pool = QueryBuilder()
+        count_pool_string = (
+            count_pool.SELECT("tt.pose_id")
+            .FROM(temp_name, "tt")
+            .JOIN("Results", "r", "pose_id")
+            .GROUP_BY("r.ligand_id")
+            .build()[0]
+        )
+        counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
+            "count_pool", "cp"
+        )
+        num_passing = tuple(self.db_query(counting.build()[0]).fetchone())[0]
 
         return temp_name, num_passing
 
@@ -408,7 +409,6 @@ class StorageManager:
                 stateVar_keys
                 ligand_data_keys
                 interaction_data_kws
-                outfield_options
 
         Returns:
             list: of keywords belonging to a specific group
@@ -438,48 +438,9 @@ class StorageManager:
                 "recname",
                 "recid",
             ],
-            # TODO update to just be db columns
-            "outfield_options": [
-                "Ligand_name",
-                "e",
-                "le",
-                "delta",
-                "ref_rmsd",
-                "e_inter",
-                "e_vdw",
-                "e_elec",
-                "e_intra",
-                "n_interact",
-                "interactions",
-                "fname",
-                "ligand_smile",
-                "rank",
-                "run",
-                "hb",
-                "source_file",
-            ],
         }
         return groups[group]
 
-    # TODO update/remove after other outfields update
-    field_to_column_name = {
-        "Ligand_name": "LigName",
-        "e": "docking_score",
-        "le": "leff",
-        "delta": "deltas",
-        "ref_rmsd": "reference_rmsd",
-        "e_inter": "energies_inter",
-        "e_vdw": "energies_vdw",
-        "e_elec": "energies_electro",
-        "e_intra": "energies_intra",
-        "n_interact": "nr_interactions",
-        "interactions": "interactions",
-        "ligand_smile": "ligand_smile",
-        "rank": "pose_rank",
-        "run": "run_number",
-        "hb": "num_hb",
-        "receptor": "receptor",
-    }
     # endregion
 
 
@@ -491,7 +452,6 @@ class StorageManagerSQLite(StorageManager):
         open_cursors (list): list of cursors that were not closed by the function that created them.
             Will be closed by close_connection method.
         db_file (str): database name
-        field_to_column_name (dict): Dictionary for converting ringtail options into DB column names
     """
 
     def __init__(
@@ -1155,10 +1115,7 @@ class StorageManagerSQLite(StorageManager):
         (?,?,?,?,?,?)"""
 
         try:
-            cur = self.conn.cursor()
-            cur.executemany(sql_insert, receptor_array)
-            self.conn.commit()
-            cur.close()
+            self.db_update(sql_insert, [receptor_array])
 
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting receptor.") from e
@@ -1710,9 +1667,40 @@ class StorageManagerSQLite(StorageManager):
             selection="R.Pose_id", group_statement=""
         )
 
+    def delete_bookmark(self, bookmark_name: str):
+        # get filter id
+        filter_id = self.db_query(
+            "SELECT filter_id from Filters WHERE name = ?", (bookmark_name,)
+        ).fetchone()["filter_id"]
+        # delete from filters
+        self.db_update(
+            "DELETE FROM Filters WHERE filter_id = ?",
+            (filter_id,),
+        )
+        # delete from filtered_poses table
+        self.db_update(
+            "DELETE FROM Filtered_poses WHERE filter_id = ?",
+            (filter_id,),
+        )
+        logger.info(
+            f"The bookmark {bookmark_name} and its associated filter data has been deleted."
+        )
+
     def format_editable_filter_query(
         self, bookmark_name, results_str="R", filter_str="f"
     ) -> str:
+        """
+        Pre-formats a sqlite query string for retrieving {selection} columns from filtered poses.
+        The string the {selection} as well as a {group_statement} when .format() after retrieval
+
+        Args:
+            bookmark_name (_type_): _description_
+            results_str (str, optional): _description_. Defaults to "R".
+            filter_str (str, optional): _description_. Defaults to "f".
+
+        Returns:
+            str: _description_
+        """
         query = """SELECT {{selection}} FROM 
                     Results {result_alias} JOIN ( 
                             SELECT Pose_id FROM filtered_poses 
@@ -1726,6 +1714,14 @@ class StorageManagerSQLite(StorageManager):
             filter_alias=filter_str,
         )
         return formatted_query
+
+    def get_bookmark_selection(self, bookmark_name: str, selection: str):
+        if not selection.startswith("R."):
+            selection = "R." + selection
+
+        return self.format_editable_filter_query(bookmark_name).format(
+            selection=selection, group_statement=""
+        )
 
     def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark
@@ -1758,50 +1754,18 @@ class StorageManagerSQLite(StorageManager):
         count = self.db_query(f"SELECT COUNT(*) FROM {bookmark_name};").fetchone()[0]
         return bool(count > 0)
 
-    def fetch_bookmark(self, bookmark_name: str) -> sqlite3.Cursor:
-        """returns SQLite cursor of all fields in bookmark
-
-        Args:
-            bookmark_name (str): name of bookmark to retrieve
-
-        Returns:
-            sqlite3.Cursor: cursor of requested view
-        """
-        return self.db_query(f"SELECT * FROM {bookmark_name}")
-
-    def create_bookmark(self, name, query, temp=False, add_poseID=False, filters={}):
-        """Takes name and selection query and creates a bookmark of name.
-        Bookmarks are Ringtail specific views that whose information is stored in the 'Bookmark' table.
-        #FIXME bug where ligand filter only results are not added as bookmarks
-        #TODO one of the issues here will be fixed by new filter storage paradigm
-        #TODO #TODO remember that new filter table should also have filter dict, query would be more for debugging probably
-
-        Args:
-            name (str): Name for bookmark which will be created
-            query (str): SQLite-formated query used to create bookmark
-            temp (bool, optional): Flag if bookmark should be temporary
-            add_poseID (bool, optional): Add Pose_ID column to bookmark
-            filters (dict, optional): a dict of filters used to construct the query
-        """
-
-        if add_poseID:
-            query = query.replace("SELECT ", "SELECT Pose_ID, ", 1)
-
-        if temp:
-            temp_flag = "TEMP "
-        else:
-            temp_flag = ""
-
-        bookmark_query = f"CREATE {temp_flag}VIEW {name} AS {query}"
-        self._create_view(name, bookmark_query)
-        self._insert_bookmark_info(name, bookmark_query, filters)
-        logger.debug(f"Created bookmark from the following query: {bookmark_query}")
-
     def populate_filter_tables(self, name, query: str, filters={}) -> bool:
+
         # fetch filtered poses
         passing_poses_tuples = self.db_query(query).fetchall()
         passing_poses = [row[0] for row in passing_poses_tuples]
         if passing_poses:
+            # check if bookmark exists
+            if self.bookmark_exists(name):
+                logger.warning(
+                    f"The bookmark {name} already exists, and will be overwritten by the current filter."
+                )
+                self.delete_bookmark(name)
             filter_sql = """INSERT INTO Filters (name,query,filters) VALUES (?,?,?) RETURNING filter_id;"""
             try:
                 filter_id = self.db_query(
@@ -1852,34 +1816,6 @@ class StorageManagerSQLite(StorageManager):
                 f"Error ({e}) creating view from query \n{query}"
             ) from e
 
-    def _insert_bookmark_info(self, name: str, sqlite_query: str, filters={}):
-        """Insert bookmark info into bookmark table (bookmarks are a Ringtail specific type of views)
-
-        Args:
-            name (str): name for bookmark
-            sqlite_query (str): sqlite query used to generate bookmark
-            filters (dict): filters used to generate bookmark
-
-        Raises:
-            DatabaseInsertionError
-        """
-        sql_insert = """INSERT OR REPLACE INTO Bookmarks (
-        Bookmark_name,
-        Query,
-        filters
-        ) VALUES (?,?,?)"""
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute(sql_insert, [name, sqlite_query, json.dumps(filters)])
-            self.conn.commit()
-            cur.close()
-
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while inserting Bookmark info into Bookmark table"
-            ) from e
-
     def drop_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from database
 
@@ -1904,29 +1840,12 @@ class StorageManagerSQLite(StorageManager):
                 f"Error while attempting to drop bookmark {bookmark_name}"
             ) from e
 
-    def create_temp_table_from_bookmark(self, bookmark_name: str):
-        """Method that creates a temporary table named "passing_temp".
-        Please note that this table will be dropped as soon as the database connection closes.
-        """
-        # TODo does not have to be like this
-        bookmark_query = self.format_editable_filter_query(bookmark_name).format(
-            selection="R.*", group_statement=""
-        )
-        cur = self.conn.cursor()
-        cur.execute(
-            f"CREATE TEMP TABLE passing_temp AS SELECT * FROM ({bookmark_query})"
-        )
-        cur.close()
-        logger.debug(
-            "Creating a temporary table of passing ligands named 'passing_temp'."
-        )
-
     def create_bookmark_from_temp_table(
         self,
         temp_table_name,
         bookmark_name,
         original_bookmark_name,
-        wanted_list,
+        wanted_list=[],
         unwanted_list=[],
     ):
         """Resaves temp bookmark stored in bookmark_name as new permenant bookmark
@@ -1938,19 +1857,23 @@ class StorageManagerSQLite(StorageManager):
             unwanted_list (list, optional): List of unwanted database names
             temp_table_name (str): name of temporary table
         """
-        self._create_view(
-            bookmark_name,
-            f"SELECT * FROM {original_bookmark_name} WHERE Pose_ID in (SELECT Pose_ID FROM {temp_table_name})",
-            add_poseID=False,
+        query = QueryBuilder()
+        subq = QueryBuilder()
+        subq_string = subq.SELECT("t.pose_id").FROM(temp_table_name, "t").build()[0]
+        query_string = (
+            query.SELECT("bm.pose_id")
+            .FROM_BOOKMARK(original_bookmark_name, "bm")
+            .WHERE(f"bm.pose_id IN ({subq_string})")
+            .build()[0]
         )
-        compare_bookmark_str = "Comparison. Wanted: "
-        compare_bookmark_str += ", ".join(wanted_list)
-        if unwanted_list is not None:
-            compare_bookmark_str += ". Unwanted: " + ", ".join(unwanted_list)
-        self._insert_bookmark_info(bookmark_name, compare_bookmark_str)
+        filters = {
+            "comparison_wanted": ", ".join(wanted_list),
+            "comparison_unwanted": ", ".join(unwanted_list),
+        }
+
+        self.populate_filter_tables(bookmark_name, query_string, filters)
 
     def _create_temp_table(self, table_name):
-        # TODO I think this can use ligand_id too, but gotta check carefully
         """create temporary table with given name and with ligand name and pose_id information
 
         Args:
@@ -1960,9 +1883,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError
         """
 
-        create_table_str = (
-            f"CREATE TEMP TABLE {table_name}(Pose_ID PRIMARY KEY, ligand_id)"
-        )
+        create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID)"
         try:
             cur = self.conn.cursor()
             cur.execute(create_table_str)
@@ -1971,25 +1892,6 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseTableCreationError(
                 f"Error while creating temporary table {table_name}"
-            ) from e
-
-    def _insert_into_temp_table(self, query):
-        """Execute insertion into temporary table
-
-        Args:
-            query (str): Insertion command
-
-        Raises:
-            DatabaseInsertionError
-        """
-        try:
-            cur = self.conn.cursor()
-            cur.execute(query)
-            self.conn.commit()
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                f"Error while inserting into temporary table"
             ) from e
 
     def get_filterid_from_name(self, bookmark_name: str) -> int:
@@ -2046,39 +1948,61 @@ class StorageManagerSQLite(StorageManager):
         else:
             outfield_string = "*"
 
-        query = (
-            "SELECT "
-            + outfield_string
-            + f" FROM Results R WHERE Pose_ID IN (SELECT Pose_ID FROM {bookmark_name})"
-        )
+        bookmark_selection = self.get_bookmark_selection(bookmark_name, "pose_id")
+
+        query = f"SELECT {outfield_string} FROM (SELECT * FROM Results WHERE Pose_ID IN ({bookmark_selection})) R JOIN Ligands L ON L.ligand_id = R.ligand_id"
         return self.db_query(query)
 
-    def fetch_flexres_info(self):
+    def add_output_fields_to_query(self, outfields, bookmark_name):
+        bookmark_selection = self.format_editable_filter_query(bookmark_name).format(
+            selection="pose_id"
+        )
+        if outfields:
+            outfield_dict = self.format_output_fields(outfields)
+            outfield_string = outfield_dict.get("selection")
+            join = outfield_dict.get("join")
+        else:
+            outfield_string = "Results.*"
+
+        query = f"SELECT {outfield_string} FROM (SELECT * FROM Results WHERE Pose_ID IN ({bookmark_selection}))"
+        if join:
+            query = query + join
+
+        return query
+
+    def fetch_flexres_info(self, receptor):
         """fetch flexible residues names and atomname lists
 
         Returns:
             tuple: (flexible_residues, flexres_atomnames)
         """
+        if type(receptor) == int:
+            selection = "receptor_id = ?"
+        elif type(receptor) == str:
+            selection = "recname = ?"
         try:
-            cur = self.conn.cursor()
-            cur.execute("SELECT flexible_residues, flexres_atomnames FROM Receptors")
-            info = cur.fetchone()
-            cur.close()
+            query = f"SELECT flexible_residues, flexres_atomnames FROM Receptors WHERE {selection}"
+            info = self.db_query(query, (receptor,)).fetchone()
+            if info is None:
+                info = [], []
             return info
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError("Error retrieving flexible residue info") from e
 
-    def fetch_passing_ligand_output_info(self) -> iter:
+    def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
         """fetch information required by vsmanager for writing out molecules
 
         Returns:
-            iter: contains LigName, ligand_smile,
+            iter: contains LigName, rdmol,
                 atom_index_map, hydrogen_parents
         """
-        query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE ligand_id IN (SELECT DISTINCT ligand_id FROM passing_temp)"
+        bookmark_selection = self.get_bookmark_selection(bookmark_name, "ligand_id")
+
+        query = f"""SELECT LigName, rdmol, atom_index_map, hydrogen_parents 
+        FROM Ligands WHERE ligand_id IN (SELECT DISTINCT ligand_id FROM ({bookmark_selection}))"""
         return self.db_query(query)
 
-    def fetch_single_ligand_output_info(self, ligname) -> str:
+    def fetch_ligand_rdkit_relevant_info(self, ligname) -> str:
         """get output information for given ligand
 
         Args:
@@ -2093,9 +2017,8 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             cur.execute(
-                f"SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
+                f"SELECT LigName, rdmol, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
             )
-            # TODO can this just get the rdmol now?
             info = cur.fetchone()
             cur.close()
             return info
@@ -2208,6 +2131,8 @@ class StorageManagerSQLite(StorageManager):
             selection="R.docking_score, R.leff, R.Pose_ID, R.LigName",
             group_statement="GROUP BY R.ligand_id",
         )
+        # format outputs would work well here
+        self.format_output_fields("")
         return self.db_query(editable_query)
 
     def _fetch_ligand_cluster_columns(self):
@@ -2250,6 +2175,7 @@ class StorageManagerSQLite(StorageManager):
 
     def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
         # TODO cna probably be optimized a bit
+        # TODO this also will not work with bookmarks rn
         """Returns a panda dataframe of table or query given as requested_data
 
         Args:
@@ -2352,22 +2278,22 @@ class StorageManagerSQLite(StorageManager):
         # 1a. if one did not have passing results, this bookmark will not exist
         # 2. select all poses that are present in all of the passing combos
 
-        view_strs = []
+        enumerated_bookmark_queries = []
         existing_bookmarks = self.get_all_bookmark_names()
         for i in range(total_combinations):
             bmn = bookmark_name + "_" + str(i)
             if bmn in existing_bookmarks:
                 result_alias = "R_" + str(i)
                 filter_alias = "f_" + str(i)
-                selection = f" ? AS filter_id, {result_alias}.pose_id"
+                selection = f"{result_alias}.pose_id"
                 partial_query = self.format_editable_filter_query(
                     bmn, result_alias, filter_alias
                 ).format(selection=selection, group_statement="")
-                view_strs.append(partial_query)
+                enumerated_bookmark_queries.append(partial_query)
 
         bookmark_name = f"{bookmark_name}_union"
         logger.debug("Saving union bookmark...")
-        union_view_query = " UNION ".join(view_strs)
+        union_view_query = " UNION ".join(enumerated_bookmark_queries)
         updated_query = union_view_query
         logger.debug("Running union query...")
         self.populate_filter_tables(
@@ -2378,11 +2304,7 @@ class StorageManagerSQLite(StorageManager):
         editable_query = self.format_editable_filter_query(bookmark_name).format(
             selection="*", group_statement=""
         )
-        self.create_bookmark(
-            name=bookmark_name,
-            query=editable_query.format(selection="*", group_statement=""),
-            filters=all_filters,
-        )
+
         count = self.get_passing_poses_count(bookmark_name, True)
         return editable_query, count, bookmark_name
 
@@ -2458,7 +2380,15 @@ class StorageManagerSQLite(StorageManager):
 
         return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
 
-    def fetch_passing_pose_properties(self, ligname):
+    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
+        placeholders = ",".join(["?"] * len(pose_ids))
+        query = f"""
+        SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
+        FROM Results WHERE Pose_ID IN ({placeholders})
+        """
+        return self.db_query(query, pose_ids)
+
+    def fetch_passing_pose_properties(self, ligname, bookmark_name):
         """fetch coordinates for poses passing filter for given ligand
 
         Args:
@@ -2468,11 +2398,16 @@ class StorageManagerSQLite(StorageManager):
             iter: SQLite cursor that contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        # TODO this needs to take ligname as input
-        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID IN (SELECT Pose_ID FROM passing_temp WHERE LigName = ?)"
+        bookmark_selection = self.get_bookmark_selection(
+            bookmark_name, "R.pose_Id, R.ligand_id"
+        )
+        query = f"""
+        SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
+        FROM Results WHERE Pose_ID IN 
+        (({bookmark_selection}) WHERE ligand_id = (SELECT ligand_id from Ligands WHERE LigName = ?))"""
         return self.db_query(query, (ligname,))
 
-    def fetch_nonpassing_pose_properties(self, ligname: str):
+    def fetch_nonpassing_pose_properties(self, ligname: str, bookmark_name):
         """fetch coordinates for poses of ligname which did not pass the filter
 
         Args:
@@ -2482,8 +2417,9 @@ class StorageManagerSQLite(StorageManager):
             iter: SQLite cursor that contains Pose_ID, docking_score, leff, ligand_coordinates,
                 flexible_res_coordinates, flexible_residues
         """
-        # TODO this needs to take ligname as input
-        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE LigName = ? AND Pose_ID NOT IN (SELECT Pose_ID FROM passing_temp)"
+        bookmark_selection = self.get_bookmark_selection(bookmark_name, "Pose_id")
+        query = f"""SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
+        FROM Results WHERE ligand_id = (SELECT ligand_id from Ligands where LigName = ?) AND Pose_ID NOT IN ({bookmark_selection})"""
         return self.db_query(query, (ligname,))
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
@@ -2554,22 +2490,59 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             OptionError
         """
+        # TODO
+        """
+        maybe one way to do this is:
+        1. format the fields
+        2. if other than R are required, join to the table
+        3. output a query wrapper, starting phrase and ending phrase
+        4. if only R table, then ending phrase is empty
+        """
+        print("Incoming outfields: ", outfields)
         if type(outfields) == str:
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
-
-        for outfield in outfields_list[:]:
-            if outfield not in self._data_kw_groups("outfield_options"):
+        elif type(outfields) == list:
+            outfields_list = outfields
+        else:
+            raise TypeError(
+                "The provided outfields is not in a usable format (string or list)."
+            )
+        table_formatted_outfields = []
+        if "ligname" not in [field.lower() for field in outfields_list]:
+            outfields_list.insert(0, "LigName")
+        possible_columns, table_formatted_columns = self.get_possible_output_columns()
+        for outfield in outfields_list:
+            if outfield.lower() in possible_columns:
+                table_formatted_outfields.append(
+                    table_formatted_columns[possible_columns.index(outfield.lower())]
+                )
+            else:
                 logger.warning(
                     f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
                 )
-                outfields_list.remove(outfield)
-        if "ligand_name" not in [field.lower() for field in outfields_list]:
-            outfields_list.insert(0, "Ligand_name")
+        if any("ligands." in field.lower() for field in table_formatted_outfields):
+            join_statement = (
+                "Results JOIN Ligands ON Ligands.ligand_id = Results.ligand_id"
+            )
+        query_adds = {
+            "selection": ", ".join(table_formatted_outfields),
+            "join": join_statement,
+        }
+        return query_adds
 
-        return ", ".join(
-            ["R." + self.field_to_column_name[field] for field in outfields_list]
-        )
+    def get_possible_output_columns(self, tables=["Results", "Ligands"]):
+        columns = []
+        columns_with_tablename = []
+        for table in tables:
+            columns_info = self.db_query(f"PRAGMA table_info({table})").fetchall()
+            columns.extend([col[1].lower() for col in columns_info])
+            columns_with_tablename.extend(
+                [(table + "." + col[1]) for col in columns_info]
+            )
+
+        return columns, columns_with_tablename
+        # get columns
 
     def get_numeric_columns(self, table_name: str) -> iter:
         """
@@ -3098,9 +3071,9 @@ class StorageManagerSQLite(StorageManager):
             data_selection_query_formatted = data_selection_query.format(
                 selection=" R.Pose_ID", group_statement=""
             )
-            rdmol_query = f"""SELECT R.Pose_ID, R.leff, L.rdmol FROM Ligands L 
-            INNER JOIN Results R ON R.ligand_id = L.ligand_id 
-            WHERE R.Pose_ID IN ({data_selection_query_formatted})"""
+            rdmol_query = f"""SELECT RR.Pose_ID, RR.leff, L.rdmol FROM Ligands L 
+            INNER JOIN Results RR ON RR.ligand_id = L.ligand_id 
+            WHERE RR.Pose_ID IN ({data_selection_query_formatted})"""
 
             pose_ids, leffs, rdmols = zip(*self.db_query(rdmol_query).fetchall())
             mfpc = MorganFingerprintCluster(pose_ids, leffs, rdmols, cutoff)
@@ -3375,8 +3348,21 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: sqlite formatted query string
         """
-        # TODO what are you
-        return f"INSERT INTO {temp_table} SELECT Pose_ID, LigName FROM {bookmark1_name} WHERE LigName {select_str} (SELECT LigName FROM {new_db_name}.{bookmark2_name})"
+        query = QueryBuilder()
+        subq = QueryBuilder()
+        subq_string = (
+            subq.SELECT("bm2.pose_id")
+            .FROM_BOOKMARK(f"{bookmark2_name}", "bm2", new_db_name)
+            .build()[0]
+        )
+        query_string = (
+            query.INSERT_INTO(temp_table)
+            .SELECT("bm1.pose_id")
+            .FROM_BOOKMARK(bookmark1_name, "bm1")
+            .WHERE(f"bm1.pose_id {select_str} ({subq_string})")
+        ).build()[0]
+
+        return query_string
 
     # endregion
 

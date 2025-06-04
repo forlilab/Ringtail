@@ -30,6 +30,7 @@ from .exceptions import RTCoreError
 from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingError
 from .exceptions import ResultsProcessingError
 from .exceptions import OutputError
+from .querybuilder import QueryBuilder
 
 __all__ = [
     "CLOptionParser",
@@ -61,4 +62,5 @@ __all__ = [
     "logutils",
     "Filters",
     "util",
+    "QueryBilder",
 ]
