@@ -30,6 +30,16 @@ class QueryBuilder:
 
         return self.FROM(bookmark_query, alias)
 
+    def JOIN_BOOKMARK(self, bookmark, alias=None, db_alias=""):
+        if db_alias:
+            db_alias += "."
+        bookmark_query = f"""(SELECT Pose_id FROM {db_alias}filtered_poses 
+        WHERE filter_id = 
+            (SELECT filter_id FROM {db_alias}Filters 
+            WHERE name = '{bookmark}'))"""
+
+        return self.JOIN(bookmark_query, alias, "pose_id", "results")
+
     def FROM(self, table, alias=None):
         if alias:
             alias = self._add_alias(table, alias)
@@ -86,7 +96,7 @@ class QueryBuilder:
         self.aliases[table.lower()] = alias.lower()
         return alias
 
-    def build(self):
+    def build(self, count=False):
         parts = []
         if self.insert_into:
             parts.append(self.insert_into)
@@ -118,4 +128,7 @@ class QueryBuilder:
         if self.order_by:
             parts.append("ORDER BY " + self.order_by)
 
-        return " ".join(parts), self.params
+        if count:
+            return f"SELECT COUNT(*) FROM ({' '.join(parts)})", self.params
+        else:
+            return " ".join(parts), self.params

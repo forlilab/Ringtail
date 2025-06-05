@@ -1629,15 +1629,16 @@ class StorageManagerSQLite(StorageManager):
         else:
             group_statement = ""
 
-        new_query = (
-            "SELECT COUNT(*) FROM ("
-            + self.format_editable_filter_query(bookmark_name).format(
-                selection="R.Pose_ID", group_statement=group_statement
-            )
-            + ")"
+        query = QueryBuilder()
+        query.SELECT("COUNT(r.pose_id)").FROM("results", "r").JOIN_BOOKMARK(
+            bookmark_name, "bm"
         )
-        if self.db_query(new_query).fetchone():
-            return self.db_query(new_query).fetchone()[0]
+        if grouped_by_ligand:
+            query.GROUP_BY("r.ligand_id")
+        query_string = query.build(count=True)[0]
+
+        if self.db_query(query_string).fetchone():
+            return self.db_query(query_string).fetchone()[0]
         else:
             return 0
 
