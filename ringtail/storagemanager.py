@@ -1635,7 +1635,7 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             cur = self.conn.cursor()
-            # cur.execute("SELECT Bookmark_name FROM Bookmarks;")
+            # TODO good place to use row factory?
             cur.execute("SELECT name FROM Filters;")
             bookmark_names = [name[0] for name in cur.fetchall()]
             cur.close()
@@ -2111,7 +2111,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _fetch_all_plot_data(self):
-        # TODO thi sshould be merged with next table, and just use columns as needed in the output
+        # TODO thi sshould be merged with next method, and just use columns as needed in the output
         # confusing that they give different kinds of data
         """Fetches cursor for best energies and leff for all ligands
 
@@ -2119,7 +2119,6 @@ class StorageManagerSQLite(StorageManager):
              iter: SQLite Cursor containing docking_score,
                 leff for the first pose for each ligand
         """
-        # TODO this and next method, need to look at for GUI
         return self.db_query(
             "SELECT docking_score, leff FROM Results GROUP BY ligand_id"
         )
@@ -2135,14 +2134,16 @@ class StorageManagerSQLite(StorageManager):
             iter: SQL Cursor containing docking_score,
                 leff for the first pose for passing ligands
         """
-        # TODO this probably needs to do a join on ligands table to get ligname, will need more attention
-        editable_query = self.format_editable_filter_query(bookmark_name).format(
-            selection="R.docking_score, R.leff, R.Pose_ID, R.LigName",
-            group_statement="GROUP BY R.ligand_id",
+        query = QueryBuilder()
+        query.SELECT("R.docking_score", "R.leff", "R.Pose_ID", "l.LigName").FROM(
+            "Results", "R"
+        ).JOIN("Ligands", "L", "ligand_id").WHERE(
+            f"r.Pose_id IN ({self.get_bookmark_poses_query(bookmark_name)})"
+        ).GROUP_BY(
+            "r.ligand_id"
         )
-        # format outputs would work well here
-        self.format_output_fields("")
-        return self.db_query(editable_query)
+
+        return self.db_query(query.build()[0])
 
     def _fetch_ligand_cluster_columns(self):
         """fetching columns from Ligand_clusters table
