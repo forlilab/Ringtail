@@ -744,7 +744,7 @@ class RingtailCore:
                 mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
                 interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
                 log_file (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
-                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION. Available fields are:\n
+                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION. Some available fields are shown, although any sortable column in Ligands or Results tables are OK:\n
                     "e" (docking_score),
                     "le" (ligand efficiency),
                     "delta" (delta energy from best pose),
@@ -757,7 +757,7 @@ class RingtailCore:
                     "rank" (rank of ligand pose),
                     "run" (run number for ligand pose),
                     "hb" (hydrogen bonds);
-                outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. `--outfields=e,le,hb`; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are: \n
+                outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. `--outfields=e,le,hb`; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column. Any column in Results and Ligands tables are available, although one of the following is recommended: \n
                     "Ligand_name" (Ligand name),
                     "e" (docking_score),
                     "le" (ligand efficiency),
@@ -853,35 +853,13 @@ class RingtailCore:
 
         with self.storageman:
             if write_one_bookmark:
-                editable_query, num_passing_ligands = self.storageman.filter_results(
+                num_passing_ligands = self.storageman.filter_results(
                     all_filters=filter_dict,
                     bookmark_name=bookmark_name,
                     filtering_bookmark=filter_bookmark,
                     clustering=clustering,
                 )
-                if num_passing_ligands:
-                    print(
-                        "\nNumber passing ligands:",
-                        num_passing_ligands,
-                    )
-                    formatted_query = self._write_filter_output(
-                        bookmark_name,
-                        filter_dict,
-                        editable_query,
-                        num_passing_ligands,
-                        log_file,
-                        outfields,
-                        output_all_poses,
-                        order_results,
-                        clustering,
-                    )
-                else:
-                    print("\nNo ligands passing filters")
-                    self.logger.warning(f"WARNING: No ligands found passing filters.")
-                if clustering:
-                    self._parse_clustering(
-                        clustering, bookmark_name, num_passing_ligands
-                    )
+                print_string = ""
             # else produce a bookmark for each interaction combination
             elif not write_one_bookmark:
                 for ic_idx, combination in enumerate(interaction_combs):
@@ -892,13 +870,11 @@ class RingtailCore:
                     )
                     iterated_bookmark_name = bookmark_name + "_" + str(ic_idx)
                     # process each interaction combination filter
-                    editable_query, num_passing_ligands = (
-                        self.storageman.filter_results(
-                            temp_filters,
-                            iterated_bookmark_name,
-                            filter_bookmark,
-                            clustering={},
-                        )
+                    num_passing_ligands = self.storageman.filter_results(
+                        temp_filters,
+                        iterated_bookmark_name,
+                        filter_bookmark,
+                        clustering={},
                     )
                     if num_passing_ligands:
                         print(
@@ -908,7 +884,6 @@ class RingtailCore:
                         self._write_filter_output(
                             iterated_bookmark_name,
                             temp_filters,
-                            editable_query,
                             num_passing_ligands,
                             log_file,
                             outfields,
@@ -923,74 +898,81 @@ class RingtailCore:
                         self.storageman.drop_bookmark(iterated_bookmark_name)
 
                 # Process the union of the max miss combinations of interactions
-                editable_query, num_passing_ligands, bookmark_name = (
-                    self.storageman.get_maxmiss_union(
-                        len(interaction_combs), bookmark_name, filters_copy
-                    )
+                num_passing_ligands, bookmark_name = self.storageman.get_maxmiss_union(
+                    len(interaction_combs), bookmark_name, filters_copy
                 )
-                if clustering:
-                    self._parse_clustering(
-                        clustering, bookmark_name, num_passing_ligands
-                    )
-                    # this needs to produce an editable query
-                if num_passing_ligands:
-                    print(
-                        "\nNumber passing ligands in max_miss union:",
-                        num_passing_ligands,
-                    )
-                    formatted_query = self._write_filter_output(
-                        bookmark_name,
-                        filters_copy,
-                        editable_query,
-                        num_passing_ligands,
-                        log_file,
-                        outfields,
-                        output_all_poses,
-                        order_results,
-                        clustering=clustering,
-                    )
-                else:
-                    print("\nNo ligands passing filters of max_miss union")
-                    self.storageman.drop_bookmark(bookmark_name)
+                # rename so can be reused in common method below
+                filter_dict = filters_copy
+                print_string = " in max_miss union"
+
+        if num_passing_ligands:
+            print(
+                f"\nNumber passing ligands{print_string}:",
+                num_passing_ligands,
+            )
+            if clustering:
+                bookmark_name, num_passing_ligands = self.parse_clustering(
+                    clustering, bookmark_name
+                )
+            # use original filters for final output log write
+            self._write_filter_output(
+                bookmark_name,
+                filters.asdict(),
+                num_passing_ligands,
+                log_file,
+                outfields,
+                output_all_poses,
+                order_results,
+                clustering,
+            )
+        else:
+            self.logger.warning(
+                f"WARNING: No ligands found passing filters{print_string}."
+            )
+            print(f"\nNo ligands passing filters{print_string}")
 
         if return_iter:
-            return self.storageman.db_query(formatted_query)
+            # create query for returning iter
+            query = QueryBuilder()
+            with self.storageman:
+                iter = self.storageman.db_query(query.build()[0])
+            return iter
         else:
             return num_passing_ligands
 
-    def _parse_clustering(self, cluster_data, bookmark_name, count_passing):
-        # TODO I need to handle the bookmarks produced by each cluster somehow,
-        # right now it is not right
-        if count_passing:
-            logger.info(f"Preparing to cluster {count_passing} passing poses.")
-            if len(cluster_data) > 1:
-                logger.warning(
-                    "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
-                )
-            if cluster_data.get("ifp"):
-                editable_query = self.cluster(
-                    bookmark_name,
-                    "ifp",
-                    cluster_data.get("ifp"),
-                )
-            if cluster_data.get("mfp"):
-                editable_query = self.cluster(
-                    bookmark_name,
-                    "mfp",
-                    cluster_data.get("mfp"),
-                )
-            return editable_query
-        elif not count_passing:
+    def parse_clustering(self, cluster_data, bookmark_name):
+        with self.storageman:
+            count_poses = self.storageman.get_passing_poses_count(bookmark_name, False)
+
+        logger.info(f"Preparing to cluster {count_poses} passing poses.")
+        if len(cluster_data) > 1:
             logger.warning(
-                "No ligands passed filtering, clustering will not be performed."
+                "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
             )
-            return None
+        if cluster_data.get("ifp"):
+            bookmark_name = self.cluster(
+                bookmark_name,
+                "ifp",
+                cluster_data.get("ifp"),
+            )
+        if cluster_data.get("mfp"):
+            bookmark_name = self.cluster(
+                bookmark_name,
+                "mfp",
+                cluster_data.get("mfp"),
+            )
+        with self.storageman:
+            count_reps = self.storageman.get_passing_poses_count(bookmark_name, True)
+        print(
+            f"\nNumber of cluster representative ligands:",
+            count_reps,
+        )
+        return bookmark_name, count_reps
 
     def _write_filter_output(
         self,
         bookmark_name: str,
         filters: dict,
-        editable_query: str,
         num_passing_ligands: int,
         log_file: str,
         output_fields: Union[str, list],
@@ -999,14 +981,13 @@ class RingtailCore:
         clustering: dict = {},
         max_miss_combs=None,
         append_to_log: bool = None,
-    ) -> str:
+    ):
         """
         PS Only works if ran inside context managed cpde
 
         Args:
             bookmark_name (str): _description_
             filters (dict): _description_
-            editable_query (str): _description_
             num_passing_ligands (int): _description_
             log_file (str): _description_
             output_fields (Union[str, list]): _description_
@@ -1018,73 +999,65 @@ class RingtailCore:
 
         Raises:
             OptionError: _description_
-
-        Returns:
-            str: _description_
         """
         # format the filter query
-        if output_fields and output_fields != "*":
-            outfields_list = self.storageman.format_output_fields(
-                output_fields, "R", "L"
-            )
-        elif output_fields == "*":
-            raise OptionError(
-                "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
-            )
-        # start formatting write query
-        query = QueryBuilder()
-        # select stuff from results where pose id in filter poses join ligands for extra fields
-        query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
-            "Ligands", "L", "ligand_id"
-        ).WHERE(
-            f"R.pose_id IN ({self.storageman.get_bookmark_poses_query(bookmark_name)})"
-        )
-
-        if not output_all_poses:
-            query.GROUP_BY("r.ligand_id")
-        if order_results:
-            columns, aliased_columns = self.storageman.get_possible_output_columns()
-            if order_results.lower() in columns:
-                index = columns.index(order_results.lower())
-                order_by = aliased_columns[index].format(
-                    Ligands_alias="L", Results_alias="R"
+        with self.storageman:
+            if output_fields and output_fields != "*":
+                outfields_list = self.storageman.format_output_fields(
+                    output_fields, "R", "L"
                 )
-            query.ORDER_BY(order_by)
-        else:
-            query.ORDER_BY(f"l.ligname")
+            elif output_fields == "*":
+                raise OptionError(
+                    "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
+                )
+            # start formatting write query
+            query = QueryBuilder()
+            # select stuff from results where pose id in filter poses join ligands for extra fields
+            query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
+                "Ligands", "L", "ligand_id"
+            ).WHERE(
+                f"R.pose_id IN ({self.storageman.get_bookmark_poses_query(bookmark_name)})"
+            )
 
-        formatted_query = query.build()[0]
-
-        # format output_log string
-        if clustering:
-            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
-        else:
-            cluster_string = "No clustering performed\n."
-        with OutputManager(log_file, append_to_log) as opm:
-            if max_miss_combs:
-                opm.write_maxmiss_union_header()
-                opm.write_bookmarkname_in_log(bookmark_name)
+            if not output_all_poses:
+                query.GROUP_BY("r.ligand_id")
+            if order_results:
+                order_by = self.storageman.format_orderby(order_results)
+                query.ORDER_BY(order_by)
             else:
-                opm.write_filtervalues_in_log(
-                    filters, [], bookmark_name, cluster_string
-                )
-            opm.write_filter_results_in_log(
-                self.storageman.db_query(formatted_query).fetchall()
-            )
-            opm.log_num_passing_ligands(num_passing_ligands)
+                query.ORDER_BY(f"l.ligname")
 
-        return formatted_query
+            formatted_query = query.build()[0]
+
+            # format output_log string
+            if clustering:
+                cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
+            else:
+                cluster_string = "No clustering performed\n."
+            with OutputManager(log_file, append_to_log) as opm:
+                if max_miss_combs:
+                    opm.write_maxmiss_union_header()
+                    opm.write_bookmarkname_in_log(bookmark_name)
+                else:
+                    opm.write_filtervalues_in_log(
+                        filters, [], bookmark_name, cluster_string
+                    )
+                opm.write_filter_results_in_log(
+                    self.storageman.db_query(formatted_query).fetchall()
+                )
+                opm.log_num_passing_ligands(num_passing_ligands)
 
     def cluster(self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5):
         with self.storageman as sm:
-            editable_query = sm.format_editable_filter_query(bookmark_name)
-            clustered_editable_query, _ = sm.cluster_data(
-                editable_query,
+            bookmark_name, num_clusters = sm.cluster_data(
                 bookmark_name,
                 type,
                 cutoff,
             )
-        return clustered_editable_query
+        logger.info(
+            f"\nNumber of clusters: {num_clusters}.\nPassing poses saved to {bookmark_name}."
+        )
+        return bookmark_name
 
     def write_flexres_pdb(
         self, receptor_polymer, ligname: str, filename: str, bookmark_name: str = None
@@ -1744,7 +1717,11 @@ class RingtailCore:
             output_manager.write_receptor_pdbqt(recname, recblob)
 
     def get_previous_filter_data(
-        self, bookmark_name, outfields: str = "Ligname,docking_score", log_file=None
+        self,
+        bookmark_name,
+        outfields: str = "Ligname,docking_score",
+        order_results: str = "ligname",
+        log_file=None,
     ):
         """Get data requested in self.out_opts['outfields'] from the
         results bookmark of a previous filtering
@@ -1757,7 +1734,7 @@ class RingtailCore:
             raise OptionError("A bookmark name has to be provided")
         with self.storageman:
             new_data = self.storageman.fetch_data_for_passing_results(
-                bookmark_name, outfields
+                bookmark_name, outfields, order_results
             )
         with OutputManager(log_file) as opm:
             opm.write_filter_results_in_log(new_data)

@@ -261,7 +261,7 @@ class StorageManager:
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
 
-        are_results = self.populate_filter_tables(
+        self.populate_filter_tables(
             name=bookmark_name,
             query=filtered_poses,
             filters=all_filters,
@@ -270,34 +270,8 @@ class StorageManager:
             f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
         )
         count = self.get_passing_poses_count(bookmark_name, True)
-        editable_query = self.format_editable_filter_query(bookmark_name)
 
-        if clustering and are_results:
-            logger.info(f"Preparing to cluster {count} passing poses.")
-            if len(clustering) > 1:
-                logger.warning(
-                    "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
-                )
-            if clustering.get("ifp"):
-                editable_query, count = self.cluster_data(
-                    editable_query,
-                    bookmark_name,
-                    "ifp",
-                    clustering.get("ifp"),
-                )
-            if clustering.get("mfp"):
-                editable_query, count = self.cluster_data(
-                    editable_query,
-                    bookmark_name,
-                    "mfp",
-                    clustering.get("mfp"),
-                )
-        elif clustering and not are_results:
-            logger.warning(
-                "No ligands passed filtering, clustering will not be performed."
-            )
-
-        return editable_query, count
+        return count
 
     def bookmark_exists(self, bookmark_name: str):
         """Checks if bookmark name is in database
@@ -1668,7 +1642,7 @@ class StorageManagerSQLite(StorageManager):
             return 0
 
     @classmethod
-    # TODO make this a query builder method maybe?
+    # TODO make this a method in query builder maybe?
     def get_bookmark_poses_query(self, bookmark_name: str):
         query = QueryBuilder()
         return query.SELECT("pose_id").FROM_BOOKMARK(bookmark_name).build()[0]
@@ -1939,7 +1913,7 @@ class StorageManagerSQLite(StorageManager):
         return cursor.fetchall()
 
     def fetch_data_for_passing_results(
-        self, bookmark_name: str, outfields: Union[str, list] = []
+        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
     ) -> iter:
         """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
 
@@ -1959,6 +1933,9 @@ class StorageManagerSQLite(StorageManager):
         query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
             f"R.pose_id IN ({bookmark_selection})"
         ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
+        if order_results:
+            order_by = self.format_orderby(order_results)
+            query.ORDER_BY(order_by)
 
         return self.db_query(query.build()[0])
 
@@ -2283,11 +2260,6 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             iter: of passing results
         """
-        # TODO so what we want to accomplish, is to get a union of the enumerated bookmarks
-        # 1. find all bookmarks that were created
-        # 1a. if one did not have passing results, this bookmark will not exist
-        # 2. select all poses that are present in all of the passing combos
-
         enumerated_bookmark_queries = []
         existing_bookmarks = self.get_all_bookmark_names()
         for i in range(total_combinations):
@@ -2307,16 +2279,13 @@ class StorageManagerSQLite(StorageManager):
         updated_query = union_view_query
         logger.debug("Running union query...")
         self.populate_filter_tables(
-            name=bookmark_name,
-            query=updated_query,
-        )
-
-        editable_query = self.format_editable_filter_query(bookmark_name).format(
-            selection="*", group_statement=""
+            name=bookmark_name, query=updated_query, filters=all_filters
         )
 
         count = self.get_passing_poses_count(bookmark_name, True)
-        return editable_query, count, bookmark_name
+        if not count:
+            bookmark_name = None
+        return count, bookmark_name
 
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
@@ -2489,6 +2458,15 @@ class StorageManagerSQLite(StorageManager):
 
         return n_ligands_passing / n_ligands_total * 100
 
+    def format_orderby(self, column_name: str):
+        columns, aliased_columns = self.get_possible_output_columns()
+        if column_name.lower() in columns:
+            index = columns.index(column_name.lower())
+            order_by = aliased_columns[index].format(
+                Ligands_alias="L", Results_alias="R"
+            )
+            return order_by
+
     def format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
     ) -> str:
@@ -2502,17 +2480,16 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             OptionError
         """
-        # TODO could maybe use this to format out field also, and have this be a special
-        # case of it where you have to include ligand name
         if type(outfields) == str:
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
         elif type(outfields) == list:
             outfields_list = outfields
         else:
-            raise TypeError(
-                "The provided outfields is not in a usable format (string or list)."
+            logger.warning(
+                "The provided outfields is not in a usable format (string or list). Will only use ligname"
             )
+            outfields_list = []
         table_formatted_outfields = []
         if "ligname" not in [field.lower() for field in outfields_list]:
             outfields_list.insert(0, "LigName")
@@ -3062,22 +3039,19 @@ class StorageManagerSQLite(StorageManager):
 
     def cluster_data(
         self,
-        data_selection_query: str,
-        data_window: str,
+        bookmark_name: str,
         cluster_type: str = "mfpt",
         cutoff: float = 0.5,
     ):
         logger.debug("Preparing to cluster")
         time0 = time.perf_counter()
 
+        query = QueryBuilder()
         if cluster_type.lower() == "ifp":
-            pose_ids, leffs = zip(
-                *self.db_query(
-                    data_selection_query.format(
-                        selection=" R.Pose_ID, R.leff ", group_statement=""
-                    )
-                ).fetchall()
+            query.SELECT("r.pose_id", "r.leff").FROM_BOOKMARK(bookmark_name, "bm").JOIN(
+                "Results", "R", "pose_id"
             )
+            pose_ids, leffs = zip(*self.db_query(query.build()[0]).fetchall())
             leffs = list(leffs)
             pose_id_bitvectors = self._generate_interaction_bitvectors(pose_ids)
             pose_ids = list(pose_ids)
@@ -3085,23 +3059,17 @@ class StorageManagerSQLite(StorageManager):
 
             ibc = InteractionBitvectorCluster(pose_ids, leffs, bitvectors, cutoff)
             clusters, representatives = ibc.cluster()
-
+            # the representatives needs to be written to the bookmark
+            # create new bookmark
         elif cluster_type.lower() == "mfp":
-            data_selection_query_formatted = data_selection_query.format(
-                selection=" R.Pose_ID", group_statement=""
-            )
-            rdmol_query = f"""SELECT RR.Pose_ID, RR.leff, L.rdmol FROM Ligands L 
-            INNER JOIN Results RR ON RR.ligand_id = L.ligand_id 
-            WHERE RR.Pose_ID IN ({data_selection_query_formatted})"""
+            query.SELECT("r.pose_id", "r.leff", "l.rdmol").FROM("Results", "R").JOIN(
+                "ligands", "l", "ligand_id", "results"
+            ).WHERE(f"r.pose_id IN ({self.get_bookmark_poses_query(bookmark_name)})")
 
-            pose_ids, leffs, rdmols = zip(*self.db_query(rdmol_query).fetchall())
+            pose_ids, leffs, rdmols = zip(*self.db_query(query.build()[0]).fetchall())
             mfpc = MorganFingerprintCluster(pose_ids, leffs, rdmols, cutoff)
             clusters, representatives = mfpc.cluster()
 
-        # update query to now just use the representatives of the clusters
-        editable_clustered_query = """SELECT {{selection}} FROM Results R WHERE R.Pose_ID IN ({pose_ids}) {{group_statement}}""".format(
-            pose_ids=",".join(representatives)
-        )
         # print some stats
         max_len = max(len(lst) for lst in clusters)
         min_len = min(len(lst) for lst in clusters)
@@ -3115,12 +3083,24 @@ class StorageManagerSQLite(StorageManager):
             pose_ids,
             cluster_type.lower(),
             str(cutoff),
-            data_window,
+            bookmark_name,
+        )
+
+        bookmark_name = bookmark_name + "_" + cluster_type.lower() + "_clustered"
+        clustered_poses = QueryBuilder()
+        clustered_poses.SELECT("pose_id").FROM("results").WHERE(
+            f"pose_id IN ({','.join(representatives)})"
+        )
+
+        self.populate_filter_tables(
+            bookmark_name,
+            clustered_poses.build()[0],
+            {"cluster_type": cluster_type, "cutoff": cutoff},
         )
 
         logger.info(f"Time to cluster data: {time.perf_counter() - time0:.2f} seconds")
 
-        return editable_clustered_query, len(clusters)
+        return bookmark_name, len(clusters)
 
     def _prepare_interaction_filtering_query(
         self, include_interactions: list, exclude_interactions: list, max_miss: int

@@ -91,7 +91,7 @@ class RingtailDefaults:
     interaction_tolerance: float = None
     add_interactions: bool = None
     interaction_cutoffs: str = "3.7,4.0"
-    outfields: str = None
+    outfields: str = "LigName,docking_score"
     order_results: str = None
     mfpt_cluster: float = None
     interaction_cluster: float = None

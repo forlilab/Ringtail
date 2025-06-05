@@ -43,8 +43,19 @@ def main():
             if cli.filtering:
                 rtcore.filter(**cli.filters, **vars(cli.filter_options))
 
+            if cli.clustering_only:
+                cluster_data = {
+                    "ifp": cli.filter_options.interaction_cluster,
+                    "mfp": cli.filter_options.mfpt_cluster,
+                }
+                bookmark_name, _ = rtcore.parse_clustering(
+                    cluster_data, cli.filter_options.bookmark_name
+                )
+
             # Write log with new data for previous filtering results
-            if cli.output_options.data_from_bookmark and not cli.filtering:
+            if (
+                cli.output_options.data_from_bookmark and not cli.filtering
+            ) or cli.clustering_only:
                 rtcore.get_previous_filter_data(
                     bookmark_name,
                     cli.output_options.outfields,

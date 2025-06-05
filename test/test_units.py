@@ -195,7 +195,7 @@ class TestRingtailCore:
         rtc.filter(eworst=-7, bookmark_name="has_filterdata")
         log_file_name = "output_log_test.txt"
         rtc.get_previous_filter_data(
-            "has_filterdata", "deltas, reference_rmsd", log_file_name
+            "has_filterdata", "deltas, reference_rmsd", log_file=log_file_name
         )
 
         with open(log_file_name) as f:
@@ -447,7 +447,6 @@ class TestRingtailCore:
         os.system("rm " + bookmark_db_name)
 
     def test_duplicate_handling(self, tablecount):
-        # TODO failing
         os.system("rm output.db output_log.txt")
 
         rtc = RingtailCore(db_file="output.db")

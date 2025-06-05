@@ -546,6 +546,24 @@ class TestFilters:
 
         assert status == 0
 
+    def test_clustering(self, tablecount):
+        os.system("rm output.db")
+        os.system(
+            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1 --file_path test_data/adgpu/group2"
+        )
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -6"
+        )
+        count1 = tablecount("filtered_poses")
+        status = os.system(
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --bookmark_name passing_results -mfpc 0.9"
+        )
+        count2 = tablecount("filtered_poses")
+
+        assert status == 0
+        assert count1 == 68
+        assert count2 == 68 + 5
+
     def test_filters_value_error(self):
 
         status = os.system(

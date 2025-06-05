@@ -289,21 +289,21 @@ def cmdline_parser(defaults: dict = {}):
         "-of",
         "--outfields",
         help=(
-            'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
-            '"Ligand_name" (Ligand name), '
-            '"e" (docking_score), '
-            '"le" (ligand efficiency), '
-            '"delta" (delta energy from best pose), '
-            '"ref_rmsd" (RMSD to reference pose), '
-            '"e_inter" (intermolecular energy), '
-            '"e_vdw" (van der waals energy), '
-            '"e_elec" (electrostatic energy), '
-            '"e_intra" (intermolecular energy), '
-            '"n_interact" (number of interactions), '
+            'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=docking_score,leff,num_hb"; by default, docking_score (energy) and ligname (ligand name) are reported; ligand always reported in first column, suggested fields are:  '
+            '"ligname" , '
+            '"docking_score", '
+            '"leff"'
+            '"deltas" (delta energy from best pose), '
+            '"reference_rmsd" (RMSD to reference pose), '
+            '"energies_inter" (intermolecular energy), '
+            '"energies_vdw" (van der waals energy), '
+            '"energies_electro" (electrostatic energy), '
+            '"energies_intra" (intermolecular energy), '
+            '"nr_interactions" (number of interactions), '
             '"ligand_smile" , '
-            '"rank" (rank of ligand pose), '
-            '"run" (run number for ligand pose), '
-            '"hb" (hydrogen bonds), '
+            '"pose_rank" (rank of ligand pose), '
+            '"run_number" (run number for ligand pose), '
+            '"num_hb" (hydrogen bonds), '
             '"receptor" (receptor name); '
             "Fields are "
             "printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified."
@@ -317,18 +317,21 @@ def cmdline_parser(defaults: dict = {}):
         "--order_results",
         help="Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
         "available fields are:  "
-        '"e" (docking_score), '
-        '"le" (ligand efficiency), '
-        '"delta" (delta energy from best pose), '
-        '"ref_rmsd" (RMSD to reference pose), '
-        '"e_inter" (intermolecular energy), '
-        '"e_vdw" (van der waals energy), '
-        '"e_elec" (electrostatic energy), '
-        '"e_intra" (intermolecular energy), '
-        '"n_interact" (number of interactions), '
-        '"rank" (rank of ligand pose), '
-        '"run" (run number for ligand pose), '
-        '"hb" (hydrogen bonds); ',
+        '"ligname" , '
+        '"docking_score", '
+        '"leff"'
+        '"deltas" (delta energy from best pose), '
+        '"reference_rmsd" (RMSD to reference pose), '
+        '"energies_inter" (intermolecular energy), '
+        '"energies_vdw" (van der waals energy), '
+        '"energies_electro" (electrostatic energy), '
+        '"energies_intra" (intermolecular energy), '
+        '"nr_interactions" (number of interactions), '
+        '"ligand_smile" , '
+        '"pose_rank" (rank of ligand pose), '
+        '"run_number" (run number for ligand pose), '
+        '"num_hb" (hydrogen bonds), '
+        '"receptor" (receptor name); ',
         action="store",
         type=str,
         metavar="STRING",
@@ -686,6 +689,7 @@ class CLOptionParser:
         self.process_mode = parsed_opts.process_mode.lower()
         # initialize flag indicating if any filters given
         self.filtering = False
+        self.clustering_only = False
         # Check database options
         if parsed_opts.input_db is not None:
             if not os.path.exists(parsed_opts.input_db):
@@ -915,8 +919,10 @@ class CLOptionParser:
             self.filters = filters
 
             # another form of filtering is clustering, which can in theory be performed without filtering (such as clustering over a filtered bookmark)
-            if parsed_opts.mfpt_cluster or parsed_opts.interaction_cluster:
-                self.filtering = True
+            if (
+                parsed_opts.mfpt_cluster or parsed_opts.interaction_cluster
+            ) and not self.filtering:
+                self.clustering_only = True
 
             self.filter_options = SimpleNamespace(
                 bookmark_name=parsed_opts.bookmark_name,
