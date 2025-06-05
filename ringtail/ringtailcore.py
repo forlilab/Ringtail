@@ -864,7 +864,7 @@ class RingtailCore:
                         "\nNumber passing ligands:",
                         num_passing_ligands,
                     )
-                    formatted_query = self.write_filter_output(
+                    formatted_query = self._write_filter_output(
                         bookmark_name,
                         filter_dict,
                         editable_query,
@@ -905,7 +905,7 @@ class RingtailCore:
                             f"\nNumber passing ligands filter combination {str(combination)}:",
                             num_passing_ligands,
                         )
-                        self.write_filter_output(
+                        self._write_filter_output(
                             iterated_bookmark_name,
                             temp_filters,
                             editable_query,
@@ -938,7 +938,7 @@ class RingtailCore:
                         "\nNumber passing ligands in max_miss union:",
                         num_passing_ligands,
                     )
-                    formatted_query = self.write_filter_output(
+                    formatted_query = self._write_filter_output(
                         bookmark_name,
                         filters_copy,
                         editable_query,
@@ -986,7 +986,7 @@ class RingtailCore:
             )
             return None
 
-    def write_filter_output(
+    def _write_filter_output(
         self,
         bookmark_name: str,
         filters: dict,
@@ -1000,32 +1000,60 @@ class RingtailCore:
         max_miss_combs=None,
         append_to_log: bool = None,
     ) -> str:
+        """
+        PS Only works if ran inside context managed cpde
 
+        Args:
+            bookmark_name (str): _description_
+            filters (dict): _description_
+            editable_query (str): _description_
+            num_passing_ligands (int): _description_
+            log_file (str): _description_
+            output_fields (Union[str, list]): _description_
+            output_all_poses (bool): _description_
+            order_results (str): _description_
+            clustering (dict, optional): _description_. Defaults to {}.
+            max_miss_combs (_type_, optional): _description_. Defaults to None.
+            append_to_log (bool, optional): _description_. Defaults to None.
+
+        Raises:
+            OptionError: _description_
+
+        Returns:
+            str: _description_
+        """
         # format the filter query
         if output_fields and output_fields != "*":
             outfields_list = self.storageman.format_output_fields(
-                output_fields, "L", "R"
+                output_fields, "R", "L"
             )
-            outfield_string = ",".join(outfields_list)
-            join = "Results JOIN Ligands ON Ligands.ligand_id = Results.ligand_id"
         elif output_fields == "*":
             raise OptionError(
                 "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
             )
-        if not output_all_poses:
-            group_by = " GROUP BY results.ligand_id"
-        else:
-            group_by = ""
-        if join:
-            editable_query = editable_query + join
-        formatted_query = editable_query.format(
-            selection=outfield_string, group_statement=group_by
+        # start formatting write query
+        query = QueryBuilder()
+        # select stuff from results where pose id in filter poses join ligands for extra fields
+        query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
+            "Ligands", "L", "ligand_id"
+        ).WHERE(
+            f"R.pose_id IN ({self.storageman.get_bookmark_poses_query(bookmark_name)})"
         )
-        print("formatted_query", formatted_query)
 
+        if not output_all_poses:
+            query.GROUP_BY("r.ligand_id")
         if order_results:
-            # TODO add statement to order by, after grouping
-            pass
+            columns, aliased_columns = self.storageman.get_possible_output_columns()
+            if order_results.lower() in columns:
+                index = columns.index(order_results.lower())
+                order_by = aliased_columns[index].format(
+                    Ligands_alias="L", Results_alias="R"
+                )
+            query.ORDER_BY(order_by)
+        else:
+            query.ORDER_BY(f"l.ligname")
+
+        formatted_query = query.build()[0]
 
         # format output_log string
         if clustering:

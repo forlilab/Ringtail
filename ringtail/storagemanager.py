@@ -1667,6 +1667,8 @@ class StorageManagerSQLite(StorageManager):
         else:
             return 0
 
+    @classmethod
+    # TODO make this a query builder method maybe?
     def get_bookmark_poses_query(self, bookmark_name: str):
         query = QueryBuilder()
         return query.SELECT("pose_id").FROM_BOOKMARK(bookmark_name).build()[0]
@@ -2499,6 +2501,8 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             OptionError
         """
+        # TODO could maybe use this to format out field also, and have this be a special
+        # case of it where you have to include ligand name
         if type(outfields) == str:
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
