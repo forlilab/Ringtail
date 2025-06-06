@@ -932,11 +932,10 @@ class RingtailCore:
             print(f"\nNo ligands passing filters{print_string}")
 
         if return_iter:
-            formatted_query = self._format_filter_query(
-                bookmark_name, outfields, output_all_poses, order_results
-            )
-
             with self.storageman:
+                formatted_query = self.storageman.get_bookmark_selection(
+                    bookmark_name, outfields, not output_all_poses, order_results
+                )
                 # have to make it into list of tuples since storageman uses row factory right now
                 iter = [
                     tuple(row)
@@ -975,37 +974,6 @@ class RingtailCore:
         )
         return bookmark_name, count_reps
 
-    def _format_filter_query(
-        self, bookmark_name, output_fields, output_all_poses, order_results
-    ):
-        with self.storageman:
-            if output_fields and output_fields != "*":
-                outfields_list = self.storageman.format_output_fields(
-                    output_fields, "R", "L"
-                )
-            elif output_fields == "*":
-                raise OptionError(
-                    "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
-                )
-            # start formatting write query
-            query = QueryBuilder()
-            # select stuff from results where pose id in filter poses join ligands for extra fields
-            query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
-                "Ligands", "L", "ligand_id"
-            ).WHERE(
-                f"R.pose_id IN ({self.storageman.get_bookmark_poses_query(bookmark_name)})"
-            )
-
-            if not output_all_poses:
-                query.GROUP_BY("r.ligand_id")
-            if order_results:
-                order_by = self.storageman.format_orderby(order_results)
-                query.ORDER_BY(order_by)
-            else:
-                query.ORDER_BY(f"l.ligname")
-
-            return query.build()[0]
-
     def _write_filter_output(
         self,
         bookmark_name: str,
@@ -1037,10 +1005,12 @@ class RingtailCore:
         Raises:
             OptionError: _description_
         """
-
-        formatted_query = self._format_filter_query(
-            bookmark_name, output_fields, output_all_poses, order_results
-        )
+        if not order_results:
+            order_results = "ligname"
+        with self.storageman:
+            formatted_query = self.storageman.get_bookmark_selection(
+                bookmark_name, output_fields, not output_all_poses, order_results
+            )
 
         # format output_log string
         if clustering:

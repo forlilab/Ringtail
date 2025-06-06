@@ -1685,15 +1685,34 @@ class StorageManagerSQLite(StorageManager):
         )
         return formatted_query
 
-    def get_bookmark_selection(self, bookmark_name: str, selection: str):
-        # This one basically is what I will use a ton, it should join on results and ligands as needed
-        # by checking what column group the selection items are in
-        if not selection.startswith("R."):
-            selection = "R." + selection
+    def get_bookmark_selection(
+        self,
+        bookmark_name: str,
+        selection: str,
+        group_by: str = None,
+        order_results: str = None,
+    ):
 
-        return self.format_editable_filter_query(bookmark_name).format(
-            selection=selection, group_statement=""
-        )
+        if selection and selection != "*":
+            outfields_list = self.format_output_fields(selection, "R", "L")
+        elif selection == "*":
+            raise OptionError(
+                "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
+            )
+        # start formatting write query
+        query = QueryBuilder()
+        # select stuff from results where pose id in filter poses join ligands for extra fields
+        query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
+            "Ligands", "L", "ligand_id"
+        ).WHERE(f"R.pose_id IN ({self.get_bookmark_poses_query(bookmark_name)})")
+
+        if group_by:
+            query.GROUP_BY("r.ligand_id")
+        if order_results:
+            order_by = self.format_orderby(order_results)
+            query.ORDER_BY(order_by)
+
+        return query.build()[0]
 
     def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark
