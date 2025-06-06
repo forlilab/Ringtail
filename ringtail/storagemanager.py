@@ -3316,7 +3316,7 @@ class StorageManagerSQLite(StorageManager):
         """
         Will drop all tables in the database.
         """
-        if not self._db_empty():
+        if not self.db_empty():
             self._drop_existing_tables()
             logger.info("Tables in existing database were dropped.")
 
@@ -3362,7 +3362,7 @@ class StorageManagerSQLite(StorageManager):
             StorageError
             OptionError: if database options are not compatible
         """
-        if self._db_empty():
+        if self.db_empty():
             self._create_tables()
 
         count = self.conn.execute("SELECT COUNT (*) FROM DB_properties").fetchone()[0]
@@ -3951,7 +3951,7 @@ class StorageManagerSQLite(StorageManager):
         logger.debug("Closing database")
         self.conn.close()
 
-    def _db_empty(self):
+    def db_empty(self):
         """empty database, for example if overwrite
 
         Returns:

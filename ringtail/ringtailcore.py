@@ -86,372 +86,6 @@ class RingtailCore:
             self.storageman.update_database_version(new_version, consent)
         # return self.storageman.update_database_version(new_version, consent)
 
-    # -#-#- Private methods -#-#-#
-
-    def _validate_docking_mode(self, docking_mode: str):
-        """Method that validates specified AutoDock program used to generate results.
-
-        Args:
-            docking_mode (str): string that describes docking mode
-
-        Raises:
-            RTCoreError: if docking_mode is not supported
-        """
-        if type(docking_mode) is not str:
-            self.logger.warning(
-                'The given docking mode was not given as a string, it will be set to default value "dlg".'
-            )
-            self._docking_mode = "dlg"
-        elif docking_mode.lower() not in ["dlg", "vina"]:
-            raise NotImplementedError(
-                f'Docking mode {docking_mode} is not supported. Please choose between "dlg" and "vina".'
-            )
-        else:
-            self._docking_mode = docking_mode.lower()
-            self.logger.debug(f"Docking mode set to {self.docking_mode}.")
-
-    def _get_docking_mode(self):
-        """
-        Private method to retrieve docking mode
-
-        Returns:
-            str: docking mode
-        """
-        return self._docking_mode
-
-    # making docking mode a property of the ringtail core object
-    docking_mode = property(fget=_get_docking_mode, fset=_validate_docking_mode)
-
-    def _add_poses(
-        self,
-        atom_indices,
-        poses,
-        mol,
-        flexres_mols,
-        flexres_info,
-        ligand_saved_coords,
-        flexres_saved_coords,
-        properties,
-    ):
-        """Add poses from given cursor to rdkit mols for ligand and flexible residues
-
-        Args:
-            atom_indices (list): List of ints indicating mapping of coordinate indices to smiles indices
-            poses (iterable): iterable containing ligand_pose, flexres_pose, flexres_names
-            mol (RDKit.Chem.Mol): RDKit molecule for ligand
-            flexres_mols (list): list of rdkit molecules for flexible residues
-            flexres_info (list): list of tuples containing info for each flexible residue (res_smiles, res_index_map, res_h_parents)
-            ligand_saved_coords (list): list of coordinates to save for adding hydrogens later
-            flexres_saved_coords (list): list of lists of flexres coords to save for adding hydrogens later
-            properties (dict): Dictionary of lists of properties, with each element corresponding to that conformer in the rdkit mol
-
-        """
-        for (
-            Pose_ID,
-            docking_score,
-            leff,
-            ligand_pose,
-            flexres_pose,
-        ) in poses:
-            # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
-            interactions = self.storageman.fetch_pose_interactions(Pose_ID)
-            # if that pose id has interactions
-            if interactions is not None:
-                # make a list of all of them
-                interactions_list = []
-                # for each interaction row, make into a string according to format above
-                for interaction_info in interactions:
-                    interaction = (
-                        interaction_info[0] + "-" + ":".join(interaction_info[1:])
-                    )
-                    interactions_list.append(interaction)
-
-                interactions_str = ", ".join(interactions_list)
-                properties["Interactions"].append(interactions_str)
-
-            # add properties to dictionary lists
-            properties["Binding energies"].append(docking_score)
-            properties["Ligand effiencies"].append(leff)
-            # get pose coordinate info
-            ligand_pose = json.loads(ligand_pose)
-            flexres_pose = json.loads(flexres_pose)
-            mol = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices)
-            for fr_idx, fr_mol in enumerate(flexres_mols):
-                flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(
-                    fr_mol, flexres_pose[fr_idx], flexres_info[fr_idx][1]
-                )
-                flexres_saved_coords[fr_idx].append(flexres_pose[fr_idx])
-            ligand_saved_coords.append(ligand_pose)
-        return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
-
-    def _generate_interaction_combinations(self, filters, max_miss):
-        """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
-
-        Args:
-            max_miss (int): Maximum number of interactions to be excluded
-        """
-
-        all_interactions = []
-        for _type in Filters.get_filter_keys("interaction"):
-            interactions = filters[_type]
-            for interact in interactions:
-                all_interactions.append(_type + "-" + interact[0])
-        # warn if max_miss greater than number of interactions
-        if max_miss > len(all_interactions):
-            self.logger.warning(
-                "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
-            )
-            max_miss = len(all_interactions)
-
-        # BASE CASE:
-        if max_miss == 0:
-            return [tuple(all_interactions)]
-        else:
-            combinations = list(
-                itertools.combinations(
-                    all_interactions, len(all_interactions) - max_miss
-                )
-            )
-            return combinations + self._generate_interaction_combinations(
-                filters, max_miss=max_miss - 1
-            )
-
-    def _prepare_filters_for_storageman(self, filters: dict, interaction_combination):
-        """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
-
-        Args:
-            interaction_combination (list): list of interactions to be included in this round of filtering
-
-        Returns:
-            dict: filters for storageman
-        """
-        for itype in Filters.get_filter_keys("interaction"):
-            itype_interactions = filters[itype]
-            for interaction in itype_interactions:
-                if itype + "-" + interaction[0] not in interaction_combination:
-                    filters[itype].remove(interaction)
-        # we want a match for all interactions when enumerating combinations
-        filters["max_miss"] = 0
-
-        return filters
-
-    def _create_rdkit_mol(
-        self,
-        ligname,
-        bin_mol,
-        atom_indices,
-        h_parent_line,
-        flexible_residues,
-        flexres_atomnames,
-        pose_ids: Union[list, int] = None,
-    ):
-        """Creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
-
-        Args:
-            ligname (string): ligand name
-            bin_mol (blob): serialized version of the ligand Mol
-            atom_indices (list): list of atom indices converting pdbqt to rdkit mol
-            h_parent_line (list): list of atom indices for heteroatoms with attached hydrogens
-            flexible_residues (list): list of flexible residue names
-            flexres_atomnames (list): list of atomtypes in flexible residue
-            pose_IDs (list[int], optional): list of poses to consider for the ligand
-
-        Raises:
-            OutputError: raises error if there is an issue with determining a flexible residue identity
-
-        Returns:
-            tuple: (ligand rdkit mol, [flexres rdkit mols], {properties for ligand})
-
-
-        Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
-        """
-        """
-        what happens: 
-        1. get mol from smiles --> replace with bin_rdmol
-        2. json format atom indices
-        3. make empty lists for stuff:
-            a. flexrs mols (receptor?)
-            b. flexres_info
-            c. ligand_saved_coords? 
-            d. flexres_saved coords? 
-        4. for flex residues and atomnames, add to flexres mol and info
-            a. this does not have any coordinates or anything just yet
-        5. start variable properties that holds some results data not immediately 
-                needed for creating an rdkit mol
-        6. then, either --> I think the method should just be given all 
-                    poses and ligand info it should deal with
-            a. a pose was given with the ligand, or
-            b. you want all poses belonging to the ligand that passed your given filte, or
-            c. you want all poses for the ligand
-        7. then if none pose given, it will get all this info for each passing pose for that ligand
-        8. then, if also writing non-passing, it will do the same for the remaining poses for that ligand
-        9. then if single pose give, just handle that one pose
-        10. to the properties is finally added ligand name, and something about hydrogen parents
-        11. then adding hydrogen parents also to the flexres mols (prob a mol for each flexible residue?)
-        12. then return the mol, flexres_mols, and properties
-
-        ***
-        mol keeps being passed in and coming back out, as do 
-        flexres_mols, ligand_saved_coords, flexres_saved_coords, 
-        and properties
-        ***
-        improvements off the bat:
-        i. method should get bin rdmol instead of smiles
-        ii. give poses it should consider
-
-        *** I need a method that
-        * fetches the ligand info
-        * flexres info
-        * creates the rdkit mol
-        """
-        mol = Chem.Mol(bin_mol)
-        flexres_mols = []
-        flexres_info = []
-        atom_indices = json.loads(atom_indices)
-        ligand_saved_coords = []
-        flexres_saved_coords = []
-
-        # make flexible residue molecules
-        for res, res_ats in zip(flexible_residues, flexres_atomnames):
-            flexres_saved_coords.append([])
-            resname = res[:3]
-            res_ats = [
-                at.strip() for at in res_ats
-            ]  # strip out whitespace around atom names
-            (
-                res_smiles,
-                res_index_map,
-                res_h_parents,
-            ) = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
-            if res_smiles is None:  # catch error in guessing smiles
-                raise OutputError(
-                    f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes"
-                )
-            frm = Chem.MolFromSmiles(res_smiles)
-            frm.SetProp("resinfo", res)
-            flexres_mols.append(frm)
-            flexres_info.append((res_smiles, res_index_map, res_h_parents))
-
-        # fetch coordinates for passing poses and add to
-        # rdkit ligand mol, add flexible residues
-        properties = {
-            "Binding energies": [],
-            "Ligand effiencies": [],
-            "Interactions": [],
-        }
-
-        if type(pose_ids) == int:
-            pose_ids = [pose_ids]
-        with self.storageman as sm:
-            poses_properties = sm.fetch_rdkit_relevant_pose_properties(pose_ids)
-            (
-                mol,
-                flexres_mols,
-                ligand_saved_coords,
-                flexres_saved_coords,
-                properties,
-            ) = self._add_poses(
-                atom_indices,
-                poses_properties,
-                mol,
-                flexres_mols,
-                flexres_info,
-                ligand_saved_coords,
-                flexres_saved_coords,
-                properties,
-            )
-
-        # add ligand name to properties
-        properties["_Name"] = ligname
-        # add hydrogens to mols
-        lig_h_parents = [int(idx) for idx in json.loads(h_parent_line)]
-        mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
-        flexres_hparents = []
-        for idx, res in enumerate(flexres_mols):
-            flexres_hparents = flexres_info[idx][2]
-            flexres_mols[idx] = RDKitMolCreate.add_hydrogens(
-                res, flexres_saved_coords[idx], flexres_hparents
-            )
-
-        return mol, flexres_mols, properties
-
-    def _add_results(
-        self,
-        results: ResultsObject,
-        duplicate_handling: str,
-        overwrite: bool,
-        store_all_poses: bool,
-        max_poses: int,
-        add_interactions: bool,
-        interaction_tolerance: float,
-        interaction_cutoffs: list,
-        max_proc: int,
-        finalize: bool,
-    ):
-        """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
-
-        Args:
-            results_sources(InputFiles or InputStrings): type checked and validated results object
-            strings (bool): whether or not results are provided as strings or files
-            duplicate_handling (str): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
-            store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
-            max_poses (int): how many poses to save (ordered by soem score?)
-            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
-            interaction_tolerance (float): longest ångström distance that is considered interaction?
-            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
-            max_proc (int): max number of computer processors to use for file reading
-            finalize (bool): whether or not this is last db write, will add indices
-
-        Raises:
-            OptionError
-        """
-        # Docking mode compatibility check
-        if self.docking_mode == "vina" and interaction_tolerance:
-            self.logger.warning(
-                "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
-            )
-            interaction_tolerance = None
-
-        processing_options = {
-            "max_poses": max_poses,
-            "store_all_poses": store_all_poses,
-            "add_interactions": add_interactions,
-            "interaction_tolerance": interaction_tolerance,
-            "interaction_cutoffs": interaction_cutoffs,
-            "max_proc": max_proc,
-        }
-
-        # Process results files and handle database versioning
-        with self.storageman:
-            if overwrite:
-                self.storageman.overwrite_storage()
-
-            self.storageman.check_storage_ready(
-                self._run_mode,
-                self.docking_mode,
-                store_all_poses,
-                max_poses,
-            )
-
-        if results.save_receptor:
-            self.save_receptor(results.receptor_file_path)
-
-        # Prepare the results manager with the provided docking results sources
-        self.resultsman = ResultsManager(
-            self.db_file,
-            self.docking_mode,
-            self.storagetype,
-            duplicate_handling,
-        )
-
-        self.logger.info("Adding results...")
-        self.resultsman.process_docking_data(results, processing_options)
-        with self.storageman:
-            if finalize:
-                self.storageman.finalize_database_write()
-
-    # endregion
-
     # region # -#-#- API -#-#-#
     def add_results_from_files(
         self,
@@ -971,61 +605,6 @@ class RingtailCore:
         )
         return bookmark_name, count_reps
 
-    def _write_filter_output(
-        self,
-        bookmark_name: str,
-        filters: dict,
-        num_passing_ligands: int,
-        log_file: str,
-        output_fields: Union[str, list],
-        output_all_poses: bool,
-        order_results: str,
-        clustering: dict = {},
-        max_miss_combs=None,
-        append_to_log: bool = None,
-    ):
-        """
-        Args:
-            bookmark_name (str): _description_
-            filters (dict): _description_
-            num_passing_ligands (int): _description_
-            log_file (str): _description_
-            output_fields (Union[str, list]): _description_
-            output_all_poses (bool): _description_
-            order_results (str): _description_
-            clustering (dict, optional): _description_. Defaults to {}.
-            max_miss_combs (_type_, optional): _description_. Defaults to None.
-            append_to_log (bool, optional): _description_. Defaults to None.
-
-        Raises:
-            OptionError: _description_
-        """
-        if not order_results:
-            order_results = "ligname"
-        with self.storageman:
-            formatted_query = self.storageman.get_bookmark_selection(
-                bookmark_name, output_fields, not output_all_poses, order_results
-            )
-
-        # format output_log string
-        if clustering:
-            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
-        else:
-            cluster_string = "No clustering performed\n."
-        with OutputManager(log_file, append_to_log) as opm:
-            if max_miss_combs:
-                opm.write_maxmiss_union_header()
-                opm.write_bookmarkname_in_log(bookmark_name)
-            else:
-                opm.write_filtervalues_in_log(
-                    filters, [], bookmark_name, cluster_string
-                )
-            with self.storageman:
-                opm.write_filter_results_in_log(
-                    self.storageman.db_query(formatted_query).fetchall()
-                )
-            opm.log_num_passing_ligands(num_passing_ligands)
-
     def cluster(self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5):
         with self.storageman as sm:
             bookmark_name, num_clusters = sm.cluster_data(
@@ -1097,41 +676,6 @@ class RingtailCore:
 
         return ligand_mol, flexmoldict
 
-    def _get_ligand_poses(
-        self,
-        ligand_name: str,
-        passing_only: bool = None,
-        bookmark_name: str = None,
-    ) -> list[int]:
-        query = QueryBuilder()
-
-        query = (
-            query.SELECT("R.pose_id")
-            .FROM("Results", "R")
-            .JOIN("Ligands", "L", "ligand_id", "Results")
-            .WHERE("L.ligname=?", ligand_name)
-        )
-
-        if bookmark_name and passing_only:
-            filtered_query = QueryBuilder()
-            subquery, params = query.build()
-            filtered_query = (
-                filtered_query.WITH_SUBQUERY("lig_poses", subquery, params)
-                .SELECT("lp.pose_id")
-                .FROM("lig_poses", "lp")
-                .JOIN("filtered_poses", "fp", "pose_id", "lig_poses")
-                .JOIN("filters", "f", "filter_id", "filtered_poses")
-                .WHERE("f.name=?", bookmark_name)
-            )
-            query_string, params = filtered_query.build()
-
-        elif passing_only and not bookmark_name:
-            raise OptionError(
-                "Cannot find passing poses without providing a bookmark name."
-            )
-
-        return [row["pose_id"] for row in self.dbquery(query_string, params).fetchall()]
-
     def dbquery(self, query: str, params=()):
         with self.storageman as sm:
             return sm.db_query(query, params)
@@ -1197,60 +741,6 @@ class RingtailCore:
                     info["properties"],
                     sdf_path,
                 )
-
-    def _validate_bookmark_name(self, bookmark_name):
-        with self.storageman:
-            if self.storageman.bookmark_exists(bookmark_name):
-                # check if has max_miss filter
-                bookmark_filters = self.storageman.fetch_filters_from_bookmark(
-                    bookmark_name
-                )
-                try:
-                    max_miss_present = bool(
-                        bookmark_filters["max_miss"] > 0
-                        and not bookmark_filters["enumerate_interaction_combs"]
-                        and not "_union" in bookmark_name
-                    )
-                except:
-                    #  in case bookmark query string does not contain the phrase 'max_miss', carry on
-                    pass
-                else:
-                    if max_miss_present:
-                        self.logger.warning(
-                            "'max_miss' used in filtering, but the bookmark used for sdfs writing is not the union of the search"
-                        )
-            # if bookmark name is not in the database
-            else:
-                # does bookmark name + _union resolve the issue
-                if self.storageman.bookmark_exists(bookmark_name + "_union"):
-                    bookmark_name = bookmark_name + "_union"
-                    self.logger.warning(
-                        "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
-                    )
-                # if not, raise error
-                else:
-                    raise StorageError(
-                        "Filtering bookmark {0} does not exist in database. Cannot write passing molecule SDFs".format(
-                            bookmark_name
-                        )
-                    )
-
-            if not self.storageman.get_passing_poses_count(bookmark_name):
-                raise StorageError(
-                    "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
-                )
-        return bookmark_name
-
-    def _get_receptor_flexres_info(self, receptor: Union[str, int] = 1):
-        with self.storageman as sm:
-            flexible_residues, flexres_atomnames = sm.fetch_flexres_info(receptor)
-        if flexible_residues is None:
-            flexible_residues, flexres_atomnames = [], []
-        elif flexible_residues != []:  # converts string to list
-            flexible_residues = json.loads(flexible_residues)
-            flexres_atomnames = json.loads(flexres_atomnames)
-
-        return flexible_residues, flexres_atomnames
 
     def ligands_rdkit_mol(self, bookmark_name, write_nonpassing=False) -> dict:
         """
@@ -1406,7 +896,6 @@ class RingtailCore:
             plt.show()
 
     def get_plot_data(self, bookmark_name: str):
-        # TODO this might not be used in GUI anymore
         """
         Get ligand efficiency and energy for all docking data and for ligands that passed
         filtering in specified bookmark. Each tuple in the respective lists contains
@@ -1615,24 +1104,6 @@ class RingtailCore:
                 # need to return updated mol
                 return canvas
 
-    def _pose_to_mol(self, pose_id, ligname):
-        # make rdkit mol for poseid
-        ligname, rdmol, atom_index_map, hydrogen_parents = (
-            self.storageman.fetch_ligand_rdkit_relevant_info(ligname)
-        )
-        flexible_residues, flexres_atomnames = self._get_receptor_flexres_info()
-
-        mol, flexres_mols, _ = self._create_rdkit_mol(
-            ligname,
-            rdmol,
-            atom_index_map,
-            hydrogen_parents,
-            flexible_residues,
-            flexres_atomnames,
-            pose_ID=pose_id,
-        )
-        return mol, flexres_mols, flexible_residues
-
     def export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV
 
@@ -1741,6 +1212,10 @@ class RingtailCore:
         with self.storageman:
             return self.storageman.get_all_bookmark_names()
 
+    def database_is_empty(self):
+        with self.storageman as sm:
+            return sm.db_empty()
+
     @staticmethod
     def defaults() -> dict:
         """
@@ -1776,3 +1251,531 @@ class RingtailCore:
         return filename
 
     # endergion
+
+    # -#-#- Private methods -#-#-#
+
+    def _validate_docking_mode(self, docking_mode: str):
+        """Method that validates specified AutoDock program used to generate results.
+
+        Args:
+            docking_mode (str): string that describes docking mode
+
+        Raises:
+            RTCoreError: if docking_mode is not supported
+        """
+        if type(docking_mode) is not str:
+            self.logger.warning(
+                'The given docking mode was not given as a string, it will be set to default value "dlg".'
+            )
+            self._docking_mode = "dlg"
+        elif docking_mode.lower() not in ["dlg", "vina"]:
+            raise NotImplementedError(
+                f'Docking mode {docking_mode} is not supported. Please choose between "dlg" and "vina".'
+            )
+        else:
+            self._docking_mode = docking_mode.lower()
+            self.logger.debug(f"Docking mode set to {self.docking_mode}.")
+
+    def _get_docking_mode(self):
+        """
+        Private method to retrieve docking mode
+
+        Returns:
+            str: docking mode
+        """
+        return self._docking_mode
+
+    # making docking mode a property of the ringtail core object
+    docking_mode = property(fget=_get_docking_mode, fset=_validate_docking_mode)
+
+    def _add_poses(
+        self,
+        atom_indices,
+        poses,
+        mol,
+        flexres_mols,
+        flexres_info,
+        ligand_saved_coords,
+        flexres_saved_coords,
+        properties,
+    ):
+        """Add poses from given cursor to rdkit mols for ligand and flexible residues
+
+        Args:
+            atom_indices (list): List of ints indicating mapping of coordinate indices to smiles indices
+            poses (iterable): iterable containing ligand_pose, flexres_pose, flexres_names
+            mol (RDKit.Chem.Mol): RDKit molecule for ligand
+            flexres_mols (list): list of rdkit molecules for flexible residues
+            flexres_info (list): list of tuples containing info for each flexible residue (res_smiles, res_index_map, res_h_parents)
+            ligand_saved_coords (list): list of coordinates to save for adding hydrogens later
+            flexres_saved_coords (list): list of lists of flexres coords to save for adding hydrogens later
+            properties (dict): Dictionary of lists of properties, with each element corresponding to that conformer in the rdkit mol
+
+        """
+        for (
+            Pose_ID,
+            docking_score,
+            leff,
+            ligand_pose,
+            flexres_pose,
+        ) in poses:
+            # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
+            interactions = self.storageman.fetch_pose_interactions(Pose_ID)
+            # if that pose id has interactions
+            if interactions is not None:
+                # make a list of all of them
+                interactions_list = []
+                # for each interaction row, make into a string according to format above
+                for interaction_info in interactions:
+                    interaction = (
+                        interaction_info[0] + "-" + ":".join(interaction_info[1:])
+                    )
+                    interactions_list.append(interaction)
+
+                interactions_str = ", ".join(interactions_list)
+                properties["Interactions"].append(interactions_str)
+
+            # add properties to dictionary lists
+            properties["Binding energies"].append(docking_score)
+            properties["Ligand effiencies"].append(leff)
+            # get pose coordinate info
+            ligand_pose = json.loads(ligand_pose)
+            flexres_pose = json.loads(flexres_pose)
+            mol = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices)
+            for fr_idx, fr_mol in enumerate(flexres_mols):
+                flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(
+                    fr_mol, flexres_pose[fr_idx], flexres_info[fr_idx][1]
+                )
+                flexres_saved_coords[fr_idx].append(flexres_pose[fr_idx])
+            ligand_saved_coords.append(ligand_pose)
+        return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
+
+    def _get_ligand_poses(
+        self,
+        ligand_name: str,
+        passing_only: bool = None,
+        bookmark_name: str = None,
+    ) -> list[int]:
+        query = QueryBuilder()
+
+        query = (
+            query.SELECT("R.pose_id")
+            .FROM("Results", "R")
+            .JOIN("Ligands", "L", "ligand_id", "Results")
+            .WHERE("L.ligname=?", ligand_name)
+        )
+
+        if bookmark_name and passing_only:
+            filtered_query = QueryBuilder()
+            subquery, params = query.build()
+            filtered_query = (
+                filtered_query.WITH_SUBQUERY("lig_poses", subquery, params)
+                .SELECT("lp.pose_id")
+                .FROM("lig_poses", "lp")
+                .JOIN("filtered_poses", "fp", "pose_id", "lig_poses")
+                .JOIN("filters", "f", "filter_id", "filtered_poses")
+                .WHERE("f.name=?", bookmark_name)
+            )
+            query_string, params = filtered_query.build()
+
+        elif passing_only and not bookmark_name:
+            raise OptionError(
+                "Cannot find passing poses without providing a bookmark name."
+            )
+
+        return [row["pose_id"] for row in self.dbquery(query_string, params).fetchall()]
+
+    def _create_rdkit_mol(
+        self,
+        ligname,
+        bin_mol,
+        atom_indices,
+        h_parent_line,
+        flexible_residues,
+        flexres_atomnames,
+        pose_ids: Union[list, int] = None,
+    ):
+        """Creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
+
+        Args:
+            ligname (string): ligand name
+            bin_mol (blob): serialized version of the ligand Mol
+            atom_indices (list): list of atom indices converting pdbqt to rdkit mol
+            h_parent_line (list): list of atom indices for heteroatoms with attached hydrogens
+            flexible_residues (list): list of flexible residue names
+            flexres_atomnames (list): list of atomtypes in flexible residue
+            pose_IDs (list[int], optional): list of poses to consider for the ligand
+
+        Raises:
+            OutputError: raises error if there is an issue with determining a flexible residue identity
+
+        Returns:
+            tuple: (ligand rdkit mol, [flexres rdkit mols], {properties for ligand})
+
+
+        Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
+        """
+        """
+        what happens: 
+        1. get mol from smiles --> replace with bin_rdmol
+        2. json format atom indices
+        3. make empty lists for stuff:
+            a. flexrs mols (receptor?)
+            b. flexres_info
+            c. ligand_saved_coords? 
+            d. flexres_saved coords? 
+        4. for flex residues and atomnames, add to flexres mol and info
+            a. this does not have any coordinates or anything just yet
+        5. start variable properties that holds some results data not immediately 
+                needed for creating an rdkit mol
+        6. then, either --> I think the method should just be given all 
+                    poses and ligand info it should deal with
+            a. a pose was given with the ligand, or
+            b. you want all poses belonging to the ligand that passed your given filte, or
+            c. you want all poses for the ligand
+        7. then if none pose given, it will get all this info for each passing pose for that ligand
+        8. then, if also writing non-passing, it will do the same for the remaining poses for that ligand
+        9. then if single pose give, just handle that one pose
+        10. to the properties is finally added ligand name, and something about hydrogen parents
+        11. then adding hydrogen parents also to the flexres mols (prob a mol for each flexible residue?)
+        12. then return the mol, flexres_mols, and properties
+
+        ***
+        mol keeps being passed in and coming back out, as do 
+        flexres_mols, ligand_saved_coords, flexres_saved_coords, 
+        and properties
+        ***
+        improvements off the bat:
+        i. method should get bin rdmol instead of smiles
+        ii. give poses it should consider
+
+        *** I need a method that
+        * fetches the ligand info
+        * flexres info
+        * creates the rdkit mol
+        """
+        mol = Chem.Mol(bin_mol)
+        flexres_mols = []
+        flexres_info = []
+        atom_indices = json.loads(atom_indices)
+        ligand_saved_coords = []
+        flexres_saved_coords = []
+
+        # make flexible residue molecules
+        for res, res_ats in zip(flexible_residues, flexres_atomnames):
+            flexres_saved_coords.append([])
+            resname = res[:3]
+            res_ats = [
+                at.strip() for at in res_ats
+            ]  # strip out whitespace around atom names
+            (
+                res_smiles,
+                res_index_map,
+                res_h_parents,
+            ) = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
+            if res_smiles is None:  # catch error in guessing smiles
+                raise OutputError(
+                    f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes"
+                )
+            frm = Chem.MolFromSmiles(res_smiles)
+            frm.SetProp("resinfo", res)
+            flexres_mols.append(frm)
+            flexres_info.append((res_smiles, res_index_map, res_h_parents))
+
+        # fetch coordinates for passing poses and add to
+        # rdkit ligand mol, add flexible residues
+        properties = {
+            "Binding energies": [],
+            "Ligand effiencies": [],
+            "Interactions": [],
+        }
+
+        if type(pose_ids) == int:
+            pose_ids = [pose_ids]
+        with self.storageman as sm:
+            poses_properties = sm.fetch_rdkit_relevant_pose_properties(pose_ids)
+            (
+                mol,
+                flexres_mols,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            ) = self._add_poses(
+                atom_indices,
+                poses_properties,
+                mol,
+                flexres_mols,
+                flexres_info,
+                ligand_saved_coords,
+                flexres_saved_coords,
+                properties,
+            )
+
+        # add ligand name to properties
+        properties["_Name"] = ligname
+        # add hydrogens to mols
+        lig_h_parents = [int(idx) for idx in json.loads(h_parent_line)]
+        mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
+        flexres_hparents = []
+        for idx, res in enumerate(flexres_mols):
+            flexres_hparents = flexres_info[idx][2]
+            flexres_mols[idx] = RDKitMolCreate.add_hydrogens(
+                res, flexres_saved_coords[idx], flexres_hparents
+            )
+
+        return mol, flexres_mols, properties
+
+    def _pose_to_mol(self, pose_id, ligname):
+        # make rdkit mol for poseid
+        ligname, rdmol, atom_index_map, hydrogen_parents = (
+            self.storageman.fetch_ligand_rdkit_relevant_info(ligname)
+        )
+        flexible_residues, flexres_atomnames = self._get_receptor_flexres_info()
+
+        mol, flexres_mols, _ = self._create_rdkit_mol(
+            ligname,
+            rdmol,
+            atom_index_map,
+            hydrogen_parents,
+            flexible_residues,
+            flexres_atomnames,
+            pose_ID=pose_id,
+        )
+        return mol, flexres_mols, flexible_residues
+
+    def _add_results(
+        self,
+        results: ResultsObject,
+        duplicate_handling: str,
+        overwrite: bool,
+        store_all_poses: bool,
+        max_poses: int,
+        add_interactions: bool,
+        interaction_tolerance: float,
+        interaction_cutoffs: list,
+        max_proc: int,
+        finalize: bool,
+    ):
+        """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
+
+        Args:
+            results_sources(InputFiles or InputStrings): type checked and validated results object
+            strings (bool): whether or not results are provided as strings or files
+            duplicate_handling (str): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
+            store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
+            max_poses (int): how many poses to save (ordered by soem score?)
+            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            interaction_tolerance (float): longest ångström distance that is considered interaction?
+            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
+            max_proc (int): max number of computer processors to use for file reading
+            finalize (bool): whether or not this is last db write, will add indices
+
+        Raises:
+            OptionError
+        """
+        # Docking mode compatibility check
+        if self.docking_mode == "vina" and interaction_tolerance:
+            self.logger.warning(
+                "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
+            )
+            interaction_tolerance = None
+
+        processing_options = {
+            "max_poses": max_poses,
+            "store_all_poses": store_all_poses,
+            "add_interactions": add_interactions,
+            "interaction_tolerance": interaction_tolerance,
+            "interaction_cutoffs": interaction_cutoffs,
+            "max_proc": max_proc,
+        }
+
+        # Process results files and handle database versioning
+        with self.storageman:
+            if overwrite:
+                self.storageman.overwrite_storage()
+
+            self.storageman.check_storage_ready(
+                self._run_mode,
+                self.docking_mode,
+                store_all_poses,
+                max_poses,
+            )
+
+        if results.save_receptor:
+            self.save_receptor(results.receptor_file_path)
+
+        # Prepare the results manager with the provided docking results sources
+        self.resultsman = ResultsManager(
+            self.db_file,
+            self.docking_mode,
+            self.storagetype,
+            duplicate_handling,
+        )
+
+        self.logger.info("Adding results...")
+        self.resultsman.process_docking_data(results, processing_options)
+        with self.storageman:
+            if finalize:
+                self.storageman.finalize_database_write()
+
+    def _write_filter_output(
+        self,
+        bookmark_name: str,
+        filters: dict,
+        num_passing_ligands: int,
+        log_file: str,
+        output_fields: Union[str, list],
+        output_all_poses: bool,
+        order_results: str,
+        clustering: dict = {},
+        max_miss_combs=None,
+        append_to_log: bool = None,
+    ):
+        """
+        Args:
+            bookmark_name (str): _description_
+            filters (dict): _description_
+            num_passing_ligands (int): _description_
+            log_file (str): _description_
+            output_fields (Union[str, list]): _description_
+            output_all_poses (bool): _description_
+            order_results (str): _description_
+            clustering (dict, optional): _description_. Defaults to {}.
+            max_miss_combs (_type_, optional): _description_. Defaults to None.
+            append_to_log (bool, optional): _description_. Defaults to None.
+
+        Raises:
+            OptionError: _description_
+        """
+        if not order_results:
+            order_results = "ligname"
+        with self.storageman:
+            formatted_query = self.storageman.get_bookmark_selection(
+                bookmark_name, output_fields, not output_all_poses, order_results
+            )
+
+        # format output_log string
+        if clustering:
+            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
+        else:
+            cluster_string = "No clustering performed\n."
+        with OutputManager(log_file, append_to_log) as opm:
+            if max_miss_combs:
+                opm.write_maxmiss_union_header()
+                opm.write_bookmarkname_in_log(bookmark_name)
+            else:
+                opm.write_filtervalues_in_log(
+                    filters, [], bookmark_name, cluster_string
+                )
+            with self.storageman:
+                opm.write_filter_results_in_log(
+                    self.storageman.db_query(formatted_query).fetchall()
+                )
+            opm.log_num_passing_ligands(num_passing_ligands)
+
+    def _generate_interaction_combinations(self, filters, max_miss):
+        """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
+
+        Args:
+            max_miss (int): Maximum number of interactions to be excluded
+        """
+
+        all_interactions = []
+        for _type in Filters.get_filter_keys("interaction"):
+            interactions = filters[_type]
+            for interact in interactions:
+                all_interactions.append(_type + "-" + interact[0])
+        # warn if max_miss greater than number of interactions
+        if max_miss > len(all_interactions):
+            self.logger.warning(
+                "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
+            )
+            max_miss = len(all_interactions)
+
+        # BASE CASE:
+        if max_miss == 0:
+            return [tuple(all_interactions)]
+        else:
+            combinations = list(
+                itertools.combinations(
+                    all_interactions, len(all_interactions) - max_miss
+                )
+            )
+            return combinations + self._generate_interaction_combinations(
+                filters, max_miss=max_miss - 1
+            )
+
+    def _prepare_filters_for_storageman(self, filters: dict, interaction_combination):
+        """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
+
+        Args:
+            interaction_combination (list): list of interactions to be included in this round of filtering
+
+        Returns:
+            dict: filters for storageman
+        """
+        for itype in Filters.get_filter_keys("interaction"):
+            itype_interactions = filters[itype]
+            for interaction in itype_interactions:
+                if itype + "-" + interaction[0] not in interaction_combination:
+                    filters[itype].remove(interaction)
+        # we want a match for all interactions when enumerating combinations
+        filters["max_miss"] = 0
+
+        return filters
+
+    def _validate_bookmark_name(self, bookmark_name):
+        with self.storageman:
+            if self.storageman.bookmark_exists(bookmark_name):
+                # check if has max_miss filter
+                bookmark_filters = self.storageman.fetch_filters_from_bookmark(
+                    bookmark_name
+                )
+                try:
+                    max_miss_present = bool(
+                        bookmark_filters["max_miss"] > 0
+                        and not bookmark_filters["enumerate_interaction_combs"]
+                        and not "_union" in bookmark_name
+                    )
+                except:
+                    #  in case bookmark query string does not contain the phrase 'max_miss', carry on
+                    pass
+                else:
+                    if max_miss_present:
+                        self.logger.warning(
+                            "'max_miss' used in filtering, but the bookmark used for sdfs writing is not the union of the search"
+                        )
+            # if bookmark name is not in the database
+            else:
+                # does bookmark name + _union resolve the issue
+                if self.storageman.bookmark_exists(bookmark_name + "_union"):
+                    bookmark_name = bookmark_name + "_union"
+                    self.logger.warning(
+                        "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
+                    )
+                # if not, raise error
+                else:
+                    raise StorageError(
+                        "Filtering bookmark {0} does not exist in database. Cannot write passing molecule SDFs".format(
+                            bookmark_name
+                        )
+                    )
+
+            if not self.storageman.get_passing_poses_count(bookmark_name):
+                raise StorageError(
+                    "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
+                )
+        return bookmark_name
+
+    def _get_receptor_flexres_info(self, receptor: Union[str, int] = 1):
+        with self.storageman as sm:
+            flexible_residues, flexres_atomnames = sm.fetch_flexres_info(receptor)
+        if flexible_residues is None:
+            flexible_residues, flexres_atomnames = [], []
+        elif flexible_residues != []:  # converts string to list
+            flexible_residues = json.loads(flexible_residues)
+            flexres_atomnames = json.loads(flexres_atomnames)
+
+        return flexible_residues, flexres_atomnames
+
+    # endregion
