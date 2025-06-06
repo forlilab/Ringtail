@@ -932,10 +932,16 @@ class RingtailCore:
             print(f"\nNo ligands passing filters{print_string}")
 
         if return_iter:
-            # create query for returning iter
-            query = QueryBuilder()
+            formatted_query = self._format_filter_query(
+                bookmark_name, outfields, output_all_poses, order_results
+            )
+
             with self.storageman:
-                iter = self.storageman.db_query(query.build()[0])
+                # have to make it into list of tuples since storageman uses row factory right now
+                iter = [
+                    tuple(row)
+                    for row in self.storageman.db_query(formatted_query).fetchall()
+                ]
             return iter
         else:
             return num_passing_ligands
@@ -969,6 +975,37 @@ class RingtailCore:
         )
         return bookmark_name, count_reps
 
+    def _format_filter_query(
+        self, bookmark_name, output_fields, output_all_poses, order_results
+    ):
+        with self.storageman:
+            if output_fields and output_fields != "*":
+                outfields_list = self.storageman.format_output_fields(
+                    output_fields, "R", "L"
+                )
+            elif output_fields == "*":
+                raise OptionError(
+                    "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
+                )
+            # start formatting write query
+            query = QueryBuilder()
+            # select stuff from results where pose id in filter poses join ligands for extra fields
+            query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
+                "Ligands", "L", "ligand_id"
+            ).WHERE(
+                f"R.pose_id IN ({self.storageman.get_bookmark_poses_query(bookmark_name)})"
+            )
+
+            if not output_all_poses:
+                query.GROUP_BY("r.ligand_id")
+            if order_results:
+                order_by = self.storageman.format_orderby(order_results)
+                query.ORDER_BY(order_by)
+            else:
+                query.ORDER_BY(f"l.ligname")
+
+            return query.build()[0]
+
     def _write_filter_output(
         self,
         bookmark_name: str,
@@ -1000,52 +1037,29 @@ class RingtailCore:
         Raises:
             OptionError: _description_
         """
-        # format the filter query
-        with self.storageman:
-            if output_fields and output_fields != "*":
-                outfields_list = self.storageman.format_output_fields(
-                    output_fields, "R", "L"
-                )
-            elif output_fields == "*":
-                raise OptionError(
-                    "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
-                )
-            # start formatting write query
-            query = QueryBuilder()
-            # select stuff from results where pose id in filter poses join ligands for extra fields
-            query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
-                "Ligands", "L", "ligand_id"
-            ).WHERE(
-                f"R.pose_id IN ({self.storageman.get_bookmark_poses_query(bookmark_name)})"
-            )
 
-            if not output_all_poses:
-                query.GROUP_BY("r.ligand_id")
-            if order_results:
-                order_by = self.storageman.format_orderby(order_results)
-                query.ORDER_BY(order_by)
+        formatted_query = self._format_filter_query(
+            bookmark_name, output_fields, output_all_poses, order_results
+        )
+
+        # format output_log string
+        if clustering:
+            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
+        else:
+            cluster_string = "No clustering performed\n."
+        with OutputManager(log_file, append_to_log) as opm:
+            if max_miss_combs:
+                opm.write_maxmiss_union_header()
+                opm.write_bookmarkname_in_log(bookmark_name)
             else:
-                query.ORDER_BY(f"l.ligname")
-
-            formatted_query = query.build()[0]
-
-            # format output_log string
-            if clustering:
-                cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
-            else:
-                cluster_string = "No clustering performed\n."
-            with OutputManager(log_file, append_to_log) as opm:
-                if max_miss_combs:
-                    opm.write_maxmiss_union_header()
-                    opm.write_bookmarkname_in_log(bookmark_name)
-                else:
-                    opm.write_filtervalues_in_log(
-                        filters, [], bookmark_name, cluster_string
-                    )
+                opm.write_filtervalues_in_log(
+                    filters, [], bookmark_name, cluster_string
+                )
+            with self.storageman:
                 opm.write_filter_results_in_log(
                     self.storageman.db_query(formatted_query).fetchall()
                 )
-                opm.log_num_passing_ligands(num_passing_ligands)
+            opm.log_num_passing_ligands(num_passing_ligands)
 
     def cluster(self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5):
         with self.storageman as sm:

@@ -137,8 +137,14 @@ class TestRingtailCore:
         assert bookmarks[0] == "union_bookmark"
         rtc.drop_bookmark("union_bookmark")
 
+    def test_return_iter(self):
+        rtc = RingtailCore(db_file="output.db")
+        iterable = rtc.filter(eworst=-7, bookmark_name="iterable", return_iter=True)
+
+        assert len(iterable) == 7
+
     def test_enumerate_interaction_combinations(self):
-        # first test without enumerate, check number of passing union as well as number of bookmarks
+        # first, test without enumerate, check number of passing union as well as number of bookmarks
         rtc = RingtailCore(db_file="output.db")
         # get current bookmark count
         bookmarks_old = rtc.get_bookmark_names()
