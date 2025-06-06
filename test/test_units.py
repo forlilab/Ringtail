@@ -47,11 +47,28 @@ def dbquery():
 
 
 class TestRingtailCore:
-
-    def test_add_folder(self, tablecount):
+    def test_add_file(self, tablecount):
         os.system("rm output.db")
         rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path="test_data/adgpu/group1")
+        rtc.add_results_from_files(
+            file="test_data/adgpu/group1/1451.dlg.gz", max_poses=3
+        )
+        count = tablecount("Results")
+        assert count == 3
+
+    def test_storeallposes(self, tablecount):
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(
+            file="test_data/adgpu/group1/1451.dlg.gz",
+            store_all_poses=True,
+            overwrite=True,
+        )
+        count = tablecount("Results")
+        assert count == 20
+
+    def test_add_folder(self, tablecount):
+        rtc = RingtailCore(db_file="output.db")
+        rtc.add_results_from_files(file_path="test_data/adgpu/group1", overwrite=True)
         count = tablecount("Ligands")
         assert count == 138
 
@@ -121,7 +138,6 @@ class TestRingtailCore:
         rtc.drop_bookmark("union_bookmark")
 
     def test_enumerate_interaction_combinations(self):
-        # TODO failing
         # first test without enumerate, check number of passing union as well as number of bookmarks
         rtc = RingtailCore(db_file="output.db")
         # get current bookmark count
