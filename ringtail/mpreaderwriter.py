@@ -59,8 +59,6 @@ class DockingFileReader(mp.Process):
         self.interaction_finder = None
         self.exception = None
         self.docking_mode = self.shared.get("docking_mode")
-        # TODO test reassigning all shared mode stuff to internal object vars vs keeping in shared dict
-        # TODO maybe even try just handing copies of the same dict, dont need
 
     def _find_best_cluster_poses(self, ligand_dict):
         """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run"
@@ -111,10 +109,8 @@ class DockingFileReader(mp.Process):
                     parsed_file_dict = parse_single_dlg(next_task)
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
-                    # TODO then this should too
                 elif self.docking_mode == "vina":
                     parsed_file_dict = parse_vina_result(next_task)
-                    # TODO this dict has "ligname" in it I can use
 
                 # Example code for calling user-implemented docking_mode
                 # elif self.docking_mode == "my_docking_mode":
@@ -281,7 +277,6 @@ class Writer(mp.Process):
         self.data_chunks = {}
         self.receptor_written_to_db = False
         self.receptor_row = None
-        # TODO get receptor ID from table, maybe overkill
         # progress tracking instance variables
         self.counter = 0
         self.num_files_written = 0
@@ -307,8 +302,6 @@ class Writer(mp.Process):
                         break
                     continue
 
-                # TODO this method is where things are divided in lists of lists
-                # this is my own method, where the dict from the file is added to the data_chunks attribute, and the current_chunk_size counter is increased
                 if self.receptor_row is None and not self.receptor_written_to_db:
                     self.receptor_row = list(next_task.values())[0].get("receptor_row")
 

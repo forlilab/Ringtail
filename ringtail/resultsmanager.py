@@ -14,19 +14,9 @@ from .ringtailoptions import ResultsObject
 class ResultsManager:
     """Class that handles the processing of the results, including passing on the docking results to the appropriate paralell/multi-processing unit
 
-    Args:
-    #TODO not accurate anymore
-        max_poses (int): max number of poses to store for each ligand
-        interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
-        store_all_poses (bool): Store all poses from docking results
-        add_interactions (bool): find and save interactions between ligand poses and receptor
-        interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
-        max_proc (int): Maximum number of processes to create during parallel file parsing.
-        storageman (StorageManager): storageman object
-        chunk_size (int): how many tasks ot send to a processor at the time
-        parser_manager (str, optional): what paralellization or multiprocessing package to use
-        file_sources (InputFiles, optional): given file sources including the receptor file
-        string_sources (InputStrings, optional): given string sources including the path to the receptor
+    Attributes:
+        write_options (dict): incoming results writing options
+        parser (MPManager): manager to handle reading and writing docking results
 
     Raises:
         ResultsProcessingError
@@ -108,7 +98,6 @@ class ResultsManager:
                     raise ResultsProcessingError(
                         "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
                     )
-        # TODO still messy, should only initialize once and provide inputs once, not all over the place
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {
             "multiprocessing": MPManager,

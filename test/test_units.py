@@ -304,6 +304,9 @@ class TestRingtailCore:
 
         assert os.path.exists("Ligands.csv")
         os.system("rm Ligands.csv")
+        rtc.export_csv("export_csv", "export_csv.csv", True)
+        assert os.path.exists("export_csv.csv")
+        os.system("rm export_csv.csv")
 
     def test_export_receptor(self, dbquery):
         rtc = RingtailCore(db_file="output.db")
@@ -662,7 +665,6 @@ class TestStorageMan:
             vdw_interactions=[("A:VAL:279:", True)],
             bookmark_name="bookmark_info",
         )
-        # TODO I might want to move the filter data to the other table so bookmark table can be discontinued easily
         qb = QueryBuilder()
         query_string = (
             qb.SELECT("filters")
@@ -701,10 +703,6 @@ class TestStorageMan:
         os.system("rm output.db output_log.txt")
         assert versionmatch
         assert int(version) == 200  # NOTE: update for new database schema versions
-
-    def test_return_iter(self):
-        # TODO test returning the iterable
-        pass
 
     def test_filter_bookmark(self):
         # TODO

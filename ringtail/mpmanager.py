@@ -28,9 +28,19 @@ class MPManager:
     multiprocessors.
 
     Attributes:
-    #TODO update
-        chunk_size (int): how many tasks ot send to a processor at the time
+        results (ResultsObject): has all docking results data such as file paths and directories to be written
+        num_readers (int): numer of processors
+        chunk_size (int): how many tasks ot send to the write processor at the time, essentially how many ligands files to read before writing them per processor
         num_files (int): number of files processed at any given time
+        queueIn (mp.Queue): queue for files about to be processed by file reader
+        queueOut (mp.Queue): queue for files that have been processed and should be written
+        writer_options (dict): incoming results writing options
+        shared (dict): limited write_options for the docking file readers
+        file_pattern (str): file extension for selected docking_mode
+        p_conn (one side of mp.Pipe): parent connection for piping information between processes
+        c_conn (one side of mp.Pipe): child connection for piping information between processes
+        receptor_file: path to receptor file
+        workers (list): reader and writer processes
 
     """
 
@@ -91,7 +101,6 @@ class MPManager:
             reader.start()
             self.workers.append(reader)
         # Start writer in a thread (pulls from queueOut)
-        # TODO make writer options method var
         writer = Writer(self.queueOut, self.num_readers, self.writer_options)
         writer.start()
         self.workers.append(writer)

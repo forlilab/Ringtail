@@ -63,7 +63,6 @@ class TypeSafe:
 
 @dataclass
 class RingtailDefaults:
-    # TODO some of these are formatted to work only with cloptionparser,
     # maybe reconsider
     docking_mode: str = "dlg"
     output_db: str = "output.db"

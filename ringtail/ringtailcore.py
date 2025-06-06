@@ -436,7 +436,6 @@ class RingtailCore:
         if results.save_receptor:
             self.save_receptor(results.receptor_file_path)
 
-        # TODO a thought would be
         # Prepare the results manager with the provided docking results sources
         self.resultsman = ResultsManager(
             self.db_file,

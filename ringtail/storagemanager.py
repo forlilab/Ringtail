@@ -142,8 +142,6 @@ class StorageManager:
         """
         if attached_db is not None:
             self._detach_db(attached_db)
-        # close any open cursors
-        self._close_open_cursors()
         # vacuum database
         if vacuum:
             self._vacuum()
@@ -296,7 +294,6 @@ class StorageManager:
         Returns:
             tuple: cursors as (<all data cursor>, <passing data cursor>)
         """
-        # TODO messy method
         # checks if we have filtered by looking for view name in list of view names
         if self.bookmark_exists(bookmark_name):
             if only_passing:
@@ -369,8 +366,7 @@ class StorageManager:
         self._delete_from_results(bookmark_name)
         self._delete_from_ligands(bookmark_name)
         self._delete_from_interactions_not_in_view(bookmark_name)
-        # self._clear_bookmarks()
-        # TODO probably needs to clea Filters and filtered_results
+        self._clear_bookmarks()
 
     # endregion
 
@@ -436,9 +432,6 @@ class StorageManagerSQLite(StorageManager):
         self.db_file = db_file
         super().__init__()
 
-        self.temptable_suffix = 0
-        self.open_cursors = []
-
     # region Methods for inserting into/removing from the database
     def _create_tables(self):
         """
@@ -457,6 +450,10 @@ class StorageManagerSQLite(StorageManager):
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> tuple:
         """takes file dictionary from the file parser, formats required storage format
+        For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
+        We also save a mapping of the its cluster number to the index in interaction_dictionaries
+        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
+        Finally, we calculate the interaction tuple lists for each pose
 
         Args:
             ligand_dict (dict): Dictionary containing data from the fileparser
@@ -466,20 +463,12 @@ class StorageManagerSQLite(StorageManager):
                     ligand_row,
                     [interaction_tuple_1, interaction_tuple_2, ...])
         """
-        # TODO #TODO this is where I should organize it all in one dict, because this method only acts
-        # on one file data packet/ligand_dict at the time
-        # initialize row holders
         result_rows = []
         interaction_dictionaries = []
         interaction_tuples = []
         saved_pose_idx = 0  # save index of last saved pose
         cluster_saved_pose_map = {}  # save mapping of cluster number to saved_pose_idx
 
-        # do the actual result formating
-        # For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
-        # We also save a mapping of the its cluster number to the index in interaction_dictionaries
-        # Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
-        # Finally, we calculate the interaction tuple lists for each pose
         for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
             cluster = ligand_dict["cluster_list"][idx]
             # save everything if this is a cluster top pose
@@ -499,7 +488,6 @@ class StorageManagerSQLite(StorageManager):
                 interaction_dictionaries[cluster_saved_pose_map[cluster]].append(
                     ligand_dict["interactions"][idx]
                 )
-        # TODO this should have same length as above, so maybe I can zip them and evaluate together. This would read much clearer
         for idx, pose_interactions in enumerate(interaction_dictionaries):
             if not any(pose_interactions):  # skip any empty dictionaries
                 continue
@@ -513,12 +501,6 @@ class StorageManagerSQLite(StorageManager):
             "receptor_row": cls._generate_receptor_row(ligand_dict),
         }
         return data_dict
-        # return (
-        #     result_rows,
-        #     cls._generate_ligand_row(ligand_dict),
-        #     interaction_tuples,
-        #     cls._generate_receptor_row(ligand_dict),
-        # )
 
     def _create_ligands_table(self):
         """Create table for ligands. Columns are:
@@ -779,7 +761,6 @@ class StorageManagerSQLite(StorageManager):
 
         # check if run is best for a cluster.
         # We are only saving the top pose for each cluster
-        # TODO needs to be ligand_id, needs that input
         ligand_data_list = [
             ligand_dict["receptor"],
             pose_rank + 1,
@@ -924,11 +905,10 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _insert_results(self, results_array, options: dict):
-        """Takes array of database rows to insert, adds data to results table. Will handle duplicates if specified
+        """Takes list of database rows to insert, adds data to results table. Will handle duplicates if specified
 
         Args:
-            results_array (np.ndAaray): numpy array of arrays containing
-                formatted result rows #TODO I am not sure this is actually numpy array, might just be a list
+            results_array (list): list of arrays containing formatted result rows
 
         Returns:
             Pose_ID (list(int)): returns the pose ids for the ligand written to results, these are used to ensure internal consistency when writing to the interaction table
@@ -983,7 +963,6 @@ class StorageManagerSQLite(StorageManager):
                 Pose_ID = (
                     -1
                 )  # nonsensical table index to initialize row index if checking for duplicates
-                # TODO duplicate handling stuff
                 if options.get("duplicate_handling"):
                     Pose_ID = self._check_unique_results_row(result)
 
@@ -1609,9 +1588,8 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             cur = self.conn.cursor()
-            # TODO good place to use row factory?
             cur.execute("SELECT name FROM Filters;")
-            bookmark_names = [name[0] for name in cur.fetchall()]
+            bookmark_names = [row["name"] for row in cur.fetchall()]
             cur.close()
 
         except sqlite3.OperationalError as e:
@@ -1753,6 +1731,12 @@ class StorageManagerSQLite(StorageManager):
             else:
                 logger.info("Successfully wrote filtered poses to database.")
         return bool(passing_poses)
+
+    def _clear_bookmarks(self):
+        self.db_query("DROP TABLE IF EXISTS Filters")
+        self.db_query("DROP TABLE IF EXISTS Filtered_poses")
+        self._create_filtering_tables()
+        self.conn.commit()
 
     def _create_view(self, name, query):
         """takes name and selection query,
@@ -1944,18 +1928,19 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError("Error retrieving flexible residue info") from e
 
     def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
-        # TODO query builder potential
         """fetch information required by vsmanager for writing out molecules
 
         Returns:
             iter: contains LigName, rdmol,
                 atom_index_map, hydrogen_parents
         """
-        bookmark_selection = self.get_bookmark_selection(bookmark_name, "ligand_id")
-
-        query = f"""SELECT LigName, rdmol, atom_index_map, hydrogen_parents 
-        FROM Ligands WHERE ligand_id IN (SELECT DISTINCT ligand_id FROM ({bookmark_selection}))"""
-        return self.db_query(query)
+        query = QueryBuilder()
+        query.SELECT("ligname", "rdmol", "atom_index_map", "hydrogen_parents").FROM(
+            "Ligands", "L"
+        ).WHERE(
+            f"""L.ligand_id IN (SELECT DISTINCT ligand_id FROM ({self.get_bookmark_selection(bookmark_name, "ligand_id")}))"""
+        )
+        return self.db_query(query.build()[0])
 
     def fetch_ligand_rdkit_relevant_info(self, ligname) -> str:
         """get output information for given ligand
@@ -1981,20 +1966,6 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError(
                 f"Error retrieving ligand info for {ligname}"
             ) from e
-
-    def fetch_single_pose_properties(self, pose_ID: int) -> iter:
-        # TODO where is this used
-        """fetch coordinates for pose given by pose_ID
-
-        Args:
-            pose_ID (int): pose id to fetch coordinates for
-
-        Returns:
-            iter: SQLite cursor that contains Pose_ID, docking_score, leff, ligand_coordinates,
-                flexible_res_coordinates, flexible_residues
-        """
-        query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID=?"
-        return self.db_query(query, (pose_ID,))
 
     def fetch_interaction_info_by_index(self, interaction_idx) -> tuple:
         """Returns tuple containing interaction info for given interaction_idx
@@ -2130,8 +2101,6 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
-        # TODO cna probably be optimized a bit
-        # TODO this also will not work with bookmarks rn
         """Returns a panda dataframe of table or query given as requested_data
 
         Args:
@@ -2142,7 +2111,13 @@ class StorageManagerSQLite(StorageManager):
             pd.DataFrame: dataframe of requested data
         """
         if table:
-            return pd.read_sql_query(f"SELECT * FROM {requested_data}", self.conn)
+            query = QueryBuilder()
+            if requested_data in self.get_all_bookmark_names():
+                query.SELECT("*").FROM("Results").IN_BOOKMARK(requested_data)
+            else:
+                # assume it is a table
+                query.SELECT("*").FROM("Results")
+            return pd.read_sql_query(query.build()[0], self.conn)
         else:
             return pd.read_sql_query(requested_data, self.conn)
 
@@ -2229,7 +2204,6 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             iter: of passing results
         """
-        enumerated_bookmark_queries = []
         enumerated_bookmarks = []
         existing_bookmarks = self.get_all_bookmark_names()
         for i in range(total_combinations):
@@ -2319,14 +2293,7 @@ class StorageManagerSQLite(StorageManager):
         (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}))
         GROUP BY ligand_id"""
 
-        # view_query = f"""
-        # SELECT * FROM Results WHERE Pose_ID IN
-        # (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster})
-        # GROUP BY LigName"""
         bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
-        # TODO needed?
-        # probably write to passing results instead
-        # self.create_bookmark(bookmark_name, view_query)
 
         return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
 
@@ -2725,7 +2692,6 @@ class StorageManagerSQLite(StorageManager):
                 ligname_query = " OR ".join(
                     [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
-                # TODO can this be made ligand_id?
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
             # rdkit queries need to be handled in memory separate from the main query
             if (
@@ -2911,7 +2877,6 @@ class StorageManagerSQLite(StorageManager):
                 return False
 
         def _ligand_indexmap(atom_index_map) -> dict:
-            # TODO there is now an extra column to consider
             """
             Method that converts the atom index mapping in the database to one usable by the filter method
 
@@ -3320,8 +3285,6 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: sqlite formatted query string
         """
-        # DUh, #TODO, they won't have the same pose ids for the same poses, so I hve to do this based on ligand name!
-        # ligand id will also be different
         query = QueryBuilder()
         subq = QueryBuilder()
         subq_string = (
@@ -3371,7 +3334,6 @@ class StorageManagerSQLite(StorageManager):
             if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
                 self.conn = self._create_connection()
                 compatible, db_version = self.check_ringtaildb_version()
-                # TODO this one is a problem
                 if not compatible and not self.overwrite:
                     raise StorageError(
                         f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
@@ -3991,16 +3953,6 @@ class StorageManagerSQLite(StorageManager):
         logger.debug("Closing database")
         self.conn.close()
 
-    def _close_open_cursors(self):
-        # TODO
-        """closes any cursors stored in self.open_cursors.
-        Resets self.open_cursors to empty list
-        """
-        for cur in self.open_cursors:
-            cur.close()
-
-        self.open_cursors = []
-
     def _db_empty(self):
         """empty database, for example if overwrite
 
@@ -4132,7 +4084,6 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             cur.execute(query, params)
-            self.open_cursors.append(cur)
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(
                 f"Unable to execute query {query} with given parameters {params}: {e}"
