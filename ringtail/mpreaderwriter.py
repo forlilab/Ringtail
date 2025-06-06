@@ -223,16 +223,19 @@ class DockingFileReader(mp.Process):
         Returns:
             list: List of run numbers to save
         """
-        if self.shared.get("store_all_poses"):
+        store_all_poses = self.shared.get("store_all_poses")
+        max_poses = self.shared.get("max_poses")
+        if max_poses:
+            if max_poses > len(ligand_dict["sorted_runs"]):
+                store_all_poses = True
+        if store_all_poses:
             poses_to_save = ligand_dict["sorted_runs"]
         elif self.docking_mode == "dlg":
-            # will only select top n clusters. Default 3
-            poses_to_save = ligand_dict["cluster_top_poses"][
-                : self.shared.get("max_poses")
-            ]
+            # will only select top n clusters.
+            poses_to_save = ligand_dict["cluster_top_poses"][:max_poses]
         # if not adgpu, save top n poses
         else:
-            poses_to_save = ligand_dict["sorted_runs"][: self.shared.get("max_poses")]
+            poses_to_save = ligand_dict["sorted_runs"][:max_poses]
 
         return poses_to_save
 
@@ -272,7 +275,7 @@ class Writer(mp.Process):
         storage_class = options.pop("storageman_class")
         storageman = StorageManager.check_storage_compatibility(storage_class)
         self.storageman = storageman(db_file)
-        self.chunk_size = 3  # options.pop("chunk_size")
+        self.chunk_size = options.pop("chunk_size")
         self.options = options
         # initialize data array (stack of dictionaries)
         self.data_chunks = {}
