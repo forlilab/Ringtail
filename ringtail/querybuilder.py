@@ -21,14 +21,27 @@ class QueryBuilder:
         return self
 
     def FROM_BOOKMARK(self, bookmark, alias=None, db_alias=""):
+        bookmark_query = f"({self.bookmark_query(bookmark, db_alias)})"
+        return self.FROM(bookmark_query, alias)
+
+    @staticmethod
+    def bookmark_query(bookmark, db_alias=""):
         if db_alias:
             db_alias += "."
-        bookmark_query = f"""(SELECT Pose_id FROM {db_alias}filtered_poses 
+        query = f"""SELECT Pose_id FROM {db_alias}filtered_poses 
         WHERE filter_id = 
             (SELECT filter_id FROM {db_alias}Filters 
-            WHERE name = '{bookmark}'))"""
+            WHERE name = '{bookmark}')"""
 
-        return self.FROM(bookmark_query, alias)
+        return query
+
+    def IN_BOOKMARK(self, bookmark):
+        """
+        should make string that adds to
+        <results-alias> in (<bookmark_query>)
+        """
+        query = f"""{self.aliased("Results")}.pose_id IN ({self.bookmark_query(bookmark)})"""
+        return self.WHERE(query)
 
     def JOIN_BOOKMARK(self, bookmark, alias=None, db_alias=""):
         if db_alias:
@@ -132,3 +145,7 @@ class QueryBuilder:
             return f"SELECT COUNT(*) FROM ({' '.join(parts)})", self.params
         else:
             return " ".join(parts), self.params
+
+    def count(self):
+        # TODO ideally this will wrap the build maybe?
+        return

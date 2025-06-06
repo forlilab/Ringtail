@@ -1624,29 +1624,18 @@ class StorageManagerSQLite(StorageManager):
     def get_passing_poses_count(
         self, bookmark_name, grouped_by_ligand: bool = False
     ) -> int:
-        if grouped_by_ligand:
-            group_statement = "GROUP BY ligand_id"
-        else:
-            group_statement = ""
-
         query = QueryBuilder()
-        query.SELECT("COUNT(r.pose_id)").FROM("results", "r").JOIN_BOOKMARK(
-            bookmark_name, "bm"
-        )
+        query.SELECT("r.pose_id").FROM("results", "r").IN_BOOKMARK(bookmark_name)
         if grouped_by_ligand:
             query.GROUP_BY("r.ligand_id")
         query_string = query.build(count=True)[0]
-
         if self.db_query(query_string).fetchone():
             return self.db_query(query_string).fetchone()[0]
         else:
             return 0
 
-    @classmethod
-    # TODO make this a method in query builder maybe?
     def get_bookmark_poses_query(self, bookmark_name: str):
-        query = QueryBuilder()
-        return query.SELECT("pose_id").FROM_BOOKMARK(bookmark_name).build()[0]
+        return QueryBuilder.bookmark_query(bookmark_name)
 
     def delete_bookmark(self, bookmark_name: str):
         # get filter id
@@ -1697,6 +1686,8 @@ class StorageManagerSQLite(StorageManager):
         return formatted_query
 
     def get_bookmark_selection(self, bookmark_name: str, selection: str):
+        # This one basically is what I will use a ton, it should join on results and ligands as needed
+        # by checking what column group the selection items are in
         if not selection.startswith("R."):
             selection = "R." + selection
 
@@ -1940,23 +1931,6 @@ class StorageManagerSQLite(StorageManager):
 
         return self.db_query(query.build()[0])
 
-    def add_output_fields_to_query(self, outfields, bookmark_name):
-        bookmark_selection = self.format_editable_filter_query(bookmark_name).format(
-            selection="pose_id"
-        )
-        if outfields:
-            outfield_dict = self.format_output_fields(outfields)
-            outfield_string = outfield_dict.get("selection")
-            join = outfield_dict.get("join")
-        else:
-            outfield_string = "Results.*"
-
-        query = f"SELECT {outfield_string} FROM (SELECT * FROM Results WHERE Pose_ID IN ({bookmark_selection}))"
-        if join:
-            query = query + join
-
-        return query
-
     def fetch_flexres_info(self, receptor):
         """fetch flexible residues names and atomname lists
 
@@ -1977,6 +1951,7 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError("Error retrieving flexible residue info") from e
 
     def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
+        # TODO query builder potential
         """fetch information required by vsmanager for writing out molecules
 
         Returns:
@@ -2269,6 +2244,7 @@ class StorageManagerSQLite(StorageManager):
                 result_alias = "R_" + str(i)
                 filter_alias = "f_" + str(i)
                 selection = f"{result_alias}.pose_id"
+                # TODO main place to replace format editablewquery
                 partial_query = self.format_editable_filter_query(
                     bmn, result_alias, filter_alias
                 ).format(selection=selection, group_statement="")
@@ -2369,6 +2345,7 @@ class StorageManagerSQLite(StorageManager):
         return self.db_query(query, pose_ids)
 
     def fetch_passing_pose_properties(self, ligname, bookmark_name):
+        # TODO query builder potential
         """fetch coordinates for poses passing filter for given ligand
 
         Args:
@@ -2388,6 +2365,7 @@ class StorageManagerSQLite(StorageManager):
         return self.db_query(query, (ligname,))
 
     def fetch_nonpassing_pose_properties(self, ligname: str, bookmark_name):
+        # TODO query builder potential
         """fetch coordinates for poses of ligname which did not pass the filter
 
         Args:
@@ -4141,6 +4119,11 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError(
                 "Error while getting names of existing database tables"
             ) from e
+
+    def _return_iterable(self, query, params=()):
+        # TODO could an idea here to format the stuff so that
+        # if row factory is turned on, it will make the output like if it wasn't?
+        pass
 
     def db_query(self, query, params: tuple = ()):
         """Executes provided SQLite query. Returns cursor for results.
