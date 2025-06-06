@@ -721,7 +721,6 @@ class TestLogger:
 
 
 class TestOptions:
-    # TODO once options are finalized, rework these tests
     def test_object_checks(self):
         # checking that incompatible options are handled
         from ringtail.ringtailoptions import Filters
@@ -738,15 +737,6 @@ class TestOptions:
 
         assert rtc.filters.eworst == -6
         assert rtc.filters.score_percentile == None
-
-    def test_order_output(self):
-        pass
-
-    def test_outfields(self):
-        pass
-
-    def test_groupby(self):
-        pass
 
     def test_overwrite_db(self, tablecount):
         rtc = RingtailCore()
