@@ -145,7 +145,3 @@ class QueryBuilder:
             return f"SELECT COUNT(*) FROM ({' '.join(parts)})", self.params
         else:
             return " ".join(parts), self.params
-
-    def count(self):
-        # TODO ideally this will wrap the build maybe?
-        return
