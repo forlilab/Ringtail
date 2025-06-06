@@ -169,6 +169,14 @@ class TestRingtailCore:
         assert "enumerated_bookmark_0" in bookmarks
         assert "enumerated_bookmark_union" in bookmarks
 
+    def test_filter_from_bookmark(self):
+        rtc = RingtailCore(db_file="output.db")
+        count_passing_ligands1 = rtc.filter(eworst=-6, bookmark_name="filter_window")
+        count_passing_ligands2 = rtc.filter(
+            eworst=-7, bookmark_name="bookmark", filter_bookmark="filter_window"
+        )
+        assert count_passing_ligands1 > count_passing_ligands2
+
     def test_ligand_filters(self):
         rtc = RingtailCore(db_file="output.db")
 
@@ -621,14 +629,6 @@ class TestVinaHandling:
 
 
 class TestStorageMan:
-
-    def test_connection(self):
-        # TODO
-        # test row factory in the connection, ie that you can access row data by index and name (code will depend on it)
-        # might be other stuff I need to test too, if the db handling depends on it. Good to check that here
-
-        pass
-
     def test_fetch_summary_data(self):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
@@ -703,10 +703,6 @@ class TestStorageMan:
         os.system("rm output.db output_log.txt")
         assert versionmatch
         assert int(version) == 200  # NOTE: update for new database schema versions
-
-    def test_filter_bookmark(self):
-        # TODO
-        pass
 
 
 class TestLogger:

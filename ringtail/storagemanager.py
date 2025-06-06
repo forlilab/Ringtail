@@ -228,7 +228,6 @@ class StorageManager:
         all_filters: Filters,
         bookmark_name: str,
         filtering_bookmark: str = None,
-        clustering: dict = {},
     ) -> iter:
         """Generate and execute database queries from given filters.
 
@@ -252,7 +251,6 @@ class StorageManager:
             all_filters, bookmark_name, filtering_bookmark
         )
 
-        filtered_poses = filter_query.format(selection=" R.Pose_ID ")
         logger.debug(f"Query for filtering results: {filter_query}")
 
         # perform filtering
@@ -261,7 +259,7 @@ class StorageManager:
 
         self.populate_filter_tables(
             name=bookmark_name,
-            query=filtered_poses,
+            query=filter_query,
             filters=all_filters,
         )
         logger.debug(
@@ -2653,7 +2651,7 @@ class StorageManagerSQLite(StorageManager):
                     "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
-            filtering_window = filter_bookmark
+            filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({QueryBuilder.bookmark_query(filter_bookmark)}))"""
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
@@ -2740,7 +2738,7 @@ class StorageManagerSQLite(StorageManager):
             partial_filter_query = " WHERE " + partial_filter_query
 
         filter_query = (
-            f"SELECT {{selection}} FROM {filtering_window} R {partial_filter_query}"
+            f"SELECT R.pose_id FROM {filtering_window} R {partial_filter_query}"
         )
 
         return filter_query

@@ -856,7 +856,6 @@ class RingtailCore:
                     all_filters=filter_dict,
                     bookmark_name=bookmark_name,
                     filtering_bookmark=filter_bookmark,
-                    clustering=clustering,
                 )
                 print_string = ""
             # else produce a bookmark for each interaction combination
@@ -873,7 +872,6 @@ class RingtailCore:
                         temp_filters,
                         iterated_bookmark_name,
                         filter_bookmark,
-                        clustering={},
                     )
                     if num_passing_ligands:
                         print(
