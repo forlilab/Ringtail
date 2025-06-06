@@ -269,7 +269,7 @@ class StorageManager:
         logger.debug(
             f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
         )
-        count = self.get_passing_poses_count(bookmark_name, True)
+        count = self.get_passing_ligands_count(bookmark_name)
 
         return count
 
@@ -1634,6 +1634,9 @@ class StorageManagerSQLite(StorageManager):
         else:
             return 0
 
+    def get_passing_ligands_count(self, bookmark_name):
+        return self.get_passing_poses_count(bookmark_name, True)
+
     def get_bookmark_poses_query(self, bookmark_name: str):
         return QueryBuilder.bookmark_query(bookmark_name)
 
@@ -1655,35 +1658,6 @@ class StorageManagerSQLite(StorageManager):
         logger.info(
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
         )
-
-    def format_editable_filter_query(
-        self, bookmark_name, results_str="R", filter_str="f"
-    ) -> str:
-        """
-        Pre-formats a sqlite query string for retrieving {selection} columns from filtered poses.
-        The string the {selection} as well as a {group_statement} when .format() after retrieval
-
-        Args:
-            bookmark_name (_type_): _description_
-            results_str (str, optional): _description_. Defaults to "R".
-            filter_str (str, optional): _description_. Defaults to "f".
-
-        Returns:
-            str: _description_
-        """
-        query = """SELECT {{selection}} FROM 
-                    Results {result_alias} JOIN ( 
-                            SELECT Pose_id FROM filtered_poses 
-                            WHERE filter_id = 
-                                (SELECT filter_id FROM Filters 
-                                WHERE name = '{bookmark_name}')) {filter_alias}            
-                    ON {result_alias}.Pose_ID = {filter_alias}.Pose_ID {{group_statement}}"""
-        formatted_query = query.format(
-            bookmark_name=bookmark_name,
-            result_alias=results_str,
-            filter_alias=filter_str,
-        )
-        return formatted_query
 
     def get_bookmark_selection(
         self,
@@ -2256,29 +2230,30 @@ class StorageManagerSQLite(StorageManager):
             iter: of passing results
         """
         enumerated_bookmark_queries = []
+        enumerated_bookmarks = []
         existing_bookmarks = self.get_all_bookmark_names()
         for i in range(total_combinations):
             bmn = bookmark_name + "_" + str(i)
             if bmn in existing_bookmarks:
-                result_alias = "R_" + str(i)
-                filter_alias = "f_" + str(i)
-                selection = f"{result_alias}.pose_id"
-                # TODO main place to replace format editablewquery
-                partial_query = self.format_editable_filter_query(
-                    bmn, result_alias, filter_alias
-                ).format(selection=selection, group_statement="")
-                enumerated_bookmark_queries.append(partial_query)
+                enumerated_bookmarks.append(f"'{bmn}'")
 
+        subq = QueryBuilder()
+        subq.SELECT("filter_id").FROM("Filters").WHERE(
+            f"name IN ({', '.join(enumerated_bookmarks)})"
+        )
+        query = QueryBuilder()
+        query.SELECT("DISTINCT pose_id").FROM("filtered_poses").WHERE(
+            f"filter_id IN ({subq.build()[0]})"
+        )
         bookmark_name = f"{bookmark_name}_union"
         logger.debug("Saving union bookmark...")
-        union_view_query = " UNION ".join(enumerated_bookmark_queries)
-        updated_query = union_view_query
         logger.debug("Running union query...")
         self.populate_filter_tables(
-            name=bookmark_name, query=updated_query, filters=all_filters
+            name=bookmark_name, query=query.build()[0], filters=all_filters
         )
 
-        count = self.get_passing_poses_count(bookmark_name, True)
+        count = self.get_passing_ligands_count(bookmark_name)
+
         if not count:
             bookmark_name = None
         return count, bookmark_name

@@ -988,8 +988,6 @@ class RingtailCore:
         append_to_log: bool = None,
     ):
         """
-        PS Only works if ran inside context managed cpde
-
         Args:
             bookmark_name (str): _description_
             filters (dict): _description_
