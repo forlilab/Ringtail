@@ -293,15 +293,34 @@ class StorageManager:
             tuple: cursors as (<all data cursor>, <passing data cursor>)
         """
         # checks if we have filtered by looking for view name in list of view names
+        all_data_query = "SELECT docking_score, leff FROM Results"
         if self.bookmark_exists(bookmark_name):
+            passing_poses_columns = [
+                "docking_score",
+                "leff",
+                "Pose_ID",
+                "LigName",
+            ]
             if only_passing:
-                return [], self._fetch_passing_plot_data(bookmark_name)
+                return (
+                    [],
+                    self.db_query(
+                        self.get_bookmark_selection(
+                            bookmark_name, passing_poses_columns
+                        )
+                    ),
+                )
             else:
-                return self._fetch_all_plot_data(), self._fetch_passing_plot_data(
-                    bookmark_name
+                return (
+                    self.db_query(all_data_query),
+                    self.db_query(
+                        self.get_bookmark_selection(
+                            bookmark_name, passing_poses_columns
+                        ),
+                    ),
                 )
         else:
-            return self._fetch_all_plot_data(), []
+            return self.db_query(all_data_query), []
 
     def crossref_filter(
         self,
@@ -1638,7 +1657,7 @@ class StorageManagerSQLite(StorageManager):
     def get_bookmark_selection(
         self,
         bookmark_name: str,
-        selection: str,
+        selection: Union[list, str],
         group_by: str = None,
         order_results: str = None,
     ):
@@ -2024,41 +2043,6 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError(
                 "Error occurred while fetching number of receptor rows containing PDBQT blob"
             ) from e
-
-    def _fetch_all_plot_data(self):
-        # TODO thi sshould be merged with next method, and just use columns as needed in the output
-        # confusing that they give different kinds of data
-        """Fetches cursor for best energies and leff for all ligands
-
-        Returns:
-             iter: SQLite Cursor containing docking_score,
-                leff for the first pose for each ligand
-        """
-        return self.db_query(
-            "SELECT docking_score, leff FROM Results GROUP BY ligand_id"
-        )
-
-    def _fetch_passing_plot_data(self, bookmark_name: str):
-        """Fetches cursor for best energies and leffs for
-            ligands passing filtering
-
-        Args:
-            bookmark_name (str): name for bookmark for which to fetch data. None will return data for default bookmark_name
-
-        Returns:
-            iter: SQL Cursor containing docking_score,
-                leff for the first pose for passing ligands
-        """
-        query = QueryBuilder()
-        query.SELECT("R.docking_score", "R.leff", "R.Pose_ID", "l.LigName").FROM(
-            "Results", "R"
-        ).JOIN("Ligands", "L", "ligand_id").WHERE(
-            f"r.Pose_id IN ({self.get_bookmark_poses_query(bookmark_name)})"
-        ).GROUP_BY(
-            "r.ligand_id"
-        )
-
-        return self.db_query(query.build()[0])
 
     def _fetch_ligand_cluster_columns(self):
         """fetching columns from Ligand_clusters table

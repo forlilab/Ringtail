@@ -858,8 +858,8 @@ class RingtailCore:
             # handle empty db rows
             if None in line:
                 continue
-            xdata.append(line[0])
-            ydata.append(line[1])
+            xdata.append(line["docking_score"])
+            ydata.append(line["leff"])
 
         # base number of bins on data size
         datalength = len(xdata)
@@ -881,9 +881,9 @@ class RingtailCore:
             yaxis = []
             for line in passing_data:
                 # energy
-                xaxis.append(line[0])
+                xaxis.append(line["docking_score"])
                 # leff
-                yaxis.append(line[1])
+                yaxis.append(line["leff"])
 
             output_manager.plot_single_points(xaxis, yaxis, markersize)
 
