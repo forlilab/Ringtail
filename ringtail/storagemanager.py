@@ -352,8 +352,6 @@ class StorageManager:
 
         Returns:
             tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
-
-            #TODO also this should have the db specific stuff in sqlite
         """
         if old_db is not None:
             self._detach_db(old_db.split(".")[0])  # remove file extension
@@ -372,76 +370,22 @@ class StorageManager:
         self.db_update(temp_insert_query, ())
 
         num_passing = self._count_ligands_in_temptable(temp_name)
-        # counting = QueryBuilder()
-        # count_pool = QueryBuilder()
-        # count_pool_string = (
-        #     count_pool.SELECT("tt.pose_id")
-        #     .FROM(temp_name, "tt")
-        #     .JOIN("Results", "r", "pose_id")
-        #     .GROUP_BY("r.ligand_id")
-        #     .build()[0]
-        # )
-        # counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
-        #     "count_pool", "cp"
-        # )
-        # num_passing = tuple(self.db_query(counting.build()[0]).fetchone())[0]
         print("\n\n Number passing the cross referenced filters: ", num_passing)
 
         return temp_name, num_passing
 
     def prune_nonpassing(self, bookmark_name: str):
-        """Deletes rows from results, ligands, and interactions in a bookmark
+        """
+        Deletes rows from results, ligands, and interactions in a bookmark
         if they do not pass filtering criteria
-        #TODO
+
+        Args:
+            bookmark_name (str): bookmark name which has the only poses to save
         """
         self._delete_from_results(bookmark_name)
         self._delete_from_ligands(bookmark_name)
         self._delete_from_interactions_not_in_view(bookmark_name)
         self._clear_bookmarks()
-
-    # endregion
-
-    # region common keywords
-    @classmethod
-    def _data_kw_groups(cls, group):
-        """Method containing lists of keywords in specific data groups, used to associate data with database columns
-
-        Args:
-            group (str): group of whose keywords are needed, including
-                stateVar_keys
-                ligand_data_keys
-                interaction_data_kws
-
-        Returns:
-            list: of keywords belonging to a specific group
-        """
-        groups = {
-            "stateVar_keys": ["pose_about", "pose_translations", "pose_quarternions"],
-            "ligand_data_keys": [
-                "cluster_rmsds",
-                "ref_rmsds",
-                "scores",
-                "leff",
-                "delta",
-                "intermolecular_energy",
-                "vdw_hb_desolv",
-                "electrostatics",
-                "flex_ligand",
-                "flexLigand_flexReceptor",
-                "internal_energy",
-                "torsional_energy",
-                "unbound_energy",
-            ],
-            "interaction_data_kws": [
-                "type",
-                "chain",
-                "residue",
-                "resid",
-                "recname",
-                "recid",
-            ],
-        }
-        return groups[group]
 
     # endregion
 
@@ -787,7 +731,21 @@ class StorageManagerSQLite(StorageManager):
             ligand_coordinates, [32]
             flexible_res_coordinates [33]
         """
-
+        ligand_data_keys = [
+            "cluster_rmsds",
+            "ref_rmsds",
+            "scores",
+            "leff",
+            "delta",
+            "intermolecular_energy",
+            "vdw_hb_desolv",
+            "electrostatics",
+            "flex_ligand",
+            "flexLigand_flexReceptor",
+            "internal_energy",
+            "torsional_energy",
+            "unbound_energy",
+        ]
         # # # # # # get pose-specific data
 
         # check if run is best for a cluster.
@@ -798,7 +756,7 @@ class StorageManagerSQLite(StorageManager):
             int(run_number),
         ]
         # get energy data
-        for key in cls._data_kw_groups("ligand_data_keys"):
+        for key in ligand_data_keys:
             if ligand_dict[key] == []:  # guard against incomplete data
                 ligand_data_list.append(None)
             else:
@@ -826,8 +784,9 @@ class StorageManagerSQLite(StorageManager):
         ligand_data_list.append(
             ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
         )
+        state_var_keys = ["pose_about", "pose_translations", "pose_quarternions"]
         # add statevars
-        for key in cls._data_kw_groups("stateVar_keys"):
+        for key in state_var_keys:
             if ligand_dict[key] == []:
                 if key == "pose_about" or key == "pose_translations":
                     ligand_data_list.extend(
@@ -1393,10 +1352,7 @@ class StorageManagerSQLite(StorageManager):
             count = pose_interactions["count"][0]
             for i in range(int(count)):
                 interactions.add(
-                    tuple(
-                        pose_interactions[kw][i]
-                        for kw in cls._data_kw_groups("interaction_data_kws")
-                    )
+                    tuple(pose_interactions[kw][i] for kw in interaction_keywords)
                 )
 
         return list(interactions)
