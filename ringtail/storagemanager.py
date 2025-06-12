@@ -394,10 +394,8 @@ class StorageManagerSQLite(StorageManager):
     """SQLite-specific StorageManager subclass
 
     Attributes:
-        conn (SQLite.conn): Connection to database
-        open_cursors (list): list of cursors that were not closed by the function that created them.
-            Will be closed by close_connection method.
         db_file (str): database name
+        conn (SQLite.conn): Connection to database
     """
 
     def __init__(
@@ -423,8 +421,8 @@ class StorageManagerSQLite(StorageManager):
         self._set_ringtail_db_schema_version(self._db_schema_ver)
 
     @classmethod
-    def format_for_storage(cls, ligand_dict: dict) -> tuple:
-        """takes file dictionary from the file parser, formats required storage format
+    def format_for_storage(cls, ligand_dict: dict) -> dict:
+        """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
         For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
         We also save a mapping of the its cluster number to the index in interaction_dictionaries
         Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
@@ -434,9 +432,8 @@ class StorageManagerSQLite(StorageManager):
             ligand_dict (dict): Dictionary containing data from the fileparser
 
         Returns:
-            tuple: of lists ([result_row_1, result_row_2,...],
-                    ligand_row,
-                    [interaction_tuple_1, interaction_tuple_2, ...])
+            dict: with storage formatted rows, including: results rows per pose, interactions per pose, one ligand row, and one receptor row
+
         """
         result_rows = []
         interaction_dictionaries = []
@@ -510,14 +507,14 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     @classmethod
-    def _generate_ligand_row(cls, ligand_dict):
+    def _generate_ligand_row(cls, ligand_dict) -> list:
         """writes row to be inserted into ligand table
 
         Args:
             ligand_dict (dict): Dictionary of ligand data from parser
 
         Returns:
-            List: List of data to be written as row in ligand table. Format:
+            list: List of data to be written as row in ligand table. Format:
                 [ligand_name, ligand_smile, ligand_rdbin, ligand_index_map,
                 ligand_h_parents, input_model]
         """
@@ -540,12 +537,14 @@ class StorageManagerSQLite(StorageManager):
             input_model,
         ]
 
-    def _insert_ligands(self, ligand_array):
+    def _insert_ligands(self, ligand_array: list) -> list:
         """Takes array of ligand rows, inserts into Ligands table.
 
-        Args: #TODO
-            ligand_array (np.ndarray): Numpy array of arrays
-                containing formatted ligand rows
+        Args:
+            ligand_array (list[list]): list of lists containing formatted ligand rows
+
+        Returns:
+            list: of ligand IDs just inserted
 
         Raises:
             DatabaseInsertionError
@@ -684,9 +683,9 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     @classmethod
-    def _generate_results_row(cls, ligand_dict, pose_rank, run_number):
+    def _generate_results_row(cls, ligand_dict, pose_rank, run_number) -> list:
         """generate list of lists of ligand values to be
-            inserted into sqlite database
+            inserted into sqlite database for a given pose
 
         Args:
             ligand_dict (dict): Dictionary of ligand data from parser
@@ -826,7 +825,7 @@ class StorageManagerSQLite(StorageManager):
 
         return ligand_data_list
 
-    def _check_unique_results_row(self, result_data):
+    def _check_unique_results_row(self, result_data: list) -> int:
         """Checks if a pose ID is uniquely represented in the result table, based on the following [index in result_data] columns:
         [0] ligand_id,
         [1] receptor,
@@ -894,15 +893,16 @@ class StorageManagerSQLite(StorageManager):
                 "Error while looking for unique result row."
             ) from e
 
-    def _insert_results(self, results_array, options: dict):
+    def _insert_results(self, results_array, options: dict) -> tuple:
         """Takes list of database rows to insert, adds data to results table. Will handle duplicates if specified
 
         Args:
             results_array (list): list of arrays containing formatted result rows
+            options (dict): includes options on how to handle duplicates if there are any
 
         Returns:
-            Pose_ID (list(int)): returns the pose ids for the ligand written to results, these are used to ensure internal consistency when writing to the interaction table
-            duplicates (list(int)): list of pose ids that are duplicates, if duplicate handling is specified. Filled with None if not specified or not duplicate
+            list[int]: returns the pose ids for the ligand written to results, these are used to ensure internal consistency when writing to the interaction table
+            list[int]: found duplicates (knowledge may be needed in other methods)
 
         Raises:
             DatabaseInsertionError
@@ -1067,11 +1067,14 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseInsertionError("Error while inserting receptor.") from e
 
     @classmethod
-    def _generate_receptor_row(cls, ligand_dict):
+    def _generate_receptor_row(cls, ligand_dict: dict) -> list:
         """Writes row to be inserted into receptor table
 
         Args:
             ligand_dict (dict): Dictionary of ligand data from parser
+
+        Returns:
+            list: receptor row columns
         """
 
         rec_name = ligand_dict["receptor"]
@@ -1092,7 +1095,7 @@ class StorageManagerSQLite(StorageManager):
             flexres_atomnames,
         ]
 
-    def insert_receptor_blob(self, receptor, rec_name):
+    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
 
         Args:
@@ -1132,6 +1135,7 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseTableCreationError
         """
+
         sql_str = """CREATE TABLE IF NOT EXISTS DB_properties (
         DB_write_session    INTEGER PRIMARY KEY AUTOINCREMENT,
         docking_mode        VARCHAR[],
@@ -1236,7 +1240,9 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
 
-    def _insert_and_format_interactions(self, pose_ids, docking_data: dict) -> list:
+    def _insert_and_format_interactions(
+        self, pose_ids: list, docking_data: dict
+    ) -> list:
         """
         This method will evaluate the docking data, and determine whether or not there are
         interactions to be processed and written.
@@ -1281,6 +1287,7 @@ class StorageManagerSQLite(StorageManager):
             interaction_rows (list(tuple)): list of tuples containing the interaction data
             duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones, will be treated according to duplicate_handling
             duplicate_handling (str): how to handle duplicates
+
         Raises:
             DatabaseInsertionError
         """
@@ -1328,7 +1335,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     @classmethod
-    def _generate_interaction_tuples(cls, interaction_dictionaries: list):
+    def _generate_interaction_tuples(cls, interaction_dictionaries: list) -> list:
         """takes dictionary of file results, formats as
         list of tuples for interactions
 
@@ -1357,7 +1364,7 @@ class StorageManagerSQLite(StorageManager):
 
         return list(interactions)
 
-    def _insert_interaction_index_row(self, interaction_tuple) -> tuple:
+    def _insert_interaction_index_row(self, interaction_tuple) -> int:
         """
         Writes unique interactions and returns the interaction_id of the given interaction
 
@@ -1365,7 +1372,7 @@ class StorageManagerSQLite(StorageManager):
             interaction_tuple (tuple): (rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
 
         Returns:
-            tuple: if interaction index (int_index,)
+            int: interaction index
 
         Raises:
             DatabaseInsertionError
@@ -1426,7 +1433,10 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _delete_from_interactions_not_in_view(self, bookmark_name: str):
-        """Remove rows from interactions table if they did not pass filtering.
+        """Remove rows from interactions table if they were not used for poses that passed filtering.
+
+        Args:
+            bookmark_name (str): defines which poses are passing
 
         Raises:
             StorageError: Description
@@ -1486,33 +1496,35 @@ class StorageManagerSQLite(StorageManager):
         """Insert cluster data into ligand cluster table
 
         Args:
-            clusters (list)
-            poseid_list (list)
-            cluster_type (str)
-            cluster_cutoff (str)
-            bookmark_name (str)
+            clusters (list[list]): list of clusters
+            poseid_list (list): representative poses for each sluter
+            cluster_type (str): how clustering was performed
+            cluster_cutoff (str): distance to representative pose
+            bookmark_name (str): bookmark name which is clustered over
         """
         cur = self.conn.cursor()
         cur.execute(
             "CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)"
         )
         ligand_cluster_columns = self._fetch_ligand_cluster_columns()
-        # TODO doesnt have to be this way
         column_name = (
             f"{bookmark_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
         )
-        if column_name not in ligand_cluster_columns:
-            cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
-        for ci, cl in enumerate(clusters):
-            for i in cl:
-                poseid = poseid_list[i]
-                cur.execute(
-                    f"INSERT INTO Ligand_clusters (pose_id, {column_name}) VALUES (?,?) ON CONFLICT (pose_id) DO UPDATE SET {column_name}=excluded.{column_name}",
-                    (poseid, ci),
-                )
+        try:
+            if column_name not in ligand_cluster_columns:
+                cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
+            for ci, cl in enumerate(clusters):
+                for i in cl:
+                    poseid = poseid_list[i]
+                    cur.execute(
+                        f"INSERT INTO Ligand_clusters (pose_id, {column_name}) VALUES (?,?) ON CONFLICT (pose_id) DO UPDATE SET {column_name}=excluded.{column_name}",
+                        (poseid, ci),
+                    )
 
-        cur.close()
-        self.conn.commit()
+            cur.close()
+            self.conn.commit()
+        except sqlite3.OperationalError as e:
+            raise StorageError("Error occurred while inserting cluster data") from e
 
     def _create_indices(self):
         """Create index for specified tables and columns. 'ak' stands for 'alternate key' and is prepended to index name to avoid naming conflicts
@@ -1560,7 +1572,13 @@ class StorageManagerSQLite(StorageManager):
         query = f"""DROP TABLE IF EXISTS {name};"""
         return self.db_query(query)
 
-    def create_merge_tables(self) -> str:
+    def create_merge_tables(self):
+        """
+        Creates tables necessary when merging two or more databases
+
+        Raises:
+            StorageError
+        """
         try:
             cur = self.conn.cursor()
             # create mergedata table: merge_id (PK), dbfile, timestamp, numofrows table
@@ -1588,7 +1606,7 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Methods for dealing with bookmarks/views and temporary tables
-    def get_all_bookmark_names(self):
+    def get_all_bookmark_names(self) -> list[str]:
         """Get all bookmarks in sql database as a list of names. Bookmarks are a Ringtail-specific saved query (much like views)
 
         Returns:
@@ -1608,8 +1626,18 @@ class StorageManagerSQLite(StorageManager):
         return bookmark_names
 
     def get_passing_poses_count(
-        self, bookmark_name, grouped_by_ligand: bool = False
+        self, bookmark_name: str, grouped_by_ligand: bool = False
     ) -> int:
+        """
+        Count poses in bookmark
+
+        Args:
+            bookmark_name (str): bookmark name in which to count
+            grouped_by_ligand (bool, optional): if grouping by ligand, essentially returns passing ligands
+
+        Returns:
+            int: number of poses (optionally grouped by ligand) in bookmark
+        """
         query = QueryBuilder()
         query.SELECT("r.pose_id").FROM("results", "r").IN_BOOKMARK(bookmark_name)
         if grouped_by_ligand:
@@ -1620,13 +1648,37 @@ class StorageManagerSQLite(StorageManager):
         else:
             return 0
 
-    def get_passing_ligands_count(self, bookmark_name):
+    def get_passing_ligands_count(self, bookmark_name: str) -> int:
+        """
+        Get number of passing ligands in bookmark name
+
+        Args:
+            bookmark_name (str): bookmark that defines passing
+
+        Returns:
+            int: number of ligands
+        """
         return self.get_passing_poses_count(bookmark_name, True)
 
-    def get_bookmark_poses_query(self, bookmark_name: str):
+    def get_bookmark_poses_query(self, bookmark_name: str) -> str:
+        """
+        Creates a query that retrieves all poses from a bookmark, that can be used in other queries
+
+        Args:
+            bookmark_name (str): bookmark for which to create the query
+
+        Returns:
+            str: query representing the poses in a bookmark
+        """
         return QueryBuilder.bookmark_query(bookmark_name)
 
     def delete_bookmark(self, bookmark_name: str):
+        """
+        Deletes bookmark (i.e., Filters table) and its associated poses (filtered_poses table)
+
+        Args:
+            bookmark_name (str): bookmark to delete
+        """
         # get filter id
         filter_id = self.db_query(
             "SELECT filter_id from Filters WHERE name = ?", (bookmark_name,)
@@ -1651,7 +1703,22 @@ class StorageManagerSQLite(StorageManager):
         selection: Union[list, str],
         group_by: str = None,
         order_results: str = None,
-    ):
+    ) -> str:
+        """
+        Generates query to gather chosen columns based on passing poses in a bookmark
+
+        Args:
+            bookmark_name (str): bookmark name from which to get the passing poses
+            selection (Union[list, str]): what columns to have in the output query
+            group_by (str, optional): whether or not to group the output by a column
+            order_results (str, optional): Whether or not to order by a column
+
+        Raises:
+            OptionError: _description_
+
+        Returns:
+            str: _description_
+        """
 
         if selection and selection != "*":
             outfields_list = self.format_output_fields(selection, "R", "L")
@@ -1706,6 +1773,21 @@ class StorageManagerSQLite(StorageManager):
         return bool(count > 0)
 
     def populate_filter_tables(self, name, query: str, filters={}) -> bool:
+        """
+        Will run a filter query and determine if there are passing poses, in which case all relevant
+        data is written to the database
+
+        Args:
+            name (str): name of new bookmark
+            query (str): query that defines what poses to insert
+            filters (dict, optional): filters or restrictions used
+
+        Raises:
+            StorageError:
+
+        Returns:
+            bool: whether or not there are poses passing the filter
+        """
 
         # fetch filtered poses
         passing_poses_tuples = self.db_query(query).fetchall()
@@ -1741,6 +1823,9 @@ class StorageManagerSQLite(StorageManager):
         return bool(passing_poses)
 
     def _clear_bookmarks(self):
+        """
+        Clears all filters and filtered poses
+        """
         self.db_query("DROP TABLE IF EXISTS Filters")
         self.db_query("DROP TABLE IF EXISTS Filtered_poses")
         self._create_filtering_tables()
@@ -1830,7 +1915,16 @@ class StorageManagerSQLite(StorageManager):
 
         self.populate_filter_tables(bookmark_name, query_string, filters)
 
-    def _count_ligands_in_temptable(self, temp_name):
+    def _count_ligands_in_temptable(self, temp_name) -> int:
+        """
+        Counts ligands represented in the temporary table
+
+        Args:
+            temp_name (str): name of temporary table
+
+        Returns:
+            int: number of poses in temporary table
+        """
         counting = QueryBuilder()
         count_pool = QueryBuilder()
         count_pool_string = (
@@ -1867,6 +1961,15 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def get_filterid_from_name(self, bookmark_name: str) -> int:
+        """
+        Gets the filter_id for bookmark
+
+        Args:
+            bookmark_name (str)
+
+        Returns:
+            int: id for Filter/bookmark
+        """
         return self.db_query(
             f"""SELECT filter_id FROM Filters WHERE name = ?;""",
             (bookmark_name,),
