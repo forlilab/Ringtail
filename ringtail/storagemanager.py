@@ -13,9 +13,6 @@ from .logutils import LOGGER as logger
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
-from rdkit import DataStructs
-from rdkit.ML.Cluster import Butina
-import numpy as np
 from typing import Union
 import time
 from importlib.metadata import version
@@ -53,6 +50,8 @@ class StorageManager:
     Attributes: 
         _db_schema_ver (str): current database schema version
         _db_schema_code_compatibility (dict): dictionary showing compatibility of code base versions with relational database schema versions
+        active_connection (bool): if there is a current open connection to database
+        keyboard_interrupt_allowed (bool): if Ctrl+Z will work, for example not supported in a GUI
     """
 
     # region database access
@@ -80,9 +79,8 @@ class StorageManager:
             )
 
     def __init__(self):
-        """Initialize instance variables common to all StorageManager subclasses"""
-        self.closed_connection = False
         self.keyboard_interrupt_allowed = False
+        self.active_connection = True
 
     def __enter__(self):
         """Used to access the database if using storage manager as a context manager
@@ -112,8 +110,9 @@ class StorageManager:
         Returns:
             instance: of class with closed database connection
         """
-        if not self.closed_connection:
+        if self.active_connection:
             self.close_storage()
+            self.active_connection = False
         if exc_type:
             logger.error(str(exc_value))
             raise exc_value from None
@@ -147,31 +146,31 @@ class StorageManager:
             self._vacuum()
         # close db itself
         self._close_connection()
-        self.closed_connection = True
 
     # endregion
 
     # region write data
     def insert_data(
         self,
-        insert_dict: dict,
+        docking_data: dict,
         write_options: dict = {},
     ):
-        """Inserts data from all arrays returned from results manager.
+        """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
 
         Args:
-            insert_dict
+            docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
+            write_options (dict): options for how to write the data, primarily how to treat duplicates
         """
         # parse ligand info form dict into list of ligands
         ligands_array = [
-            docked_ligand["ligand_row"] for docked_ligand in insert_dict.values()
+            docked_ligand["ligand_row"] for docked_ligand in docking_data.values()
         ]
         # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
         ligand_ids = self._insert_ligands(ligands_array)
 
         # add ligand ids to results array and make result array list of poses
         results_array = []
-        for index, docked_ligand in enumerate(insert_dict.values()):
+        for index, docked_ligand in enumerate(docking_data.values()):
             for pose in docked_ligand["poses_results"]:
                 results_array.append([ligand_ids[index]] + pose)
         # get unique pose ids and duplicate handling info
@@ -179,17 +178,24 @@ class StorageManager:
         # check if are interactions:
         if any(
             docked_ligand.get("poses_interactions") not in (None, [])
-            for docked_ligand in insert_dict.values()
+            for docked_ligand in docking_data.values()
         ):
 
             self.insert_interactions(
                 Pose_IDs,
-                insert_dict,
+                docking_data,
                 duplicates,
                 write_options.get("duplicate_handling"),
             )
 
     def insert_receptor(self, receptor_data):
+        """
+
+        Method to insert receptor information into the database
+
+        Args:
+            receptor_data (list): of receptor data, ordered by columns in the db
+        """
         receptors = self.fetch_receptor_objects()
         # insert receptor if database does not have already have a receptor entry
         if not receptors:
@@ -197,17 +203,19 @@ class StorageManager:
 
     def insert_interactions(
         self,
-        Pose_IDs: list,
-        all_data: dict,
+        pose_IDs: list,
+        docking_data: dict,
         duplicates: list,
         duplicate_handling: str = None,
     ):
-        """Takes list of interactions, inserts into database
+        """Looks for interactions in the docking data, and inserts new interaction definitions
+        as well as interaction rows if there are any.
 
         Args:
-            interactions_list (list): List of tuples for interactions in form
-                ("type", "chain", "residue", "resid", "recname", "recid")
+            pose_IDs (list[int]): pose ids currently being processed
+            docking_data (dict): all parsed data from the docking fror those poses
             duplicates (list(Pose_ID)): any duplicates identified in "insert_results", if duplicate handling has been specified
+            duplicate_handling (str): how to treat any duplicates
 
         """
         if duplicate_handling:
@@ -216,7 +224,7 @@ class StorageManager:
                     f"duplicate_handling option {duplicate_handling} not allowed. Reverting to default behavior."
                 )
                 duplicate_handling = None
-        interaction_rows = self._insert_and_format_interactions(Pose_IDs, all_data)
+        interaction_rows = self._insert_and_format_interactions(pose_IDs, docking_data)
         # NOTE here as of dev meeting
         self._insert_interaction_rows(interaction_rows, duplicates, duplicate_handling)
 
@@ -228,15 +236,16 @@ class StorageManager:
         all_filters: Filters,
         bookmark_name: str,
         filtering_bookmark: str = None,
-    ) -> iter:
+    ) -> int:
         """Generate and execute database queries from given filters.
 
         Args:
-            all_filters (dict): dict containing all filters. Expects format and keys corresponding to ringtail.Filters().todict()
-            suppress_output (bool): prints filtering summary to sdout
+            all_filters (dict): dict containing all filters
+            bookmark_name (str): name of bookmark in which to save the data
+            filtering_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
 
         Returns:
-             iter: iterable, such as an sqlite cursor, of passing results
+             int: number of passing ligands
         """
         # before we do anything, check that the DB version matches the version number of our module
         rt_version_same, db_rt_version = self.check_ringtaildb_version()
@@ -269,7 +278,7 @@ class StorageManager:
 
         return count
 
-    def bookmark_exists(self, bookmark_name: str):
+    def bookmark_exists(self, bookmark_name: str) -> bool:
         """Checks if bookmark name is in database
 
         Args:
@@ -282,8 +291,8 @@ class StorageManager:
         return bool(bookmark_name in self.get_all_bookmark_names())
 
     def get_plot_data(self, bookmark_name: str, only_passing=False):
-        """This function is expected to return an ascii plot
-        representation of the results
+        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
+        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
 
         Args:
             bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
@@ -292,7 +301,6 @@ class StorageManager:
         Returns:
             tuple: cursors as (<all data cursor>, <passing data cursor>)
         """
-        # checks if we have filtered by looking for view name in list of view names
         all_data_query = "SELECT docking_score, leff FROM Results"
         if self.bookmark_exists(bookmark_name):
             passing_poses_columns = [
@@ -327,21 +335,25 @@ class StorageManager:
         new_db: str,
         bookmark1_name: str,
         bookmark2_name: str,
-        temp_table_suffix: int,
+        temp_table_suffix: int = 0,
         selection="NOT IN",
         old_db=None,
     ) -> tuple:
-        """Selects ligands found or not found in the given bookmark in both current db and new_db. Stores as temp view
+        """Selects ligands found or not found in the given bookmark in both current db and new_db.
+        Stores as a temporary table, only accessible within the same database connection.
 
         Args:
             new_db (str): file name for database to attach
             bookmark1_name (str): string for name of first bookmark/temp table to compare
             bookmark2_name (str): string for name of second bookmark to compare
-            selection (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+            temp_table_suffix (int, optional): if comparing more than set of bookmarks in one database connection, use this to give different temp table names
+            selection (str, optional): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
             old_db (str, optional): file name for previous database
 
         Returns:
             tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
+
+            #TODO also this should have the db specific stuff in sqlite
         """
         if old_db is not None:
             self._detach_db(old_db.split(".")[0])  # remove file extension
@@ -359,19 +371,20 @@ class StorageManager:
         )
         self.db_update(temp_insert_query, ())
 
-        counting = QueryBuilder()
-        count_pool = QueryBuilder()
-        count_pool_string = (
-            count_pool.SELECT("tt.pose_id")
-            .FROM(temp_name, "tt")
-            .JOIN("Results", "r", "pose_id")
-            .GROUP_BY("r.ligand_id")
-            .build()[0]
-        )
-        counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
-            "count_pool", "cp"
-        )
-        num_passing = tuple(self.db_query(counting.build()[0]).fetchone())[0]
+        num_passing = self._count_ligands_in_temptable(temp_name)
+        # counting = QueryBuilder()
+        # count_pool = QueryBuilder()
+        # count_pool_string = (
+        #     count_pool.SELECT("tt.pose_id")
+        #     .FROM(temp_name, "tt")
+        #     .JOIN("Results", "r", "pose_id")
+        #     .GROUP_BY("r.ligand_id")
+        #     .build()[0]
+        # )
+        # counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
+        #     "count_pool", "cp"
+        # )
+        # num_passing = tuple(self.db_query(counting.build()[0]).fetchone())[0]
         print("\n\n Number passing the cross referenced filters: ", num_passing)
 
         return temp_name, num_passing
@@ -379,6 +392,7 @@ class StorageManager:
     def prune_nonpassing(self, bookmark_name: str):
         """Deletes rows from results, ligands, and interactions in a bookmark
         if they do not pass filtering criteria
+        #TODO
         """
         self._delete_from_results(bookmark_name)
         self._delete_from_ligands(bookmark_name)
@@ -585,7 +599,7 @@ class StorageManagerSQLite(StorageManager):
     def _insert_ligands(self, ligand_array):
         """Takes array of ligand rows, inserts into Ligands table.
 
-        Args:
+        Args: #TODO
             ligand_array (np.ndarray): Numpy array of arrays
                 containing formatted ligand rows
 
@@ -1263,7 +1277,20 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
 
-    def _insert_and_format_interactions(self, pose_ids, docking_data: dict):
+    def _insert_and_format_interactions(self, pose_ids, docking_data: dict) -> list:
+        """
+        This method will evaluate the docking data, and determine whether or not there are
+        interactions to be processed and written.
+
+
+        Args:
+            pose_ids (list[int]): pose ids being processed
+            docking_data (dict): all docking data
+
+        Returns:
+            interactions_list (list): List of tuples for interactions in form
+                ("type", "chain", "residue", "resid", "recname", "recid")
+        """
         # insert interactions if they are present
         interaction_list = []
         pose_counter = 0
@@ -1353,6 +1380,14 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             list: List of tuples of interaction data
         """
+        interaction_keywords = [
+            "type",
+            "chain",
+            "residue",
+            "resid",
+            "recname",
+            "recid",
+        ]
         interactions = set()
         for pose_interactions in interaction_dictionaries:
             count = pose_interactions["count"][0]
@@ -1838,6 +1873,21 @@ class StorageManagerSQLite(StorageManager):
         }
 
         self.populate_filter_tables(bookmark_name, query_string, filters)
+
+    def _count_ligands_in_temptable(self, temp_name):
+        counting = QueryBuilder()
+        count_pool = QueryBuilder()
+        count_pool_string = (
+            count_pool.SELECT("tt.pose_id")
+            .FROM(temp_name, "tt")
+            .JOIN("Results", "r", "pose_id")
+            .GROUP_BY("r.ligand_id")
+            .build()[0]
+        )
+        counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
+            "count_pool", "cp"
+        )
+        return tuple(self.db_query(counting.build()[0]).fetchone())[0]
 
     def _create_crossref_temp_table(self, table_name):
         """create temporary table with given name and with ligand name and pose_id information
