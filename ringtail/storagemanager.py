@@ -139,13 +139,7 @@ class StorageManager:
             attached_db (str, optional): name of attached DB (not including file extension)
             vacuum (bool, optional): indicates that database should be vacuumed before closing
         """
-        if attached_db is not None:
-            self._detach_db(attached_db)
-        # vacuum database
-        if vacuum:
-            self._vacuum()
-        # close db itself
-        self._close_connection()
+        self._close_storage(attached_db, vacuum)
 
     # endregion
 
@@ -386,6 +380,34 @@ class StorageManager:
         self._delete_from_ligands(bookmark_name)
         self._delete_from_interactions_not_in_view(bookmark_name)
         self._clear_bookmarks()
+
+    # endregion
+
+    # region methods moved from child class bc they are API used outside of storageman
+    def fetch_receptor_objects(self):
+        """Returns all Receptor objects from database
+
+        Args:
+            rec_name (str): Name of receptor to return object for
+
+        Returns:
+            iter (tuple): of receptor names and objects
+        """
+
+        return self._fetch_receptor_objects()
+
+    # endregion
+
+    # region NotImplemented
+    def _fetch_receptor_objects(self):
+        raise NotImplementedError(
+            "Method '_fetch_receptor_objects' is not implemented in child class"
+        )
+
+    def _close_storage(self):
+        raise NotImplementedError(
+            "Method '_close_storage' is not implemented in child class"
+        )
 
     # endregion
 
@@ -1978,23 +2000,7 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Methods for getting information from database
-    def fetch_receptor_object_by_name(self, rec_name):
-        """Returns Receptor object from database for given rec_name
-
-        Args:
-            rec_name (str): Name of receptor to return object for
-
-        Returns:
-        str: receptor object as a string
-        """
-
-        cursor = self.db_query(
-            """SELECT receptor_object FROM Receptors WHERE RecName LIKE ?""",
-            (rec_name,),
-        )
-        return str(cursor.fetchone()[0])
-
-    def fetch_receptor_objects(self):
+    def _fetch_receptor_objects(self):
         """Returns all Receptor objects from database
 
         Args:
@@ -4039,8 +4045,20 @@ class StorageManagerSQLite(StorageManager):
             ) from e
         return con
 
-    def _close_connection(self):
-        """Closes connection to database"""
+    def _close_storage(self, attached_db=None, vacuum=None):
+        """
+        Closes storage, handles attached databases if necessary, and vacuums storage if requested
+
+        Args:
+            attached_db (_type_, optional): _description_. Defaults to None.
+            vacuum (_type_, optional): _description_. Defaults to None.
+        """
+        if attached_db is not None:
+            self._detach_db(attached_db)
+        # vacuum database
+        if vacuum:
+            self._vacuum()
+        # close db itself
         logger.debug("Closing database")
         self.conn.close()
 
