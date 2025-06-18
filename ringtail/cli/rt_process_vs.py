@@ -48,7 +48,7 @@ def main():
                     "ifp": cli.filter_options.interaction_cluster,
                     "mfp": cli.filter_options.mfpt_cluster,
                 }
-                bookmark_name, _ = rtcore.parse_clustering(
+                bookmark_name, _ = rtcore._parse_clustering(
                     cluster_data, cli.filter_options.bookmark_name
                 )
 

@@ -970,6 +970,7 @@ class RingtailCore:
         self.make_clickable_plot(pymol, bookmark_name)
 
     def launch_pymol(self):
+        """doc string"""
         import subprocess
         from rdkit.Chem import PyMol
         import socket
