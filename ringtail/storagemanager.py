@@ -210,7 +210,7 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def db_query(self, query, params: iter):
+    def db_query(self, query, params: iter) -> iter:
         """Executes provided sql query. Returns iter for results.
 
         Args:
@@ -488,6 +488,20 @@ class StorageManager:
         """
 
         return bool(bookmark_name in self.get_all_bookmark_names())
+
+    def tables_in_db(self) -> list:
+        """
+        Returns a list of all table names in the database
+
+        Returns:
+            list: list of table names
+        """
+        return [
+            name
+            for name in self.db_query(
+                "SELECT name FROM sqlite_master WHERE type='table';"
+            ).fetchall()
+        ]
 
     def get_filterid_from_name(self, bookmark_name: str) -> int:
         """
@@ -2965,7 +2979,8 @@ class StorageManagerSQLite(StorageManager):
             filters (dict, optional): filters or restrictions used
 
         Raises:
-            StorageError:
+            StorageError
+            OptionError
 
         Returns:
             bool: whether or not there are poses passing the filter
@@ -2975,6 +2990,11 @@ class StorageManagerSQLite(StorageManager):
         passing_poses_tuples = self.db_query(query).fetchall()
         passing_poses = [row[0] for row in passing_poses_tuples]
         if passing_poses:
+            # make sure bookmark name is not a table name
+            if name in self.tables_in_db():
+                raise OptionError(
+                    f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
+                )
             # check if bookmark exists
             if self.bookmark_exists(name):
                 logger.warning(
@@ -4633,7 +4653,7 @@ class StorageManagerSQLite(StorageManager):
         query = f"""DROP TABLE IF EXISTS {name};"""
         return self.db_query(query)
 
-    def db_query(self, query, params: tuple = ()):
+    def db_query(self, query, params: tuple = ()) -> iter:
         """Executes provided SQLite query. Returns cursor for results.
             Since cursor remains open, added to list of open cursors
 
