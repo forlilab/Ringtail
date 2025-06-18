@@ -33,7 +33,7 @@ def tablecount():
 
 
 @pytest.fixture(scope="class")
-def dbquery():
+def db_query():
     conn = sqlite3.connect("output.db")
     curs = conn.cursor()
 
@@ -72,16 +72,16 @@ class TestRingtailCore:
         count = tablecount("Ligands")
         assert count == 138
 
-    def test_save_receptor(self, dbquery):
+    def test_save_receptor(self, db_query):
         rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
-        count0 = dbquery(
+        count0 = db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         ).fetchone()[0]
 
         assert count0 == 0
 
         rtc.save_receptor(receptor_file="test_data/adgpu/4j8m.pdbqt")
-        count = dbquery(
+        count = db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         ).fetchone()[0]
 
@@ -316,10 +316,10 @@ class TestRingtailCore:
         assert os.path.exists("export_csv.csv")
         os.system("rm export_csv.csv")
 
-    def test_export_receptor(self, dbquery):
+    def test_export_receptor(self, db_query):
         rtc = RingtailCore(db_file="output.db")
         rtc.export_receptors()
-        curs = dbquery("SELECT RecName FROM Receptors;")
+        curs = db_query("SELECT RecName FROM Receptors;")
         receptor_name = curs.fetchone()[0]
         receptor_file = receptor_name + ".pdbqt"
 
@@ -654,7 +654,7 @@ class TestStorageMan:
             "10%_leff": -0.444,
         }
 
-    def test_bookmark_info(self, dbquery):
+    def test_bookmark_info(self, db_query):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
             file_path="test_data/adgpu/group2",
@@ -672,7 +672,7 @@ class TestStorageMan:
             .WHERE("name='bookmark_info'")
             .build()[0]
         )
-        curs = dbquery(query_string)
+        curs = db_query(query_string)
         bookmark_filters_db_str = curs.fetchone()[0]
 
         filters = {
