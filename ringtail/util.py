@@ -138,3 +138,27 @@ docking_mode_file_ext = {"dlg": "dlg", "vina": "pdbqt"}
 
 
 docking_mode_aliases = {"dlg": ["gpu", "adgpu", "dlg"], "vina": ["vina"]}
+
+
+def generate_not_implemented_message():
+    import inspect
+
+    frame = inspect.currentframe()
+    outer_frame = frame.f_back
+    method_name = outer_frame.f_code.co_name
+    class_name = None
+
+    # Try to find the class name from 'self'
+    if "self" in outer_frame.f_locals:
+        class_name = outer_frame.f_locals["self"].__class__.__name__
+
+    if class_name:
+        return (
+            f"Method '{method_name}' must be implemented in subclass of '{class_name}'."
+        )
+    else:
+        return f"Method '{method_name}' must be implemented in subclass."
+
+
+def raise_not_implemented():
+    raise NotImplementedError(generate_not_implemented_message())
