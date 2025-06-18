@@ -135,7 +135,7 @@ class TestRingtailCore:
         bookmarks = rtc.get_bookmark_names()
         assert len(bookmarks) == 1
         assert bookmarks[0] == "union_bookmark"
-        rtc.drop_bookmark("union_bookmark")
+        rtc.delete_bookmark("union_bookmark")
 
     def test_return_iter(self):
         rtc = RingtailCore(db_file="output.db")

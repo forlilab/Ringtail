@@ -24,7 +24,6 @@ from .exceptions import (
     DatabaseConnectionError,
     DatabaseTableCreationError,
     DatabaseQueryError,
-    DatabaseViewCreationError,
     OptionError,
     MergeError,
 )
@@ -139,11 +138,29 @@ class StorageManager:
             attached_db (str, optional): name of attached DB (not including file extension)
             vacuum (bool, optional): indicates that database should be vacuumed before closing
         """
-        self._close_storage(attached_db, vacuum)
+        raise_not_implemented()
 
     # endregion
 
-    # region write data
+    # region insert data
+
+    @classmethod
+    def format_for_storage(cls, ligand_dict: dict) -> dict:
+        """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
+        For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
+        We also save a mapping of the its cluster number to the index in interaction_dictionaries
+        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
+        Finally, we calculate the interaction tuple lists for each pose
+
+        Args:
+            ligand_dict (dict): Dictionary containing data from the fileparser
+
+        Returns:
+            dict: with storage formatted rows, including: results rows per pose, interactions per pose, one ligand row, and one receptor row
+        """
+
+        raise_not_implemented()
+
     def insert_data(
         self,
         docking_data: dict,
@@ -231,26 +248,9 @@ class StorageManager:
         """
         self._insert_receptor_blob(receptor, rec_name)
 
-    @classmethod
-    def format_for_storage(cls, ligand_dict: dict) -> dict:
-        """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
-        For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
-        We also save a mapping of the its cluster number to the index in interaction_dictionaries
-        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
-        Finally, we calculate the interaction tuple lists for each pose
-
-        Args:
-            ligand_dict (dict): Dictionary containing data from the fileparser
-
-        Returns:
-            dict: with storage formatted rows, including: results rows per pose, interactions per pose, one ligand row, and one receptor row
-        """
-
-        raise_not_implemented()
-
     # endregion
 
-    # region read data
+    # region filter data
     def filter_results(
         self,
         all_filters: Filters,
@@ -390,12 +390,6 @@ class StorageManager:
     def _fetch_receptor_objects(self):
         raise_not_implemented()
 
-    def _close_storage(self, attached_db=None, vacuum=None):
-        """
-        Closes storage
-        """
-        raise_not_implemented()
-
     def _insert_ligands(self, ligand_array: list) -> list:
         raise_not_implemented()
 
@@ -509,17 +503,6 @@ class StorageManager:
 
             Returns:
                 dict: containing the filter data
-        """
-        raise_not_implemented()
-
-    def drop_bookmark(self, bookmark_name: str):
-        """Drops specified bookmark from database
-
-        Args:
-            bookmark_name (str): bookmark to be dropped
-
-        Raises:
-            DatabaseInsertionError
         """
         raise_not_implemented()
 
@@ -821,7 +804,7 @@ class StorageManagerSQLite(StorageManager):
         self.db_file = db_file
         super().__init__()
 
-    # region Methods for inserting into/removing from the database
+    # region Methods for creating and inserting into tables the database
     def _create_tables(self) -> None:
         """
         Creates all tables needed for a Ringtail database of a specific version
@@ -991,24 +974,6 @@ class StorageManagerSQLite(StorageManager):
 
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting ligands.") from e
-
-    def _delete_from_ligands(self, bookmark_name: str):
-        """Remove rows from ligands table if they did not pass filtering
-
-        Raises:
-            StorageError
-        """
-        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
-
-        try:
-            self.db_update(
-                f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query}))",
-                (),
-            )
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                f"Error occured while pruning Ligands not in {bookmark_name}"
-            ) from e
 
     def _create_results_table(self):
         """Creates table for results. Columns are:
@@ -1405,22 +1370,6 @@ class StorageManagerSQLite(StorageManager):
 
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting results.") from e
-
-    def _delete_from_results(self, bookmark_name: str):
-        """Remove rows from results table if they did not pass filtering
-
-        Raises:
-            StorageError
-        """
-        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
-        try:
-            self.db_update(
-                f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})", ()
-            )
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                f"Error occured while pruning Results not in {bookmark_name}"
-            ) from e
 
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
@@ -1848,36 +1797,15 @@ class StorageManagerSQLite(StorageManager):
                 "Error while deleting rows in the Interaction table"
             ) from e
 
-    def _delete_from_interactions_not_in_view(self, bookmark_name: str):
-        """Remove rows from interactions table if they were not used for poses that passed filtering.
-
-        Args:
-            bookmark_name (str): defines which poses are passing
+    def _create_filtering_tables(self):
+        """
+        Creates a Filter table which includes filter_id (PK), name (bookmark_name), sqlite formatted query,
+        and dictionary of filters used, as well as Filtered_poses, which uses filter_id as FK,
+        and lists all poses passing that filter_id
 
         Raises:
-            StorageError: Description
+            DatabaseTableCreationError
         """
-        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
-        try:
-            self.db_update(
-                f"DELETE FROM Interactions WHERE Pose_ID NOT IN ({passing_poses_query})",
-                (),
-            )
-            # remove unused interaction indices, if any
-            self.db_update(
-                """DELETE FROM Interaction_indices WHERE interaction_id IN
-                            (SELECT ii.interaction_id FROM Interaction_indices ii 
-                            LEFT JOIN Interactions i ON ii.interaction_id=i.interaction_id 
-                            WHERE i.interaction_id IS NULL);""",
-                (),
-            )
-
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                f"Error occured while pruning Interactions not in {bookmark_name}"
-            ) from e
-
-    def _create_filtering_tables(self):
         # Create filters table keeping track of filter id etc
         filters_sql = """CREATE TABLE IF NOT EXISTS Filters (
         filter_id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1971,21 +1899,104 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error occurred while indexing") from e
 
-    def _delete_table(self, table_name: str, db_alias: str = None):
+    # endregion
+
+    # region merge databases
+
+    def merge_databases(self, merging_db: str, backup: bool = True):
         """
-        Method to delete a table
+        Method that merges two databases, ensuring integrity of primary and foreign keys.
+        The merging will create a new table if needed, that keeps track of the primary key
+        in the original and the merged database on a per-table basis. Another table will also
+        keep track of how many databases has been merged into the primary database.
+        Each merge session is given a merge_id.
+        The merging will ensure the two databases are -compatible based on the receptor only-.
+        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
+            these will be allowed to merge.
 
         Args:
-            table_name (str): table to be dropped
+            merging_db (str): path to database being merged into current
+            backup (bool, optional): whether or not to back up current database before
+                merging another database into it. Defaults to True.
 
+        Raises:
+            MergeError
         """
+        # back up main database
+        if backup:
+            self.clone()
+        # attach incoming database and check compatibility
+        merging_db_alias = self._attach_db(merging_db, "merging")
+        if not self._check_if_db_is_compatible(merging_db_alias, 200):
+            raise StorageError(
+                "Trying to merge two databases of incompatible or too old versions, cannot proceed."
+            )
+        # create new tables to keep track of merger
+        self._create_merge_tables()
+        # add to merging table the absolute path
+        mergedb_abspath = str(os.path.abspath(merging_db))
+        # insert merging db name first
+        cur = self.conn.execute(
+            """INSERT INTO merged_tables(dbfile) VALUES (?)""",
+            (mergedb_abspath,),
+        )
+        # receptor compatibility check
+        receptorcheck_sql = """
+        SELECT CASE 
+            WHEN Receptors.RecName = merging_receptors.RecName THEN 'True'
+            ELSE 'False'
+        END AS comparison_result 
+        FROM Receptors 
+        JOIN merging.Receptors AS merging_receptors 
+            ON Receptors.receptor_id = merging_receptors.receptor_id"""
 
-        if db_alias:
-            name = db_alias + "." + table_name
+        try:
+            assert self.db_query(receptorcheck_sql).fetchone()[0] == "True"
+        except AssertionError:
+            raise StorageError(
+                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
+            )
         else:
-            name = table_name
-        query = f"""DROP TABLE IF EXISTS {name};"""
-        return self.db_query(query)
+            logger.info(
+                "The two databases are of compatible version and receptors. Merging will proceed."
+            )
+
+        # get the active merge_id to ensure we use the correct merge data moving forward
+        merge_id = self.db_query(
+            "SELECT last_insert_rowid() FROM merged_tables"
+        ).fetchone()[0]
+
+        # delete incompatible tables
+        # for main db
+        self._drop_views()
+        self._delete_table("Ligand_clusters")
+        # for attached db
+        self._drop_views(merging_db_alias)
+        self._delete_table("Ligand_clusters", merging_db_alias)
+
+        # merge tables
+        try:
+            self._merge_db_properties_table(merge_id)
+            logger.info("The 'db_properties' table has been merged.")
+
+            self._merge_ligands_table()
+            logger.info("The 'Ligands' table has been merged.")
+
+            self._merge_results_table(merge_id)
+            logger.info("The 'Results' table has been merged.")
+
+            self._merge_interaction_tables(merge_id)
+            logger.info(
+                "The 'Interaction_indices' and 'Interactions' tables have been merged."
+            )
+        except Exception as e:
+            raise MergeError(f"Error during database merging: {e}") from e
+        else:
+            logger.info(
+                f"The database {merging_db} has been successfully merged into {self.db_file}."
+            )
+        finally:
+            cur.close()
 
     def _create_merge_tables(self):
         """
@@ -2018,9 +2029,290 @@ class StorageManagerSQLite(StorageManager):
         except Exception as e:
             raise StorageError(e) from e
 
+    def _merge_interaction_tables(self, merge_id: int):
+        """
+        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
+        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            Exception
+        """
+        convert_ii_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        "Interaction_indices", 
+        interaction_id,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    ) 
+                THEN (
+                    SELECT main.Interaction_indices.interaction_id
+                    FROM main.Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    )
+                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
+            END AS new_interaction_id
+        FROM merging.Interaction_indices;"""
+
+        # then inserting only those that aren't already in the table
+        insert_interaction_indices = """INSERT INTO Interaction_indices (
+        interaction_id,
+        interaction_type,
+        rec_chain,
+        rec_resname,
+        rec_resid,
+        rec_atom,
+        rec_atomid)
+        SELECT 
+            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
+            interaction_type,
+            rec_chain,
+            rec_resname,
+            rec_resid,
+            rec_atom,
+            rec_atomid
+        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
+        """
+
+        # Adding new data to Interactions table with (updated) pose_id and interaction_id
+        insert_interactions = """
+        INSERT INTO Interactions (
+        Pose_ID,
+        interaction_id
+        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
+                FROM merging.Interactions I
+                LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
+            LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Interaction_indices' 
+                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                convert_ii_sql,
+                (merge_id,),
+            )
+            cur.execute(insert_interaction_indices, (merge_id,))
+            cur.execute(
+                insert_interactions,
+                (
+                    merge_id,
+                    merge_id,
+                ),
+            )
+            self.conn.commit()
+        except Exception as e:
+            raise Exception(
+                f"Error during update and insertion of interactions: {e}"
+            ) from e
+
+    def _merge_results_table(self, merge_id: int):
+        # TODO since the ligand id merge table stuff is issue now, this will also be issue
+        """
+        Merges the results table, will not check for duplicates. Will assign new pose_id/primary key
+        to the rows from the incoming Results table
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            StorageError
+        """
+
+        cur = self.conn.cursor()
+        convert_poseid_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        "Results", 
+        Pose_ID,
+        Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
+        FROM merging.Results;"""
+
+        # insert results with updated pose_ids
+        insert_Results = """INSERT INTO Results (
+            Pose_ID,
+            ligand_id,
+            receptor,
+            pose_rank,
+            run_number,
+            docking_score,
+            leff,
+            deltas,
+            cluster_rmsd,
+            cluster_size,
+            reference_rmsd,
+            energies_inter,
+            energies_vdw,
+            energies_electro,
+            energies_flexLig,
+            energies_flexLR,
+            energies_intra,
+            energies_torsional,
+            unbound_energy,
+            nr_interactions,
+            num_hb,
+            about_x,
+            about_y,
+            about_z,
+            trans_x,
+            trans_y,
+            trans_z,
+            axisangle_x,
+            axisangle_y,
+            axisangle_z,
+            axisangle_w,
+            dihedrals,
+            ligand_coordinates,
+            flexible_res_coordinates) 
+        SELECT 
+            II.merged_PK as pose_id,
+            I.ligand_id,
+            I.receptor,
+            I.pose_rank,
+            I.run_number,
+            I.docking_score,
+            I.leff,
+            I.deltas,
+            I.cluster_rmsd,
+            I.cluster_size,
+            I.reference_rmsd,
+            I.energies_inter,
+            I.energies_vdw,
+            I.energies_electro,
+            I.energies_flexLig,
+            I.energies_flexLR,
+            I.energies_intra,
+            I.energies_torsional,
+            I.unbound_energy,
+            I.nr_interactions,
+            I.num_hb,
+            I.about_x,
+            I.about_y,
+            I.about_z,
+            I.trans_x,
+            I.trans_y,
+            I.trans_z,
+            I.axisangle_x,
+            I.axisangle_y,
+            I.axisangle_z,
+            I.axisangle_w,
+            I.dihedrals,
+            I.ligand_coordinates,
+            I.flexible_res_coordinates
+        FROM merging.Results I
+                LEFT JOIN (SELECT original_PK, merged_PK 
+                FROM PK_conversions 
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) II ON II.original_PK = I.Pose_ID;"""
+
+        try:
+            cur.execute(
+                convert_poseid_sql,
+                (merge_id,),
+            )
+            cur.execute(insert_Results, (merge_id,))
+            # commit after each large table in case there are memory constraints
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError(f"Error during insertion of results: {e}") from e
+
+    def _merge_ligands_table(self):
+        """
+        _summary_
+
+        Raises:
+            StorageError: _description_
+        """
+        # TODO I think this method is wrong now, because I changed from ligname PK to ligand_id
+        try:
+            cur = self.conn.cursor()
+            # Ligand table has unique constraints and primary key is ligand_id so no checks needed
+            merge_ligands = """INSERT INTO Ligands 
+                SELECT * FROM merging.Ligands"""
+            cur.execute(merge_ligands)
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError("Error encountered while merging Ligands table") from e
+
+    def _merge_db_properties_table(self, merge_id: int):
+        """
+        Merges database properties table, but importantly will not check for property compatibility
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            StorageError
+        """
+        try:
+            cur = self.conn.cursor()
+            convert_dbprop_sql = """INSERT INTO PK_conversions (
+                merge_id,
+                table_name,
+                original_PK,
+                merged_PK) SELECT 
+                ?,
+                "db_properties", 
+                DB_write_session,
+                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
+                FROM merging.db_properties;"""
+            cur.execute(
+                convert_dbprop_sql,
+                (merge_id,),
+            )
+
+            insert_dbprops_sql = """INSERT INTO DB_properties (
+                DB_write_session,
+                docking_mode,
+                number_of_poses)
+                SELECT 
+                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
+                    docking_mode,
+                    number_of_poses
+                FROM merging.DB_properties;"""
+            cur.execute(insert_dbprops_sql, (merge_id,))
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError(
+                "Error encountered while merging db_properties table"
+            ) from e
+
+    def _merge_filtered_data(self):
+        # TODO
+        # deal with new tables for filtering
+        pass
+
     # endregion
 
-    # region Methods for dealing with bookmarks/views and temporary tables
+    # region Methods for dealing with bookmarks
     def get_all_bookmark_names(self) -> list[str]:
         """Get all bookmarks in sql database as a list of names. Bookmarks are a Ringtail-specific saved query (much like views)
 
@@ -2157,73 +2449,6 @@ class StorageManagerSQLite(StorageManager):
 
         return query.build()[0]
 
-    def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
-        """Method that will retrieve filter values used to construct bookmark
-
-        Args:
-            bookmark_name (str, optional): can get filter values for given bookmark, or filter values from currently active bookmark in storageman
-
-            Returns:
-                dict: containing the filter data
-        """
-        sql_query = "SELECT filters FROM Filters where name = ?"
-
-        filters = self.db_query(sql_query, (bookmark_name,)).fetchone()
-        if not filters:
-            return {}
-
-        return json.loads(filters[0])
-
-    def _populate_filter_tables(self, name, query: str, filters={}) -> bool:
-        """
-        Will run a filter query and determine if there are passing poses, in which case all relevant
-        data is written to the database
-
-        Args:
-            name (str): name of new bookmark
-            query (str): query that defines what poses to insert
-            filters (dict, optional): filters or restrictions used
-
-        Raises:
-            StorageError:
-
-        Returns:
-            bool: whether or not there are poses passing the filter
-        """
-
-        # fetch filtered poses
-        passing_poses_tuples = self.db_query(query).fetchall()
-        passing_poses = [row[0] for row in passing_poses_tuples]
-        if passing_poses:
-            # check if bookmark exists
-            if self.bookmark_exists(name):
-                logger.warning(
-                    f"The bookmark {name} already exists, and will be overwritten by the current filter."
-                )
-                self.delete_bookmark(name)
-            filter_sql = """INSERT INTO Filters (name,query,filters) VALUES (?,?,?) RETURNING filter_id;"""
-            try:
-                filter_id = self.db_query(
-                    filter_sql,
-                    (
-                        name,
-                        query,
-                        json.dumps(filters),
-                    ),
-                ).fetchone()[0]
-
-                filter_pose_sql = f"""
-                    INSERT INTO Filtered_poses (filter_id, pose_id) VALUES (?,?);"""
-                params = [(filter_id, pose_id) for pose_id in passing_poses]
-                self.db_update(filter_pose_sql, params)
-            except Exception as e:
-                raise StorageError(
-                    f"Problems while writing filtered poses to database: {e}"
-                ) from e
-            else:
-                logger.info("Successfully wrote filtered poses to database.")
-        return bool(passing_poses)
-
     def _clear_bookmarks(self):
         """
         Clears all filters and filtered poses
@@ -2232,108 +2457,6 @@ class StorageManagerSQLite(StorageManager):
         self.db_query("DROP TABLE IF EXISTS Filtered_poses")
         self._create_filtering_tables()
         self.conn.commit()
-
-    def drop_bookmark(self, bookmark_name: str):
-        """Drops specified bookmark from database
-
-        Args:
-            bookmark_name (str): bookmark to be dropped
-
-        Raises:
-            DatabaseInsertionError
-        """
-
-        query_drop = f"DROP VIEW IF EXISTS {bookmark_name}"
-        query_delete = f"DELETE FROM Bookmarks WHERE Bookmark_name = '{bookmark_name}'"
-
-        try:
-            cur = self.conn.execute(query_drop)
-            cur.execute(query_delete)
-            self.conn.commit()
-            cur.close()
-            logger.info(f"Dropped bookmark {bookmark_name}.")
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                f"Error while attempting to drop bookmark {bookmark_name}"
-            ) from e
-
-    def create_bookmark_from_temp_table(
-        self,
-        temp_table_name,
-        bookmark_name,
-        original_bookmark_name,
-        wanted_list=[],
-        unwanted_list=[],
-    ):
-        """Resaves temp bookmark stored in bookmark_name as new permenant bookmark
-
-        Args:
-            bookmark_name (str): name of bookmark to save last temp bookmark as
-            original_bookmark_name (str): name of original bookmark
-            wanted_list (list): List of wanted database names
-            unwanted_list (list, optional): List of unwanted database names
-            temp_table_name (str): name of temporary table
-        """
-        query = QueryBuilder()
-        subq = QueryBuilder()
-        subq_string = subq.SELECT("t.pose_id").FROM(temp_table_name, "t").build()[0]
-        query_string = (
-            query.SELECT("bm.pose_id")
-            .FROM_BOOKMARK(original_bookmark_name, "bm")
-            .WHERE(f"bm.pose_id IN ({subq_string})")
-            .build()[0]
-        )
-        filters = {
-            "comparison_wanted": ", ".join(wanted_list),
-            "comparison_unwanted": ", ".join(unwanted_list),
-        }
-
-        self._populate_filter_tables(bookmark_name, query_string, filters)
-
-    def _count_ligands_in_temptable(self, temp_name: str) -> int:
-        """
-        Counts ligands represented in the temporary table
-
-        Args:
-            temp_name (str): name of temporary table
-
-        Returns:
-            int: number of poses in temporary table
-        """
-        counting = QueryBuilder()
-        count_pool = QueryBuilder()
-        count_pool_string = (
-            count_pool.SELECT("tt.pose_id")
-            .FROM(temp_name, "tt")
-            .JOIN("Results", "r", "pose_id")
-            .GROUP_BY("r.ligand_id")
-            .build()[0]
-        )
-        counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
-            "count_pool", "cp"
-        )
-        return tuple(self.db_query(counting.build()[0]).fetchone())[0]
-
-    def _create_crossref_temp_table(self, table_name: str):
-        """create temporary table with given name and with ligand name and pose_id information
-
-        Args:
-            table_name (str): name for temp table
-
-        Raises:
-            DatabaseTableCreationError
-        """
-
-        create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID, ligname)"
-        try:
-            cur = self.conn.cursor()
-            cur.execute(create_table_str)
-            self.conn.commit()
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                f"Error while creating temporary table {table_name}"
-            ) from e
 
     def get_filterid_from_name(self, bookmark_name: str) -> int:
         """
@@ -2352,571 +2475,7 @@ class StorageManagerSQLite(StorageManager):
 
     # endregion
 
-    # region Methods for getting information from database
-    def _fetch_receptor_objects(self):
-        """Returns all Receptor objects from database"""
-
-        cursor = self.db_query("SELECT RecName, receptor_object FROM Receptors")
-        return cursor.fetchall()
-
-    def fetch_data_for_passing_results(
-        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
-    ) -> iter:
-        """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
-
-        Returns:
-            iter: sqlite cursor of data from passing data
-
-        Raises:
-            OptionError
-        """
-        outfields_list = self._format_output_fields(
-            outfields, ligands_alias="L", results_alias="R"
-        )
-
-        bookmark_selection = self._get_bookmark_poses_query(bookmark_name)
-
-        query = QueryBuilder()
-        query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
-            f"R.pose_id IN ({bookmark_selection})"
-        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
-        if order_results:
-            order_by = self._format_orderby(order_results)
-            if order_by:
-                query.ORDER_BY(order_by)
-
-        return self.db_query(query.build()[0])
-
-    def fetch_flexres_info(self, receptor):
-        """fetch flexible residues names and atomname lists
-
-        Returns:
-            tuple: (flexible_residues, flexres_atomnames)
-        """
-        if type(receptor) == int:
-            selection = "receptor_id = ?"
-        elif type(receptor) == str:
-            selection = "recname = ?"
-        try:
-            query = f"SELECT flexible_residues, flexres_atomnames FROM Receptors WHERE {selection}"
-            info = self.db_query(query, (receptor,)).fetchone()
-            if info is None:
-                info = [], []
-            return info
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError("Error retrieving flexible residue info") from e
-
-    def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
-        """fetch information required by vsmanager for writing out molecules
-
-        Returns:
-            iter: contains LigName, rdmol,
-                atom_index_map, hydrogen_parents
-        """
-        query = QueryBuilder()
-        query.SELECT("ligname", "rdmol", "atom_index_map", "hydrogen_parents").FROM(
-            "Ligands", "L"
-        ).WHERE(
-            f"""L.ligand_id IN (SELECT DISTINCT ligand_id FROM ({self.get_bookmark_selection(bookmark_name, "ligand_id")}))"""
-        )
-        return self.db_query(query.build()[0])
-
-    def fetch_ligand_rdkit_relevant_info(self, ligname) -> str:
-        """get output information for given ligand
-
-        Args:
-            ligname (str): ligand name
-
-        Raises:
-            DatabaseQueryError
-
-        Returns:
-            str: information containing smiles, atom and index mapping, and hydrogen parents
-        """
-        try:
-            cur = self.conn.cursor()
-            cur.execute(
-                f"SELECT LigName, rdmol, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
-            )
-            info = cur.fetchone()
-            cur.close()
-            return info
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError(
-                f"Error retrieving ligand info for {ligname}"
-            ) from e
-
-    def fetch_pose_interactions(self, Pose_ID) -> iter:
-        """
-        Fetch all interactions parameters belonging to a Pose_ID
-
-        Args:
-            Pose_ID (int): pose id, 1-1 with Results table
-
-        Returns:
-            iter: of interaction information for given Pose_ID
-        """
-        # check if table exist
-        cur = self.db_query(
-            """SELECT name FROM sqlite_master WHERE type='table' AND name='Interactions';"""
-        )
-        if len(cur.fetchall()) == 0:
-            return None
-
-        query = f"""SELECT ii.interaction_type, ii.rec_chain, ii.rec_resname, ii.rec_resid, ii.rec_atom, ii.rec_atomid 
-        FROM Interaction_indices ii 
-        JOIN Interactions i ON i.interaction_id = ii.interaction_id
-        WHERE i.Pose_ID = ?"""
-
-        return self.db_query(query, (Pose_ID,)).fetchall()
-
-    def count_receptors_in_db(self):
-        """returns number of rows in Receptors table where receptor_object already has blob
-
-        Returns:
-            int: number of rows in receptors table
-            str: name of receptor if present in table
-
-        Raises:
-            DatabaseQueryError
-        """
-        try:
-            cur = self.conn.execute(
-                "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
-            )
-            row_count = cur.fetchone()[0]
-            cur.close()
-            return row_count
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError(
-                "Error occurred while fetching number of receptor rows containing PDBQT blob"
-            ) from e
-
-    def _fetch_ligand_cluster_columns(self) -> list:
-        """fetching columns from Ligand_clusters table
-
-        Raises:
-            IndexError
-
-        Returns:
-            list: columns from ligand clusters table
-        """
-        try:
-            return [
-                c[1]
-                for c in self.db_query("PRAGMA table_info(Ligand_clusters)").fetchall()
-            ][1:]
-        except IndexError:
-            raise IndexError(
-                "Error fetching columns from Ligand_clusters table. Confirm that ligand clustering has been previously performed."
-            )
-
-    def _fetch_results_column_names(self) -> list:
-        """Fetches list of string for column names in results table
-
-        Returns:
-            list: List of strings of results table column names
-
-        Raises:
-            StorageError
-        """
-        try:
-            return [
-                column_tuple[1]
-                for column_tuple in self.conn.execute("PRAGMA table_info(Results)")
-            ]
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                "Error while fetching column names from Results table"
-            ) from e
-
-    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
-        """Returns a panda dataframe of table or query given as requested_data
-
-        Args:
-            requested_data (str): String containing SQL-formatted query or table name
-            table (bool): Flag indicating if requested_data is table name or not
-
-        Returns:
-            pd.DataFrame: dataframe of requested data
-        """
-        if table:
-            query = QueryBuilder()
-            if requested_data in self.get_all_bookmark_names():
-                query.SELECT("*").FROM("Results").IN_BOOKMARK(requested_data)
-            else:
-                # assume it is a table
-                query.SELECT("*").FROM("Results")
-            return pd.read_sql_query(query.build()[0], self.conn)
-        else:
-            return pd.read_sql_query(requested_data, self.conn)
-
-    def _get_length_of_table(self, table_name: str):
-        """
-        Finds the rowcount/length of a table based on the rowid
-
-        Args:
-            table_name (str): name of table to count the length of
-
-        Returns:
-            int: length of the table
-        """
-        query = f"""SELECT COUNT(rowid) from {table_name}"""
-
-        return self.db_query(query).fetchone()[0]
-
-    def fetch_summary_data(
-        self, columns=["docking_score", "leff"], percentiles=[1, 10]
-    ) -> dict:
-        """Collect summary data for database:
-            Num Ligands
-            Num stored poses
-            Num unique interactions
-
-            min, max, percentiles for columns in columns
-
-        Args:
-            columns (list (str)): columns to be displayed and used in summary
-            percentiles (list(int)): percentiles to consider
-
-        Returns:
-            dict: of data summary
-        """
-        try:
-            summary_data = {}
-            cur = self.conn.cursor()
-            summary_data["num_ligands"] = cur.execute(
-                "SELECT COUNT(ligand_id) FROM Ligands"
-            ).fetchone()[0]
-            if summary_data["num_ligands"] == 0:
-                raise StorageError("There is no ligand data in the database. ")
-            summary_data["num_poses"] = cur.execute(
-                "SELECT COUNT(Pose_id) FROM Results"
-            ).fetchone()[0]
-            summary_data["num_unique_interactions"] = cur.execute(
-                "SELECT COUNT(interaction_id) FROM Interaction_indices"
-            ).fetchone()[0]
-            summary_data["num_interacting_residues"] = cur.execute(
-                "SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)"
-            ).fetchone()[0]
-
-            allowed_columns = self._fetch_results_column_names()
-            for col in columns:
-                if col not in allowed_columns:
-                    raise StorageError(
-                        f"Requested summary column {col} not found in Results table! Available columns: {allowed_columns}"
-                    )
-                summary_data[f"min_{col}"] = cur.execute(
-                    f"SELECT MIN({col}) FROM Results"
-                ).fetchone()[0]
-                summary_data[f"max_{col}"] = cur.execute(
-                    f"SELECT MAX({col}) FROM Results"
-                ).fetchone()[0]
-                for p in percentiles:
-                    summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
-
-            return summary_data
-
-        except sqlite3.OperationalError as e:
-            raise StorageError("Error while fetching summary data!") from e
-
-    # endregion
-
-    # region Methods dealing with filtered results
-    def get_maxmiss_union(
-        self, total_combinations: int, bookmark_name: str, all_filters={}
-    ):
-        """Get results that are in union considering max miss
-
-        Args:
-            total_combinations (int): numer of possible combinations
-
-        Returns:
-            iter: of passing results
-        """
-        enumerated_bookmarks = []
-        existing_bookmarks = self.get_all_bookmark_names()
-        for i in range(total_combinations):
-            bmn = bookmark_name + "_" + str(i)
-            if bmn in existing_bookmarks:
-                enumerated_bookmarks.append(f"'{bmn}'")
-
-        subq = QueryBuilder()
-        subq.SELECT("filter_id").FROM("Filters").WHERE(
-            f"name IN ({', '.join(enumerated_bookmarks)})"
-        )
-        query = QueryBuilder()
-        query.SELECT("DISTINCT pose_id").FROM("filtered_poses").WHERE(
-            f"filter_id IN ({subq.build()[0]})"
-        )
-        bookmark_name = f"{bookmark_name}_union"
-        logger.debug("Saving union bookmark...")
-        logger.debug("Running union query...")
-        self._populate_filter_tables(
-            name=bookmark_name, query=query.build()[0], filters=all_filters
-        )
-
-        count = self.get_passing_ligands_count(bookmark_name)
-
-        if not count:
-            bookmark_name = None
-        return count, bookmark_name
-
-    def fetch_clustered_similars(self, ligname: str):
-        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
-
-        Args:
-            ligname (str): ligname for ligand to find similarity with
-
-        Raises:
-            ValueError: wrong terminal input
-            DatabaseQueryError
-        """
-        logger.warning(
-            "N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters."
-        )
-        cur = self.conn.cursor()
-        # TODO should be able to just check what clusters the ligand is a part of, and then offer them here
-        # nothing somehow what filters were involved before the clustering perhaps?
-        ligand_cluster_columns = self._fetch_ligand_cluster_columns()
-        print(
-            "Here are the existing clustering groups. Please ensure that you query ligand(s) is a part of the group you select."
-        )
-        print(
-            "   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint?   |   cutoff   "
-        )
-        print(
-            "----------------------------------------------------------------------------------------------------------"
-        )
-        for i, col in enumerate(ligand_cluster_columns):
-            col_info = col.split("_")
-            option_list = (
-                [str(i)]
-                + ["_".join(col_info[:-2])]
-                + [col_info[-2]]
-                + [col_info[-1].replace("p", ".")]
-            )
-            print(f"{'    |    '.join(option_list)}")
-        cluster_choice = input(
-            "Please specify choice number for the cluster you would like to return similar ligands from: "
-        )
-        try:
-            cluster_col_choice = ligand_cluster_columns[int(cluster_choice)]
-        except ValueError:
-            raise ValueError(
-                f"Given cluster number {cluster_choice} cannot be converted to int. Please be sure you are specifying integer."
-            )
-        query_ligand_cluster = cur.execute(
-            f"SELECT {cluster_col_choice} FROM Ligand_clusters WHERE pose_id IN (SELECT Pose_ID FROM Results WHERE ligand_id = (SELECT ligand_id FROM Ligands WHERE LigName =  '{ligname}'))"
-        ).fetchone()
-        if query_ligand_cluster is None:
-            raise DatabaseQueryError(
-                f"Requested ligand name {ligname} not found in cluster {cluster_col_choice}!"
-            )
-        query_ligand_cluster = query_ligand_cluster[0]  # extract from tuple
-
-        # TODO this is not ideal or optimized, but it does what it needs to do.
-        sql_query = f"""
-        SELECT LigName FROM Ligands WHERE ligand_id IN (SELECT ligand_id FROM Results WHERE Pose_ID IN 
-        (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}))
-        GROUP BY ligand_id"""
-
-        bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
-
-        return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
-
-    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
-        """
-        Gets molecular data that is needed to create rdkit mols for a given list of poses
-
-        Args:
-            pose_ids (list): pose ids for which to collect molecular data
-
-        Returns:
-            iter: of the following columns Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates
-        """
-        placeholders = ",".join(["?"] * len(pose_ids))
-        query = f"""
-        SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
-        FROM Results WHERE Pose_ID IN ({placeholders})
-        """
-        return self.db_query(query, pose_ids)
-
-    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
-        """Make query for percentile by calculating energy or leff cutoff
-
-        Args:
-            percentile (float): cutoff percentile
-            column (str, optional): string indicating column for percentile to be calculated over
-
-        Returns:
-            float: effective cutoff value of results based on percentile
-        """
-        # get total number of ligands
-        try:
-            logger.debug(f"Generating percentile filter query for {column}")
-            cur = self.conn.cursor()
-            cur.execute("SELECT COUNT(ligand_id) FROM Ligands")
-            n_ligands = int(cur.fetchone()[0])
-            n_passing = int((percentile / 100) * n_ligands)
-            # find energy cutoff
-            counter = 0
-            for i in cur.execute(
-                f"SELECT {column} FROM Results GROUP BY ligand_id ORDER BY {column}"
-            ):
-                if counter == n_passing:
-                    cutoff = i[0]
-                    break
-                counter += 1
-            logger.debug(f"{column} percentile cutoff is {cutoff}")
-            return cutoff
-        except sqlite3.OperationalError as e:
-            raise StorageError("Error while generating percentile query") from e
-
-    def calculate_percentile_from_value(self, docking_score_max=None, leff_max=None):
-        # TODO
-        # can replace with kwargs, and check in the create table statement or something if the column
-        # name is actually a numerical column or not
-        if docking_score_max and leff_max:
-            logger.warning(
-                "Can not calculate percentil for both docking score and ligand efficiency, will proceed with just docking score"
-            )
-            leff_max = None
-        if docking_score_max:
-            column = "docking_score"
-            value = docking_score_max
-        elif leff_max:
-            column = "leff"
-            value = leff_max
-
-        cur = self.conn.cursor()
-        cur.execute("SELECT COUNT(ligand_id) FROM Ligands")
-        n_ligands_total = int(cur.fetchone()[0])
-
-        cur.execute(
-            f"SELECT COUNT(*) FROM (SELECT Pose_ID FROM Results WHERE {column} < {value} GROUP BY ligand_id);"
-        )
-        n_ligands_passing = int(cur.fetchone()[0])
-
-        return n_ligands_passing / n_ligands_total * 100
-
-    def _format_orderby(self, column_name: str) -> str:
-        """
-        Ensures chosen order by column is a valid choice
-
-        Args:
-            column_name (str): column to order by
-
-        Returns:
-            str: column to order by with appropriate alias
-        """
-        columns, aliased_columns = self._get_possible_output_columns()
-        if column_name.lower() in columns:
-            index = columns.index(column_name.lower())
-            order_by = aliased_columns[index].format(
-                Ligands_alias="L", Results_alias="R"
-            )
-            return order_by
-        else:
-            return None
-
-    def _format_output_fields(
-        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
-    ) -> str:
-        """Handles string or list input of column names to be outputted, will make sure LigName
-        is in the list, and make sure all options are valid
-
-        Returns:
-            list: column names for which the data is to be displayed that needs formatting with table alias
-                for which table they belong to
-
-        Raises:
-            OptionError
-        """
-        if type(outfields) == str:
-            outfields = outfields.replace(" ", "")
-            outfields_list = outfields.split(",")
-        elif type(outfields) == list:
-            outfields_list = outfields
-        else:
-            logger.warning(
-                "The provided outfields is not in a usable format (string or list). Will only use ligname"
-            )
-            outfields_list = []
-        table_formatted_outfields = []
-        if "ligname" not in [field.lower() for field in outfields_list]:
-            outfields_list.insert(0, "LigName")
-        possible_columns, table_formatted_columns = self._get_possible_output_columns()
-
-        for outfield in outfields_list:
-            if outfield.lower() in possible_columns:
-                table_formatted_outfields.append(
-                    table_formatted_columns[possible_columns.index(outfield.lower())]
-                )
-            else:
-                logger.warning(
-                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
-                )
-        formatted_outfields = [
-            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
-            for outfield in table_formatted_outfields
-        ]
-
-        return formatted_outfields
-
-    def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
-        """
-        Gets all column names from given tables
-
-        Args:
-            tables (list, optional): Defaults to ["Results", "Ligands"].
-
-        Returns:
-            columns (list[str]): list of column names for all listed tables
-            columns_with_tablename (list[str.format]): needs formatted with table_alias (one per table) for use
-        """
-        columns = []
-        columns_with_tablename = []
-        for table in tables:
-            columns_info = self.db_query(f"PRAGMA table_info({table})").fetchall()
-            columns.extend([col[1].lower() for col in columns_info])
-            columns_with_tablename.extend(
-                [
-                    (
-                        "{{{table_alias}_alias}}.{col}".format(
-                            col=col[1], table_alias=table
-                        )
-                    )
-                    for col in columns_info
-                ]
-            )
-
-        return columns, columns_with_tablename
-
-    def _get_numeric_columns(self, table_name: str) -> iter:
-        """
-        Method to get the names of all numeric columns, for example for allowable sorting options
-
-        Args:
-            table_name (str): table name to evaluate
-
-        Returns:
-            iter: column names that has a numeric type
-        """
-        return self.db_query(
-            f"""SELECT
-                            name
-                        FROM
-                            pragma_table_info('{table_name}')
-                            WHERE CASE 
-                                WHEN UPPER(type) LIKE '%INT%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%REAL%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%NUM%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%DEC%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%FLOAT%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%DOUBLE%' THEN 'numerical'
-                            END ='numerical';"""
-        ).fetchall()
+    # region filtering related methods
 
     def _process_filters_for_query(self, filters_dict: dict):
         score_maxmin_to_sqlite_call = {
@@ -3388,6 +2947,95 @@ class StorageManagerSQLite(StorageManager):
 
         return filtered_ligands
 
+    def _populate_filter_tables(self, name, query: str, filters={}) -> bool:
+        """
+        Will run a filter query and determine if there are passing poses, in which case all relevant
+        data is written to the database
+
+        Args:
+            name (str): name of new bookmark
+            query (str): query that defines what poses to insert
+            filters (dict, optional): filters or restrictions used
+
+        Raises:
+            StorageError:
+
+        Returns:
+            bool: whether or not there are poses passing the filter
+        """
+
+        # fetch filtered poses
+        passing_poses_tuples = self.db_query(query).fetchall()
+        passing_poses = [row[0] for row in passing_poses_tuples]
+        if passing_poses:
+            # check if bookmark exists
+            if self.bookmark_exists(name):
+                logger.warning(
+                    f"The bookmark {name} already exists, and will be overwritten by the current filter."
+                )
+                self.delete_bookmark(name)
+            filter_sql = """INSERT INTO Filters (name,query,filters) VALUES (?,?,?) RETURNING filter_id;"""
+            try:
+                filter_id = self.db_query(
+                    filter_sql,
+                    (
+                        name,
+                        query,
+                        json.dumps(filters),
+                    ),
+                ).fetchone()[0]
+
+                filter_pose_sql = f"""
+                    INSERT INTO Filtered_poses (filter_id, pose_id) VALUES (?,?);"""
+                params = [(filter_id, pose_id) for pose_id in passing_poses]
+                self.db_update(filter_pose_sql, params)
+            except Exception as e:
+                raise StorageError(
+                    f"Problems while writing filtered poses to database: {e}"
+                ) from e
+            else:
+                logger.info("Successfully wrote filtered poses to database.")
+        return bool(passing_poses)
+
+    def get_maxmiss_union(
+        self, total_combinations: int, bookmark_name: str, all_filters={}
+    ):
+        """Get results that are in union considering max miss
+
+        Args:
+            total_combinations (int): numer of possible combinations
+
+        Returns:
+            iter: of passing results
+        """
+        enumerated_bookmarks = []
+        existing_bookmarks = self.get_all_bookmark_names()
+        for i in range(total_combinations):
+            bmn = bookmark_name + "_" + str(i)
+            if bmn in existing_bookmarks:
+                enumerated_bookmarks.append(f"'{bmn}'")
+
+        subq = QueryBuilder()
+        subq.SELECT("filter_id").FROM("Filters").WHERE(
+            f"name IN ({', '.join(enumerated_bookmarks)})"
+        )
+        query = QueryBuilder()
+        query.SELECT("DISTINCT pose_id").FROM("filtered_poses").WHERE(
+            f"filter_id IN ({subq.build()[0]})"
+        )
+        bookmark_name = f"{bookmark_name}_union"
+        logger.debug("Saving union bookmark...")
+        logger.debug("Running union query...")
+        self._populate_filter_tables(
+            name=bookmark_name, query=query.build()[0], filters=all_filters
+        )
+
+        count = self.get_passing_ligands_count(bookmark_name)
+
+        if not count:
+            bookmark_name = None
+        return count, bookmark_name
+
     def cluster_data(
         self,
         bookmark_name: str,
@@ -3696,86 +3344,9 @@ class StorageManagerSQLite(StorageManager):
 
         return self.db_query(sql_string).fetchall()
 
-    def _generate_selective_insert_query(
-        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
-    ):
-        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
+    # endregion
 
-        Args:
-            bookmark1_name (str): name of bookmark to cross-reference for main db
-            bookmark2_name (str): name of bookmark to cross-reference for attached db
-            select_str (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            new_db_name (str): name of attached db
-            temp_table (str): name of temporary table to store passing results in
-
-        Returns:
-            str: sqlite formatted query string
-        """
-        query = QueryBuilder()
-        subq = QueryBuilder()
-        subq_string = (
-            subq.SELECT("l.ligname")
-            .FROM_BOOKMARK(f"{bookmark2_name}", "bm2", new_db_name)
-            .JOIN(
-                f"{new_db_name}.results",
-                "r",
-                "pose_Id",
-                f"bm2",
-            )
-            .JOIN(f"{new_db_name}.ligands", "l", "ligand_id", f"{new_db_name}.results")
-            .build()[0]
-        )
-        query_string = (
-            query.INSERT_INTO(temp_table)
-            .SELECT("bm1.pose_id", "l.ligname")
-            .FROM_BOOKMARK(bookmark1_name, "bm1")
-            .JOIN("results", "r", "pose_id", "bm1")
-            .JOIN("ligands", "l", "ligand_id", "results")
-            .WHERE(f"l.ligname {select_str} ({subq_string})")
-        ).build()[0]
-
-        return query_string
-
-    def get_plot_data(self, bookmark_name: str, only_passing=False):
-        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
-        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
-
-        Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
-            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
-
-        Returns:
-            tuple: cursors as (<all data cursor>, <passing data cursor>)
-        """
-
-        all_data_query = "SELECT docking_score, leff FROM Results"
-        if self.bookmark_exists(bookmark_name):
-            passing_poses_columns = [
-                "docking_score",
-                "leff",
-                "Pose_ID",
-                "LigName",
-            ]
-            if only_passing:
-                return (
-                    [],
-                    self.db_query(
-                        self.get_bookmark_selection(
-                            bookmark_name, passing_poses_columns
-                        )
-                    ),
-                )
-            else:
-                return (
-                    self.db_query(all_data_query),
-                    self.db_query(
-                        self.get_bookmark_selection(
-                            bookmark_name, passing_poses_columns
-                        ),
-                    ),
-                )
-        else:
-            return self.db_query(all_data_query), []
+    # region crossreferencing filtered databases
 
     def crossref_filter(
         self,
@@ -3821,15 +3392,781 @@ class StorageManagerSQLite(StorageManager):
 
         return temp_name, num_passing
 
+    def create_bookmark_from_temp_table(
+        self,
+        temp_table_name,
+        bookmark_name,
+        original_bookmark_name,
+        wanted_list=[],
+        unwanted_list=[],
+    ):
+        """Resaves temp bookmark stored in bookmark_name as new permenant bookmark
+
+        Args:
+            bookmark_name (str): name of bookmark to save last temp bookmark as
+            original_bookmark_name (str): name of original bookmark
+            wanted_list (list): List of wanted database names
+            unwanted_list (list, optional): List of unwanted database names
+            temp_table_name (str): name of temporary table
+        """
+        query = QueryBuilder()
+        subq = QueryBuilder()
+        subq_string = subq.SELECT("t.pose_id").FROM(temp_table_name, "t").build()[0]
+        query_string = (
+            query.SELECT("bm.pose_id")
+            .FROM_BOOKMARK(original_bookmark_name, "bm")
+            .WHERE(f"bm.pose_id IN ({subq_string})")
+            .build()[0]
+        )
+        filters = {
+            "comparison_wanted": ", ".join(wanted_list),
+            "comparison_unwanted": ", ".join(unwanted_list),
+        }
+
+        self._populate_filter_tables(bookmark_name, query_string, filters)
+
     def prune_nonpassing(self, bookmark_name):
         self._delete_from_results(bookmark_name)
         self._delete_from_ligands(bookmark_name)
         self._delete_from_interactions_not_in_view(bookmark_name)
         self._clear_bookmarks()
 
+    def _delete_from_ligands(self, bookmark_name: str):
+        """Remove rows from ligands table if they did not pass filtering
+
+        Raises:
+            StorageError
+        """
+        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
+
+        try:
+            self.db_update(
+                f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query}))",
+                (),
+            )
+        except sqlite3.OperationalError as e:
+            raise StorageError(
+                f"Error occured while pruning Ligands not in {bookmark_name}"
+            ) from e
+
+    def _delete_from_results(self, bookmark_name: str):
+        """Remove rows from results table if they did not pass filtering
+
+        Raises:
+            StorageError
+        """
+        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
+        try:
+            self.db_update(
+                f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})", ()
+            )
+        except sqlite3.OperationalError as e:
+            raise StorageError(
+                f"Error occured while pruning Results not in {bookmark_name}"
+            ) from e
+
+    def _delete_from_interactions_not_in_view(self, bookmark_name: str):
+        """Remove rows from interactions table if they were not used for poses that passed filtering.
+
+        Args:
+            bookmark_name (str): defines which poses are passing
+
+        Raises:
+            StorageError: Description
+        """
+        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
+        try:
+            self.db_update(
+                f"DELETE FROM Interactions WHERE Pose_ID NOT IN ({passing_poses_query})",
+                (),
+            )
+            # remove unused interaction indices, if any
+            self.db_update(
+                """DELETE FROM Interaction_indices WHERE interaction_id IN
+                            (SELECT ii.interaction_id FROM Interaction_indices ii 
+                            LEFT JOIN Interactions i ON ii.interaction_id=i.interaction_id 
+                            WHERE i.interaction_id IS NULL);""",
+                (),
+            )
+
+        except sqlite3.OperationalError as e:
+            raise StorageError(
+                f"Error occured while pruning Interactions not in {bookmark_name}"
+            ) from e
+
+    def _count_ligands_in_temptable(self, temp_name: str) -> int:
+        """
+        Counts ligands represented in the temporary table
+
+        Args:
+            temp_name (str): name of temporary table
+
+        Returns:
+            int: number of poses in temporary table
+        """
+        counting = QueryBuilder()
+        count_pool = QueryBuilder()
+        count_pool_string = (
+            count_pool.SELECT("tt.pose_id")
+            .FROM(temp_name, "tt")
+            .JOIN("Results", "r", "pose_id")
+            .GROUP_BY("r.ligand_id")
+            .build()[0]
+        )
+        counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
+            "count_pool", "cp"
+        )
+        return tuple(self.db_query(counting.build()[0]).fetchone())[0]
+
+    def _create_crossref_temp_table(self, table_name: str):
+        """create temporary table with given name and with ligand name and pose_id information
+
+        Args:
+            table_name (str): name for temp table
+
+        Raises:
+            DatabaseTableCreationError
+        """
+
+        create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID, ligname)"
+        try:
+            cur = self.conn.cursor()
+            cur.execute(create_table_str)
+            self.conn.commit()
+            cur.close()
+        except sqlite3.OperationalError as e:
+            raise DatabaseTableCreationError(
+                f"Error while creating temporary table {table_name}"
+            ) from e
+
+    def _generate_selective_insert_query(
+        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
+    ):
+        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
+
+        Args:
+            bookmark1_name (str): name of bookmark to cross-reference for main db
+            bookmark2_name (str): name of bookmark to cross-reference for attached db
+            select_str (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+            new_db_name (str): name of attached db
+            temp_table (str): name of temporary table to store passing results in
+
+        Returns:
+            str: sqlite formatted query string
+        """
+        query = QueryBuilder()
+        subq = QueryBuilder()
+        subq_string = (
+            subq.SELECT("l.ligname")
+            .FROM_BOOKMARK(f"{bookmark2_name}", "bm2", new_db_name)
+            .JOIN(
+                f"{new_db_name}.results",
+                "r",
+                "pose_Id",
+                f"bm2",
+            )
+            .JOIN(f"{new_db_name}.ligands", "l", "ligand_id", f"{new_db_name}.results")
+            .build()[0]
+        )
+        query_string = (
+            query.INSERT_INTO(temp_table)
+            .SELECT("bm1.pose_id", "l.ligname")
+            .FROM_BOOKMARK(bookmark1_name, "bm1")
+            .JOIN("results", "r", "pose_id", "bm1")
+            .JOIN("ligands", "l", "ligand_id", "results")
+            .WHERE(f"l.ligname {select_str} ({subq_string})")
+        ).build()[0]
+
+        return query_string
+
     # endregion
 
-    # region Database operations
+    # region fetching specific columns
+
+    def _format_orderby(self, column_name: str) -> str:
+        """
+        Ensures chosen order by column is a valid choice
+
+        Args:
+            column_name (str): column to order by
+
+        Returns:
+            str: column to order by with appropriate alias
+        """
+        columns, aliased_columns = self._get_possible_output_columns()
+        if column_name.lower() in columns:
+            index = columns.index(column_name.lower())
+            order_by = aliased_columns[index].format(
+                Ligands_alias="L", Results_alias="R"
+            )
+            return order_by
+        else:
+            return None
+
+    def _format_output_fields(
+        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
+    ) -> str:
+        """Handles string or list input of column names to be outputted, will make sure LigName
+        is in the list, and make sure all options are valid
+
+        Returns:
+            list: column names for which the data is to be displayed that needs formatting with table alias
+                for which table they belong to
+
+        Raises:
+            OptionError
+        """
+        if type(outfields) == str:
+            outfields = outfields.replace(" ", "")
+            outfields_list = outfields.split(",")
+        elif type(outfields) == list:
+            outfields_list = outfields
+        else:
+            logger.warning(
+                "The provided outfields is not in a usable format (string or list). Will only use ligname"
+            )
+            outfields_list = []
+        table_formatted_outfields = []
+        if "ligname" not in [field.lower() for field in outfields_list]:
+            outfields_list.insert(0, "LigName")
+        possible_columns, table_formatted_columns = self._get_possible_output_columns()
+
+        for outfield in outfields_list:
+            if outfield.lower() in possible_columns:
+                table_formatted_outfields.append(
+                    table_formatted_columns[possible_columns.index(outfield.lower())]
+                )
+            else:
+                logger.warning(
+                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
+                )
+        formatted_outfields = [
+            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
+            for outfield in table_formatted_outfields
+        ]
+
+        return formatted_outfields
+
+    def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
+        """
+        Gets all column names from given tables
+
+        Args:
+            tables (list, optional): Defaults to ["Results", "Ligands"].
+
+        Returns:
+            columns (list[str]): list of column names for all listed tables
+            columns_with_tablename (list[str.format]): needs formatted with table_alias (one per table) for use
+        """
+        columns = []
+        columns_with_tablename = []
+        for table in tables:
+            columns_info = self.db_query(f"PRAGMA table_info({table})").fetchall()
+            columns.extend([col[1].lower() for col in columns_info])
+            columns_with_tablename.extend(
+                [
+                    (
+                        "{{{table_alias}_alias}}.{col}".format(
+                            col=col[1], table_alias=table
+                        )
+                    )
+                    for col in columns_info
+                ]
+            )
+
+        return columns, columns_with_tablename
+
+    def _get_numeric_columns(self, table_name: str) -> iter:
+        """
+        Method to get the names of all numeric columns, for example for allowable sorting options
+
+        Args:
+            table_name (str): table name to evaluate
+
+        Returns:
+            iter: column names that has a numeric type
+        """
+        return self.db_query(
+            f"""SELECT
+                            name
+                        FROM
+                            pragma_table_info('{table_name}')
+                            WHERE CASE 
+                                WHEN UPPER(type) LIKE '%INT%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%REAL%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%NUM%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%DEC%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%FLOAT%' THEN 'numerical'
+                                WHEN UPPER(type) LIKE '%DOUBLE%' THEN 'numerical'
+                            END ='numerical';"""
+        ).fetchall()
+
+    def _fetch_receptor_objects(self):
+        """Returns all Receptor objects from database"""
+
+        cursor = self.db_query("SELECT RecName, receptor_object FROM Receptors")
+        return cursor.fetchall()
+
+    def count_receptors_in_db(self):
+        """returns number of rows in Receptors table where receptor_object already has blob
+
+        Returns:
+            int: number of rows in receptors table
+            str: name of receptor if present in table
+
+        Raises:
+            DatabaseQueryError
+        """
+        try:
+            cur = self.conn.execute(
+                "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
+            )
+            row_count = cur.fetchone()[0]
+            cur.close()
+            return row_count
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError(
+                "Error occurred while fetching number of receptor rows containing PDBQT blob"
+            ) from e
+
+    def fetch_data_for_passing_results(
+        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
+    ) -> iter:
+        """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
+
+        Returns:
+            iter: sqlite cursor of data from passing data
+
+        Raises:
+            OptionError
+        """
+        outfields_list = self._format_output_fields(
+            outfields, ligands_alias="L", results_alias="R"
+        )
+
+        bookmark_selection = self._get_bookmark_poses_query(bookmark_name)
+
+        query = QueryBuilder()
+        query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
+            f"R.pose_id IN ({bookmark_selection})"
+        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
+        if order_results:
+            order_by = self._format_orderby(order_results)
+            if order_by:
+                query.ORDER_BY(order_by)
+
+        return self.db_query(query.build()[0])
+
+    def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
+        """Method that will retrieve filter values used to construct bookmark
+
+        Args:
+            bookmark_name (str, optional): can get filter values for given bookmark, or filter values from currently active bookmark in storageman
+
+            Returns:
+                dict: containing the filter data
+        """
+        sql_query = "SELECT filters FROM Filters where name = ?"
+
+        filters = self.db_query(sql_query, (bookmark_name,)).fetchone()
+        if not filters:
+            return {}
+
+        return json.loads(filters[0])
+
+    def fetch_flexres_info(self, receptor):
+        """fetch flexible residues names and atomname lists
+
+        Returns:
+            tuple: (flexible_residues, flexres_atomnames)
+        """
+        if type(receptor) == int:
+            selection = "receptor_id = ?"
+        elif type(receptor) == str:
+            selection = "recname = ?"
+        try:
+            query = f"SELECT flexible_residues, flexres_atomnames FROM Receptors WHERE {selection}"
+            info = self.db_query(query, (receptor,)).fetchone()
+            if info is None:
+                info = [], []
+            return info
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError("Error retrieving flexible residue info") from e
+
+    def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
+        """fetch information required by vsmanager for writing out molecules
+
+        Returns:
+            iter: contains LigName, rdmol,
+                atom_index_map, hydrogen_parents
+        """
+        query = QueryBuilder()
+        query.SELECT("ligname", "rdmol", "atom_index_map", "hydrogen_parents").FROM(
+            "Ligands", "L"
+        ).WHERE(
+            f"""L.ligand_id IN (SELECT DISTINCT ligand_id FROM ({self.get_bookmark_selection(bookmark_name, "ligand_id")}))"""
+        )
+        return self.db_query(query.build()[0])
+
+    def fetch_ligand_rdkit_relevant_info(self, ligname) -> str:
+        """get output information for given ligand
+
+        Args:
+            ligname (str): ligand name
+
+        Raises:
+            DatabaseQueryError
+
+        Returns:
+            str: information containing smiles, atom and index mapping, and hydrogen parents
+        """
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                f"SELECT LigName, rdmol, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
+            )
+            info = cur.fetchone()
+            cur.close()
+            return info
+        except sqlite3.OperationalError as e:
+            raise DatabaseQueryError(
+                f"Error retrieving ligand info for {ligname}"
+            ) from e
+
+    def fetch_pose_interactions(self, Pose_ID) -> iter:
+        """
+        Fetch all interactions parameters belonging to a Pose_ID
+
+        Args:
+            Pose_ID (int): pose id, 1-1 with Results table
+
+        Returns:
+            iter: of interaction information for given Pose_ID
+        """
+        # check if table exist
+        cur = self.db_query(
+            """SELECT name FROM sqlite_master WHERE type='table' AND name='Interactions';"""
+        )
+        if len(cur.fetchall()) == 0:
+            return None
+
+        query = f"""SELECT ii.interaction_type, ii.rec_chain, ii.rec_resname, ii.rec_resid, ii.rec_atom, ii.rec_atomid 
+        FROM Interaction_indices ii 
+        JOIN Interactions i ON i.interaction_id = ii.interaction_id
+        WHERE i.Pose_ID = ?"""
+
+        return self.db_query(query, (Pose_ID,)).fetchall()
+
+    def _fetch_ligand_cluster_columns(self) -> list:
+        """fetching columns from Ligand_clusters table
+
+        Raises:
+            IndexError
+
+        Returns:
+            list: columns from ligand clusters table
+        """
+        try:
+            return [
+                c[1]
+                for c in self.db_query("PRAGMA table_info(Ligand_clusters)").fetchall()
+            ][1:]
+        except IndexError:
+            raise IndexError(
+                "Error fetching columns from Ligand_clusters table. Confirm that ligand clustering has been previously performed."
+            )
+
+    def _fetch_results_column_names(self) -> list:
+        """Fetches list of string for column names in results table
+
+        Returns:
+            list: List of strings of results table column names
+
+        Raises:
+            StorageError
+        """
+        try:
+            return [
+                column_tuple[1]
+                for column_tuple in self.conn.execute("PRAGMA table_info(Results)")
+            ]
+        except sqlite3.OperationalError as e:
+            raise StorageError(
+                "Error while fetching column names from Results table"
+            ) from e
+
+    def fetch_summary_data(
+        self, columns=["docking_score", "leff"], percentiles=[1, 10]
+    ) -> dict:
+        """Collect summary data for database:
+            Num Ligands
+            Num stored poses
+            Num unique interactions
+
+            min, max, percentiles for columns in columns
+
+        Args:
+            columns (list (str)): columns to be displayed and used in summary
+            percentiles (list(int)): percentiles to consider
+
+        Returns:
+            dict: of data summary
+        """
+        try:
+            summary_data = {}
+            cur = self.conn.cursor()
+            summary_data["num_ligands"] = cur.execute(
+                "SELECT COUNT(ligand_id) FROM Ligands"
+            ).fetchone()[0]
+            if summary_data["num_ligands"] == 0:
+                raise StorageError("There is no ligand data in the database. ")
+            summary_data["num_poses"] = cur.execute(
+                "SELECT COUNT(Pose_id) FROM Results"
+            ).fetchone()[0]
+            summary_data["num_unique_interactions"] = cur.execute(
+                "SELECT COUNT(interaction_id) FROM Interaction_indices"
+            ).fetchone()[0]
+            summary_data["num_interacting_residues"] = cur.execute(
+                "SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)"
+            ).fetchone()[0]
+
+            allowed_columns = self._fetch_results_column_names()
+            for col in columns:
+                if col not in allowed_columns:
+                    raise StorageError(
+                        f"Requested summary column {col} not found in Results table! Available columns: {allowed_columns}"
+                    )
+                summary_data[f"min_{col}"] = cur.execute(
+                    f"SELECT MIN({col}) FROM Results"
+                ).fetchone()[0]
+                summary_data[f"max_{col}"] = cur.execute(
+                    f"SELECT MAX({col}) FROM Results"
+                ).fetchone()[0]
+                for p in percentiles:
+                    summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
+
+            return summary_data
+
+        except sqlite3.OperationalError as e:
+            raise StorageError("Error while fetching summary data!") from e
+
+    def fetch_clustered_similars(self, ligname: str):
+        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
+
+        Args:
+            ligname (str): ligname for ligand to find similarity with
+
+        Raises:
+            ValueError: wrong terminal input
+            DatabaseQueryError
+        """
+        logger.warning(
+            "N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters."
+        )
+        cur = self.conn.cursor()
+        # TODO should be able to just check what clusters the ligand is a part of, and then offer them here
+        # nothing somehow what filters were involved before the clustering perhaps?
+        ligand_cluster_columns = self._fetch_ligand_cluster_columns()
+        print(
+            "Here are the existing clustering groups. Please ensure that you query ligand(s) is a part of the group you select."
+        )
+        print(
+            "   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint?   |   cutoff   "
+        )
+        print(
+            "----------------------------------------------------------------------------------------------------------"
+        )
+        for i, col in enumerate(ligand_cluster_columns):
+            col_info = col.split("_")
+            option_list = (
+                [str(i)]
+                + ["_".join(col_info[:-2])]
+                + [col_info[-2]]
+                + [col_info[-1].replace("p", ".")]
+            )
+            print(f"{'    |    '.join(option_list)}")
+        cluster_choice = input(
+            "Please specify choice number for the cluster you would like to return similar ligands from: "
+        )
+        try:
+            cluster_col_choice = ligand_cluster_columns[int(cluster_choice)]
+        except ValueError:
+            raise ValueError(
+                f"Given cluster number {cluster_choice} cannot be converted to int. Please be sure you are specifying integer."
+            )
+        query_ligand_cluster = cur.execute(
+            f"SELECT {cluster_col_choice} FROM Ligand_clusters WHERE pose_id IN (SELECT Pose_ID FROM Results WHERE ligand_id = (SELECT ligand_id FROM Ligands WHERE LigName =  '{ligname}'))"
+        ).fetchone()
+        if query_ligand_cluster is None:
+            raise DatabaseQueryError(
+                f"Requested ligand name {ligname} not found in cluster {cluster_col_choice}!"
+            )
+        query_ligand_cluster = query_ligand_cluster[0]  # extract from tuple
+
+        # TODO this is not ideal or optimized, but it does what it needs to do.
+        sql_query = f"""
+        SELECT LigName FROM Ligands WHERE ligand_id IN (SELECT ligand_id FROM Results WHERE Pose_ID IN 
+        (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}))
+        GROUP BY ligand_id"""
+
+        bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
+
+        return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
+
+    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
+        """
+        Gets molecular data that is needed to create rdkit mols for a given list of poses
+
+        Args:
+            pose_ids (list): pose ids for which to collect molecular data
+
+        Returns:
+            iter: of the following columns Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates
+        """
+        placeholders = ",".join(["?"] * len(pose_ids))
+        query = f"""
+        SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
+        FROM Results WHERE Pose_ID IN ({placeholders})
+        """
+        return self.db_query(query, pose_ids)
+
+    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
+        """Make query for percentile by calculating energy or leff cutoff
+
+        Args:
+            percentile (float): cutoff percentile
+            column (str, optional): string indicating column for percentile to be calculated over
+
+        Returns:
+            float: effective cutoff value of results based on percentile
+        """
+        # get total number of ligands
+        try:
+            logger.debug(f"Generating percentile filter query for {column}")
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(ligand_id) FROM Ligands")
+            n_ligands = int(cur.fetchone()[0])
+            n_passing = int((percentile / 100) * n_ligands)
+            # find energy cutoff
+            counter = 0
+            for i in cur.execute(
+                f"SELECT {column} FROM Results GROUP BY ligand_id ORDER BY {column}"
+            ):
+                if counter == n_passing:
+                    cutoff = i[0]
+                    break
+                counter += 1
+            logger.debug(f"{column} percentile cutoff is {cutoff}")
+            return cutoff
+        except sqlite3.OperationalError as e:
+            raise StorageError("Error while generating percentile query") from e
+
+    def calculate_percentile_from_value(self, docking_score_max=None, leff_max=None):
+        # TODO
+        # can replace with kwargs, and check in the create table statement or something if the column
+        # name is actually a numerical column or not
+        if docking_score_max and leff_max:
+            logger.warning(
+                "Can not calculate percentil for both docking score and ligand efficiency, will proceed with just docking score"
+            )
+            leff_max = None
+        if docking_score_max:
+            column = "docking_score"
+            value = docking_score_max
+        elif leff_max:
+            column = "leff"
+            value = leff_max
+
+        cur = self.conn.cursor()
+        cur.execute("SELECT COUNT(ligand_id) FROM Ligands")
+        n_ligands_total = int(cur.fetchone()[0])
+
+        cur.execute(
+            f"SELECT COUNT(*) FROM (SELECT Pose_ID FROM Results WHERE {column} < {value} GROUP BY ligand_id);"
+        )
+        n_ligands_passing = int(cur.fetchone()[0])
+
+        return n_ligands_passing / n_ligands_total * 100
+
+    def get_plot_data(self, bookmark_name: str, only_passing=False):
+        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
+        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
+
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
+            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+
+        Returns:
+            tuple: cursors as (<all data cursor>, <passing data cursor>)
+        """
+
+        all_data_query = "SELECT docking_score, leff FROM Results"
+        if self.bookmark_exists(bookmark_name):
+            passing_poses_columns = [
+                "docking_score",
+                "leff",
+                "Pose_ID",
+                "LigName",
+            ]
+            if only_passing:
+                return (
+                    [],
+                    self.db_query(
+                        self.get_bookmark_selection(
+                            bookmark_name, passing_poses_columns
+                        )
+                    ),
+                )
+            else:
+                return (
+                    self.db_query(all_data_query),
+                    self.db_query(
+                        self.get_bookmark_selection(
+                            bookmark_name, passing_poses_columns
+                        ),
+                    ),
+                )
+        else:
+            return self.db_query(all_data_query), []
+
+    # endregion
+
+    # region general database operations
+
+    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
+        """Returns a panda dataframe of table or query given as requested_data
+
+        Args:
+            requested_data (str): String containing SQL-formatted query or table name
+            table (bool): Flag indicating if requested_data is table name or not
+
+        Returns:
+            pd.DataFrame: dataframe of requested data
+        """
+        if table:
+            query = QueryBuilder()
+            if requested_data in self.get_all_bookmark_names():
+                query.SELECT("*").FROM("Results").IN_BOOKMARK(requested_data)
+            else:
+                # assume it is a table
+                query.SELECT("*").FROM("Results")
+            return pd.read_sql_query(query.build()[0], self.conn)
+        else:
+            return pd.read_sql_query(requested_data, self.conn)
+
+    def _get_length_of_table(self, table_name: str):
+        """
+        Finds the rowcount/length of a table based on the rowid
+
+        Args:
+            table_name (str): name of table to count the length of
+
+        Returns:
+            int: length of the table
+        """
+        query = f"""SELECT COUNT(rowid) from {table_name}"""
+
+        return self.db_query(query).fetchone()[0]
 
     def overwrite_storage(self):
         """
@@ -3991,382 +4328,6 @@ class StorageManagerSQLite(StorageManager):
         cur.close()
         return is_compatible, db_version
 
-    def merge_databases(self, merging_db: str, backup: bool = True):
-        """
-        Method that merges two databases, ensuring integrity of primary and foreign keys.
-        The merging will create a new table if needed, that keeps track of the primary key
-        in the original and the merged database on a per-table basis. Another table will also
-        keep track of how many databases has been merged into the primary database.
-        Each merge session is given a merge_id.
-        The merging will ensure the two databases are -compatible based on the receptor only-.
-        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
-            these will be allowed to merge.
-
-        Args:
-            merging_db (str): path to database being merged into current
-            backup (bool, optional): whether or not to back up current database before
-                merging another database into it. Defaults to True.
-
-        Raises:
-            MergeError
-        """
-        # back up main database
-        if backup:
-            self.clone()
-        # attach incoming database and check compatibility
-        merging_db_alias = self._attach_db(merging_db, "merging")
-        if not self._check_if_db_is_compatible(merging_db_alias, 200):
-            raise StorageError(
-                "Trying to merge two databases of incompatible or too old versions, cannot proceed."
-            )
-        # create new tables to keep track of merger
-        self._create_merge_tables()
-        # add to merging table the absolute path
-        mergedb_abspath = str(os.path.abspath(merging_db))
-        # insert merging db name first
-        cur = self.conn.execute(
-            """INSERT INTO merged_tables(dbfile) VALUES (?)""",
-            (mergedb_abspath,),
-        )
-        # receptor compatibility check
-        receptorcheck_sql = """
-        SELECT CASE 
-            WHEN Receptors.RecName = merging_receptors.RecName THEN 'True'
-            ELSE 'False'
-        END AS comparison_result 
-        FROM Receptors 
-        JOIN merging.Receptors AS merging_receptors 
-            ON Receptors.receptor_id = merging_receptors.receptor_id"""
-
-        try:
-            assert self.db_query(receptorcheck_sql).fetchone()[0] == "True"
-        except AssertionError:
-            raise StorageError(
-                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
-            )
-        else:
-            logger.info(
-                "The two databases are of compatible version and receptors. Merging will proceed."
-            )
-
-        # get the active merge_id to ensure we use the correct merge data moving forward
-        merge_id = self.db_query(
-            "SELECT last_insert_rowid() FROM merged_tables"
-        ).fetchone()[0]
-
-        # delete incompatible tables
-        # for main db
-        self._drop_views()
-        self._delete_table("Ligand_clusters")
-        # for attached db
-        self._drop_views(merging_db_alias)
-        self._delete_table("Ligand_clusters", merging_db_alias)
-
-        # merge tables
-        try:
-            self._merge_db_properties_table(merge_id)
-            logger.info("The 'db_properties' table has been merged.")
-
-            self._merge_ligands_table()
-            logger.info("The 'Ligands' table has been merged.")
-
-            self._merge_results_table(merge_id)
-            logger.info("The 'Results' table has been merged.")
-
-            self._merge_interaction_tables(merge_id)
-            logger.info(
-                "The 'Interaction_indices' and 'Interactions' tables have been merged."
-            )
-        except Exception as e:
-            raise MergeError(f"Error during database merging: {e}") from e
-        else:
-            logger.info(
-                f"The database {merging_db} has been successfully merged into {self.db_file}."
-            )
-        finally:
-            cur.close()
-
-    def _merge_interaction_tables(self, merge_id: int):
-        """
-        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
-        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            Exception
-        """
-        convert_ii_sql = """INSERT INTO PK_conversions (
-        merge_id,
-        table_name,
-        original_PK,
-        merged_PK) SELECT 
-        ?,
-        "Interaction_indices", 
-        interaction_id,
-            CASE 
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM Interaction_indices
-                    WHERE 
-                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
-                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
-                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
-                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
-                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
-                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
-                    ) 
-                THEN (
-                    SELECT main.Interaction_indices.interaction_id
-                    FROM main.Interaction_indices
-                    WHERE 
-                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
-                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
-                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
-                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
-                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
-                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
-                    )
-                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
-            END AS new_interaction_id
-        FROM merging.Interaction_indices;"""
-
-        # then inserting only those that aren't already in the table
-        insert_interaction_indices = """INSERT INTO Interaction_indices (
-        interaction_id,
-        interaction_type,
-        rec_chain,
-        rec_resname,
-        rec_resid,
-        rec_atom,
-        rec_atomid)
-        SELECT 
-            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
-            interaction_type,
-            rec_chain,
-            rec_resname,
-            rec_resid,
-            rec_atom,
-            rec_atomid
-        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
-        """
-
-        # Adding new data to Interactions table with (updated) pose_id and interaction_id
-        insert_interactions = """
-        INSERT INTO Interactions (
-        Pose_ID,
-        interaction_id
-        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
-                FROM merging.Interactions I
-                LEFT JOIN (SELECT original_PK, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
-            LEFT JOIN (SELECT original_PK, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Interaction_indices' 
-                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute(
-                convert_ii_sql,
-                (merge_id,),
-            )
-            cur.execute(insert_interaction_indices, (merge_id,))
-            cur.execute(
-                insert_interactions,
-                (
-                    merge_id,
-                    merge_id,
-                ),
-            )
-            self.conn.commit()
-        except Exception as e:
-            raise Exception(
-                f"Error during update and insertion of interactions: {e}"
-            ) from e
-
-    def _merge_results_table(self, merge_id: int):
-        # TODO since the ligand id merge table stuff is issue now, this will also be issue
-        """
-        Merges the results table, will not check for duplicates. Will assign new pose_id/primary key
-        to the rows from the incoming Results table
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            StorageError
-        """
-
-        cur = self.conn.cursor()
-        convert_poseid_sql = """INSERT INTO PK_conversions (
-        merge_id,
-        table_name,
-        original_PK,
-        merged_PK) SELECT 
-        ?,
-        "Results", 
-        Pose_ID,
-        Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
-        FROM merging.Results;"""
-
-        # insert results with updated pose_ids
-        insert_Results = """INSERT INTO Results (
-            Pose_ID,
-            ligand_id,
-            receptor,
-            pose_rank,
-            run_number,
-            docking_score,
-            leff,
-            deltas,
-            cluster_rmsd,
-            cluster_size,
-            reference_rmsd,
-            energies_inter,
-            energies_vdw,
-            energies_electro,
-            energies_flexLig,
-            energies_flexLR,
-            energies_intra,
-            energies_torsional,
-            unbound_energy,
-            nr_interactions,
-            num_hb,
-            about_x,
-            about_y,
-            about_z,
-            trans_x,
-            trans_y,
-            trans_z,
-            axisangle_x,
-            axisangle_y,
-            axisangle_z,
-            axisangle_w,
-            dihedrals,
-            ligand_coordinates,
-            flexible_res_coordinates) 
-        SELECT 
-            II.merged_PK as pose_id,
-            I.ligand_id,
-            I.receptor,
-            I.pose_rank,
-            I.run_number,
-            I.docking_score,
-            I.leff,
-            I.deltas,
-            I.cluster_rmsd,
-            I.cluster_size,
-            I.reference_rmsd,
-            I.energies_inter,
-            I.energies_vdw,
-            I.energies_electro,
-            I.energies_flexLig,
-            I.energies_flexLR,
-            I.energies_intra,
-            I.energies_torsional,
-            I.unbound_energy,
-            I.nr_interactions,
-            I.num_hb,
-            I.about_x,
-            I.about_y,
-            I.about_z,
-            I.trans_x,
-            I.trans_y,
-            I.trans_z,
-            I.axisangle_x,
-            I.axisangle_y,
-            I.axisangle_z,
-            I.axisangle_w,
-            I.dihedrals,
-            I.ligand_coordinates,
-            I.flexible_res_coordinates
-        FROM merging.Results I
-                LEFT JOIN (SELECT original_PK, merged_PK 
-                FROM PK_conversions 
-                WHERE table_name = 'Results' 
-                AND merge_id = ?) II ON II.original_PK = I.Pose_ID;"""
-
-        try:
-            cur.execute(
-                convert_poseid_sql,
-                (merge_id,),
-            )
-            cur.execute(insert_Results, (merge_id,))
-            # commit after each large table in case there are memory constraints
-            self.conn.commit()
-        except Exception as e:
-            raise StorageError(f"Error during insertion of results: {e}") from e
-
-    def _merge_ligands_table(self):
-        """
-        _summary_
-
-        Raises:
-            StorageError: _description_
-        """
-        # TODO I think this method is wrong now, because I changed from ligname PK to ligand_id
-        try:
-            cur = self.conn.cursor()
-            # Ligand table has unique constraints and primary key is ligand_id so no checks needed
-            merge_ligands = """INSERT INTO Ligands 
-                SELECT * FROM merging.Ligands"""
-            cur.execute(merge_ligands)
-            self.conn.commit()
-        except Exception as e:
-            raise StorageError("Error encountered while merging Ligands table") from e
-
-    def _merge_db_properties_table(self, merge_id: int):
-        """
-        Merges database properties table, but importantly will not check for property compatibility
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            StorageError
-        """
-        try:
-            cur = self.conn.cursor()
-            convert_dbprop_sql = """INSERT INTO PK_conversions (
-                merge_id,
-                table_name,
-                original_PK,
-                merged_PK) SELECT 
-                ?,
-                "db_properties", 
-                DB_write_session,
-                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
-                FROM merging.db_properties;"""
-            cur.execute(
-                convert_dbprop_sql,
-                (merge_id,),
-            )
-
-            insert_dbprops_sql = """INSERT INTO DB_properties (
-                DB_write_session,
-                docking_mode,
-                number_of_poses)
-                SELECT 
-                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
-                    docking_mode,
-                    number_of_poses
-                FROM merging.DB_properties;"""
-            cur.execute(insert_dbprops_sql, (merge_id,))
-            self.conn.commit()
-        except Exception as e:
-            raise StorageError(
-                "Error encountered while merging db_properties table"
-            ) from e
-
-    def merge_filtered_data(self):
-        # TODO
-        # deal with new tables for filtering
-        pass
-
     def update_database_version(self, new_version, consent=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
@@ -4523,7 +4484,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
         return con
 
-    def _close_storage(self, attached_db=None, vacuum=None):
+    def close_storage(self, attached_db=None, vacuum=None):
         """
         Closes storage
         """
@@ -4648,6 +4609,22 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseQueryError(
                 "Error while getting names of existing database tables"
             ) from e
+
+    def _delete_table(self, table_name: str, db_alias: str = None):
+        """
+        Method to delete a table
+
+        Args:
+            table_name (str): table to be dropped
+
+        """
+
+        if db_alias:
+            name = db_alias + "." + table_name
+        else:
+            name = table_name
+        query = f"""DROP TABLE IF EXISTS {name};"""
+        return self.db_query(query)
 
     def db_query(self, query, params: tuple = ()):
         """Executes provided SQLite query. Returns cursor for results.

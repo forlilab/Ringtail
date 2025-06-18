@@ -526,7 +526,7 @@ class RingtailCore:
                         self.logger.warning(
                             f"WARNING: No ligands found passing filter combination {str(combination)}."
                         )
-                        self.storageman.drop_bookmark(iterated_bookmark_name)
+                        self.storageman.delete_bookmark(iterated_bookmark_name)
 
                 # Process the union of the max miss combinations of interactions
                 num_passing_ligands, bookmark_name = self.storageman.get_maxmiss_union(
@@ -1189,7 +1189,7 @@ class RingtailCore:
         with OutputManager(log_file) as opm:
             opm.write_filter_results_in_log(new_data)
 
-    def drop_bookmark(self, bookmark_name: str):
+    def delete_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database
 
         Args:
@@ -1415,45 +1415,6 @@ class RingtailCore:
 
         Note: needs to be ran inside a storageman context manager, will not be able to access the temporary table otherwise.
         """
-        """
-        what happens: 
-        1. get mol from smiles --> replace with bin_rdmol
-        2. json format atom indices
-        3. make empty lists for stuff:
-            a. flexrs mols (receptor?)
-            b. flexres_info
-            c. ligand_saved_coords? 
-            d. flexres_saved coords? 
-        4. for flex residues and atomnames, add to flexres mol and info
-            a. this does not have any coordinates or anything just yet
-        5. start variable properties that holds some results data not immediately 
-                needed for creating an rdkit mol
-        6. then, either --> I think the method should just be given all 
-                    poses and ligand info it should deal with
-            a. a pose was given with the ligand, or
-            b. you want all poses belonging to the ligand that passed your given filte, or
-            c. you want all poses for the ligand
-        7. then if none pose given, it will get all this info for each passing pose for that ligand
-        8. then, if also writing non-passing, it will do the same for the remaining poses for that ligand
-        9. then if single pose give, just handle that one pose
-        10. to the properties is finally added ligand name, and something about hydrogen parents
-        11. then adding hydrogen parents also to the flexres mols (prob a mol for each flexible residue?)
-        12. then return the mol, flexres_mols, and properties
-
-        ***
-        mol keeps being passed in and coming back out, as do 
-        flexres_mols, ligand_saved_coords, flexres_saved_coords, 
-        and properties
-        ***
-        improvements off the bat:
-        i. method should get bin rdmol instead of smiles
-        ii. give poses it should consider
-
-        *** I need a method that
-        * fetches the ligand info
-        * flexres info
-        * creates the rdkit mol
-        """
         mol = Chem.Mol(bin_mol)
         flexres_mols = []
         flexres_info = []
@@ -1526,6 +1487,16 @@ class RingtailCore:
         return mol, flexres_mols, properties
 
     def _pose_to_mol(self, pose_id, ligname):
+        """
+        _summary_
+
+        Args:
+            pose_id (_type_): _description_
+            ligname (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         # make rdkit mol for poseid
         ligname, rdmol, atom_index_map, hydrogen_parents = (
             self.storageman.fetch_ligand_rdkit_relevant_info(ligname)
