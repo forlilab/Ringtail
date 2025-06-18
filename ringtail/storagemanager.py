@@ -91,7 +91,7 @@ class StorageManager:
             instance: of class with open database connection
         """
         try:
-            self._open_storage()
+            self.open_storage()
         except StorageError as e:
             logger.error(str(e))
             raise e from None
@@ -123,13 +123,12 @@ class StorageManager:
         self.__exit__(None, None, None)
         sys.exit(0)
 
-    def finalize_database_write(self):
-        """
-        Methods to finalize when a database has been written to, including creating indices
-        """
-        # index certain tables
-        self._create_indices()
-        logger.info("Database write session completed successfully.")
+    # endregion
+
+    # region public api database operations
+
+    def open_storage(self):
+        raise_not_implemented()
 
     def close_storage(self, attached_db=None, vacuum=False):
         """Close connection to database
@@ -140,9 +139,127 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def check_storage_ready(
+        self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
+    ):
+        """
+        Check that storage is ready and compatible with options before proceeding, and creates new tables if needed
+
+        Args:
+            run_mode (str): if ringtail is ran using cmd line interface or api
+            docking_mode (str): what docking engine was used to produce results
+            store_all_poses (bool): overrwrites max poses
+            max_poses (int): max poses to save to db
+        """
+        raise_not_implemented()
+
+    def check_ringtaildb_version(self):
+        """
+        Checks the database version and confirms whether the code base is compatible with it
+
+        Returns:
+            bool: whether or not db is compatible with the code base
+            str: current database version
+        """
+        raise_not_implemented()
+
+    def overwrite_storage(self):
+        """
+        Will drop all tables in the database.
+        """
+        raise_not_implemented()
+
+    def finalize_database_write(self):
+        """
+        Methods to finalize when a database has been written to, including creating indices
+        """
+        # index certain tables
+        self._create_indices()
+        logger.info("Database write session completed successfully.")
+
+    def clone(self, backup_name=None):
+        """Creates a copy of the db
+
+        Args:
+            backup_name (str, optional): name of the cloned database
+        """
+        raise_not_implemented()
+
+    def update_database_version(self, new_version, consent=False):
+        """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
+
+        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
+        the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
+
+        Args:
+            consent (bool, optional): variable to ensure consent to update database is explicit
+
+        Returns:
+            bool: final consent
+        """
+        raise_not_implemented()
+
+    def db_empty(self):
+        """empty database, for example if overwrite
+
+        Returns:
+            bool: whether or not db is empty
+        """
+        raise_not_implemented()
+
+    def db_query(self, query, params: iter):
+        """Executes provided sql query. Returns iter for results.
+
+        Args:
+            query (str): Formated sql query as string
+            params (iter): parameters to be used in query (assumes query as appropriate place holders)
+
+        Returns:
+            iter: Contains results of query
+        """
+        raise_not_implemented()
+
+    def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
+        """
+        A db query that also commits if/when specified
+
+        Args:
+            query (str): sql formatted query string
+            parameters (list[tuple]): assumes appropriate place holders in query
+            commit (bool, optional): whether to commit the transaction in open connection. Defaults to True.
+
+        Raises:
+            OptionError
+            DatabaseInsertionError
+
+        Returns:
+            iter: if requesting return value(s)
+        """
+        raise_not_implemented()
+
+    def merge_databases(self, merging_db: str, backup: bool = True):
+        """
+        Method that merges two databases, ensuring integrity of primary and foreign keys.
+        The merging will create a new table if needed, that keeps track of the primary key
+        in the original and the merged database on a per-table basis. Another table will also
+        keep track of how many databases has been merged into the primary database.
+        The merging will ensure the two databases are -compatible based on the receptor only-.
+        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
+            these will be allowed to merge.
+
+        Args:
+            merging_db (str): path to database being merged into current
+            backup (bool, optional): whether or not to back up current database before
+                merging another database into it. Defaults to True.
+
+        Raises:
+            MergeError
+        """
+        raise_not_implemented()
+
     # endregion
 
-    # region insert data
+    # region public api insert data
 
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> dict:
@@ -250,7 +367,7 @@ class StorageManager:
 
     # endregion
 
-    # region filter data
+    # region public api filter data and bookmarks
     def filter_results(
         self,
         all_filters: Filters,
@@ -298,28 +415,37 @@ class StorageManager:
 
         return count
 
-    def bookmark_exists(self, bookmark_name: str) -> bool:
-        """Checks if bookmark name is in database
+    def get_maxmiss_union(
+        self, total_combinations: int, bookmark_name: str, all_filters={}
+    ):
+        """Get results that are in union considering max miss
 
         Args:
-            bookmark_name (str): name of bookmark name to check if exist
+            total_combinations (int): numer of possible combinations
 
         Returns:
-            bool: indicates if bookmark_name exists in the current database
+            iter: of passing results
         """
+        raise_not_implemented()
 
-        return bool(bookmark_name in self.get_all_bookmark_names())
-
-    def get_plot_data(self, bookmark_name: str, only_passing=False):
-        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
-        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
+    def cluster_data(
+        self,
+        bookmark_name: str,
+        cluster_type: str = "mfpt",
+        cutoff: float = 0.5,
+    ) -> tuple:
+        """
+        Clusters data in a given bookmark. Will create a new bookmark with the format
+        <bookmark_name>_<cluster-type>_clustered containing the representative poses
+        for the clusters
 
         Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
-            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+            bookmark_name (str): bookmark name with poses to cluster
+            cluster_type (str, optional): type of clustering. Defaults to "mfpt".
+            cutoff (float, optional): cutoff cluster distance. Defaults to 0.5.
 
         Returns:
-            tuple: cursors as (<all data cursor>, <passing data cursor>)
+            tuple (str, int): clustered bookmark name, number of clusters
         """
         raise_not_implemented()
 
@@ -348,6 +474,30 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def bookmark_exists(self, bookmark_name: str) -> bool:
+        """Checks if bookmark name is in database
+
+        Args:
+            bookmark_name (str): name of bookmark name to check if exist
+
+        Returns:
+            bool: indicates if bookmark_name exists in the current database
+        """
+
+        return bool(bookmark_name in self.get_all_bookmark_names())
+
+    def get_filterid_from_name(self, bookmark_name: str) -> int:
+        """
+        Gets the filter_id for bookmark
+
+        Args:
+            bookmark_name (str)
+
+        Returns:
+            int: id for Filter/bookmark
+        """
+        raise_not_implemented()
+
     def prune_nonpassing(self, bookmark_name: str):
         """
         Used when creating a new database from filtered data, will remove the data
@@ -356,95 +506,6 @@ class StorageManager:
         Args:
             bookmark_name (str): bookmark name which has the only poses to save
         """
-        raise_not_implemented()
-
-    def fetch_receptor_objects(self) -> iter:
-        """Returns all Receptor objects from database
-
-        Args:
-            rec_name (str): Name of receptor to return object for
-
-        Returns:
-            iter (tuple): of receptor names and objects
-        """
-
-        return self._fetch_receptor_objects()
-
-    def check_storage_ready(
-        self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
-    ):
-        """
-        Check that storage is ready and compatible with options before proceeding, and creates new tables if needed
-
-        Args:
-            run_mode (str): if ringtail is ran using cmd line interface or api
-            docking_mode (str): what docking engine was used to produce results
-            store_all_poses (bool): overrwrites max poses
-            max_poses (int): max poses to save to db
-        """
-        raise_not_implemented()
-
-    # endregion
-
-    # region NotImplemented
-    def _fetch_receptor_objects(self):
-        raise_not_implemented()
-
-    def _insert_ligands(self, ligand_array: list) -> list:
-        raise_not_implemented()
-
-    def _create_indices(self):
-        raise_not_implemented()
-
-    def _insert_results(self, results_array, options):
-        raise_not_implemented()
-
-    def _insert_receptors(self, receptor_array):
-        raise_not_implemented()
-
-    def _insert_and_format_interactions(self, pose_ids, docking_data):
-        raise_not_implemented()
-
-    def _insert_interaction_rows(
-        self, interaction_rows, duplicates, duplicate_handling
-    ):
-        raise_not_implemented()
-
-    def check_ringtaildb_version():
-        raise_not_implemented()
-
-    def _generate_result_filtering_query(
-        self, filters_dict, bookmark_name, filter_bookmark
-    ):
-        raise_not_implemented()
-
-    def get_passing_ligands_count(self, bookmark_name: str) -> int:
-        """
-        Get number of passing ligands in bookmark name
-
-        Args:
-            bookmark_name (str): bookmark that defines passing
-
-        Returns:
-            int: number of ligands
-        """
-        raise_not_implemented()
-
-    def get_all_bookmark_names() -> list[str]:
-        """Get all bookmarks in sql database as a list of names. Bookmarks are a Ringtail-specific saved query (much like views)
-
-        Returns:
-            list: of bookmark names
-        """
-        raise_not_implemented()
-
-    def _populate_filter_tables(self, name, query, filters):
-        raise_not_implemented()
-
-    def _open_storage(self):
-        raise_not_implemented()
-
-    def _insert_receptor_blob(self, receptor, rec_name):
         raise_not_implemented()
 
     def get_passing_poses_count(
@@ -525,15 +586,93 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def get_filterid_from_name(self, bookmark_name: str) -> int:
+    def get_passing_ligands_count(self, bookmark_name: str) -> int:
         """
-        Gets the filter_id for bookmark
+        Get number of passing ligands in bookmark name
 
         Args:
-            bookmark_name (str)
+            bookmark_name (str): bookmark that defines passing
 
         Returns:
-            int: id for Filter/bookmark
+            int: number of ligands
+        """
+        raise_not_implemented()
+
+    def get_all_bookmark_names() -> list[str]:
+        """Get all bookmarks in sql database as a list of names. Bookmarks are a Ringtail-specific saved query (much like views)
+
+        Returns:
+            list: of bookmark names
+        """
+        raise_not_implemented()
+
+    # endregion
+
+    # region public api fetch data
+    def get_plot_data(self, bookmark_name: str, only_passing=False):
+        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
+        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
+
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
+            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+
+        Returns:
+            tuple: cursors as (<all data cursor>, <passing data cursor>)
+        """
+        raise_not_implemented()
+
+    def fetch_receptor_objects(self) -> iter:
+        """Returns all Receptor objects from database
+
+        Args:
+            rec_name (str): Name of receptor to return object for
+
+        Returns:
+            iter (tuple): of receptor names and objects
+        """
+
+        return self._fetch_receptor_objects()
+
+    def fetch_clustered_similars(self, ligname: str):
+        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
+
+        Args:
+            ligname (str): ligname for ligand to find similarity with
+
+        Raises:
+            ValueError: wrong terminal input
+        """
+        raise_not_implemented()
+
+    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
+        """
+        Gets molecular data that is needed to create rdkit mols for a given list of poses
+
+        Args:
+            pose_ids (list): pose ids for which to collect molecular data
+
+        Returns:
+            iter: of the following columns Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates
+        """
+        raise_not_implemented()
+
+    def fetch_summary_data(
+        self, columns=["docking_score", "leff"], percentiles=[1, 10]
+    ) -> dict:
+        """Collect summary data for database:
+            Num Ligands
+            Num stored poses
+            Num unique interactions
+
+            min, max, percentiles for columns in columns
+
+        Args:
+            columns (list (str)): columns to be displayed and used in summary
+            percentiles (list(int)): percentiles to consider
+
+        Returns:
+            dict: of data summary
         """
         raise_not_implemented()
 
@@ -614,176 +753,41 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def fetch_summary_data(
-        self, columns=["docking_score", "leff"], percentiles=[1, 10]
-    ) -> dict:
-        """Collect summary data for database:
-            Num Ligands
-            Num stored poses
-            Num unique interactions
+        # endregion
 
-            min, max, percentiles for columns in columns
-
-        Args:
-            columns (list (str)): columns to be displayed and used in summary
-            percentiles (list(int)): percentiles to consider
-
-        Returns:
-            dict: of data summary
-        """
+    # region private methods
+    def _fetch_receptor_objects(self):
         raise_not_implemented()
 
-    def get_maxmiss_union(
-        self, total_combinations: int, bookmark_name: str, all_filters={}
+    def _insert_ligands(self, ligand_array: list) -> list:
+        raise_not_implemented()
+
+    def _create_indices(self):
+        raise_not_implemented()
+
+    def _insert_results(self, results_array, options):
+        raise_not_implemented()
+
+    def _insert_receptors(self, receptor_array):
+        raise_not_implemented()
+
+    def _insert_and_format_interactions(self, pose_ids, docking_data):
+        raise_not_implemented()
+
+    def _insert_interaction_rows(
+        self, interaction_rows, duplicates, duplicate_handling
     ):
-        """Get results that are in union considering max miss
-
-        Args:
-            total_combinations (int): numer of possible combinations
-
-        Returns:
-            iter: of passing results
-        """
         raise_not_implemented()
 
-    def fetch_clustered_similars(self, ligname: str):
-        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
-
-        Args:
-            ligname (str): ligname for ligand to find similarity with
-
-        Raises:
-            ValueError: wrong terminal input
-        """
+    def _generate_result_filtering_query(
+        self, filters_dict, bookmark_name, filter_bookmark
+    ):
         raise_not_implemented()
 
-    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
-        """
-        Gets molecular data that is needed to create rdkit mols for a given list of poses
-
-        Args:
-            pose_ids (list): pose ids for which to collect molecular data
-
-        Returns:
-            iter: of the following columns Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates
-        """
+    def _populate_filter_tables(self, name, query, filters):
         raise_not_implemented()
 
-    def cluster_data(
-        self,
-        bookmark_name: str,
-        cluster_type: str = "mfpt",
-        cutoff: float = 0.5,
-    ) -> tuple:
-        """
-        Clusters data in a given bookmark. Will create a new bookmark with the format
-        <bookmark_name>_<cluster-type>_clustered containing the representative poses
-        for the clusters
-
-        Args:
-            bookmark_name (str): bookmark name with poses to cluster
-            cluster_type (str, optional): type of clustering. Defaults to "mfpt".
-            cutoff (float, optional): cutoff cluster distance. Defaults to 0.5.
-
-        Returns:
-            tuple (str, int): clustered bookmark name, number of clusters
-        """
-        raise_not_implemented()
-
-    def overwrite_storage(self):
-        """
-        Will drop all tables in the database.
-        """
-        raise_not_implemented()
-
-    def clone(self, backup_name=None):
-        """Creates a copy of the db
-
-        Args:
-            backup_name (str, optional): name of the cloned database
-        """
-        raise_not_implemented()
-
-    def check_ringtaildb_version(self):
-        """
-        Checks the database version and confirms whether the code base is compatible with it
-
-        Returns:
-            bool: whether or not db is compatible with the code base
-            str: current database version
-        """
-        raise_not_implemented()
-
-    def merge_databases(self, merging_db: str, backup: bool = True):
-        """
-        Method that merges two databases, ensuring integrity of primary and foreign keys.
-        The merging will create a new table if needed, that keeps track of the primary key
-        in the original and the merged database on a per-table basis. Another table will also
-        keep track of how many databases has been merged into the primary database.
-        The merging will ensure the two databases are -compatible based on the receptor only-.
-        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
-            these will be allowed to merge.
-
-        Args:
-            merging_db (str): path to database being merged into current
-            backup (bool, optional): whether or not to back up current database before
-                merging another database into it. Defaults to True.
-
-        Raises:
-            MergeError
-        """
-        raise_not_implemented()
-
-    def update_database_version(self, new_version, consent=False):
-        """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
-
-        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
-        the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
-
-        Args:
-            consent (bool, optional): variable to ensure consent to update database is explicit
-
-        Returns:
-            bool: final consent
-        """
-        raise_not_implemented()
-
-    def db_empty(self):
-        """empty database, for example if overwrite
-
-        Returns:
-            bool: whether or not db is empty
-        """
-        raise_not_implemented()
-
-    def db_query(self, query, params: iter):
-        """Executes provided sql query. Returns iter for results.
-
-        Args:
-            query (str): Formated sql query as string
-            params (iter): parameters to be used in query (assumes query as appropriate place holders)
-
-        Returns:
-            iter: Contains results of query
-        """
-        raise_not_implemented()
-
-    def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
-        """
-        A db query that also commits if/when specified
-
-        Args:
-            query (str): sql formatted query string
-            parameters (list[tuple]): assumes appropriate place holders in query
-            commit (bool, optional): whether to commit the transaction in open connection. Defaults to True.
-
-        Raises:
-            OptionError
-            DatabaseInsertionError
-
-        Returns:
-            iter: if requesting return value(s)
-        """
+    def _insert_receptor_blob(self, receptor, rec_name):
         raise_not_implemented()
 
     # endregion
@@ -4176,7 +4180,7 @@ class StorageManagerSQLite(StorageManager):
             self._drop_existing_tables()
             logger.info("Tables in existing database were dropped.")
 
-    def _open_storage(self):
+    def open_storage(self):
         """Create connection to db. Then, check if db needs to be created.
         If self.overwrite drop existing tables and initialize new tables
 
