@@ -32,8 +32,8 @@ class RingtailCore:
         docking_mode (str): specifies what docking mode has been used for the results in the database
         storageman (StorageManager): Interface module with database
         resultsman (ResultsManager): Module to deal with results processing before adding to database
-        outputman (OutputManager): Manager for output tasks of log-writting, plotting, ligand SDF writing, starting pymol sessions
-        filters (Filters): object holding all optional filters
+        storagetype (str): database type
+        logger (RaccoonLogger): handles logging
         _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
     """
 
@@ -80,13 +80,7 @@ class RingtailCore:
         self._run_mode = "api"
         self._docking_mode = docking_mode
 
-    def update_database_version(self, consent=False, new_version="2.0.0"):
-        """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
-        with self.storageman:
-            self.storageman.update_database_version(new_version, consent)
-        # return self.storageman.update_database_version(new_version, consent)
-
-    # region # -#-#- API -#-#-#
+    # region write to database
     def add_results_from_files(
         self,
         file: str = None,
@@ -252,6 +246,10 @@ class RingtailCore:
                     )
                 self.storageman.insert_receptor_blob(rec, rec_name)
                 self.logger.info("Receptor data was added to the database.")
+
+    # endregion
+
+    # region filter, export
 
     def produce_summary(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
@@ -542,7 +540,7 @@ class RingtailCore:
                 num_passing_ligands,
             )
             if clustering:
-                bookmark_name, num_passing_ligands = self.parse_clustering(
+                bookmark_name, num_passing_ligands = self._parse_clustering(
                     clustering, bookmark_name
                 )
             # use original filters for final output log write
@@ -575,35 +573,6 @@ class RingtailCore:
             return iter
         else:
             return num_passing_ligands
-
-    def parse_clustering(self, cluster_data, bookmark_name):
-        with self.storageman:
-            count_poses = self.storageman.get_passing_poses_count(bookmark_name, False)
-
-        logger.info(f"Preparing to cluster {count_poses} passing poses.")
-        if len(cluster_data) > 1:
-            logger.warning(
-                "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
-            )
-        if cluster_data.get("ifp"):
-            bookmark_name = self.cluster(
-                bookmark_name,
-                "ifp",
-                cluster_data.get("ifp"),
-            )
-        if cluster_data.get("mfp"):
-            bookmark_name = self.cluster(
-                bookmark_name,
-                "mfp",
-                cluster_data.get("mfp"),
-            )
-        with self.storageman:
-            count_reps = self.storageman.get_passing_poses_count(bookmark_name, True)
-        print(
-            f"\nNumber of cluster representative ligands:",
-            count_reps,
-        )
-        return bookmark_name, count_reps
 
     def cluster(self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5):
         with self.storageman as sm:
@@ -675,10 +644,6 @@ class RingtailCore:
             file.write(pdb_str)
 
         return ligand_mol, flexmoldict
-
-    def dbquery(self, query: str, params=()):
-        with self.storageman as sm:
-            return sm.db_query(query, params)
 
     def write_molecule_sdfs(
         self,
@@ -822,6 +787,86 @@ class RingtailCore:
                 number_similar,
             )
         return number_similar
+
+    def export_csv(self, requested_data: str, csv_name: str, table=False):
+        """Get requested data from database, export as CSV
+
+        Args:
+            requested_data (str): Table name or SQL-formatted query
+            csv_name (str): Name for exported CSV file
+            table (bool): flag indicating is requested data is a table name
+        """
+        with self.storageman:
+            df = self.storageman.to_dataframe(requested_data, table=table)
+            df.to_csv(csv_name)
+
+    def export_bookmark_db(self, bookmark_name: str) -> str:
+        """Export database containing data from bookmark
+
+        Args:
+            bookmark_name (str): name for bookmark_db
+
+        Returns:
+            str: name of the new, exported database
+        """
+        bookmark_db_name = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+        self.logger.info("Exporting bookmark database")
+        if os.path.exists(bookmark_db_name):
+            self.logger.warning(
+                "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
+            )
+            return
+        with self.storageman:
+            self.storageman.clone(bookmark_db_name)
+        # connect to cloned database
+        temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
+        with temp_storageman(bookmark_db_name) as db_clone:
+            db_clone.prune_nonpassing(bookmark_name)
+            db_clone.close_storage(vacuum=True)
+
+        return bookmark_db_name
+
+    def export_receptors(self):
+        """
+        Export receptor in database to pdbqt
+        """
+        with self.storageman:
+            receptor_tuples = self.storageman.fetch_receptor_objects()
+        for recname, recblob in receptor_tuples:
+            if recblob is None:
+                self.logger.warning(
+                    f"No receptor pdbqt stored for {recname}. Export failed."
+                )
+                continue
+            output_manager = OutputManager()
+            output_manager.write_receptor_pdbqt(recname, recblob)
+
+    def get_previous_filter_data(
+        self,
+        bookmark_name,
+        outfields: str = "Ligname,docking_score",
+        order_results: str = "ligname",
+        log_file=None,
+    ):
+        """Get data requested in self.out_opts['outfields'] from the
+        results bookmark of a previous filtering
+
+        Args:
+            outfields (str): use outfields as described in RingtailOptions > StorageOptions
+            bookmark_name (str): bookmark for which the filters were used
+        """
+        if bookmark_name is None:
+            raise OptionError("A bookmark name has to be provided")
+        with self.storageman:
+            new_data = self.storageman.fetch_data_for_passing_results(
+                bookmark_name, outfields, order_results
+            )
+        with OutputManager(log_file) as opm:
+            opm.write_filter_results_in_log(new_data)
+
+    # endregion
+
+    # region visualize ringtail
 
     def plot(self, bookmark_name: str, save=True, return_fig_handle: bool = False):
         """
@@ -1104,43 +1149,22 @@ class RingtailCore:
                 # need to return updated mol
                 return canvas
 
-    def export_csv(self, requested_data: str, csv_name: str, table=False):
-        """Get requested data from database, export as CSV
+    # endregion
 
-        Args:
-            requested_data (str): Table name or SQL-formatted query
-            csv_name (str): Name for exported CSV file
-            table (bool): flag indicating is requested data is a table name
-        """
+    # region utilities
+
+    def db_query(self, query: str, params=()):
+        with self.storageman as sm:
+            return sm.db_query(query, params)
+
+    def database_is_empty(self):
+        with self.storageman as sm:
+            return sm.db_empty()
+
+    def update_database_version(self, consent=False, new_version="2.0.0"):
+        """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
         with self.storageman:
-            df = self.storageman.to_dataframe(requested_data, table=table)
-            df.to_csv(csv_name)
-
-    def export_bookmark_db(self, bookmark_name: str) -> str:
-        """Export database containing data from bookmark
-
-        Args:
-            bookmark_name (str): name for bookmark_db
-
-        Returns:
-            str: name of the new, exported database
-        """
-        bookmark_db_name = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
-        self.logger.info("Exporting bookmark database")
-        if os.path.exists(bookmark_db_name):
-            self.logger.warning(
-                "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
-            )
-            return
-        with self.storageman:
-            self.storageman.clone(bookmark_db_name)
-        # connect to cloned database
-        temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
-        with temp_storageman(bookmark_db_name) as db_clone:
-            db_clone.prune_nonpassing(bookmark_name)
-            db_clone.close_storage(vacuum=True)
-
-        return bookmark_db_name
+            return self.storageman.update_database_version(new_version, consent)
 
     def merge_databases(self, merging_db: str, backup: bool = True):
 
@@ -1150,44 +1174,6 @@ class RingtailCore:
         # create merge tables
         with self.storageman as sm:
             sm.merge_databases(**{"merging_db": merging_db, "backup": backup})
-
-    def export_receptors(self):
-        """
-        Export receptor in database to pdbqt
-        """
-        with self.storageman:
-            receptor_tuples = self.storageman.fetch_receptor_objects()
-        for recname, recblob in receptor_tuples:
-            if recblob is None:
-                self.logger.warning(
-                    f"No receptor pdbqt stored for {recname}. Export failed."
-                )
-                continue
-            output_manager = OutputManager()
-            output_manager.write_receptor_pdbqt(recname, recblob)
-
-    def get_previous_filter_data(
-        self,
-        bookmark_name,
-        outfields: str = "Ligname,docking_score",
-        order_results: str = "ligname",
-        log_file=None,
-    ):
-        """Get data requested in self.out_opts['outfields'] from the
-        results bookmark of a previous filtering
-
-        Args:
-            outfields (str): use outfields as described in RingtailOptions > StorageOptions
-            bookmark_name (str): bookmark for which the filters were used
-        """
-        if bookmark_name is None:
-            raise OptionError("A bookmark name has to be provided")
-        with self.storageman:
-            new_data = self.storageman.fetch_data_for_passing_results(
-                bookmark_name, outfields, order_results
-            )
-        with OutputManager(log_file) as opm:
-            opm.write_filter_results_in_log(new_data)
 
     def delete_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database
@@ -1211,10 +1197,6 @@ class RingtailCore:
         """
         with self.storageman:
             return self.storageman.get_all_bookmark_names()
-
-    def database_is_empty(self):
-        with self.storageman as sm:
-            return sm.db_empty()
 
     @staticmethod
     def defaults() -> dict:
@@ -1243,16 +1225,14 @@ class RingtailCore:
             str: file name of config file or json string with template including default values
         """
 
-        json_string = RingtailCore.defaults()
-
         filename = "config.json"
         with open(filename, "w") as f:
-            f.write(json.dumps(json_string, indent=4))
+            f.write(json.dumps(RingtailCore.defaults(), indent=4))
         return filename
 
     # endergion
 
-    # -#-#- Private methods -#-#-#
+    # region private methods
 
     def _validate_docking_mode(self, docking_mode: str):
         """Method that validates specified AutoDock program used to generate results.
@@ -1383,7 +1363,9 @@ class RingtailCore:
                 "Cannot find passing poses without providing a bookmark name."
             )
 
-        return [row["pose_id"] for row in self.dbquery(query_string, params).fetchall()]
+        return [
+            row["pose_id"] for row in self.db_query(query_string, params).fetchall()
+        ]
 
     def _create_rdkit_mol(
         self,
@@ -1748,5 +1730,46 @@ class RingtailCore:
             flexres_atomnames = json.loads(flexres_atomnames)
 
         return flexible_residues, flexres_atomnames
+
+    def _parse_clustering(
+        self, cluster_data: dict, bookmark_name: str
+    ) -> tuple[str, int]:
+        """
+        Takes dictionary with one or more cluster constraints and performs clustering one after another
+
+        Args:
+            cluster_data (dict): _description_
+            bookmark_name (str): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        with self.storageman:
+            count_poses = self.storageman.get_passing_poses_count(bookmark_name, False)
+
+        logger.info(f"Preparing to cluster {count_poses} passing poses.")
+        if len(cluster_data) > 1:
+            logger.warning(
+                "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
+            )
+        if cluster_data.get("ifp"):
+            bookmark_name = self.cluster(
+                bookmark_name,
+                "ifp",
+                cluster_data.get("ifp"),
+            )
+        if cluster_data.get("mfp"):
+            bookmark_name = self.cluster(
+                bookmark_name,
+                "mfp",
+                cluster_data.get("mfp"),
+            )
+        with self.storageman:
+            count_reps = self.storageman.get_passing_poses_count(bookmark_name, True)
+        print(
+            f"\nNumber of cluster representative ligands:",
+            count_reps,
+        )
+        return bookmark_name, count_reps
 
     # endregion

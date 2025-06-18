@@ -128,6 +128,9 @@ class StorageManager:
     # region public api database operations
 
     def open_storage(self):
+        """
+        Opens connection to the database
+        """
         raise_not_implemented()
 
     def close_storage(self, attached_db=None, vacuum=False):
