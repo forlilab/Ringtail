@@ -1154,11 +1154,47 @@ class RingtailCore:
 
     # region utilities
 
-    def db_query(self, query: str, params=()):
+    def db_query(self, query: str, params=()) -> Union[None, iter]:
+        """
+        Run a db query and return iterable if applicable
+
+        Args:
+            query (str): sql formatted string
+            params (tuple, optional): parameters, assumes placehodlers in query
+
+        Returns:
+            iter: if any
+        """
         with self.storageman as sm:
             return sm.db_query(query, params)
 
-    def database_is_empty(self):
+    def table_length(self, table: str) -> int:
+        """
+        Get length of table or bookmark
+
+        Args:
+            table (str): name of table or bookmark
+
+        Returns:
+            int: number of poses in table/bookmark
+        """
+
+        with self.storageman:
+            if table in self.storageman.tables_in_db():
+                query = """SELECT COUNT(*) FROM Results;"""
+                params = ()
+            elif table in self.storageman.get_all_bookmark_names():
+                query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = '?');"""
+                params = (table,)
+        return self.db_query(query, params).fetchone()[0]
+
+    def database_is_empty(self) -> bool:
+        """
+        Determines whether or not there is data in the database
+
+        Returns:
+            bool: True if db is empty
+        """
         with self.storageman as sm:
             return sm.db_empty()
 
