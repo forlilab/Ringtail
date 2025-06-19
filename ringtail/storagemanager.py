@@ -272,6 +272,18 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def get_table_data(self, table: str) -> iter:
+        """
+        Returns a pointer or cursor (iterable) to the data in a given table or bookmark
+
+        Args:
+            table (str): name of table or bookmark
+
+        Returns:
+            iter: iterable/cursor pointing to data in given table or bookmark
+        """
+        raise_not_implemented()
+
     # endregion
 
     # region public api insert data
@@ -768,7 +780,43 @@ class StorageManager:
         """
         raise_not_implemented()
 
-        # endregion
+    # endregion
+
+    # region gui required api
+    def create_status_tables(self):
+        """
+        Creates status tables if needed
+        """
+        raise_not_implemented()
+
+    def accept_pose(self, pose_id: int):
+        """
+        Will add pose_id to accepted, and delete from maybe and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        raise_not_implemented()
+
+    def maybe_pose(self, pose_id: int):
+        """
+        Will add pose_id to maybe, and delete from accepted and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        raise_not_implemented()
+
+    def reject_pose(self, pose_id: int):
+        """
+        Will add pose_id to rejected, and delete from accepted and maybe if needed
+
+        Args:
+            pose_id (int)
+        """
+        raise_not_implemented()
+
+    # endregion
 
     # region private methods
     def _fetch_receptor_objects(self):
@@ -3369,6 +3417,98 @@ class StorageManagerSQLite(StorageManager):
 
         return self.db_query(sql_string).fetchall()
 
+    def create_status_tables(self) -> None:
+        """
+        Creates pose status tables if needed
+        """
+        self.db_update(
+            f"""
+                CREATE TABLE IF NOT EXISTS Accepted 
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                );""",
+            (),
+        )
+
+        # create maybe table
+        self.db_update(
+            f"""
+                CREATE TABLE IF NOT EXISTS Maybe 
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                );""",
+            (),
+        )
+
+        # create rejected table
+        self.db_update(
+            f"""
+                CREATE TABLE IF NOT EXISTS Rejected 
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                );""",
+            (),
+        )
+
+        return None
+
+    def accept_pose(self, pose_id: int):
+        """
+        Will add pose_id to accepted, and delete from maybe and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_update(
+            """INSERT OR IGNORE INTO Accepted (pose_id) VALUES (?);""",
+            (pose_id,),
+            commit=False,
+        )
+        self.db_update(
+            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=False
+        )
+        self.db_update(
+            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
+        )
+
+    def maybe_pose(self, pose_id: int):
+        """
+        Will add pose_id to maybe, and delete from accepted and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_update(
+            """INSERT OR IGNORE INTO Maybe (pose_id) VALUES (?);""",
+            (pose_id,),
+            commit=False,
+        )
+        self.db_update(
+            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
+        )
+        self.db_update(
+            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
+        )
+
+    def reject_pose(self, pose_id: int):
+        """
+        Will add pose_id to rejected, and delete from accepted and maybe if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_update(
+            """INSERT OR IGNORE INTO Rejected (pose_id) VALUES (?);""",
+            (pose_id,),
+            commit=False,
+        )
+        self.db_update(
+            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
+        )
+        self.db_update(
+            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=True
+        )
+
     # endregion
 
     # region crossreferencing filtered databases
@@ -4567,6 +4707,27 @@ class StorageManagerSQLite(StorageManager):
             params = (table,)
         return self.db_query(query, params).fetchone()[0]
 
+    def get_table_data(self, table: str) -> iter:
+        """
+        Returns a pointer or cursor (iterable) to the data in a given table or bookmark
+
+        Args:
+            table (str): name of table or bookmark
+
+        Returns:
+            iter: iterable/cursor pointing to data in given table or bookmark
+        """
+        if table in self.tables_in_db():
+            query = """SELECT * FROM Results;"""
+            params = ()
+        elif table in self.get_all_bookmark_names():
+            # TODO get all selection from bookmark
+
+            query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = '?');"""
+            params = (table,)
+
+        return self.db_query(query, params)
+
     def _vacuum(self):
         """SQLite vacuum rebuilds the database file, repacking it into a minimal amount of disk space
 
@@ -4683,7 +4844,7 @@ class StorageManagerSQLite(StorageManager):
         query = f"""DROP TABLE IF EXISTS {name};"""
         return self.db_query(query)
 
-    def db_query(self, query, params: tuple = ()) -> iter:
+    def db_query(self, query, params: tuple = (), commit=False) -> iter:
         """Executes provided SQLite query. Returns cursor for results.
             Since cursor remains open, added to list of open cursors
 
@@ -4693,9 +4854,18 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             SQLite cursor: Contains results of query
         """
+        if parameters:
+            if type(parameters) == tuple:
+                parameters = [parameters]
+            elif type(parameters) != list:
+                raise OptionError(
+                    "Cannot use a non-list or non-tuple as insert parameters, please format appropriately."
+                )
         try:
             cur = self.conn.cursor()
             cur.execute(query, params)
+            if commit:
+                self.conn.commit()
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(
                 f"Unable to execute query {query} with given parameters {params}: {e}"
@@ -4703,6 +4873,7 @@ class StorageManagerSQLite(StorageManager):
         return cur
 
     def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
+        # TODO should be able to discontinue
         """
         A db query that also commits if/when specified
 

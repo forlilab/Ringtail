@@ -1154,7 +1154,7 @@ class RingtailCore:
 
     # region utilities
 
-    def db_query(self, query: str, params=()) -> Union[None, iter]:
+    def db_query(self, query: str, params=(), commit=False) -> Union[None, iter]:
         """
         Run a db query and return iterable if applicable
 
@@ -1166,7 +1166,51 @@ class RingtailCore:
             iter: if any
         """
         with self.storageman as sm:
-            return sm.db_query(query, params)
+            return sm.db_query(query, params, commit)
+
+    def update_pose_status(self, pose_id: int, status: str):
+        """
+        Updates the status of a given pose so that it is only ever in one status table
+
+        Args:
+            pose_id (int)
+            status (str)
+
+        Raises:
+            OptionError
+        """
+        status_options = ["accepted", "maybe", "rejected"]
+        status = status.lower()
+        if status not in status_options:
+            raise OptionError(f"Status option {status} not a valid option.")
+
+        with self.storageman as sm:
+            if status == "accepted":
+                sm.accept_pose(pose_id)
+            elif status == "maybe":
+                sm.maybe_pose(pose_id)
+            elif status == "rejected":
+                sm.reject_pose(pose_id)
+
+    def enable_status_assignment(self):
+        """
+        Handles preparing the db to enable assigning status to poses
+        """
+        with self.storageman as sm:
+            sm.create_status_tables()
+
+    def get_table_pointer(self, table) -> iter:
+        """
+        Returns a pointer or cursor (iterable) to the data in a given table or bookmark
+
+        Args:
+            table (str): name of table or bookmark
+
+        Returns:
+            iter: iterable/cursor pointing to data in given table or bookmark
+        """
+        with self.storageman as sm:
+            return sm.get_table_data(table)
 
     def table_length(self, table: str) -> int:
         """
