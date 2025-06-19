@@ -21,6 +21,16 @@ class QueryBuilder:
         self.selects.extend(fields)
         return self
 
+    def SELECT_STATUS(self):
+        status_case = """CASE
+            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
+            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
+            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
+            ELSE 'not evaluated'
+        END AS status"""
+        self.selects.append(status_case)
+        return self
+
     def FROM_BOOKMARK(self, bookmark, alias=None, db_alias=""):
         bookmark_query = f"({self.bookmark_query(bookmark, db_alias)})"
         return self.FROM(bookmark_query, alias)

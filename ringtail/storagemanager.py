@@ -624,13 +624,23 @@ class StorageManager:
     # endregion
 
     # region public api fetch data
-    def get_plot_data(self, bookmark_name: str, only_passing=False):
+    def get_plot_data(
+        self,
+        bookmark_name: str,
+        only_passing: bool = False,
+        include_status: bool = False,
+        x_axis: str = "docking_score",
+        y_axis: str = "leff",
+    ):
         """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
         as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
 
         Args:
             bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
             only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+            include_status (bool): look for status tables and include if requested
+            x_axis (str, optional): Defaults to "docking_score".
+            y_axis (str, optional): Defaults to "leff".
 
         Returns:
             tuple: cursors as (<all data cursor>, <passing data cursor>)
@@ -2457,14 +2467,13 @@ class StorageManagerSQLite(StorageManager):
             "SELECT filter_id from Filters WHERE name = ?", (bookmark_name,)
         ).fetchone()["filter_id"]
         # delete from filters
-        self.db_update(
+        self.db_query(
             "DELETE FROM Filters WHERE filter_id = ?",
             (filter_id,),
         )
         # delete from filtered_poses table
-        self.db_update(
-            "DELETE FROM Filtered_poses WHERE filter_id = ?",
-            (filter_id,),
+        self.db_query(
+            "DELETE FROM Filtered_poses WHERE filter_id = ?", (filter_id,), commit=True
         )
         logger.info(
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
@@ -4252,46 +4261,52 @@ class StorageManagerSQLite(StorageManager):
 
         return n_ligands_passing / n_ligands_total * 100
 
-    def get_plot_data(self, bookmark_name: str, only_passing=False):
+    def get_plot_data(
+        self,
+        bookmark_name: str,
+        only_passing: bool = False,
+        include_status: bool = False,
+        x_axis: str = "docking_score",
+        y_axis: str = "leff",
+    ):
         """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
         as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
 
         Args:
             bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
             only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+            include_status (bool): look for status tables and include if requested
+            x_axis (str, optional): Defaults to "docking_score".
+            y_axis (str, optional): Defaults to "leff".
 
         Returns:
             tuple: cursors as (<all data cursor>, <passing data cursor>)
         """
+        all_data_query = QueryBuilder()
+        all_data_query.SELECT("docking_score", "leff").FROM("Results")
 
-        all_data_query = "SELECT docking_score, leff FROM Results"
         if self.bookmark_exists(bookmark_name):
-            passing_poses_columns = [
-                "docking_score",
-                "leff",
-                "Pose_ID",
-                "LigName",
-            ]
+            bookmark_query = QueryBuilder()
+            bookmark_query.SELECT(
+                "R." + x_axis, "R." + y_axis, "R." + "Pose_ID", "L." + "LigName"
+            )
+            if include_status:
+                bookmark_query.SELECT_STATUS()
+            bookmark_query.FROM("Results", "R").IN_BOOKMARK(bookmark_name).JOIN(
+                "Ligands", "L", "ligand_id"
+            )
+
             if only_passing:
-                return (
-                    [],
-                    self.db_query(
-                        self.get_bookmark_selection(
-                            bookmark_name, passing_poses_columns
-                        )
-                    ),
-                )
+                all_data = []
             else:
-                return (
-                    self.db_query(all_data_query),
-                    self.db_query(
-                        self.get_bookmark_selection(
-                            bookmark_name, passing_poses_columns
-                        ),
-                    ),
-                )
+                all_data = self.db_query(all_data_query.build()[0])
+            passing_data = self.db_query(bookmark_query.build()[0])
+
         else:
-            return self.db_query(all_data_query), []
+            all_data = self.db_query(all_data_query.build()[0])
+            passing_data = []
+
+        return all_data, passing_data
 
     # endregion
 
@@ -4702,7 +4717,7 @@ class StorageManagerSQLite(StorageManager):
             query = """SELECT COUNT(*) FROM Results;"""
             params = ()
         elif self._is_bookmark(table):
-            query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = '?');"""
+            query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?);"""
             params = (table,)
         else:
             raise OptionError(f"Table -{table}- does not exist in the database.")
@@ -4835,13 +4850,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             SQLite cursor: Contains results of query
         """
-        if params:
-            if type(params) == tuple:
-                params = [params]
-            elif type(params) != list:
-                raise OptionError(
-                    "Cannot use a non-list or non-tuple as insert parameters, please format appropriately."
-                )
+
         try:
             cur = self.conn.cursor()
             cur.execute(query, params)

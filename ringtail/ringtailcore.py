@@ -940,7 +940,7 @@ class RingtailCore:
         else:
             plt.show()
 
-    def get_plot_data(self, bookmark_name: str):
+    def get_plot_data(self, bookmark_name: str, include_status=False):
         """
         Get ligand efficiency and energy for all docking data and for ligands that passed
         filtering in specified bookmark. Each tuple in the respective lists contains
@@ -953,7 +953,9 @@ class RingtailCore:
             list(tuple), list(tuple): [all_data], [filtered_data]
         """
         with self.storageman:
-            all_data, passing_data = self.storageman.get_plot_data(bookmark_name)
+            all_data, passing_data = self.storageman.get_plot_data(
+                bookmark_name, include_status
+            )
 
         return all_data, passing_data
 
