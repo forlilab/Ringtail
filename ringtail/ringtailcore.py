@@ -1180,13 +1180,7 @@ class RingtailCore:
         """
 
         with self.storageman:
-            if table in self.storageman.tables_in_db():
-                query = """SELECT COUNT(*) FROM Results;"""
-                params = ()
-            elif table in self.storageman.get_all_bookmark_names():
-                query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = '?');"""
-                params = (table,)
-        return self.db_query(query, params).fetchone()[0]
+            return self.storageman.table_length(table)
 
     def database_is_empty(self) -> bool:
         """

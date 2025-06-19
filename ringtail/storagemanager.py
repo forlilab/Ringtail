@@ -260,6 +260,18 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def table_length(self, table) -> int:
+        """
+        Get length of table or bookmark
+
+        Args:
+            table (str): name of table or bookmark
+
+        Returns:
+            int: number of poses in table/bookmark
+        """
+        raise_not_implemented()
+
     # endregion
 
     # region public api insert data
@@ -488,20 +500,6 @@ class StorageManager:
         """
 
         return bool(bookmark_name in self.get_all_bookmark_names())
-
-    def tables_in_db(self) -> list:
-        """
-        Returns a list of all table names in the database
-
-        Returns:
-            list: list of table names
-        """
-        return [
-            name
-            for name in self.db_query(
-                "SELECT name FROM sqlite_master WHERE type='table';"
-            ).fetchall()
-        ]
 
     def get_filterid_from_name(self, bookmark_name: str) -> int:
         """
@@ -4355,6 +4353,20 @@ class StorageManagerSQLite(StorageManager):
         cur.close()
         return is_compatible, db_version
 
+    def tables_in_db(self) -> list:
+        """
+        Returns a list of all table names in the database
+
+        Returns:
+            list: list of table names
+        """
+        return [
+            name
+            for name in self.db_query(
+                "SELECT name FROM sqlite_master WHERE type='table';"
+            ).fetchall()
+        ]
+
     def update_database_version(self, new_version, consent=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
@@ -4536,6 +4548,24 @@ class StorageManagerSQLite(StorageManager):
         tablecount = cur.fetchone()[0]
         cur.close()
         return True if tablecount == 0 else False
+
+    def table_length(self, table) -> int:
+        """
+        Get length of table or bookmark
+
+        Args:
+            table (str): name of table or bookmark
+
+        Returns:
+            int: number of poses in table/bookmark
+        """
+        if table in self.tables_in_db():
+            query = """SELECT COUNT(*) FROM Results;"""
+            params = ()
+        elif table in self.get_all_bookmark_names():
+            query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = '?');"""
+            params = (table,)
+        return self.db_query(query, params).fetchone()[0]
 
     def _vacuum(self):
         """SQLite vacuum rebuilds the database file, repacking it into a minimal amount of disk space
