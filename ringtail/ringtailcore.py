@@ -1199,7 +1199,9 @@ class RingtailCore:
         with self.storageman as sm:
             sm.create_status_tables()
 
-    def get_table_pointer(self, table) -> iter:
+    def get_table_pointer(
+        self, table: str, length: int = 100, starting_pose_id: int = 0
+    ) -> iter:
         """
         Returns a pointer or cursor (iterable) to the data in a given table or bookmark
 
@@ -1210,7 +1212,7 @@ class RingtailCore:
             iter: iterable/cursor pointing to data in given table or bookmark
         """
         with self.storageman as sm:
-            return sm.get_table_data(table)
+            return sm.fetch_viewable_columns_from(table, length, starting_pose_id)
 
     def table_length(self, table: str) -> int:
         """

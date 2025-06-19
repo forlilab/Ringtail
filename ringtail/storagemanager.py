@@ -272,18 +272,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def get_table_data(self, table: str) -> iter:
-        """
-        Returns a pointer or cursor (iterable) to the data in a given table or bookmark
-
-        Args:
-            table (str): name of table or bookmark
-
-        Returns:
-            iter: iterable/cursor pointing to data in given table or bookmark
-        """
-        raise_not_implemented()
-
     # endregion
 
     # region public api insert data
@@ -813,6 +801,17 @@ class StorageManager:
 
         Args:
             pose_id (int)
+        """
+        raise_not_implemented()
+
+    def fetch_viewable_columns_from(
+        self, table: str, length: int, last_pose_id: int = 0
+    ) -> iter:
+        """
+        Makes a selection of columns and includes the status of the pose
+
+        Returns:
+            iter: iterable/cursor of the columns
         """
         raise_not_implemented()
 
@@ -4501,7 +4500,7 @@ class StorageManagerSQLite(StorageManager):
             list: list of table names
         """
         return [
-            name
+            name[0].lower()
             for name in self.db_query(
                 "SELECT name FROM sqlite_master WHERE type='table';"
             ).fetchall()
@@ -4689,7 +4688,7 @@ class StorageManagerSQLite(StorageManager):
         cur.close()
         return True if tablecount == 0 else False
 
-    def table_length(self, table) -> int:
+    def table_length(self, table: str) -> int:
         """
         Get length of table or bookmark
 
@@ -4699,34 +4698,16 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             int: number of poses in table/bookmark
         """
-        if table in self.tables_in_db():
+        if self._is_table(table):
             query = """SELECT COUNT(*) FROM Results;"""
             params = ()
-        elif table in self.get_all_bookmark_names():
+        elif self._is_bookmark(table):
             query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = '?');"""
             params = (table,)
+        else:
+            raise OptionError(f"Table -{table}- does not exist in the database.")
+
         return self.db_query(query, params).fetchone()[0]
-
-    def get_table_data(self, table: str) -> iter:
-        """
-        Returns a pointer or cursor (iterable) to the data in a given table or bookmark
-
-        Args:
-            table (str): name of table or bookmark
-
-        Returns:
-            iter: iterable/cursor pointing to data in given table or bookmark
-        """
-        if table in self.tables_in_db():
-            query = """SELECT * FROM Results;"""
-            params = ()
-        elif table in self.get_all_bookmark_names():
-            # TODO get all selection from bookmark
-
-            query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = '?');"""
-            params = (table,)
-
-        return self.db_query(query, params)
 
     def _vacuum(self):
         """SQLite vacuum rebuilds the database file, repacking it into a minimal amount of disk space
@@ -4854,10 +4835,10 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             SQLite cursor: Contains results of query
         """
-        if parameters:
-            if type(parameters) == tuple:
-                parameters = [parameters]
-            elif type(parameters) != list:
+        if params:
+            if type(params) == tuple:
+                params = [params]
+            elif type(params) != list:
                 raise OptionError(
                     "Cannot use a non-list or non-tuple as insert parameters, please format appropriately."
                 )
@@ -4902,5 +4883,77 @@ class StorageManagerSQLite(StorageManager):
                 self.conn.commit()
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while committing insert query") from e
+
+    def _is_table(self, table: str) -> bool:
+        """
+        Returns True if table name is actually a bookmark
+
+        Args:
+            table (str): name of table or bookmark to check
+
+        Returns:
+            bool: if table name is a bookmark
+        """
+
+        if table.lower() in self.tables_in_db():
+            return True
+        else:
+            return False
+
+    def _is_bookmark(self, table: str) -> bool:
+        """
+        Returns True if table name is actually a bookmark
+
+        Args:
+            table (str): name of table or bookmark to check
+
+        Returns:
+            bool: if table name is a bookmark
+        """
+
+        if table.lower() in self.get_all_bookmark_names():
+            return True
+        else:
+            return False
+
+    # endregion
+
+    # region GUI specific API
+    def fetch_viewable_columns_from(
+        self, table: str, length: int, last_pose_id: int = 0
+    ) -> sqlite3.Cursor:
+        """
+        Makes a selection of columns and includes the status of the pose
+
+        Returns:
+            sqlite3.Cursor: iterable cursor of the columns
+        """
+        ordered_columns = """
+        CASE
+            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
+            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
+            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
+            ELSE 'not evaluated'
+        END AS status,
+        R.Pose_ID, L.LigName, R.docking_score, 
+        R.leff, R.cluster_size, R.cluster_rmsd, 
+        R.pose_rank, R.num_hb, R.receptor, R.run_number, 
+        R.deltas, R.nr_interactions, R.unbound_energy, 
+        R.reference_RMSD, R.energies_inter, R.energies_vdw, 
+        R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
+        R.energies_intra, R.energies_torsional, R.about_x, R.about_y, 
+        R.about_z, R.trans_x, R.trans_y, R.trans_z, R.axisangle_x, 
+        R.axisangle_y, R.axisangle_z, R.axisangle_w, R.dihedrals"""
+
+        query = QueryBuilder()
+        query.SELECT(ordered_columns).FROM("Results", "R")
+        if self._is_bookmark(table):
+            query.WHERE(f"R.Pose_id IN ({QueryBuilder.bookmark_query(table)})")
+
+        query.WHERE("R.Pose_ID > ?", last_pose_id).JOIN(
+            "Ligands", "L", "ligand_id"
+        ).ORDER_BY("R.pose_id").LIMIT(length)
+
+        return self.db_query(*query.build())
 
     # endregion

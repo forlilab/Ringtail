@@ -11,6 +11,7 @@ class QueryBuilder:
         self.params = []
         self.aliases = {}
         self.insert_into = None
+        self.limit = None
 
     def INSERT_INTO(self, table_name):
         self.insert_into = f"INSERT INTO {table_name}"
@@ -43,16 +44,6 @@ class QueryBuilder:
         query = f"""{self.aliased("Results")}.pose_id IN ({self.bookmark_query(bookmark)})"""
         return self.WHERE(query)
 
-    def JOIN_BOOKMARK(self, bookmark, alias=None, db_alias=""):
-        if db_alias:
-            db_alias += "."
-        bookmark_query = f"""(SELECT Pose_id FROM {db_alias}filtered_poses 
-        WHERE filter_id = 
-            (SELECT filter_id FROM {db_alias}Filters 
-            WHERE name = '{bookmark}'))"""
-
-        return self.JOIN(bookmark_query, alias, "pose_id", "results")
-
     def FROM(self, table, alias=None):
         if alias:
             alias = self._add_alias(table, alias)
@@ -84,6 +75,9 @@ class QueryBuilder:
     def ORDER_BY(self, column):
         self.order_by = column
         return self
+
+    def LIMIT(self, limit: int):
+        self.limit = str(limit)
 
     def WITH_SUBQUERY(self, name, query, params=None):
         # This could in theory accept a QueryBuilder object instead
@@ -140,6 +134,9 @@ class QueryBuilder:
 
         if self.order_by:
             parts.append("ORDER BY " + self.order_by)
+
+        if self.limit:
+            parts.append("LIMIT " + self.limit)
 
         if count:
             return f"SELECT COUNT(*) FROM ({' '.join(parts)})", self.params
