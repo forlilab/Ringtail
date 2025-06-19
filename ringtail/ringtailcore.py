@@ -954,7 +954,7 @@ class RingtailCore:
         """
         with self.storageman:
             all_data, passing_data = self.storageman.get_plot_data(
-                bookmark_name, include_status
+                bookmark_name, include_status=include_status
             )
 
         return all_data, passing_data
