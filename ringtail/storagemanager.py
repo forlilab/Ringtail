@@ -4287,32 +4287,22 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
 
-    def calculate_percentile_from_value(self, docking_score_max=None, leff_max=None):
-        # TODO
-        # can replace with kwargs, and check in the create table statement or something if the column
-        # name is actually a numerical column or not
-        if docking_score_max and leff_max:
-            logger.warning(
-                "Can not calculate percentil for both docking score and ligand efficiency, will proceed with just docking score"
+    def calculate_percentiles(self, column: str, num_bins: int, table: str):
+
+        if not column in self._get_numeric_columns("Results"):
+            raise OptionError(
+                f"Requested column {column} in not numeric, percentiles cannot be calcualted."
             )
-            leff_max = None
-        if docking_score_max:
-            column = "docking_score"
-            value = docking_score_max
-        elif leff_max:
-            column = "leff"
-            value = leff_max
+        query = QueryBuilder()
+        query.SELECT(f"{column}").FROM("Results")
+        if self._is_bookmark(table):
+            query.IN_BOOKMARK(table)
+        query.GROUP_BY("ligand_id")
+        values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
 
-        cur = self.conn.cursor()
-        cur.execute("SELECT COUNT(ligand_id) FROM Ligands")
-        n_ligands_total = int(cur.fetchone()[0])
-
-        cur.execute(
-            f"SELECT COUNT(*) FROM (SELECT Pose_ID FROM Results WHERE {column} < {value} GROUP BY ligand_id);"
-        )
-        n_ligands_passing = int(cur.fetchone()[0])
-
-        return n_ligands_passing / n_ligands_total * 100
+        bins = np.linspace(0, 100, num_bins + 1)
+        bin_edges = np.percentile(values, bins)
+        return bins, bin_edges
 
     def get_plot_data(
         self,
