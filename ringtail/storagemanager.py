@@ -2572,10 +2572,10 @@ class StorageManagerSQLite(StorageManager):
 
     def _process_filters_for_query(self, filters_dict: dict):
         score_maxmin_to_sqlite_call = {
-            "eworst": "docking_score < {value}",
-            "ebest": "docking_score > {value}",
-            "leworst": "leff < {value}",
-            "lebest": "leff > {value}",
+            "eworst": "docking_score <= {value}",
+            "ebest": "docking_score >= {value}",
+            "leworst": "leff <= {value}",
+            "lebest": "leff >= {value}",
         }
         # NOTE this method can maybe be a main class method once we get more database types
         """
