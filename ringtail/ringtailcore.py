@@ -1465,7 +1465,7 @@ class RingtailCore:
             h_parent_line (list): list of atom indices for heteroatoms with attached hydrogens
             flexible_residues (list): list of flexible residue names
             flexres_atomnames (list): list of atomtypes in flexible residue
-            pose_IDs (list[int], optional): list of poses to consider for the ligand
+            pose_ids (list[int], optional): list of poses to consider for the ligand
 
         Raises:
             OutputError: raises error if there is an issue with determining a flexible residue identity
@@ -1571,7 +1571,7 @@ class RingtailCore:
             hydrogen_parents,
             flexible_residues,
             flexres_atomnames,
-            pose_ID=pose_id,
+            pose_id,
         )
         return mol, flexres_mols, flexible_residues
 
