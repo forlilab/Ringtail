@@ -1,4 +1,7 @@
 class QueryBuilder:
+    """
+    Currently only configured to work with sqlite, will have to subclass once we add more database types
+    """
 
     def __init__(self):
         self.selects = []
