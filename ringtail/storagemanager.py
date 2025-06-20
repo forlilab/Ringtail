@@ -339,7 +339,7 @@ class StorageManager:
         Args:
             receptor_data (list): of receptor data, ordered by columns in the db
         """
-        receptors = self.fetch_receptor_objects()
+        receptors = self.fetch_receptor_object()
         # insert receptor if database does not have already have a receptor entry
         if not receptors:
             self._insert_receptors(receptor_data)
@@ -647,17 +647,16 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def fetch_receptor_objects(self) -> iter:
+    def fetch_receptor_object(self) -> tuple:
         """Returns all Receptor objects from database
 
         Args:
             rec_name (str): Name of receptor to return object for
 
         Returns:
-            iter (tuple): of receptor names and objects
+            tuple: of receptor name and object
         """
-
-        return self._fetch_receptor_objects()
+        raise_not_implemented()
 
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
@@ -846,8 +845,6 @@ class StorageManager:
     # endregion
 
     # region private methods
-    def _fetch_receptor_objects(self):
-        raise_not_implemented()
 
     def _insert_ligands(self, ligand_array: list) -> list:
         raise_not_implemented()
@@ -3923,11 +3920,18 @@ class StorageManagerSQLite(StorageManager):
                 f"Requested column {column} is not a numeric column, cannot get value range."
             )
 
-    def _fetch_receptor_objects(self):
-        """Returns all Receptor objects from database"""
+    def fetch_receptor_object(self):
+        """Returns all Receptor objects from database
+
+        Args:
+            rec_name (str): Name of receptor to return object for
+
+        Returns:
+            tuple: of receptor name and object
+        """
 
         cursor = self.db_query("SELECT RecName, receptor_object FROM Receptors")
-        return cursor.fetchall()
+        return cursor.fetchall()[0]
 
     def count_receptors_in_db(self):
         """returns number of rows in Receptors table where receptor_object already has blob

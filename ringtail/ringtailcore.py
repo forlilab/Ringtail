@@ -627,10 +627,8 @@ class RingtailCore:
                 ext = ".pdb"
             path = root + ext
         else:
-            with self.storageman as sm:
-                # name if after the receptor
-                receptor_name, _ = sm.fetch_receptor_objects()[0]
-                path = receptor_name + ".pdb"
+            receptor_name, _ = self.get_receptor_object()
+            path = receptor_name + ".pdb"
 
         flexmoldict = {}
         # string in list of strings
@@ -830,9 +828,8 @@ class RingtailCore:
         """
         Export receptor in database to pdbqt
         """
-        with self.storageman:
-            receptor_tuples = self.storageman.fetch_receptor_objects()
-        for recname, recblob in receptor_tuples:
+        receptor = self.get_receptor_object()
+        for recname, recblob in receptor:
             if recblob is None:
                 self.logger.warning(
                     f"No receptor pdbqt stored for {recname}. Export failed."
@@ -959,6 +956,10 @@ class RingtailCore:
 
         return all_data, passing_data
 
+    def get_receptor_object(self) -> tuple:
+        with self.storageman as sm:
+            return sm.fetch_receptor_object()
+
     def display_pymol(self, bookmark_name, integrate: bool = False, canvas=None):
         # TODO update to new gui viewer paradigm
         """
@@ -1049,7 +1050,7 @@ class RingtailCore:
             axes.set_title("Passing Docking Poses")
 
             # check if receptor in db
-            receptor = self.storageman.fetch_receptor_objects()[0]
+            receptor = self.get_receptor_object()
             if receptor[1]:
                 # print("####### jani debug receptor", receptor[0], len(receptor))
 
