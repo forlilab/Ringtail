@@ -4749,8 +4749,13 @@ class StorageManagerSQLite(StorageManager):
             "SELECT COUNT(*) name FROM sqlite_master WHERE type='table' AND name <> 'sqlite_sequence';"
         )
         tablecount = cur.fetchone()[0]
+        if tablecount > 0:
+            cur.execute("SELECT COUNT(*) FROM Results")
+            datacount = cur.fetchone()[0]
+        else:
+            datacount = 0
         cur.close()
-        return True if tablecount == 0 else False
+        return True if datacount == 0 else False
 
     def table_length(self, table: str) -> int:
         """
