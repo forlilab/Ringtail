@@ -778,6 +778,24 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def get_range_of_column(self, column: str, table: str) -> tuple:
+        """
+        Get min and max of a given column, if column is numeric. Currently only works for
+        columns in the Results table. If given table is a bookmark, it will limit the data to
+        get min/max for by the range of poses represented in the bookmark.
+
+        Args:
+            column (str): name of column for which to get range
+            table (str): table limit data, e.g., either Results or a bookmark
+
+        Raises:
+            OptionError
+
+        Returns:
+            tuple: min, max of the column
+        """
+        raise_not_implemented()
+
     # endregion
 
     # region gui required api
@@ -3849,18 +3867,21 @@ class StorageManagerSQLite(StorageManager):
 
         return columns, columns_with_tablename
 
-    def _get_numeric_columns(self, table_name: str) -> iter:
+    def _get_numeric_columns(self, table_name: str) -> list:
         """
-        Method to get the names of all numeric columns, for example for allowable sorting options
+        Method to get the names of all numeric columns in a table, for example for
+        allowable sorting options
 
         Args:
             table_name (str): table name to evaluate
 
         Returns:
-            iter: column names that has a numeric type
+            list: column names that has a numeric type
         """
-        return self.db_query(
-            f"""SELECT
+        return [
+            table[0]
+            for table in self.db_query(
+                f"""SELECT
                             name
                         FROM
                             pragma_table_info('{table_name}')
@@ -3872,7 +3893,35 @@ class StorageManagerSQLite(StorageManager):
                                 WHEN UPPER(type) LIKE '%FLOAT%' THEN 'numerical'
                                 WHEN UPPER(type) LIKE '%DOUBLE%' THEN 'numerical'
                             END ='numerical';"""
-        ).fetchall()
+            ).fetchall()
+        ]
+
+    def get_range_of_column(self, column: str, table: str) -> tuple:
+        """
+        Get min and max of a given column, if column is numeric. Currently only works for
+        columns in the Results table. If given table is a bookmark, it will limit the data to
+        get min/max for by the range of poses represented in the bookmark.
+
+        Args:
+            column (str): name of column for which to get range
+            table (str): table limit data, e.g., either Results or a bookmark
+
+        Raises:
+            OptionError
+
+        Returns:
+            tuple: min, max of the column
+        """
+        if column in self._get_numeric_columns("Results"):
+            query = QueryBuilder()
+            query.SELECT(f"MIN(R.{column})", f"MAX(R.{column})").FROM("Results", "R")
+            if self._is_bookmark(table):
+                query.IN_BOOKMARK(table)
+            return self.db_query(query.build()[0]).fetchall()[0]
+        else:
+            raise OptionError(
+                f"Requested column {column} is not a numeric column, cannot get value range."
+            )
 
     def _fetch_receptor_objects(self):
         """Returns all Receptor objects from database"""

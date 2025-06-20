@@ -1240,6 +1240,27 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.db_empty()
 
+    def get_value_range(
+        self, column: str, table: str = "Results"
+    ) -> tuple[float, float]:
+        """
+        Get min and max of a given column, if column is numeric. Currently only works for
+        columns in the Results table. If given table is a bookmark, it will limit the data to
+        get min/max for by the range of poses represented in the bookmark.
+
+        Args:
+            column (str): name of column for which to get range
+            table (str): table limit data, e.g., either Results or a bookmark
+
+        Raises:
+            OptionError
+
+        Returns:
+            tuple: min, max of the column
+        """
+        with self.storageman as sm:
+            return sm.get_range_of_column(column, table)
+
     def update_database_version(self, consent=False, new_version="2.0.0"):
         """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
         with self.storageman:
