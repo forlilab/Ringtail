@@ -842,6 +842,26 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def calculate_percentiles(
+        self, column: str, num_bins: int, table: str
+    ) -> tuple[list[int], list[float]]:
+        """
+        Will calculate percentiles for a given column and given number of bins to divide the data in.
+        Will group the data by ligand_id, so it will be per ligand and not per pose id.
+
+        Args:
+            column (str): what column to calculate percentile for. must be numeric
+            num_bins (int): how many percentile bins data should be divided into
+            table (str): whether the column is in Results or filtered results (i.e., bookmark)
+
+        Raises:
+            OptionError: if column given is not numeric and in results
+
+        Returns:
+            tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
+        """
+        raise_not_implemented()
+
     # endregion
 
     # region private methods
@@ -4287,7 +4307,24 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
 
-    def calculate_percentiles(self, column: str, num_bins: int, table: str):
+    def calculate_percentiles(
+        self, column: str, num_bins: int, table: str
+    ) -> tuple[list[int], list[float]]:
+        """
+        Will calculate percentiles for a given column and given number of bins to divide the data in.
+        Will group the data by ligand_id, so it will be per ligand and not per pose id.
+
+        Args:
+            column (str): what column to calculate percentile for. must be numeric
+            num_bins (int): how many percentile bins data should be divided into
+            table (str): whether the column is in Results or filtered results (i.e., bookmark)
+
+        Raises:
+            OptionError: if column given is not numeric and in results
+
+        Returns:
+            tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
+        """
 
         if not column in self._get_numeric_columns("Results"):
             raise OptionError(

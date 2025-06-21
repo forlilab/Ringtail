@@ -1262,6 +1262,24 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.get_range_of_column(column, table)
 
+    def get_percentiles(
+        self, column: str, num_bins: int = 20, table: str = "Results"
+    ) -> tuple[list[int], list[float]]:
+        """
+        Will calculate percentiles for a given column and given number of bins to divide the data in.
+        Will group the data by ligand_id, so it will be per ligand and not per pose id.
+
+        Args:
+            column (str): what column to calculate percentile for. must be numeric
+            num_bins (int, optional): how many percentile bins data should be divided into. Defaults to 20.
+            table (str, optional): whether the column is in Results or filtered results (i.e., bookmark). Defaults to "Results".
+
+        Returns:
+            tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
+        """
+        with self.storageman as sm:
+            return sm.calculate_percentiles(column, num_bins, table)
+
     def update_database_version(self, consent=False, new_version="2.0.0"):
         """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
         with self.storageman:
