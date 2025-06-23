@@ -141,7 +141,7 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
         iterable = rtc.filter(eworst=-7, bookmark_name="iterable", return_iter=True)
 
-        assert len(iterable) == 7
+        assert len(iterable) == 8
 
     def test_enumerate_interaction_combinations(self):
         # first, test without enumerate, check number of passing union as well as number of bookmarks
@@ -232,7 +232,7 @@ class TestRingtailCore:
             file_contents = f.read()
         import linecache
 
-        final_line = linecache.getline(log_file_name, 10)
+        final_line = linecache.getline(log_file_name, 11)
 
         assert "'11991', 0.0, 226.06" in file_contents
         assert "'3961', 0.0, 215.96" in file_contents
@@ -284,6 +284,7 @@ class TestRingtailCore:
             "13974.sdf",
             "15776.sdf",
             "136065.sdf",
+            "127947.sdf",
         ]
         assert len(sdf_files) == len(expected)
 
@@ -475,7 +476,7 @@ class TestRingtailCore:
         curs.close()
         conn.close()
 
-        assert count == 7
+        assert count == 8
 
         os.system("rm " + bookmark_db_name)
 

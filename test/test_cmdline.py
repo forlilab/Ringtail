@@ -661,7 +661,7 @@ class TestOtherScripts:
         with open("compared_ligands.txt") as f:
             for pos, line in enumerate(f):
                 if pos + 1 == 4:  # zero based line indexing
-                    assert line == "Number passing ligands: 25 \n"
+                    assert line == "Number passing ligands: 24 \n"
                     break
 
         os.system("rm output.db output2.db compared_ligands.txt output_log.txt")

@@ -1987,16 +1987,14 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             StorageError
         """
-        # TODO check performance by including or excluding the different indices
         try:
             cur = self.conn.cursor()
-            logger.debug("Creating columns index...")
+            logger.debug("Creating columns indices...")
             cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
+                "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
             )
-            cur.execute("CREATE INDEX IF NOT EXISTS ak_poseid ON Results(Pose_id)")
             cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
+                "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
             )
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
@@ -2005,7 +2003,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.commit()
             cur.close()
             logger.info(
-                "Indicies were created for specified Results and Interaction_indices columns."
+                "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
             )
         except sqlite3.OperationalError as e:
             raise StorageError("Error occurred while indexing") from e
@@ -2078,6 +2076,7 @@ class StorageManagerSQLite(StorageManager):
         ).fetchone()[0]
 
         # delete incompatible tables
+        # TODO delete bookmarks and filtered data
         # for main db
         self._drop_views()
         self._delete_table("Ligand_clusters")
@@ -2090,11 +2089,11 @@ class StorageManagerSQLite(StorageManager):
             self._merge_db_properties_table(merge_id)
             logger.info("The 'db_properties' table has been merged.")
 
-            self._merge_ligands_table()
-            logger.info("The 'Ligands' table has been merged.")
+            self._merge_ligands_and_results_tables()
+            logger.info("The 'Ligands' and 'Results' tables have been merged.")
 
-            self._merge_results_table(merge_id)
-            logger.info("The 'Results' table has been merged.")
+            # self._merge_results_table(merge_id)
+            # logger.info("The 'Results' table has been merged.")
 
             self._merge_interaction_tables(merge_id)
             logger.info(
@@ -2242,6 +2241,202 @@ class StorageManagerSQLite(StorageManager):
                 f"Error during update and insertion of interactions: {e}"
             ) from e
 
+    def _merge_ligands_and_results_tables(self, merge_id: int):
+        """
+        Merges the Ligands tables. #TODO Interaction definitions are unique and independent of the Results table, so we only
+        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            StorageError: _description_
+        """
+        # convert ligand_ids and log
+        convert_ligand_ids_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        "Ligands", 
+        ligand_id,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM Ligands
+                    WHERE 
+                        merging.Ligands.LigName = Ligands.LigName
+                        AND merging.Ligands.ligand_smile = Ligands.ligand_smile
+                        AND merging.Ligands.rdmol = Ligands.rdmol
+                        AND merging.Ligands.atom_index_map = Ligands.atom_index_map
+                        AND merging.Ligands.hydrogen_parents = Ligands.hydrogen_parents
+                        AND merging.Ligands.input_model = Ligands.input_model
+                    ) 
+                THEN (
+                    SELECT main.Ligands.ligand_id
+                    FROM main.Ligands
+                    WHERE 
+                        merging.Ligands.LigName = Ligands.LigName
+                        AND merging.Ligands.ligand_smile = Ligands.ligand_smile
+                        AND merging.Ligands.rdmol = Ligands.rdmol
+                        AND merging.Ligands.atom_index_map = Ligands.atom_index_map
+                        AND merging.Ligands.hydrogen_parents = Ligands.hydrogen_parents
+                        AND merging.Ligands.input_model = Ligands.input_model
+                    )
+                ELSE merging.Ligands.ligand_id + (SELECT MAX(ligand_id) FROM Ligands)
+            END AS new_ligand_id
+        FROM merging.Ligands;"""
+
+        # then inserting only those that aren't already in the table
+        insert_new_ligands = """INSERT INTO Ligands (
+        ligand_id,
+        LigName,
+        ligand_smile,
+        rdmol,
+        atom_index_map,
+        hydrogen_parents,
+        input_model)
+        SELECT 
+            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Ligands') new_id,
+            LigName,
+            ligand_smile,
+            rdmol,
+            atom_index_map,
+            hydrogen_parents,
+            input_model
+        FROM merging.Ligands WHERE new_id > (SELECT MAX(ligand_id) FROM Ligands);
+        """
+
+        # convert pose_id
+        convert_poseid_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        "Results", 
+        Pose_ID,
+        Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
+        FROM merging.Results;"""
+
+        # insert results with updated pose_ids
+        insert_Results = """INSERT INTO Results (
+            Pose_ID,
+            ligand_id,
+            receptor,
+            pose_rank,
+            run_number,
+            docking_score,
+            leff,
+            deltas,
+            cluster_rmsd,
+            cluster_size,
+            reference_rmsd,
+            energies_inter,
+            energies_vdw,
+            energies_electro,
+            energies_flexLig,
+            energies_flexLR,
+            energies_intra,
+            energies_torsional,
+            unbound_energy,
+            nr_interactions,
+            num_hb,
+            about_x,
+            about_y,
+            about_z,
+            trans_x,
+            trans_y,
+            trans_z,
+            axisangle_x,
+            axisangle_y,
+            axisangle_z,
+            axisangle_w,
+            dihedrals,
+            ligand_coordinates,
+            flexible_res_coordinates) 
+        SELECT 
+            II.merged_PK as pose_id,
+            I.ligand_id,
+            I.receptor,
+            I.pose_rank,
+            I.run_number,
+            I.docking_score,
+            I.leff,
+            I.deltas,
+            I.cluster_rmsd,
+            I.cluster_size,
+            I.reference_rmsd,
+            I.energies_inter,
+            I.energies_vdw,
+            I.energies_electro,
+            I.energies_flexLig,
+            I.energies_flexLR,
+            I.energies_intra,
+            I.energies_torsional,
+            I.unbound_energy,
+            I.nr_interactions,
+            I.num_hb,
+            I.about_x,
+            I.about_y,
+            I.about_z,
+            I.trans_x,
+            I.trans_y,
+            I.trans_z,
+            I.axisangle_x,
+            I.axisangle_y,
+            I.axisangle_z,
+            I.axisangle_w,
+            I.dihedrals,
+            I.ligand_coordinates,
+            I.flexible_res_coordinates
+        FROM merging.Results I
+                LEFT JOIN (SELECT original_PK, merged_PK 
+                FROM PK_conversions 
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) II ON II.original_PK = I.Pose_ID;"""
+
+        # Adding new data to Results table with (updated) pose_id and ligand_id
+        insert_results = """
+        INSERT INTO Interactions (
+        Pose_ID,
+        interaction_id
+        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
+                FROM merging.Interactions I
+                LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
+            LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Interaction_indices' 
+                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
+
+        try:
+            cur = self.conn.cursor()
+            # new stuff
+            # insert and get new ligand ids
+            cur.execute(
+                convert_ligand_ids_sql,
+                (merge_id,),
+            )
+            cur.execute(insert_new_ligands, (merge_id,))
+            # get new pose_ids
+            cur.execute(
+                convert_poseid_sql,
+                (merge_id,),
+            )
+            # insert results with new pose_ids and ligand_ids
+
+            # # Ligand table has unique constraints and primary key is ligand_id so no checks needed
+            # merge_ligands = """INSERT INTO Ligands
+            #     SELECT * FROM merging.Ligands"""
+            # cur.execute(merge_ligands)
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError("Error encountered while merging Ligands table") from e
+
     def _merge_results_table(self, merge_id: int):
         # TODO since the ligand id merge table stuff is issue now, this will also be issue
         """
@@ -2354,24 +2549,6 @@ class StorageManagerSQLite(StorageManager):
             self.conn.commit()
         except Exception as e:
             raise StorageError(f"Error during insertion of results: {e}") from e
-
-    def _merge_ligands_table(self):
-        """
-        _summary_
-
-        Raises:
-            StorageError: _description_
-        """
-        # TODO I think this method is wrong now, because I changed from ligname PK to ligand_id
-        try:
-            cur = self.conn.cursor()
-            # Ligand table has unique constraints and primary key is ligand_id so no checks needed
-            merge_ligands = """INSERT INTO Ligands 
-                SELECT * FROM merging.Ligands"""
-            cur.execute(merge_ligands)
-            self.conn.commit()
-        except Exception as e:
-            raise StorageError("Error encountered while merging Ligands table") from e
 
     def _merge_db_properties_table(self, merge_id: int):
         """
@@ -3950,8 +4127,13 @@ class StorageManagerSQLite(StorageManager):
             tuple: of receptor name and object
         """
 
-        cursor = self.db_query("SELECT RecName, receptor_object FROM Receptors")
-        return cursor.fetchall()[0]
+        cursor = self.db_query(
+            "SELECT RecName, receptor_object FROM Receptors"
+        ).fetchone()
+        if cursor:
+            return tuple(cursor)
+        else:
+            return None
 
     def count_receptors_in_db(self):
         """returns number of rows in Receptors table where receptor_object already has blob
@@ -4697,15 +4879,10 @@ class StorageManagerSQLite(StorageManager):
                 pose_indices,
             )
             # drop old bitvector table
-            # TODO shouldn't this use the create_indices method
             cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
-            # create new indixes
-            cur.execute("CREATE INDEX IF NOT EXISTS ak_poseid ON Results(Pose_id)")
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
-            )
-            cur.execute("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
             self.conn.commit()
+            # index certain tables
+            self._create_indices()
             self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
         except sqlite3.OperationalError as e:
             raise DatabaseConnectionError(

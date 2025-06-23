@@ -244,6 +244,8 @@ class RingtailCore:
                             filled_receptor_rows
                         )
                     )
+                # TODO instead it should check if same receptors, and carry on if they are,
+                # or error out ifthey are different
                 self.storageman.insert_receptor_blob(rec, rec_name)
                 self.logger.info("Receptor data was added to the database.")
 
@@ -828,15 +830,14 @@ class RingtailCore:
         """
         Export receptor in database to pdbqt
         """
-        receptor = self.get_receptor_object()
-        for recname, recblob in receptor:
-            if recblob is None:
-                self.logger.warning(
-                    f"No receptor pdbqt stored for {recname}. Export failed."
-                )
-                continue
-            output_manager = OutputManager()
-            output_manager.write_receptor_pdbqt(recname, recblob)
+        recname, recblob = self.get_receptor_object()
+        if recblob is None:
+            self.logger.warning(
+                f"No receptor pdbqt stored for {recname}. Export failed."
+            )
+            return
+        output_manager = OutputManager()
+        output_manager.write_receptor_pdbqt(recname, recblob)
 
     def get_previous_filter_data(
         self,

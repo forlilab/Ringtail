@@ -89,7 +89,7 @@ class ResultsManager:
                     from .receptormanager import ReceptorManager as rm
 
                     # grab receptor info from database, this assumes there is only one receptor in the database
-                    receptor_blob = sm.fetch_receptor_objects()[0][
+                    receptor_blob = sm.fetch_receptor_object()[
                         1
                     ]  # method returns an iter of tuples, blob is the second tuple element in the first list element
                     # convert receptor blob to string
