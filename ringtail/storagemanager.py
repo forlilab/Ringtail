@@ -2076,7 +2076,6 @@ class StorageManagerSQLite(StorageManager):
         ).fetchone()[0]
 
         # delete incompatible tables
-        # TODO delete bookmarks and filtered data
         # for main db
         self._delete_filter_data()
         self._delete_table("Ligand_clusters")
@@ -2102,7 +2101,8 @@ class StorageManagerSQLite(StorageManager):
             logger.info(
                 f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
             )
-            self.db_query("REINDEX")
+            self._cleanup_storage(merging_db, vacuum=True, reindex=True)
+            logger.info("The final database has neem cleaned up, and indices rebuilt.")
         finally:
             cur.close()
 
@@ -4859,19 +4859,37 @@ class StorageManagerSQLite(StorageManager):
         return con
 
     def close_storage(self, attached_db=None, vacuum=None):
-        # TODO might wanna make the cleanup part its own method,
-        # that includes reindexing
         """
         Closes storage
         """
-        if attached_db is not None:
-            self._detach_db(attached_db)
-        # vacuum database
-        if vacuum:
-            self._vacuum()
+        if attached_db or vacuum:
+            self._cleanup_storage(attached_db, vacuum)
+
         # close db itself
         logger.debug("Closing database")
         self.conn.close()
+
+    def _cleanup_storage(
+        self, attached_db: str = None, vacuum: bool = None, reindex=False
+    ):
+        """
+        Cleans up storage, especially useful for situations where two databases
+        hvae been connected/attached. Will detach the database, reindex main database,
+        and vacuum the file if requested.
+
+        Args:
+            attached_db (str, optional): Name of attached database, if any. Defaults to None.
+            vacuum (bool, optional): rebuilds db file to minimize space. Defaults to None.
+            reindex (bool, optional): deletes and reruns all indixes. Defaults to False.
+
+        """
+        if attached_db is not None:
+            self._detach_db(attached_db)
+        if reindex:
+            self.db_query("REINDEX", commit=True)
+        # vacuum database
+        if vacuum:
+            self._vacuum()
 
     def db_empty(self):
         """empty database, for example if overwrite
