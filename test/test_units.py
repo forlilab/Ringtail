@@ -11,20 +11,9 @@ import pytest
 
 
 @pytest.fixture
-def passingcount():
-    def __dbconnect(bookmark):
-        rtc = RingtailCore("output.db")
-        with rtc.storageman as sm:
-            count = sm.get_passing_poses_count(bookmark, True)
-        return count
-
-    return __dbconnect
-
-
-@pytest.fixture
 def tablecount():
-    def __dbconnect(table):
-        rtc = RingtailCore("output.db")
+    def __dbconnect(table, database="output.db"):
+        rtc = RingtailCore(database)
         with rtc.storageman as sm:
             count = sm.db_query(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         return count
@@ -704,6 +693,60 @@ class TestStorageMan:
         os.system("rm output.db output_log.txt")
         assert versionmatch
         assert int(version) == 200  # NOTE: update for new database schema versions
+
+
+class TestMergeDB:
+    def test_db_write(self, tablecount):
+        rtc1 = RingtailCore("primary.db")
+        rtc1.add_results_from_files("test_data/adgpu/group1/1451.dlg.gz")
+
+        rtc2 = RingtailCore("secondary.db")
+        rtc2.add_results_from_files("test_data/adgpu/group1/1620.dlg.gz")
+
+        rtc3 = RingtailCore("tertiary.db")
+        rtc3.add_results_from_files("test_data/adgpu/group1/1751.dlg.gz")
+
+        # they should all have one ligand each
+        assert (
+            tablecount("Ligands", "primary.db")
+            == tablecount("Ligands", "secondary.db")
+            == tablecount("Ligands", "tertiary.db")
+            == 1
+        )
+
+    def test_before_merge(self, tablecount):
+        rtc1 = RingtailCore("primary.db")
+        # should not be any poses in this interval
+        assert rtc1.filter(eworst=-2, ebest=-5) == 0
+        assert rtc1.filter(eworst=-5) == 1
+        assert tablecount("filtered_poses", "primary.db") == 3
+
+    def test_after_merge(self, tablecount):
+        rtc1 = RingtailCore("primary.db")
+        rtc1.merge_databases("secondary.db", False)
+        rtc1.merge_databases("tertiary.db", False)
+        # this should add two more ligands
+        assert tablecount("Ligands", "primary.db") == 3
+        # should now be data in this interval
+        assert rtc1.filter(eworst=-2, ebest=-5) == 2
+
+    def test_check_PKs(self):
+        rtc2 = RingtailCore("secondary.db")
+
+        # get best ranked pose id in secondary database for ligand 1620
+        secondary_db_pose_as_main = rtc2.db_query(
+            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND ligand_id = (SELECT ligand_id FROM Ligands WHERE LigName = '1620')"
+        )[0][0]
+        assert secondary_db_pose_as_main == 1
+
+        # compare to pose id for best ranked pose for same ligand in the merged database
+        rtc1 = RingtailCore("primary.db")
+        secondary_db_pose_as_merged = rtc1.db_query(
+            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND ligand_id = (SELECT ligand_id FROM Ligands WHERE LigName = '1620')"
+        )[0][0]
+        assert secondary_db_pose_as_merged != secondary_db_pose_as_main
+
+        os.system("rm primary.db secondary.db tertiary.db output_log.txt")
 
 
 class TestLogger:

@@ -1170,7 +1170,7 @@ class RingtailCore:
             iter: if any
         """
         with self.storageman as sm:
-            return sm.db_query(query, params, commit)
+            return sm.db_query(query, params, commit).fetchall()
 
     def update_pose_status(self, pose_id: int, status: str):
         """
@@ -1483,9 +1483,7 @@ class RingtailCore:
                 "Cannot find passing poses without providing a bookmark name."
             )
 
-        return [
-            row["pose_id"] for row in self.db_query(query_string, params).fetchall()
-        ]
+        return [row["pose_id"] for row in self.db_query(query_string, params)]
 
     def _create_rdkit_mol(
         self,

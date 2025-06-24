@@ -2020,7 +2020,7 @@ class StorageManagerSQLite(StorageManager):
         keep track of how many databases has been merged into the primary database.
         Each merge session is given a merge_id.
         The merging will ensure the two databases are -compatible based on the receptor only-.
-        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
+        PLEASE NOTE: If two databases have been docked with dlg and vina respectively,
             these will be allowed to merge.
 
         Args:
@@ -2036,7 +2036,7 @@ class StorageManagerSQLite(StorageManager):
             self.clone()
         # attach incoming database and check compatibility
         merging_db_alias = self._attach_db(merging_db, "merging")
-        if not self._check_if_db_is_compatible(merging_db_alias, 200):
+        if not self._check_if_db_compatible_for_merge(merging_db_alias):
             raise StorageError(
                 "Trying to merge two databases of incompatible or too old versions, cannot proceed."
             )
@@ -2078,10 +2078,10 @@ class StorageManagerSQLite(StorageManager):
         # delete incompatible tables
         # TODO delete bookmarks and filtered data
         # for main db
-        self._drop_views()
+        self._delete_filter_data()
         self._delete_table("Ligand_clusters")
         # for attached db
-        self._drop_views(merging_db_alias)
+        self._delete_filter_data(merging_db_alias)
         self._delete_table("Ligand_clusters", merging_db_alias)
 
         # merge tables
@@ -2089,11 +2089,8 @@ class StorageManagerSQLite(StorageManager):
             self._merge_db_properties_table(merge_id)
             logger.info("The 'db_properties' table has been merged.")
 
-            self._merge_ligands_and_results_tables()
+            self._merge_ligands_and_results_tables(merge_id)
             logger.info("The 'Ligands' and 'Results' tables have been merged.")
-
-            # self._merge_results_table(merge_id)
-            # logger.info("The 'Results' table has been merged.")
 
             self._merge_interaction_tables(merge_id)
             logger.info(
@@ -2103,8 +2100,9 @@ class StorageManagerSQLite(StorageManager):
             raise MergeError(f"Error during database merging: {e}") from e
         else:
             logger.info(
-                f"The database {merging_db} has been successfully merged into {self.db_file}."
+                f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
             )
+            self.db_query("REINDEX")
         finally:
             cur.close()
 
@@ -2243,14 +2241,15 @@ class StorageManagerSQLite(StorageManager):
 
     def _merge_ligands_and_results_tables(self, merge_id: int):
         """
-        Merges the Ligands tables. #TODO Interaction definitions are unique and independent of the Results table, so we only
-        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
+        Merges first the Ligands table, then the Results table, maintaining ligand_id and pose_id as primary keys,
+        where their relationship to the original PK is kept track of in the mering datble. Duplicate ligands will maintain
+        the ligand_id from the main database.
 
         Args:
             merge_id (int): merge session id
 
         Raises:
-            StorageError: _description_
+            StorageError
         """
         # convert ligand_ids and log
         convert_ligand_ids_sql = """INSERT INTO PK_conversions (
@@ -2298,7 +2297,7 @@ class StorageManagerSQLite(StorageManager):
         hydrogen_parents,
         input_model)
         SELECT 
-            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Ligands') new_id,
+            (SELECT merged_PK FROM PK_conversions WHERE original_PK = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
             LigName,
             ligand_smile,
             rdmol,
@@ -2357,65 +2356,58 @@ class StorageManagerSQLite(StorageManager):
             ligand_coordinates,
             flexible_res_coordinates) 
         SELECT 
-            II.merged_PK as pose_id,
-            I.ligand_id,
-            I.receptor,
-            I.pose_rank,
-            I.run_number,
-            I.docking_score,
-            I.leff,
-            I.deltas,
-            I.cluster_rmsd,
-            I.cluster_size,
-            I.reference_rmsd,
-            I.energies_inter,
-            I.energies_vdw,
-            I.energies_electro,
-            I.energies_flexLig,
-            I.energies_flexLR,
-            I.energies_intra,
-            I.energies_torsional,
-            I.unbound_energy,
-            I.nr_interactions,
-            I.num_hb,
-            I.about_x,
-            I.about_y,
-            I.about_z,
-            I.trans_x,
-            I.trans_y,
-            I.trans_z,
-            I.axisangle_x,
-            I.axisangle_y,
-            I.axisangle_z,
-            I.axisangle_w,
-            I.dihedrals,
-            I.ligand_coordinates,
-            I.flexible_res_coordinates
-        FROM merging.Results I
-                LEFT JOIN (SELECT original_PK, merged_PK 
-                FROM PK_conversions 
-                WHERE table_name = 'Results' 
-                AND merge_id = ?) II ON II.original_PK = I.Pose_ID;"""
-
-        # Adding new data to Results table with (updated) pose_id and ligand_id
-        insert_results = """
-        INSERT INTO Interactions (
-        Pose_ID,
-        interaction_id
-        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
-                FROM merging.Interactions I
-                LEFT JOIN (SELECT original_PK, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
-            LEFT JOIN (SELECT original_PK, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Interaction_indices' 
-                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
+            pose.merged_PK as pose_id,
+            ligand.merged_PK as ligand_id,
+            mr.receptor,
+            mr.pose_rank,
+            mr.run_number,
+            mr.docking_score,
+            mr.leff,
+            mr.deltas,
+            mr.cluster_rmsd,
+            mr.cluster_size,
+            mr.reference_rmsd,
+            mr.energies_inter,
+            mr.energies_vdw,
+            mr.energies_electro,
+            mr.energies_flexLig,
+            mr.energies_flexLR,
+            mr.energies_intra,
+            mr.energies_torsional,
+            mr.unbound_energy,
+            mr.nr_interactions,
+            mr.num_hb,
+            mr.about_x,
+            mr.about_y,
+            mr.about_z,
+            mr.trans_x,
+            mr.trans_y,
+            mr.trans_z,
+            mr.axisangle_x,
+            mr.axisangle_y,
+            mr.axisangle_z,
+            mr.axisangle_w,
+            mr.dihedrals,
+            mr.ligand_coordinates,
+            mr.flexible_res_coordinates
+        FROM merging.Results mr
+        LEFT JOIN (
+            SELECT original_PK, merged_PK 
+            FROM PK_conversions 
+            WHERE table_name = 'Results' 
+            AND merge_id = ?
+            ) pose 
+        ON pose.original_PK = mr.Pose_ID
+        LEFT JOIN (
+            SELECT original_PK, merged_PK 
+            FROM PK_conversions 
+            WHERE table_name = 'Ligands' 
+            AND merge_id = ?
+            ) ligand
+        ON (mr.ligand_id = ligand.original_PK);"""
 
         try:
             cur = self.conn.cursor()
-            # new stuff
             # insert and get new ligand ids
             cur.execute(
                 convert_ligand_ids_sql,
@@ -2428,127 +2420,19 @@ class StorageManagerSQLite(StorageManager):
                 (merge_id,),
             )
             # insert results with new pose_ids and ligand_ids
-
-            # # Ligand table has unique constraints and primary key is ligand_id so no checks needed
-            # merge_ligands = """INSERT INTO Ligands
-            #     SELECT * FROM merging.Ligands"""
-            # cur.execute(merge_ligands)
-            self.conn.commit()
-        except Exception as e:
-            raise StorageError("Error encountered while merging Ligands table") from e
-
-    def _merge_results_table(self, merge_id: int):
-        # TODO since the ligand id merge table stuff is issue now, this will also be issue
-        """
-        Merges the results table, will not check for duplicates. Will assign new pose_id/primary key
-        to the rows from the incoming Results table
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            StorageError
-        """
-
-        cur = self.conn.cursor()
-        convert_poseid_sql = """INSERT INTO PK_conversions (
-        merge_id,
-        table_name,
-        original_PK,
-        merged_PK) SELECT 
-        ?,
-        "Results", 
-        Pose_ID,
-        Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
-        FROM merging.Results;"""
-
-        # insert results with updated pose_ids
-        insert_Results = """INSERT INTO Results (
-            Pose_ID,
-            ligand_id,
-            receptor,
-            pose_rank,
-            run_number,
-            docking_score,
-            leff,
-            deltas,
-            cluster_rmsd,
-            cluster_size,
-            reference_rmsd,
-            energies_inter,
-            energies_vdw,
-            energies_electro,
-            energies_flexLig,
-            energies_flexLR,
-            energies_intra,
-            energies_torsional,
-            unbound_energy,
-            nr_interactions,
-            num_hb,
-            about_x,
-            about_y,
-            about_z,
-            trans_x,
-            trans_y,
-            trans_z,
-            axisangle_x,
-            axisangle_y,
-            axisangle_z,
-            axisangle_w,
-            dihedrals,
-            ligand_coordinates,
-            flexible_res_coordinates) 
-        SELECT 
-            II.merged_PK as pose_id,
-            I.ligand_id,
-            I.receptor,
-            I.pose_rank,
-            I.run_number,
-            I.docking_score,
-            I.leff,
-            I.deltas,
-            I.cluster_rmsd,
-            I.cluster_size,
-            I.reference_rmsd,
-            I.energies_inter,
-            I.energies_vdw,
-            I.energies_electro,
-            I.energies_flexLig,
-            I.energies_flexLR,
-            I.energies_intra,
-            I.energies_torsional,
-            I.unbound_energy,
-            I.nr_interactions,
-            I.num_hb,
-            I.about_x,
-            I.about_y,
-            I.about_z,
-            I.trans_x,
-            I.trans_y,
-            I.trans_z,
-            I.axisangle_x,
-            I.axisangle_y,
-            I.axisangle_z,
-            I.axisangle_w,
-            I.dihedrals,
-            I.ligand_coordinates,
-            I.flexible_res_coordinates
-        FROM merging.Results I
-                LEFT JOIN (SELECT original_PK, merged_PK 
-                FROM PK_conversions 
-                WHERE table_name = 'Results' 
-                AND merge_id = ?) II ON II.original_PK = I.Pose_ID;"""
-
-        try:
             cur.execute(
-                convert_poseid_sql,
-                (merge_id,),
+                insert_Results,
+                (
+                    merge_id,
+                    merge_id,
+                ),
             )
-            cur.execute(insert_Results, (merge_id,))
-            # commit after each large table in case there are memory constraints
+
             self.conn.commit()
         except Exception as e:
-            raise StorageError(f"Error during insertion of results: {e}") from e
+            raise StorageError(
+                f"Error encountered while merging Ligands and Results tables: \n{str(e)}"
+            ) from e
 
     def _merge_db_properties_table(self, merge_id: int):
         """
@@ -4735,7 +4619,7 @@ class StorageManagerSQLite(StorageManager):
                 f"Code base version {code_version} is not compatible with database schema version {db_version}."
             )
 
-    def check_ringtaildb_version(self):
+    def check_ringtaildb_version(self) -> tuple[bool, str]:
         """
         Checks the database version and confirms whether the code base is compatible with it
 
@@ -4768,6 +4652,31 @@ class StorageManagerSQLite(StorageManager):
             )
         cur.close()
         return is_compatible, db_version
+
+    def _check_if_db_compatible_for_merge(self, merging_db_alias: str) -> bool:
+        """
+        Method that checks if the database merging into main is compatible with main,
+        and checks if both databases are of appropriately high version where merge has
+        been implemented
+
+        Args:
+            merging_db_alias (str): alias for the database being merged into main
+
+        Returns:
+            bool: if the two databases are compatible
+        """
+        main_version = self.db_query("PRAGMA main.user_version").fetchone()[0]
+        merging_version = self.db_query(
+            f"PRAGMA {merging_db_alias}.user_version"
+        ).fetchone()[0]
+
+        if main_version != merging_version:
+            return False
+        # TODO this might be tied to the code version rather
+        if main_version < 200:
+            return False
+
+        return True
 
     def tables_in_db(self) -> list:
         """
@@ -4893,6 +4802,21 @@ class StorageManagerSQLite(StorageManager):
                 f"Error while setting the database schema version: {e}"
             ) from e
 
+    def _delete_filter_data(self, db_alias: str = None):
+        """
+        Empties all data in the filter and filtered_poses tables
+
+        Args:
+            db_alias (str, optional): if needing to empty tables from a connected, aliased database. Defaults to None.
+        """
+        if db_alias:
+            alias_string = db_alias + "."
+        else:
+            alias_string = ""
+        self.db_query(f"DELETE FROM {alias_string}Filters")
+        # delete all rows in bookmarks table
+        self.db_query(f"DELETE FROM {alias_string}filtered_poses", commit=True)
+
     def _drop_views(self, db_alias: str = None):
         """
         #TODO not sure if this is needed anymore
@@ -4935,6 +4859,8 @@ class StorageManagerSQLite(StorageManager):
         return con
 
     def close_storage(self, attached_db=None, vacuum=None):
+        # TODO might wanna make the cleanup part its own method,
+        # that includes reindexing
         """
         Closes storage
         """
