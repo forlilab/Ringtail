@@ -14,7 +14,7 @@ from .outputmanager import OutputManager
 from .querybuilder import QueryBuilder
 from .ringtailoptions import *
 from .util import *
-from .exceptions import RTCoreError, OutputError, StorageError
+from .exceptions import RTCoreError, OutputError, StorageError, ResultsProcessingError
 from rdkit import Chem
 import itertools
 import os
@@ -105,17 +105,18 @@ class RingtailCore:
             file (str, optional: list(str)): ligand result file
             file_path (str, optional: list(str)): list of folders containing one or more result files
             file_list (str, optional: list(str)): list of ligand result file(s)
-            file_pattern (str): file pattern to use with recursive search in a file_path, "*.dlg*" for AutoDock-GDP and "*.pdbqt*" for vina
             recursive (bool): used to recursively search file_path for folders inside folders
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
+            overwrite (bool): whether or not to overwrite existing storage
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
+            finalize (bool, optional): whether to finalize database creation and write indices, or wait, for example when you write to the db in batches
 
         Raises:
             OptionError
@@ -169,15 +170,17 @@ class RingtailCore:
         Creates or adds to an existing a database.
 
         Args:
-            results_string (dict): string containing the ligand identified and docking results as a dictionary
+            results (dict): string containing the ligand identified and docking results as a dictionary
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
+            overwrite (bool): whether or not to overwrite existing storage
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
+            finalize (bool, optional): whether to finalize database creation and write indices, or wait, for example when you write to the db in batches
 
         Raises:
             OptionError
@@ -215,12 +218,12 @@ class RingtailCore:
 
     def finalize_write(self):
         """
-        Finalize database write by creating interaction tables and setting database version
+        Finalize database write by creating indices
         """
         with self.storageman:
             self.storageman.finalize_database_write()
 
-    def save_receptor(self, receptor_file):
+    def save_receptor(self, receptor_file: str):
         """
         Add receptor to database.
 
@@ -234,16 +237,19 @@ class RingtailCore:
                 # NOTE: in current implementation, only one receptor allowed per database
                 # Check that any receptor row is incomplete (needs receptor blob) before inserting
                 filled_receptor_rows = self.storageman.count_receptors_in_db()
-                if (
-                    filled_receptor_rows != 0
-                ):  # throw error if receptor is already present
-                    raise RTCoreError(
-                        "Expected Receptors table to have no receptor objects present, already has {0} receptor present. Cannot add more than 1 receptor to a database.".format(
-                            filled_receptor_rows
+                if filled_receptor_rows != 0:
+                    # check if you are trying to add the same receptor, or a different receptor
+                    if (
+                        receptor_file.split(os.extsep)[0]
+                        != self.get_receptor_object()[0]
+                    ):
+                        logger.warning(
+                            "You attempted to add a receptor to a database that already has a receptor in it, and they do not appear to be the same receptor."
                         )
+                    # throw error if receptor is already present
+                    raise RTCoreError(
+                        "Expected Receptors table to have no receptor objects present, already has a receptor present. Cannot add more than 1 receptor to a database."
                     )
-                # TODO instead it should check if same receptors, and carry on if they are,
-                # or error out ifthey are different
                 self.storageman.insert_receptor_blob(rec, rec_name)
                 self.logger.info("Receptor data was added to the database.")
 
@@ -348,7 +354,9 @@ class RingtailCore:
         filter_bookmark: str = None,
         return_iter: bool = False,
     ) -> Union[int, iter]:
-        """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
+        """Prepare list of filters, then filters and writes all passing pose_ids to a bookmark of given name. Creates an output log text file of all ligand (or all poses, if requested) docking results that passes.
+        If clustering is requested, it will first perform the filtering, then cluster, and create a new bookmark of name <bookmark_<cluster_type>_cluster> for each requested cluster type.
+        In the case of clustering, the representative ligands will be the ones written to the output log.
 
         Args:
             Filters:
@@ -375,19 +383,6 @@ class RingtailCore:
                 mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
                 interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
                 log_file (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
-                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION. Some available fields are shown, although any sortable column in Ligands or Results tables are OK:\n
-                    "e" (docking_score),
-                    "le" (ligand efficiency),
-                    "delta" (delta energy from best pose),
-                    "ref_rmsd" (RMSD to reference pose),
-                    "e_inter" (intermolecular energy),
-                    "e_vdw" (van der waals energy),
-                    "e_elec" (electrostatic energy),
-                    "e_intra" (intermolecular energy),
-                    "n_interact" (number of interactions),
-                    "rank" (rank of ligand pose),
-                    "run" (run number for ligand pose),
-                    "hb" (hydrogen bonds);
                 outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. `--outfields=e,le,hb`; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column. Any column in Results and Ligands tables are available, although one of the following is recommended: \n
                     "Ligand_name" (Ligand name),
                     "e" (docking_score),
@@ -404,6 +399,19 @@ class RingtailCore:
                     "run" (run number for ligand pose),
                     "hb" (hydrogen bonds),
                     "receptor" (receptor name)
+                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION. Some available fields are shown, although any sortable column in Ligands or Results tables are OK:\n
+                    "e" (docking_score),
+                    "le" (ligand efficiency),
+                    "delta" (delta energy from best pose),
+                    "ref_rmsd" (RMSD to reference pose),
+                    "e_inter" (intermolecular energy),
+                    "e_vdw" (van der waals energy),
+                    "e_elec" (electrostatic energy),
+                    "e_intra" (intermolecular energy),
+                    "n_interact" (number of interactions),
+                    "rank" (rank of ligand pose),
+                    "run" (run number for ligand pose),
+                    "hb" (hydrogen bonds);
                 bookmark_name (str): name for resulting book mark file. Default value is 'passing_results'
                 filter_bookmark (str): name of bookmark to perform filtering over
                 return_iter (bool): return an iterable of all of the filtering results
@@ -475,6 +483,8 @@ class RingtailCore:
         else:
             filter_dict = filters.asdict()
             write_one_bookmark = True
+
+        # parse clustering
         clustering = {}
         if mfpt_cluster or interaction_cluster:
             if mfpt_cluster:
@@ -565,7 +575,7 @@ class RingtailCore:
                 formatted_query = self.storageman.get_bookmark_selection(
                     bookmark_name, outfields, not output_all_poses, order_results
                 )
-                # have to make it into list of tuples since storageman uses row factory right now
+                # have to make it into list of tuples since storageman uses row factory
                 iter = [
                     tuple(row)
                     for row in self.storageman.db_query(formatted_query).fetchall()
@@ -574,7 +584,20 @@ class RingtailCore:
         else:
             return num_passing_ligands
 
-    def cluster(self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5):
+    def cluster(
+        self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5
+    ) -> str:
+        """
+        Clusters data in a bookmark using given cluster algorithm and with given cutoff distance.
+
+        Args:
+            bookmark_name (str): bookmark name that describes what data to cluster
+            type (str, optional): cluster algirithm. Defaults to "mfp".
+            cutoff (float, optional): cutoff distance for each cluster. Defaults to 0.5.
+
+        Returns:
+            str: bookmark name describing the representative poses for the clustered data
+        """
         with self.storageman as sm:
             bookmark_name, num_clusters = sm.cluster_data(
                 bookmark_name,
@@ -588,7 +611,7 @@ class RingtailCore:
 
     def write_flexres_pdb(
         self, receptor_polymer, ligname: str, filename: str, bookmark_name: str = None
-    ):
+    ) -> tuple[Chem.rdchem.Mol, dict]:
 
         from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 
@@ -600,26 +623,16 @@ class RingtailCore:
             ligname (str): ligand name for which the receptor flexible residue info should be collected
             filename (str): name of the output pdb, extension is optional, will default to '.pdb'
             bookmark_name (str, optional): if provided, it will only export flex res for ligand poses passing bookmark filters
+        
+        Returns
+            Chem.rdchem.Mol: the Mol object for the given ligand
+            dict: dictionary describing the Mols for the flexible residues
         """
         # make flexres rdkit mols for ligand-receptor docking
-
-        with self.storageman:
-            ligname, rdmol, atom_index_map, hydrogen_parents = (
-                self.storageman.fetch_ligand_rdkit_relevant_info(ligname)
-            )
-        flexible_residues, flexres_atomnames = self._get_receptor_flexres_info()
-
-        pose_ids = self._get_ligand_poses(ligname, bookmark_name=bookmark_name)
-
-        ligand_mol, flexres_mols, _ = self._create_rdkit_mol(
-            ligname,
-            rdmol,
-            atom_index_map,
-            hydrogen_parents,
-            flexible_residues,
-            flexres_atomnames,
-            pose_ids=pose_ids,
+        ligand_mol, flexres_mols, flexible_residues = self._ligand_pose_to_mol(
+            ligname, bookmark_name=bookmark_name
         )
+
         if filename:
             # if providing filename, make sure it has .pdb extension
             root, ext = os.path.splitext(filename)
@@ -705,7 +718,9 @@ class RingtailCore:
                     sdf_path,
                 )
 
-    def ligands_rdkit_mol(self, bookmark_name, write_nonpassing=False) -> dict:
+    def ligands_rdkit_mol(
+        self, bookmark_name: str, write_nonpassing: bool = False
+    ) -> dict:
         """
         Creates a dictionary of RDKit mols of all ligands specified from a bookmark, either excluding (default) or including
         those ligands that did not pass the filter(s).
@@ -757,7 +772,7 @@ class RingtailCore:
 
     def find_similar_ligands(
         self, query_ligname: str, log_file: str = "cluster_log.txt"
-    ):
+    ) -> int:
         """
         Find ligands in cluster with query_ligname
 
@@ -824,7 +839,7 @@ class RingtailCore:
 
         return bookmark_db_name
 
-    def export_receptors(self):
+    def export_receptor(self):
         """
         Export receptor in database to pdbqt
         """
@@ -839,17 +854,19 @@ class RingtailCore:
 
     def get_previous_filter_data(
         self,
-        bookmark_name,
+        bookmark_name: str,
         outfields: str = "Ligname,docking_score",
         order_results: str = "ligname",
-        log_file=None,
+        log_file: str = None,
     ):
-        """Get data requested in self.out_opts['outfields'] from the
+        """Get data requested in outfields from the
         results bookmark of a previous filtering
 
         Args:
-            outfields (str): use outfields as described in RingtailOptions > StorageOptions
             bookmark_name (str): bookmark for which the filters were used
+            outfields (str, optional): columns to write to the output. Defaults to "Ligname,docking_score".
+            order_results (str, optional): how to order the data. Defaults to "ligname".
+            log_file (str, optional): log file name to write to. Defaults to None.
         """
         if bookmark_name is None:
             raise OptionError("A bookmark name has to be provided")
@@ -860,19 +877,52 @@ class RingtailCore:
         with OutputManager(log_file) as opm:
             opm.write_filter_results_in_log(new_data)
 
+    def get_plot_data(self, bookmark_name: str = None, include_status: bool = False):
+        """
+        Get ligand efficiency and energy for all docking data and for ligands that passed
+        filtering in specified bookmark. Each tuple in the respective lists contains
+        docking_score, leff, pose_id, and ligand name. If requested, will also include
+        pose_id status if previously assigned
+
+        Args:
+            bookmark_name (str): name for which to fetch passing poses
+            include_status (bool, optional): Whether to include pose_id status in the data (a 5th column). Defaults to False
+
+        Returns:
+            list(tuple), list(tuple): [all_data <only docking score and ligand efficiency], [filtered_data <also includes pose id and ligand name>]
+        """
+        with self.storageman:
+            all_data, passing_data = self.storageman.get_plot_data(
+                bookmark_name, include_status=include_status
+            )
+
+        return all_data, passing_data
+
+    def get_receptor_object(self) -> tuple:
+        """
+        Gets the receptor object from the database
+
+        Returns:
+            tuple: receptor name and receptor blob
+        """
+        with self.storageman as sm:
+            return sm.fetch_receptor_object()
+
     # endregion
 
     # region visualize ringtail
 
-    def plot(self, bookmark_name: str, save=True, return_fig_handle: bool = False):
+    def plot(
+        self, bookmark_name: str, save: bool = True, return_fig_handle: bool = False
+    ) -> Union[None, plt.Figure]:
         """
         Get data needed for creating Ligand Efficiency vs
         Energy scatter plot from storageManager. Call OutputManager to create plot.
         Option to save the plot and close it immediately, or keep it open and save it manually later.
 
         Args:
-            save (bool): whether to save plot to cd. Will save and close figure
             bookmark_name (str): bookmark from which to fetch filtered data to plot
+            save (bool): whether to save plot to cd. Will save and close figure
             return_fig_handle (bool): use to return a handle to the matplotlib figure instead of saving or showing figure
 
         Returns:
@@ -935,29 +985,6 @@ class RingtailCore:
             return fig
         else:
             plt.show()
-
-    def get_plot_data(self, bookmark_name: str, include_status=False):
-        """
-        Get ligand efficiency and energy for all docking data and for ligands that passed
-        filtering in specified bookmark. Each tuple in the respective lists contains
-        docking_score, leff, pose_id, and ligand name.
-
-        Args:
-            bookmark_name (str):
-
-        Returns:
-            list(tuple), list(tuple): [all_data], [filtered_data]
-        """
-        with self.storageman:
-            all_data, passing_data = self.storageman.get_plot_data(
-                bookmark_name, include_status=include_status
-            )
-
-        return all_data, passing_data
-
-    def get_receptor_object(self) -> tuple:
-        with self.storageman as sm:
-            return sm.fetch_receptor_object()
 
     def display_pymol(self, bookmark_name, integrate: bool = False, canvas=None):
         # TODO update to new gui viewer paradigm
@@ -1110,9 +1137,7 @@ class RingtailCore:
                 self.logger.info(f"LigName: {ligname}; Pose_ID: {pose_id}")
 
                 # make rdkit mol for poseid
-                mol, flexres_mols, flexible_residues = self._pose_to_mol(
-                    pose_id, ligname
-                )
+                mol, flexres_mols, flexible_residues = self._ligand_pose_to_mol(pose_id)
 
                 # update custom viewer
                 # also leave the pymol option available
@@ -1175,8 +1200,8 @@ class RingtailCore:
         Updates the status of a given pose so that it is only ever in one status table
 
         Args:
-            pose_id (int)
-            status (str)
+            pose_id (int): pose id for which a status is assigned
+            status (str): new status
 
         Raises:
             OptionError
@@ -1279,19 +1304,6 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.calculate_percentiles(column, num_bins, table)
 
-    def update_database_version(self, consent=False, new_version="3.0.0"):
-        """Method to update database version from earlier versions to either 1.1.0, 2.0.0, or 3.0.0"""
-        return self.storageman.update_database_version(new_version, consent)
-
-    def merge_databases(self, merging_db: str, backup: bool = True):
-
-        self.logger.warning(
-            "If you have performed clustering, this data will be lost in the new, merged database. "
-        )
-        # create merge tables
-        with self.storageman as sm:
-            sm.merge_databases(**{"merging_db": merging_db, "backup": backup})
-
     def delete_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database
 
@@ -1305,7 +1317,7 @@ class RingtailCore:
             f"Bookmark {bookmark_name} was dropped from the database {self.db_file}"
         )
 
-    def get_bookmark_names(self):
+    def get_bookmark_names(self) -> list:
         """
         Method to retrieve all bookmark names in a database
 
@@ -1314,6 +1326,48 @@ class RingtailCore:
         """
         with self.storageman:
             return self.storageman.get_all_bookmark_names()
+
+    def merge_databases(self, merging_db: str, backup: bool = True):
+        """
+        Method that merges two databases, ensuring integrity of primary and foreign keys.
+        The merging will create a new table if needed, that keeps track of the primary key
+        in the original and the merged database on a per-table basis. Another table will also
+        keep track of how many databases has been merged into the primary database.
+        The merging will ensure the two databases are -compatible based on the receptor only-.
+        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
+            these will be allowed to merge.
+
+        Args:
+            merging_db (str): path to database being merged into current db
+            backup (bool, optional): whether or not to back up the current db before merging. Defaults to True.
+        """
+
+        self.logger.warning(
+            "If you have performed clustering, this data will be lost in the new, merged database. "
+        )
+        # create merge tables
+        with self.storageman as sm:
+            sm.merge_databases(**{"merging_db": merging_db, "backup": backup})
+
+    def update_database_version(self, consent=False, new_version="3.0.0"):
+        """
+        Updates/upgrades sqlite database schema 1.0.0 through 3.0.0. The upgrade may take a while to
+        complete, as it has to upgrade via each major upgrade, e.g., it will not upgrade straight
+        from 1.0.0 to 3.0.0, but rather 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0 etc.
+
+        Please #NOTE that currently no backup is made of the database, so please do this prior to
+            upgrading.
+
+
+        Args:
+            consent (bool, optional): You have to give explicit consent to perform upgrade. Defaults to False.
+            new_version (str, optional): What version you want to upgrade to. Defaults to "3.0.0".
+
+        Returns:
+            bool: consent/success
+        """
+
+        return self.storageman.update_database_version(new_version, consent)
 
     @staticmethod
     def defaults() -> dict:
@@ -1331,15 +1385,10 @@ class RingtailCore:
 
     @staticmethod
     def generate_config_file_template():
-        """Outputs to "config.json in current working directory if to_file = true,
-        else it returns the dict of default option values used for API (for command
-        line a few more options are included that are always used explicitly when using API)
-
-        Args:
-            to_file (bool): whether to produce the template as a json string or as a file "config.json"
+        """Outputs to "config.json in current working directory
 
         Returns:
-            str: file name of config file or json string with template including default values
+            str: file name of config file with template including default values
         """
 
         filename = "config.json"
@@ -1395,7 +1444,7 @@ class RingtailCore:
         ligand_saved_coords,
         flexres_saved_coords,
         properties,
-    ):
+    ) -> tuple:
         """Add poses from given cursor to rdkit mols for ligand and flexible residues
 
         Args:
@@ -1408,6 +1457,8 @@ class RingtailCore:
             flexres_saved_coords (list): list of lists of flexres coords to save for adding hydrogens later
             properties (dict): Dictionary of lists of properties, with each element corresponding to that conformer in the rdkit mol
 
+            Returns:
+                tuple: mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
         """
         for (
             Pose_ID,
@@ -1453,6 +1504,20 @@ class RingtailCore:
         passing_only: bool = None,
         bookmark_name: str = None,
     ) -> list[int]:
+        """
+        Gets all poses for a ligand, or passing poses only from bookmark if specified
+
+        Args:
+            ligand_name (str): ligand name
+            passing_only (bool, optional): if only returning poses passing filter. Defaults to None.
+            bookmark_name (str, optional): bookmark name which describes the passing poses. Defaults to None.
+
+        Raises:
+            OptionError
+
+        Returns:
+            list[int]: list of requested poses
+        """
         query = QueryBuilder()
 
         query = (
@@ -1463,24 +1528,14 @@ class RingtailCore:
         )
 
         if bookmark_name and passing_only:
-            filtered_query = QueryBuilder()
-            subquery, params = query.build()
-            filtered_query = (
-                filtered_query.WITH_SUBQUERY("lig_poses", subquery, params)
-                .SELECT("lp.pose_id")
-                .FROM("lig_poses", "lp")
-                .JOIN("filtered_poses", "fp", "pose_id", "lig_poses")
-                .JOIN("filters", "f", "filter_id", "filtered_poses")
-                .WHERE("f.name=?", bookmark_name)
-            )
-            query_string, params = filtered_query.build()
+            query.IN_BOOKMARK(bookmark_name)
 
         elif passing_only and not bookmark_name:
             raise OptionError(
                 "Cannot find passing poses without providing a bookmark name."
             )
 
-        return [row["pose_id"] for row in self.db_query(query_string, params)]
+        return [row["pose_id"] for row in self.db_query(*query.build())]
 
     def _create_rdkit_mol(
         self,
@@ -1491,7 +1546,7 @@ class RingtailCore:
         flexible_residues,
         flexres_atomnames,
         pose_ids: Union[list, int] = None,
-    ):
+    ) -> tuple:
         """Creates rdkit molecule for given ligand, either for a specific pose_ID or for all passing (and nonpassing?) poses
 
         Args:
@@ -1583,19 +1638,40 @@ class RingtailCore:
 
         return mol, flexres_mols, properties
 
-    def _pose_to_mol(self, pose_id, ligname):
+    def _ligand_pose_to_mol(
+        self,
+        ligname: str = None,
+        pose_id: Union[list, int] = None,
+        bookmark_name: str = None,
+    ) -> tuple[Chem.rdchem.Mol, dict, list]:
         """
-        _summary_
+        Will create rdkit Mols of requested data, including:
+        only ligand name: all poses of that ligand
+        ligand name + bookmark_name: ligand poses pasing filter
+        pose_id: will get ligand name for that pose, and create Mol for that pose only
+        pose_id and bookmark_name (optional ligname): specified pose(s) as well as passing poses
 
         Args:
-            pose_id (_type_): _description_
-            ligname (_type_): _description_
+            ligname (str, optional): _description_. Defaults to None.
+            pose_id (Union[list, int], optional): _description_. Defaults to None.
+            bookmark_name (str, optional): _description_. Defaults to None.
 
         Returns:
-            _type_: _description_
+            tuple[Chem.rdchem.Mol, dict, list]: mol, flexres_mols, flexible_residues
         """
+        if not ligname and pose_id:
+            with self.storageman as sm:
+                ligname = sm.get_ligname_from_pose(pose_id)
+
+        if bookmark_name:
+            filtered_poses = self._get_ligand_poses(ligname, True, bookmark_name)
+            if filtered_poses:
+                if type(pose_id) == int:
+                    pose_id = [pose_id]
+                pose_id.extend(filtered_poses)
+
         # make rdkit mol for poseid
-        ligname, rdmol, atom_index_map, hydrogen_parents = (
+        rdmol, atom_index_map, hydrogen_parents = (
             self.storageman.fetch_ligand_rdkit_relevant_info(ligname)
         )
         flexible_residues, flexres_atomnames = self._get_receptor_flexres_info()
@@ -1627,9 +1703,9 @@ class RingtailCore:
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
 
         Args:
-            results_sources(InputFiles or InputStrings): type checked and validated results object
-            strings (bool): whether or not results are provided as strings or files
+            results (ResultsObject): type checked and validated results object
             duplicate_handling (str): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
+            overwrite (bool): whether or not to overwrite existing storage
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
@@ -1680,6 +1756,19 @@ class RingtailCore:
             duplicate_handling,
         )
 
+        # need receptor file contents if adding interaction
+        if add_interactions:
+            # grab receptor info from database, this assumes there is only one receptor in the database
+            receptor_blob = self.get_receptor_object()[1]
+            try:
+                from .receptormanager import ReceptorManager as rm
+
+                results.receptor_string = rm.blob2str(receptor_blob)
+            except:
+                raise ResultsProcessingError(
+                    "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                )
+
         self.logger.info("Adding results...")
         self.resultsman.process_docking_data(results, processing_options)
         with self.storageman:
@@ -1696,24 +1785,24 @@ class RingtailCore:
         output_all_poses: bool,
         order_results: str,
         clustering: dict = {},
-        max_miss_combs=None,
+        max_miss_combs: int = None,
         append_to_log: bool = None,
     ):
         """
         Args:
-            bookmark_name (str): _description_
-            filters (dict): _description_
-            num_passing_ligands (int): _description_
-            log_file (str): _description_
-            output_fields (Union[str, list]): _description_
-            output_all_poses (bool): _description_
-            order_results (str): _description_
-            clustering (dict, optional): _description_. Defaults to {}.
-            max_miss_combs (_type_, optional): _description_. Defaults to None.
-            append_to_log (bool, optional): _description_. Defaults to None.
+            bookmark_name (str): describing the passing poses
+            filters (dict): filters used to pass the poses
+            num_passing_ligands (int): number passing ligands
+            log_file (str): name of file to write to
+            output_fields (Union[str, list]): output columns to include
+            output_all_poses (bool): whether or not to output one or all passing poses
+            order_results (str): if ordering the results by a specific column
+            clustering (dict, optional): dict describing any clustering done. Defaults to {}.
+            max_miss_combs (int, optional): how many max_miss combinations were used. Defaults to None.
+            append_to_log (bool, optional): whether or not to append to existing logfile. Defaults to None.
 
         Raises:
-            OptionError: _description_
+            OptionError
         """
         if not order_results:
             order_results = "ligname"
@@ -1741,11 +1830,15 @@ class RingtailCore:
                 )
             opm.log_num_passing_ligands(num_passing_ligands)
 
-    def _generate_interaction_combinations(self, filters, max_miss):
+    def _generate_interaction_combinations(self, filters: dict, max_miss: int) -> list:
         """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
 
         Args:
+            filters (dict): filter object with all filters
             max_miss (int): Maximum number of interactions to be excluded
+
+        Returns:
+            list: of interaction combinations for that specific combo
         """
 
         all_interactions = []
@@ -1777,6 +1870,7 @@ class RingtailCore:
         """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
 
         Args:
+            filters (dict): original filters to be used as basis for creating specific filter setup given an interaction combo
             interaction_combination (list): list of interactions to be included in this round of filtering
 
         Returns:
@@ -1792,7 +1886,19 @@ class RingtailCore:
 
         return filters
 
-    def _validate_bookmark_name(self, bookmark_name):
+    def _validate_bookmark_name(self, bookmark_name: str) -> str:
+        """
+        Ensures a bookmark exist, and runs checks on it
+
+        Args:
+            bookmark_name (str)
+
+        Raises:
+            StorageError
+
+        Returns:
+            str: bookmark name if valid
+        """
         with self.storageman:
             if self.storageman.bookmark_exists(bookmark_name):
                 # check if has max_miss filter
@@ -1835,7 +1941,17 @@ class RingtailCore:
                 )
         return bookmark_name
 
-    def _get_receptor_flexres_info(self, receptor: Union[str, int] = 1):
+    def _get_receptor_flexres_info(self, receptor: Union[str, int] = 1) -> tuple:
+        """
+        Gets flexible residue info for the receptor, either given recepetor name, or receptor id.
+
+
+        Args:
+            receptor (Union[str, int], optional): receptor name or id. Defaults to 1, which is equivalent to get -the- receptor since only on allowed
+
+        Returns:
+            tuple: flexible_residues, flexres_atomnames
+        """
         with self.storageman as sm:
             flexible_residues, flexres_atomnames = sm.fetch_flexres_info(receptor)
         if flexible_residues is None:
@@ -1853,11 +1969,11 @@ class RingtailCore:
         Takes dictionary with one or more cluster constraints and performs clustering one after another
 
         Args:
-            cluster_data (dict): _description_
-            bookmark_name (str): _description_
+            cluster_data (dict): containing cluster types to be performed and their cutoffs
+            bookmark_name (str): bookmark over which to perform the clustering
 
         Returns:
-            _type_: _description_
+            tuple[str,int]: bookmark name of representative poses as well as count of clusters
         """
         with self.storageman:
             count_poses = self.storageman.get_passing_poses_count(bookmark_name, False)

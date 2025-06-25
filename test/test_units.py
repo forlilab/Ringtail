@@ -309,7 +309,7 @@ class TestRingtailCore:
 
     def test_export_receptor(self, db_query):
         rtc = RingtailCore(db_file="output.db")
-        rtc.export_receptors()
+        rtc.export_receptor()
         curs = db_query("SELECT RecName FROM Receptors;")
         receptor_name = curs.fetchone()[0]
         receptor_file = receptor_name + ".pdbqt"

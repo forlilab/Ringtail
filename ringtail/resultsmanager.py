@@ -76,28 +76,6 @@ class ResultsManager:
             )
             processing_options["interaction_tolerance"] = None
 
-        # need receptor file contents if adding interaction
-        if processing_options.get("add_interactions"):
-            # build local storageman to retrieve receptor
-            db_file = self.writer_options.get("db_file")
-            print(f"The writer options: {self.writer_options}")
-            storageman = StorageManager.check_storage_compatibility(
-                self.writer_options.get("storageman_class")
-            )
-            with storageman(db_file) as sm:
-                try:
-                    from .receptormanager import ReceptorManager as rm
-
-                    # grab receptor info from database, this assumes there is only one receptor in the database
-                    receptor_blob = sm.fetch_receptor_object()[
-                        1
-                    ]  # method returns an iter of tuples, blob is the second tuple element in the first list element
-                    # convert receptor blob to string
-                    results.receptor_string = rm.blob2str(receptor_blob)
-                except:
-                    raise ResultsProcessingError(
-                        "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
-                    )
         # NOTE: if implementing a new parser manager (i.e. serial) must add it to this dict
         implemented_parser_managers = {
             "multiprocessing": MPManager,

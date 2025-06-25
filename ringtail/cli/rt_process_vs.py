@@ -93,7 +93,7 @@ def main():
 
             # export receptor as .pdbqt
             if cli.output_options.export_receptor:
-                rtcore.export_receptors()
+                rtcore.export_receptor()
 
             # plot if requested
             if cli.output_options.plot:

@@ -758,6 +758,18 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def get_ligname_from_pose(self, pose_id: int) -> str:
+        """
+        Get ligand name given a pose_id
+
+        Args:
+            pose_id (int): pose id for which to get ligand name
+
+        Returns:
+            str: ligand name
+        """
+        raise_not_implemented()
+
     def count_receptors_in_db(self):
         """returns number of rows in Receptors table where receptor_object already has blob
 
@@ -2480,11 +2492,6 @@ class StorageManagerSQLite(StorageManager):
                 "Error encountered while merging db_properties table"
             ) from e
 
-    def _merge_filtered_data(self):
-        # TODO
-        # deal with new tables for filtering
-        pass
-
     # endregion
 
     # region Methods for dealing with bookmarks
@@ -2577,6 +2584,22 @@ class StorageManagerSQLite(StorageManager):
         logger.info(
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
         )
+
+    def get_ligname_from_pose(self, pose_id: int) -> str:
+        """
+        Get ligand name given a pose_id
+
+        Args:
+            pose_id (int): pose id for which to get ligand name
+
+        Returns:
+            str: ligand name
+        """
+        query = QueryBuilder()
+        query.SELECT("L.LigName").FROM("Ligands", "L").JOIN(
+            "Results", "R", "ligand_id"
+        ).WHERE("R.pose_id =?", pose_id)
+        return self.db_query(*query.build()).fetchone()[0]
 
     def get_bookmark_selection(
         self,
@@ -4004,11 +4027,8 @@ class StorageManagerSQLite(StorageManager):
                 f"Requested column {column} is not a numeric column, cannot get value range."
             )
 
-    def fetch_receptor_object(self):
+    def fetch_receptor_object(self) -> Union[None, tuple]:
         """Returns all Receptor objects from database
-
-        Args:
-            rec_name (str): Name of receptor to return object for
 
         Returns:
             tuple: of receptor name and object
@@ -4138,7 +4158,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             cur.execute(
-                f"SELECT LigName, rdmol, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
+                f"SELECT rdmol, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
             )
             info = cur.fetchone()
             cur.close()
@@ -4746,7 +4766,13 @@ class StorageManagerSQLite(StorageManager):
         return consent
 
     def _update_db_100_to_110(self):
+        """
+        Will update a database of version 1.0.0 to 1.1.0, which renames energies_binding to docking_score in Results, adds a column in Bookmarks to store filters dict,
+        and add indices to Results and Interaction_indices
 
+        Raises:
+            DatabaseConnectionError
+        """
         self._drop_views()
         # create cursor
         cur = self.conn.cursor()
@@ -4772,7 +4798,8 @@ class StorageManagerSQLite(StorageManager):
 
     def _update_db_110_to_200(self):
         """
-        Method to update from database v 1.1.0 to 2.0.0, will remove bitvetor table and create Interactions table
+        Method to update from database v 1.1.0 to 2.0.0,mainly removes the bitvetor table and creates Interactions table
+        where interaction just lists Pose_id and interaction_id in a long-skinny table
 
         Raises:
             DatabaseConnectionError
@@ -4822,6 +4849,18 @@ class StorageManagerSQLite(StorageManager):
             ) from e
 
     def _update_db_200_to_300(self):
+        """
+        Upgrades database from 2.0.0 to 3.0.0.
+        This includes
+        - converting the a chemicalite object in the Ligands table to a serialized blob (removing chemicalite dependency)
+        - giving ligands a ligand_id which is used in Results instead of LigName
+        - removes the use of views for storing filtered data, instead adds a Filtered_poses table to store all passing poses
+        - keeps bookmark table but gives each bookmark an id which is used in the Filtered_poses table
+        - removes some of the rarely used indices and adds a few others for minimizing db file size
+
+        Raises:
+            StorageError
+        """
         # drop views first, because they depend on tables that will be altered
         self._drop_views()
         self._delete_table("Bookmarks")
@@ -4842,6 +4881,16 @@ class StorageManagerSQLite(StorageManager):
 
         # create a temp connection function
         def _smile_to_rdbin(smile):
+            """
+            Temporary db connection method that will use rdkit to convert smiles to Mol
+            inline in the sql query
+
+            Args:
+                smile (str): smiles describing ligand
+
+            Returns:
+                blob: binary Chem.rdchem.Mol ready to insert in db
+            """
             try:
                 mol = Chem.MolFromSmiles(smile)
                 if mol is None:
@@ -4854,7 +4903,6 @@ class StorageManagerSQLite(StorageManager):
         self.conn.create_function("smile_to_rdbin", 1, _smile_to_rdbin)
 
         # populate with data from original ligands table, will autogenerate ligand_id PK
-        # oops! I removed chemicalite too
         self.db_query(
             """INSERT INTO Ligands_new (
                 LigName,
@@ -5005,7 +5053,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _drop_views(self, db_alias: str = None):
         """
-        #TODO not sure if this is needed anymore
+        Will drop views and clear bookmark table
 
         Args:
             db_alias (str, optional): if needing to drop views from a connected, aliased database. Defaults to None.
@@ -5255,7 +5303,6 @@ class StorageManagerSQLite(StorageManager):
         return cur
 
     def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
-        # TODO should be able to discontinue
         """
         A db query that also commits if/when specified
 
