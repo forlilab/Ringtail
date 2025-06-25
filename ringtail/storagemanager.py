@@ -406,7 +406,7 @@ class StorageManager:
         if not rt_version_same:
             # NOTE will cause error when any version int is > 10
             raise StorageError(
-                f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail update script(s) to update database if needed."
+                f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail upgrade script to upgrade database if needed."
             )
 
         # get the final filter query, has a {selection} place holder
@@ -2104,7 +2104,7 @@ class StorageManagerSQLite(StorageManager):
             logger.info(
                 f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
             )
-            self._cleanup_storage(merging_db, vacuum=True, reindex=True)
+            self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
             logger.info("The final database has neem cleaned up, and indices rebuilt.")
         finally:
             cur.close()
@@ -4653,7 +4653,7 @@ class StorageManagerSQLite(StorageManager):
                 f"Database version {db_schema_ver} is NOT compatible with code base version {version('ringtail')}"
             )
         cur.close()
-        return is_compatible, db_version
+        return is_compatible, db_schema_ver
 
     def _check_if_db_compatible_for_merge(self, merging_db_alias: str) -> bool:
         """
@@ -4712,7 +4712,7 @@ class StorageManagerSQLite(StorageManager):
         # get consent, same for both
         if not consent:
             logger.warning(
-                "WARNING: All existing bookmarks in database will be dropped during database update!"
+                "WARNING: All existing filters and bookmarks in database will be dropped during database update!"
             )
             consent = input("Type 'yes' if you wish to continue: ") == "yes"
         if not consent:
@@ -4720,7 +4720,7 @@ class StorageManagerSQLite(StorageManager):
             sys.exit(1)
 
         original_version = self.check_ringtaildb_version()[1]
-        logger.info(
+        print(
             f"Upgrading {self.db_file} of version {original_version} to version {new_version}:"
         )
 
@@ -5056,7 +5056,7 @@ class StorageManagerSQLite(StorageManager):
         self.conn.close()
 
     def _cleanup_storage(
-        self, attached_db: str = None, vacuum: bool = None, reindex=False
+        self, attached_db_alias: str = None, vacuum: bool = None, reindex=False
     ):
         """
         Cleans up storage, especially useful for situations where two databases
@@ -5069,8 +5069,8 @@ class StorageManagerSQLite(StorageManager):
             reindex (bool, optional): deletes and reruns all indixes. Defaults to False.
 
         """
-        if attached_db is not None:
-            self._detach_db(attached_db)
+        if attached_db_alias is not None:
+            self._detach_db(attached_db_alias)
         if reindex:
             self.db_query("REINDEX", commit=True)
         # vacuum database
