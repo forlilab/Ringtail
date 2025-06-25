@@ -1270,12 +1270,12 @@ class RingtailCore:
     ) -> tuple[float, float]:
         """
         Get min and max of a given column, if column is numeric. Currently only works for
-        columns in the Results table. If given table is a bookmark, it will limit the data to
+        columns in the Results table. If given table is a bookmark name, it will limit the data to
         get min/max for by the range of poses represented in the bookmark.
 
         Args:
             column (str): name of column for which to get range
-            table (str): table limit data, e.g., either Results or a bookmark
+            table (str): table limit data, e.g., either Results or a bookmark name
 
         Raises:
             OptionError
@@ -1888,7 +1888,8 @@ class RingtailCore:
 
     def _validate_bookmark_name(self, bookmark_name: str) -> str:
         """
-        Ensures a bookmark exist, and runs checks on it
+        Ensures a bookmark exist, and runs checks on it. Particularly useful for dealing with union and interaction combinations,
+        as user may provide the base bookmark_name but the filtering auto-generates derived bookmark_names for the combos.
 
         Args:
             bookmark_name (str)
