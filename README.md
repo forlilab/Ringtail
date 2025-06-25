@@ -29,6 +29,8 @@ at [Scripps Research](https://www.scripps.edu/).
 ### Documentation
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
+### Version 3: GUI and database schema overhaul
+
 ### Version 2.1.1 bug fixes
 - bugs related to ligand filtering and certain uses of the `overwrite` option in the command line have been fixed
 - enhancements to the result plotting feature

@@ -37,8 +37,6 @@ class RingtailCore:
         _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
     """
 
-    # region #-#-#- Base methods -#-#-#
-
     def __init__(
         self,
         db_file: str = "output.db",
@@ -1281,10 +1279,9 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.calculate_percentiles(column, num_bins, table)
 
-    def update_database_version(self, consent=False, new_version="2.0.0"):
-        """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
-        with self.storageman:
-            return self.storageman.update_database_version(new_version, consent)
+    def update_database_version(self, consent=False, new_version="3.0.0"):
+        """Method to update database version from earlier versions to either 1.1.0, 2.0.0, or 3.0.0"""
+        return self.storageman.update_database_version(new_version, consent)
 
     def merge_databases(self, merging_db: str, backup: bool = True):
 

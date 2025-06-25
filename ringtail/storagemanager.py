@@ -11,6 +11,7 @@ import os.path
 import pandas as pd
 from .logutils import LOGGER as logger
 import sys
+import re
 from signal import signal, SIGINT
 from rdkit import Chem
 from typing import Union
@@ -33,13 +34,14 @@ from .querybuilder import QueryBuilder
 
 class StorageManager:
     # NOTE gotta be careful with schema
-    _db_schema_ver = "2.0.0"
+    _db_schema_ver = "3.0.0"
 
     # "db_schema_ver":list("compatible code versions")
     _db_schema_code_compatibility = {
         "1.0.0": ["1.0.0"],
         "1.1.0": ["1.1.0"],
         "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2"],
+        "3.0.0": ["3.0.0"],
     }
 
     """Base class for a generic virtual screening database object.
@@ -984,7 +986,7 @@ class StorageManagerSQLite(StorageManager):
         }
         return data_dict
 
-    def _create_ligands_table(self) -> None:
+    def _create_ligands_table(self, name="Ligands") -> None:
         """Create table for ligands. Columns are:
         ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
@@ -998,7 +1000,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError: Description
 
         """
-        ligand_table = """CREATE TABLE IF NOT EXISTS Ligands (
+        ligand_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
             ligand_smile        VARCHAR[],
@@ -1086,7 +1088,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting ligands.") from e
 
-    def _create_results_table(self):
+    def _create_results_table(self, name="Results"):
         """Creates table for results. Columns are:
         Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
         ligand_id           INTEGER FOREIGN KEY from Ligands,
@@ -1127,7 +1129,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError: Description
         """
 
-        sql_results_table = """CREATE TABLE IF NOT EXISTS Results (
+        sql_results_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             ligand_id           INT[],
             receptor            VARCHAR[],
@@ -1934,6 +1936,7 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(filters_sql)
             cur.execute(filter_pose_sql)
+            self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseTableCreationError(
@@ -4503,7 +4506,6 @@ class StorageManagerSQLite(StorageManager):
 
     def open_storage(self):
         """Create connection to db. Then, check if db needs to be created.
-        If self.overwrite drop existing tables and initialize new tables
 
         Raises:
             StorageError
@@ -4513,7 +4515,7 @@ class StorageManagerSQLite(StorageManager):
             if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
                 self.conn = self._create_connection()
                 compatible, db_version = self.check_ringtaildb_version()
-                if not compatible and not self.overwrite:
+                if not compatible:
                     raise StorageError(
                         f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
                     )
@@ -4598,7 +4600,7 @@ class StorageManagerSQLite(StorageManager):
         bck.close()
         logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
 
-    def _set_ringtail_db_schema_version(self, db_version: str = "2.0.0"):
+    def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
         """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
 
         Raises:
@@ -4672,8 +4674,11 @@ class StorageManagerSQLite(StorageManager):
 
         if main_version != merging_version:
             return False
-        # TODO this might be tied to the code version rather
-        if main_version < 200:
+        if main_version < 300:
+            if main_version == 200:
+                logger.error(
+                    "The database is enabled for merging, but only with an older version of the code. Please contact code maintainer."
+                )
             return False
 
         return True
@@ -4693,10 +4698,9 @@ class StorageManagerSQLite(StorageManager):
         ]
 
     def update_database_version(self, new_version, consent=False):
-        """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
-
-        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
-        the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
+        """method that updates sqlite database schema 1.0.0 through 3.0.0.
+        The way it currently works, it has to upgrade via each major upgrade, e.g., it will not upgrade straight
+        from 1.0.0 to 3.0.0, but rather 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0
 
         Args:
             consent (bool, optional): variable to ensure consent to update database is explicit
@@ -4704,9 +4708,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             bool: final consent
         """
-        # create cursor
-        cur = self.conn.cursor()
-
+        self.conn = self._create_connection()
         # get consent, same for both
         if not consent:
             logger.warning(
@@ -4717,40 +4719,56 @@ class StorageManagerSQLite(StorageManager):
             logger.critical("Consent not given for database update. Cancelling...")
             sys.exit(1)
 
-        # get views and drop them
-        logger.info(f"Updating {self.db_file}...")
-        self._drop_views()
+        original_version = self.check_ringtaildb_version()[1]
+        logger.info(
+            f"Upgrading {self.db_file} of version {original_version} to version {new_version}:"
+        )
 
-        # if current version is 1.0.0
-        if self.check_ringtaildb_version()[1] == "1.0.0":
-            # reformat for v1.1.0
-            cur.execute(
-                "ALTER TABLE Results RENAME COLUMN energies_binding TO docking_score"
+        # upgrade to 1.1.0
+        if original_version in ["1.0.0", "1.1.0"]:
+            logger.warning(
+                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
             )
-            cur.execute("ALTER TABLE Bookmarks ADD COLUMN filters")
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_results ON Results(ligand_id, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
-            )
-            try:
-                self.conn.commit()
-                cur.close()
-            except sqlite3.OperationalError as e:
-                raise DatabaseConnectionError(
-                    f"Error while updating database from v1.0.0 to v1.1.0: {e}"
-                ) from e
-        # if you only wanted to upgrade to v1.1.0, stop here
-        if new_version == "1.1.0":
-            self._set_ringtail_db_schema_version("1.1.0")  # set explicit version
-        elif new_version == "2.0.0":
-            # major table updates and sets db version inside method
-            self._update_db_110_to_200()
+            if original_version == "1.0.0":
+                self._update_db_100_to_110()
+                print("\n\nSuccessfully upgraded to 1.1.0!\n\n")
 
-        # TODO need method to update to db 300 eventually
+            # upgrade to 2.0.0
+            if new_version in ["2.0.0", "3.0.0"]:
+                self._update_db_110_to_200()
+                print("\n\nSuccessfully upgraded to 2.0.0!\n\n")
+
+        # upgrade to 3.0.0
+        if new_version == "3.0.0" and original_version == "2.0.0":
+            self._update_db_200_to_300()
+            print("\n\nSuccessfully upgraded to 3.0.0!\n\n")
 
         return consent
+
+    def _update_db_100_to_110(self):
+
+        self._drop_views()
+        # create cursor
+        cur = self.conn.cursor()
+        # reformat for v1.1.0
+        cur.execute(
+            "ALTER TABLE Results RENAME COLUMN energies_binding TO docking_score"
+        )
+        cur.execute("ALTER TABLE Bookmarks ADD COLUMN filters")
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS ak_results ON Results(ligand_id, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
+        )
+        try:
+            self.conn.commit()
+            cur.close()
+            self._set_ringtail_db_schema_version("1.1.0")
+        except sqlite3.OperationalError as e:
+            raise DatabaseConnectionError(
+                f"Error while updating database from v1.0.0 to v1.1.0: {e}"
+            ) from e
 
     def _update_db_110_to_200(self):
         """
@@ -4760,6 +4778,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseConnectionError
             StorageError
         """
+        self._drop_views()
         # delete interaction table if necessary
         self._delete_table("Interactions")
         # create interaction table
@@ -4801,6 +4820,173 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError(
                 f"Error while setting the database schema version: {e}"
             ) from e
+
+    def _update_db_200_to_300(self):
+        # drop views first, because they depend on tables that will be altered
+        self._drop_views()
+        self._delete_table("Bookmarks")
+        # create Filter and filtered_poses tables
+        self._create_filtering_tables()
+        # drop indices
+        indices = self.db_query(
+            "SELECT name FROM sqlite_master WHERE type == 'index'"
+        ).fetchall()
+        for index in indices:
+            index_name = index[0]
+            try:
+                self.db_query(f"DROP INDEX {index_name}")
+            except:
+                pass
+        # create new, empty ligands table
+        self._create_ligands_table("Ligands_new")
+
+        # create a temp connection function
+        def _smile_to_rdbin(smile):
+            try:
+                mol = Chem.MolFromSmiles(smile)
+                if mol is None:
+                    return None
+                Chem.SanitizeMol(mol)
+                return mol.ToBinary()
+            except Exception:
+                return None
+
+        self.conn.create_function("smile_to_rdbin", 1, _smile_to_rdbin)
+
+        # populate with data from original ligands table, will autogenerate ligand_id PK
+        # oops! I removed chemicalite too
+        self.db_query(
+            """INSERT INTO Ligands_new (
+                LigName,
+                ligand_smile,
+                rdmol,
+                atom_index_map,
+                hydrogen_parents,
+                input_model) 
+            SELECT 
+                LigName,
+                ligand_smile,
+                smile_to_rdbin(ligand_smile),
+                atom_index_map,
+                hydrogen_parents,
+                input_model FROM Ligands;""",
+            commit=True,
+        )
+        # ensure row numbers are the same
+        original_length = self.table_length("Ligands")
+        new_length = self.table_length("Ligands_new")
+        if original_length != new_length:
+            raise StorageError(
+                "Problems while upgrading database, Ligands table did not copy properly."
+            )
+        # delete old table
+        self._delete_table("Ligands")
+        # rename new table
+        self.db_query("ALTER TABLE Ligands_new RENAME TO Ligands;", commit=True)
+
+        # update results table to use ligand_id from Ligands
+        self.db_query("ALTER TABLE Results ADD COLUMN ligand_id INTEGER;")
+        # populate ligand_id in Results
+        self.db_query(
+            """UPDATE Results
+                        SET ligand_id = (
+                            SELECT ligand_id FROM Ligands
+                            WHERE Ligands.LigName = Results.LigName);"""
+        )
+
+        # create new Results table without LigName column
+        self._create_results_table("Results_new")
+        # insert data from original to new Results
+        self.db_query(
+            """INSERT INTO Results_new (
+                        pose_id,
+                        ligand_id,
+                        receptor,
+                        pose_rank,
+                        run_number,
+                        cluster_rmsd,
+                        reference_rmsd,
+                        docking_score,
+                        leff,
+                        deltas,
+                        energies_inter,
+                        energies_vdw,
+                        energies_electro,
+                        energies_flexLig,
+                        energies_flexLR,
+                        energies_intra,
+                        energies_torsional,
+                        unbound_energy,
+                        nr_interactions,
+                        num_hb,
+                        cluster_size,
+                        about_x,
+                        about_y,
+                        about_z,
+                        trans_x,
+                        trans_y,
+                        trans_z,
+                        axisangle_x,
+                        axisangle_y,
+                        axisangle_z,
+                        axisangle_w,
+                        dihedrals,
+                        ligand_coordinates,
+                        flexible_res_coordinates)
+                    SELECT
+                        pose_id,
+                        ligand_id,
+                        receptor,
+                        pose_rank,
+                        run_number,
+                        cluster_rmsd,
+                        reference_rmsd,
+                        docking_score,
+                        leff,
+                        deltas,
+                        energies_inter,
+                        energies_vdw,
+                        energies_electro,
+                        energies_flexLig,
+                        energies_flexLR,
+                        energies_intra,
+                        energies_torsional,
+                        unbound_energy,
+                        nr_interactions,
+                        num_hb,
+                        cluster_size,
+                        about_x,
+                        about_y,
+                        about_z,
+                        trans_x,
+                        trans_y,
+                        trans_z,
+                        axisangle_x,
+                        axisangle_y,
+                        axisangle_z,
+                        axisangle_w,
+                        dihedrals,
+                        ligand_coordinates,
+                        flexible_res_coordinates
+                      FROM Results""",
+            commit=True,
+        )
+        # ensure row numbers are the same
+        original_length = self.table_length("Results")
+        new_length = self.table_length("Results_new")
+        if original_length != new_length:
+            raise StorageError(
+                "Problems while upgrading database, Results table did not copy properly."
+            )
+        # delete old table
+        self._delete_table("Results")
+        # rename new table
+        self.db_query("ALTER TABLE Results_new RENAME TO Results;", commit=True)
+
+        # build new indices if you got this far successfully
+        self._create_indices()
+        self.db_query("REINDEX", commit=True)
+        self._set_ringtail_db_schema_version("3.0.0")
 
     def _delete_filter_data(self, db_alias: str = None):
         """
@@ -4920,7 +5106,7 @@ class StorageManagerSQLite(StorageManager):
             int: number of poses in table/bookmark
         """
         if self._is_table(table):
-            query = """SELECT COUNT(*) FROM Results;"""
+            query = f"""SELECT COUNT(*) FROM {table};"""
             params = ()
         elif self._is_bookmark(table):
             query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?);"""
@@ -5044,7 +5230,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             name = table_name
         query = f"""DROP TABLE IF EXISTS {name};"""
-        return self.db_query(query)
+        return self.db_query(query, commit=True)
 
     def db_query(self, query, params: tuple = (), commit=False) -> iter:
         """Executes provided SQLite query. Returns cursor for results.
@@ -5064,7 +5250,7 @@ class StorageManagerSQLite(StorageManager):
                 self.conn.commit()
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(
-                f"Unable to execute query {query} with given parameters {params}: {e}"
+                f"Unable to execute query -{query}- with given parameters -{params}-: -{e}-"
             ) from e
         return cur
 
