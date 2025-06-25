@@ -2494,7 +2494,7 @@ class StorageManagerSQLite(StorageManager):
 
     # endregion
 
-    # region Methods for dealing with bookmarks
+    # region Methods for dealing with bookmarks and filtering
     def get_all_bookmark_names(self) -> list[str]:
         """Get all bookmarks in sql database as a list of names. Bookmarks are a Ringtail-specific saved query (much like views)
 
@@ -2669,10 +2669,6 @@ class StorageManagerSQLite(StorageManager):
             f"""SELECT filter_id FROM Filters WHERE name = ?;""",
             (bookmark_name,),
         ).fetchone()[0]
-
-    # endregion
-
-    # region filtering related methods
 
     def _process_filters_for_query(self, filters_dict: dict):
         score_maxmin_to_sqlite_call = {
@@ -3546,98 +3542,6 @@ class StorageManagerSQLite(StorageManager):
         )
 
         return self.db_query(sql_string).fetchall()
-
-    def create_status_tables(self) -> None:
-        """
-        Creates pose status tables if needed
-        """
-        self.db_update(
-            f"""
-                CREATE TABLE IF NOT EXISTS Accepted 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
-                );""",
-            (),
-        )
-
-        # create maybe table
-        self.db_update(
-            f"""
-                CREATE TABLE IF NOT EXISTS Maybe 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
-                );""",
-            (),
-        )
-
-        # create rejected table
-        self.db_update(
-            f"""
-                CREATE TABLE IF NOT EXISTS Rejected 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
-                );""",
-            (),
-        )
-
-        return None
-
-    def accept_pose(self, pose_id: int):
-        """
-        Will add pose_id to accepted, and delete from maybe and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Accepted (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
-
-    def maybe_pose(self, pose_id: int):
-        """
-        Will add pose_id to maybe, and delete from accepted and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Maybe (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
-
-    def reject_pose(self, pose_id: int):
-        """
-        Will add pose_id to rejected, and delete from accepted and maybe if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Rejected (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
 
     # endregion
 
@@ -5095,6 +4999,10 @@ class StorageManagerSQLite(StorageManager):
     def close_storage(self, attached_db=None, vacuum=None):
         """
         Closes storage
+
+        Args:
+            attached_db (str, optional): alias of attached database. Defaults to None.
+            vacuum (bool, optional): whether or not to vacuum file to save space. Defaults to None.
         """
         if attached_db or vacuum:
             self._cleanup_storage(attached_db, vacuum)
@@ -5403,5 +5311,97 @@ class StorageManagerSQLite(StorageManager):
         ).ORDER_BY("R.pose_id").LIMIT(length)
 
         return self.db_query(*query.build())
+
+    def create_status_tables(self) -> None:
+        """
+        Creates pose status tables if needed
+        """
+        self.db_update(
+            f"""
+                CREATE TABLE IF NOT EXISTS Accepted 
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                );""",
+            (),
+        )
+
+        # create maybe table
+        self.db_update(
+            f"""
+                CREATE TABLE IF NOT EXISTS Maybe 
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                );""",
+            (),
+        )
+
+        # create rejected table
+        self.db_update(
+            f"""
+                CREATE TABLE IF NOT EXISTS Rejected 
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                );""",
+            (),
+        )
+
+        return None
+
+    def accept_pose(self, pose_id: int):
+        """
+        Will add pose_id to accepted, and delete from maybe and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_update(
+            """INSERT OR IGNORE INTO Accepted (pose_id) VALUES (?);""",
+            (pose_id,),
+            commit=False,
+        )
+        self.db_update(
+            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=False
+        )
+        self.db_update(
+            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
+        )
+
+    def maybe_pose(self, pose_id: int):
+        """
+        Will add pose_id to maybe, and delete from accepted and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_update(
+            """INSERT OR IGNORE INTO Maybe (pose_id) VALUES (?);""",
+            (pose_id,),
+            commit=False,
+        )
+        self.db_update(
+            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
+        )
+        self.db_update(
+            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
+        )
+
+    def reject_pose(self, pose_id: int):
+        """
+        Will add pose_id to rejected, and delete from accepted and maybe if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_update(
+            """INSERT OR IGNORE INTO Rejected (pose_id) VALUES (?);""",
+            (pose_id,),
+            commit=False,
+        )
+        self.db_update(
+            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
+        )
+        self.db_update(
+            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=True
+        )
 
     # endregion
