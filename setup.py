@@ -4,7 +4,8 @@
 import os
 import fnmatch
 from setuptools import setup, find_packages
-
+import re
+import pathlib
 
 # Path to the directory that contains this setup.py file.
 base_dir = os.path.abspath(os.path.dirname(__file__))
@@ -20,9 +21,18 @@ def find_files(directory):
     return matches
 
 
+def get_version():
+    version_file = pathlib.Path(__file__).parent / "ringtail" / "_version.py"
+    content = version_file.read_text(encoding="utf-8")
+    match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+    if match:
+        return match.group(1)
+    raise RuntimeError("Unable to find __version__ in _version.py")
+
+
 setup(
     name="ringtail",
-    version="3.0.0",
+    version=get_version(),
     author="Forli Lab",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/Ringtail",
@@ -59,8 +69,7 @@ setup(
         "console_scripts": [
             "rt_process_vs=ringtail.cli.rt_process_vs:main",
             "rt_compare=ringtail.cli.rt_compare:main",
-            "rt_db_v100_to_v110=ringtail.cli.rt_db_v100_to_v110:main",
-            "rt_db_to_v200=ringtail.cli.rt_db_to_v200:main",
+            "rt_upgrade_db=ringtail.cli.rt_upgrade_db:main",
             "rt_generate_config_file=ringtail.cli.rt_generate_config_file:main",
         ]
     },

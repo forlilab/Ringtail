@@ -3,6 +3,7 @@
 #
 # Ringtail unit testing
 #
+import ringtail
 from ringtail import RingtailCore, ringtailoptions, QueryBuilder
 import sqlite3
 import os
@@ -687,12 +688,15 @@ class TestStorageMan:
         assert json.loads(bookmark_filters_db_str) == filters
 
     def test_version_info(self):
+
+        from importlib.metadata import version
+
         rtc = RingtailCore("output.db")
         with rtc.storageman:
-            versionmatch, version = rtc.storageman.check_ringtaildb_version()
+            versionmatch, db_version = rtc.storageman.check_ringtaildb_version()
         os.system("rm output.db output_log.txt")
         assert versionmatch
-        assert int(version) == 200  # NOTE: update for new database schema versions
+        assert db_version == version("ringtail")
 
 
 class TestMergeDB:

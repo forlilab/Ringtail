@@ -31,6 +31,7 @@ from .exceptions import FileParsingError, WriteToStorageError, MultiprocessingEr
 from .exceptions import ResultsProcessingError
 from .exceptions import OutputError
 from .querybuilder import QueryBuilder
+from ._version import __version__
 
 __all__ = [
     "CLOptionParser",
@@ -62,5 +63,5 @@ __all__ = [
     "logutils",
     "Filters",
     "util",
-    "QueryBilder",
+    "QueryBuilder",
 ]
