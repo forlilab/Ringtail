@@ -732,14 +732,30 @@ class RingtailCore:
         Returns:
             all_mols (dict): containing ligand names, RDKit mols, flexible residue bols, and other ligand properties
         """
+        # incoming bookmark_name could be status table
+        valid_bookmark_name = self._validate_bookmark_name(bookmark_name)
+        if valid_bookmark_name:
+            status_table = None
+        elif not valid_bookmark_name and bookmark_name.lower() in [
+            "accepted",
+            "maybe",
+            "rejected",
+        ]:
+            status_table = bookmark_name
+        else:
+            raise RTCoreError(
+                f"Requested data, -{bookmark_name}-, is not available to write passing molecule SDFs from."
+            )
 
-        bookmark_name = self._validate_bookmark_name(bookmark_name)
         with self.storageman:
             filtered_ligands_info = (
-                self.storageman.fetch_passing_ligands_rdkit_relevant_info(bookmark_name)
+                self.storageman.fetch_passing_ligands_rdkit_relevant_info(
+                    bookmark_name=valid_bookmark_name, status_table=status_table
+                )
             )
             flexible_residues, flexres_atomnames = self._get_receptor_flexres_info()
-
+        # TODO this is getting messy, too many places giving passing data signals
+        # TODO # TODO need to simplify
         all_mols = {}
         for ligname, bin_mol, atom_indices, h_parent_line in filtered_ligands_info:
             self.logger.info(f"Creating an RDKIT mol for ligand: {ligname}.")
@@ -1886,7 +1902,7 @@ class RingtailCore:
 
         return filters
 
-    def _validate_bookmark_name(self, bookmark_name: str) -> str:
+    def _validate_bookmark_name(self, bookmark_name: str) -> Union[str, None]:
         """
         Ensures a bookmark exist, and runs checks on it. Particularly useful for dealing with union and interaction combinations,
         as user may provide the base bookmark_name but the filtering auto-generates derived bookmark_names for the combos.
@@ -1930,11 +1946,10 @@ class RingtailCore:
                     )
                 # if not, raise error
                 else:
-                    raise StorageError(
-                        "Filtering bookmark {0} does not exist in database. Cannot write passing molecule SDFs".format(
-                            bookmark_name
-                        )
+                    logger.error(
+                        f"Filtering bookmark {bookmark_name} does not exist in database. "
                     )
+                    return None
 
             if not self.storageman.get_passing_poses_count(bookmark_name):
                 raise StorageError(
