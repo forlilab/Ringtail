@@ -5068,7 +5068,8 @@ class StorageManagerSQLite(StorageManager):
             query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?);"""
             params = (table,)
         else:
-            raise OptionError(f"Table -{table}- does not exist in the database.")
+            logger.error(f"Table -{table}- does not exist in the database.")
+            return None
 
         return self.db_query(query, params).fetchone()[0]
 
