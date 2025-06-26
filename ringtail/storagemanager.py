@@ -845,7 +845,7 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def fetch_viewable_columns_from(
+    def fetch_viewable_data_columns_from(
         self, table: str, length: int, last_pose_id: int = 0
     ) -> iter:
         """
@@ -853,6 +853,39 @@ class StorageManager:
 
         Returns:
             iter: iterable/cursor of the columns
+        """
+        raise_not_implemented()
+
+    def fetch_columns_from_table_as_dicts(
+        self, table: str, columns: list, length: int = 500, starting_rowid: int = 0
+    ) -> tuple[list[str], list[dict]]:
+        """
+        Will get requested table data for a table given one or more columns.
+        Data will be limited by a certain length, and can be retrieved from a desired
+        rowid.
+
+        Args:
+            table (str): name of table or bookmark
+            columns (list, optional): list of columns to retrieve. Defaults to ["*"].
+            length (int, optional): number of rows to collect. Defaults to 500.
+            starting_rowid (int, optional): rowid to start with. Defaults to 0.
+
+        Returns:
+            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
+                                            and column is the key, value is the row-col cell value
+        """
+        raise_not_implemented()
+
+    def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
+        """
+        Will return data requested in an sql formatted query
+
+        Args:
+            query (str): sql query formatted to sqlite database
+
+        Returns:
+            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
+                                            and column is the key, value is the row-col cell value
         """
         raise_not_implemented()
 
@@ -5189,7 +5222,7 @@ class StorageManagerSQLite(StorageManager):
         query = f"""DROP TABLE IF EXISTS {name};"""
         return self.db_query(query, commit=True)
 
-    def db_query(self, query, params: tuple = (), commit=False) -> iter:
+    def db_query(self, query, params: tuple = (), commit=False) -> sqlite3.Cursor:
         """Executes provided SQLite query. Returns cursor for results.
             Since cursor remains open, added to list of open cursors
 
@@ -5276,7 +5309,7 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region GUI specific API
-    def fetch_viewable_columns_from(
+    def fetch_viewable_data_columns_from(
         self, table: str, length: int, last_pose_id: int = 0
     ) -> sqlite3.Cursor:
         """
@@ -5312,6 +5345,49 @@ class StorageManagerSQLite(StorageManager):
         ).ORDER_BY("R.pose_id").LIMIT(length)
 
         return self.db_query(*query.build())
+
+    def fetch_columns_from_table_as_dicts(
+        self, table: str, columns: list, length: int = 500, starting_rowid: int = 0
+    ) -> tuple[list[str], list[dict]]:
+        """
+        Will get requested table data for a table given one or more columns.
+        Data will be limited by a certain length, and can be retrieved from a desired
+        rowid.
+
+        Args:
+            table (str): name of table or bookmark
+            columns (list, optional): list of columns to retrieve. Defaults to ["*"].
+            length (int, optional): number of rows to collect. Defaults to 500.
+            starting_rowid (int, optional): rowid to start with. Defaults to 0.
+
+        Returns:
+            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
+                                            and column is the key, value is the row-col cell value
+        """
+        query = QueryBuilder()
+        query.SELECT(",".join(columns)).FROM(table)
+
+        if length:
+            query.LIMIT(length)
+        if starting_rowid:
+            query.WHERE(f"{table}.rowid = {starting_rowid}")
+
+        return self.get_query_data_as_dicts(query.build()[0])
+
+    def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
+        """
+        Will return data requested in an sqlite formatted query
+
+        Args:
+            query (str): sql query formatted to sqlite database
+
+        Returns:
+            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
+                                            and column is the key, value is the row-col cell value
+        """
+        rows = self.db_query(query).fetchall()
+        column_names = rows[0].keys() if rows else []
+        return list(column_names), [dict(row) for row in rows]
 
     def create_status_tables(self) -> None:
         """

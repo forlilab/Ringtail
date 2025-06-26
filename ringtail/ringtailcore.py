@@ -1242,20 +1242,67 @@ class RingtailCore:
         with self.storageman as sm:
             sm.create_status_tables()
 
-    def get_table_pointer(
+    def get_data_table_pointer(
         self, table: str, length: int = 100, starting_pose_id: int = 0
     ) -> iter:
         """
-        Returns a pointer or cursor (iterable) to the data in a given table or bookmark
+        Returns a pointer or cursor (iterable) to the data in the Results table,
+        if table is a bookmark it will limit the Results data to the poses represented
+        in the bookmark.
 
         Args:
             table (str): name of table or bookmark
+            length (int, optional): number of rows to collect. Defaults to 100.
+            starting_pose_id (int, optional): pose id to start with. Defaults to 0.
 
         Returns:
             iter: iterable/cursor pointing to data in given table or bookmark
         """
         with self.storageman as sm:
-            return sm.fetch_viewable_columns_from(table, length, starting_pose_id)
+            return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
+
+    def get_table_columns(
+        self,
+        table: str,
+        columns: list = ["*"],
+        length: int = 500,
+        starting_rowid: int = 0,
+    ) -> tuple[list[str], list[dict]]:
+        """
+        Will get requested table data for a table given one or more columns.
+        Data will be limited by a certain length, and can be retrieved from a desired
+        rowid.
+
+        Args:
+            table (str): name of table or bookmark
+            columns (list, optional): list of columns to retrieve. Defaults to ["*"].
+            length (int, optional): number of rows to collect. Defaults to 100.
+            starting_rowid (int, optional): rowid to start with. Defaults to 0.
+
+        Returns:
+            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
+                                            and column is the key, value is the row-col cell value
+        """
+        with self.storageman as sm:
+            return sm.fetch_columns_from_table_as_dicts(
+                table, columns, length, starting_rowid
+            )
+
+    def get_query_data(self, query: str) -> tuple[list[str], list[dict]]:
+        """
+        Will return data requested in an sql formatted query. User must ensure the sql
+        string is formatted correctly for the type of database used.
+
+        Args:
+            query (str): sql query formatted to sqlite database
+
+        Returns:
+            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
+                                            and column is the key, value is the row-col cell value
+        """
+
+        with self.storageman as sm:
+            return sm.get_query_data_as_dicts(query)
 
     def table_length(self, table: str) -> int:
         """
