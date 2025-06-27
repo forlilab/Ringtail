@@ -163,13 +163,14 @@ class Filters:
         self.leworst: float = None
         self.score_percentile: float = None
         self.le_percentile: float = None
+
         self.vdw_interactions: list = []
         self.hb_interactions: list = []
         self.reactive_interactions: list = []
         self.hb_count: int = None
         self.react_any: bool = None
-
         self.max_miss: int = 0
+
         self.ligand_name: str = None
         self.ligand_operator: str = None
         self.ligand_substruct: str = None
