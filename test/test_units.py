@@ -251,11 +251,15 @@ class TestRingtailCore:
     def test_create_rdkitmol(self):
         bookmark_name = "rdkit_test"
         rtc = RingtailCore(db_file="output.db")
+        ligname = "14303"
         rtc.filter(ebest=-3, bookmark_name=bookmark_name)
-        rdkit_dict = rtc.ligands_rdkit_mol(bookmark_name=bookmark_name)
-        assert len(rdkit_dict) == 8
+        ligands_poses = rtc._fetch_select_ligands_poses(
+            ligand_names=[ligname], bookmark_name=bookmark_name
+        )
+
+        mol = rtc.create_rdkit_mol(ligname, ligands_poses[ligname])[0]
         # grab one molecule from bookmark and check number of atoms
-        num_of_atoms = rdkit_dict["14303"]["ligand"].GetNumAtoms()
+        num_of_atoms = mol.GetNumAtoms()
         assert num_of_atoms == 10
 
     def test_write_sdfs(self):
@@ -330,7 +334,7 @@ class TestRingtailCore:
         )
         interaction_combs = rtc._generate_interaction_combinations(filters.asdict(), 1)
         for ic in interaction_combs:
-            nufilter = rtc._prepare_filters_for_storageman(filters.asdict(), ic)
+            nufilter = rtc._prepare_interaction_combo_filters(filters.asdict(), ic)
             test_filters.append(nufilter)
 
         assert {

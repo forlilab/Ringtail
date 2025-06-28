@@ -18,7 +18,7 @@ from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters
-from .util import numlist2str, raise_not_implemented
+from .util import numlist2str, raise_not_implemented, statuses
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -30,6 +30,7 @@ from .exceptions import (
 )
 from .clustermanager import *
 from .querybuilder import QueryBuilder
+from collections import defaultdict
 
 
 class StorageManager:
@@ -501,7 +502,7 @@ class StorageManager:
             bool: indicates if bookmark_name exists in the current database
         """
 
-        return bool(bookmark_name in self.get_all_bookmark_names())
+        return bool(bookmark_name.lower() in self.get_all_bookmark_names())
 
     def get_filterid_from_name(self, bookmark_name: str) -> int:
         """
@@ -732,17 +733,26 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def fetch_ligand_rdkit_relevant_info(self, ligname) -> str:
-        """get output information for given ligand
-
-        Args:
-            ligname (str): ligand name
-
-        Raises:
-            DatabaseQueryError
+    def fetch_ligand_rdkit_relevant_info(self, ligname: str) -> tuple:
+        """fetch information required by vsmanager for writing out molecules
 
         Returns:
-            str: information containing smiles, atom and index mapping, and hydrogen parents
+            tuple: contains rdmol, atom_index_map, hydrogen_parents
+        """
+        raise_not_implemented()
+
+    def fetch_lignames_and_poses_for_selection(
+        self, selection: str
+    ) -> dict[str, list[int]]:
+        """
+        Creates a dictionary of ligands and the selected poses that appear in a selection,
+        such as a bookmark or a status table (where only poses are given).
+
+        Args:
+            selection (str): name of bookmark or status table
+
+        Returns:
+            dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
         """
         raise_not_implemented()
 
@@ -2537,7 +2547,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             cur.execute("SELECT name FROM Filters;")
-            bookmark_names = [row["name"] for row in cur.fetchall()]
+            bookmark_names = [row["name"].lower() for row in cur.fetchall()]
             cur.close()
 
         except sqlite3.OperationalError as e:
@@ -4080,30 +4090,17 @@ class StorageManagerSQLite(StorageManager):
         )
         return self.db_query(query.build()[0])
 
-    def fetch_ligand_rdkit_relevant_info(self, ligname) -> str:
-        """get output information for given ligand
-
-        Args:
-            ligname (str): ligand name
-
-        Raises:
-            DatabaseQueryError
+    def fetch_ligand_rdkit_relevant_info(self, ligname: str) -> tuple:
+        """fetch information required by vsmanager for writing out molecules
 
         Returns:
-            str: information containing smiles, atom and index mapping, and hydrogen parents
+            tuple: contains rdmol, atom_index_map, hydrogen_parents
         """
-        try:
-            cur = self.conn.cursor()
-            cur.execute(
-                f"SELECT rdmol, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName = '{ligname}'"
-            )
-            info = cur.fetchone()
-            cur.close()
-            return info
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError(
-                f"Error retrieving ligand info for {ligname}"
-            ) from e
+        query = QueryBuilder()
+        query.SELECT("rdmol", "atom_index_map", "hydrogen_parents").FROM(
+            "Ligands"
+        ).WHERE(f"ligname = ?", ligname)
+        return self.db_query(*query.build()).fetchone()
 
     def fetch_pose_interactions(self, Pose_ID) -> iter:
         """
@@ -4293,14 +4290,14 @@ class StorageManagerSQLite(StorageManager):
             pose_ids (list): pose ids for which to collect molecular data
 
         Returns:
-            iter: of the following columns Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates
+            iter: of the following columns pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates
         """
         placeholders = ",".join(["?"] * len(pose_ids))
         query = f"""
-        SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
+        SELECT pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
         FROM Results WHERE Pose_ID IN ({placeholders})
         """
-        return self.db_query(query, pose_ids)
+        return self.db_query(query, pose_ids).fetchall()
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
@@ -5373,6 +5370,69 @@ class StorageManagerSQLite(StorageManager):
             query.WHERE(f"{table}.rowid = {starting_rowid}")
 
         return self.get_query_data_as_dicts(query.build()[0])
+
+    def fetch_lignames_and_poses_for_selection(
+        self, selection: str
+    ) -> dict[str, list[int]]:
+        """
+        Creates a dictionary of ligands and the selected poses that appear in a selection,
+        such as a bookmark or a status table (where only poses are given).
+
+        Args:
+            selection (str): name of bookmark or status table
+
+        Returns:
+            dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
+        """
+        query = QueryBuilder()
+        query.SELECT("L.Ligname", "r.pose_id").FROM("Ligands", "L").JOIN(
+            "Results", "R", "ligand_id"
+        )
+        if self._is_bookmark(selection):
+            query.IN_BOOKMARK(selection)
+        elif selection.lower() in statuses:
+            query.WHERE(f"R.pose_id IN {selection}")
+        else:
+            logger.error(
+                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
+            )
+            return
+        rows = self.db_query(query.build()[0]).fetchall()
+        ligand_poses = defaultdict(list)
+        for name, id in rows:
+            ligand_poses[name].append(id)
+        # convert to normal dict
+        return dict(ligand_poses)
+
+    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
+        """
+        #TODO
+
+        Args:
+            ligand_name (str): _description_
+            selection (str): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        query = QueryBuilder()
+        query.SELECT("R.Pose_id").FROM("Results", "R").WHERE(
+            "L.LigName = ?", ligand_name
+        ).JOIN("Ligands", "L", "ligand_id")
+
+        if self._is_bookmark(selection):
+            query.IN_BOOKMARK(selection)
+        elif selection in statuses:
+            query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")
+        elif selection == None:
+            # get all poses for ligand, no WHERE clause for pose_id
+            pass
+        else:
+            logger.error(
+                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
+            )
+            return
+        return [row[0] for row in self.db_query(*query.build()).fetchall()]
 
     def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
         """

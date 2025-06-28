@@ -140,6 +140,9 @@ docking_mode_file_ext = {"dlg": "dlg", "vina": "pdbqt"}
 docking_mode_aliases = {"dlg": ["gpu", "adgpu", "dlg"], "vina": ["vina"]}
 
 
+statuses = ["accepted", "maybe", "rejected"]
+
+
 def generate_not_implemented_message():
     import inspect
 
