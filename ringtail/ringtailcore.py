@@ -651,7 +651,7 @@ class RingtailCore:
                 )
                 return
 
-        flexres_data = self._make_receptor_flexres_mols()
+        flexres_data = self.make_receptor_flexres_mols()
         lig_flex_mol = {}
         for ligand, poses in ligands_poses.items():
             ligand_mol, flexres_mols, _, flexible_residues = self.create_rdkit_mol(
@@ -709,7 +709,7 @@ class RingtailCore:
             ligands_poses = self._fetch_select_ligands_poses(
                 bookmark_name=bookmark_name
             )
-            flexres_data = self._make_receptor_flexres_mols()
+            flexres_data = self.make_receptor_flexres_mols()
             all_mols = {}
             for ligname, poses in ligands_poses.items():
 
@@ -1686,7 +1686,7 @@ class RingtailCore:
                 ligand_saved_coords.append(ligand_pose)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
 
-    def _make_receptor_flexres_mols(self):
+    def make_receptor_flexres_mols(self):
         # TODO
 
         mols = []
