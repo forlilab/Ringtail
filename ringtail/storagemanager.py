@@ -5101,6 +5101,22 @@ class StorageManagerSQLite(StorageManager):
 
         return self.db_query(query, params).fetchone()[0]
 
+    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
+        query = QueryBuilder()
+        query.SELECT("rowid")
+        if self._is_bookmark(table):
+            query.FROM("Filtered_poses").WHERE(
+                "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
+            )
+        else:
+            query.FROM(table)
+        query.WHERE("pose_id = ?", pose_id)
+        row = self.db_query(*query.build()).fetchone()
+        if row:
+            return row[0]
+        else:
+            return None
+
     def table_page_data(self, table: str, page_size: int) -> list:
         query = QueryBuilder()
         query.SELECT("MIN(rowid)")

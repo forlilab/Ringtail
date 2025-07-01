@@ -1241,6 +1241,11 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
 
+    def get_row_from_pose(self, table: str, pose_id: int) -> int:
+        print("About to fetch the row for pose ", pose_id)
+        with self.storageman as sm:
+            return sm.pose_row_in_table(table, pose_id)
+
     def get_limited_table_data(
         self, table: str, length: int = 100, starting_row_id: int = 0
     ) -> iter:
