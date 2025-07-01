@@ -2947,9 +2947,7 @@ class StorageManagerSQLite(StorageManager):
 
             partial_filter_query = " WHERE " + partial_filter_query
 
-        filter_query = (
-            f"SELECT R.pose_id FROM {filtering_window} R {partial_filter_query}"
-        )
+        filter_query = f"SELECT R.pose_id FROM {filtering_window} R {partial_filter_query} ORDER BY R.pose_id"
 
         return filter_query
 
@@ -5307,7 +5305,7 @@ class StorageManagerSQLite(StorageManager):
 
     # region GUI specific API
     def fetch_viewable_data_columns_from(
-        self, table: str, length: int, last_pose_id: int = 0
+        self, table: str, length: int, starting_rowid: int = 0
     ) -> sqlite3.Cursor:
         """
         Makes a selection of columns and includes the status of the pose
@@ -5334,10 +5332,16 @@ class StorageManagerSQLite(StorageManager):
 
         query = QueryBuilder()
         query.SELECT(ordered_columns).FROM("Results", "R")
+        if not self._is_bookmark(table):
+            query.WHERE("R.rowid >= ?", starting_rowid)
         if self._is_bookmark(table):
+            self.db_query(
+                """SELECT MIN(rowid),MAX(rowid) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?)""",
+                table,
+            )
             query.WHERE(f"R.Pose_id IN ({QueryBuilder.bookmark_query(table)})")
 
-        query.WHERE("R.Pose_ID > ?", last_pose_id).JOIN(
+        query.WHERE("R.rowid > ?", starting_rowid).JOIN(
             "Ligands", "L", "ligand_id"
         ).ORDER_BY("R.pose_id").LIMIT(length)
 
