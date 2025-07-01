@@ -1241,6 +1241,25 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
 
+    def get_limited_table_data(
+        self, table: str, length: int = 100, starting_row_id: int = 0
+    ) -> iter:
+        """
+        Returns a pointer or cursor (iterable) to the data in the Results table,
+        if table is a bookmark it will limit the Results data to the poses represented
+        in the bookmark.
+
+        Args:
+            table (str): name of table or bookmark
+            length (int, optional): number of rows to collect. Defaults to 100.
+            starting_pose_id (int, optional): pose id to start with. Defaults to 0.
+
+        Returns:
+            iter: iterable/cursor pointing to data in given table or bookmark
+        """
+        with self.storageman as sm:
+            return sm.fetch_viewable_data_columns_from(table, length, starting_row_id)
+
     def get_table_columns(
         self,
         table: str,
@@ -1297,6 +1316,10 @@ class RingtailCore:
 
         with self.storageman:
             return self.storageman.table_length(table)
+
+    def get_table_pagination(self, table: str, page_size: int) -> list[Page]:
+        with self.storageman as sm:
+            return sm.table_page_data(table, page_size)
 
     def database_is_empty(self) -> bool:
         """

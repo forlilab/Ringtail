@@ -18,7 +18,7 @@ from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters
-from .util import numlist2str, raise_not_implemented, statuses
+from .util import numlist2str, raise_not_implemented, statuses, Page
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -5101,6 +5101,43 @@ class StorageManagerSQLite(StorageManager):
 
         return self.db_query(query, params).fetchone()[0]
 
+    def table_page_data(self, table: str, page_size: int) -> list:
+        query = QueryBuilder()
+        query.SELECT("MIN(rowid)")
+
+        pose_query = QueryBuilder()
+        pose_query.SELECT("Pose_ID")
+
+        if self._is_table(table):
+            query.FROM(table)
+            pose_table = table
+        elif self._is_bookmark(table):
+            query.FROM("Filtered_poses").WHERE(
+                "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
+            )
+            pose_table = "Filtered_poses"
+            pose_query.FROM("Filtered_poses")
+        else:
+            logger.error(f"Table -{table}- does not exist in the database.")
+            return None
+        pages = []
+        start = self.db_query(*query.build()).fetchone()[0]
+        length = self.table_length(table)
+        # I know length already, next get rowid first and last, and pose_id first and last
+        # TODO #TODO #TODO problem with status tables, they will not have ordered poses
+        # maybe just if status table, don't add poses?
+        # or in that case i would have to load it as a query or rewrite the table or something
+        for start_index in range(start, start + length, page_size):
+            end = min(start_index + page_size, start + length) - 1
+            min_poseid = self.db_query(
+                f"SELECT Pose_id FROM {pose_table} WHERE rowid=?", (start_index,)
+            ).fetchone()[0]
+            max_poseid = self.db_query(
+                f"SELECT Pose_id FROM {pose_table} WHERE rowid=?", (end,)
+            ).fetchone()[0]
+            pages.append(Page(start_index, end, min_poseid, max_poseid))
+        return pages
+
     def _vacuum(self):
         """SQLite vacuum rebuilds the database file, repacking it into a minimal amount of disk space
 
@@ -5335,10 +5372,6 @@ class StorageManagerSQLite(StorageManager):
         if not self._is_bookmark(table):
             query.WHERE("R.rowid >= ?", starting_rowid)
         if self._is_bookmark(table):
-            self.db_query(
-                """SELECT MIN(rowid),MAX(rowid) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?)""",
-                table,
-            )
             query.WHERE(f"R.Pose_id IN ({QueryBuilder.bookmark_query(table)})")
 
         query.WHERE("R.rowid > ?", starting_rowid).JOIN(
