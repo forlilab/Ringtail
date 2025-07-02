@@ -5336,27 +5336,28 @@ class StorageManagerSQLite(StorageManager):
             where_operator = ">="
         query = QueryBuilder()
         query.FROM("Results", "R")
-        if table.lower() == "results":
-            query.WHERE(f"R.rowid {where_operator} ?", starting_rowid)
-            rowid = "R.rowid"
-        elif not self._is_bookmark(table):  # assumes it is a status table
-            query.JOIN(table, "T", "pose_id").WHERE(
-                f"T.rowid {where_operator} ?", starting_rowid
-            )
-            rowid = "T.rowid"
-        if self._is_bookmark(table):
-            query.JOIN("filtered_poses", "fp", "pose_id").WHERE(
-                f"fp.rowid {where_operator} ?", starting_rowid
-            )
-            rowid = "fp.rowid"
-
-        ordered_columns = f"""
-        CASE
+        status_assignement = """CASE
             WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
             WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
             WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
             ELSE 'not evaluated'
-        END AS status,
+        END AS status,"""
+
+        if table.lower() == "results":
+            rowid = "R.rowid"
+
+        elif not self._is_bookmark(table):  # assumes it is a status table
+            query.JOIN(table, "T", "pose_id")
+            rowid = "T.rowid"
+            # status assignement doesn't make sense for status tables
+            status_assignement = f"""'{table.lower()}',"""
+
+        elif self._is_bookmark(table):
+            query.JOIN("filtered_poses", "fp", "pose_id")
+            rowid = "fp.rowid"
+
+        ordered_columns = f"""
+        {status_assignement}
         R.Pose_ID, L.LigName, R.docking_score, 
         R.leff, R.cluster_size, R.cluster_rmsd, 
         R.pose_rank, R.num_hb, R.receptor, R.run_number, 
@@ -5369,9 +5370,9 @@ class StorageManagerSQLite(StorageManager):
 
         query.SELECT(ordered_columns)
 
-        query.JOIN("Ligands", "L", "ligand_id").ORDER_BY(rowid).LIMIT(length).DESC(
-            reverse
-        )
+        query.JOIN("Ligands", "L", "ligand_id").WHERE(
+            f"{rowid} {where_operator} ?", starting_rowid
+        ).ORDER_BY(rowid).LIMIT(length).DESC(reverse)
 
         cursor = self.db_query(*query.build())
         headers = [desc[0] for desc in cursor.description]
