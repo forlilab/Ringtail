@@ -492,18 +492,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def bookmark_exists(self, bookmark_name: str) -> bool:
-        """Checks if bookmark name is in database
-
-        Args:
-            bookmark_name (str): name of bookmark name to check if exist
-
-        Returns:
-            bool: indicates if bookmark_name exists in the current database
-        """
-
-        return bool(bookmark_name.lower() in self.get_all_bookmark_names())
-
     def get_filterid_from_name(self, bookmark_name: str) -> int:
         """
         Gets the filter_id for bookmark
@@ -3209,7 +3197,7 @@ class StorageManagerSQLite(StorageManager):
                     f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
                 )
             # check if bookmark exists
-            if self.bookmark_exists(name):
+            if self._is_bookmark(name):
                 logger.warning(
                     f"The bookmark {name} already exists, and will be overwritten by the current filter."
                 )
@@ -4385,17 +4373,31 @@ class StorageManagerSQLite(StorageManager):
         """
         all_data_query = QueryBuilder()
         all_data_query.SELECT("docking_score", "leff").FROM("Results")
+        bookmark_query = QueryBuilder()
+        bookmark_query.SELECT(
+            "R." + x_axis, "R." + y_axis, "R." + "Pose_ID", "L." + "LigName"
+        )
 
-        if self.bookmark_exists(bookmark_name):
-            bookmark_query = QueryBuilder()
-            bookmark_query.SELECT(
-                "R." + x_axis, "R." + y_axis, "R." + "Pose_ID", "L." + "LigName"
-            )
+        if self._is_bookmark(bookmark_name):
             if include_status:
                 bookmark_query.SELECT_STATUS()
             bookmark_query.FROM("Results", "R").IN_BOOKMARK(bookmark_name).JOIN(
                 "Ligands", "L", "ligand_id"
             )
+
+            if only_passing:
+                all_data = []
+            else:
+                all_data = self.db_query(all_data_query.build()[0])
+            passing_data = self.db_query(bookmark_query.build()[0])
+
+        elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
+            # will assume it is a status table
+            if include_status:
+                bookmark_query.SELECT(f"""'{bookmark_name.lower()}' as status""")
+            bookmark_query.FROM("Results", "R").JOIN(
+                bookmark_name, "T", "pose_id"
+            ).JOIN("Ligands", "L", "ligand_id")
 
             if only_passing:
                 all_data = []
