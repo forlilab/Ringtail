@@ -5329,7 +5329,28 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             dict[list[str], list]: dict of headers and data
         """
-        ordered_columns = """
+
+        if reverse:
+            where_operator = "<="
+        else:
+            where_operator = ">="
+        query = QueryBuilder()
+        query.FROM("Results", "R")
+        if table.lower() == "results":
+            query.WHERE(f"R.rowid {where_operator} ?", starting_rowid)
+            rowid = "R.rowid"
+        elif not self._is_bookmark(table):  # assumes it is a status table
+            query.JOIN(table, "T", "pose_id").WHERE(
+                f"T.rowid {where_operator} ?", starting_rowid
+            )
+            rowid = "T.rowid"
+        if self._is_bookmark(table):
+            query.JOIN("filtered_poses", "fp", "pose_id").WHERE(
+                f"fp.rowid {where_operator} ?", starting_rowid
+            )
+            rowid = "fp.rowid"
+
+        ordered_columns = f"""
         CASE
             WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
             WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
@@ -5344,27 +5365,10 @@ class StorageManagerSQLite(StorageManager):
         R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
         R.energies_intra, R.energies_torsional, R.about_x, R.about_y, 
         R.about_z, R.trans_x, R.trans_y, R.trans_z, R.axisangle_x, 
-        R.axisangle_y, R.axisangle_z, R.axisangle_w, R.dihedrals"""
+        R.axisangle_y, R.axisangle_z, R.axisangle_w, R.dihedrals, {rowid}"""
 
-        if reverse:
-            where_operator = "<="
-        else:
-            where_operator = ">="
-        query = QueryBuilder()
-        query.SELECT(ordered_columns).FROM("Results", "R")
-        if table.lower() == "results":
-            query.WHERE(f"R.rowid {where_operator} ?", starting_rowid)
-            rowid = "R.rowid"
-        elif not self._is_bookmark(table):  # assumes it is a status table
-            query.JOIN(table, "T", "pose_id").WHERE(
-                f"T.rowid {where_operator} ?", starting_rowid
-            )
-            rowid = "T.rowid"
-        if self._is_bookmark(table):
-            query.JOIN("filtered_poses", "fp", "pose_id").WHERE(
-                f"fp.rowid {where_operator} ?", starting_rowid
-            )
-            rowid = "fp.rowid"
+        query.SELECT(ordered_columns)
+
         query.JOIN("Ligands", "L", "ligand_id").ORDER_BY(rowid).LIMIT(length).DESC(
             reverse
         )
