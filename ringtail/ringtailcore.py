@@ -1247,7 +1247,7 @@ class RingtailCore:
             return sm.pose_row_in_table(table, pose_id)
 
     def get_limited_table_data(
-        self, table: str, length: int = 100, starting_row_id: int = 0
+        self, table: str, length: int = 100, starting_row_id: int = 1, reverse=False
     ) -> dict[list[str], list]:
         """
         Returns a pointer or cursor (iterable) to the data in the Results table,
@@ -1257,13 +1257,16 @@ class RingtailCore:
         Args:
             table (str): name of table or bookmark
             length (int, optional): number of rows to collect. Defaults to 100.
-            starting_pose_id (int, optional): pose id to start with. Defaults to 0.
+            starting_row_id (int, optional): rowid to start fetching from. Defaults to 0.
+            reverse (bool, optional): whether to collect data in descending/reverse order. Defaults to False
 
         Returns:
-            iter: iterable/cursor pointing to data in given table or bookmark
+            dict[list[str], list]: dict of headers and data
         """
         with self.storageman as sm:
-            return sm.fetch_viewable_data_columns_from(table, length, starting_row_id)
+            return sm.fetch_viewable_data_columns_from(
+                table, length, starting_row_id, reverse
+            )
 
     def get_table_columns(
         self,
@@ -1322,9 +1325,9 @@ class RingtailCore:
         with self.storageman:
             return self.storageman.table_length(table)
 
-    def get_table_pagination(self, table: str, page_size: int) -> list[Page]:
-        with self.storageman as sm:
-            return sm.table_page_data(table, page_size)
+    def get_starting_rowid(self, table: str):
+        with self.storageman:
+            return self.storageman.get_starting_rowid(table)
 
     def database_is_empty(self) -> bool:
         """

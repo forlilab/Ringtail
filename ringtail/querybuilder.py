@@ -15,6 +15,7 @@ class QueryBuilder:
         self.aliases = {}
         self.insert_into = None
         self.limit = None
+        self.descending = False
 
     def INSERT_INTO(self, table_name):
         self.insert_into = f"INSERT INTO {table_name}"
@@ -91,6 +92,11 @@ class QueryBuilder:
 
     def LIMIT(self, limit: int):
         self.limit = str(limit)
+        return self
+
+    def DESC(self, descending):
+        self.descending = descending
+        return self
 
     def WITH_SUBQUERY(self, name, query, params=None):
         # This could in theory accept a QueryBuilder object instead
@@ -147,6 +153,9 @@ class QueryBuilder:
 
         if self.order_by:
             parts.append("ORDER BY " + self.order_by)
+
+        if self.descending:
+            parts.append("DESC")
 
         if self.limit:
             parts.append("LIMIT " + self.limit)

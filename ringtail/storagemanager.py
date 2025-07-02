@@ -18,7 +18,7 @@ from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters
-from .util import numlist2str, raise_not_implemented, statuses, Page
+from .util import numlist2str, raise_not_implemented, statuses
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -5117,28 +5117,6 @@ class StorageManagerSQLite(StorageManager):
         else:
             return None
 
-    def table_page_data(self, table: str, page_size: int) -> list[Page]:
-        query = QueryBuilder()
-        query.SELECT("MIN(rowid)")
-
-        if self._is_table(table):
-            query.FROM(table)
-        elif self._is_bookmark(table):
-            query.FROM("Filtered_poses").WHERE(
-                "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
-            )
-
-        else:
-            logger.error(f"Table -{table}- does not exist in the database.")
-            return None
-        pages = []
-        start = self.db_query(*query.build()).fetchone()[0]
-        length = self.table_length(table)
-        for start_index in range(start, start + length, page_size):
-            end = min(start_index + page_size, start + length)
-            pages.append(Page(start_index, end))
-        return pages
-
     def _vacuum(self):
         """SQLite vacuum rebuilds the database file, repacking it into a minimal amount of disk space
 
@@ -5343,13 +5321,13 @@ class StorageManagerSQLite(StorageManager):
 
     # region GUI specific API
     def fetch_viewable_data_columns_from(
-        self, table: str, length: int, starting_rowid: int = 0
+        self, table: str, length: int, starting_rowid: int = 0, reverse=False
     ) -> dict[list[str], list]:
         """
         Makes a selection of columns and includes the status of the pose
 
         Returns:
-            sqlite3.Cursor: iterable cursor of the columns
+            dict[list[str], list]: dict of headers and data
         """
         ordered_columns = """
         CASE
@@ -5368,22 +5346,49 @@ class StorageManagerSQLite(StorageManager):
         R.about_z, R.trans_x, R.trans_y, R.trans_z, R.axisangle_x, 
         R.axisangle_y, R.axisangle_z, R.axisangle_w, R.dihedrals"""
 
+        if reverse:
+            where_operator = "<="
+        else:
+            where_operator = ">="
         query = QueryBuilder()
         query.SELECT(ordered_columns).FROM("Results", "R")
         if table.lower() == "results":
-            query.WHERE("R.rowid >= ?", starting_rowid)
+            query.WHERE(f"R.rowid {where_operator} ?", starting_rowid)
+            rowid = "R.rowid"
         elif not self._is_bookmark(table):  # assumes it is a status table
-            query.JOIN(table, "T", "pose_id").WHERE("T.rowid >= ?", starting_rowid)
+            query.JOIN(table, "T", "pose_id").WHERE(
+                f"T.rowid {where_operator} ?", starting_rowid
+            )
+            rowid = "T.rowid"
         if self._is_bookmark(table):
             query.JOIN("filtered_poses", "fp", "pose_id").WHERE(
-                "fp.rowid >= ?", starting_rowid
+                f"fp.rowid {where_operator} ?", starting_rowid
             )
-        query.JOIN("Ligands", "L", "ligand_id").LIMIT(length)
+            rowid = "fp.rowid"
+        query.JOIN("Ligands", "L", "ligand_id").ORDER_BY(rowid).LIMIT(length).DESC(
+            reverse
+        )
 
         cursor = self.db_query(*query.build())
         headers = [desc[0] for desc in cursor.description]
         data = cursor.fetchall()
         return {"headers": headers, "data": data}
+
+    def get_starting_rowid(self, table: str):
+        query = QueryBuilder()
+        query.SELECT("MIN(rowid)")
+
+        if self._is_table(table):
+            query.FROM(table)
+        elif self._is_bookmark(table):
+            query.FROM("Filtered_poses").WHERE(
+                "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
+            )
+
+        else:
+            logger.error(f"Table -{table}- does not exist in the database.")
+            return None
+        return self.db_query(*query.build()).fetchone()[0]
 
     def fetch_columns_from_table_as_dicts(
         self, table: str, columns: list, length: int = 500, starting_rowid: int = 0

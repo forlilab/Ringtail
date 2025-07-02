@@ -3,9 +3,6 @@
 #
 # Ringtail static utility methods
 #
-from collections import namedtuple
-
-Page = namedtuple("Page", ["start", "end"])
 
 
 def split_dict(dict: dict, items: list) -> tuple:
