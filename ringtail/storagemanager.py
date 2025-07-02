@@ -5117,41 +5117,26 @@ class StorageManagerSQLite(StorageManager):
         else:
             return None
 
-    def table_page_data(self, table: str, page_size: int) -> list:
+    def table_page_data(self, table: str, page_size: int) -> list[Page]:
         query = QueryBuilder()
         query.SELECT("MIN(rowid)")
 
-        pose_query = QueryBuilder()
-        pose_query.SELECT("Pose_ID")
-
         if self._is_table(table):
             query.FROM(table)
-            pose_table = table
         elif self._is_bookmark(table):
             query.FROM("Filtered_poses").WHERE(
                 "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
             )
-            pose_table = "Filtered_poses"
-            pose_query.FROM("Filtered_poses")
+
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
             return None
         pages = []
         start = self.db_query(*query.build()).fetchone()[0]
         length = self.table_length(table)
-        # I know length already, next get rowid first and last, and pose_id first and last
-        # TODO #TODO #TODO problem with status tables, they will not have ordered poses
-        # maybe just if status table, don't add poses?
-        # or in that case i would have to load it as a query or rewrite the table or something
         for start_index in range(start, start + length, page_size):
-            end = min(start_index + page_size, start + length) - 1
-            min_poseid = self.db_query(
-                f"SELECT Pose_id FROM {pose_table} WHERE rowid=?", (start_index,)
-            ).fetchone()[0]
-            max_poseid = self.db_query(
-                f"SELECT Pose_id FROM {pose_table} WHERE rowid=?", (end,)
-            ).fetchone()[0]
-            pages.append(Page(start_index, end, min_poseid, max_poseid))
+            end = min(start_index + page_size, start + length)
+            pages.append(Page(start_index, end))
         return pages
 
     def _vacuum(self):
@@ -5359,7 +5344,7 @@ class StorageManagerSQLite(StorageManager):
     # region GUI specific API
     def fetch_viewable_data_columns_from(
         self, table: str, length: int, starting_rowid: int = 0
-    ) -> sqlite3.Cursor:
+    ) -> dict[list[str], list]:
         """
         Makes a selection of columns and includes the status of the pose
 
@@ -5385,16 +5370,20 @@ class StorageManagerSQLite(StorageManager):
 
         query = QueryBuilder()
         query.SELECT(ordered_columns).FROM("Results", "R")
-        if not self._is_bookmark(table):
+        if table.lower() == "results":
             query.WHERE("R.rowid >= ?", starting_rowid)
+        elif not self._is_bookmark(table):  # assumes it is a status table
+            query.JOIN(table, "T", "pose_id").WHERE("T.rowid >= ?", starting_rowid)
         if self._is_bookmark(table):
-            query.WHERE(f"R.Pose_id IN ({QueryBuilder.bookmark_query(table)})")
+            query.JOIN("filtered_poses", "fp", "pose_id").WHERE(
+                "fp.rowid >= ?", starting_rowid
+            )
+        query.JOIN("Ligands", "L", "ligand_id").LIMIT(length)
 
-        query.WHERE("R.rowid > ?", starting_rowid).JOIN(
-            "Ligands", "L", "ligand_id"
-        ).ORDER_BY("R.pose_id").LIMIT(length)
-
-        return self.db_query(*query.build())
+        cursor = self.db_query(*query.build())
+        headers = [desc[0] for desc in cursor.description]
+        data = cursor.fetchall()
+        return {"headers": headers, "data": data}
 
     def fetch_columns_from_table_as_dicts(
         self, table: str, columns: list, length: int = 500, starting_rowid: int = 0

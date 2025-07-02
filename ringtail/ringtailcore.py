@@ -1248,7 +1248,7 @@ class RingtailCore:
 
     def get_limited_table_data(
         self, table: str, length: int = 100, starting_row_id: int = 0
-    ) -> iter:
+    ) -> dict[list[str], list]:
         """
         Returns a pointer or cursor (iterable) to the data in the Results table,
         if table is a bookmark it will limit the Results data to the poses represented

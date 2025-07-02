@@ -5,7 +5,7 @@
 #
 from collections import namedtuple
 
-Page = namedtuple("Page", ["start", "end", "min_poseid", "max_poseid"])
+Page = namedtuple("Page", ["start", "end"])
 
 
 def split_dict(dict: dict, items: list) -> tuple:
