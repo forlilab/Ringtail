@@ -4337,6 +4337,8 @@ class StorageManagerSQLite(StorageManager):
         query.SELECT(f"{column}").FROM("Results")
         if self._is_bookmark(table):
             query.IN_BOOKMARK(table)
+        elif self._is_statustable(table):
+            query.JOIN(table, "T", "pose_id")
         query.GROUP_BY("ligand_id")
         values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
 
