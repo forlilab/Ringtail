@@ -871,7 +871,15 @@ class RingtailCore:
         with OutputManager(log_file) as opm:
             opm.write_filter_results_in_log(new_data)
 
-    def get_plot_data(self, bookmark_name: str = None, include_status: bool = False):
+    def get_plot_data(
+        self,
+        bookmark_name: str = None,
+        only_passing: bool = False,
+        include_status: bool = False,
+        x_axis: str = "docking_score",
+        y_axis: str = "leff",
+        limit: int = None,
+    ):
         """
         Get ligand efficiency and energy for all docking data and for ligands that passed
         filtering in specified bookmark. Each tuple in the respective lists contains
@@ -887,7 +895,7 @@ class RingtailCore:
         """
         with self.storageman:
             all_data, passing_data = self.storageman.get_plot_data(
-                bookmark_name, include_status=include_status
+                bookmark_name, only_passing, include_status, x_axis, y_axis, limit
             )
 
         return all_data, passing_data

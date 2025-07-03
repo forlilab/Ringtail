@@ -4357,6 +4357,7 @@ class StorageManagerSQLite(StorageManager):
         include_status: bool = False,
         x_axis: str = "docking_score",
         y_axis: str = "leff",
+        limit: int = None,
     ):
         """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
         as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
@@ -4377,6 +4378,8 @@ class StorageManagerSQLite(StorageManager):
         bookmark_query.SELECT(
             "R." + x_axis, "R." + y_axis, "R." + "Pose_ID", "L." + "LigName"
         )
+        if limit:
+            bookmark_query.LIMIT(limit)
 
         if self._is_bookmark(bookmark_name):
             if include_status:
