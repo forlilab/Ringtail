@@ -420,11 +420,14 @@ class StorageManager:
         # perform filtering
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
+        if filtering_bookmark == None:
+            filtering_bookmark = "Results"
 
         self._populate_filter_tables(
             name=bookmark_name,
             query=filter_query,
             filters=all_filters,
+            filtering_bookmark=filtering_bookmark,
         )
         logger.debug(
             f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
@@ -1961,7 +1964,8 @@ class StorageManagerSQLite(StorageManager):
         filter_id           INTEGER PRIMARY KEY AUTOINCREMENT,
         name                VARCHAR[],
         query               VARCHAR[],
-        filters             VARCHAR[]);"""
+        filters             VARCHAR[],
+        filter_window       VARCHAR[]);"""
 
         filter_pose_sql = """CREATE TABLE IF NOT EXISTS Filtered_poses (
         filter_id           INTEGER,
@@ -3163,7 +3167,9 @@ class StorageManagerSQLite(StorageManager):
 
         return filtered_ligands
 
-    def _populate_filter_tables(self, name, query: str, filters={}) -> bool:
+    def _populate_filter_tables(
+        self, name, query: str, filters={}, filtering_bookmark: str = ""
+    ) -> bool:
         """
         Will run a filter query and determine if there are passing poses, in which case all relevant
         data is written to the database
@@ -3172,6 +3178,7 @@ class StorageManagerSQLite(StorageManager):
             name (str): name of new bookmark
             query (str): query that defines what poses to insert
             filters (dict, optional): filters or restrictions used
+            filtering_bookmark (str, optional): If filters were performed across an existing obokmark. Defaults to None.
 
         Raises:
             StorageError
@@ -3196,15 +3203,11 @@ class StorageManagerSQLite(StorageManager):
                     f"The bookmark {name} already exists, and will be overwritten by the current filter."
                 )
                 self.delete_bookmark(name)
-            filter_sql = """INSERT INTO Filters (name,query,filters) VALUES (?,?,?) RETURNING filter_id;"""
+            filter_sql = """INSERT INTO Filters (name,query,filters,filter_window) VALUES (?,?,?,?) RETURNING filter_id;"""
             try:
                 filter_id = self.db_query(
                     filter_sql,
-                    (
-                        name,
-                        query,
-                        json.dumps(filters),
-                    ),
+                    (name, query, json.dumps(filters), filtering_bookmark),
                 ).fetchone()[0]
 
                 filter_pose_sql = f"""
