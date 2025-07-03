@@ -789,21 +789,15 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def get_range_of_column(self, column: str, table: str) -> tuple:
+    def get_range_of_e_le(self, table: str) -> tuple:
         """
-        Get min and max of a given column, if column is numeric. Currently only works for
-        columns in the Results table. If given table is a bookmark, it will limit the data to
-        get min/max for by the range of poses represented in the bookmark.
+        Get min and max of e/docking_score and ligand efficiency/le/leff/
 
         Args:
-            column (str): name of column for which to get range
-            table (str): table limit data, e.g., either Results or a bookmark
-
-        Raises:
-            OptionError
+            table (str): table limit data, e.g., either Results or a bookmark name
 
         Returns:
-            tuple: min, max of the column
+            tuple: e_min, e_max, le_min, le_max
         """
         raise_not_implemented()
 
@@ -3933,32 +3927,32 @@ class StorageManagerSQLite(StorageManager):
             ).fetchall()
         ]
 
-    def get_range_of_column(self, column: str, table: str) -> tuple:
+    def get_range_of_e_le(self, table: str) -> tuple:
         """
-        Get min and max of a given column, if column is numeric. Currently only works for
-        columns in the Results table. If given table is a bookmark, it will limit the data to
-        get min/max for by the range of poses represented in the bookmark.
+        Get min and max of e/docking_score and ligand efficiency/le/leff/
 
         Args:
-            column (str): name of column for which to get range
-            table (str): table limit data, e.g., either Results or a bookmark
-
-        Raises:
-            OptionError
+            table (str): table limit data, e.g., either Results or a bookmark name
 
         Returns:
-            tuple: min, max of the column
+            tuple: e_min, e_max, le_min, le_max
         """
-        if column in self._get_numeric_columns("Results"):
-            query = QueryBuilder()
-            query.SELECT(f"MIN(R.{column})", f"MAX(R.{column})").FROM("Results", "R")
-            if self._is_bookmark(table):
-                query.IN_BOOKMARK(table)
-            return self.db_query(query.build()[0]).fetchall()[0]
-        else:
-            raise OptionError(
-                f"Requested column {column} is not a numeric column, cannot get value range."
-            )
+
+        query = QueryBuilder()
+        query.SELECT(
+            "MIN(R.docking_score)",
+            "MAX(R.docking_score)",
+            "MIN(R.leff)",
+            "MAX(R.leff)",
+        ).FROM("Results", "R")
+        if self._is_bookmark(table):
+            query.JOIN("Filtered_poses", "fp", "pose_id").JOIN(
+                "Filters", "f", "filter_id", to="Filtered_poses"
+            ).WHERE("f.name = ?", table)
+        elif self._is_statustable(table):
+            query.JOIN(table, "T", "pose_id")
+
+        return self.db_query(*query.build()).fetchall()[0]
 
     def fetch_receptor_object(self) -> Union[None, tuple]:
         """Returns all Receptor objects from database
@@ -5322,6 +5316,22 @@ class StorageManagerSQLite(StorageManager):
         else:
             return False
 
+    def _is_statustable(self, table: str) -> bool:
+        """
+        Returns True if table name is actually a status table (table with poses who have been assigned a status like accept, reject, maybe)
+
+        Args:
+            table (str): name of table or bookmark to check
+
+        Returns:
+            bool: if table name is a status table
+        """
+        # TODO hardcoded, need to find better way
+        if table.lower() in ["accepted", "maybe", "rejected"]:
+            return True
+        else:
+            return False
+
     # endregion
 
     # region GUI specific API
@@ -5351,7 +5361,7 @@ class StorageManagerSQLite(StorageManager):
         if table.lower() == "results":
             rowid = "R.rowid"
 
-        elif not self._is_bookmark(table):  # assumes it is a status table
+        elif self._is_statustable(table):
             query.JOIN(table, "T", "pose_id")
             rowid = "T.rowid"
             # status assignement doesn't make sense for status tables
@@ -5385,6 +5395,7 @@ class StorageManagerSQLite(StorageManager):
         return {"headers": headers, "data": data}
 
     def get_starting_rowid(self, table: str):
+        # TODO
         query = QueryBuilder()
         query.SELECT("MIN(rowid)")
 

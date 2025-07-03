@@ -1334,6 +1334,7 @@ class RingtailCore:
             return self.storageman.table_length(table)
 
     def get_starting_rowid(self, table: str):
+        # TODO
         with self.storageman:
             return self.storageman.get_starting_rowid(table)
 
@@ -1347,26 +1348,18 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.db_empty()
 
-    def get_value_range(
-        self, column: str, table: str = "Results"
-    ) -> tuple[float, float]:
+    def get_range_of_e_le(self, table: str = "Results") -> tuple[float, float]:
         """
-        Get min and max of a given column, if column is numeric. Currently only works for
-        columns in the Results table. If given table is a bookmark name, it will limit the data to
-        get min/max for by the range of poses represented in the bookmark.
+        Get min and max of e/docking_score and ligand efficiency/le/leff/
 
         Args:
-            column (str): name of column for which to get range
             table (str): table limit data, e.g., either Results or a bookmark name
 
-        Raises:
-            OptionError
-
         Returns:
-            tuple: min, max of the column
+            tuple: e_min, e_max, le_min, le_max
         """
         with self.storageman as sm:
-            return sm.get_range_of_column(column, table)
+            return sm.get_range_of_e_le(table)
 
     def get_percentiles(
         self, column: str, num_bins: int = 20, table: str = "Results"
