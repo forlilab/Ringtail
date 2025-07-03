@@ -569,10 +569,22 @@ class StorageManager:
         """Method that will retrieve filter values used to construct bookmark
 
         Args:
-            bookmark_name (str, optional): can get filter values for given bookmark, or filter values from currently active bookmark in storageman
+            bookmark_name (str): bookmark for which to get filters
 
             Returns:
                 dict: containing the filter data
+        """
+        raise_not_implemented()
+
+    def fetch_filters_and_filterwindow(self, bookmark_name: str) -> dict:
+        """Method that will retrieve filter values used to construct bookmark
+        and the filter window used as basis
+
+        Args:
+            bookmark_name (str): bookmark which was the result of the filtering
+
+            Returns:
+                tuple(dict, str): containing the filter data and filter window
         """
         raise_not_implemented()
 
@@ -4026,18 +4038,40 @@ class StorageManagerSQLite(StorageManager):
         """Method that will retrieve filter values used to construct bookmark
 
         Args:
-            bookmark_name (str, optional): can get filter values for given bookmark, or filter values from currently active bookmark in storageman
+            bookmark_name (str): bookmark for which to get filters
 
             Returns:
                 dict: containing the filter data
         """
-        sql_query = "SELECT filters FROM Filters where name = ?"
+        query = QueryBuilder()
+        query.SELECT("filters").FROM("Filters").WHERE("name = ?", bookmark_name)
 
-        filters = self.db_query(sql_query, (bookmark_name,)).fetchone()
+        filters = self.db_query(*query.build()).fetchone()
         if not filters:
             return {}
 
         return json.loads(filters[0])
+
+    def fetch_filters_and_filterwindow(self, bookmark_name: str) -> tuple[dict, str]:
+        """Method that will retrieve filter values used to construct bookmark
+        and the filter window used as basis
+
+        Args:
+            bookmark_name (str): bookmark which was the result of the filtering
+
+            Returns:
+                tuple(dict, str): containing the filter data and filter window
+        """
+        if not self._is_bookmark(bookmark_name):
+            return {}, ""
+
+        query = QueryBuilder()
+        query.SELECT("filters", "filter_window").FROM("Filters").WHERE(
+            "name = ?", bookmark_name
+        )
+        filters, filter_window = self.db_query(*query.build()).fetchone()
+
+        return json.loads(filters), filter_window
 
     def fetch_flexres_info(self, receptor):
         """fetch flexible residues names and atomname lists

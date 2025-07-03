@@ -871,6 +871,10 @@ class RingtailCore:
         with OutputManager(log_file) as opm:
             opm.write_filter_results_in_log(new_data)
 
+    def get_previous_filters(self, bookmark_name: str) -> tuple[dict, str]:
+        with self.storageman as sm:
+            return sm.fetch_filters_and_filterwindow(bookmark_name)
+
     def get_plot_data(
         self,
         bookmark_name: str = None,
