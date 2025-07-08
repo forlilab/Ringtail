@@ -470,7 +470,7 @@ class RingtailCore:
 
         self.logger.info("Starting to filter results")
         # get possible permutations of interaction with max_miss excluded
-        if max_miss > 0 and enumerate_interaction_combs:
+        if enumerate_interaction_combs and max_miss > 0:
             interaction_combs = self._generate_interaction_combinations(
                 filters.asdict(), max_miss
             )
