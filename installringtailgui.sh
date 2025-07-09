@@ -19,7 +19,7 @@ mkdir ringtail_test_gui
 cd ringtail_test_gui
 
 # download and install ringtail
-git clone -b dev git@github.com:forlilab/PrivateRingtail.git
+git clone -b performance git@github.com:forlilab/PrivateRingtail.git
 cd PrivateRingtail
 pip install -e .
 micromamba activate ringtail_test_gui
