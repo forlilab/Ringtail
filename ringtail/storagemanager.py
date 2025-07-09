@@ -5407,7 +5407,9 @@ class StorageManagerSQLite(StorageManager):
             status_assignement = f"""'{table.lower()}',"""
 
         elif self._is_bookmark(table):
-            query.JOIN("filtered_poses", "fp", "pose_id")
+            query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
+                "filters", "f", "filter_id", "filtered_poses"
+            ).WHERE("f.name = ?", table)
             rowid = "fp.rowid"
 
         ordered_columns = f"""
@@ -5424,7 +5426,7 @@ class StorageManagerSQLite(StorageManager):
 
         query.SELECT(ordered_columns)
 
-        query.JOIN("Ligands", "L", "ligand_id").WHERE(
+        query.JOIN("Ligands", "L", "ligand_id", "results").WHERE(
             f"{rowid} {where_operator} ?", starting_rowid
         ).ORDER_BY(rowid).LIMIT(length).DESC(reverse)
 
