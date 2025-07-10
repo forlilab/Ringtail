@@ -2859,7 +2859,10 @@ class StorageManagerSQLite(StorageManager):
                     "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
-            filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({QueryBuilder.bookmark_query(filter_bookmark)}))"""
+            if self._is_bookmark(filter_bookmark):
+                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({QueryBuilder.bookmark_query(filter_bookmark)}))"""
+            elif self._is_statustable(filter_bookmark):
+                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN (SELECT Pose_ID FROM {filter_bookmark}))"""
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
