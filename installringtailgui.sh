@@ -12,7 +12,7 @@ micromamba activate ringtail_test_gui
 micromamba install -c conda-forge meeko rdkit multiprocess scipy pandas matplotlib chemicalite pyside6
 
 # saltviewer dependencies
-micromamba install -c conda-forge prody pyopengl pylinalg wgpu-py pygltflib pygfx line_profiler
+micromamba install -c conda-forge prody pyopengl pylinalg wgpu-py pygltflib pygfx line_profiler tomli
 
 micromamba activate ringtail_test_gui
 mkdir ringtail_test_gui
