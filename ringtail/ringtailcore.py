@@ -79,6 +79,10 @@ class RingtailCore:
         self._run_mode = "api"
         self._docking_mode = docking_mode
 
+    def check_previous_docking_mode(self) -> Union[None, str]:
+        with self.storageman as sm:
+            return sm.check_previous_docking_mode()
+
     # region write to database
     def add_results_from_files(
         self,

@@ -916,6 +916,15 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def check_previous_docking_mode(self) -> Union[None, str]:
+        """
+        Checks the docking_mode last used in a database write session
+
+        Returns:
+            Union[None, str]: docking_mode if any
+        """
+        raise_not_implemented()
+
     # endregion
 
     # region private methods
@@ -4522,6 +4531,20 @@ class StorageManagerSQLite(StorageManager):
             logger.debug(f"Ringtail connected to database {self.db_file}.")
         except Exception as e:
             raise StorageError(f"Error while creating or connecting to database: {e}.")
+
+    def check_previous_docking_mode(self) -> Union[None, str]:
+        """
+        Checks the docking_mode last used in a database write session
+
+        Returns:
+            Union[None, str]: docking_mode if any
+        """
+        if self.db_empty():
+            return None
+        docking_mode = self.conn.execute(
+            "SELECT docking_mode FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1"
+        ).fetchone()
+        return docking_mode[0].lower() if docking_mode else None
 
     def check_storage_ready(
         self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
