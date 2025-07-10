@@ -347,6 +347,8 @@ class RingtailCore:
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
+        ligand_min_molweight=None,
+        ligand_max_molweight=None,
         # other processing options:
         enumerate_interaction_combs: bool = None,
         output_all_poses: bool = None,
@@ -381,6 +383,8 @@ class RingtailCore:
                 ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., [["ccc", "CN"]]
                 ligand_substruct_pos (list[list[type]]): SMARTS pattern(s) for substructure matching, e.g., [["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5]] -> [["smart_string", index_of_positioned_atom, cutoff_distance, x, y, z]]
                 ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
+                ligand_min_molweight (float): min molweight (inclusive, g/mol) for the ligand
+                ligand_max_molweight (float): max molweight (inclusive, g/mol) for the ligand
                 ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
             Ligand results options:
                 enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
@@ -446,6 +450,8 @@ class RingtailCore:
                 "ligand_substruct": ligand_substruct,
                 "ligand_substruct_pos": ligand_substruct_pos,
                 "ligand_max_atoms": ligand_max_atoms,
+                "ligand_min_molweight": ligand_min_molweight,
+                "ligand_max_molweight": ligand_max_molweight,
             }
         )
 

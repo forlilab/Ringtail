@@ -509,6 +509,22 @@ def cmdline_parser(defaults: dict = {}):
         metavar="INT",
     )
     ligand_group.add_argument(
+        "-lmw",
+        "--ligand_min_molweight",
+        help="min molweight (inclusive, g/mol) for the ligand",
+        action="store",
+        type=float,
+        metavar="float",
+    )
+    ligand_group.add_argument(
+        "-hmw",
+        "--ligand_max_molweight",
+        help="max molweight (inclusive, g/mol) for the ligand",
+        action="store",
+        type=float,
+        metavar="float",
+    )
+    ligand_group.add_argument(
         "--ligand_substruct",
         help="SMARTS pattern(s) for substructure matching, if error delimit each substructure with ''.",
         action="append",
@@ -865,7 +881,11 @@ class CLOptionParser:
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
                     # just a simple string
-                    if _type == ("ligand_max_atoms"):
+                    if _type in [
+                        "ligand_max_atoms",
+                        "ligand_min_molweight",
+                        "ligand_max_molweight",
+                    ]:
                         ligand_filters[_type] = ligand_filter_value
                         continue
                     # don't include None values

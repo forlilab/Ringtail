@@ -2906,17 +2906,13 @@ class StorageManagerSQLite(StorageManager):
         if "lig_filters" in processed_filters:
             lig_filters = processed_filters["lig_filters"]
             if "ligand_name" in lig_filters:
-                lig_names = lig_filters["ligand_name"]
+                lig_names = lig_filters.pop("ligand_name")
                 ligname_query = " OR ".join(
                     [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
             # rdkit queries need to be handled in memory separate from the main query
-            if (
-                "ligand_substruct" in lig_filters
-                or "ligand_substruct_pos" in lig_filters
-                or "ligand_max_atoms" in lig_filters
-            ):
+            if lig_filters:
                 rdkit_query = True
 
         ### Join each of the filter groups
@@ -2991,6 +2987,8 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             dict: dict of ligand idsnames and all their pose ids passing regular+rdkit filters
         """
+        from rdkit.Chem import Descriptors
+
         maxatoms = 0
         position = False
         substruct_mols = []
@@ -2999,6 +2997,14 @@ class StorageManagerSQLite(StorageManager):
             logical_operator = ligand_filters["ligand_operator"]
         if "ligand_max_atoms" in ligand_filters:
             maxatoms = ligand_filters["ligand_max_atoms"]
+        if "ligand_min_molweight" in ligand_filters:
+            min_mw = ligand_filters["ligand_min_molweight"]
+        else:
+            min_mw = None
+        if "ligand_max_molweight" in ligand_filters:
+            max_mw = ligand_filters["ligand_max_molweight"]
+        else:
+            max_mw = None
 
         def _smarts_to_mol(smarts: str) -> Chem.Mol:
             """
@@ -3121,9 +3127,16 @@ class StorageManagerSQLite(StorageManager):
                 # check if qualify for maxatoms
                 if maxatoms > 0:
                     if not ligand_mol.GetNumHeavyAtoms() <= maxatoms:
-                        # continue for ligandrow in _stream_query, ligand did not pass
+                        # continue for ligandrow in _stream_query, ligand did not pass num atoms filter
                         continue
-
+                # check if mol weight filters are present
+                if min_mw or max_mw:
+                    if not (
+                        (min_mw is None or Descriptors.MolWt(ligand_mol) >= min_mw)
+                        and (max_mw is None or Descriptors.MolWt(ligand_mol) <= max_mw)
+                    ):
+                        # continue for ligandrow in _stream_query, ligand did not pass molweight filter
+                        continue
                 # if there are substructures in the search
                 if substruct_mols:
                     # count how many matches
