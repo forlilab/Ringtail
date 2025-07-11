@@ -4449,8 +4449,8 @@ class StorageManagerSQLite(StorageManager):
             if only_passing:
                 all_data = []
             else:
-                all_data = self.db_query(all_data_query.build()[0])
-            passing_data = self.db_query(bookmark_query.build()[0])
+                all_data = self.db_query(all_data_query.build()[0]).fetchall()
+            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
 
         elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
             # will assume it is a status table
@@ -4463,13 +4463,12 @@ class StorageManagerSQLite(StorageManager):
             if only_passing:
                 all_data = []
             else:
-                all_data = self.db_query(all_data_query.build()[0])
-            passing_data = self.db_query(bookmark_query.build()[0])
+                all_data = self.db_query(all_data_query.build()[0]).fetchall()
+            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
 
         else:
-            all_data = self.db_query(all_data_query.build()[0])
+            all_data = self.db_query(all_data_query.build()[0]).fetchall()
             passing_data = []
-
         return all_data, passing_data
 
     # endregion
