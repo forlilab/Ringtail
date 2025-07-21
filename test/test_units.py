@@ -325,7 +325,6 @@ class TestRingtailCore:
     def test_generate_interactions_prepare_filters(self):
         test_filters = []
         rtc = RingtailCore()
-        rtc.docking_mode = "dlg"
         filters = ringtailoptions.Filters(
             {
                 "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
@@ -337,105 +336,55 @@ class TestRingtailCore:
             nufilter = rtc._prepare_interaction_combo_filters(filters.asdict(), ic)
             test_filters.append(nufilter)
 
-        assert {
-            "eworst": None,
-            "ebest": None,
-            "leworst": None,
-            "lebest": None,
-            "score_percentile": None,
-            "le_percentile": None,
-            "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-            "hb_interactions": [("A:ARG:123:", True)],
-            "reactive_interactions": [],
-            "hb_count": None,
-            "react_any": None,
-            "max_miss": 0,
-            "ligand_name": None,
-            "ligand_operator": None,
-            "ligand_substruct": None,
-            "ligand_substruct_pos": None,
-            "ligand_max_atoms": None,
-        } in test_filters
+        assert (
+            ringtailoptions.Filters(
+                {
+                    "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                    "vdw_interactions": [("A:ARG:123:", True)],
+                }
+            ).asdict()
+            in test_filters
+        )
 
-        assert {
-            "eworst": None,
-            "ebest": None,
-            "leworst": None,
-            "lebest": None,
-            "score_percentile": None,
-            "le_percentile": None,
-            "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-            "hb_interactions": [("A:VAL:124:", True)],
-            "reactive_interactions": [],
-            "hb_count": None,
-            "react_any": None,
-            "max_miss": 0,
-            "ligand_name": None,
-            "ligand_operator": None,
-            "ligand_substruct": None,
-            "ligand_substruct_pos": None,
-            "ligand_max_atoms": None,
-        } in test_filters
+        assert (
+            ringtailoptions.Filters(
+                {
+                    "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                    "vdw_interactions": [("A:VAL:124:", True)],
+                }
+            ).asdict()
+            in test_filters
+        )
 
-        assert {
-            "eworst": None,
-            "ebest": None,
-            "leworst": None,
-            "lebest": None,
-            "score_percentile": None,
-            "le_percentile": None,
-            "vdw_interactions": [("A:ARG:123:", True)],
-            "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-            "reactive_interactions": [],
-            "hb_count": None,
-            "react_any": None,
-            "max_miss": 0,
-            "ligand_name": None,
-            "ligand_operator": None,
-            "ligand_substruct": None,
-            "ligand_substruct_pos": None,
-            "ligand_max_atoms": None,
-        } in test_filters
+        assert (
+            ringtailoptions.Filters(
+                {
+                    "hb_interactions": [("A:ARG:123:", True)],
+                    "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                }
+            ).asdict()
+            in test_filters
+        )
 
-        assert {
-            "eworst": None,
-            "ebest": None,
-            "leworst": None,
-            "lebest": None,
-            "score_percentile": None,
-            "le_percentile": None,
-            "vdw_interactions": [("A:VAL:124:", True)],
-            "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-            "reactive_interactions": [],
-            "hb_count": None,
-            "react_any": None,
-            "max_miss": 0,
-            "ligand_name": None,
-            "ligand_operator": None,
-            "ligand_substruct": None,
-            "ligand_substruct_pos": None,
-            "ligand_max_atoms": None,
-        } in test_filters
+        assert (
+            ringtailoptions.Filters(
+                {
+                    "hb_interactions": [("A:VAL:124:", True)],
+                    "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                }
+            ).asdict()
+            in test_filters
+        )
 
-        assert {
-            "eworst": None,
-            "ebest": None,
-            "leworst": None,
-            "lebest": None,
-            "score_percentile": None,
-            "le_percentile": None,
-            "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-            "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-            "reactive_interactions": [],
-            "hb_count": None,
-            "react_any": None,
-            "max_miss": 0,
-            "ligand_name": None,
-            "ligand_operator": None,
-            "ligand_substruct": None,
-            "ligand_substruct_pos": None,
-            "ligand_max_atoms": None,
-        } in test_filters
+        assert (
+            ringtailoptions.Filters(
+                {
+                    "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                    "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                }
+            ).asdict()
+            in test_filters
+        )
 
         assert len(test_filters) == 5
 
@@ -443,8 +392,11 @@ class TestRingtailCore:
         assert os.path.exists("different_log.txt")
 
         with open("different_log.txt") as f:
+            target_line_no = None
             for line_no, line_content in enumerate(f):
-                if line_no == 28:
+                if "bookmark" in line_content:
+                    target_line_no = line_no + 2
+                if line_no == target_line_no:
                     break
 
         assert line_content == "'11128', -7.25\n"
@@ -670,26 +622,16 @@ class TestStorageMan:
         curs = db_query(query_string)
         bookmark_filters_db_str = curs.fetchone()[0]
 
-        filters = {
-            "eworst": -3.0,
-            "ebest": None,
-            "leworst": None,
-            "lebest": None,
-            "score_percentile": None,
-            "le_percentile": None,
-            "vdw_interactions": [["A:VAL:279:", True]],
-            "hb_interactions": [["A:VAL:279:", True], ["A:LYS:162:", True]],
-            "reactive_interactions": [],
-            "hb_count": None,
-            "react_any": None,
-            "max_miss": 0,
-            "ligand_name": None,
-            "ligand_operator": None,
-            "ligand_substruct": None,
-            "ligand_substruct_pos": None,
-            "ligand_max_atoms": None,
-        }
-        assert json.loads(bookmark_filters_db_str) == filters
+        assert (
+            json.loads(bookmark_filters_db_str)
+            == ringtailoptions.Filters(
+                {
+                    "eworst": -3.0,
+                    "vdw_interactions": [["A:VAL:279:", True]],
+                    "hb_interactions": [["A:VAL:279:", True], ["A:LYS:162:", True]],
+                }
+            ).asdict()
+        )
 
     def test_version_info(self):
 
