@@ -2868,7 +2868,7 @@ class StorageManagerSQLite(StorageManager):
                     "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
-            if self._is_bookmark(filter_bookmark):
+            if self.is_bookmark(filter_bookmark):
                 filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({QueryBuilder.bookmark_query(filter_bookmark)}))"""
             elif self._is_statustable(filter_bookmark):
                 filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN (SELECT Pose_ID FROM {filter_bookmark}))"""
@@ -3235,7 +3235,7 @@ class StorageManagerSQLite(StorageManager):
                     f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
                 )
             # check if bookmark exists
-            if self._is_bookmark(name):
+            if self.is_bookmark(name):
                 logger.warning(
                     f"The bookmark {name} already exists, and will be overwritten by the current filter."
                 )
@@ -3985,7 +3985,7 @@ class StorageManagerSQLite(StorageManager):
             "MIN(R.leff)",
             "MAX(R.leff)",
         ).FROM("Results", "R")
-        if self._is_bookmark(table):
+        if self.is_bookmark(table):
             query.JOIN("Filtered_poses", "fp", "pose_id").JOIN(
                 "Filters", "f", "filter_id", to="Filtered_poses"
             ).WHERE("f.name = ?", table)
@@ -4087,7 +4087,7 @@ class StorageManagerSQLite(StorageManager):
             Returns:
                 tuple(dict, str): containing the filter data and filter window
         """
-        if not self._is_bookmark(bookmark_name):
+        if not self.is_bookmark(bookmark_name):
             return {}, ""
 
         query = QueryBuilder()
@@ -4397,7 +4397,7 @@ class StorageManagerSQLite(StorageManager):
             )
         query = QueryBuilder()
         query.SELECT(f"{column}").FROM("Results")
-        if self._is_bookmark(table):
+        if self.is_bookmark(table):
             query.IN_BOOKMARK(table)
         elif self._is_statustable(table):
             query.JOIN(table, "T", "pose_id")
@@ -4439,7 +4439,7 @@ class StorageManagerSQLite(StorageManager):
         if limit:
             bookmark_query.LIMIT(limit)
 
-        if self._is_bookmark(bookmark_name):
+        if self.is_bookmark(bookmark_name):
             if include_status:
                 bookmark_query.SELECT_STATUS()
             bookmark_query.FROM("Results", "R").IN_BOOKMARK(bookmark_name).JOIN(
@@ -5168,7 +5168,7 @@ class StorageManagerSQLite(StorageManager):
         if self._is_table(table):
             query = f"""SELECT COUNT(*) FROM {table};"""
             params = ()
-        elif self._is_bookmark(table):
+        elif self.is_bookmark(table):
             query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?);"""
             params = (table,)
         else:
@@ -5180,7 +5180,7 @@ class StorageManagerSQLite(StorageManager):
     def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
         query = QueryBuilder()
         query.SELECT("rowid")
-        if self._is_bookmark(table):
+        if self.is_bookmark(table):
             query.FROM("Filtered_poses").WHERE(
                 "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
             )
@@ -5377,7 +5377,7 @@ class StorageManagerSQLite(StorageManager):
         else:
             return False
 
-    def _is_bookmark(self, table: str) -> bool:
+    def is_bookmark(self, table: str) -> bool:
         """
         Returns True if table name is actually a bookmark
 
@@ -5444,7 +5444,7 @@ class StorageManagerSQLite(StorageManager):
             # status assignement doesn't make sense for status tables
             status_assignement = f"""'{table.lower()}',"""
 
-        elif self._is_bookmark(table):
+        elif self.is_bookmark(table):
             query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
                 "filters", "f", "filter_id", "filtered_poses"
             ).WHERE("f.name = ?", table)
@@ -5480,7 +5480,7 @@ class StorageManagerSQLite(StorageManager):
 
         if self._is_table(table):
             query.FROM(table)
-        elif self._is_bookmark(table):
+        elif self.is_bookmark(table):
             query.FROM("Filtered_poses").WHERE(
                 "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
             )
@@ -5535,7 +5535,7 @@ class StorageManagerSQLite(StorageManager):
         query.SELECT("L.Ligname", "r.pose_id").FROM("Ligands", "L").JOIN(
             "Results", "R", "ligand_id"
         )
-        if self._is_bookmark(selection):
+        if self.is_bookmark(selection):
             query.IN_BOOKMARK(selection)
         elif selection.lower() in statuses:
             query.WHERE(f"R.pose_id IN {selection}")
@@ -5567,7 +5567,7 @@ class StorageManagerSQLite(StorageManager):
             "L.LigName = ?", ligand_name
         ).JOIN("Ligands", "L", "ligand_id")
 
-        if self._is_bookmark(selection):
+        if self.is_bookmark(selection):
             query.IN_BOOKMARK(selection)
         elif selection in statuses:
             query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")

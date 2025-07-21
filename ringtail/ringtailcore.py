@@ -1986,7 +1986,7 @@ class RingtailCore:
             str: bookmark name if valid
         """
         with self.storageman:
-            if self.storageman.bookmark_exists(bookmark_name):
+            if self.storageman.is_bookmark(bookmark_name):
                 # check if has max_miss filter
                 bookmark_filters = self.storageman.fetch_filters_from_bookmark(
                     bookmark_name
@@ -2008,7 +2008,7 @@ class RingtailCore:
             # if bookmark name is not in the database
             else:
                 # does bookmark name + _union resolve the issue
-                if self.storageman.bookmark_exists(bookmark_name + "_union"):
+                if self.storageman.is_bookmark(bookmark_name + "_union"):
                     bookmark_name = bookmark_name + "_union"
                     self.logger.warning(
                         "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
