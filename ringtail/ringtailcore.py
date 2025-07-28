@@ -5,6 +5,7 @@
 #
 
 import matplotlib.pyplot as plt
+from pathlib import Path
 import json
 from meeko import RDKitMolCreate
 from .storagemanager import StorageManager
@@ -661,6 +662,32 @@ class RingtailCore:
                 )
                 return
 
+        # ensure polymer is correct type, else check if string or path
+        if type(receptor_polymer) == str:
+            from meeko import Polymer
+
+            if ".json" in receptor_polymer:
+                polypath = Path(receptor_polymer)
+                if polypath.is_file():
+                    with open(polypath) as f:
+                        polymer_string = f.read()
+                else:
+                    raise OptionError(
+                        "It appears a path to a receptor polymer json file was provided, but the file does not exist: ",
+                        receptor_polymer,
+                    )
+            else:
+                try:
+                    polymer_string = json.loads(receptor_polymer)
+                except json.JSONDecodeError:
+                    raise OptionError(
+                        "The provided input for receptor_polymer was provided is not a valid Polymer object, not a valid path or valid json, cannot proceed."
+                    )
+
+            polymer = Polymer.from_json(polymer_string)
+        else:
+            polymer = receptor_polymer
+
         flexres_data = self.make_receptor_flexres_mols()
         lig_flex_mol = {}
         for ligand, poses in ligands_poses.items():
@@ -670,13 +697,14 @@ class RingtailCore:
 
             if filename:
                 # if providing filename, make sure it has .pdb extension
+                # and add ligand name
                 root, ext = os.path.splitext(filename)
                 if not ext:
                     ext = ".pdb"
-                path = root + ext
+                path = root + ligand + ext
             else:
                 receptor_name, _ = self.get_receptor_object()
-                path = receptor_name + ".pdb"
+                path = receptor_name + ligand + ".pdb"
 
             flexmoldict = {}
             # string in list of strings
@@ -684,7 +712,7 @@ class RingtailCore:
                 # res id is chain:resnum
                 flexmoldict[f"{flexres[4]}:{flexres[-3:]}"] = flexres_mols[index]
 
-            pdb_str = pdb_updated_flexres_from_rdkit(receptor_polymer, flexmoldict)
+            pdb_str = pdb_updated_flexres_from_rdkit(polymer, flexmoldict)
             # write pdb string to file
             with open(path, "w") as file:
                 file.write(pdb_str)
