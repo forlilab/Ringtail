@@ -5388,7 +5388,7 @@ class StorageManagerSQLite(StorageManager):
             bool: if table name is a bookmark
         """
 
-        if table.lower() in self.get_all_bookmark_names():
+        if table and table.lower() in self.get_all_bookmark_names():
             return True
         else:
             return False
@@ -5569,7 +5569,7 @@ class StorageManagerSQLite(StorageManager):
 
         if self.is_bookmark(selection):
             query.IN_BOOKMARK(selection)
-        elif selection in statuses:
+        elif selection.lower() in statuses:
             query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")
         elif selection == None:
             # get all poses for ligand, no WHERE clause for pose_id
