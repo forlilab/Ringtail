@@ -4468,7 +4468,13 @@ class StorageManagerSQLite(StorageManager):
 
         else:
             all_data = self.db_query(all_data_query.build()[0]).fetchall()
-            passing_data = []
+
+            if include_status:
+                bookmark_query.SELECT_STATUS()
+            bookmark_query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
+
+            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
+
         return all_data, passing_data
 
     # endregion
