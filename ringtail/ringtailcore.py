@@ -623,7 +623,7 @@ class RingtailCore:
 
     def write_flexres_pdb(
         self,
-        receptor_polymer,
+        receptor_polymer: Union[object, str],
         ligname: str = None,
         bookmark_name: str = None,
         filename: str = "receptor.pdb",
@@ -636,7 +636,9 @@ class RingtailCore:
         Writes a receptor pdb with flexible residues based on the ligand provided
 
         Args:
-            receptor_polymer (Polymer): version of receptor produced by meeko
+            receptor_polymer (Polymer, json string, .json file): version of receptor produced by meeko, 
+                                        or a json representation that can be rebuilt to a polymer, including 
+                                        valid json string and valid json file
             ligname (str): ligand name for which the receptor flexible residue info should be collected
             filename (str): name of the output pdb, extension is optional, will default to '.pdb'
             bookmark_name (str, optional): if provided, it will only export flex res for ligand poses passing bookmark filters
