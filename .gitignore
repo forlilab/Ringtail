@@ -179,3 +179,5 @@ test/.DS_Store
 *_ringtail-process-log.txt
 *output.db
 *_log.txt
+
+*config.json
