@@ -180,4 +180,4 @@ test/.DS_Store
 *output.db
 *_log.txt
 
-*config.json
+config.json
