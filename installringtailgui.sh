@@ -9,7 +9,7 @@ micromamba create -y -n ringtail_test_gui "python>=3.9,<3.12"
 micromamba activate ringtail_test_gui
 
 # ringtail dependencies
-micromamba install -c conda-forge meeko rdkit multiprocess scipy pandas matplotlib chemicalite pyside6
+micromamba install -c conda-forge meeko rdkit scipy pandas matplotlib pyside6
 
 # saltviewer dependencies
 micromamba install -c conda-forge prody pyopengl pylinalg wgpu-py pygltflib pygfx line_profiler tomli
