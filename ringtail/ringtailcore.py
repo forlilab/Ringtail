@@ -753,9 +753,6 @@ class RingtailCore:
             ligands_poses = self._fetch_select_ligands_poses(
                 ligand_names=ligname, bookmark_name=bookmark_name
             )
-            # ligands_poses = self._fetch_select_ligands_poses(
-            #     bookmark_name=bookmark_name
-            # )
             flexres_data = self.make_receptor_flexres_mols()
             all_mols = {}
             for ligname, poses in ligands_poses.items():

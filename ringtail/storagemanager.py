@@ -5575,11 +5575,11 @@ class StorageManagerSQLite(StorageManager):
 
         if self.is_bookmark(selection):
             query.IN_BOOKMARK(selection)
-        elif selection.lower() in statuses:
-            query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")
         elif selection == None:
             # get all poses for ligand, no WHERE clause for pose_id
             pass
+        elif selection.lower() in statuses:
+            query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")
         else:
             logger.error(
                 f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
