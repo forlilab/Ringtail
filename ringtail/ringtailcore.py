@@ -20,7 +20,7 @@ from rdkit import Chem
 import itertools
 import os
 from .logutils import LOGGER
-from typing import Union
+from typing import Callable, Union
 from collections import defaultdict
 
 
@@ -624,41 +624,45 @@ class RingtailCore:
     def write_flexres_pdb(
         self,
         receptor_polymer: Union[object, str],
-        ligname: str = None,
+        ligname: Union[str, list] = None,
         bookmark_name: str = None,
         filename: str = "receptor.pdb",
+        get_consent: Callable = None,
     ) -> tuple[Chem.rdchem.Mol, dict]:
-
-        from meeko.export_flexres import pdb_updated_flexres_from_rdkit
-
         """
-        #TODO update with new paradigm
         Writes a receptor pdb with flexible residues based on the ligand provided
 
         Args:
-            receptor_polymer (Polymer, json string, .json file): version of receptor produced by meeko, 
-                                        or a json representation that can be rebuilt to a polymer, including 
+            receptor_polymer (Polymer, json string, .json file): version of receptor produced by meeko,
+                                        or a json representation that can be rebuilt to a polymer, including
                                         valid json string and valid json file
-            ligname (str): ligand name for which the receptor flexible residue info should be collected
+            ligname (str | list): ligand name for which the receptor flexible residue info should be collected
             filename (str): name of the output pdb, extension is optional, will default to '.pdb'
             bookmark_name (str, optional): if provided, it will only export flex res for ligand poses passing bookmark filters
-        
+
         Returns
             Chem.rdchem.Mol: the Mol object for the given ligand
             dict: dictionary describing the Mols for the flexible residues
         """
 
+        from meeko.export_flexres import pdb_updated_flexres_from_rdkit
+
         ligands_poses = self._fetch_select_ligands_poses(
             ligand_names=ligname, bookmark_name=bookmark_name
         )
         if len(ligands_poses) > 10:
-            consent = (
-                input(
-                    f"WARNING: You are requesting to prepare pdbs for {len(ligands_poses)} ligands/flexible residue combinations.\n Are you sure you wish to proceed? If so, type 'yes': "
+            length = len(ligands_poses)
+
+            def _api_cmd_consent(length: int):
+                consent = input(
+                    f"WARNING: You are requesting to prepare pdbs for {length} ligands/flexible residue combinations.\n Are you sure you wish to proceed? If so, type 'yes': "
                 )
-                == "yes"
-            )
-            if not consent:
+                return consent.strip().lower() == "yes"
+
+            if get_consent is None:
+                get_consent = _api_cmd_consent
+
+            if not get_consent(length):
                 logger.critical(
                     "Consent not given for large number of pdbs to write, exiting."
                 )
@@ -728,9 +732,10 @@ class RingtailCore:
 
     def write_molecule_sdfs(
         self,
-        bookmark_name: str,
+        bookmark_name: str = None,
         sdf_path: str = ".",
         all_in_one: bool = True,
+        ligname: Union[str, list] = None,
     ):
         """
         Have output manager write molecule sdf files for passing results in given results bookmark
@@ -739,16 +744,18 @@ class RingtailCore:
             bookmark_name (str): bookmark name from which to export Mols
             sdf_path (str, optional): Optional path existing or to be created in cd where SDF files will be saved
             all_in_one (bool, optional): If True will write all molecules to one SDF (separated by $$$$), if False will write one molecule pre SDF
-            write_nonpassing (bool, optional): Option to include non-passing poses for passing ligands
-
+            ligname (str | list): ligand name for which the receptor flexible residue info should be collected
         Raises:
             StorageError: if bookmark or data not found
         """
 
         try:
             ligands_poses = self._fetch_select_ligands_poses(
-                bookmark_name=bookmark_name
+                ligand_names=ligname, bookmark_name=bookmark_name
             )
+            # ligands_poses = self._fetch_select_ligands_poses(
+            #     bookmark_name=bookmark_name
+            # )
             flexres_data = self.make_receptor_flexres_mols()
             all_mols = {}
             for ligname, poses in ligands_poses.items():
