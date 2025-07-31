@@ -1328,7 +1328,7 @@ class RingtailCore:
         self,
         table: str,
         columns: list = ["*"],
-        length: int = 500,
+        length: int = None,
         starting_rowid: int = 0,
     ) -> tuple[list[str], list[dict]]:
         """
@@ -1426,6 +1426,16 @@ class RingtailCore:
         """
         with self.storageman as sm:
             return sm.calculate_percentiles(column, num_bins, table)
+
+    def all_database_tables(self) -> list:
+        """
+        Returns a list of all table names in the database
+
+        Returns:
+            list: list of table names
+        """
+        with self.storageman as sm:
+            return sm.tables_in_db()
 
     def delete_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database
