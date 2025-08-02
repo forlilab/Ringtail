@@ -1298,7 +1298,16 @@ class RingtailCore:
             return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
 
     def get_row_from_pose(self, table: str, pose_id: int) -> int:
-        print("About to fetch the row for pose ", pose_id)
+        """
+        Method to get table row for a a pose id in given table, used to support gui
+
+        Args:
+            table (str): table name
+            pose_id (int):
+
+        Returns:
+            int: row in given table
+        """
         with self.storageman as sm:
             return sm.pose_row_in_table(table, pose_id)
 
