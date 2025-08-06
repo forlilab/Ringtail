@@ -4,7 +4,6 @@
 # Ringtail storage adaptors
 #
 
-import sqlite3
 import time
 import json
 import os.path
@@ -31,7 +30,19 @@ from .exceptions import (
 from .clustermanager import *
 from .querybuilder import QueryBuilder
 from collections import defaultdict
-import duckdb
+
+try:
+    import sqlite3
+
+    HAS_SQLITE = True
+except:
+    HAS_SQLITE = False
+try:
+    import duckdb
+
+    HAS_DUCK = True
+except:
+    HAS_DUCK = False
 
 
 class StorageManager:
@@ -6507,4 +6518,8 @@ class StorageManagerDuckDB(StorageManager):
     # endregion
 
 
-storage_types = {"sqlite": StorageManagerSQLite, "duckdb": StorageManagerDuckDB}
+storage_types = {}
+if HAS_SQLITE:
+    storage_types.update({"sqlite": StorageManagerSQLite})
+if HAS_DUCK:
+    storage_types.update({"duckdb": StorageManagerDuckDB})
