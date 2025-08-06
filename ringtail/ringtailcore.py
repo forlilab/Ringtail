@@ -617,7 +617,7 @@ class RingtailCore:
                 cutoff,
             )
         logger.info(
-            f"\nNumber of clusters: {num_clusters}.\nPassing poses saved to {bookmark_name}."
+            f"Number of clusters: {num_clusters}.\nPassing poses saved to {bookmark_name}."
         )
         return bookmark_name
 

@@ -128,7 +128,148 @@ class StorageManager:
 
     # endregion
 
-    # region public api database operations
+    # region public api
+
+    def insert_data(
+        self,
+        docking_data: dict,
+        write_options: dict = {},
+    ):
+        """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
+
+        Args:
+            docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
+            write_options (dict): options for how to write the data, primarily how to treat duplicates
+        """
+        # parse ligand info form dict into list of ligands
+        ligands_array = [
+            docked_ligand["ligand_row"] for docked_ligand in docking_data.values()
+        ]
+        # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
+        ligand_ids = self._insert_ligands(ligands_array)
+
+        # add ligand ids to results array and make result array list of poses
+        results_array = []
+        for index, docked_ligand in enumerate(docking_data.values()):
+            for pose in docked_ligand["poses_results"]:
+                results_array.append([ligand_ids[index]] + pose)
+        # get unique pose ids and duplicate handling info
+        Pose_IDs, duplicates = self._insert_results(results_array, write_options)
+        # check if are interactions:
+        if any(
+            docked_ligand.get("poses_interactions") not in (None, [])
+            for docked_ligand in docking_data.values()
+        ):
+
+            self.insert_interactions(
+                Pose_IDs,
+                docking_data,
+                duplicates,
+                write_options.get("duplicate_handling"),
+            )
+
+    def insert_receptor(self, receptor_data: list):
+        """
+
+        Method to insert receptor information into the database
+
+        Args:
+            receptor_data (list): of receptor data, ordered by columns in the db
+        """
+        receptors = self.fetch_receptor_object()
+        # insert receptor if database does not have already have a receptor entry
+        if not receptors:
+            self._insert_receptors(receptor_data)
+
+    def insert_interactions(
+        self,
+        pose_IDs: list,
+        docking_data: dict,
+        duplicates: list,
+        duplicate_handling: str = None,
+    ):
+        """Looks for interactions in the docking data, and inserts new interaction definitions
+        as well as interaction rows if there are any.
+
+        Args:
+            pose_IDs (list[int]): pose ids currently being processed
+            docking_data (dict): all parsed data from the docking fror those poses
+            duplicates (list(Pose_ID)): any duplicates identified in "insert_results", if duplicate handling has been specified
+            duplicate_handling (str): how to treat any duplicates
+
+        """
+        if duplicate_handling:
+            if duplicate_handling.lower() not in ["ignore", "replace"]:
+                logger.warning(
+                    f"duplicate_handling option {duplicate_handling} not allowed. Reverting to default behavior."
+                )
+                duplicate_handling = None
+        interaction_rows = self._insert_and_format_interactions(pose_IDs, docking_data)
+        # NOTE here as of dev meeting
+        self._insert_interaction_rows(interaction_rows, duplicates, duplicate_handling)
+
+    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
+        """Takes object of Receptor class, updates the column in Receptor table
+
+        Args:
+            receptor (bytes): bytes receptor object to be inserted into DB
+            rec_name (string): Name of receptor. Used to insert into correct row of DB
+        """
+        self._insert_receptor_blob(receptor, rec_name)
+
+    def filter_results(
+        self,
+        all_filters: Filters,
+        bookmark_name: str,
+        filtering_bookmark: str = None,
+    ) -> int:
+        """Generate and execute database queries from given filters.
+
+        Args:
+            all_filters (dict): dict containing all filters
+            bookmark_name (str): name of bookmark in which to save the data
+            filtering_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
+
+        Returns:
+             int: number of passing ligands
+        """
+        # before we do anything, check that the DB version matches the version number of our module
+        rt_version_same, db_rt_version = self.check_ringtaildb_version()
+        if not rt_version_same:
+            # NOTE will cause error when any version int is > 10
+            raise StorageError(
+                f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail upgrade script to upgrade database if needed."
+            )
+
+        # get the final filter query, has a {selection} place holder
+        filter_query: str = self._generate_result_filtering_query(
+            all_filters, bookmark_name, filtering_bookmark
+        )
+
+        logger.debug(f"Query for filtering results: {filter_query}")
+
+        # perform filtering
+        logger.debug("Running filtering query...")
+        time0 = time.perf_counter()
+        if filtering_bookmark == None:
+            filtering_bookmark = "Results"
+
+        self._populate_filter_tables(
+            name=bookmark_name,
+            query=filter_query,
+            filters=all_filters,
+            filtering_bookmark=filtering_bookmark,
+        )
+        logger.debug(
+            f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
+        )
+        count = self.get_passing_ligands_count(bookmark_name)
+
+        return count
+
+    # endregion
+
+    # region virtual public api
 
     def open_storage(self):
         """
@@ -275,10 +416,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    # endregion
-
-    # region public api insert data
-
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> dict:
         """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
@@ -295,146 +432,6 @@ class StorageManager:
         """
 
         raise_not_implemented()
-
-    def insert_data(
-        self,
-        docking_data: dict,
-        write_options: dict = {},
-    ):
-        """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
-
-        Args:
-            docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
-            write_options (dict): options for how to write the data, primarily how to treat duplicates
-        """
-        # parse ligand info form dict into list of ligands
-        ligands_array = [
-            docked_ligand["ligand_row"] for docked_ligand in docking_data.values()
-        ]
-        # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
-        ligand_ids = self._insert_ligands(ligands_array)
-
-        # add ligand ids to results array and make result array list of poses
-        results_array = []
-        for index, docked_ligand in enumerate(docking_data.values()):
-            for pose in docked_ligand["poses_results"]:
-                results_array.append([ligand_ids[index]] + pose)
-        # get unique pose ids and duplicate handling info
-        Pose_IDs, duplicates = self._insert_results(results_array, write_options)
-        # check if are interactions:
-        if any(
-            docked_ligand.get("poses_interactions") not in (None, [])
-            for docked_ligand in docking_data.values()
-        ):
-
-            self.insert_interactions(
-                Pose_IDs,
-                docking_data,
-                duplicates,
-                write_options.get("duplicate_handling"),
-            )
-
-    def insert_receptor(self, receptor_data: list):
-        """
-
-        Method to insert receptor information into the database
-
-        Args:
-            receptor_data (list): of receptor data, ordered by columns in the db
-        """
-        receptors = self.fetch_receptor_object()
-        # insert receptor if database does not have already have a receptor entry
-        if not receptors:
-            self._insert_receptors(receptor_data)
-
-    def insert_interactions(
-        self,
-        pose_IDs: list,
-        docking_data: dict,
-        duplicates: list,
-        duplicate_handling: str = None,
-    ):
-        """Looks for interactions in the docking data, and inserts new interaction definitions
-        as well as interaction rows if there are any.
-
-        Args:
-            pose_IDs (list[int]): pose ids currently being processed
-            docking_data (dict): all parsed data from the docking fror those poses
-            duplicates (list(Pose_ID)): any duplicates identified in "insert_results", if duplicate handling has been specified
-            duplicate_handling (str): how to treat any duplicates
-
-        """
-        if duplicate_handling:
-            if duplicate_handling.lower() not in ["ignore", "replace"]:
-                logger.warning(
-                    f"duplicate_handling option {duplicate_handling} not allowed. Reverting to default behavior."
-                )
-                duplicate_handling = None
-        interaction_rows = self._insert_and_format_interactions(pose_IDs, docking_data)
-        # NOTE here as of dev meeting
-        self._insert_interaction_rows(interaction_rows, duplicates, duplicate_handling)
-
-    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
-        """Takes object of Receptor class, updates the column in Receptor table
-
-        Args:
-            receptor (bytes): bytes receptor object to be inserted into DB
-            rec_name (string): Name of receptor. Used to insert into correct row of DB
-        """
-        self._insert_receptor_blob(receptor, rec_name)
-
-    # endregion
-
-    # region public api filter data and bookmarks
-    def filter_results(
-        self,
-        all_filters: Filters,
-        bookmark_name: str,
-        filtering_bookmark: str = None,
-    ) -> int:
-        """Generate and execute database queries from given filters.
-
-        Args:
-            all_filters (dict): dict containing all filters
-            bookmark_name (str): name of bookmark in which to save the data
-            filtering_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
-
-        Returns:
-             int: number of passing ligands
-        """
-        # before we do anything, check that the DB version matches the version number of our module
-        rt_version_same, db_rt_version = self.check_ringtaildb_version()
-        if not rt_version_same:
-            # NOTE will cause error when any version int is > 10
-            raise StorageError(
-                f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail upgrade script to upgrade database if needed."
-            )
-
-        # get the final filter query, has a {selection} place holder
-        filter_query: str = self._generate_result_filtering_query(
-            all_filters, bookmark_name, filtering_bookmark
-        )
-
-        logger.debug(f"Query for filtering results: {filter_query}")
-
-        # perform filtering
-        logger.debug("Running filtering query...")
-        time0 = time.perf_counter()
-        if filtering_bookmark == None:
-            filtering_bookmark = "Results"
-
-        self._populate_filter_tables(
-            name=bookmark_name,
-            query=filter_query,
-            filters=all_filters,
-            filtering_bookmark=filtering_bookmark,
-        )
-        logger.debug(
-            f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
-        )
-        count = self.get_passing_ligands_count(bookmark_name)
-
-        return count
 
     def get_maxmiss_union(
         self, total_combinations: int, bookmark_name: str, all_filters={}
@@ -492,18 +489,6 @@ class StorageManager:
 
         Returns:
             tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
-        """
-        raise_not_implemented()
-
-    def get_filterid_from_name(self, bookmark_name: str) -> int:
-        """
-        Gets the filter_id for bookmark
-
-        Args:
-            bookmark_name (str)
-
-        Returns:
-            int: id for Filter/bookmark
         """
         raise_not_implemented()
 
@@ -627,9 +612,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    # endregion
-
-    # region public api fetch data
     def get_plot_data(
         self,
         bookmark_name: str,
@@ -816,9 +798,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    # endregion
-
-    # region gui required api
     def create_status_tables(self):
         """
         Creates status tables if needed
@@ -896,6 +875,40 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def is_bookmark(self, table: str) -> bool:
+        """
+        Returns True if table name is actually a bookmark
+
+        Args:
+            table (str): name of table or bookmark to check
+
+        Returns:
+            bool: if table name is a bookmark
+        """
+        raise_not_implemented()
+
+    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
+        """
+        Find the row id of a pose in a given table
+
+        Args:
+            table (str)
+            pose_id (int)
+
+        Returns:
+            Union[None, int]: rowid if any
+        """
+        raise_not_implemented()
+
+    def tables_in_db(self) -> list:
+        """
+        Returns a list of all table names in the database
+
+        Returns:
+            list: list of table names
+        """
+        raise_not_implemented()
+
     def calculate_percentiles(
         self, column: str, num_bins: int, table: str
     ) -> tuple[list[int], list[float]]:
@@ -925,9 +938,35 @@ class StorageManager:
         """
         raise_not_implemented()
 
+    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
+        """
+        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
+
+        Args:
+            ligand_name (str)
+            selection (str): status table or bookmark name
+
+        Returns:
+            list[int]: selected poses for ligand
+        """
+        raise_not_implemented()
+
+    def get_starting_rowid(self, table: str) -> int:
+        """
+        Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
+        (whose rows are inside Filtered_poses)
+
+        Args:
+            table (str): table or bookmark name
+
+        Returns:
+            int: first row id belonging to that selection
+        """
+        raise_not_implemented()
+
     # endregion
 
-    # region private methods
+    # region virtual internal methods
 
     def _insert_ligands(self, ligand_array: list) -> list:
         raise_not_implemented()
@@ -2012,7 +2051,7 @@ class StorageManagerSQLite(StorageManager):
         cluster_type: str,
         cluster_cutoff: str,
         bookmark_name: str,
-    ):
+    ) -> str:
         """Insert cluster data into ligand cluster table
 
         Args:
@@ -2021,7 +2060,11 @@ class StorageManagerSQLite(StorageManager):
             cluster_type (str): how clustering was performed
             cluster_cutoff (str): distance to representative pose
             bookmark_name (str): bookmark name which is clustered over
+
+        Returns:
+            str: name of cluster bookmark
         """
+        # TODO
         cur = self.conn.cursor()
         cur.execute(
             "CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)"
@@ -2043,6 +2086,8 @@ class StorageManagerSQLite(StorageManager):
 
             cur.close()
             self.conn.commit()
+
+            return column_name
         except sqlite3.OperationalError as e:
             raise StorageError("Error occurred while inserting cluster data") from e
 
@@ -2705,21 +2750,6 @@ class StorageManagerSQLite(StorageManager):
         self._create_filtering_tables()
         self.conn.commit()
 
-    def get_filterid_from_name(self, bookmark_name: str) -> int:
-        """
-        Gets the filter_id for bookmark
-
-        Args:
-            bookmark_name (str)
-
-        Returns:
-            int: id for Filter/bookmark
-        """
-        return self.db_query(
-            f"""SELECT filter_id FROM Filters WHERE name = ?;""",
-            (bookmark_name,),
-        ).fetchone()[0]
-
     def _process_filters_for_query(self, filters_dict: dict):
         score_maxmin_to_sqlite_call = {
             "eworst": "docking_score <= {value}",
@@ -3321,10 +3351,14 @@ class StorageManagerSQLite(StorageManager):
         time0 = time.perf_counter()
 
         query = QueryBuilder()
+        # TODO handle if table is Results
         if cluster_type.lower() == "ifp":
-            query.SELECT("r.pose_id", "r.leff").FROM_BOOKMARK(bookmark_name, "bm").JOIN(
-                "Results", "R", "pose_id"
-            )
+            query.SELECT("r.pose_id", "r.leff").FROM("Results", "R")
+
+            if self.is_bookmark(bookmark_name):
+                query.IN_BOOKMARK(bookmark_name)
+            elif self._is_statustable(bookmark_name):
+                query.JOIN(bookmark_name, "T", "pose_id")
             pose_ids, leffs = zip(*self.db_query(query.build()[0]).fetchall())
             leffs = list(leffs)
             pose_id_bitvectors = self._generate_interaction_bitvectors(pose_ids)
@@ -3338,7 +3372,12 @@ class StorageManagerSQLite(StorageManager):
         elif cluster_type.lower() == "mfp":
             query.SELECT("r.pose_id", "r.leff", "l.rdmol").FROM("Results", "R").JOIN(
                 "ligands", "l", "ligand_id", "results"
-            ).WHERE(f"r.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
+            )
+
+            if self.is_bookmark(bookmark_name):
+                query.IN_BOOKMARK(bookmark_name)
+            elif self._is_statustable(bookmark_name):
+                query.JOIN(bookmark_name, "T", "pose_id")
 
             pose_ids, leffs, rdmols = zip(*self.db_query(query.build()[0]).fetchall())
             mfpc = MorganFingerprintCluster(pose_ids, leffs, rdmols, cutoff)
@@ -3352,7 +3391,7 @@ class StorageManagerSQLite(StorageManager):
             f"Biggest {cluster_type} cluster contains {max_len} poses while the smallest cluster contains {min_len} poses."
         )
         # write to db
-        self._insert_cluster_data(
+        cluster_bookmark_name = self._insert_cluster_data(
             clusters,
             pose_ids,
             cluster_type.lower(),
@@ -3360,21 +3399,21 @@ class StorageManagerSQLite(StorageManager):
             bookmark_name,
         )
 
-        bookmark_name = bookmark_name + "_" + cluster_type.lower() + "_clustered"
         clustered_poses = QueryBuilder()
         clustered_poses.SELECT("pose_id").FROM("results").WHERE(
             f"pose_id IN ({','.join(representatives)})"
         )
 
         self._populate_filter_tables(
-            bookmark_name,
+            cluster_bookmark_name,
             clustered_poses.build()[0],
             {"cluster_type": cluster_type, "cutoff": cutoff},
+            bookmark_name,
         )
 
         logger.info(f"Time to cluster data: {time.perf_counter() - time0:.2f} seconds")
 
-        return bookmark_name, len(clusters)
+        return cluster_bookmark_name, len(clusters)
 
     def _prepare_interaction_filtering_query(
         self, include_interactions: list, exclude_interactions: list, max_miss: int
@@ -5184,6 +5223,16 @@ class StorageManagerSQLite(StorageManager):
         return self.db_query(query, params).fetchone()[0]
 
     def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
+        """
+        Find the row id of a pose in a given table
+
+        Args:
+            table (str)
+            pose_id (int)
+
+        Returns:
+            Union[None, int]: rowid if any
+        """
         query = QueryBuilder()
         query.SELECT("rowid")
         if self.is_bookmark(table):
@@ -5479,8 +5528,17 @@ class StorageManagerSQLite(StorageManager):
         data = cursor.fetchall()
         return {"headers": headers, "data": data}
 
-    def get_starting_rowid(self, table: str):
-        # TODO
+    def get_starting_rowid(self, table: str) -> int:
+        """
+        Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
+        (whose rows are inside Filtered_poses)
+
+        Args:
+            table (str): table or bookmark name
+
+        Returns:
+            int: first row id belonging to that selection
+        """
         query = QueryBuilder()
         query.SELECT("MIN(rowid)")
 
@@ -5559,14 +5617,14 @@ class StorageManagerSQLite(StorageManager):
 
     def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
         """
-        #TODO
+        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
 
         Args:
-            ligand_name (str): _description_
-            selection (str): _description_
+            ligand_name (str)
+            selection (str): status table or bookmark name
 
         Returns:
-            _type_: _description_
+            list[int]: selected poses for ligand
         """
         query = QueryBuilder()
         query.SELECT("R.Pose_id").FROM("Results", "R").WHERE(
@@ -5695,3 +5753,7 @@ class StorageManagerSQLite(StorageManager):
         )
 
     # endregion
+
+
+class StorageManagerDuckDB(StorageManager):
+    pass
