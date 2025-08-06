@@ -31,19 +31,12 @@ from .exceptions import (
 from .clustermanager import *
 from .querybuilder import QueryBuilder
 from collections import defaultdict
+import duckdb
 
 
 class StorageManager:
     # NOTE gotta be careful with schema
     _db_schema_ver = "3.0.0"
-
-    # "db_schema_ver":list("compatible code versions")
-    _db_schema_code_compatibility = {
-        "1.0.0": ["1.0.0"],
-        "1.1.0": ["1.1.0"],
-        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2"],
-        "3.0.0": ["3.0.0"],
-    }
 
     """Base class for a generic virtual screening database object.
     This class holds some of the common API for StorageManager child classes. 
@@ -70,9 +63,6 @@ class StorageManager:
             class: of implemented storage type
         """
 
-        storage_types = {
-            "sqlite": StorageManagerSQLite,
-        }
         if storage_type in storage_types:
             return storage_types[storage_type]
         else:
@@ -1009,6 +999,14 @@ class StorageManagerSQLite(StorageManager):
         db_file (str): database name
         conn (SQLite.conn): Connection to database
     """
+
+    # "db_schema_ver":list("compatible code versions")
+    _db_schema_code_compatibility = {
+        "1.0.0": ["1.0.0"],
+        "1.1.0": ["1.1.0"],
+        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2"],
+        "3.0.0": ["3.0.0"],
+    }
 
     def __init__(
         self,
@@ -5756,4 +5754,757 @@ class StorageManagerSQLite(StorageManager):
 
 
 class StorageManagerDuckDB(StorageManager):
-    pass
+    """DuckDB-specific StorageManager subclass
+
+    Attributes:
+        db_file (str): database name
+        conn (SQLite.conn): Connection to database
+    """
+
+    # "db_schema_ver":list("compatible code versions")
+    _db_schema_code_compatibility = {
+        "3.0.0": ["3.0.0"],
+    }
+
+    def __init__(
+        self,
+        db_file: str = None,
+    ):
+        self.db_file = db_file
+        super().__init__()
+
+    # region virtual public api
+
+    def open_storage(self):
+        """
+        Opens connection to the database
+        """
+        self.conn = duckdb.connect(self.db_file)
+
+    def close_storage(self, attached_db=None, vacuum=False):
+        """Close connection to database
+
+        Args:
+            attached_db (str, optional): name of attached DB (not including file extension)
+            vacuum (bool, optional): indicates that database should be vacuumed before closing
+        """
+        # TODO
+        self.conn.close()
+
+    def check_storage_ready(
+        self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
+    ):
+        """
+        Check that storage is ready and compatible with options before proceeding, and creates new tables if needed
+
+        Args:
+            run_mode (str): if ringtail is ran using cmd line interface or api
+            docking_mode (str): what docking engine was used to produce results
+            store_all_poses (bool): overrwrites max poses
+            max_poses (int): max poses to save to db
+        """
+        raise_not_implemented()
+
+    def check_ringtaildb_version(self):
+        """
+        Checks the database version and confirms whether the code base is compatible with it
+
+        Returns:
+            bool: whether or not db is compatible with the code base
+            str: current database version
+        """
+        raise_not_implemented()
+
+    def overwrite_storage(self):
+        """
+        Will drop all tables in the database.
+        """
+        raise_not_implemented()
+
+    def finalize_database_write(self):
+        """
+        Methods to finalize when a database has been written to, including creating indices
+        """
+        # index certain tables
+        self._create_indices()
+        logger.info("Database write session completed successfully.")
+
+    def clone(self, backup_name=None):
+        """Creates a copy of the db
+
+        Args:
+            backup_name (str, optional): name of the cloned database
+        """
+        raise_not_implemented()
+
+    def update_database_version(self, new_version, consent=False):
+        """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
+
+        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
+        the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
+
+        Args:
+            consent (bool, optional): variable to ensure consent to update database is explicit
+
+        Returns:
+            bool: final consent
+        """
+        raise_not_implemented()
+
+    def db_empty(self):
+        """empty database, for example if overwrite
+
+        Returns:
+            bool: whether or not db is empty
+        """
+        raise_not_implemented()
+
+    def db_query(self, query, params: iter) -> iter:
+        """Executes provided sql query. Returns iter for results.
+
+        Args:
+            query (str): Formated sql query as string
+            params (iter): parameters to be used in query (assumes query as appropriate place holders)
+
+        Returns:
+            iter: Contains results of query
+        """
+        raise_not_implemented()
+
+    def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
+        """
+        A db query that also commits if/when specified
+
+        Args:
+            query (str): sql formatted query string
+            parameters (list[tuple]): assumes appropriate place holders in query
+            commit (bool, optional): whether to commit the transaction in open connection. Defaults to True.
+
+        Raises:
+            OptionError
+            DatabaseInsertionError
+
+        Returns:
+            iter: if requesting return value(s)
+        """
+        raise_not_implemented()
+
+    def merge_databases(self, merging_db: str, backup: bool = True):
+        """
+        Method that merges two databases, ensuring integrity of primary and foreign keys.
+        The merging will create a new table if needed, that keeps track of the primary key
+        in the original and the merged database on a per-table basis. Another table will also
+        keep track of how many databases has been merged into the primary database.
+        The merging will ensure the two databases are -compatible based on the receptor only-.
+        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
+            these will be allowed to merge.
+
+        Args:
+            merging_db (str): path to database being merged into current
+            backup (bool, optional): whether or not to back up current database before
+                merging another database into it. Defaults to True.
+
+        Raises:
+            MergeError
+        """
+        raise_not_implemented()
+
+    def table_length(self, table) -> int:
+        """
+        Get length of table or bookmark
+
+        Args:
+            table (str): name of table or bookmark
+
+        Returns:
+            int: number of poses in table/bookmark
+        """
+        raise_not_implemented()
+
+    @classmethod
+    def format_for_storage(cls, ligand_dict: dict) -> dict:
+        """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
+        For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
+        We also save a mapping of the its cluster number to the index in interaction_dictionaries
+        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
+        Finally, we calculate the interaction tuple lists for each pose
+
+        Args:
+            ligand_dict (dict): Dictionary containing data from the fileparser
+
+        Returns:
+            dict: with storage formatted rows, including: results rows per pose, interactions per pose, one ligand row, and one receptor row
+        """
+
+        raise_not_implemented()
+
+    def get_maxmiss_union(
+        self, total_combinations: int, bookmark_name: str, all_filters={}
+    ):
+        """Get results that are in union considering max miss
+
+        Args:
+            total_combinations (int): numer of possible combinations
+
+        Returns:
+            iter: of passing results
+        """
+        raise_not_implemented()
+
+    def cluster_data(
+        self,
+        bookmark_name: str,
+        cluster_type: str = "mfpt",
+        cutoff: float = 0.5,
+    ) -> tuple:
+        """
+        Clusters data in a given bookmark. Will create a new bookmark with the format
+        <bookmark_name>_<cluster-type>_clustered containing the representative poses
+        for the clusters
+
+        Args:
+            bookmark_name (str): bookmark name with poses to cluster
+            cluster_type (str, optional): type of clustering. Defaults to "mfpt".
+            cutoff (float, optional): cutoff cluster distance. Defaults to 0.5.
+
+        Returns:
+            tuple (str, int): clustered bookmark name, number of clusters
+        """
+        raise_not_implemented()
+
+    def crossref_filter(
+        self,
+        new_db: str,
+        bookmark1_name: str,
+        bookmark2_name: str,
+        temp_table_suffix: int = 0,
+        selection="NOT IN",
+        old_db=None,
+    ) -> tuple:
+        """Selects ligands found or not found in the given bookmark in both current db and new_db.
+        Stores as a temporary table, only accessible within the same database connection.
+
+        Args:
+            new_db (str): file name for database to attach
+            bookmark1_name (str): string for name of first bookmark/temp table to compare
+            bookmark2_name (str): string for name of second bookmark to compare
+            temp_table_suffix (int, optional): if comparing more than set of bookmarks in one database connection, use this to give different temp table names
+            selection (str, optional): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+            old_db (str, optional): file name for previous database
+
+        Returns:
+            tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
+        """
+        raise_not_implemented()
+
+    def prune_nonpassing(self, bookmark_name: str):
+        """
+        Used when creating a new database from filtered data, will remove the data
+        that did not pass filtering
+
+        Args:
+            bookmark_name (str): bookmark name which has the only poses to save
+        """
+        raise_not_implemented()
+
+    def get_passing_poses_count(
+        self, bookmark_name: str, grouped_by_ligand: bool = False
+    ) -> int:
+        """
+        Count poses in bookmark
+
+        Args:
+            bookmark_name (str): bookmark name in which to count
+            grouped_by_ligand (bool, optional): if grouping by ligand, essentially returns passing ligands
+
+        Returns:
+            int: number of poses (optionally grouped by ligand) in bookmark
+        """
+        raise_not_implemented()
+
+    def delete_bookmark(self, bookmark_name: str):
+        """
+        Deletes bookmark (i.e., Filters table) and its associated poses (filtered_poses table)
+
+        Args:
+            bookmark_name (str): bookmark to delete
+        """
+        raise_not_implemented()
+
+    def get_bookmark_selection(
+        self,
+        bookmark_name: str,
+        selection: Union[list, str],
+        group_by: str = None,
+        order_results: str = None,
+    ) -> str:
+        """
+        Generates query to gather chosen columns based on passing poses in a bookmark
+
+        Args:
+            bookmark_name (str): bookmark name from which to get the passing poses
+            selection (Union[list, str]): what columns to have in the output query
+            group_by (str, optional): whether or not to group the output by a column
+            order_results (str, optional): Whether or not to order by a column
+
+        Raises:
+            OptionError: _description_
+
+        Returns:
+            str: sql string that describes selection of data from bookmark
+        """
+        raise_not_implemented()
+
+    def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
+        """Method that will retrieve filter values used to construct bookmark
+
+        Args:
+            bookmark_name (str): bookmark for which to get filters
+
+            Returns:
+                dict: containing the filter data
+        """
+        raise_not_implemented()
+
+    def fetch_filters_and_filterwindow(self, bookmark_name: str) -> dict:
+        """Method that will retrieve filter values used to construct bookmark
+        and the filter window used as basis
+
+        Args:
+            bookmark_name (str): bookmark which was the result of the filtering
+
+            Returns:
+                tuple(dict, str): containing the filter data and filter window
+        """
+        raise_not_implemented()
+
+    def create_bookmark_from_temp_table(
+        self,
+        temp_table_name,
+        bookmark_name,
+        original_bookmark_name,
+        wanted_list=[],
+        unwanted_list=[],
+    ):
+        """Resaves temp bookmark stored in bookmark_name as new permenant bookmark
+
+        Args:
+            bookmark_name (str): name of bookmark to save last temp bookmark as
+            original_bookmark_name (str): name of original bookmark
+            wanted_list (list): List of wanted database names
+            unwanted_list (list, optional): List of unwanted database names
+            temp_table_name (str): name of temporary table
+        """
+        raise_not_implemented()
+
+    def get_passing_ligands_count(self, bookmark_name: str) -> int:
+        """
+        Get number of passing ligands in bookmark name
+
+        Args:
+            bookmark_name (str): bookmark that defines passing
+
+        Returns:
+            int: number of ligands
+        """
+        raise_not_implemented()
+
+    def get_all_bookmark_names() -> list[str]:
+        """Get all bookmarks in sql database as a list of names. Bookmarks are a Ringtail-specific saved query (much like views)
+
+        Returns:
+            list: of bookmark names
+        """
+        raise_not_implemented()
+
+    def get_plot_data(
+        self,
+        bookmark_name: str,
+        only_passing: bool = False,
+        include_status: bool = False,
+        x_axis: str = "docking_score",
+        y_axis: str = "leff",
+    ):
+        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
+        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
+
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
+            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+            include_status (bool): look for status tables and include if requested
+            x_axis (str, optional): Defaults to "docking_score".
+            y_axis (str, optional): Defaults to "leff".
+
+        Returns:
+            tuple: cursors as (<all data cursor>, <passing data cursor>)
+        """
+        raise_not_implemented()
+
+    def fetch_receptor_object(self) -> tuple:
+        """Returns all Receptor objects from database
+
+        Args:
+            rec_name (str): Name of receptor to return object for
+
+        Returns:
+            tuple: of receptor name and object
+        """
+        raise_not_implemented()
+
+    def fetch_clustered_similars(self, ligname: str):
+        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
+
+        Args:
+            ligname (str): ligname for ligand to find similarity with
+
+        Raises:
+            ValueError: wrong terminal input
+        """
+        raise_not_implemented()
+
+    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
+        """
+        Gets molecular data that is needed to create rdkit mols for a given list of poses
+
+        Args:
+            pose_ids (list): pose ids for which to collect molecular data
+
+        Returns:
+            iter: of the following columns Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates
+        """
+        raise_not_implemented()
+
+    def fetch_summary_data(
+        self, columns=["docking_score", "leff"], percentiles=[1, 10]
+    ) -> dict:
+        """Collect summary data for database:
+            Num Ligands
+            Num stored poses
+            Num unique interactions
+
+            min, max, percentiles for columns in columns
+
+        Args:
+            columns (list (str)): columns to be displayed and used in summary
+            percentiles (list(int)): percentiles to consider
+
+        Returns:
+            dict: of data summary
+        """
+        raise_not_implemented()
+
+    def fetch_data_for_passing_results(
+        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
+    ) -> iter:
+        """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
+
+        Returns:
+            iter: sqlite cursor of data from passing data
+
+        Raises:
+            OptionError
+        """
+        raise_not_implemented()
+
+    def fetch_flexres_info(self, receptor):
+        """fetch flexible residues names and atomname lists
+
+        Returns:
+            tuple: (flexible_residues, flexres_atomnames)
+        """
+        raise_not_implemented()
+
+    def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
+        """fetch information required by vsmanager for writing out molecules
+
+        Returns:
+            iter: contains LigName, rdmol,
+                atom_index_map, hydrogen_parents
+        """
+        raise_not_implemented()
+
+    def fetch_ligand_rdkit_relevant_info(self, ligname: str) -> tuple:
+        """fetch information required by vsmanager for writing out molecules
+
+        Returns:
+            tuple: contains rdmol, atom_index_map, hydrogen_parents
+        """
+        raise_not_implemented()
+
+    def fetch_lignames_and_poses_for_selection(
+        self, selection: str
+    ) -> dict[str, list[int]]:
+        """
+        Creates a dictionary of ligands and the selected poses that appear in a selection,
+        such as a bookmark or a status table (where only poses are given).
+
+        Args:
+            selection (str): name of bookmark or status table
+
+        Returns:
+            dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
+        """
+        raise_not_implemented()
+
+    def fetch_pose_interactions(self, Pose_ID) -> iter:
+        """
+        Fetch all interactions parameters belonging to a Pose_ID
+
+        Args:
+            Pose_ID (int): pose id, 1-1 with Results table
+
+        Returns:
+            iter: of interaction information for given Pose_ID
+        """
+        raise_not_implemented()
+
+    def get_ligname_from_pose(self, pose_id: int) -> str:
+        """
+        Get ligand name given a pose_id
+
+        Args:
+            pose_id (int): pose id for which to get ligand name
+
+        Returns:
+            str: ligand name
+        """
+        raise_not_implemented()
+
+    def count_receptors_in_db(self):
+        """returns number of rows in Receptors table where receptor_object already has blob
+
+        Returns:
+            int: number of rows in receptors table
+            str: name of receptor if present in table
+        """
+        raise_not_implemented()
+
+    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
+        """Returns a panda dataframe of table or query given as requested_data
+
+        Args:
+            requested_data (str): String containing SQL-formatted query or table name
+            table (bool): Flag indicating if requested_data is table name or not
+
+        Returns:
+            pd.DataFrame: dataframe of requested data
+        """
+        raise_not_implemented()
+
+    def get_range_of_e_le(self, table: str) -> tuple:
+        """
+        Get min and max of e/docking_score and ligand efficiency/le/leff/
+
+        Args:
+            table (str): table limit data, e.g., either Results or a bookmark name
+
+        Returns:
+            tuple: e_min, e_max, le_min, le_max
+        """
+        raise_not_implemented()
+
+    def create_status_tables(self):
+        """
+        Creates status tables if needed
+        """
+        raise_not_implemented()
+
+    def accept_pose(self, pose_id: int):
+        """
+        Will add pose_id to accepted, and delete from maybe and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        raise_not_implemented()
+
+    def maybe_pose(self, pose_id: int):
+        """
+        Will add pose_id to maybe, and delete from accepted and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        raise_not_implemented()
+
+    def reject_pose(self, pose_id: int):
+        """
+        Will add pose_id to rejected, and delete from accepted and maybe if needed
+
+        Args:
+            pose_id (int)
+        """
+        raise_not_implemented()
+
+    def fetch_viewable_data_columns_from(
+        self, table: str, length: int, last_pose_id: int = 0
+    ) -> iter:
+        """
+        Makes a selection of columns and includes the status of the pose
+
+        Returns:
+            iter: iterable/cursor of the columns
+        """
+        raise_not_implemented()
+
+    def fetch_columns_from_table_as_dicts(
+        self, table: str, columns: list, length: int = 500, starting_rowid: int = 0
+    ) -> tuple[list[str], list[dict]]:
+        """
+        Will get requested table data for a table given one or more columns.
+        Data will be limited by a certain length, and can be retrieved from a desired
+        rowid.
+
+        Args:
+            table (str): name of table or bookmark
+            columns (list, optional): list of columns to retrieve. Defaults to ["*"].
+            length (int, optional): number of rows to collect. Defaults to 500.
+            starting_rowid (int, optional): rowid to start with. Defaults to 0.
+
+        Returns:
+            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
+                                            and column is the key, value is the row-col cell value
+        """
+        raise_not_implemented()
+
+    def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
+        """
+        Will return data requested in an sql formatted query
+
+        Args:
+            query (str): sql query formatted to sqlite database
+
+        Returns:
+            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
+                                            and column is the key, value is the row-col cell value
+        """
+        raise_not_implemented()
+
+    def is_bookmark(self, table: str) -> bool:
+        """
+        Returns True if table name is actually a bookmark
+
+        Args:
+            table (str): name of table or bookmark to check
+
+        Returns:
+            bool: if table name is a bookmark
+        """
+        raise_not_implemented()
+
+    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
+        """
+        Find the row id of a pose in a given table
+
+        Args:
+            table (str)
+            pose_id (int)
+
+        Returns:
+            Union[None, int]: rowid if any
+        """
+        raise_not_implemented()
+
+    def tables_in_db(self) -> list:
+        """
+        Returns a list of all table names in the database
+
+        Returns:
+            list: list of table names
+        """
+        raise_not_implemented()
+
+    def calculate_percentiles(
+        self, column: str, num_bins: int, table: str
+    ) -> tuple[list[int], list[float]]:
+        """
+        Will calculate percentiles for a given column and given number of bins to divide the data in.
+        Will group the data by ligand_id, so it will be per ligand and not per pose id.
+
+        Args:
+            column (str): what column to calculate percentile for. must be numeric
+            num_bins (int): how many percentile bins data should be divided into
+            table (str): whether the column is in Results or filtered results (i.e., bookmark)
+
+        Raises:
+            OptionError: if column given is not numeric and in results
+
+        Returns:
+            tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
+        """
+        raise_not_implemented()
+
+    def check_previous_docking_mode(self) -> Union[None, str]:
+        """
+        Checks the docking_mode last used in a database write session
+
+        Returns:
+            Union[None, str]: docking_mode if any
+        """
+        raise_not_implemented()
+
+    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
+        """
+        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
+
+        Args:
+            ligand_name (str)
+            selection (str): status table or bookmark name
+
+        Returns:
+            list[int]: selected poses for ligand
+        """
+        raise_not_implemented()
+
+    def get_starting_rowid(self, table: str) -> int:
+        """
+        Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
+        (whose rows are inside Filtered_poses)
+
+        Args:
+            table (str): table or bookmark name
+
+        Returns:
+            int: first row id belonging to that selection
+        """
+        raise_not_implemented()
+
+    # endregion
+
+    # region virtual internal methods
+
+    def _insert_ligands(self, ligand_array: list) -> list:
+        raise_not_implemented()
+
+    def _create_indices(self):
+        raise_not_implemented()
+
+    def _insert_results(self, results_array, options):
+        raise_not_implemented()
+
+    def _insert_receptors(self, receptor_array):
+        raise_not_implemented()
+
+    def _insert_and_format_interactions(self, pose_ids, docking_data):
+        raise_not_implemented()
+
+    def _insert_interaction_rows(
+        self, interaction_rows, duplicates, duplicate_handling
+    ):
+        raise_not_implemented()
+
+    def _generate_result_filtering_query(
+        self, filters_dict, bookmark_name, filter_bookmark
+    ):
+        raise_not_implemented()
+
+    def _populate_filter_tables(self, name, query, filters):
+        raise_not_implemented()
+
+    def _insert_receptor_blob(self, receptor, rec_name):
+        raise_not_implemented()
+
+    # endregion
+
+
+storage_types = {"sqlite": StorageManagerSQLite, "duckdb": StorageManagerDuckDB}
