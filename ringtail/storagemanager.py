@@ -3368,6 +3368,7 @@ class StorageManagerSQLite(StorageManager):
                 query.IN_BOOKMARK(bookmark_name)
             elif self._is_statustable(bookmark_name):
                 query.JOIN(bookmark_name, "T", "pose_id")
+            # tuple, tuple
             pose_ids, leffs = zip(*self.db_query(query.build()[0]).fetchall())
             leffs = list(leffs)
             pose_id_bitvectors = self._generate_interaction_bitvectors(pose_ids)
@@ -3376,8 +3377,7 @@ class StorageManagerSQLite(StorageManager):
 
             ibc = InteractionBitvectorCluster(pose_ids, leffs, bitvectors, cutoff)
             clusters, representatives = ibc.cluster()
-            # the representatives needs to be written to the bookmark
-            # create new bookmark
+
         elif cluster_type.lower() == "mfp":
             query.SELECT("r.pose_id", "r.leff", "l.rdmol").FROM("Results", "R").JOIN(
                 "ligands", "l", "ligand_id", "results"
@@ -5814,7 +5814,53 @@ class StorageManagerDuckDB(StorageManager):
             store_all_poses (bool): overrwrites max poses
             max_poses (int): max poses to save to db
         """
-        raise_not_implemented()
+        if self.db_empty():
+            self._create_tables()
+
+        count = self.conn.execute("SELECT COUNT (*) FROM DB_properties").fetchone()[0]
+
+        compatible = True
+        if count < 1:
+            logger.info(
+                "Adding results to an existing database that is currently empty of docking results."
+            )
+        else:
+            compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
+            try:
+                cur = self.conn.execute(
+                    "SELECT * FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1"
+                )
+                (_, last_docking_mode, num_of_poses) = cur.fetchone()
+                if docking_mode != last_docking_mode:
+                    compatible = False
+                    compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
+                if num_of_poses == "all" != store_all_poses:
+                    compatible = False
+                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to 'store_all_poses'.\n"
+                elif int(num_of_poses) != max_poses:
+                    compatible = False
+                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to {num_of_poses}."
+            except Exception as e:
+                raise e
+            finally:
+                cur.close()
+
+        if not compatible:
+            if run_mode == "cmd":
+                raise OptionError(compatibility_string)
+            else:
+                logger.warning(compatibility_string)
+
+        # write current database properties to database
+        if store_all_poses:
+            number_of_poses = "all"
+        else:
+            number_of_poses = str(max_poses)
+        self._insert_db_properties(docking_mode, number_of_poses)
+        logger.debug("Storage compatibility has been checked and is ensured.")
+        # cannot use Signal/keyboard interrupt in the GUI bc it uses multiple threads
+        if run_mode != "gui":
+            self.keyboard_interrupt_allowed = True
 
     def check_ringtaildb_version(self):
         """
