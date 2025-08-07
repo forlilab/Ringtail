@@ -52,7 +52,11 @@ class MorganFingerprintCluster:
         Returns:
             list[DataStructs.cDataStructs.ExplicitBitVect]: list of morgan fingerprints as bitvectors
         """
-        mfpgenerator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
+        mfpgenerator = rdFingerprintGenerator.GetMorganGenerator(
+            radius=2,
+            fpSize=1024,
+        )
+
         mfps = []
         # prepare each mol json to fingerprint
         for rdmol in self.rdmols:
@@ -110,7 +114,8 @@ def top_score_per_cluster(
     clusters: list[list], rating_data: list, unclustered_items: list
 ) -> list[int]:
     """
-    _summary_
+    Finds the stop scored representative for each cluster, based on the supplied
+    rating data
 
     Args:
         clusters (list[list]): list of clusters
@@ -142,10 +147,8 @@ def butina_cluster_fingerprints(fps, cutoff):
         fps (): fingerprints
         cutoff distance (float)
     """
-    from rdkit.SimDivFilters import rdSimDivPickers
     from rdkit.ML.Cluster import Butina
 
-    lp = rdSimDivPickers.LeaderPicker()
     # first generate the distance matrix:
     dists = []
     nfps = len(fps)
@@ -154,8 +157,6 @@ def butina_cluster_fingerprints(fps, cutoff):
         sims = DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
         dists.extend([1 - x for x in sims])
 
-    picks = lp.LazyBitVectorPick(fps, nfps, 0.5)
-    pickfps = [fps[x] for x in picks]
     # now cluster the data:
     cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)
     return cs
