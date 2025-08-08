@@ -3283,7 +3283,7 @@ class StorageManagerSQLite(StorageManager):
             try:
                 filter_id = self.db_query(
                     filter_sql,
-                    (name, query, json.dumps(filters), filtering_bookmark),
+                    (name.lower(), query, json.dumps(filters), filtering_bookmark),
                 ).fetchone()[0]
 
                 filter_pose_sql = f"""
