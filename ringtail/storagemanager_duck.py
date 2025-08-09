@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail storage adaptors
+# Ringtail storage adaptor for DuckDB
 #
 
 import time
@@ -10,14 +10,13 @@ import os.path
 import pandas as pd
 from .logutils import LOGGER as logger
 import sys
-import re
 from signal import signal, SIGINT
 from rdkit import Chem
 from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters
-from .util import numlist2str, raise_not_implemented, statuses
+from .util import numlist2str, statuses
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -28,15 +27,10 @@ from .exceptions import (
     MergeError,
 )
 from .clustermanager import *
+from .storagemanager import StorageManager
 from .querybuilder import QueryBuilder
 from collections import defaultdict
 
-try:
-    import sqlite3
-
-    HAS_SQLITE = True
-except:
-    HAS_SQLITE = False
 try:
     import duckdb
 
@@ -45,1336 +39,16 @@ except:
     HAS_DUCK = False
 
 
-class StorageManager:
-    # NOTE gotta be careful with schema
-    _db_schema_ver = "3.0.0"
-
-    """Base class for a generic virtual screening database object.
-    This class holds some of the common API for StorageManager child classes. 
-    Each child class will implement their own functions to write to and read from the database
-
-    Attributes: 
-        _db_schema_ver (str): current database schema version
-        _db_schema_code_compatibility (dict): dictionary showing compatibility of code base versions with relational database schema versions
-        active_connection (bool): if there is a current open connection to database
-        keyboard_interrupt_allowed (bool): if Ctrl+Z will work, for example not supported in a GUI
-    """
-
-    # region database access
-    def check_storage_compatibility(storage_type):
-        """Checks if chosen storage type has been implemented
-
-        Args:
-            storage_type (str): name of the storage type
-
-        Raises:
-            NotImplementedError: raised if seelected storage type has not been implemented
-
-        Returns:
-            class: of implemented storage type
-        """
-        storage_types = {
-            "sqlite": StorageManagerSQLite,
-        }
-
-        if storage_type in storage_types:
-            return storage_types[storage_type]
-        else:
-            raise NotImplementedError(
-                f"Given storage type {storage_type} is not implemented."
-            )
-
-    def __init__(self):
-        self.keyboard_interrupt_allowed = False
-        self.active_connection = True
-
-    def __enter__(self):
-        """Used to access the database if using storage manager as a context manager
-
-        Raises:
-            StorageError
-
-        Returns:
-            instance: of class with open database connection
-        """
-        try:
-            self.open_storage()
-        except StorageError as e:
-            logger.error(str(e))
-            raise e from None
-        else:
-            return self
-
-    def __exit__(self, exc_type, exc_value, tb):
-        """Used to close the database if using storage manager as a context manager
-
-        Args:
-            exc_type (_type_): error exit parameter requirerd when using context manager
-            exc_value (_type_): error exit parameter requirerd when using context manager
-            tb (_type_): error exit parameter requirerd when using context manager
-
-        Returns:
-            instance: of class with closed database connection
-        """
-        if self.active_connection:
-            self.close_storage()
-            self.active_connection = False
-        if exc_type:
-            logger.error(str(exc_value))
-            raise exc_value from None
-        return self
-
-    def _sigint_handler(self, signal_received, frame):
-        """Handles and reports if program is interrupted through the terminal"""
-        logger.critical("Ctrl + C pressed, keyboard interupt initiated")
-        self.__exit__(None, None, None)
-        sys.exit(0)
-
-    # endregion
-
-    # region public api
-
-    @classmethod
-    def format_for_storage(cls, ligand_dict: dict) -> dict:
-        # TODO the only sql specific about this method is the methods it uses
-        """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
-        For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
-        We also save a mapping of the its cluster number to the index in interaction_dictionaries
-        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
-        Finally, we calculate the interaction tuple lists for each pose
-
-        Args:
-            ligand_dict (dict): Dictionary containing data from the fileparser
-
-        Returns:
-            dict: with storage formatted rows, including: results rows per pose, interactions per pose, one ligand row, and one receptor row
-
-        """
-        result_rows = []
-        interaction_dictionaries = []
-        interaction_tuples = []
-        saved_pose_idx = 0  # save index of last saved pose
-        cluster_saved_pose_map = {}  # save mapping of cluster number to saved_pose_idx
-
-        for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
-            cluster = ligand_dict["cluster_list"][idx]
-            # save everything if this is a cluster top pose
-            if run_number in ligand_dict["poses_to_save"]:
-                # Check how things are parsed here, might not be most efficient
-                result_rows.append(
-                    cls._generate_results_row(ligand_dict, idx, run_number)
-                )
-                cluster_saved_pose_map[cluster] = saved_pose_idx
-                saved_pose_idx += 1
-                if ligand_dict["interactions"] != []:
-                    interaction_dictionaries.append([ligand_dict["interactions"][idx]])
-            elif run_number in ligand_dict["tolerated_interaction_runs"]:
-                # adds to list started by best-scoring pose in cluster
-                if cluster not in cluster_saved_pose_map:
-                    continue
-                interaction_dictionaries[cluster_saved_pose_map[cluster]].append(
-                    ligand_dict["interactions"][idx]
-                )
-        for idx, pose_interactions in enumerate(interaction_dictionaries):
-            if not any(pose_interactions):  # skip any empty dictionaries
-                continue
-            interaction_tuples.append(
-                cls._generate_interaction_tuples(pose_interactions)
-            )
-        data_dict = {
-            "poses_results": result_rows,
-            "poses_interactions": interaction_tuples,
-            "ligand_row": cls._generate_ligand_row(ligand_dict),
-            "receptor_row": cls._generate_receptor_row(ligand_dict),
-        }
-        return data_dict
-
-    def insert_data(
-        self,
-        docking_data: dict,
-        write_options: dict = {},
-    ):
-        """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
-
-        Args:
-            docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
-            write_options (dict): options for how to write the data, primarily how to treat duplicates
-        """
-        # parse ligand info form dict into list of ligands
-        ligands_array = [
-            docked_ligand["ligand_row"] for docked_ligand in docking_data.values()
-        ]
-        # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
-        ligand_ids = self._insert_ligands(ligands_array)
-
-        # add ligand ids to results array and make result array list of poses
-        results_array = []
-        for index, docked_ligand in enumerate(docking_data.values()):
-            for pose in docked_ligand["poses_results"]:
-                results_array.append([ligand_ids[index]] + pose)
-        # get unique pose ids and duplicate handling info
-        Pose_IDs, duplicates = self._insert_results(results_array, write_options)
-        # check if are interactions:
-        if any(
-            docked_ligand.get("poses_interactions") not in (None, [])
-            for docked_ligand in docking_data.values()
-        ):
-
-            self.insert_interactions(
-                Pose_IDs,
-                docking_data,
-                duplicates,
-                write_options.get("duplicate_handling"),
-            )
-
-    def insert_receptor(self, receptor_data: list):
-        """
-
-        Method to insert receptor information into the database
-
-        Args:
-            receptor_data (list): of receptor data, ordered by columns in the db
-        """
-        receptors = self.fetch_receptor_object()
-        # insert receptor if database does not have already have a receptor entry
-        if not receptors:
-            self._insert_receptors(receptor_data)
-
-    def insert_interactions(
-        self,
-        pose_IDs: list,
-        docking_data: dict,
-        duplicates: list,
-        duplicate_handling: str = None,
-    ):
-        """Looks for interactions in the docking data, and inserts new interaction definitions
-        as well as interaction rows if there are any.
-
-        Args:
-            pose_IDs (list[int]): pose ids currently being processed
-            docking_data (dict): all parsed data from the docking fror those poses
-            duplicates (list(Pose_ID)): any duplicates identified in "insert_results", if duplicate handling has been specified
-            duplicate_handling (str): how to treat any duplicates
-
-        """
-        if duplicate_handling:
-            if duplicate_handling.lower() not in ["ignore", "replace"]:
-                logger.warning(
-                    f"duplicate_handling option {duplicate_handling} not allowed. Reverting to default behavior."
-                )
-                duplicate_handling = None
-        interaction_rows = self._insert_and_format_interactions(pose_IDs, docking_data)
-        # NOTE here as of dev meeting
-        self._insert_interaction_rows(interaction_rows, duplicates, duplicate_handling)
-
-    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
-        """Takes object of Receptor class, updates the column in Receptor table
-
-        Args:
-            receptor (bytes): bytes receptor object to be inserted into DB
-            rec_name (string): Name of receptor. Used to insert into correct row of DB
-        """
-        self._insert_receptor_blob(receptor, rec_name)
-
-    def filter_results(
-        self,
-        all_filters: Filters,
-        bookmark_name: str,
-        filtering_bookmark: str = None,
-    ) -> int:
-        """Generate and execute database queries from given filters.
-
-        Args:
-            all_filters (dict): dict containing all filters
-            bookmark_name (str): name of bookmark in which to save the data
-            filtering_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
-
-        Returns:
-             int: number of passing ligands
-        """
-        # before we do anything, check that the DB version matches the version number of our module
-        rt_version_same, db_rt_version = self.check_ringtaildb_version()
-        if not rt_version_same:
-            # NOTE will cause error when any version int is > 10
-            raise StorageError(
-                f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail upgrade script to upgrade database if needed."
-            )
-
-        # get the final filter query, has a {selection} place holder
-        filter_query: str = self._generate_result_filtering_query(
-            all_filters, bookmark_name, filtering_bookmark
-        )
-
-        logger.debug(f"Query for filtering results: {filter_query}")
-
-        # perform filtering
-        logger.debug("Running filtering query...")
-        time0 = time.perf_counter()
-        if filtering_bookmark == None:
-            filtering_bookmark = "Results"
-
-        self._populate_filter_tables(
-            name=bookmark_name,
-            query=filter_query,
-            filters=all_filters,
-            filtering_bookmark=filtering_bookmark,
-        )
-        logger.debug(
-            f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
-        )
-        count = self.get_passing_ligands_count(bookmark_name)
-
-        return count
-
-    # endregion
-
-    # region virtual public api
-
-    def open_storage(self):
-        """
-        Opens connection to the database
-        """
-        raise_not_implemented()
-
-    def close_storage(self, attached_db=None, vacuum=False):
-        """Close connection to database
-
-        Args:
-            attached_db (str, optional): name of attached DB (not including file extension)
-            vacuum (bool, optional): indicates that database should be vacuumed before closing
-        """
-        raise_not_implemented()
-
-    def check_storage_ready(
-        self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
-    ):
-        """
-        Check that storage is ready and compatible with options before proceeding, and creates new tables if needed
-
-        Args:
-            run_mode (str): if ringtail is ran using cmd line interface or api
-            docking_mode (str): what docking engine was used to produce results
-            store_all_poses (bool): overrwrites max poses
-            max_poses (int): max poses to save to db
-        """
-        raise_not_implemented()
-
-    def check_ringtaildb_version(self):
-        """
-        Checks the database version and confirms whether the code base is compatible with it
-
-        Returns:
-            bool: whether or not db is compatible with the code base
-            str: current database version
-        """
-        raise_not_implemented()
-
-    def overwrite_storage(self):
-        """
-        Will drop all tables in the database.
-        """
-        raise_not_implemented()
-
-    def finalize_database_write(self):
-        """
-        Methods to finalize when a database has been written to, including creating indices
-        """
-        # index certain tables
-        self._create_indices()
-        logger.info("Database write session completed successfully.")
-
-    def clone(self, backup_name=None):
-        """Creates a copy of the db
-
-        Args:
-            backup_name (str, optional): name of the cloned database
-        """
-        raise_not_implemented()
-
-    def update_database_version(self, new_version, consent=False):
-        """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
-
-        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
-        the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
-
-        Args:
-            consent (bool, optional): variable to ensure consent to update database is explicit
-
-        Returns:
-            bool: final consent
-        """
-        raise_not_implemented()
-
-    def db_empty(self):
-        """empty database, for example if overwrite
-
-        Returns:
-            bool: whether or not db is empty
-        """
-        raise_not_implemented()
-
-    def db_query(self, query, params: iter) -> iter:
-        """Executes provided sql query. Returns iter for results.
-
-        Args:
-            query (str): Formated sql query as string
-            params (iter): parameters to be used in query (assumes query as appropriate place holders)
-
-        Returns:
-            iter: Contains results of query
-        """
-        raise_not_implemented()
-
-    def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
-        """
-        A db query that also commits if/when specified
-
-        Args:
-            query (str): sql formatted query string
-            parameters (list[tuple]): assumes appropriate place holders in query
-            commit (bool, optional): whether to commit the transaction in open connection. Defaults to True.
-
-        Raises:
-            OptionError
-            DatabaseInsertionError
-
-        Returns:
-            iter: if requesting return value(s)
-        """
-        raise_not_implemented()
-
-    def merge_databases(self, merging_db: str, backup: bool = True):
-        """
-        Method that merges two databases, ensuring integrity of primary and foreign keys.
-        The merging will create a new table if needed, that keeps track of the primary key
-        in the original and the merged database on a per-table basis. Another table will also
-        keep track of how many databases has been merged into the primary database.
-        The merging will ensure the two databases are -compatible based on the receptor only-.
-        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
-            these will be allowed to merge.
-
-        Args:
-            merging_db (str): path to database being merged into current
-            backup (bool, optional): whether or not to back up current database before
-                merging another database into it. Defaults to True.
-
-        Raises:
-            MergeError
-        """
-        raise_not_implemented()
-
-    def table_length(self, table) -> int:
-        """
-        Get length of table or bookmark
-
-        Args:
-            table (str): name of table or bookmark
-
-        Returns:
-            int: number of poses in table/bookmark
-        """
-        raise_not_implemented()
-
-    def get_maxmiss_union(
-        self, total_combinations: int, bookmark_name: str, all_filters={}
-    ):
-        """Get results that are in union considering max miss
-
-        Args:
-            total_combinations (int): numer of possible combinations
-
-        Returns:
-            iter: of passing results
-        """
-        raise_not_implemented()
-
-    def cluster_data(
-        self,
-        bookmark_name: str,
-        cluster_type: str = "mfpt",
-        cutoff: float = 0.5,
-    ) -> tuple:
-        """
-        Clusters data in a given bookmark. Will create a new bookmark with the format
-        <bookmark_name>_<cluster-type>_clustered containing the representative poses
-        for the clusters
-
-        Args:
-            bookmark_name (str): bookmark name with poses to cluster
-            cluster_type (str, optional): type of clustering. Defaults to "mfpt".
-            cutoff (float, optional): cutoff cluster distance. Defaults to 0.5.
-
-        Returns:
-            tuple (str, int): clustered bookmark name, number of clusters
-        """
-        raise_not_implemented()
-
-    def crossref_filter(
-        self,
-        new_db: str,
-        bookmark1_name: str,
-        bookmark2_name: str,
-        temp_table_suffix: int = 0,
-        selection="NOT IN",
-        old_db=None,
-    ) -> tuple:
-        """Selects ligands found or not found in the given bookmark in both current db and new_db.
-        Stores as a temporary table, only accessible within the same database connection.
-
-        Args:
-            new_db (str): file name for database to attach
-            bookmark1_name (str): string for name of first bookmark/temp table to compare
-            bookmark2_name (str): string for name of second bookmark to compare
-            temp_table_suffix (int, optional): if comparing more than set of bookmarks in one database connection, use this to give different temp table names
-            selection (str, optional): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            old_db (str, optional): file name for previous database
-
-        Returns:
-            tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
-        """
-        raise_not_implemented()
-
-    def prune_nonpassing(self, bookmark_name: str):
-        """
-        Used when creating a new database from filtered data, will remove the data
-        that did not pass filtering
-
-        Args:
-            bookmark_name (str): bookmark name which has the only poses to save
-        """
-        raise_not_implemented()
-
-    def get_passing_poses_count(
-        self, bookmark_name: str, grouped_by_ligand: bool = False
-    ) -> int:
-        """
-        Count poses in bookmark
-
-        Args:
-            bookmark_name (str): bookmark name in which to count
-            grouped_by_ligand (bool, optional): if grouping by ligand, essentially returns passing ligands
-
-        Returns:
-            int: number of poses (optionally grouped by ligand) in bookmark
-        """
-        raise_not_implemented()
-
-    def delete_bookmark(self, bookmark_name: str):
-        """
-        Deletes bookmark (i.e., Filters table) and its associated poses (filtered_poses table)
-
-        Args:
-            bookmark_name (str): bookmark to delete
-        """
-        raise_not_implemented()
-
-    def get_bookmark_selection(
-        self,
-        bookmark_name: str,
-        selection: Union[list, str],
-        group_by: str = None,
-        order_results: str = None,
-    ) -> str:
-        """
-        Generates query to gather chosen columns based on passing poses in a bookmark
-
-        Args:
-            bookmark_name (str): bookmark name from which to get the passing poses
-            selection (Union[list, str]): what columns to have in the output query
-            group_by (str, optional): whether or not to group the output by a column
-            order_results (str, optional): Whether or not to order by a column
-
-        Raises:
-            OptionError: _description_
-
-        Returns:
-            str: sql string that describes selection of data from bookmark
-        """
-        raise_not_implemented()
-
-    def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
-        """Method that will retrieve filter values used to construct bookmark
-
-        Args:
-            bookmark_name (str): bookmark for which to get filters
-
-            Returns:
-                dict: containing the filter data
-        """
-        raise_not_implemented()
-
-    def fetch_filters_and_filterwindow(self, bookmark_name: str) -> dict:
-        """Method that will retrieve filter values used to construct bookmark
-        and the filter window used as basis
-
-        Args:
-            bookmark_name (str): bookmark which was the result of the filtering
-
-            Returns:
-                tuple(dict, str): containing the filter data and filter window
-        """
-        raise_not_implemented()
-
-    def create_bookmark_from_temp_table(
-        self,
-        temp_table_name,
-        bookmark_name,
-        original_bookmark_name,
-        wanted_list=[],
-        unwanted_list=[],
-    ):
-        """Resaves temp bookmark stored in bookmark_name as new permenant bookmark
-
-        Args:
-            bookmark_name (str): name of bookmark to save last temp bookmark as
-            original_bookmark_name (str): name of original bookmark
-            wanted_list (list): List of wanted database names
-            unwanted_list (list, optional): List of unwanted database names
-            temp_table_name (str): name of temporary table
-        """
-        raise_not_implemented()
-
-    def get_passing_ligands_count(self, bookmark_name: str) -> int:
-        """
-        Get number of passing ligands in bookmark name
-
-        Args:
-            bookmark_name (str): bookmark that defines passing
-
-        Returns:
-            int: number of ligands
-        """
-        raise_not_implemented()
-
-    def get_all_bookmark_names() -> list[str]:
-        """Get all bookmarks in sql database as a list of names. Bookmarks are a Ringtail-specific saved query (much like views)
-
-        Returns:
-            list: of bookmark names
-        """
-        raise_not_implemented()
-
-    def get_plot_data(
-        self,
-        bookmark_name: str,
-        only_passing: bool = False,
-        include_status: bool = False,
-        x_axis: str = "docking_score",
-        y_axis: str = "leff",
-    ):
-        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
-        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
-
-        Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
-            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
-            include_status (bool): look for status tables and include if requested
-            x_axis (str, optional): Defaults to "docking_score".
-            y_axis (str, optional): Defaults to "leff".
-
-        Returns:
-            tuple: cursors as (<all data cursor>, <passing data cursor>)
-        """
-        raise_not_implemented()
-
-    def fetch_receptor_object(self) -> tuple:
-        """Returns all Receptor objects from database
-
-        Args:
-            rec_name (str): Name of receptor to return object for
-
-        Returns:
-            tuple: of receptor name and object
-        """
-        raise_not_implemented()
-
-    def fetch_clustered_similars(self, ligname: str):
-        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
-
-        Args:
-            ligname (str): ligname for ligand to find similarity with
-
-        Raises:
-            ValueError: wrong terminal input
-        """
-        raise_not_implemented()
-
-    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
-        """
-        Gets molecular data that is needed to create rdkit mols for a given list of poses
-
-        Args:
-            pose_ids (list): pose ids for which to collect molecular data
-
-        Returns:
-            iter: of the following columns Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates
-        """
-        raise_not_implemented()
-
-    def fetch_summary_data(
-        self, columns=["docking_score", "leff"], percentiles=[1, 10]
-    ) -> dict:
-        """Collect summary data for database:
-            Num Ligands
-            Num stored poses
-            Num unique interactions
-
-            min, max, percentiles for columns in columns
-
-        Args:
-            columns (list (str)): columns to be displayed and used in summary
-            percentiles (list(int)): percentiles to consider
-
-        Returns:
-            dict: of data summary
-        """
-        raise_not_implemented()
-
-    def fetch_data_for_passing_results(
-        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
-    ) -> iter:
-        """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
-
-        Returns:
-            iter: sqlite cursor of data from passing data
-
-        Raises:
-            OptionError
-        """
-        raise_not_implemented()
-
-    def fetch_flexres_info(self, receptor):
-        """fetch flexible residues names and atomname lists
-
-        Returns:
-            tuple: (flexible_residues, flexres_atomnames)
-        """
-        raise_not_implemented()
-
-    def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
-        """fetch information required by vsmanager for writing out molecules
-
-        Returns:
-            iter: contains LigName, rdmol,
-                atom_index_map, hydrogen_parents
-        """
-        raise_not_implemented()
-
-    def fetch_ligand_rdkit_relevant_info(self, ligname: str) -> tuple:
-        """fetch information required by vsmanager for writing out molecules
-
-        Returns:
-            tuple: contains rdmol, atom_index_map, hydrogen_parents
-        """
-        raise_not_implemented()
-
-    def fetch_lignames_and_poses_for_selection(
-        self, selection: str
-    ) -> dict[str, list[int]]:
-        """
-        Creates a dictionary of ligands and the selected poses that appear in a selection,
-        such as a bookmark or a status table (where only poses are given).
-
-        Args:
-            selection (str): name of bookmark or status table
-
-        Returns:
-            dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
-        """
-        raise_not_implemented()
-
-    def fetch_pose_interactions(self, Pose_ID) -> iter:
-        """
-        Fetch all interactions parameters belonging to a Pose_ID
-
-        Args:
-            Pose_ID (int): pose id, 1-1 with Results table
-
-        Returns:
-            iter: of interaction information for given Pose_ID
-        """
-        raise_not_implemented()
-
-    def get_ligname_from_pose(self, pose_id: int) -> str:
-        """
-        Get ligand name given a pose_id
-
-        Args:
-            pose_id (int): pose id for which to get ligand name
-
-        Returns:
-            str: ligand name
-        """
-        raise_not_implemented()
-
-    def count_receptors_in_db(self):
-        """returns number of rows in Receptors table where receptor_object already has blob
-
-        Returns:
-            int: number of rows in receptors table
-            str: name of receptor if present in table
-        """
-        raise_not_implemented()
-
-    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
-        """Returns a panda dataframe of table or query given as requested_data
-
-        Args:
-            requested_data (str): String containing SQL-formatted query or table name
-            table (bool): Flag indicating if requested_data is table name or not
-
-        Returns:
-            pd.DataFrame: dataframe of requested data
-        """
-        raise_not_implemented()
-
-    def get_range_of_e_le(self, table: str) -> tuple:
-        """
-        Get min and max of e/docking_score and ligand efficiency/le/leff/
-
-        Args:
-            table (str): table limit data, e.g., either Results or a bookmark name
-
-        Returns:
-            tuple: e_min, e_max, le_min, le_max
-        """
-        raise_not_implemented()
-
-    def create_status_tables(self):
-        """
-        Creates status tables if needed
-        """
-        raise_not_implemented()
-
-    def accept_pose(self, pose_id: int):
-        """
-        Will add pose_id to accepted, and delete from maybe and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        raise_not_implemented()
-
-    def maybe_pose(self, pose_id: int):
-        """
-        Will add pose_id to maybe, and delete from accepted and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        raise_not_implemented()
-
-    def reject_pose(self, pose_id: int):
-        """
-        Will add pose_id to rejected, and delete from accepted and maybe if needed
-
-        Args:
-            pose_id (int)
-        """
-        raise_not_implemented()
-
-    def fetch_viewable_data_columns_from(
-        self, table: str, length: int, last_pose_id: int = 0
-    ) -> iter:
-        """
-        Makes a selection of columns and includes the status of the pose
-
-        Returns:
-            iter: iterable/cursor of the columns
-        """
-        raise_not_implemented()
-
-    def fetch_columns_from_table_as_dicts(
-        self, table: str, columns: list, length: int = 500, starting_rowid: int = 0
-    ) -> tuple[list[str], list[dict]]:
-        """
-        Will get requested table data for a table given one or more columns.
-        Data will be limited by a certain length, and can be retrieved from a desired
-        rowid.
-
-        Args:
-            table (str): name of table or bookmark
-            columns (list, optional): list of columns to retrieve. Defaults to ["*"].
-            length (int, optional): number of rows to collect. Defaults to 500.
-            starting_rowid (int, optional): rowid to start with. Defaults to 0.
-
-        Returns:
-            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
-                                            and column is the key, value is the row-col cell value
-        """
-        raise_not_implemented()
-
-    def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
-        """
-        Will return data requested in an sql formatted query
-
-        Args:
-            query (str): sql query formatted to sqlite database
-
-        Returns:
-            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
-                                            and column is the key, value is the row-col cell value
-        """
-        raise_not_implemented()
-
-    def is_bookmark(self, table: str) -> bool:
-        """
-        Returns True if table name is actually a bookmark
-
-        Args:
-            table (str): name of table or bookmark to check
-
-        Returns:
-            bool: if table name is a bookmark
-        """
-        raise_not_implemented()
-
-    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
-        """
-        Find the row id of a pose in a given table
-
-        Args:
-            table (str)
-            pose_id (int)
-
-        Returns:
-            Union[None, int]: rowid if any
-        """
-        raise_not_implemented()
-
-    def tables_in_db(self) -> list:
-        """
-        Returns a list of all table names in the database
-
-        Returns:
-            list: list of table names
-        """
-        raise_not_implemented()
-
-    def calculate_percentiles(
-        self, column: str, num_bins: int, table: str
-    ) -> tuple[list[int], list[float]]:
-        """
-        Will calculate percentiles for a given column and given number of bins to divide the data in.
-        Will group the data by ligand_id, so it will be per ligand and not per pose id.
-
-        Args:
-            column (str): what column to calculate percentile for. must be numeric
-            num_bins (int): how many percentile bins data should be divided into
-            table (str): whether the column is in Results or filtered results (i.e., bookmark)
-
-        Raises:
-            OptionError: if column given is not numeric and in results
-
-        Returns:
-            tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
-        """
-        raise_not_implemented()
-
-    def check_previous_docking_mode(self) -> Union[None, str]:
-        """
-        Checks the docking_mode last used in a database write session
-
-        Returns:
-            Union[None, str]: docking_mode if any
-        """
-        raise_not_implemented()
-
-    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
-        """
-        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
-
-        Args:
-            ligand_name (str)
-            selection (str): status table or bookmark name
-
-        Returns:
-            list[int]: selected poses for ligand
-        """
-        raise_not_implemented()
-
-    def get_starting_rowid(self, table: str) -> int:
-        """
-        Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
-        (whose rows are inside Filtered_poses)
-
-        Args:
-            table (str): table or bookmark name
-
-        Returns:
-            int: first row id belonging to that selection
-        """
-        raise_not_implemented()
-
-    # endregion
-
-    # region private methods
-    def _create_tables(self) -> None:
-        """
-        Creates all tables needed for a Ringtail database of a specific version
-        """
-        self._create_results_table()
-        self._create_ligands_table()
-        self._create_receptors_table()
-        self._create_interaction_index_table()
-        self._create_interaction_table()
-        self._create_db_properties_table()
-        self._create_filtering_tables()
-
-        self._set_ringtail_db_schema_version(self._db_schema_ver)
-
-    @classmethod
-    def _generate_results_row(cls, ligand_dict, pose_rank, run_number) -> list:
-        """generate list of lists of ligand values to be
-            inserted into duckdb database for a given pose
-
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
-            pose_rank (int): Rank of pose to generate row for
-                all runs for the given ligand
-            run_number (int): Run number of pose to generate row for
-                all runs for the given ligand
-
-        Returns:
-            List: List of pose data to be inserted into Results table.
-            In same order as expected in insert_results:
-            receptor, [2]
-            pose_rank, [3]
-            run_number, [4]
-            cluster_rmsd, [5]
-            reference_rmsd, [6]
-            docking_score, [7]
-            leff, [8]
-            deltas, [9]
-            energies_inter, [10]
-            energies_vdw, [11]
-            energies_electro, [12]
-            energies_flexLig, [13]
-            energies_flexLR, [14]
-            energies_intra, [15]
-            energies_torsional, [16]
-            unbound_energy, [17]
-            nr_interactions, [18]
-            num_hb, [19]
-            cluster_size, [20]
-            about_x, [21]
-            about_y, [22]
-            about_z, [23]
-            trans_x, [24]
-            trans_y, [25]
-            trans_z, [26]
-            axisangle_x, [27]
-            axisangle_y, [28]
-            axisangle_z, [29]
-            axisangle_w, [30]
-            dihedrals, [31]
-            ligand_coordinates, [32]
-            flexible_res_coordinates [33]
-        """
-        ligand_data_keys = [
-            "cluster_rmsds",
-            "ref_rmsds",
-            "scores",
-            "leff",
-            "delta",
-            "intermolecular_energy",
-            "vdw_hb_desolv",
-            "electrostatics",
-            "flex_ligand",
-            "flexLigand_flexReceptor",
-            "internal_energy",
-            "torsional_energy",
-            "unbound_energy",
-        ]
-        # # # # # # get pose-specific data
-
-        # check if run is best for a cluster.
-        # We are only saving the top pose for each cluster
-        ligand_data_list = [
-            ligand_dict["receptor"],
-            pose_rank + 1,
-            int(run_number),
-        ]
-        # get energy data
-        for key in ligand_data_keys:
-            if ligand_dict[key] == []:  # guard against incomplete data
-                ligand_data_list.append(None)
-            else:
-                ligand_data_list.append(ligand_dict[key][pose_rank])
-        if ligand_dict["interactions"] != [] and any(
-            ligand_dict["interactions"][pose_rank]
-        ):  # catch lack of interaction data
-            # add interaction count
-            ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0])
-            if int(ligand_dict["interactions"][pose_rank]["count"][0]) != 0:
-                # count number H bonds, add to ligand data list
-                ligand_data_list.append(
-                    ligand_dict["interactions"][pose_rank]["type"].count("H")
-                )
-            else:
-                ligand_data_list.append(0)
-        else:
-            ligand_data_list.extend(
-                [
-                    None,
-                    None,
-                ]
-            )
-        # Add the cluster size for the cluster this pose belongs to
-        ligand_data_list.append(
-            ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
-        )
-        state_var_keys = ["pose_about", "pose_translations", "pose_quarternions"]
-        # add statevars
-        for key in state_var_keys:
-            if ligand_dict[key] == []:
-                if key == "pose_about" or key == "pose_translations":
-                    ligand_data_list.extend(
-                        [
-                            None,
-                            None,
-                            None,
-                        ]
-                    )
-                if key == "pose_quarternions":
-                    ligand_data_list.extend(
-                        [
-                            None,
-                            None,
-                            None,
-                            None,
-                        ]
-                    )
-                continue
-            stateVar_data = ligand_dict[key][pose_rank]
-            if stateVar_data != []:
-                for dim in stateVar_data:
-                    ligand_data_list.append(dim)
-        dihedral_string = ""
-        if ligand_dict["pose_dihedrals"] != []:
-            pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
-            for dihedral in pose_dihedrals:
-                dihedral_string = dihedral_string + json.dumps(dihedral) + ", "
-        ligand_data_list.append(dihedral_string)
-
-        # add coordinates
-        # convert to string for storage as VARCHAR
-        ligand_data_list.append(json.dumps(ligand_dict["pose_coordinates"][pose_rank]))
-        ligand_data_list.append(
-            json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank])
-        )
-
-        return ligand_data_list
-
-    @classmethod
-    def _generate_ligand_row(cls, ligand_dict: dict) -> list:
-        """writes row to be inserted into ligand table
-
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
-
-        Returns:
-            list: List of data to be written as row in ligand table. Format:
-                [ligand_name, ligand_smile, ligand_rdbin, ligand_index_map,
-                ligand_h_parents, input_model]
-        """
-        ligand_name = ligand_dict["ligname"]
-        ligand_smile = ligand_dict["ligand_smile_string"]
-        ligand_mol = Chem.MolFromSmiles(ligand_smile)
-        # sanitize the ligand
-        Chem.SanitizeMol(ligand_mol)
-        ligand_rdbin = ligand_mol.ToBinary()
-        ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
-        ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
-        input_model = json.dumps(ligand_dict["ligand_input_model"])
-
-        return [
-            ligand_name,
-            ligand_smile,
-            ligand_rdbin,
-            ligand_index_map,
-            ligand_h_parents,
-            input_model,
-        ]
-
-    @classmethod
-    def _generate_receptor_row(cls, ligand_dict: dict) -> list:
-        """Writes row to be inserted into receptor table
-
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
-
-        Returns:
-            list: receptor row columns
-        """
-        rec_name = ligand_dict["receptor"]
-        box_dim = json.dumps(ligand_dict["grid_dim"])
-        box_center = json.dumps(ligand_dict["grid_center"])
-        grid_spacing = ligand_dict["grid_spacing"]
-        if grid_spacing != "":
-            grid_spacing = float(grid_spacing)
-        flexible_residues = json.dumps(ligand_dict["flexible_residues"])
-        flexres_atomnames = json.dumps(ligand_dict["flexres_atomnames"])
-
-        return [
-            rec_name,
-            box_dim,
-            box_center,
-            grid_spacing,
-            flexible_residues,
-            flexres_atomnames,
-        ]
-
-    @classmethod
-    def _generate_interaction_tuples(cls, interaction_dictionaries: list) -> list:
-        """takes dictionary of file results, formats as
-        list of tuples for interactions
-
-        Args:
-            interaction_dictionaries (list): List of pose interaction
-                dictionaries from parser
-
-        Returns:
-            list: List of tuples of interaction data
-        """
-        interaction_keywords = [
-            "type",
-            "chain",
-            "residue",
-            "resid",
-            "recname",
-            "recid",
-        ]
-        interactions = set()
-        for pose_interactions in interaction_dictionaries:
-            count = pose_interactions["count"][0]
-            for i in range(int(count)):
-                interactions.add(
-                    tuple(pose_interactions[kw][i] for kw in interaction_keywords)
-                )
-
-        return list(interactions)
-
-    def _create_results_table(self):
-        pass
-
-    def _create_ligands_table(self):
-        pass
-
-    def _create_receptors_table(self):
-        pass
-
-    def _create_interaction_index_table(self):
-        pass
-
-    def _create_interaction_table(self):
-        pass
-
-    def _create_db_properties_table(self):
-        pass
-
-    def _create_filtering_tables(self):
-        pass
-
-    def _set_ringtail_db_schema_version(self):
-        pass
-
-    def _insert_ligands(self, ligand_array: list) -> list:
-        raise_not_implemented()
-
-    def _create_indices(self):
-        raise_not_implemented()
-
-    def _insert_results(self, results_array, options):
-        raise_not_implemented()
-
-    def _insert_receptors(self, receptor_array):
-        raise_not_implemented()
-
-    def _insert_and_format_interactions(
-        self, pose_ids: list, docking_data: dict
-    ) -> list:
-        """
-        This method will evaluate the docking data, and determine whether or not there are
-        interactions to be processed and written.
-
-
-        Args:
-            pose_ids (list[int]): pose ids being processed
-            docking_data (dict): all docking data
-
-        Returns:
-            interactions_list (list): List of tuples for interactions in form
-                ("type", "chain", "residue", "resid", "recname", "recid")
-        """
-        # insert interactions if they are present
-        interaction_list = []
-        pose_counter = 0
-        for docked_ligand in docking_data.values():
-            # for each pose of that ligand
-            for pose_interactions in docked_ligand.get("poses_interactions"):
-                # for each interaction of that pose
-                Pose_ID = pose_ids[pose_counter]
-                pose_interactions_with_poseid = [
-                    (
-                        (Pose_ID,)
-                        + tuple(self._insert_interaction_index_row(interaction_tuple))
-                    )
-                    for interaction_tuple in pose_interactions
-                ]
-
-                interaction_list.extend(pose_interactions_with_poseid)
-                pose_counter += 1
-
-        return interaction_list
-
-    def _insert_interaction_index_row(self, interaction_tuple) -> int:
-        """
-        Writes unique interactions and returns the interaction_id of the given interaction
-
-        Args:
-            interaction_tuple (tuple): (rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
-
-        Returns:
-            int: interaction index
-
-        Raises:
-            DatabaseInsertionError
-        """
-        raise_not_implemented()
-
-    def _insert_interaction_rows(
-        self, interaction_rows, duplicates, duplicate_handling
-    ):
-        raise_not_implemented()
-
-    def _generate_result_filtering_query(
-        self, filters_dict, bookmark_name, filter_bookmark
-    ):
-        raise_not_implemented()
-
-    def _populate_filter_tables(self, name, query, filters):
-        raise_not_implemented()
-
-    def _insert_receptor_blob(self, receptor, rec_name):
-        raise_not_implemented()
-
-    # endregion
-
-
-class StorageManagerSQLite(StorageManager):
-    """SQLite-specific StorageManager subclass
+class StorageManagerDuckDB(StorageManager):
+    """DuckDB-specific StorageManager subclass
 
     Attributes:
         db_file (str): database name
-        conn (SQLite.conn): Connection to database
+        conn (duckdb.DuckDBPyConnection): Connection to database
     """
 
     # "db_schema_ver":list("compatible code versions")
     _db_schema_code_compatibility = {
-        "1.0.0": ["1.0.0"],
-        "1.1.0": ["1.1.0"],
-        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2"],
         "3.0.0": ["3.0.0"],
     }
 
@@ -1391,30 +65,31 @@ class StorageManagerSQLite(StorageManager):
         """Create table for ligands. Columns are:
         ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-        ligand_smile        VARCHAR[],
+        ligand_smile        VARCHAR,
         rdmol               BLOB,
-        atom_index_map      VARCHAR[],
-        hydrogen_parents    VARCHAR[],
-        input_model         VARCHAR[]
+        atom_index_map      VARCHAR,
+        hydrogen_parents    VARCHAR,
+        input_model         VARCHAR
 
         Raises:
             DatabaseTableCreationError: Description
 
         """
-        ligand_table = f"""CREATE TABLE IF NOT EXISTS {name} (
-            ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-            ligand_smile        VARCHAR[],
-            rdmol        BLOB,
-            atom_index_map      VARCHAR[],
-            hydrogen_parents    VARCHAR[],
-            input_model         VARCHAR[])"""
+        ligand_table = f"""
+            CREATE SEQUENCE seq_ligandid START 1;
+            CREATE TABLE IF NOT EXISTS {name} (
+            ligand_id           INTEGER DEFAULT nextval('seq_ligandid') PRIMARY KEY,
+            LigName             VARCHAR NOT NULL UNIQUE,
+            ligand_smile        VARCHAR,
+            rdmol               BLOB,
+            atom_index_map      VARCHAR,
+            hydrogen_parents    VARCHAR,
+            input_model         VARCHAR)"""
 
         try:
-            cur = self.conn.cursor()
-            cur.execute(ligand_table)
+            cur = self.conn.execute(ligand_table)
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating ligands table. If database already exists, use --overwrite to drop existing tables"
             ) from e
@@ -1432,7 +107,6 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
 
         """
-
         sql_insert = """INSERT INTO Ligands (
         LigName,
         ligand_smile,
@@ -1442,8 +116,12 @@ class StorageManagerSQLite(StorageManager):
         input_model
         ) VALUES
         (?,?,?,?,?,?)
-        ON CONFLICT(LigName) DO 
-            UPDATE SET LigName=excluded.LigName
+        ON CONFLICT(LigName) DO UPDATE SET 
+            ligand_smile = excluded.ligand_smile,
+            rdmol = excluded.rdmol,
+            atom_index_map = excluded.atom_index_map,
+            hydrogen_parents = excluded.hydrogen_parents,
+            input_model = excluded.input_model
         RETURNING ligand_id"""
         ligand_ids = []
         try:
@@ -1455,93 +133,94 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
             return ligand_ids
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting ligands.") from e
 
     def _create_results_table(self, name="Results"):
         """Creates table for results. Columns are:
         Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
         ligand_id           INTEGER FOREIGN KEY from Ligands,
-        receptor            VARCHAR[],
-        pose_rank           INT[],
-        run_number          INT[],
-        docking_score    FLOAT(4),
-        leff                FLOAT(4),
-        deltas              FLOAT(4),
-        cluster_rmsd        FLOAT(4),
-        cluster_size        INT[],
-        reference_rmsd      FLOAT(4),
-        energies_inter      FLOAT(4),
-        energies_vdw        FLOAT(4),
-        energies_electro    FLOAT(4),
-        energies_flexLig    FLOAT(4),
-        energies_flexLR     FLOAT(4),
-        energies_intra      FLOAT(4),
-        energies_torsional  FLOAT(4),
-        unbound_energy      FLOAT(4),
-        nr_interactions     INT[],
-        num_hb              INT[],
-        about_x             FLOAT(4),
-        about_y             FLOAT(4),
-        about_z             FLOAT(4),
-        trans_x             FLOAT(4),
-        trans_y             FLOAT(4),
-        trans_z             FLOAT(4),
-        axisangle_x         FLOAT(4),
-        axisangle_y         FLOAT(4),
-        axisangle_z         FLOAT(4),
-        axisangle_w         FLOAT(4),
-        dihedrals           VARCHAR[],
-        ligand_coordinates         VARCHAR[],
-        flexible_res_coordinates   VARCHAR[]
+        receptor            VARCHAR,
+        pose_rank           INTEGER,
+        run_number          INTEGER,
+        docking_score    FLOAT,
+        leff                FLOAT,
+        deltas              FLOAT,
+        cluster_rmsd        FLOAT,
+        cluster_size        INTEGER,
+        reference_rmsd      FLOAT,
+        energies_inter      FLOAT,
+        energies_vdw        FLOAT,
+        energies_electro    FLOAT,
+        energies_flexLig    FLOAT,
+        energies_flexLR     FLOAT,
+        energies_intra      FLOAT,
+        energies_torsional  FLOAT,
+        unbound_energy      FLOAT,
+        nr_interactions     INTEGER,
+        num_hb              INTEGER,
+        about_x             FLOAT,
+        about_y             FLOAT,
+        about_z             FLOAT,
+        trans_x             FLOAT,
+        trans_y             FLOAT,
+        trans_z             FLOAT,
+        axisangle_x         FLOAT,
+        axisangle_y         FLOAT,
+        axisangle_z         FLOAT,
+        axisangle_w         FLOAT,
+        dihedrals           VARCHAR,
+        ligand_coordinates         VARCHAR,
+        flexible_res_coordinates   VARCHAR
 
         Raises:
             DatabaseTableCreationError: Description
         """
 
-        sql_results_table = f"""CREATE TABLE IF NOT EXISTS {name} (
-            Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
-            ligand_id           INT[],
-            receptor            VARCHAR[],
-            pose_rank           INT[],
-            run_number          INT[],
-            docking_score       FLOAT(4),
-            leff                FLOAT(4),
-            deltas              FLOAT(4),
-            cluster_rmsd        FLOAT(4),
-            cluster_size        INT[],
-            reference_rmsd      FLOAT(4),
-            energies_inter      FLOAT(4),
-            energies_vdw        FLOAT(4),
-            energies_electro    FLOAT(4),
-            energies_flexLig    FLOAT(4),
-            energies_flexLR     FLOAT(4),
-            energies_intra      FLOAT(4),
-            energies_torsional  FLOAT(4),
-            unbound_energy      FLOAT(4),
-            nr_interactions     INT[],
-            num_hb              INT[],
-            about_x             FLOAT(4),
-            about_y             FLOAT(4),
-            about_z             FLOAT(4),
-            trans_x             FLOAT(4),
-            trans_y             FLOAT(4),
-            trans_z             FLOAT(4),
-            axisangle_x         FLOAT(4),
-            axisangle_y         FLOAT(4),
-            axisangle_z         FLOAT(4),
-            axisangle_w         FLOAT(4),
-            dihedrals           VARCHAR[],
-            ligand_coordinates         VARCHAR[],
-            flexible_res_coordinates   VARCHAR[],
-            FOREIGN KEY (ligand_id) REFERENCES Ligands(ligand_id)
+        sql_results_table = f"""
+            CREATE SEQUENCE seq_poseid START 1;
+            CREATE TABLE IF NOT EXISTS {name} (
+            Pose_ID             INTEGER DEFAULT nextval('seq_poseid') PRIMARY KEY,
+            ligand_id           INTEGER REFERENCES Ligands(ligand_id),
+            receptor            VARCHAR,
+            pose_rank           INTEGER,
+            run_number          INTEGER,
+            docking_score       FLOAT,
+            leff                FLOAT,
+            deltas              FLOAT,
+            cluster_rmsd        FLOAT,
+            cluster_size        INTEGER,
+            reference_rmsd      FLOAT,
+            energies_inter      FLOAT,
+            energies_vdw        FLOAT,
+            energies_electro    FLOAT,
+            energies_flexLig    FLOAT,
+            energies_flexLR     FLOAT,
+            energies_intra      FLOAT,
+            energies_torsional  FLOAT,
+            unbound_energy      FLOAT,
+            nr_interactions     INTEGER,
+            num_hb              INTEGER,
+            about_x             FLOAT,
+            about_y             FLOAT,
+            about_z             FLOAT,
+            trans_x             FLOAT,
+            trans_y             FLOAT,
+            trans_z             FLOAT,
+            axisangle_x         FLOAT,
+            axisangle_y         FLOAT,
+            axisangle_z         FLOAT,
+            axisangle_w         FLOAT,
+            dihedrals           VARCHAR,
+            ligand_coordinates         VARCHAR,
+            flexible_res_coordinates   VARCHAR,
             ); """
 
         try:
             cur = self.conn.cursor()
             cur.execute(sql_results_table)
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating results table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
@@ -1574,12 +253,12 @@ class StorageManagerSQLite(StorageManager):
             Pose_ID (int): returns the Pose_ID of the duplicate if found, returns -1 of no duplicate found
 
         """
+        # TODO could be candidate for moving to storagemanager if it just uses self.db_query
         # create list of the data that is to be considered unique
         unique_data_indices = [0, 1, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
         unique_data = [result_data[index] for index in unique_data_indices]
 
         try:
-            cur = self.conn.cursor()
             query = """SELECT Pose_ID 
                         FROM Results 
                         WHERE 
@@ -1597,7 +276,7 @@ class StorageManagerSQLite(StorageManager):
                         AND axisangle_w=?
                         AND dihedrals=?;"""
 
-            cur.execute(query, unique_data)
+            cur = self.conn.execute(query, unique_data)
             row = cur.fetchone()
             if row is None:
                 Pose_ID = -1
@@ -1609,7 +288,7 @@ class StorageManagerSQLite(StorageManager):
 
             return Pose_ID
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseQueryError(
                 "Error while looking for unique result row."
             ) from e
@@ -1685,7 +364,7 @@ class StorageManagerSQLite(StorageManager):
                         pass
                     elif options.get("duplicate_handling").upper() == "REPLACE":
                         # update the existing row with the new results
-                        # reformat sqlite query to update
+                        # reformat duckdb query to update
                         sql_replace = sql_insert.replace(
                             "INSERT INTO Results", "UPDATE Results SET"
                         )
@@ -1693,7 +372,7 @@ class StorageManagerSQLite(StorageManager):
                         sql_replace = sql_replace.replace(";", " WHERE Pose_ID = ?;")
                         result.append(
                             Pose_ID
-                        )  # add pose ID to the data being processed in sqlite statement
+                        )  # add pose ID to the data being processed in duckdb statement
                         cur.execute(sql_replace, result)
 
                 else:  # row does not exist
@@ -1708,31 +387,33 @@ class StorageManagerSQLite(StorageManager):
 
             return Pose_IDs, duplicates
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting results.") from e
 
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
         Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
         RecName             VARCHAR,
-        box_dim             VARCHAR[],
-        box_center          VARCHAR[],
-        grid_spacing        FLOAT(4),
-        flexible_residues   VARCHAR[],
-        flexres_atomnames   VARCHAR[],
+        box_dim             VARCHAR,
+        box_center          VARCHAR,
+        grid_spacing        FLOAT,
+        flexible_residues   VARCHAR,
+        flexres_atomnames   VARCHAR,
         receptor_object     BLOB
 
         Raises:
             DatabaseTableCreationError: Description
         """
-        receptors_table = """CREATE TABLE IF NOT EXISTS Receptors (
-            Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
+        receptors_table = """
+            CREATE SEQUENCE seq_receptorid START 1;
+            CREATE TABLE IF NOT EXISTS Receptors (
+            Receptor_ID         INTEGER DEFAULT nextval('seq_receptorid') PRIMARY KEY,
             RecName             VARCHAR,
-            box_dim             VARCHAR[],
-            box_center          VARCHAR[],
-            grid_spacing        FLOAT(4),
-            flexible_residues   VARCHAR[],
-            flexres_atomnames   VARCHAR[],
+            box_dim             VARCHAR,
+            box_center          VARCHAR,
+            grid_spacing        FLOAT,
+            flexible_residues   VARCHAR,
+            flexres_atomnames   VARCHAR,
             receptor_object     BLOB
         )"""
 
@@ -1740,7 +421,7 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.cursor()
             cur.execute(receptors_table)
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating receptor table. If database already exists, use --overwrite to drop existing tables"
             ) from e
@@ -1768,7 +449,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             self.db_update(sql_insert, [receptor_array])
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting receptor.") from e
 
     def _insert_receptor_blob(self, receptor: bytes, rec_name: str):
@@ -1797,7 +478,7 @@ class StorageManagerSQLite(StorageManager):
             cur = self.conn.execute(query, (rec_name, receptor))
             self.conn.commit()
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error while adding receptor blob to database"
             ) from e
@@ -1812,16 +493,18 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError
         """
 
-        sql_str = """CREATE TABLE IF NOT EXISTS DB_properties (
-        DB_write_session    INTEGER PRIMARY KEY AUTOINCREMENT,
-        docking_mode        VARCHAR[],
-        number_of_poses     VARCHAR[])"""
+        sql_str = """
+        CREATE SEQUENCE seq_dbwriteid START 1;
+        CREATE TABLE IF NOT EXISTS DB_properties (
+        DB_write_session    INTEGER DEFAULT nextval('seq_dbwriteid') PRIMARY KEY,
+        docking_mode        VARCHAR,
+        number_of_poses     VARCHAR)"""
 
         try:
             cur = self.conn.cursor()
             cur.execute(sql_str)
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating db properties table. If database already exists, use --overwrite to drop existing tables"
             ) from e
@@ -1847,7 +530,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.commit()
             cur.close()
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error while inserting database properties info into DB_properties table"
             ) from e
@@ -1856,34 +539,36 @@ class StorageManagerSQLite(StorageManager):
         """create table of data for each unique interaction, will be remade everytime db is written to.
         Columns are:
         interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-        interaction_type    VARCHAR[],
-        rec_chain           VARCHAR[],
-        rec_resname         VARCHAR[],
-        rec_resid           VARCHAR[],
-        rec_atom            VARCHAR[],
-        rec_atomid          VARCHAR[]
+        interaction_type    VARCHAR,
+        rec_chain           VARCHAR,
+        rec_resname         VARCHAR,
+        rec_resid           VARCHAR,
+        rec_atom            VARCHAR,
+        rec_atomid          VARCHAR
 
         Raises:
             DatabaseTableCreationError: Description
 
         """
-        interaction_index_table = """CREATE TABLE Interaction_indices (
-                                        interaction_id      INTEGER PRIMARY KEY,
-                                        interaction_type    VARCHAR[],
-                                        rec_chain           VARCHAR[],
-                                        rec_resname         VARCHAR[],
-                                        rec_resid           VARCHAR[],
-                                        rec_atom            VARCHAR[],
-                                        rec_atomid          VARCHAR[],
-                                        UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid) ON CONFLICT IGNORE );
-                                        """
+        interaction_index_table = """
+        CREATE SEQUENCE seq_interactionid START 1;
+        CREATE TABLE Interaction_indices (
+        interaction_id      INTEGER DEFAULT nextval('seq_interactionid') PRIMARY KEY,
+        interaction_type    VARCHAR,
+        rec_chain           VARCHAR,
+        rec_resname         VARCHAR,
+        rec_resid           VARCHAR,
+        rec_atom            VARCHAR,
+        rec_atomid          VARCHAR,
+        UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid) ON CONFLICT IGNORE );
+        """
 
         try:
             cur = self.conn.cursor()
             cur.execute("""DROP TABLE IF EXISTS Interaction_indices""")
             cur.execute(interaction_index_table)
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 f"Error while creating interaction index table: {e}"
             ) from e
@@ -1900,18 +585,18 @@ class StorageManagerSQLite(StorageManager):
             DatabaseTableCreationError: Description
         """
 
-        interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        Pose_ID   INTEGER,
-        interaction_id INTEGER,
-        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID),
-        FOREIGN KEY (interaction_id) REFERENCES Interaction_indices(interaction_id))"""
+        interaction_table = """
+        CREATE SEQUENCE seq_interactionposeid START 1;
+        CREATE TABLE IF NOT EXISTS Interactions (
+        interaction_pose_ID INTEGER DEFAULT nextval('seq_interactionposeid') PRIMARY KEY,
+        Pose_ID   INTEGER REFERENCES Results(pose_id),
+        interaction_id INTEGER REFERENCES Interaction_indices(interaction_id))"""
 
         try:
             cur = self.conn.cursor()
             cur.execute(interaction_table)
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
@@ -1968,7 +653,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.commit()
             cur.close()
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseInsertionError(
                 f"Error while inserting an interaction row: {e}"
             ) from e
@@ -1987,8 +672,8 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
         # to insert interaction if unique
-        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_id, interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
-                        VALUES (?,?,?,?,?,?,?);"""
+        sql_insert = """INSERT INTO Interaction_indices (interaction_id, interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
+                        VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING;"""
         # to get interaction_id from the given interaction
         sql_query = f"""SELECT interaction_id FROM Interaction_indices 
         WHERE interaction_type = ?
@@ -2014,7 +699,7 @@ class StorageManagerSQLite(StorageManager):
                 interaction_index = interaction_index[0]
             cur.close()
             return interaction_index
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseInsertionError(
                 f"Error inserting unique interaction tuples in index table: {e}"
             ) from e
@@ -2036,33 +721,33 @@ class StorageManagerSQLite(StorageManager):
             self.conn.commit()
             cur.close()
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError(
                 "Error while deleting rows in the Interaction table"
             ) from e
 
     def _create_filtering_tables(self):
         """
-        Creates a Filter table which includes filter_id (PK), name (bookmark_name), sqlite formatted query,
+        Creates a Filter table which includes filter_id (PK), name (bookmark_name), duckdb formatted query,
         and dictionary of filters used, as well as Filtered_poses, which uses filter_id as FK,
         and lists all poses passing that filter_id
 
         Raises:
             DatabaseTableCreationError
         """
-        # Create filters table keeping track of filter id etc
-        filters_sql = """CREATE TABLE IF NOT EXISTS Filters (
-        filter_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        name                VARCHAR[],
-        query               VARCHAR[],
-        filters             VARCHAR[],
-        filter_window       VARCHAR[]);"""
+        filters_sql = """
+        CREATE SEQUENCE seq_filterid START 1;
+        CREATE TABLE IF NOT EXISTS Filters (
+        filter_id           INTEGER DEFAULT nextval('seq_filterid') PRIMARY KEY,
+        name                VARCHAR,
+        query               VARCHAR,
+        filters             VARCHAR,
+        filter_window       VARCHAR);"""
 
-        filter_pose_sql = """CREATE TABLE IF NOT EXISTS Filtered_poses (
-        filter_id           INTEGER,
-        pose_id             INTEGER,
-        FOREIGN KEY(filter_id) REFERENCES Filters(filter_id),
-        FOREIGN KEY(pose_id) REFERENCES Results(pose_id));"""
+        filter_pose_sql = """
+        CREATE TABLE IF NOT EXISTS Filtered_poses (
+        filter_id           INTEGER REFERENCES Filters(filter_id),
+        pose_id             INTEGER REFERENCES Results(pose_id));"""
 
         try:
             cur = self.conn.cursor()
@@ -2070,7 +755,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(filter_pose_sql)
             self.conn.commit()
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating bookmark table. If database already exists, use --overwrite to drop existing tables"
             ) from e
@@ -2098,7 +783,7 @@ class StorageManagerSQLite(StorageManager):
         # TODO
         cur = self.conn.cursor()
         cur.execute(
-            "CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)"
+            "CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INTEGER UNIQUE)"
         )
         ligand_cluster_columns = self._fetch_ligand_cluster_columns()
         column_name = (
@@ -2119,7 +804,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.commit()
 
             return column_name
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError("Error occurred while inserting cluster data") from e
 
     def _create_indices(self):
@@ -2146,7 +831,7 @@ class StorageManagerSQLite(StorageManager):
             logger.info(
                 "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
             )
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError("Error occurred while indexing") from e
 
     # endregion
@@ -2259,14 +944,14 @@ class StorageManagerSQLite(StorageManager):
             # create mergedata table: merge_id (PK), dbfile, timestamp, numofrows table
             mergetbl_sql = """CREATE TABLE IF NOT EXISTS merged_tables (
             merge_id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            dbfile                  VARCHAR[],
+            dbfile                  VARCHAR,
             merge_start             DATETIME DEFAULT CURRENT_TIMESTAMP);"""
             cur.execute(mergetbl_sql)
 
             # create PK table: merge_id(FK), table, original_val, merge_val
             pktable_sql = """CREATE TABLE IF NOT EXISTS PK_conversions (
             merge_id        INTEGER,
-            table_name      VARCHAR[],
+            table_name      VARCHAR,
             original_PK     INTEGER,
             merged_PK       INTEGER,
             FOREIGN KEY(merge_id) REFERENCES merged_tables(merge_id));"""
@@ -2633,7 +1318,7 @@ class StorageManagerSQLite(StorageManager):
             bookmark_names = [row["name"].lower() for row in cur.fetchall()]
             cur.close()
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError(
                 "Error occured while fetching existing bookmark names"
             ) from e
@@ -2782,7 +1467,7 @@ class StorageManagerSQLite(StorageManager):
         self.conn.commit()
 
     def _process_filters_for_query(self, filters_dict: dict):
-        score_maxmin_to_sqlite_call = {
+        score_maxmin_to_duckdb_call = {
             "eworst": "docking_score <= {value}",
             "ebest": "docking_score >= {value}",
             "leworst": "leff <= {value}",
@@ -2827,7 +1512,7 @@ class StorageManagerSQLite(StorageManager):
                     )
                 else:
                     numerical_filters.append(
-                        score_maxmin_to_sqlite_call[filter_key].format(
+                        score_maxmin_to_duckdb_call[filter_key].format(
                             value=filter_value
                         )
                     )
@@ -2900,7 +1585,7 @@ class StorageManagerSQLite(StorageManager):
             filters_dict (dict): dict of filters. Keys names and value formats must match those found in the Filters class
 
         Returns:
-            str: SQLite-formatted string for filtering query
+            str: duckdb-formatted string for filtering query
         """
         # table to filter over
         filtering_window = "Results"
@@ -3652,7 +2337,7 @@ class StorageManagerSQLite(StorageManager):
                 <rec_resid>, <rec_atom>]
 
         Returns:
-            iter: sqlite cursor with the interaction index/indices
+            iter: duckdb cursor with the interaction index/indices
         """
         interaction_info = [
             "interaction_type",
@@ -3776,7 +2461,7 @@ class StorageManagerSQLite(StorageManager):
                 f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query}))",
                 (),
             )
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError(
                 f"Error occured while pruning Ligands not in {bookmark_name}"
             ) from e
@@ -3792,7 +2477,7 @@ class StorageManagerSQLite(StorageManager):
             self.db_update(
                 f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})", ()
             )
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError(
                 f"Error occured while pruning Results not in {bookmark_name}"
             ) from e
@@ -3821,7 +2506,7 @@ class StorageManagerSQLite(StorageManager):
                 (),
             )
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError(
                 f"Error occured while pruning Interactions not in {bookmark_name}"
             ) from e
@@ -3866,7 +2551,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(create_table_str)
             self.conn.commit()
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 f"Error while creating temporary table {table_name}"
             ) from e
@@ -3884,7 +2569,7 @@ class StorageManagerSQLite(StorageManager):
             temp_table (str): name of temporary table to store passing results in
 
         Returns:
-            str: sqlite formatted query string
+            str: duckdb formatted query string
         """
         query = QueryBuilder()
         subq = QueryBuilder()
@@ -4096,7 +2781,7 @@ class StorageManagerSQLite(StorageManager):
             row_count = cur.fetchone()[0]
             cur.close()
             return row_count
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseQueryError(
                 "Error occurred while fetching number of receptor rows containing PDBQT blob"
             ) from e
@@ -4104,10 +2789,10 @@ class StorageManagerSQLite(StorageManager):
     def fetch_data_for_passing_results(
         self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
     ) -> iter:
-        """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
+        """Will return duckdb cursor with requested data for outfields for poses that passed filter in bookmark_name
 
         Returns:
-            iter: sqlite cursor of data from passing data
+            iter: duckdb cursor of data from passing data
 
         Raises:
             OptionError
@@ -4184,7 +2869,7 @@ class StorageManagerSQLite(StorageManager):
             if info is None:
                 info = [], []
             return info
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseQueryError("Error retrieving flexible residue info") from e
 
     def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
@@ -4226,7 +2911,7 @@ class StorageManagerSQLite(StorageManager):
         """
         # check if table exist
         cur = self.db_query(
-            """SELECT name FROM sqlite_master WHERE type='table' AND name='Interactions';"""
+            """SELECT name FROM duckdb_master WHERE type='table' AND name='Interactions';"""
         )
         if len(cur.fetchall()) == 0:
             return None
@@ -4271,7 +2956,7 @@ class StorageManagerSQLite(StorageManager):
                 column_tuple[1]
                 for column_tuple in self.conn.execute("PRAGMA table_info(Results)")
             ]
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError(
                 "Error while fetching column names from Results table"
             ) from e
@@ -4328,7 +3013,7 @@ class StorageManagerSQLite(StorageManager):
 
             return summary_data
 
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError("Error while fetching summary data!") from e
 
     def fetch_clustered_similars(self, ligname: str):
@@ -4439,7 +3124,7 @@ class StorageManagerSQLite(StorageManager):
                 counter += 1
             logger.debug(f"{column} percentile cutoff is {cutoff}")
             return cutoff
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
 
     def calculate_percentiles(
@@ -4698,7 +3383,7 @@ class StorageManagerSQLite(StorageManager):
         """
         if backup_name is None:
             backup_name = self.db_file + ".bk"
-        bck = sqlite3.connect(backup_name)
+        bck = duckdb.connect(backup_name)
         with bck:
             self.conn.backup(bck, pages=1)
         bck.close()
@@ -4738,7 +3423,7 @@ class StorageManagerSQLite(StorageManager):
         if db_version == "0":
             # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
             cur.execute(
-                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='Results');"
+                "SELECT EXISTS(SELECT 1 FROM duckdb_master WHERE type='table' AND name='Results');"
             )
             # if db version is 0 but has a results table, it is 1.0.0
             if cur.fetchone()[0] != 0:
@@ -4797,12 +3482,12 @@ class StorageManagerSQLite(StorageManager):
         return [
             name[0].lower()
             for name in self.db_query(
-                "SELECT name FROM sqlite_master WHERE type='table';"
+                "SELECT name FROM duckdb_master WHERE type='table';"
             ).fetchall()
         ]
 
     def update_database_version(self, new_version, consent=False):
-        """method that updates sqlite database schema 1.0.0 through 3.0.0.
+        """method that updates duckdb database schema 1.0.0 through 3.0.0.
         The way it currently works, it has to upgrade via each major upgrade, e.g., it will not upgrade straight
         from 1.0.0 to 3.0.0, but rather 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0
 
@@ -4875,7 +3560,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.commit()
             cur.close()
             self._set_ringtail_db_schema_version("1.1.0")
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseConnectionError(
                 f"Error while updating database from v1.0.0 to v1.1.0: {e}"
             ) from e
@@ -4923,7 +3608,7 @@ class StorageManagerSQLite(StorageManager):
             # index certain tables
             self._create_indices()
             self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseConnectionError(
                 f"Error while creating new interaction tables: {e}"
             ) from e
@@ -4952,7 +3637,7 @@ class StorageManagerSQLite(StorageManager):
         self._create_filtering_tables()
         # drop indices
         indices = self.db_query(
-            "SELECT name FROM sqlite_master WHERE type == 'index'"
+            "SELECT name FROM duckdb_master WHERE type == 'index'"
         ).fetchall()
         for index in indices:
             index_name = index[0]
@@ -5146,7 +3831,7 @@ class StorageManagerSQLite(StorageManager):
             alias_string = db_alias + "."
         else:
             alias_string = ""
-        query = f"SELECT name FROM {alias_string}sqlite_master WHERE type = 'view'"
+        query = f"SELECT name FROM {alias_string}duckdb_master WHERE type = 'view'"
         cur = self.conn.execute(query)
         views = cur.fetchall()
         for v in views:
@@ -5154,27 +3839,23 @@ class StorageManagerSQLite(StorageManager):
         # delete all rows in bookmarks table
         cur.execute(f"DELETE FROM {alias_string}Bookmarks")
 
-    def _create_connection(self):
+    def _create_connection(self) -> duckdb.DuckDBPyConnection:
         """Creates database connection to self.db_file
 
         Returns:
-            SQLite.conn: Connection object to self.db_file
+            duckdb.DuckDBPyConnection: Connection object to self.db_file
 
         Raises:
             DatabaseConnectionError
         """
         try:
-            con = sqlite3.connect(self.db_file)
-            con.row_factory = sqlite3.Row
-            cursor = con.execute("PRAGMA synchronous = OFF;")
-            cursor.execute("PRAGMA journal_mode = MEMORY;")
-            con.commit()
-            cursor.close()
-        except sqlite3.OperationalError as e:
+            conn = duckdb.connect(self.db_file)
+            # TODO database settings?
+        except duckdb.OperationalError as e:
             raise DatabaseConnectionError(
                 "Error while establishing database connection"
             ) from e
-        return con
+        return conn
 
     def close_storage(self, attached_db=None, vacuum=None):
         """
@@ -5220,7 +3901,7 @@ class StorageManagerSQLite(StorageManager):
             bool: whether or not db is empty
         """
         cur = self.conn.execute(
-            "SELECT COUNT(*) name FROM sqlite_master WHERE type='table' AND name <> 'sqlite_sequence';"
+            "SELECT COUNT(*) name FROM duckdb_master WHERE type='table' AND name <> 'duckdb_sequence';"
         )
         tablecount = cur.fetchone()[0]
         if tablecount > 0:
@@ -5280,18 +3961,8 @@ class StorageManagerSQLite(StorageManager):
             return None
 
     def _vacuum(self):
-        """SQLite vacuum rebuilds the database file, repacking it into a minimal amount of disk space
-
-        Raises:
-            DatabaseInsertionError
-        """
-        try:
-            cur = self.conn.cursor()
-            cur.execute("VACUUM")
-            self.conn.commit()
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(f"Error while vacuuming DB") from e
+        """#TODO duckdb doesn't really have this, can VACUUM ANALYZE <table>"""
+        pass
 
     def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
         """Attaches new database file to current database
@@ -5310,7 +3981,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(attach_str)
             self.conn.commit()
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError(f"Error occurred while attaching {new_db}") from e
         else:
             logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
@@ -5331,7 +4002,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(detach_str)
             self.conn.commit()
             cur.close()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise StorageError(f"Error occurred while detaching {new_db_alias}") from e
         else:
             logger.info(f"Detached database aliased as {new_db_alias}.")
@@ -5350,11 +4021,11 @@ class StorageManagerSQLite(StorageManager):
         # drop tables
         for table in tables:
             # cannot drop this, so we catch it instead
-            if table[0] == "sqlite_sequence":
+            if table[0] == "duckdb_sequence":
                 continue
             try:
                 cur.execute("DROP TABLE {table_name}".format(table_name=table[0]))
-            except sqlite3.OperationalError as e:
+            except duckdb.OperationalError as e:
                 raise StorageError(
                     "Error occurred while dropping table {0}".format(table[0])
                 ) from e
@@ -5372,9 +4043,9 @@ class StorageManagerSQLite(StorageManager):
 
         try:
             cur = self.conn.cursor()
-            cur.execute("SELECT name FROM sqlite_schema WHERE type='table';")
+            cur.execute("SELECT name FROM duckdb_schema WHERE type='table';")
             return cur.fetchall()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseQueryError(
                 "Error while getting names of existing database tables"
             ) from e
@@ -5395,15 +4066,15 @@ class StorageManagerSQLite(StorageManager):
         query = f"""DROP TABLE IF EXISTS {name};"""
         return self.db_query(query, commit=True)
 
-    def db_query(self, query, params: tuple = (), commit=False) -> sqlite3.Cursor:
-        """Executes provided SQLite query. Returns cursor for results.
+    def db_query(self, query, params: tuple = (), commit=False) -> duckdb.Cursor:
+        """Executes provided duckdb query. Returns cursor for results.
             Since cursor remains open, added to list of open cursors
 
         Args:
-            query (str): Formated SQLite query as string
+            query (str): Formated duckdb query as string
 
         Returns:
-            SQLite cursor: Contains results of query
+            duckdb cursor: Contains results of query
         """
 
         try:
@@ -5411,7 +4082,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(query, params)
             if commit:
                 self.conn.commit()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseQueryError(
                 f"Unable to execute query -{query}- with given parameters -{params}-: -{e}-"
             ) from e
@@ -5422,7 +4093,7 @@ class StorageManagerSQLite(StorageManager):
         A db query that also commits if/when specified
 
         Args:
-            query (str): sqlite formatted query string
+            query (str): duckdb formatted query string
             parameters (list[tuple]): assumes appropriate place holders in query
             commit (bool, optional): whether to commit the transaction in open connection. Defaults to True.
 
@@ -5444,7 +4115,7 @@ class StorageManagerSQLite(StorageManager):
             cur.executemany(query, parameters)
             if commit:
                 self.conn.commit()
-        except sqlite3.OperationalError as e:
+        except duckdb.OperationalError as e:
             raise DatabaseInsertionError(f"Error while committing insert query") from e
 
     def _is_table(self, table: str) -> bool:
@@ -5678,10 +4349,10 @@ class StorageManagerSQLite(StorageManager):
 
     def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
         """
-        Will return data requested in an sqlite formatted query
+        Will return data requested in an duckdb formatted query
 
         Args:
-            query (str): sql query formatted to sqlite database
+            query (str): sql query formatted to duckdb database
 
         Returns:
             tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
