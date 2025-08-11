@@ -9,7 +9,7 @@ import argparse
 import os
 from .exceptions import OptionError
 import __main__
-from .ringtailcore import RingtailCore
+from .ringtailcore import RingtailCore, docking_alias_to_mode
 from .ringtailoptions import Filters
 from .util import docking_mode_file_ext
 from types import SimpleNamespace
@@ -82,7 +82,7 @@ def cmdline_parser(defaults: dict = {}):
         help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
-        metavar="[dlg] or [vina]",
+        metavar="'adgpu' or 'vina'",
     )
     write_parser.add_argument(
         "-su",
@@ -255,7 +255,7 @@ def cmdline_parser(defaults: dict = {}):
         help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
-        metavar="'dlg' or 'vina'",
+        metavar="'adgpu' or 'vina'",
     )
     read_parser.add_argument(
         "-su",
@@ -720,14 +720,14 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
 
-        if parsed_opts.docking_mode.lower() not in ["dlg", "vina"]:
+        if parsed_opts.docking_mode.lower() not in docking_alias_to_mode:
             raise OptionError(
                 f"The chosen docking mode {parsed_opts.docking_mode} is not supported. Please choose either 'dlg' or 'vina'."
             )
 
         self.rtcore = RingtailCore(
             db_file=db_file,
-            docking_mode=parsed_opts.docking_mode.lower(),
+            docking_mode=docking_alias_to_mode[parsed_opts.docking_mode.lower()],
             logging_level=log_level,
         )
         # make sure we log the command line prompt

@@ -555,6 +555,8 @@ class TestVinaHandling:
         assert count == 45
 
     def test_db_dockingmode_warning(self):
+        from ringtail import RingtailDefaults
+
         rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
         rtc.add_results_from_files(file="test_data/adgpu/group1/1451.dlg.gz")
         rtc = RingtailCore(
@@ -562,7 +564,7 @@ class TestVinaHandling:
         )
         rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
 
-        warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is dlg."
+        warning_string = f"The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is {RingtailDefaults.docking_mode}."
         log_file = rtc.logger._log_fp.baseFilename
         with open(log_file, "r") as f:
             if warning_string in f.read():

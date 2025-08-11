@@ -55,6 +55,14 @@ def get_valid_storageclass(storage_type) -> StorageManager:
         )
 
 
+docking_modes = {"adgpu": {"adgpu", "dlg", "gpu"}, "vina": {"vina", "pdbqt"}}
+
+docking_alias_to_mode = {}
+for canonical, aliases in docking_modes.items():
+    for alias in aliases:
+        docking_alias_to_mode[alias] = canonical
+
+
 class RingtailCore:
     """Core class for coordinating different actions on virtual screening
     including adding results to storage, filtering and clusteirng, and outputting data as
@@ -74,7 +82,7 @@ class RingtailCore:
         self,
         db_file: str = "output.db",
         storage_type: str = "sqlite",
-        docking_mode: str = "dlg",
+        docking_mode: str = RingtailDefaults.docking_mode,
         logging_level: str = "WARNING",
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
@@ -111,9 +119,9 @@ class RingtailCore:
         self._run_mode = "api"
         self._docking_mode = docking_mode
 
-    def check_previous_docking_mode(self) -> Union[None, str]:
+    def get_previous_docking_mode(self) -> Union[None, str]:
         with self.storageman as sm:
-            return sm.check_previous_docking_mode()
+            return sm.get_previous_docking_mode()
 
     # region write to database
     def add_results_from_files(
@@ -1670,15 +1678,15 @@ class RingtailCore:
         """
         if type(docking_mode) is not str:
             self.logger.warning(
-                'The given docking mode was not given as a string, it will be set to default value "dlg".'
+                f'The given docking mode was not given as a string, it will be set to default value "{RingtailDefaults.docking_mode}".'
             )
-            self._docking_mode = "dlg"
-        elif docking_mode.lower() not in ["dlg", "vina"]:
+            self._docking_mode = RingtailDefaults.docking_mode
+        elif docking_mode.lower() not in docking_alias_to_mode:
             raise NotImplementedError(
-                f'Docking mode {docking_mode} is not supported. Please choose between "dlg" and "vina".'
+                f"Docking mode {docking_mode} is not supported. Please choose between {docking_modes}."
             )
         else:
-            self._docking_mode = docking_mode.lower()
+            self._docking_mode = docking_alias_to_mode[docking_mode.lower()]
             self.logger.debug(f"Docking mode set to {self.docking_mode}.")
 
     def _get_docking_mode(self):

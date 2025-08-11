@@ -12,7 +12,13 @@ from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import parse_single_dlg, parse_vina_result
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
-from .ringtailcore import RingtailCore, storage_types, get_valid_storageclass
+from .ringtailcore import (
+    RingtailCore,
+    docking_modes,
+    docking_alias_to_mode,
+    storage_types,
+    get_valid_storageclass,
+)
 from .ringtailoptions import *
 
 from .logutils import *
@@ -45,6 +51,8 @@ __all__ = [
     "ReceptorManager",
     "ResultsManager",
     "RingtailCore",
+    "docking_modes",
+    "docking_alias_to_mode",
     "storage_types",
     "get_valid_storageclass",
     "OutputManager",

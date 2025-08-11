@@ -64,7 +64,7 @@ class TypeSafe:
 @dataclass
 class RingtailDefaults:
     # maybe reconsider
-    docking_mode: str = "dlg"
+    docking_mode: str = "adgpu"
     output_db: str = "output.db"
     max_proc: int = None
     max_poses: int = 3
