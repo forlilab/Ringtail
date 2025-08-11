@@ -3,25 +3,31 @@
 #
 # Ringtail virtual screening manager
 #
-
-import matplotlib.pyplot as plt
-from pathlib import Path
+import itertools
+import os
+from typing import Callable, Union
+from collections import defaultdict
 import json
+from pathlib import Path
+import matplotlib.pyplot as plt
 from meeko import RDKitMolCreate
-from .storagemanager import StorageManager
+from rdkit import Chem
+
+from .util import *
+from .logutils import LOGGER
+from .ringtailoptions import *
+from .exceptions import RTCoreError, OutputError, StorageError, ResultsProcessingError
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
-from .querybuilder import QueryBuilder
-from .ringtailoptions import *
-from .util import *
-from .exceptions import RTCoreError, OutputError, StorageError, ResultsProcessingError
-from rdkit import Chem
-import itertools
-import os
-from .logutils import LOGGER
-from typing import Callable, Union
-from collections import defaultdict
+from .storagemanager import StorageManager, StorageManagerSQLite, HAS_DUCK, HAS_SQLITE
+from .storagemanager_duck import StorageManagerDuckDB
+
+storage_types = {}
+if HAS_SQLITE:
+    storage_types.update({"sqlite": StorageManagerSQLite})
+if HAS_DUCK:
+    storage_types.update({"duckdb": StorageManagerDuckDB})
 
 
 class RingtailCore:
@@ -68,7 +74,7 @@ class RingtailCore:
         )
         # Check if storage type is implemented
         try:
-            storageman = StorageManager.check_storage_compatibility(storage_type)
+            storageman = self._check_storage_compatibility(storage_type)
         except NotImplementedError as e:
             self.logger.error(e)
             raise e
@@ -1822,6 +1828,26 @@ class RingtailCore:
             info.append((res_smiles, res_index_map, res_h_parents))
 
             return mols, info, saved_coords, residues
+
+    def _check_storage_compatibility(storage_type):
+        """Checks if chosen storage type has been implemented
+
+        Args:
+            storage_type (str): name of the storage type
+
+        Raises:
+            NotImplementedError: raised if seelected storage type has not been implemented
+
+        Returns:
+            class: of implemented storage type
+        """
+
+        if storage_type in storage_types:
+            return storage_types[storage_type]
+        else:
+            raise NotImplementedError(
+                f"Given storage type {storage_type} is not implemented."
+            )
 
     def _add_results(
         self,

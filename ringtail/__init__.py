@@ -12,7 +12,7 @@ from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import parse_single_dlg, parse_vina_result
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
-from .ringtailcore import RingtailCore
+from .ringtailcore import RingtailCore, storage_types
 from .ringtailoptions import *
 
 from .logutils import *
@@ -45,6 +45,7 @@ __all__ = [
     "ReceptorManager",
     "ResultsManager",
     "RingtailCore",
+    "storage_types",
     "OutputManager",
     "InteractionFinder",
     "StorageError",

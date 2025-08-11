@@ -35,13 +35,13 @@ try:
     import sqlite3
 
     HAS_SQLITE = True
-except:
+except ImportError:
     HAS_SQLITE = False
 try:
     import duckdb
 
     HAS_DUCK = True
-except:
+except ImportError:
     HAS_DUCK = False
 
 
@@ -61,29 +61,6 @@ class StorageManager:
     """
 
     # region database access
-    def check_storage_compatibility(storage_type):
-        """Checks if chosen storage type has been implemented
-
-        Args:
-            storage_type (str): name of the storage type
-
-        Raises:
-            NotImplementedError: raised if seelected storage type has not been implemented
-
-        Returns:
-            class: of implemented storage type
-        """
-        storage_types = {
-            "sqlite": StorageManagerSQLite,
-        }
-
-        if storage_type in storage_types:
-            return storage_types[storage_type]
-        else:
-            raise NotImplementedError(
-                f"Given storage type {storage_type} is not implemented."
-            )
-
     def __init__(self):
         self.keyboard_interrupt_allowed = False
         self.active_connection = True

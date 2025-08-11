@@ -4066,7 +4066,7 @@ class StorageManagerDuckDB(StorageManager):
         query = f"""DROP TABLE IF EXISTS {name};"""
         return self.db_query(query, commit=True)
 
-    def db_query(self, query, params: tuple = (), commit=False) -> duckdb.Cursor:
+    def db_query(self, query, params: tuple = (), commit=False) -> iter:
         """Executes provided duckdb query. Returns cursor for results.
             Since cursor remains open, added to list of open cursors
 
