@@ -18,7 +18,6 @@ from datetime import datetime
 import multiprocessing as mp
 from .util import docking_mode_file_ext, iterate_nested, docking_mode_aliases
 from .ringtailoptions import ResultsObject
-from .storagemanager import StorageManager
 
 mp.set_start_method("fork", force=True)
 
@@ -68,10 +67,7 @@ class MPManager:
         self.shared = {}
         # populate read only dict
         self.shared["docking_mode"] = self.writer_options.pop("docking_mode")
-        # method that the Docking File Reader will use to reformat the data
-        storageman = StorageManager.check_storage_compatibility(
-            self.writer_options.get("storageman_class")
-        )
+        storageman = self.writer_options.get("storageman_class")
         self.shared["format_method"] = storageman.format_for_storage
         self.shared["receptor_string"] = results.receptor_string
         self.shared["target"] = results.target_name

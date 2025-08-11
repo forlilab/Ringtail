@@ -15,11 +15,8 @@ from .exceptions import (
     FileParsingError,
     WriteToStorageError,
     MultiprocessingError,
-    ResultsProcessingError,
 )
-from .storagemanager import StorageManager
 from .interactions import InteractionFinder
-
 import multiprocessing as mp
 
 
@@ -269,8 +266,7 @@ class Writer(mp.Process):
         # assign pointer to storage object, set chunksize
         db_file = options.pop("db_file")
         storage_class = options.pop("storageman_class")
-        storageman = StorageManager.check_storage_compatibility(storage_class)
-        self.storageman = storageman(db_file)
+        self.storageman = storage_class(db_file)
         self.chunk_size = options.pop("chunk_size")
         self.options = options
         # initialize data array (stack of dictionaries)

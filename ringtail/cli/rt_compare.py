@@ -8,11 +8,11 @@ import argparse
 import json
 import sys
 import os
-from ringtail import StorageManager
 from ringtail import OutputManager, OptionError
 from ringtail import OptionError
 from ringtail import logutils
 from ringtail import QueryBuilder
+from ringtail import get_valid_storageclass
 import traceback
 
 
@@ -44,7 +44,7 @@ def cmdline_parser(defaults={}):
     )  # using dict -> str -> dict as a safe copy method
 
     if confargs.config is not None:
-        logger.info("Reading options from config file")
+        logutils.LOGGER.info("Reading options from config file")
         with open(confargs.config) as f:
             c = json.load(f)
             config.update(c)
@@ -203,7 +203,7 @@ def main():
         if args.database_type is None:
             args.database_type = "sqlite"
         # ensure the specified database types are supported
-        storagemanager = StorageManager.check_storage_compatibility(args.database_type)
+        storagemanager = get_valid_storageclass(args.database_type)
 
         dbman = storagemanager(ref_db)
 

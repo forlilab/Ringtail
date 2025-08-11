@@ -20,14 +20,39 @@ from .exceptions import RTCoreError, OutputError, StorageError, ResultsProcessin
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
-from .storagemanager import StorageManager, StorageManagerSQLite, HAS_DUCK, HAS_SQLITE
-from .storagemanager_duck import StorageManagerDuckDB
+from .storagemanager import (
+    StorageManager,
+    StorageManagerSQLite,
+    HAS_SQLITE,
+)
+from .storagemanager_duck import StorageManagerDuckDB, HAS_DUCK
 
 storage_types = {}
 if HAS_SQLITE:
     storage_types.update({"sqlite": StorageManagerSQLite})
 if HAS_DUCK:
     storage_types.update({"duckdb": StorageManagerDuckDB})
+
+
+def get_valid_storageclass(storage_type) -> StorageManager:
+    """Checks if chosen storage type has been implemented
+
+    Args:
+        storage_type (str): name of the storage type
+
+    Raises:
+        NotImplementedError: raised if seelected storage type has not been implemented
+
+    Returns:
+        class: of implemented storage type
+    """
+
+    if storage_type in storage_types:
+        return storage_types[storage_type]
+    else:
+        raise NotImplementedError(
+            f"Given storage type {storage_type} is not implemented."
+        )
 
 
 class RingtailCore:
@@ -74,7 +99,7 @@ class RingtailCore:
         )
         # Check if storage type is implemented
         try:
-            storageman = self._check_storage_compatibility(storage_type)
+            storageman = get_valid_storageclass(storage_type)
         except NotImplementedError as e:
             self.logger.error(e)
             raise e
@@ -876,8 +901,8 @@ class RingtailCore:
         with self.storageman:
             self.storageman.clone(bookmark_db_name)
         # connect to cloned database
-        temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
-        with temp_storageman(bookmark_db_name) as db_clone:
+        db_clone = get_valid_storageclass(self.storagetype)(bookmark_db_name)
+        with db_clone:
             db_clone.prune_nonpassing(bookmark_name)
             db_clone.close_storage(vacuum=True)
 
@@ -1829,26 +1854,6 @@ class RingtailCore:
 
             return mols, info, saved_coords, residues
 
-    def _check_storage_compatibility(storage_type):
-        """Checks if chosen storage type has been implemented
-
-        Args:
-            storage_type (str): name of the storage type
-
-        Raises:
-            NotImplementedError: raised if seelected storage type has not been implemented
-
-        Returns:
-            class: of implemented storage type
-        """
-
-        if storage_type in storage_types:
-            return storage_types[storage_type]
-        else:
-            raise NotImplementedError(
-                f"Given storage type {storage_type} is not implemented."
-            )
-
     def _add_results(
         self,
         results: ResultsObject,
@@ -1914,7 +1919,7 @@ class RingtailCore:
         self.resultsman = ResultsManager(
             self.db_file,
             self.docking_mode,
-            self.storagetype,
+            get_valid_storageclass(self.storagetype),
             duplicate_handling,
         )
 
