@@ -10,6 +10,8 @@ class QueryBuilder:
         self.wheres = []
         self.group_bys = []
         self.order_by = None
+        self.delete_from = None
+        self.drop_if_exists = None
         self.subquery = {}
         self.params = []
         self.aliases = {}
@@ -35,6 +37,7 @@ class QueryBuilder:
         self.selects.append(status_case)
         return self
 
+    # TODO take a look at all from bookmark stuff
     def FROM_BOOKMARK(self, bookmark, alias=None, db_alias=""):
         bookmark_query = f"({self.bookmark_query(bookmark, db_alias)})"
         return self.FROM(bookmark_query, alias)
@@ -106,6 +109,14 @@ class QueryBuilder:
             self.params.extend(params)
         return self
 
+    def DELETE_FROM(self, table: str):
+        self.delete_from = f"""DELETE FROM {table}"""
+        return self
+
+    def DROP_IF_EXISTS(self, table: str):
+        self.drop_if_exists = f"DROP TABLE IF EXISTS {table}"
+        return self
+
     def aliased(self, table: str):
         if table.lower() in self.aliases.keys():
             return self.aliases[table.lower()]
@@ -131,7 +142,16 @@ class QueryBuilder:
             parts.append(
                 f"""WITH {self.subquery["name"]} AS ({self.subquery["query"]})"""
             )
-        parts.extend(["SELECT", ", ".join(self.selects)])
+
+        if self.selects:
+            parts.extend(["SELECT", ", ".join(self.selects)])
+
+        # TODO gotta add some guards if I wanna use this loosey goosey
+        if self.delete_from:
+            parts.append(self.delete_from)
+
+        if self.drop_if_exists:
+            parts.append(self.drop_if_exists)
 
         if self.from_table:
             table, alias = self.from_table
