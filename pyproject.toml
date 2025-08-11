@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ringtail"
+dynamic = ["version"]
+description = "Package for creating database from virtual screening files and performing filtering on results."
+readme = "README.md"
+license = "LGPL-2.1-only"
+authors = [
+    { name = "Forli Lab", email = "forli@scripps.edu" },
+]
+keywords = [
+    "autodock",
+    "docking",
+    "drug design",
+    "drug discovery",
+    "molecular modeling",
+    "virtual screening",
+]
+classifiers = [
+    "Environment :: Console",
+    "Environment :: Other Environment",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)",
+    "Natural Language :: English",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.scripts]
+rt_compare = "ringtail.cli.rt_compare:main"
+rt_generate_config_file = "ringtail.cli.rt_generate_config_file:main"
+rt_process_vs = "ringtail.cli.rt_process_vs:main"
+rt_upgrade_db = "ringtail.cli.rt_upgrade_db:main"
+
+[project.urls]
+Homepage = "https://github.com/forlilab/Ringtail"
+
+[tool.hatch.version]
+path = "ringtail/_version.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/ringtail",
+]
