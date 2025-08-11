@@ -1,13 +1,13 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "ringtail"
 dynamic = ["version"]
 description = "Package for creating database from virtual screening files and performing filtering on results."
 readme = "README.md"
-license = "LGPL-2.1-only"
+license = { text = "LGPL-2.1-or-later" }
 authors = [
     { name = "Forli Lab", email = "forli@scripps.edu" },
 ]
@@ -43,10 +43,8 @@ rt_upgrade_db = "ringtail.cli.rt_upgrade_db:main"
 [project.urls]
 Homepage = "https://github.com/forlilab/Ringtail"
 
-[tool.hatch.version]
-path = "ringtail/_version.py"
+[tool.setuptools.dynamic]
+version = { attr = "ringtail._version.__version__" }
 
-[tool.hatch.build.targets.sdist]
-include = [
-    "/ringtail",
-]
+[tool.setuptools.packages.find]
+include = ["ringtail*"]
