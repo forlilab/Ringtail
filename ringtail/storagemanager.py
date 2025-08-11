@@ -28,7 +28,7 @@ from .exceptions import (
     MergeError,
 )
 from .clustermanager import *
-from .querybuilder import QueryBuilder
+from .querybuilder import QueryBuilder, QueryBuilderSQLite
 from collections import defaultdict
 
 try:
@@ -42,6 +42,7 @@ except ImportError:
 class StorageManager:
     # NOTE gotta be careful with schema
     _db_schema_ver = "3.0.0"
+    QueryBuilder = QueryBuilder
 
     """Base class for a generic virtual screening database object.
     This class holds some of the common API for StorageManager child classes. 
@@ -1258,7 +1259,7 @@ class StorageManager:
         unique_data_indices = [0, 1, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
         unique_data = [result_data[index] for index in unique_data_indices]
 
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("Pose_ID").FROM("Results").WHERE(
             """ligand_id=?
                     AND receptor=?
@@ -1409,6 +1410,7 @@ class StorageManagerSQLite(StorageManager):
         "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2"],
         "3.0.0": ["3.0.0"],
     }
+    QueryBuilder = QueryBuilderSQLite
 
     def __init__(
         self,
@@ -2622,7 +2624,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             int: number of poses (optionally grouped by ligand) in bookmark
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("r.pose_id").FROM("results", "r").IN_BOOKMARK(bookmark_name)
         if grouped_by_ligand:
             query.GROUP_BY("r.ligand_id")
@@ -2654,7 +2656,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: query representing the poses in a bookmark
         """
-        return QueryBuilder.bookmark_query(bookmark_name)
+        return self.QueryBuilder.bookmark_query(bookmark_name)
 
     def delete_bookmark(self, bookmark_name: str):
         """
@@ -2690,7 +2692,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: ligand name
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("L.LigName").FROM("Ligands", "L").JOIN(
             "Results", "R", "ligand_id"
         ).WHERE("R.pose_id =?", pose_id)
@@ -2726,7 +2728,7 @@ class StorageManagerSQLite(StorageManager):
                 "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
             )
         # start formatting write query
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         # select stuff from results where pose id in filter poses join ligands for extra fields
         query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
             "Ligands", "L", "ligand_id"
@@ -2899,7 +2901,7 @@ class StorageManagerSQLite(StorageManager):
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
             if self.is_bookmark(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({QueryBuilder.bookmark_query(filter_bookmark)}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
             elif self._is_statustable(filter_bookmark):
                 filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN (SELECT Pose_ID FROM {filter_bookmark}))"""
 
@@ -3307,11 +3309,11 @@ class StorageManagerSQLite(StorageManager):
             if bmn in existing_bookmarks:
                 enumerated_bookmarks.append(f"'{bmn}'")
 
-        subq = QueryBuilder()
+        subq = self.QueryBuilder()
         subq.SELECT("filter_id").FROM("Filters").WHERE(
             f"name IN ({', '.join(enumerated_bookmarks)})"
         )
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("DISTINCT pose_id").FROM("filtered_poses").WHERE(
             f"filter_id IN ({subq.build()[0]})"
         )
@@ -3350,7 +3352,7 @@ class StorageManagerSQLite(StorageManager):
         logger.debug("Preparing to cluster")
         time0 = time.perf_counter()
 
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         # TODO handle if table is Results
         if cluster_type.lower() == "ifp":
             query.SELECT("r.pose_id", "r.leff").FROM("Results", "R")
@@ -3399,7 +3401,7 @@ class StorageManagerSQLite(StorageManager):
             bookmark_name,
         )
 
-        clustered_poses = QueryBuilder()
+        clustered_poses = self.QueryBuilder()
         clustered_poses.SELECT("pose_id").FROM("results").WHERE(
             f"pose_id IN ({','.join(representatives)})"
         )
@@ -3710,8 +3712,8 @@ class StorageManagerSQLite(StorageManager):
             unwanted_list (list, optional): List of unwanted database names
             temp_table_name (str): name of temporary table
         """
-        query = QueryBuilder()
-        subq = QueryBuilder()
+        query = self.QueryBuilder()
+        subq = self.QueryBuilder()
         subq_string = subq.SELECT("t.pose_id").FROM(temp_table_name, "t").build()[0]
         query_string = (
             query.SELECT("bm.pose_id")
@@ -3805,8 +3807,8 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             int: number of poses in temporary table
         """
-        counting = QueryBuilder()
-        count_pool = QueryBuilder()
+        counting = self.QueryBuilder()
+        count_pool = self.QueryBuilder()
         count_pool_string = (
             count_pool.SELECT("tt.pose_id")
             .FROM(temp_name, "tt")
@@ -3855,8 +3857,8 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: sqlite formatted query string
         """
-        query = QueryBuilder()
-        subq = QueryBuilder()
+        query = self.QueryBuilder()
+        subq = self.QueryBuilder()
         subq_string = (
             subq.SELECT("l.ligname")
             .FROM_BOOKMARK(f"{bookmark2_name}", "bm2", new_db_name)
@@ -4017,7 +4019,7 @@ class StorageManagerSQLite(StorageManager):
             tuple: e_min, e_max, le_min, le_max
         """
 
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT(
             "MIN(R.docking_score)",
             "MAX(R.docking_score)",
@@ -4087,7 +4089,7 @@ class StorageManagerSQLite(StorageManager):
 
         bookmark_selection = self._get_bookmark_poses_query(bookmark_name)
 
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
             f"R.pose_id IN ({bookmark_selection})"
         ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
@@ -4107,7 +4109,7 @@ class StorageManagerSQLite(StorageManager):
             Returns:
                 dict: containing the filter data
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("filters").FROM("Filters").WHERE("name = ?", bookmark_name)
 
         filters = self.db_query(*query.build()).fetchone()
@@ -4129,7 +4131,7 @@ class StorageManagerSQLite(StorageManager):
         if not self.is_bookmark(bookmark_name):
             return {}, ""
 
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("filters", "filter_window").FROM("Filters").WHERE(
             "name = ?", bookmark_name
         )
@@ -4163,7 +4165,7 @@ class StorageManagerSQLite(StorageManager):
             iter: contains LigName, rdmol,
                 atom_index_map, hydrogen_parents
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("ligname", "rdmol", "atom_index_map", "hydrogen_parents").FROM(
             "Ligands", "L"
         ).WHERE(
@@ -4177,7 +4179,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             tuple: contains rdmol, atom_index_map, hydrogen_parents
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("rdmol", "atom_index_map", "hydrogen_parents").FROM(
             "Ligands"
         ).WHERE(f"ligname = ?", ligname)
@@ -4434,7 +4436,7 @@ class StorageManagerSQLite(StorageManager):
             raise OptionError(
                 f"Requested column {column} in not numeric, percentiles cannot be calcualted."
             )
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT(f"{column}").FROM("Results")
         if self.is_bookmark(table):
             query.IN_BOOKMARK(table)
@@ -4469,9 +4471,9 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             tuple: cursors as (<all data cursor>, <passing data cursor>)
         """
-        all_data_query = QueryBuilder()
+        all_data_query = self.QueryBuilder()
         all_data_query.SELECT("docking_score", "leff").FROM("Results")
-        bookmark_query = QueryBuilder()
+        bookmark_query = self.QueryBuilder()
         bookmark_query.SELECT(
             "R." + x_axis, "R." + y_axis, "R." + "Pose_ID", "L." + "LigName"
         )
@@ -4531,7 +4533,7 @@ class StorageManagerSQLite(StorageManager):
             pd.DataFrame: dataframe of requested data
         """
         if table:
-            query = QueryBuilder()
+            query = self.QueryBuilder()
             if requested_data in self.get_all_bookmark_names():
                 query.SELECT("*").FROM("Results").IN_BOOKMARK(requested_data)
             else:
@@ -5233,7 +5235,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             Union[None, int]: rowid if any
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("rowid")
         if self.is_bookmark(table):
             query.FROM("Filtered_poses").WHERE(
@@ -5481,7 +5483,7 @@ class StorageManagerSQLite(StorageManager):
             where_operator = "<="
         else:
             where_operator = ">="
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.FROM("Results", "R")
         status_assignement = """CASE
             WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
@@ -5539,7 +5541,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             int: first row id belonging to that selection
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("MIN(rowid)")
 
         if self._is_table(table):
@@ -5572,7 +5574,7 @@ class StorageManagerSQLite(StorageManager):
             tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
                                             and column is the key, value is the row-col cell value
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT(",".join(columns)).FROM(table)
 
         if length:
@@ -5595,7 +5597,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("L.Ligname", "r.pose_id").FROM("Ligands", "L").JOIN(
             "Results", "R", "ligand_id"
         )
@@ -5626,7 +5628,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             list[int]: selected poses for ligand
         """
-        query = QueryBuilder()
+        query = self.QueryBuilder()
         query.SELECT("R.Pose_id").FROM("Results", "R").WHERE(
             "L.LigName = ?", ligand_name
         ).JOIN("Ligands", "L", "ligand_id")

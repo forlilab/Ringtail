@@ -166,6 +166,11 @@ class QueryBuilder:
             return " ".join(parts), self.params
 
 
+class QueryBuilderSQLite(QueryBuilder):
+
+    pass
+
+
 class QueryBuilderDuck(QueryBuilder):
 
     pass
