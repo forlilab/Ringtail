@@ -164,3 +164,8 @@ class QueryBuilder:
             return f"SELECT COUNT(*) FROM ({' '.join(parts)})", self.params
         else:
             return " ".join(parts), self.params
+
+
+class QueryBuilderDuck(QueryBuilder):
+
+    pass

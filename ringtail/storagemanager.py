@@ -37,12 +37,6 @@ try:
     HAS_SQLITE = True
 except ImportError:
     HAS_SQLITE = False
-try:
-    import duckdb
-
-    HAS_DUCK = True
-except ImportError:
-    HAS_DUCK = False
 
 
 class StorageManager:
@@ -1232,6 +1226,67 @@ class StorageManager:
 
         return list(interactions)
 
+    def _check_unique_results_row(self, result_data: list) -> int:
+        """Checks if a pose ID is uniquely represented in the result table, based on the following [index in result_data] columns:
+        [0] ligand_id,
+        [1] receptor,
+        [20] about_x,
+        [21] about_y,
+        [22] about_z,
+        [23] trans_x,
+        [24] trans_y,
+        [25] trans_z,
+        [26] axisangle_x,
+        [27] axisangle_y,
+        [28] axisangle_z,
+        [29] axisangle_w,
+        [30] dihedrals,
+
+        #NOTE Please note that this method will only identify one duplicate in the table. If there are more than one duplicates, it will just deal with the earliest entry
+
+        Args:
+            result_data (list): data packet coming from the results processing
+
+        Raises:
+            DatabaseQueryError
+
+        Returns:
+            Pose_ID (int): returns the Pose_ID of the duplicate if found, returns -1 of no duplicate found
+
+        """
+        # create list of the data that is to be considered unique
+        unique_data_indices = [0, 1, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+        unique_data = [result_data[index] for index in unique_data_indices]
+
+        query = QueryBuilder()
+        query.SELECT("Pose_ID").FROM("Results").WHERE(
+            """ligand_id=?
+                    AND receptor=?
+                    AND about_x=?
+                    AND about_y=?
+                    AND about_z=?
+                    AND trans_x=?
+                    AND trans_y=?
+                    AND trans_z=?
+                    AND axisangle_x=?
+                    AND axisangle_y=?
+                    AND axisangle_z=?
+                    AND axisangle_w=?
+                    AND dihedrals=?""",
+            *unique_data,
+        )
+        try:
+            data = self.db_query(*query.build())
+        except Exception as e:
+            raise e
+        row = data.fetchone()
+        if row is None:
+            Pose_ID = -1
+            logger.debug("Duplicate row not found.")
+        else:
+            Pose_ID = row[0]
+            logger.debug(f"Duplicate row found for Pose_ID {Pose_ID}")
+
     def _create_results_table(self):
         pass
 
@@ -1522,69 +1577,6 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseTableCreationError(
                 "Error while creating results table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
-
-    def _check_unique_results_row(self, result_data: list) -> int:
-        """Checks if a pose ID is uniquely represented in the result table, based on the following [index in result_data] columns:
-        [0] ligand_id,
-        [1] receptor,
-        [20] about_x,
-        [21] about_y,
-        [22] about_z,
-        [23] trans_x,
-        [24] trans_y,
-        [25] trans_z,
-        [26] axisangle_x,
-        [27] axisangle_y,
-        [28] axisangle_z,
-        [29] axisangle_w,
-        [30] dihedrals,
-
-        #NOTE Please note that this method will only identify one duplicate in the table. If there are more than one duplicates, it will just deal with the earliest entry
-
-        Args:
-            result_data (list): data packet coming from the results processing
-
-        Raises:
-            DatabaseQueryError
-
-        Returns:
-            Pose_ID (int): returns the Pose_ID of the duplicate if found, returns -1 of no duplicate found
-
-        """
-        # create list of the data that is to be considered unique
-        unique_data_indices = [0, 1, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-        unique_data = [result_data[index] for index in unique_data_indices]
-
-        try:
-            cur = self.conn.cursor()
-            query = """SELECT Pose_ID 
-                        FROM Results 
-                        WHERE 
-                        ligand_id=?
-                        AND receptor=?
-                        AND about_x=?
-                        AND about_y=?
-                        AND about_z=?
-                        AND trans_x=?
-                        AND trans_y=?
-                        AND trans_z=?
-                        AND axisangle_x=?
-                        AND axisangle_y=?
-                        AND axisangle_z=?
-                        AND axisangle_w=?
-                        AND dihedrals=?;"""
-
-            cur.execute(query, unique_data)
-            row = cur.fetchone()
-            if row is None:
-                Pose_ID = -1
-                logger.debug("Duplicate row not found.")
-            else:
-                Pose_ID = row[0]
-                logger.debug(f"Duplicate row found for Pose_ID {Pose_ID}")
-            cur.close()
-
-            return Pose_ID
 
         except sqlite3.OperationalError as e:
             raise DatabaseQueryError(
