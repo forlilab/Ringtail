@@ -761,18 +761,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
-        """
-        Gets molecular data that is needed to create rdkit mols for a given list of poses
-
-        Args:
-            pose_ids (list): pose ids for which to collect molecular data
-
-        Returns:
-            iter: of the following columns Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates
-        """
-        raise_not_implemented()
-
     def fetch_summary_data(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
     ) -> dict:
@@ -789,19 +777,6 @@ class StorageManager:
 
         Returns:
             dict: of data summary
-        """
-        raise_not_implemented()
-
-    def fetch_data_for_passing_results(
-        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
-    ) -> iter:
-        """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
-
-        Returns:
-            iter: sqlite cursor of data from passing data
-
-        Raises:
-            OptionError
         """
         raise_not_implemented()
 
@@ -854,15 +829,6 @@ class StorageManager:
 
         Returns:
             iter: of interaction information for given Pose_ID
-        """
-        raise_not_implemented()
-
-    def count_receptors_in_db(self):
-        """returns number of rows in Receptors table where receptor_object already has blob
-
-        Returns:
-            int: number of rows in receptors table
-            str: name of receptor if present in table
         """
         raise_not_implemented()
 
@@ -2086,6 +2052,73 @@ class StorageManager:
 
         return formatted_outfields
 
+    def fetch_data_for_passing_results(
+        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
+    ) -> iter:
+        """Will return duckdb cursor with requested data for outfields for poses that passed filter in bookmark_name
+
+        Returns:
+            iter: duckdb cursor of data from passing data
+
+        Raises:
+            OptionError
+        """
+        outfields_list = self._format_output_fields(
+            outfields, ligands_alias="L", results_alias="R"
+        )
+
+        bookmark_selection = self._get_bookmark_poses_query(bookmark_name)
+
+        query = self.QueryBuilder()
+        query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
+            f"R.pose_id IN ({bookmark_selection})"
+        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
+        if order_results:
+            order_by = self._format_orderby(order_results)
+            if order_by:
+                query.ORDER_BY(order_by)
+
+        return self.db_query(query.build()[0])
+
+    def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
+        """Method that will retrieve filter values used to construct bookmark
+
+        Args:
+            bookmark_name (str): bookmark for which to get filters
+
+            Returns:
+                dict: containing the filter data
+        """
+        query = self.QueryBuilder()
+        query.SELECT("filters").FROM("Filters").WHERE("name = ?", bookmark_name)
+
+        filters = self.db_query(*query.build()).fetchone()
+        if not filters:
+            return {}
+
+        return json.loads(filters[0])
+
+    def fetch_filters_and_filterwindow(self, bookmark_name: str) -> tuple[dict, str]:
+        """Method that will retrieve filter values used to construct bookmark
+        and the filter window used as basis
+
+        Args:
+            bookmark_name (str): bookmark which was the result of the filtering
+
+            Returns:
+                tuple(dict, str): containing the filter data and filter window
+        """
+        if not self.is_bookmark(bookmark_name):
+            return {}, ""
+
+        query = self.QueryBuilder()
+        query.SELECT("filters", "filter_window").FROM("Filters").WHERE(
+            "name = ?", bookmark_name
+        )
+        filters, filter_window = self.db_query(*query.build()).fetchone()
+
+        return json.loads(filters), filter_window
+
     # endregion
 
     # region cross referencing filtered databases
@@ -2274,6 +2307,118 @@ class StorageManager:
             return cursor
         else:
             return None
+
+    def count_receptors_in_db(self):
+        """returns number of rows in Receptors table where receptor_object already has blob
+
+        Returns:
+            int: number of rows in receptors table
+            str: name of receptor if present in table
+
+        Raises:
+            DatabaseQueryError
+        """
+        query = self.QueryBuilder()
+        row_count = self.db_query(
+            *query.SELECT("COUNT(*)")
+            .FROM("Receptors")
+            .WHERE("receptor_object NOT NULL")
+            .build()
+        ).fetchone()[0]
+        return row_count
+
+    def fetch_flexres_info(self, receptor):
+        """fetch flexible residues names and atomname lists
+
+        Returns:
+            tuple: (flexible_residues, flexres_atomnames)
+        """
+        if type(receptor) == int:
+            selection = "receptor_id = ?"
+        elif type(receptor) == str:
+            selection = "recname = ?"
+        query = self.QueryBuilder()
+        query.SELECT("flexible_residues", "flexres_atomnames").FROM("Receptors").WHERE(
+            selection, receptor
+        )
+        info = self.db_query(*query.build()).fetchone()
+        if info is None:
+            info = [], []
+        return info
+
+    def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
+        # TODO redundant? see next method
+        """fetch information required by vsmanager for writing out molecules
+
+        Returns:
+            iter: contains LigName, rdmol,
+                atom_index_map, hydrogen_parents
+        """
+        query = self.QueryBuilder()
+        query.SELECT("ligname", "rdmol", "atom_index_map", "hydrogen_parents").FROM(
+            "Ligands", "L"
+        ).WHERE(
+            f"""L.ligand_id IN (SELECT DISTINCT ligand_id FROM ({self.get_bookmark_selection(bookmark_name, "ligand_id")}))"""
+        )
+        return self.db_query(query.build()[0])
+
+    def fetch_ligand_rdkit_relevant_info(self, ligname: str) -> tuple:
+        # TODO redundant? see previous method
+        """fetch information required by vsmanager for writing out molecules
+
+        Returns:
+            tuple: contains rdmol, atom_index_map, hydrogen_parents
+        """
+        query = self.QueryBuilder()
+        query.SELECT("rdmol", "atom_index_map", "hydrogen_parents").FROM(
+            "Ligands"
+        ).WHERE(f"ligname = ?", ligname)
+        return self.db_query(*query.build()).fetchone()
+
+    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
+        """
+        Gets molecular data that is needed to create rdkit mols for a given list of poses
+
+        Args:
+            pose_ids (list): pose ids for which to collect molecular data
+
+        Returns:
+            iter: of the following columns pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates
+        """
+        placeholders = ",".join(["?"] * len(pose_ids))
+        query = f"""
+        SELECT pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
+        FROM Results WHERE Pose_ID IN ({placeholders})
+        """
+        query = self.QueryBuilder()
+        query.SELECT(
+            "pose_id",
+            "docking_score",
+            "leff",
+            "ligand_coordinates",
+            "flexible_res_coordinates",
+        ).FROM("Results").WHERE(f"Pose_ID IN ({placeholders})", *pose_ids)
+        return self.db_query(*query.build()).fetchall()
+
+    # endregion
+
+    # region database logic
+
+    def _is_table(self, table: str) -> bool:
+        """
+        Returns True if table name is actually a bookmark
+
+        Args:
+            table (str): name of table or bookmark to check
+
+        Returns:
+            bool: if table name is a bookmark
+        """
+
+        if table.lower() in self.tables_in_db():
+            return True
+        else:
+            return False
 
     # endregion
 
@@ -3932,56 +4077,6 @@ class StorageManagerSQLite(StorageManager):
             ).fetchall()
         ]
 
-    def count_receptors_in_db(self):
-        """returns number of rows in Receptors table where receptor_object already has blob
-
-        Returns:
-            int: number of rows in receptors table
-            str: name of receptor if present in table
-
-        Raises:
-            DatabaseQueryError
-        """
-        try:
-            cur = self.conn.execute(
-                "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
-            )
-            row_count = cur.fetchone()[0]
-            cur.close()
-            return row_count
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError(
-                "Error occurred while fetching number of receptor rows containing PDBQT blob"
-            ) from e
-
-    def fetch_data_for_passing_results(
-        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
-    ) -> iter:
-        """Will return SQLite cursor with requested data for outfields for poses that passed filter in bookmark_name
-
-        Returns:
-            iter: sqlite cursor of data from passing data
-
-        Raises:
-            OptionError
-        """
-        outfields_list = self._format_output_fields(
-            outfields, ligands_alias="L", results_alias="R"
-        )
-
-        bookmark_selection = self._get_bookmark_poses_query(bookmark_name)
-
-        query = self.QueryBuilder()
-        query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
-            f"R.pose_id IN ({bookmark_selection})"
-        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
-        if order_results:
-            order_by = self._format_orderby(order_results)
-            if order_by:
-                query.ORDER_BY(order_by)
-
-        return self.db_query(query.build()[0])
-
     def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark
 
@@ -4246,23 +4341,6 @@ class StorageManagerSQLite(StorageManager):
         bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
 
         return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
-
-    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
-        """
-        Gets molecular data that is needed to create rdkit mols for a given list of poses
-
-        Args:
-            pose_ids (list): pose ids for which to collect molecular data
-
-        Returns:
-            iter: of the following columns pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates
-        """
-        placeholders = ",".join(["?"] * len(pose_ids))
-        query = f"""
-        SELECT pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
-        FROM Results WHERE Pose_ID IN ({placeholders})
-        """
-        return self.db_query(query, pose_ids).fetchall()
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
@@ -5273,22 +5351,6 @@ class StorageManagerSQLite(StorageManager):
                 self.conn.commit()
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while committing insert query") from e
-
-    def _is_table(self, table: str) -> bool:
-        """
-        Returns True if table name is actually a bookmark
-
-        Args:
-            table (str): name of table or bookmark to check
-
-        Returns:
-            bool: if table name is a bookmark
-        """
-
-        if table.lower() in self.tables_in_db():
-            return True
-        else:
-            return False
 
     def is_bookmark(self, table: str) -> bool:
         """

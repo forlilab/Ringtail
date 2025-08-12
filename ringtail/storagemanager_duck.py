@@ -1632,141 +1632,6 @@ class StorageManagerDuckDB(StorageManager):
             ).fetchall()
         ]
 
-    def count_receptors_in_db(self):
-        """returns number of rows in Receptors table where receptor_object already has blob
-
-        Returns:
-            int: number of rows in receptors table
-            str: name of receptor if present in table
-
-        Raises:
-            DatabaseQueryError
-        """
-        try:
-            cur = self.conn.execute(
-                "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
-            )
-            row_count = cur.fetchone()[0]
-            cur.close()
-            return row_count
-        except duckdb.OperationalError as e:
-            raise DatabaseQueryError(
-                "Error occurred while fetching number of receptor rows containing PDBQT blob"
-            ) from e
-
-    def fetch_data_for_passing_results(
-        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
-    ) -> iter:
-        """Will return duckdb cursor with requested data for outfields for poses that passed filter in bookmark_name
-
-        Returns:
-            iter: duckdb cursor of data from passing data
-
-        Raises:
-            OptionError
-        """
-        outfields_list = self._format_output_fields(
-            outfields, ligands_alias="L", results_alias="R"
-        )
-
-        bookmark_selection = self._get_bookmark_poses_query(bookmark_name)
-
-        query = self.QueryBuilder()
-        query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
-            f"R.pose_id IN ({bookmark_selection})"
-        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
-        if order_results:
-            order_by = self._format_orderby(order_results)
-            if order_by:
-                query.ORDER_BY(order_by)
-
-        return self.db_query(query.build()[0])
-
-    def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
-        """Method that will retrieve filter values used to construct bookmark
-
-        Args:
-            bookmark_name (str): bookmark for which to get filters
-
-            Returns:
-                dict: containing the filter data
-        """
-        query = self.QueryBuilder()
-        query.SELECT("filters").FROM("Filters").WHERE("name = ?", bookmark_name)
-
-        filters = self.db_query(*query.build()).fetchone()
-        if not filters:
-            return {}
-
-        return json.loads(filters[0])
-
-    def fetch_filters_and_filterwindow(self, bookmark_name: str) -> tuple[dict, str]:
-        """Method that will retrieve filter values used to construct bookmark
-        and the filter window used as basis
-
-        Args:
-            bookmark_name (str): bookmark which was the result of the filtering
-
-            Returns:
-                tuple(dict, str): containing the filter data and filter window
-        """
-        if not self.is_bookmark(bookmark_name):
-            return {}, ""
-
-        query = self.QueryBuilder()
-        query.SELECT("filters", "filter_window").FROM("Filters").WHERE(
-            "name = ?", bookmark_name
-        )
-        filters, filter_window = self.db_query(*query.build()).fetchone()
-
-        return json.loads(filters), filter_window
-
-    def fetch_flexres_info(self, receptor):
-        """fetch flexible residues names and atomname lists
-
-        Returns:
-            tuple: (flexible_residues, flexres_atomnames)
-        """
-        if type(receptor) == int:
-            selection = "receptor_id = ?"
-        elif type(receptor) == str:
-            selection = "recname = ?"
-        try:
-            query = f"SELECT flexible_residues, flexres_atomnames FROM Receptors WHERE {selection}"
-            info = self.db_query(query, (receptor,)).fetchone()
-            if info is None:
-                info = [], []
-            return info
-        except duckdb.OperationalError as e:
-            raise DatabaseQueryError("Error retrieving flexible residue info") from e
-
-    def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
-        """fetch information required by vsmanager for writing out molecules
-
-        Returns:
-            iter: contains LigName, rdmol,
-                atom_index_map, hydrogen_parents
-        """
-        query = self.QueryBuilder()
-        query.SELECT("ligname", "rdmol", "atom_index_map", "hydrogen_parents").FROM(
-            "Ligands", "L"
-        ).WHERE(
-            f"""L.ligand_id IN (SELECT DISTINCT ligand_id FROM ({self.get_bookmark_selection(bookmark_name, "ligand_id")}))"""
-        )
-        return self.db_query(query.build()[0])
-
-    def fetch_ligand_rdkit_relevant_info(self, ligname: str) -> tuple:
-        """fetch information required by vsmanager for writing out molecules
-
-        Returns:
-            tuple: contains rdmol, atom_index_map, hydrogen_parents
-        """
-        query = self.QueryBuilder()
-        query.SELECT("rdmol", "atom_index_map", "hydrogen_parents").FROM(
-            "Ligands"
-        ).WHERE(f"ligname = ?", ligname)
-        return self.db_query(*query.build()).fetchone()
-
     def fetch_pose_interactions(self, Pose_ID) -> iter:
         """
         Fetch all interactions parameters belonging to a Pose_ID
@@ -1784,12 +1649,30 @@ class StorageManagerDuckDB(StorageManager):
         if len(cur.fetchall()) == 0:
             return None
 
-        query = f"""SELECT ii.interaction_type, ii.rec_chain, ii.rec_resname, ii.rec_resid, ii.rec_atom, ii.rec_atomid 
-        FROM Interaction_indices ii 
-        JOIN Interactions i ON i.interaction_id = ii.interaction_id
-        WHERE i.Pose_ID = ?"""
+        query = self.QueryBuilder()
+        query.SELECT(
+            "ii.interaction_type",
+            "ii.rec_chain",
+            "ii.rec_resname",
+            "ii.rec_resid",
+            "ii.rec_atom",
+            "ii.rec_atomid",
+        ).FROM("Interaction_indices", "ii").JOIN(
+            "Interactions", "i", "interaction_id"
+        ).WHERE(
+            "i.pose_id = ?", Pose_ID
+        )
 
-        return self.db_query(query, (Pose_ID,)).fetchall()
+        return self.db_query(*query.build()).fetchall()
+
+    def tables_in_db(self) -> list:
+        """
+        Returns a list of all table names in the database
+
+        Returns:
+            list: list of table names
+        """
+        return [row[0] for row in self.db_query("SHOW ALL TABLES").fetchall()]
 
     def _fetch_ligand_cluster_columns(self) -> list:
         """fetching columns from Ligand_clusters table
@@ -1946,23 +1829,6 @@ class StorageManagerDuckDB(StorageManager):
         bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
 
         return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
-
-    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
-        """
-        Gets molecular data that is needed to create rdkit mols for a given list of poses
-
-        Args:
-            pose_ids (list): pose ids for which to collect molecular data
-
-        Returns:
-            iter: of the following columns pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates
-        """
-        placeholders = ",".join(["?"] * len(pose_ids))
-        query = f"""
-        SELECT pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates 
-        FROM Results WHERE Pose_ID IN ({placeholders})
-        """
-        return self.db_query(query, pose_ids).fetchall()
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
@@ -2313,20 +2179,6 @@ class StorageManagerDuckDB(StorageManager):
             return False
 
         return True
-
-    def tables_in_db(self) -> list:
-        """
-        Returns a list of all table names in the database
-
-        Returns:
-            list: list of table names
-        """
-        return [
-            name[0].lower()
-            for name in self.db_query(
-                "SELECT name FROM duckdb_master WHERE type='table';"
-            ).fetchall()
-        ]
 
     def update_database_version(self, new_version, consent=False):
         """method that updates duckdb database schema 1.0.0 through 3.0.0.
