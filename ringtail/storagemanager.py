@@ -750,17 +750,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def fetch_receptor_object(self) -> tuple:
-        """Returns all Receptor objects from database
-
-        Args:
-            rec_name (str): Name of receptor to return object for
-
-        Returns:
-            tuple: of receptor name and object
-        """
-        raise_not_implemented()
-
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
 
@@ -886,18 +875,6 @@ class StorageManager:
 
         Returns:
             pd.DataFrame: dataframe of requested data
-        """
-        raise_not_implemented()
-
-    def get_range_of_e_le(self, table: str) -> tuple:
-        """
-        Get min and max of e/docking_score and ligand efficiency/le/leff/
-
-        Args:
-            table (str): table limit data, e.g., either Results or a bookmark name
-
-        Returns:
-            tuple: e_min, e_max, le_min, le_max
         """
         raise_not_implemented()
 
@@ -2045,6 +2022,70 @@ class StorageManager:
                 logger.info("Successfully wrote filtered poses to database.")
         return bool(passing_poses)
 
+    def _format_orderby(self, column_name: str) -> str:
+        """
+        Ensures chosen order by column is a valid choice
+
+        Args:
+            column_name (str): column to order by
+
+        Returns:
+            str: column to order by with appropriate alias
+        """
+        columns, aliased_columns = self._get_possible_output_columns()
+        if column_name.lower() in columns:
+            index = columns.index(column_name.lower())
+            order_by = aliased_columns[index].format(
+                Ligands_alias="L", Results_alias="R"
+            )
+            return order_by
+        else:
+            return None
+
+    def _format_output_fields(
+        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
+    ) -> str:
+        """Handles string or list input of column names to be outputted, will make sure LigName
+        is in the list, and make sure all options are valid
+
+        Returns:
+            list: column names for which the data is to be displayed that needs formatting with table alias
+                for which table they belong to
+
+        Raises:
+            OptionError
+        """
+        if type(outfields) == str:
+            outfields = outfields.replace(" ", "")
+            outfields_list = outfields.split(",")
+        elif type(outfields) == list:
+            outfields_list = outfields
+        else:
+            logger.warning(
+                "The provided outfields is not in a usable format (string or list). Will only use ligname"
+            )
+            outfields_list = []
+        table_formatted_outfields = []
+        if "ligname" not in [field.lower() for field in outfields_list]:
+            outfields_list.insert(0, "LigName")
+        possible_columns, table_formatted_columns = self._get_possible_output_columns()
+
+        for outfield in outfields_list:
+            if outfield.lower() in possible_columns:
+                table_formatted_outfields.append(
+                    table_formatted_columns[possible_columns.index(outfield.lower())]
+                )
+            else:
+                logger.warning(
+                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
+                )
+        formatted_outfields = [
+            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
+            for outfield in table_formatted_outfields
+        ]
+
+        return formatted_outfields
+
     # endregion
 
     # region cross referencing filtered databases
@@ -2189,6 +2230,50 @@ class StorageManager:
             "count_pool", "cp"
         )
         return self.db_query(counting.build()[0]).fetchone()[0]
+
+    # endregion
+
+    # region get objects, stats, counts
+    def get_range_of_e_le(self, table: str) -> tuple:
+        """
+        Get min and max of e/docking_score and ligand efficiency/le/leff/
+
+        Args:
+            table (str): table limit data, e.g., either Results or a bookmark name
+
+        Returns:
+            tuple: e_min, e_max, le_min, le_max
+        """
+
+        query = self.QueryBuilder()
+        query.SELECT(
+            "MIN(R.docking_score)",
+            "MAX(R.docking_score)",
+            "MIN(R.leff)",
+            "MAX(R.leff)",
+        ).FROM("Results", "R")
+        if self.is_bookmark(table):
+            query.JOIN("Filtered_poses", "fp", "pose_id").JOIN(
+                "Filters", "f", "filter_id", to="Filtered_poses"
+            ).WHERE("f.name = ?", table)
+        elif self._is_statustable(table):
+            query.JOIN(table, "T", "pose_id")
+
+        return self.db_query(*query.build()).fetchall()[0]
+
+    def fetch_receptor_object(self) -> Union[None, tuple]:
+        """Returns all Receptor objects from database
+
+        Returns:
+            tuple: of receptor name and object
+        """
+        query = self.QueryBuilder()
+        query.SELECT("RecName", "receptor_object").FROM("Receptors")
+        cursor = self.db_query(query.build()[0]).fetchone()
+        if cursor:
+            return cursor
+        else:
+            return None
 
     # endregion
 
@@ -3789,70 +3874,6 @@ class StorageManagerSQLite(StorageManager):
 
     # region fetching specific columns
 
-    def _format_orderby(self, column_name: str) -> str:
-        """
-        Ensures chosen order by column is a valid choice
-
-        Args:
-            column_name (str): column to order by
-
-        Returns:
-            str: column to order by with appropriate alias
-        """
-        columns, aliased_columns = self._get_possible_output_columns()
-        if column_name.lower() in columns:
-            index = columns.index(column_name.lower())
-            order_by = aliased_columns[index].format(
-                Ligands_alias="L", Results_alias="R"
-            )
-            return order_by
-        else:
-            return None
-
-    def _format_output_fields(
-        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
-    ) -> str:
-        """Handles string or list input of column names to be outputted, will make sure LigName
-        is in the list, and make sure all options are valid
-
-        Returns:
-            list: column names for which the data is to be displayed that needs formatting with table alias
-                for which table they belong to
-
-        Raises:
-            OptionError
-        """
-        if type(outfields) == str:
-            outfields = outfields.replace(" ", "")
-            outfields_list = outfields.split(",")
-        elif type(outfields) == list:
-            outfields_list = outfields
-        else:
-            logger.warning(
-                "The provided outfields is not in a usable format (string or list). Will only use ligname"
-            )
-            outfields_list = []
-        table_formatted_outfields = []
-        if "ligname" not in [field.lower() for field in outfields_list]:
-            outfields_list.insert(0, "LigName")
-        possible_columns, table_formatted_columns = self._get_possible_output_columns()
-
-        for outfield in outfields_list:
-            if outfield.lower() in possible_columns:
-                table_formatted_outfields.append(
-                    table_formatted_columns[possible_columns.index(outfield.lower())]
-                )
-            else:
-                logger.warning(
-                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
-                )
-        formatted_outfields = [
-            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
-            for outfield in table_formatted_outfields
-        ]
-
-        return formatted_outfields
-
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
         """
         Gets all column names from given tables
@@ -3910,48 +3931,6 @@ class StorageManagerSQLite(StorageManager):
                             END ='numerical';"""
             ).fetchall()
         ]
-
-    def get_range_of_e_le(self, table: str) -> tuple:
-        """
-        Get min and max of e/docking_score and ligand efficiency/le/leff/
-
-        Args:
-            table (str): table limit data, e.g., either Results or a bookmark name
-
-        Returns:
-            tuple: e_min, e_max, le_min, le_max
-        """
-
-        query = self.QueryBuilder()
-        query.SELECT(
-            "MIN(R.docking_score)",
-            "MAX(R.docking_score)",
-            "MIN(R.leff)",
-            "MAX(R.leff)",
-        ).FROM("Results", "R")
-        if self.is_bookmark(table):
-            query.JOIN("Filtered_poses", "fp", "pose_id").JOIN(
-                "Filters", "f", "filter_id", to="Filtered_poses"
-            ).WHERE("f.name = ?", table)
-        elif self._is_statustable(table):
-            query.JOIN(table, "T", "pose_id")
-
-        return self.db_query(*query.build()).fetchall()[0]
-
-    def fetch_receptor_object(self) -> Union[None, tuple]:
-        """Returns all Receptor objects from database
-
-        Returns:
-            tuple: of receptor name and object
-        """
-
-        cursor = self.db_query(
-            "SELECT RecName, receptor_object FROM Receptors"
-        ).fetchone()
-        if cursor:
-            return tuple(cursor)
-        else:
-            return None
 
     def count_receptors_in_db(self):
         """returns number of rows in Receptors table where receptor_object already has blob
@@ -5289,7 +5268,6 @@ class StorageManagerSQLite(StorageManager):
             )
         try:
             cur = self.conn.cursor()
-            print("\n\n", query, parameters)
             cur.executemany(query, parameters)
             if commit:
                 self.conn.commit()
