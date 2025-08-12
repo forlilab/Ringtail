@@ -165,3 +165,21 @@ def generate_not_implemented_message():
 
 def raise_not_implemented():
     raise NotImplementedError(generate_not_implemented_message())
+
+
+def ligand_sdf_to_pdb(sdf_file: str):
+
+    import os
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+
+    suppl = Chem.SDMolSupplier(sdf_file)
+    for mol in suppl:
+        name = mol.GetProp("_Name")
+
+    if mol.GetNumConformers() == 0 or not mol.GetConformer(0).Is3D():
+        mol = Chem.AddHs(mol)
+        AllChem.EmbedMolecule(mol)
+    else:
+        mol = Chem.AddHs(mol, addCoords=True)
+    Chem.MolToPDBFile(mol, os.path.join(name + ".pdb"), flavor=0)
