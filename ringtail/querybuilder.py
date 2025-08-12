@@ -16,11 +16,21 @@ class QueryBuilder:
         self.params = []
         self.aliases = {}
         self.insert_into = None
+        self.returning = None
         self.limit = None
         self.descending = False
 
-    def INSERT_INTO(self, table_name):
-        self.insert_into = f"INSERT INTO {table_name}"
+    def INSERT_INTO(self, table_name, *columns):
+        if columns:
+            column_statement = f""" ({", ".join(map(str, columns))}) VALUES ({",".join(["?"] * len(columns))})"""
+        else:
+            column_statement = ""
+        self.insert_into = f"INSERT INTO {table_name}{column_statement}"
+
+        return self
+
+    def RETURNING(self, column_name: str):
+        self.returning = column_name
         return self
 
     def SELECT(self, *fields):
@@ -136,7 +146,7 @@ class QueryBuilder:
     def build(self, count=False):
         parts = []
         if self.insert_into:
-            parts.append(self.insert_into)
+            parts.append(f"""{self.insert_into}""")
 
         if self.subquery:
             parts.append(
@@ -179,6 +189,9 @@ class QueryBuilder:
 
         if self.limit:
             parts.append("LIMIT " + self.limit)
+
+        if self.returning:
+            parts.append("RETURNING " + self.returning)
 
         if count:
             return f"SELECT COUNT(*) FROM ({' '.join(parts)})", self.params

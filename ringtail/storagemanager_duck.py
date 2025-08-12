@@ -1368,65 +1368,10 @@ class StorageManagerDuckDB(StorageManager):
 
         return filter_query
 
-    def _populate_filter_tables(
-        self, name, query: str, filters={}, filtering_bookmark: str = ""
-    ) -> bool:
-        # TODO another biggie
-        """
-        Will run a filter query and determine if there are passing poses, in which case all relevant
-        data is written to the database
-
-        Args:
-            name (str): name of new bookmark
-            query (str): query that defines what poses to insert
-            filters (dict, optional): filters or restrictions used
-            filtering_bookmark (str, optional): If filters were performed across an existing obokmark. Defaults to None.
-
-        Raises:
-            StorageError
-            OptionError
-
-        Returns:
-            bool: whether or not there are poses passing the filter
-        """
-
-        # fetch filtered poses
-        passing_poses_tuples = self.db_query(query).fetchall()
-        passing_poses = [row[0] for row in passing_poses_tuples]
-        if passing_poses:
-            # make sure bookmark name is not a table name
-            if name in self.tables_in_db():
-                raise OptionError(
-                    f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
-                )
-            # check if bookmark exists
-            if self.is_bookmark(name):
-                logger.warning(
-                    f"The bookmark {name} already exists, and will be overwritten by the current filter."
-                )
-                self.delete_bookmark(name)
-            filter_sql = """INSERT INTO Filters (name,query,filters,filter_window) VALUES (?,?,?,?) RETURNING filter_id;"""
-            try:
-                filter_id = self.db_query(
-                    filter_sql,
-                    (name.lower(), query, json.dumps(filters), filtering_bookmark),
-                ).fetchone()[0]
-
-                filter_pose_sql = f"""
-                    INSERT INTO Filtered_poses (filter_id, pose_id) VALUES (?,?);"""
-                params = [(filter_id, pose_id) for pose_id in passing_poses]
-                self.db_update(filter_pose_sql, params)
-            except Exception as e:
-                raise StorageError(
-                    f"Problems while writing filtered poses to database: {e}"
-                ) from e
-            else:
-                logger.info("Successfully wrote filtered poses to database.")
-        return bool(passing_poses)
-
     def _prepare_interaction_filtering_query(
         self, include_interactions: list, exclude_interactions: list, max_miss: int
     ) -> str:
+        # TODO this method is huge, great potential for query builder
         """
         Method that prepares a partial query for interactions
 
@@ -1536,204 +1481,9 @@ class StorageManagerDuckDB(StorageManager):
 
         return query
 
-    def _generate_interaction_bitvectors(self, pose_ids: tuple[str]) -> dict:
-        """
-        Method to generate a dict of generate bitvector strings from pose_ids
-
-        Args:
-            pose_ids (str): query formatted list of pose_ids (as tuple)
-
-        Returns:
-            dict: of "pose_id":"bitvector"
-        """
-        # create a list of 0 items the length of interaction_indices table
-        ii_length = self._get_length_of_table("Interaction_indices")
-        # for each pose id, get a list of interaction_indices from joining the two tables i and ii
-        poseid_intind_query = """SELECT Pose_ID, interaction_id
-                                    FROM Interactions
-                                    WHERE Pose_ID IN ({placeholders});""".format(
-            placeholders=",".join(["?"] * len(pose_ids))
-        )
-        poseid_intinds = self.db_query(poseid_intind_query, pose_ids).fetchall()
-        # make dict of pose id and bitvector
-        poseid_bvlist = {(pose_id): [0] * ii_length for pose_id in pose_ids}
-        # iterate over the tuple results from the query
-        for poseid_intind in poseid_intinds:
-            poseid_bvlist[(poseid_intind[0])][poseid_intind[1] - 1] = 1
-
-        # join list as string without any delimiter
-        poseid_bv = {
-            key: "".join(map(str, value)) for (key, value) in poseid_bvlist.items()
-        }
-        # return dict of pose id as string and bitvector
-        return poseid_bv
-
-    def _prepare_interaction_indices_for_filtering(self, interaction_list: list):
-        """
-        Prepare lists of interaction indices where they are grouped by whether or not they should be evaluated as "AND" or "OR",
-        and whether to be excluded or included in the passing filter poses
-
-        Args:
-            interaction_list (list): list of interactions
-
-        Raises:
-            OptionError
-
-        Returns:
-            list: two lists of indices for interactions to exclude and to include
-        """
-        # initialize variables
-        exclude_interactions = []
-        include_interactions = []
-        interaction_not_found = []
-
-        # figure out if each interaction is in database, make a list of list of indices for each interaction
-        for interaction in interaction_list:
-            # get all interaction indices matching the interaction filter (returns more than one index if filter has a "wildcard")
-            interaction_index_tuples = self._get_interaction_indices(interaction[:-1])
-            # make list of indices from iterable cursor tuples (should create empty list if no results)
-            interaction_indices = [i[0] for i in interaction_index_tuples]
-            # catch if interaction not found in database
-            if interaction_indices == []:
-                if interaction == ["R", "", "", "", "", True]:
-                    logger.warning(
-                        "Given 'react_any' filter, no reactive interactions found. Excluded from filtering."
-                    )
-                else:
-                    # create string representation of ecah interaction not found
-                    interaction_not_found.append(":".join(interaction[:4]))
-                continue  # ends this iteration of the for loop
-
-            # create a list of lists for interactions to either include or exclude
-            if interaction[-1] is True:
-                include_interactions.append(interaction_indices)
-            elif interaction[-1] is False:
-                exclude_interactions.append(interaction_indices)
-            else:
-                raise OptionError(
-                    "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
-                )
-        # if one or more interactions not found, raise error
-        if interaction_not_found:
-            raise OptionError(
-                f"The following interactions do not exist in the database: {interaction_not_found} not found in the database. Please check for spelling errors or remove from filter."
-            )
-        else:
-            return include_interactions, exclude_interactions
-
-    def _get_interaction_indices(self, interaction_list) -> iter:
-        """takes list of interaction info and looks up corresponding interaction index
-
-        Args:
-            interaction_list (list): List containing interaction info
-                in format [<interaction_type>, <rec_chain>, <rec_resname>,
-                <rec_resid>, <rec_atom>]
-
-        Returns:
-            iter: duckdb cursor with the interaction index/indices
-        """
-        interaction_info = [
-            "interaction_type",
-            "rec_chain",
-            "rec_resname",
-            "rec_resid",
-            "rec_atom",
-        ]
-        len_interaction_info = len(interaction_info)
-        sql_string = "SELECT interaction_id FROM Interaction_indices WHERE "
-
-        sql_string += " AND ".join(
-            [
-                "{column} LIKE '{value}'".format(
-                    column=interaction_info[i], value=interaction_list[i]
-                )
-                for i in range(len_interaction_info)
-                if interaction_list[i] != ""
-            ]
-        )
-
-        return self.db_query(sql_string).fetchall()
-
     # endregion
 
     # region crossreferencing filtered databases
-
-    def crossref_filter(
-        self,
-        new_db: str,
-        bookmark1_name: str,
-        bookmark2_name: str,
-        temp_table_suffix: int = 0,
-        selection="NOT IN",
-        old_db=None,
-    ) -> tuple:
-        """Selects ligands found or not found in the given bookmark in both current db and new_db.
-        Stores as a temporary table, only accessible within the same database connection.
-
-        Args:
-            new_db (str): file name for database to attach
-            bookmark1_name (str): string for name of first bookmark/temp table to compare
-            bookmark2_name (str): string for name of second bookmark to compare
-            temp_table_suffix (int, optional): if comparing more than set of bookmarks in one database connection, use this to give different temp table names
-            selection (str, optional): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            old_db (str, optional): file name for previous database
-
-        Returns:
-            tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
-        """
-        if old_db is not None:
-            self._detach_db(old_db.split(".")[0])  # remove file extension
-        new_db_name = new_db.split(".")[0]  # remove file extension
-        self._attach_db(new_db, new_db_name)
-
-        selection = selection.upper().strip()
-        if selection not in ["NOT IN", "IN"]:
-            raise StorageError(f"Unrecognized selection type {selection}")
-
-        temp_name = "temp_" + str(temp_table_suffix)
-        self._create_crossref_temp_table(temp_name)
-        temp_insert_query = self._generate_selective_insert_query(
-            bookmark1_name, bookmark2_name, selection, new_db_name, temp_name
-        )
-        self.db_update(temp_insert_query, ())
-
-        num_passing = self._count_ligands_in_temptable(temp_name)
-        print("\n\n Number passing the cross referenced filters: ", num_passing)
-
-        return temp_name, num_passing
-
-    def create_bookmark_from_temp_table(
-        self,
-        temp_table_name,
-        bookmark_name,
-        original_bookmark_name,
-        wanted_list=[],
-        unwanted_list=[],
-    ):
-        """Resaves temp bookmark stored in bookmark_name as new permenant bookmark
-
-        Args:
-            bookmark_name (str): name of bookmark to save last temp bookmark as
-            original_bookmark_name (str): name of original bookmark
-            wanted_list (list): List of wanted database names
-            unwanted_list (list, optional): List of unwanted database names
-            temp_table_name (str): name of temporary table
-        """
-        query = self.QueryBuilder()
-        subq = self.QueryBuilder()
-        subq_string = subq.SELECT("t.pose_id").FROM(temp_table_name, "t").build()[0]
-        query_string = (
-            query.SELECT("bm.pose_id")
-            .FROM_BOOKMARK(original_bookmark_name, "bm")
-            .WHERE(f"bm.pose_id IN ({subq_string})")
-            .build()[0]
-        )
-        filters = {
-            "comparison_wanted": ", ".join(wanted_list),
-            "comparison_unwanted": ", ".join(unwanted_list),
-        }
-
-        self._populate_filter_tables(bookmark_name, query_string, filters)
 
     def _delete_from_ligands(self, bookmark_name: str):
         """Remove rows from ligands table if they did not pass filtering
@@ -1798,30 +1548,6 @@ class StorageManagerDuckDB(StorageManager):
                 f"Error occured while pruning Interactions not in {bookmark_name}"
             ) from e
 
-    def _count_ligands_in_temptable(self, temp_name: str) -> int:
-        """
-        Counts ligands represented in the temporary table
-
-        Args:
-            temp_name (str): name of temporary table
-
-        Returns:
-            int: number of poses in temporary table
-        """
-        counting = self.QueryBuilder()
-        count_pool = self.QueryBuilder()
-        count_pool_string = (
-            count_pool.SELECT("tt.pose_id")
-            .FROM(temp_name, "tt")
-            .JOIN("Results", "r", "pose_id")
-            .GROUP_BY("r.ligand_id")
-            .build()[0]
-        )
-        counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
-            "count_pool", "cp"
-        )
-        return tuple(self.db_query(counting.build()[0]).fetchone())[0]
-
     def _create_crossref_temp_table(self, table_name: str):
         """create temporary table with given name and with ligand name and pose_id information
 
@@ -1842,46 +1568,6 @@ class StorageManagerDuckDB(StorageManager):
             raise DatabaseTableCreationError(
                 f"Error while creating temporary table {table_name}"
             ) from e
-
-    def _generate_selective_insert_query(
-        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
-    ):
-        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
-
-        Args:
-            bookmark1_name (str): name of bookmark to cross-reference for main db
-            bookmark2_name (str): name of bookmark to cross-reference for attached db
-            select_str (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            new_db_name (str): name of attached db
-            temp_table (str): name of temporary table to store passing results in
-
-        Returns:
-            str: duckdb formatted query string
-        """
-        query = self.QueryBuilder()
-        subq = self.QueryBuilder()
-        subq_string = (
-            subq.SELECT("l.ligname")
-            .FROM_BOOKMARK(f"{bookmark2_name}", "bm2", new_db_name)
-            .JOIN(
-                f"{new_db_name}.results",
-                "r",
-                "pose_Id",
-                f"bm2",
-            )
-            .JOIN(f"{new_db_name}.ligands", "l", "ligand_id", f"{new_db_name}.results")
-            .build()[0]
-        )
-        query_string = (
-            query.INSERT_INTO(temp_table)
-            .SELECT("bm1.pose_id", "l.ligname")
-            .FROM_BOOKMARK(bookmark1_name, "bm1")
-            .JOIN("results", "r", "pose_id", "bm1")
-            .JOIN("ligands", "l", "ligand_id", "results")
-            .WHERE(f"l.ligname {select_str} ({subq_string})")
-        ).build()[0]
-
-        return query_string
 
     # endregion
 
