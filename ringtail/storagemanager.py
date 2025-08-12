@@ -727,29 +727,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def get_plot_data(
-        self,
-        bookmark_name: str,
-        only_passing: bool = False,
-        include_status: bool = False,
-        x_axis: str = "docking_score",
-        y_axis: str = "leff",
-    ):
-        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
-        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
-
-        Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
-            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
-            include_status (bool): look for status tables and include if requested
-            x_axis (str, optional): Defaults to "docking_score".
-            y_axis (str, optional): Defaults to "leff".
-
-        Returns:
-            tuple: cursors as (<all data cursor>, <passing data cursor>)
-        """
-        raise_not_implemented()
-
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
 
@@ -829,18 +806,6 @@ class StorageManager:
 
         Returns:
             iter: of interaction information for given Pose_ID
-        """
-        raise_not_implemented()
-
-    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
-        """Returns a panda dataframe of table or query given as requested_data
-
-        Args:
-            requested_data (str): String containing SQL-formatted query or table name
-            table (bool): Flag indicating if requested_data is table name or not
-
-        Returns:
-            pd.DataFrame: dataframe of requested data
         """
         raise_not_implemented()
 
@@ -952,26 +917,6 @@ class StorageManager:
 
         Returns:
             list: list of table names
-        """
-        raise_not_implemented()
-
-    def calculate_percentiles(
-        self, column: str, num_bins: int, table: str
-    ) -> tuple[list[int], list[float]]:
-        """
-        Will calculate percentiles for a given column and given number of bins to divide the data in.
-        Will group the data by ligand_id, so it will be per ligand and not per pose id.
-
-        Args:
-            column (str): what column to calculate percentile for. must be numeric
-            num_bins (int): how many percentile bins data should be divided into
-            table (str): whether the column is in Results or filtered results (i.e., bookmark)
-
-        Raises:
-            OptionError: if column given is not numeric and in results
-
-        Returns:
-            tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
         """
         raise_not_implemented()
 
@@ -2400,9 +2345,114 @@ class StorageManager:
         ).FROM("Results").WHERE(f"Pose_ID IN ({placeholders})", *pose_ids)
         return self.db_query(*query.build()).fetchall()
 
+    def calculate_percentiles(
+        self, column: str, num_bins: int, table: str
+    ) -> tuple[list[int], list[float]]:
+        """
+        Will calculate percentiles for a given column and given number of bins to divide the data in.
+        Will group the data by ligand_id, so it will be per ligand and not per pose id.
+
+        Args:
+            column (str): what column to calculate percentile for. must be numeric
+            num_bins (int): how many percentile bins data should be divided into
+            table (str): whether the column is in Results or filtered results (i.e., bookmark)
+
+        Raises:
+            OptionError: if column given is not numeric and in results
+
+        Returns:
+            tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
+        """
+
+        if not column in self._get_numeric_columns("Results"):
+            raise OptionError(
+                f"Requested column {column} in not numeric, percentiles cannot be calcualted."
+            )
+        query = self.QueryBuilder()
+        query.SELECT(f"{column}").FROM("Results")
+        if self.is_bookmark(table):
+            query.IN_BOOKMARK(table)
+        elif self._is_statustable(table):
+            query.JOIN(table, "T", "pose_id")
+        query.GROUP_BY("ligand_id")
+        values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
+
+        bins = np.linspace(0, 100, num_bins + 1)
+        bin_edges = np.percentile(values, bins)
+        return bins, bin_edges
+
+    def get_plot_data(
+        self,
+        bookmark_name: str,
+        only_passing: bool = False,
+        include_status: bool = False,
+        x_axis: str = "docking_score",
+        y_axis: str = "leff",
+        limit: int = None,
+    ):
+        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
+        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
+
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
+            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
+            include_status (bool): look for status tables and include if requested
+            x_axis (str, optional): Defaults to "docking_score".
+            y_axis (str, optional): Defaults to "leff".
+
+        Returns:
+            tuple: cursors as (<all data cursor>, <passing data cursor>)
+        """
+        all_data_query = self.QueryBuilder()
+        all_data_query.SELECT("docking_score", "leff").FROM("Results")
+        bookmark_query = self.QueryBuilder()
+        bookmark_query.SELECT(
+            "R." + x_axis, "R." + y_axis, "R." + "Pose_ID", "L." + "LigName"
+        )
+        if limit:
+            bookmark_query.LIMIT(limit)
+
+        if self.is_bookmark(bookmark_name):
+            if include_status:
+                bookmark_query.SELECT_STATUS()
+            bookmark_query.FROM("Results", "R").IN_BOOKMARK(bookmark_name).JOIN(
+                "Ligands", "L", "ligand_id"
+            )
+
+            if only_passing:
+                all_data = []
+            else:
+                all_data = self.db_query(all_data_query.build()[0]).fetchall()
+            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
+
+        elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
+            # will assume it is a status table
+            if include_status:
+                bookmark_query.SELECT(f"""'{bookmark_name.lower()}' as status""")
+            bookmark_query.FROM("Results", "R").JOIN(
+                bookmark_name, "T", "pose_id"
+            ).JOIN("Ligands", "L", "ligand_id")
+
+            if only_passing:
+                all_data = []
+            else:
+                all_data = self.db_query(all_data_query.build()[0]).fetchall()
+            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
+
+        else:
+            all_data = self.db_query(all_data_query.build()[0]).fetchall()
+
+            if include_status:
+                bookmark_query.SELECT_STATUS()
+            bookmark_query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
+
+            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
+
+        return all_data, passing_data
+
     # endregion
 
-    # region database logic
+    # region database logic and utilities
 
     def _is_table(self, table: str) -> bool:
         """
@@ -2419,6 +2469,27 @@ class StorageManager:
             return True
         else:
             return False
+
+    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
+        """Returns a panda dataframe of table or query given as requested_data
+
+        Args:
+            requested_data (str): String containing SQL-formatted query or table name
+            table (bool): Flag indicating if requested_data is table name or not
+
+        Returns:
+            pd.DataFrame: dataframe of requested data
+        """
+        if table:
+            query = self.QueryBuilder()
+            if requested_data in self.get_all_bookmark_names():
+                query.SELECT("*").FROM("Results").IN_BOOKMARK(requested_data)
+            else:
+                # assume it is a table
+                query.SELECT("*").FROM("Results")
+            return pd.read_sql_query(query.build()[0], self.conn)
+        else:
+            return pd.read_sql_query(requested_data, self.conn)
 
     # endregion
 
@@ -4373,135 +4444,9 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise StorageError("Error while generating percentile query") from e
 
-    def calculate_percentiles(
-        self, column: str, num_bins: int, table: str
-    ) -> tuple[list[int], list[float]]:
-        """
-        Will calculate percentiles for a given column and given number of bins to divide the data in.
-        Will group the data by ligand_id, so it will be per ligand and not per pose id.
-
-        Args:
-            column (str): what column to calculate percentile for. must be numeric
-            num_bins (int): how many percentile bins data should be divided into
-            table (str): whether the column is in Results or filtered results (i.e., bookmark)
-
-        Raises:
-            OptionError: if column given is not numeric and in results
-
-        Returns:
-            tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
-        """
-
-        if not column in self._get_numeric_columns("Results"):
-            raise OptionError(
-                f"Requested column {column} in not numeric, percentiles cannot be calcualted."
-            )
-        query = self.QueryBuilder()
-        query.SELECT(f"{column}").FROM("Results")
-        if self.is_bookmark(table):
-            query.IN_BOOKMARK(table)
-        elif self._is_statustable(table):
-            query.JOIN(table, "T", "pose_id")
-        query.GROUP_BY("ligand_id")
-        values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
-
-        bins = np.linspace(0, 100, num_bins + 1)
-        bin_edges = np.percentile(values, bins)
-        return bins, bin_edges
-
-    def get_plot_data(
-        self,
-        bookmark_name: str,
-        only_passing: bool = False,
-        include_status: bool = False,
-        x_axis: str = "docking_score",
-        y_axis: str = "leff",
-        limit: int = None,
-    ):
-        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
-        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
-
-        Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
-            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
-            include_status (bool): look for status tables and include if requested
-            x_axis (str, optional): Defaults to "docking_score".
-            y_axis (str, optional): Defaults to "leff".
-
-        Returns:
-            tuple: cursors as (<all data cursor>, <passing data cursor>)
-        """
-        all_data_query = self.QueryBuilder()
-        all_data_query.SELECT("docking_score", "leff").FROM("Results")
-        bookmark_query = self.QueryBuilder()
-        bookmark_query.SELECT(
-            "R." + x_axis, "R." + y_axis, "R." + "Pose_ID", "L." + "LigName"
-        )
-        if limit:
-            bookmark_query.LIMIT(limit)
-
-        if self.is_bookmark(bookmark_name):
-            if include_status:
-                bookmark_query.SELECT_STATUS()
-            bookmark_query.FROM("Results", "R").IN_BOOKMARK(bookmark_name).JOIN(
-                "Ligands", "L", "ligand_id"
-            )
-
-            if only_passing:
-                all_data = []
-            else:
-                all_data = self.db_query(all_data_query.build()[0]).fetchall()
-            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
-            # will assume it is a status table
-            if include_status:
-                bookmark_query.SELECT(f"""'{bookmark_name.lower()}' as status""")
-            bookmark_query.FROM("Results", "R").JOIN(
-                bookmark_name, "T", "pose_id"
-            ).JOIN("Ligands", "L", "ligand_id")
-
-            if only_passing:
-                all_data = []
-            else:
-                all_data = self.db_query(all_data_query.build()[0]).fetchall()
-            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        else:
-            all_data = self.db_query(all_data_query.build()[0]).fetchall()
-
-            if include_status:
-                bookmark_query.SELECT_STATUS()
-            bookmark_query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
-
-            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        return all_data, passing_data
-
     # endregion
 
     # region general database operations
-
-    def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
-        """Returns a panda dataframe of table or query given as requested_data
-
-        Args:
-            requested_data (str): String containing SQL-formatted query or table name
-            table (bool): Flag indicating if requested_data is table name or not
-
-        Returns:
-            pd.DataFrame: dataframe of requested data
-        """
-        if table:
-            query = self.QueryBuilder()
-            if requested_data in self.get_all_bookmark_names():
-                query.SELECT("*").FROM("Results").IN_BOOKMARK(requested_data)
-            else:
-                # assume it is a table
-                query.SELECT("*").FROM("Results")
-            return pd.read_sql_query(query.build()[0], self.conn)
-        else:
-            return pd.read_sql_query(requested_data, self.conn)
 
     def _get_length_of_table(self, table_name: str):
         """
