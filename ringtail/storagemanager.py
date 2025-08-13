@@ -2622,10 +2622,61 @@ class StorageManager:
         """
         pass
 
-    def _create_results_table(self):
+    def _create_results_table(self, name="Results"):
+        """Creates table for results. Columns are:
+        Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
+        ligand_id           INTEGER FOREIGN KEY from Ligands,
+        receptor            VARCHAR,
+        pose_rank           INTEGER,
+        run_number          INTEGER,
+        docking_score    FLOAT,
+        leff                FLOAT,
+        deltas              FLOAT,
+        cluster_rmsd        FLOAT,
+        cluster_size        INTEGER,
+        reference_rmsd      FLOAT,
+        energies_inter      FLOAT,
+        energies_vdw        FLOAT,
+        energies_electro    FLOAT,
+        energies_flexLig    FLOAT,
+        energies_flexLR     FLOAT,
+        energies_intra      FLOAT,
+        energies_torsional  FLOAT,
+        unbound_energy      FLOAT,
+        nr_interactions     INTEGER,
+        num_hb              INTEGER,
+        about_x             FLOAT,
+        about_y             FLOAT,
+        about_z             FLOAT,
+        trans_x             FLOAT,
+        trans_y             FLOAT,
+        trans_z             FLOAT,
+        axisangle_x         FLOAT,
+        axisangle_y         FLOAT,
+        axisangle_z         FLOAT,
+        axisangle_w         FLOAT,
+        dihedrals           VARCHAR,
+        ligand_coordinates         VARCHAR,
+        flexible_res_coordinates   VARCHAR
+
+        Raises:
+            DatabaseTableCreationError: Description
+        """
         pass
 
-    def _create_ligands_table(self):
+    def _create_ligands_table(self, name="Ligands") -> None:
+        """Create table for ligands. Columns are:
+        ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
+        ligand_smile        VARCHAR,
+        rdmol               BLOB,
+        atom_index_map      VARCHAR,
+        hydrogen_parents    VARCHAR,
+        input_model         VARCHAR
+
+        Raises:
+            DatabaseTableCreationError: Description
+        """
         pass
 
     def _create_receptors_table(self):
@@ -2647,7 +2698,19 @@ class StorageManager:
         pass
 
     def _insert_ligands(self, ligand_array: list) -> list:
-        raise_not_implemented()
+        """Takes array of ligand rows, inserts into Ligands table.
+
+        Args:
+            ligand_array (list[list]): list of lists containing formatted ligand rows
+
+        Returns:
+            list: of ligand IDs just inserted
+
+        Raises:
+            DatabaseInsertionError
+
+        """
+        pass
 
     def _create_indices(self):
         raise_not_implemented()

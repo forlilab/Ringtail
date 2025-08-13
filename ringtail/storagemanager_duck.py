@@ -62,19 +62,12 @@ class StorageManagerDuckDB(StorageManager):
 
     # region Methods for creating and inserting into tables the database
 
-    def _create_ligands_table(self, name="Ligands") -> None:
-        """Create table for ligands. Columns are:
-        ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-        ligand_smile        VARCHAR,
-        rdmol               BLOB,
-        atom_index_map      VARCHAR,
-        hydrogen_parents    VARCHAR,
-        input_model         VARCHAR
+    def _create_ligands_table(self, name="Ligands"):
+        """
+        Creates ligands table
 
-        Raises:
-            DatabaseTableCreationError: Description
-
+        Args:
+            name (str, optional): _description_. Defaults to "Ligands".
         """
         ligand_table = f"""
             CREATE SEQUENCE seq_ligandid START 1;
@@ -90,16 +83,8 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(ligand_table, commit=True)
 
     def _insert_ligands(self, ligand_array: list) -> list:
-        """Takes array of ligand rows, inserts into Ligands table.
-
-        Args:
-            ligand_array (list[list]): list of lists containing formatted ligand rows
-
-        Returns:
-            list: of ligand IDs just inserted
-
-        Raises:
-            DatabaseInsertionError
+        """
+        duck db implementation of parent method
 
         """
         sql_insert = """INSERT INTO Ligands (
@@ -111,66 +96,23 @@ class StorageManagerDuckDB(StorageManager):
         input_model
         ) VALUES
         (?,?,?,?,?,?)
-        ON CONFLICT(LigName) DO UPDATE SET 
-            ligand_smile = excluded.ligand_smile,
-            rdmol = excluded.rdmol,
-            atom_index_map = excluded.atom_index_map,
-            hydrogen_parents = excluded.hydrogen_parents,
-            input_model = excluded.input_model
-        RETURNING ligand_id"""
+        ON CONFLICT(LigName) DO NOTHING"""
         ligand_ids = []
         try:
-            cur = self.conn.cursor()
             for ligand in ligand_array:
-                ligand_id = cur.execute(sql_insert, ligand).fetchone()[0]
+                self.db_query(sql_insert, params=ligand, commit=True)
+                ligand_id = self.db_query(
+                    """SELECT ligand_id FROM Ligands WHERE LigName = ?;""",
+                    params=[ligand[0]],
+                ).fetchone()[0]
                 ligand_ids.append(ligand_id)
-            self.conn.commit()
-            cur.close()
             return ligand_ids
 
         except duckdb.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting ligands.") from e
 
     def _create_results_table(self, name="Results"):
-        """Creates table for results. Columns are:
-        Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
-        ligand_id           INTEGER FOREIGN KEY from Ligands,
-        receptor            VARCHAR,
-        pose_rank           INTEGER,
-        run_number          INTEGER,
-        docking_score    FLOAT,
-        leff                FLOAT,
-        deltas              FLOAT,
-        cluster_rmsd        FLOAT,
-        cluster_size        INTEGER,
-        reference_rmsd      FLOAT,
-        energies_inter      FLOAT,
-        energies_vdw        FLOAT,
-        energies_electro    FLOAT,
-        energies_flexLig    FLOAT,
-        energies_flexLR     FLOAT,
-        energies_intra      FLOAT,
-        energies_torsional  FLOAT,
-        unbound_energy      FLOAT,
-        nr_interactions     INTEGER,
-        num_hb              INTEGER,
-        about_x             FLOAT,
-        about_y             FLOAT,
-        about_z             FLOAT,
-        trans_x             FLOAT,
-        trans_y             FLOAT,
-        trans_z             FLOAT,
-        axisangle_x         FLOAT,
-        axisangle_y         FLOAT,
-        axisangle_z         FLOAT,
-        axisangle_w         FLOAT,
-        dihedrals           VARCHAR,
-        ligand_coordinates         VARCHAR,
-        flexible_res_coordinates   VARCHAR
-
-        Raises:
-            DatabaseTableCreationError: Description
-        """
+        """Creates table for results."""
 
         sql_results_table = f"""
             CREATE SEQUENCE seq_poseid START 1;
@@ -229,7 +171,6 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         sql_insert = """INSERT INTO Results (
-                        pose_id,
                         ligand_id,
                         receptor,
                         pose_rank,
@@ -263,7 +204,7 @@ class StorageManagerDuckDB(StorageManager):
                         dihedrals,
                         ligand_coordinates,
                         flexible_res_coordinates
-                        ) VALUES (nextval('seq_poseid'),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"""
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"""
 
         try:
             Pose_IDs = []
@@ -323,8 +264,6 @@ class StorageManagerDuckDB(StorageManager):
         flexres_atomnames   VARCHAR,
         receptor_object     BLOB
 
-        Raises:
-            DatabaseTableCreationError: Description
         """
         receptors_table = """
             CREATE SEQUENCE seq_receptorid START 1;
@@ -2100,6 +2039,7 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             iter: if requesting return value(s)
         """
+        # TODO this is not working for duckdb
         if type(parameters) == tuple:
             parameters = [parameters]
         elif type(parameters) != list:
