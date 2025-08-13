@@ -1875,87 +1875,9 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             int: length of the table
         """
-        query = f"""SELECT COUNT(rowid) from {table_name}"""
+        query = f"""SELECT COUNT(*) from {table_name}"""
 
         return self.db_query(query).fetchone()[0]
-
-    def overwrite_storage(self):
-        """
-        Will drop all tables in the database.
-        """
-        if not self.db_empty():
-            self._drop_existing_tables()
-            logger.info("Tables in existing database were dropped.")
-
-    def get_previous_docking_mode(self) -> Union[None, str]:
-        """
-        Checks the docking_mode last used in a database write session
-
-        Returns:
-            Union[None, str]: docking_mode if any
-        """
-        if self.db_empty():
-            return None
-        docking_mode = self.conn.execute(
-            "SELECT docking_mode FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1"
-        ).fetchone()
-        return docking_mode[0].lower() if docking_mode else None
-
-    def check_storage_ready(
-        self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
-    ):
-        """Check that storage is ready
-
-        Raises:
-            OptionError: if database options are not compatible
-        """
-        if self.db_empty():
-            self._create_tables()
-
-        count = self.conn.execute("SELECT COUNT (*) FROM DB_properties").fetchone()[0]
-
-        compatible = True
-        if count < 1:
-            logger.info(
-                "Adding results to an existing database that is currently empty of docking results."
-            )
-        else:
-            compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
-            try:
-                cur = self.conn.execute(
-                    "SELECT * FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1"
-                )
-                (_, last_docking_mode, num_of_poses) = cur.fetchone()
-                if docking_mode != last_docking_mode:
-                    compatible = False
-                    compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
-                if num_of_poses == "all" != store_all_poses:
-                    compatible = False
-                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to 'store_all_poses'.\n"
-                elif int(num_of_poses) != max_poses:
-                    compatible = False
-                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to {num_of_poses}."
-            except Exception as e:
-                raise e
-            finally:
-                cur.close()
-
-        if not compatible:
-            if run_mode == "cmd":
-                raise OptionError(compatibility_string)
-            else:
-                logger.warning(compatibility_string)
-
-        # write current database properties to database
-        if store_all_poses:
-            number_of_poses = "all"
-        else:
-            number_of_poses = str(max_poses)
-        self._insert_db_properties(docking_mode, number_of_poses)
-        logger.debug("Storage compatibility has been checked and is ensured.")
-        # cannot use Signal/keyboard interrupt in the GUI bc it uses multiple threads
-        if run_mode != "gui":
-            self.keyboard_interrupt_allowed = True
 
     def clone(self, backup_name=None):
         """Creates a copy of the db
@@ -1963,6 +1885,7 @@ class StorageManagerDuckDB(StorageManager):
         Args:
             backup_name (str, optional): name of the cloned database
         """
+        # TODO
         if backup_name is None:
             backup_name = self.db_file + ".bk"
         bck = duckdb.connect(backup_name)
@@ -1972,6 +1895,7 @@ class StorageManagerDuckDB(StorageManager):
         logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
 
     def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
+        # TODO rejigger for duckdb, metadata table?
         """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
 
         Raises:
@@ -1993,6 +1917,7 @@ class StorageManagerDuckDB(StorageManager):
             )
 
     def check_ringtaildb_version(self) -> tuple[bool, str]:
+        # TODO rejigger for duckdb, metadata table?
         """
         Checks the database version and confirms whether the code base is compatible with it
 
@@ -2027,6 +1952,7 @@ class StorageManagerDuckDB(StorageManager):
         return is_compatible, db_schema_ver
 
     def _check_if_db_compatible_for_merge(self, merging_db_alias: str) -> bool:
+        # TODO rejigger for duckdb, metadata table?
         """
         Method that checks if the database merging into main is compatible with main,
         and checks if both databases are of appropriately high version where merge has
@@ -2054,359 +1980,6 @@ class StorageManagerDuckDB(StorageManager):
 
         return True
 
-    def update_database_version(self, new_version, consent=False):
-        """method that updates duckdb database schema 1.0.0 through 3.0.0.
-        The way it currently works, it has to upgrade via each major upgrade, e.g., it will not upgrade straight
-        from 1.0.0 to 3.0.0, but rather 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0
-
-        Args:
-            consent (bool, optional): variable to ensure consent to update database is explicit
-
-        Returns:
-            bool: final consent
-        """
-        self.conn = self._create_connection()
-        # get consent, same for both
-        if not consent:
-            logger.warning(
-                "WARNING: All existing filters and bookmarks in database will be dropped during database update!"
-            )
-            consent = input("Type 'yes' if you wish to continue: ") == "yes"
-        if not consent:
-            logger.critical("Consent not given for database update. Cancelling...")
-            sys.exit(1)
-
-        original_version = self.check_ringtaildb_version()[1]
-        print(
-            f"Upgrading {self.db_file} of version {original_version} to version {new_version}:"
-        )
-
-        # upgrade to 1.1.0
-        if original_version in ["1.0.0", "1.1.0"]:
-            logger.warning(
-                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
-            )
-            if original_version == "1.0.0":
-                self._update_db_100_to_110()
-                print("\n\nSuccessfully upgraded to 1.1.0!\n\n")
-
-            # upgrade to 2.0.0
-            if new_version in ["2.0.0", "3.0.0"]:
-                self._update_db_110_to_200()
-                print("\n\nSuccessfully upgraded to 2.0.0!\n\n")
-
-        # upgrade to 3.0.0
-        if new_version == "3.0.0" and original_version == "2.0.0":
-            self._update_db_200_to_300()
-            print("\n\nSuccessfully upgraded to 3.0.0!\n\n")
-
-        return consent
-
-    def _update_db_100_to_110(self):
-        """
-        Will update a database of version 1.0.0 to 1.1.0, which renames energies_binding to docking_score in Results, adds a column in Bookmarks to store filters dict,
-        and add indices to Results and Interaction_indices
-
-        Raises:
-            DatabaseConnectionError
-        """
-        self._drop_views()
-        # create cursor
-        cur = self.conn.cursor()
-        # reformat for v1.1.0
-        cur.execute(
-            "ALTER TABLE Results RENAME COLUMN energies_binding TO docking_score"
-        )
-        cur.execute("ALTER TABLE Bookmarks ADD COLUMN filters")
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS ak_results ON Results(ligand_id, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
-        )
-        try:
-            self.conn.commit()
-            cur.close()
-            self._set_ringtail_db_schema_version("1.1.0")
-        except duckdb.OperationalError as e:
-            raise DatabaseConnectionError(
-                f"Error while updating database from v1.0.0 to v1.1.0: {e}"
-            ) from e
-
-    def _update_db_110_to_200(self):
-        """
-        Method to update from database v 1.1.0 to 2.0.0,mainly removes the bitvetor table and creates Interactions table
-        where interaction just lists Pose_id and interaction_id in a long-skinny table
-
-        Raises:
-            DatabaseConnectionError
-            StorageError
-        """
-        self._drop_views()
-        # delete interaction table if necessary
-        self._delete_table("Interactions")
-        # create interaction table
-        self._create_interaction_table()
-
-        # get all interaction bitvector tuples
-        cur = self.conn.cursor()
-        cur.execute("SELECT * FROM Interaction_bitvectors")
-
-        pose_indices = []
-        # for each table entry
-        for entry in cur:
-            # pose id is firste element of tuple
-            pose_id = entry[0]
-            # enumerate the remaining (1:) tuple data which are all the bits
-            for index, bit in enumerate(entry[1:]):
-                # if column is "1" it means that (index+1) interaction was active
-                if bit == 1:
-                    # index will correspond to the Interaction_index table if +1
-                    pose_indices.append((pose_id, index + 1))
-
-        try:
-            # just populate the Interaction table straight
-            cur.executemany(
-                """INSERT INTO Interactions (Pose_id, Interaction_id) VALUES (?,?)""",
-                pose_indices,
-            )
-            # drop old bitvector table
-            cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
-            self.conn.commit()
-            # index certain tables
-            self._create_indices()
-            self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
-        except duckdb.OperationalError as e:
-            raise DatabaseConnectionError(
-                f"Error while creating new interaction tables: {e}"
-            ) from e
-        except StorageError as e:
-            raise StorageError(
-                f"Error while setting the database schema version: {e}"
-            ) from e
-
-    def _update_db_200_to_300(self):
-        """
-        Upgrades database from 2.0.0 to 3.0.0.
-        This includes
-        - converting the a chemicalite object in the Ligands table to a serialized blob (removing chemicalite dependency)
-        - giving ligands a ligand_id which is used in Results instead of LigName
-        - removes the use of views for storing filtered data, instead adds a Filtered_poses table to store all passing poses
-        - keeps bookmark table but gives each bookmark an id which is used in the Filtered_poses table
-        - removes some of the rarely used indices and adds a few others for minimizing db file size
-
-        Raises:
-            StorageError
-        """
-        # drop views first, because they depend on tables that will be altered
-        self._drop_views()
-        self._delete_table("Bookmarks")
-        # create Filter and filtered_poses tables
-        self._create_filtering_tables()
-        # drop indices
-        indices = self.db_query(
-            "SELECT name FROM duckdb_master WHERE type == 'index'"
-        ).fetchall()
-        for index in indices:
-            index_name = index[0]
-            try:
-                self.db_query(f"DROP INDEX {index_name}")
-            except:
-                pass
-        # create new, empty ligands table
-        self._create_ligands_table("Ligands_new")
-
-        # create a temp connection function
-        def _smile_to_rdbin(smile):
-            """
-            Temporary db connection method that will use rdkit to convert smiles to Mol
-            inline in the sql query
-
-            Args:
-                smile (str): smiles describing ligand
-
-            Returns:
-                blob: binary Chem.rdchem.Mol ready to insert in db
-            """
-            try:
-                mol = Chem.MolFromSmiles(smile)
-                if mol is None:
-                    return None
-                Chem.SanitizeMol(mol)
-                return mol.ToBinary()
-            except Exception:
-                return None
-
-        self.conn.create_function("smile_to_rdbin", 1, _smile_to_rdbin)
-
-        # populate with data from original ligands table, will autogenerate ligand_id PK
-        self.db_query(
-            """INSERT INTO Ligands_new (
-                LigName,
-                ligand_smile,
-                rdmol,
-                atom_index_map,
-                hydrogen_parents,
-                input_model) 
-            SELECT 
-                LigName,
-                ligand_smile,
-                smile_to_rdbin(ligand_smile),
-                atom_index_map,
-                hydrogen_parents,
-                input_model FROM Ligands;""",
-            commit=True,
-        )
-        # ensure row numbers are the same
-        original_length = self.table_length("Ligands")
-        new_length = self.table_length("Ligands_new")
-        if original_length != new_length:
-            raise StorageError(
-                "Problems while upgrading database, Ligands table did not copy properly."
-            )
-        # delete old table
-        self._delete_table("Ligands")
-        # rename new table
-        self.db_query("ALTER TABLE Ligands_new RENAME TO Ligands;", commit=True)
-
-        # update results table to use ligand_id from Ligands
-        self.db_query("ALTER TABLE Results ADD COLUMN ligand_id INTEGER;")
-        # populate ligand_id in Results
-        self.db_query(
-            """UPDATE Results
-                        SET ligand_id = (
-                            SELECT ligand_id FROM Ligands
-                            WHERE Ligands.LigName = Results.LigName);"""
-        )
-
-        # create new Results table without LigName column
-        self._create_results_table("Results_new")
-        # insert data from original to new Results
-        self.db_query(
-            """INSERT INTO Results_new (
-                        pose_id,
-                        ligand_id,
-                        receptor,
-                        pose_rank,
-                        run_number,
-                        cluster_rmsd,
-                        reference_rmsd,
-                        docking_score,
-                        leff,
-                        deltas,
-                        energies_inter,
-                        energies_vdw,
-                        energies_electro,
-                        energies_flexLig,
-                        energies_flexLR,
-                        energies_intra,
-                        energies_torsional,
-                        unbound_energy,
-                        nr_interactions,
-                        num_hb,
-                        cluster_size,
-                        about_x,
-                        about_y,
-                        about_z,
-                        trans_x,
-                        trans_y,
-                        trans_z,
-                        axisangle_x,
-                        axisangle_y,
-                        axisangle_z,
-                        axisangle_w,
-                        dihedrals,
-                        ligand_coordinates,
-                        flexible_res_coordinates)
-                    SELECT
-                        pose_id,
-                        ligand_id,
-                        receptor,
-                        pose_rank,
-                        run_number,
-                        cluster_rmsd,
-                        reference_rmsd,
-                        docking_score,
-                        leff,
-                        deltas,
-                        energies_inter,
-                        energies_vdw,
-                        energies_electro,
-                        energies_flexLig,
-                        energies_flexLR,
-                        energies_intra,
-                        energies_torsional,
-                        unbound_energy,
-                        nr_interactions,
-                        num_hb,
-                        cluster_size,
-                        about_x,
-                        about_y,
-                        about_z,
-                        trans_x,
-                        trans_y,
-                        trans_z,
-                        axisangle_x,
-                        axisangle_y,
-                        axisangle_z,
-                        axisangle_w,
-                        dihedrals,
-                        ligand_coordinates,
-                        flexible_res_coordinates
-                      FROM Results""",
-            commit=True,
-        )
-        # ensure row numbers are the same
-        original_length = self.table_length("Results")
-        new_length = self.table_length("Results_new")
-        if original_length != new_length:
-            raise StorageError(
-                "Problems while upgrading database, Results table did not copy properly."
-            )
-        # delete old table
-        self._delete_table("Results")
-        # rename new table
-        self.db_query("ALTER TABLE Results_new RENAME TO Results;", commit=True)
-
-        # build new indices if you got this far successfully
-        self._create_indices()
-        self.db_query("REINDEX", commit=True)
-        self._set_ringtail_db_schema_version("3.0.0")
-
-    def _delete_filter_data(self, db_alias: str = None):
-        """
-        Empties all data in the filter and filtered_poses tables
-
-        Args:
-            db_alias (str, optional): if needing to empty tables from a connected, aliased database. Defaults to None.
-        """
-        if db_alias:
-            alias_string = db_alias + "."
-        else:
-            alias_string = ""
-        self.db_query(f"DELETE FROM {alias_string}Filters")
-        # delete all rows in bookmarks table
-        self.db_query(f"DELETE FROM {alias_string}filtered_poses", commit=True)
-
-    def _drop_views(self, db_alias: str = None):
-        """
-        Will drop views and clear bookmark table
-
-        Args:
-            db_alias (str, optional): if needing to drop views from a connected, aliased database. Defaults to None.
-        """
-        if db_alias:
-            alias_string = db_alias + "."
-        else:
-            alias_string = ""
-        query = f"SELECT name FROM {alias_string}duckdb_master WHERE type = 'view'"
-        cur = self.conn.execute(query)
-        views = cur.fetchall()
-        for v in views:
-            cur.execute(f"DROP VIEW IF EXISTS {alias_string}{v[0]}")
-        # delete all rows in bookmarks table
-        cur.execute(f"DELETE FROM {alias_string}Bookmarks")
-
     def _create_connection(self) -> duckdb.DuckDBPyConnection:
         """Creates database connection to self.db_file
 
@@ -2433,6 +2006,7 @@ class StorageManagerDuckDB(StorageManager):
             attached_db (str, optional): alias of attached database. Defaults to None.
             vacuum (bool, optional): whether or not to vacuum file to save space. Defaults to None.
         """
+        # TODO maybe, check attached + vacuuming
         if attached_db or vacuum:
             self._cleanup_storage(attached_db, vacuum)
 
@@ -2468,6 +2042,7 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             bool: whether or not db is empty
         """
+        # TODO not clearcut
         cur = self.conn.execute(
             "SELECT COUNT(*) name FROM duckdb_master WHERE type='table' AND name <> 'duckdb_sequence';"
         )
@@ -2542,18 +2117,7 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             StorageError
         """
-        attach_str = f"ATTACH DATABASE '{new_db}' AS {new_db_alias}"
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute(attach_str)
-            self.conn.commit()
-            cur.close()
-        except duckdb.OperationalError as e:
-            raise StorageError(f"Error occurred while attaching {new_db}") from e
-        else:
-            logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
-            return new_db_alias
+        pass
 
     def _detach_db(self, new_db_alias):
         """Detaches new database file from current database
@@ -2564,16 +2128,7 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             StorageError
         """
-        detach_str = f"DETACH DATABASE {new_db_alias}"
-        try:
-            cur = self.conn.cursor()
-            cur.execute(detach_str)
-            self.conn.commit()
-            cur.close()
-        except duckdb.OperationalError as e:
-            raise StorageError(f"Error occurred while detaching {new_db_alias}") from e
-        else:
-            logger.info(f"Detached database aliased as {new_db_alias}.")
+        pass
 
     def _drop_existing_tables(self):
         """drop any existing tables.
@@ -2583,40 +2138,13 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         # fetch existing tables
-        cur = self.conn.cursor()
-        tables = self._fetch_existing_table_names()
+        tables = self.tables_in_db()
 
         # drop tables
         for table in tables:
-            # cannot drop this, so we catch it instead
-            if table[0] == "duckdb_sequence":
-                continue
-            try:
-                cur.execute("DROP TABLE {table_name}".format(table_name=table[0]))
-            except duckdb.OperationalError as e:
-                raise StorageError(
-                    "Error occurred while dropping table {0}".format(table[0])
-                ) from e
-        cur.close()
-
-    def _fetch_existing_table_names(self):
-        """Returns list of all tables in database
-
-        Returns:
-            list: list of table names
-
-        Raises:
-            DatabaseQueryError
-        """
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute("SELECT name FROM duckdb_schema WHERE type='table';")
-            return cur.fetchall()
-        except duckdb.OperationalError as e:
-            raise DatabaseQueryError(
-                "Error while getting names of existing database tables"
-            ) from e
+            query = self.QueryBuilder()
+            query.DROP_IF_EXISTS(table[0])
+            self.db_query(query.build()[0])
 
     def _delete_table(self, table_name: str, db_alias: str = None):
         """

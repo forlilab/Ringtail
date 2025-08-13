@@ -536,20 +536,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def check_storage_ready(
-        self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
-    ):
-        """
-        Check that storage is ready and compatible with options before proceeding, and creates new tables if needed
-
-        Args:
-            run_mode (str): if ringtail is ran using cmd line interface or api
-            docking_mode (str): what docking engine was used to produce results
-            store_all_poses (bool): overrwrites max poses
-            max_poses (int): max poses to save to db
-        """
-        raise_not_implemented()
-
     def check_ringtaildb_version(self):
         """
         Checks the database version and confirms whether the code base is compatible with it
@@ -557,12 +543,6 @@ class StorageManager:
         Returns:
             bool: whether or not db is compatible with the code base
             str: current database version
-        """
-        raise_not_implemented()
-
-    def overwrite_storage(self):
-        """
-        Will drop all tables in the database.
         """
         raise_not_implemented()
 
@@ -917,15 +897,6 @@ class StorageManager:
 
         Returns:
             list: list of table names
-        """
-        raise_not_implemented()
-
-    def get_previous_docking_mode(self) -> Union[None, str]:
-        """
-        Checks the docking_mode last used in a database write session
-
-        Returns:
-            Union[None, str]: docking_mode if any
         """
         raise_not_implemented()
 
@@ -2490,6 +2461,104 @@ class StorageManager:
             return pd.read_sql_query(query.build()[0], self.conn)
         else:
             return pd.read_sql_query(requested_data, self.conn)
+
+    def overwrite_storage(self):
+        """
+        Will drop all tables in the database.
+        """
+        if not self.db_empty():
+            self._drop_existing_tables()
+            logger.info("Tables in existing database were dropped.")
+
+    def get_previous_docking_mode(self) -> Union[None, str]:
+        """
+        Checks the docking_mode last used in a database write session
+
+        Returns:
+            Union[None, str]: docking_mode if any
+        """
+        if self.db_empty():
+            return None
+        query = self.QueryBuilder()
+        query.SELECT("docking_mode").FROM("DB_properties").ORDER_BY(
+            "DB_write_session"
+        ).DESC("DB_write_session").LIMIT(1)
+        docking_mode = self.db_query(query.build()[0]).fetchone()
+        return docking_mode[0].lower() if docking_mode else None
+
+    def check_storage_ready(
+        self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
+    ):
+        """Check that storage is ready
+
+        Raises:
+            OptionError: if database options are not compatible
+        """
+        if self.db_empty():
+            self._create_tables()
+        query = self.QueryBuilder()
+        query.SELECT("COUNT(*)").FROM("DB_properties")
+        count = self.db_query(query.build()[0]).fetchone()[0]
+
+        compatible = True
+        if count < 1:
+            logger.info(
+                "Adding results to an existing database that is currently empty of docking results."
+            )
+        else:
+            compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
+            try:
+                query = self.QueryBuilder()
+                query.SELECT("*").FROM("DB_properties").ORDER_BY(
+                    "DB_write_session"
+                ).DESC("DB_write_session").LIMIT(1)
+                cur = self.db_query(query.build()[0])
+
+                (_, last_docking_mode, num_of_poses) = cur.fetchone()
+                if docking_mode != last_docking_mode:
+                    compatible = False
+                    compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
+                if num_of_poses == "all" != store_all_poses:
+                    compatible = False
+                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to 'store_all_poses'.\n"
+                elif int(num_of_poses) != max_poses:
+                    compatible = False
+                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to {num_of_poses}."
+            except Exception as e:
+                raise e
+
+        if not compatible:
+            if run_mode == "cmd":
+                raise OptionError(compatibility_string)
+            else:
+                logger.warning(compatibility_string)
+
+        # write current database properties to database
+        if store_all_poses:
+            number_of_poses = "all"
+        else:
+            number_of_poses = str(max_poses)
+        self._insert_db_properties(docking_mode, number_of_poses)
+        logger.debug("Storage compatibility has been checked and is ensured.")
+        # cannot use Signal/keyboard interrupt in the GUI bc it uses multiple threads
+        if run_mode != "gui":
+            self.keyboard_interrupt_allowed = True
+
+    def _drop_existing_tables(self):
+        """drop any existing tables.
+
+        Raises:
+            StorageError
+        """
+
+        # fetch existing tables
+        tables = self.tables_in_db()
+
+        # drop tables
+        for table in tables:
+            query = self.QueryBuilder()
+            query.DROP_IF_EXISTS(table)
+            self.db_query(query.build()[0])
 
     # endregion
 
@@ -4462,84 +4531,6 @@ class StorageManagerSQLite(StorageManager):
 
         return self.db_query(query).fetchone()[0]
 
-    def overwrite_storage(self):
-        """
-        Will drop all tables in the database.
-        """
-        if not self.db_empty():
-            self._drop_existing_tables()
-            logger.info("Tables in existing database were dropped.")
-
-    def get_previous_docking_mode(self) -> Union[None, str]:
-        """
-        Checks the docking_mode last used in a database write session
-
-        Returns:
-            Union[None, str]: docking_mode if any
-        """
-        if self.db_empty():
-            return None
-        docking_mode = self.conn.execute(
-            "SELECT docking_mode FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1"
-        ).fetchone()
-        return docking_mode[0].lower() if docking_mode else None
-
-    def check_storage_ready(
-        self, run_mode: str, docking_mode: str, store_all_poses: bool, max_poses: int
-    ):
-        """Check that storage is ready
-
-        Raises:
-            OptionError: if database options are not compatible
-        """
-        if self.db_empty():
-            self._create_tables()
-
-        count = self.conn.execute("SELECT COUNT (*) FROM DB_properties").fetchone()[0]
-
-        compatible = True
-        if count < 1:
-            logger.info(
-                "Adding results to an existing database that is currently empty of docking results."
-            )
-        else:
-            compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
-            try:
-                cur = self.conn.execute(
-                    "SELECT * FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1"
-                )
-                (_, last_docking_mode, num_of_poses) = cur.fetchone()
-                if docking_mode != last_docking_mode:
-                    compatible = False
-                    compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
-                if num_of_poses == "all" != store_all_poses:
-                    compatible = False
-                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to 'store_all_poses'.\n"
-                elif int(num_of_poses) != max_poses:
-                    compatible = False
-                    compatibility_string += f"Current number of poses saved is {max_poses} but database was previously set to {num_of_poses}."
-            except Exception as e:
-                raise e
-            finally:
-                cur.close()
-
-        if not compatible:
-            if run_mode == "cmd":
-                raise OptionError(compatibility_string)
-            else:
-                logger.warning(compatibility_string)
-
-        # write current database properties to database
-        if store_all_poses:
-            number_of_poses = "all"
-        else:
-            number_of_poses = str(max_poses)
-        self._insert_db_properties(docking_mode, number_of_poses)
-        logger.debug("Storage compatibility has been checked and is ensured.")
-        # cannot use Signal/keyboard interrupt in the GUI bc it uses multiple threads
-        if run_mode != "gui":
-            self.keyboard_interrupt_allowed = True
-
     def clone(self, backup_name=None):
         """Creates a copy of the db
 
@@ -4644,12 +4635,15 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             list: list of table names
         """
-        return [
+        tables = [
             name[0].lower()
             for name in self.db_query(
                 "SELECT name FROM sqlite_master WHERE type='table';"
             ).fetchall()
         ]
+        if "sqlite_sequence" in tables:
+            tables.remove("sqlite_sequence")
+        return tables
 
     def update_database_version(self, new_version, consent=False):
         """method that updates sqlite database schema 1.0.0 through 3.0.0.
@@ -5185,49 +5179,6 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError(f"Error occurred while detaching {new_db_alias}") from e
         else:
             logger.info(f"Detached database aliased as {new_db_alias}.")
-
-    def _drop_existing_tables(self):
-        """drop any existing tables.
-
-        Raises:
-            StorageError
-        """
-
-        # fetch existing tables
-        cur = self.conn.cursor()
-        tables = self._fetch_existing_table_names()
-
-        # drop tables
-        for table in tables:
-            # cannot drop this, so we catch it instead
-            if table[0] == "sqlite_sequence":
-                continue
-            try:
-                cur.execute("DROP TABLE {table_name}".format(table_name=table[0]))
-            except sqlite3.OperationalError as e:
-                raise StorageError(
-                    "Error occurred while dropping table {0}".format(table[0])
-                ) from e
-        cur.close()
-
-    def _fetch_existing_table_names(self):
-        """Returns list of all tables in database
-
-        Returns:
-            list: list of table names
-
-        Raises:
-            DatabaseQueryError
-        """
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute("SELECT name FROM sqlite_schema WHERE type='table';")
-            return cur.fetchall()
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError(
-                "Error while getting names of existing database tables"
-            ) from e
 
     def _delete_table(self, table_name: str, db_alias: str = None):
         """
