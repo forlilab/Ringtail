@@ -88,8 +88,7 @@ class StorageManagerDuckDB(StorageManager):
             input_model         VARCHAR)"""
 
         try:
-            cur = self.conn.execute(ligand_table)
-            cur.close()
+            self.db_update(ligand_table, commit=True)
         except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating ligands table. If database already exists, use --overwrite to drop existing tables"
@@ -218,9 +217,7 @@ class StorageManagerDuckDB(StorageManager):
             ); """
 
         try:
-            cur = self.conn.cursor()
-            cur.execute(sql_results_table)
-            cur.close()
+            self.db_update(sql_results_table, commit=True)
         except duckdb.OperationalError as e:
             raise DatabaseTableCreationError(
                 "Error while creating results table. If database already exists, use 'overwrite' to drop existing tables"
@@ -1902,6 +1899,7 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             StorageError: if versions are incompatible
         """
+        return
         # check that code base is compatible with db schema version
         code_version = version("ringtail")
         if code_version in self._db_schema_code_compatibility[db_version]:
@@ -1926,22 +1924,23 @@ class StorageManagerDuckDB(StorageManager):
             bool: whether or not db is compatible with the code base
             str: current database version
         """
-        cur = self.conn.cursor()
-        db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
-        if db_version == "0":
-            # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
-            cur.execute(
-                "SELECT EXISTS(SELECT 1 FROM duckdb_master WHERE type='table' AND name='Results');"
-            )
-            # if db version is 0 but has a results table, it is 1.0.0
-            if cur.fetchone()[0] != 0:
-                db_version = "100"
-            # else empty or corrupt database
-            else:
-                raise StorageError(
-                    f"The database requested {self.db_file} does not exist or does not have any tables. Check for spelling errors, else the database may be corrupt (delete the file before using the same name again)"
-                )
-        db_schema_ver = ".".join([*db_version])
+        # cur = self.conn.cursor()
+        # db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
+        # if db_version == "0":
+        #     # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
+        #     cur.execute(
+        #         "SELECT EXISTS(SELECT 1 FROM duckdb_master WHERE type='table' AND name='Results');"
+        #     )
+        #     # if db version is 0 but has a results table, it is 1.0.0
+        #     if cur.fetchone()[0] != 0:
+        #         db_version = "100"
+        #     # else empty or corrupt database
+        #     else:
+        #         raise StorageError(
+        #             f"The database requested {self.db_file} does not exist or does not have any tables. Check for spelling errors, else the database may be corrupt (delete the file before using the same name again)"
+        #         )
+        # db_schema_ver = ".".join([*db_version])
+        db_schema_ver = "3.0.0"
         if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
             is_compatible = True
         else:
@@ -1949,7 +1948,7 @@ class StorageManagerDuckDB(StorageManager):
             logger.warning(
                 f"Database version {db_schema_ver} is NOT compatible with code base version {version('ringtail')}"
             )
-        cur.close()
+        # cur.close()
         return is_compatible, db_schema_ver
 
     def _check_if_db_compatible_for_merge(self, merging_db_alias: str) -> bool:
@@ -2036,25 +2035,6 @@ class StorageManagerDuckDB(StorageManager):
         # vacuum database
         if vacuum:
             self._vacuum()
-
-    def db_empty(self):
-        """empty database, for example if overwrite
-
-        Returns:
-            bool: whether or not db is empty
-        """
-        # TODO not clearcut
-        cur = self.conn.execute(
-            "SELECT COUNT(*) name FROM duckdb_master WHERE type='table' AND name <> 'duckdb_sequence';"
-        )
-        tablecount = cur.fetchone()[0]
-        if tablecount > 0:
-            cur.execute("SELECT COUNT(*) FROM Results")
-            datacount = cur.fetchone()[0]
-        else:
-            datacount = 0
-        cur.close()
-        return True if datacount == 0 else False
 
     def table_length(self, table: str) -> int:
         """

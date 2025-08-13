@@ -576,14 +576,6 @@ class StorageManager:
         """
         raise_not_implemented()
 
-    def db_empty(self):
-        """empty database, for example if overwrite
-
-        Returns:
-            bool: whether or not db is empty
-        """
-        raise_not_implemented()
-
     def db_query(self, query, params: iter) -> iter:
         """Executes provided sql query. Returns iter for results.
 
@@ -960,8 +952,8 @@ class StorageManager:
         """
         Creates all tables needed for a Ringtail database of a specific version
         """
-        self._create_results_table()
         self._create_ligands_table()
+        self._create_results_table()
         self._create_receptors_table()
         self._create_interaction_index_table()
         self._create_interaction_table()
@@ -2605,9 +2597,31 @@ class StorageManager:
         else:
             return False
 
+    def db_empty(self):
+        """empty database, for example if overwrite
+
+        Returns:
+            bool: whether or not db is empty
+        """
+        if self.tables_in_db():
+            datacount = self.table_length("Results")
+        else:
+            datacount = 0
+        return True if datacount == 0 else False
+
     # endregion
 
     # region private virtual methods
+    def _create_connection(self):
+        """Creates database connection to self.db_file
+
+        Returns:
+            <db type>conn: Connection object to self.db_file
+
+        Raises:
+            DatabaseConnectionError
+        """
+        pass
 
     def _create_results_table(self):
         pass
@@ -5102,24 +5116,6 @@ class StorageManagerSQLite(StorageManager):
         # vacuum database
         if vacuum:
             self._vacuum()
-
-    def db_empty(self):
-        """empty database, for example if overwrite
-
-        Returns:
-            bool: whether or not db is empty
-        """
-        cur = self.conn.execute(
-            "SELECT COUNT(*) name FROM sqlite_master WHERE type='table' AND name <> 'sqlite_sequence';"
-        )
-        tablecount = cur.fetchone()[0]
-        if tablecount > 0:
-            cur.execute("SELECT COUNT(*) FROM Results")
-            datacount = cur.fetchone()[0]
-        else:
-            datacount = 0
-        cur.close()
-        return True if datacount == 0 else False
 
     def table_length(self, table: str) -> int:
         """
