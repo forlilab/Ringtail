@@ -308,7 +308,7 @@ class StorageManager:
         try:
             query = self.QueryBuilder()
             query.SELECT("name").FROM("Filters")
-            cur = self.db_query(*query.build())
+            cur = self.db_query(query.build()[0])
             bookmark_names = [row["name"].lower() for row in cur.fetchall()]
 
         except Exception as e:
@@ -2410,7 +2410,6 @@ class StorageManager:
         Returns:
             bool: if table name is a bookmark
         """
-
         if table.lower() in self.tables_in_db():
             return True
         else:

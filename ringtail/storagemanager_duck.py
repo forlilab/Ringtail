@@ -87,12 +87,7 @@ class StorageManagerDuckDB(StorageManager):
             hydrogen_parents    VARCHAR,
             input_model         VARCHAR)"""
 
-        try:
-            self.db_update(ligand_table, commit=True)
-        except duckdb.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating ligands table. If database already exists, use --overwrite to drop existing tables"
-            ) from e
+        self.db_query(ligand_table, commit=True)
 
     def _insert_ligands(self, ligand_array: list) -> list:
         """Takes array of ligand rows, inserts into Ligands table.
@@ -216,12 +211,7 @@ class StorageManagerDuckDB(StorageManager):
             flexible_res_coordinates   VARCHAR,
             ); """
 
-        try:
-            self.db_update(sql_results_table, commit=True)
-        except duckdb.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating results table. If database already exists, use 'overwrite' to drop existing tables"
-            ) from e
+        self.db_query(sql_results_table, commit=True)
 
     def _insert_results(self, results_array, options: dict) -> tuple:
         """Takes list of database rows to insert, adds data to results table. Will handle duplicates if specified
@@ -239,6 +229,7 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         sql_insert = """INSERT INTO Results (
+                        pose_id,
                         ligand_id,
                         receptor,
                         pose_rank,
@@ -272,13 +263,14 @@ class StorageManagerDuckDB(StorageManager):
                         dihedrals,
                         ligand_coordinates,
                         flexible_res_coordinates
-                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"""
+                        ) VALUES (nextval('seq_poseid'),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"""
 
         try:
             Pose_IDs = []
             duplicates = []
             cur = self.conn.cursor()
             # for each pose/docking result
+            # TODO unsure if duplicate handling works
             for result in results_array:
                 Pose_ID = (
                     -1
@@ -308,7 +300,7 @@ class StorageManagerDuckDB(StorageManager):
                 else:  # row does not exist
                     duplicates.append(None)
                     cur.execute(sql_insert, result)
-                    Pose_ID = cur.lastrowid
+                    Pose_ID = cur.execute("SELECT currval('seq_poseid')").fetchone()[0]
                 # create list of pose ids just processed
                 Pose_IDs.append(Pose_ID)
 
@@ -346,15 +338,7 @@ class StorageManagerDuckDB(StorageManager):
             flexres_atomnames   VARCHAR,
             receptor_object     BLOB
         )"""
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute(receptors_table)
-            cur.close()
-        except duckdb.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating receptor table. If database already exists, use --overwrite to drop existing tables"
-            ) from e
+        self.db_query(receptors_table, commit=True)
 
     def _insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
@@ -430,14 +414,7 @@ class StorageManagerDuckDB(StorageManager):
         docking_mode        VARCHAR,
         number_of_poses     VARCHAR)"""
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(sql_str)
-            cur.close()
-        except duckdb.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating db properties table. If database already exists, use --overwrite to drop existing tables"
-            ) from e
+        self.db_query(sql_str, commit=True)
 
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
@@ -490,18 +467,11 @@ class StorageManagerDuckDB(StorageManager):
         rec_resid           VARCHAR,
         rec_atom            VARCHAR,
         rec_atomid          VARCHAR,
-        UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid) ON CONFLICT IGNORE );
+        UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid));
         """
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute("""DROP TABLE IF EXISTS Interaction_indices""")
-            cur.execute(interaction_index_table)
-            cur.close()
-        except duckdb.OperationalError as e:
-            raise DatabaseTableCreationError(
-                f"Error while creating interaction index table: {e}"
-            ) from e
+        self.db_query("""DROP TABLE IF EXISTS Interaction_indices""")
+        self.db_query(interaction_index_table, commit=True)
 
     def _create_interaction_table(self):
         """Create table a "tall-skinny" table of each pose-interaction.
@@ -522,14 +492,7 @@ class StorageManagerDuckDB(StorageManager):
         Pose_ID   INTEGER REFERENCES Results(pose_id),
         interaction_id INTEGER REFERENCES Interaction_indices(interaction_id))"""
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(interaction_table)
-            cur.close()
-        except duckdb.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
-            ) from e
+        self.db_query(interaction_table, commit=True)
 
     def _insert_interaction_rows(
         self, interaction_rows, duplicates, duplicate_handling
@@ -679,16 +642,8 @@ class StorageManagerDuckDB(StorageManager):
         filter_id           INTEGER REFERENCES Filters(filter_id),
         pose_id             INTEGER REFERENCES Results(pose_id));"""
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(filters_sql)
-            cur.execute(filter_pose_sql)
-            self.conn.commit()
-            cur.close()
-        except duckdb.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating bookmark table. If database already exists, use --overwrite to drop existing tables"
-            ) from e
+        self.db_query(filters_sql)
+        self.db_query(filter_pose_sql, commit=True)
 
     def _insert_cluster_data(
         self,
@@ -743,26 +698,22 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             StorageError
         """
-        try:
-            cur = self.conn.cursor()
-            logger.debug("Creating columns indices...")
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
-            )
-            cur.execute("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
-            self.conn.commit()
-            cur.close()
-            logger.info(
-                "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
-            )
-        except duckdb.OperationalError as e:
-            raise StorageError("Error occurred while indexing") from e
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
+        )
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
+        )
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
+        )
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)", commit=True
+        )
+
+        logger.info(
+            "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
+        )
 
     # endregion
 
@@ -1669,7 +1620,7 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             list: list of table names
         """
-        return [row[0] for row in self.db_query("SHOW ALL TABLES").fetchall()]
+        return [row[0].lower() for row in self.db_query("SHOW TABLES").fetchall()]
 
     def _fetch_ligand_cluster_columns(self) -> list:
         """fetching columns from Ligand_clusters table
