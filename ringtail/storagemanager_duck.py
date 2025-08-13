@@ -1896,6 +1896,7 @@ class StorageManagerDuckDB(StorageManager):
 
     def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
         # TODO rejigger for duckdb, metadata table?
+        # TODO this might be the only onw I need working for testing
         """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
 
         Raises:
@@ -2130,38 +2131,6 @@ class StorageManagerDuckDB(StorageManager):
         """
         pass
 
-    def _drop_existing_tables(self):
-        """drop any existing tables.
-
-        Raises:
-            StorageError
-        """
-
-        # fetch existing tables
-        tables = self.tables_in_db()
-
-        # drop tables
-        for table in tables:
-            query = self.QueryBuilder()
-            query.DROP_IF_EXISTS(table[0])
-            self.db_query(query.build()[0])
-
-    def _delete_table(self, table_name: str, db_alias: str = None):
-        """
-        Method to delete a table
-
-        Args:
-            table_name (str): table to be dropped
-
-        """
-
-        if db_alias:
-            name = db_alias + "." + table_name
-        else:
-            name = table_name
-        query = f"""DROP TABLE IF EXISTS {name};"""
-        return self.db_query(query, commit=True)
-
     def db_query(self, query, params: tuple = (), commit=False) -> iter:
         """Executes provided duckdb query. Returns cursor for results.
             Since cursor remains open, added to list of open cursors
@@ -2213,54 +2182,6 @@ class StorageManagerDuckDB(StorageManager):
                 self.conn.commit()
         except duckdb.OperationalError as e:
             raise DatabaseInsertionError(f"Error while committing insert query") from e
-
-    def _is_table(self, table: str) -> bool:
-        """
-        Returns True if table name is actually a bookmark
-
-        Args:
-            table (str): name of table or bookmark to check
-
-        Returns:
-            bool: if table name is a bookmark
-        """
-
-        if table.lower() in self.tables_in_db():
-            return True
-        else:
-            return False
-
-    def is_bookmark(self, table: str) -> bool:
-        """
-        Returns True if table name is actually a bookmark
-
-        Args:
-            table (str): name of table or bookmark to check
-
-        Returns:
-            bool: if table name is a bookmark
-        """
-
-        if table and table.lower() in self.get_all_bookmark_names():
-            return True
-        else:
-            return False
-
-    def _is_statustable(self, table: str) -> bool:
-        """
-        Returns True if table name is actually a status table (table with poses who have been assigned a status like accept, reject, maybe)
-
-        Args:
-            table (str): name of table or bookmark to check
-
-        Returns:
-            bool: if table name is a status table
-        """
-        # TODO hardcoded, need to find better way
-        if table.lower() in ["accepted", "maybe", "rejected"]:
-            return True
-        else:
-            return False
 
     # endregion
 
@@ -2352,34 +2273,6 @@ class StorageManagerDuckDB(StorageManager):
             return None
         return self.db_query(*query.build()).fetchone()[0]
 
-    def fetch_columns_from_table_as_dicts(
-        self, table: str, columns: list, length: int = 500, starting_rowid: int = 0
-    ) -> tuple[list[str], list[dict]]:
-        """
-        Will get requested table data for a table given one or more columns.
-        Data will be limited by a certain length, and can be retrieved from a desired
-        rowid.
-
-        Args:
-            table (str): name of table or bookmark
-            columns (list, optional): list of columns to retrieve. Defaults to ["*"].
-            length (int, optional): number of rows to collect. Defaults to 500.
-            starting_rowid (int, optional): rowid to start with. Defaults to 0.
-
-        Returns:
-            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
-                                            and column is the key, value is the row-col cell value
-        """
-        query = self.QueryBuilder()
-        query.SELECT(",".join(columns)).FROM(table)
-
-        if length:
-            query.LIMIT(length)
-        if starting_rowid:
-            query.WHERE(f"{table}.rowid = {starting_rowid}")
-
-        return self.get_query_data_as_dicts(query.build()[0])
-
     def fetch_lignames_and_poses_for_selection(
         self, selection: str
     ) -> dict[str, list[int]]:
@@ -2442,21 +2335,6 @@ class StorageManagerDuckDB(StorageManager):
             )
             return
         return [row[0] for row in self.db_query(*query.build()).fetchall()]
-
-    def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
-        """
-        Will return data requested in an duckdb formatted query
-
-        Args:
-            query (str): sql query formatted to duckdb database
-
-        Returns:
-            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
-                                            and column is the key, value is the row-col cell value
-        """
-        rows = self.db_query(query).fetchall()
-        column_names = rows[0].keys() if rows else []
-        return list(column_names), [dict(row) for row in rows]
 
     def create_status_tables(self) -> None:
         """
