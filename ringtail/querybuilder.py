@@ -207,3 +207,6 @@ class QueryBuilderSQLite(QueryBuilder):
 class QueryBuilderDuck(QueryBuilder):
 
     pass
+    # def build(self):
+    #     # need to if: group by, add ANY_VALUE else specified for each selected item
+    #     pass

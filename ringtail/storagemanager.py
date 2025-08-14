@@ -332,13 +332,10 @@ class StorageManager:
             int: number of poses (optionally grouped by ligand) in bookmark
         """
         query = self.QueryBuilder()
-        query.SELECT("ANY_VALUE(r.pose_id)").FROM("results", "r").IN_BOOKMARK(
-            bookmark_name
-        )
+        query.SELECT("r.pose_id").FROM("results", "r").IN_BOOKMARK(bookmark_name)
         if grouped_by_ligand:
             query.GROUP_BY("r.ligand_id")
         query_string = query.build(count=True)[0]
-        print("\n\n problematic query: ", query_string)
         if self.db_query(query_string).fetchone():
             return self.db_query(query_string).fetchone()[0]
         else:
@@ -888,7 +885,7 @@ class StorageManager:
             "Ligands", "L", "ligand_id"
         ).WHERE(f"R.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
         if group_by:
-            query.GROUP_BY("l.ligname")
+            query.GROUP_BY("l.ligand_id")
         if order_results:
             order_by = self._format_orderby(order_results)
             if order_by:

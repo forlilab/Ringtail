@@ -1418,6 +1418,32 @@ class StorageManagerDuckDB(StorageManager):
 
         return duck_formatted_outfields
 
+    def get_passing_poses_count(
+        self, bookmark_name: str, grouped_by_ligand: bool = False
+    ) -> int:
+        """
+        Count poses in bookmark
+
+        Args:
+            bookmark_name (str): bookmark name in which to count
+            grouped_by_ligand (bool, optional): if grouping by ligand, essentially returns passing ligands
+
+        Returns:
+            int: number of poses (optionally grouped by ligand) in bookmark
+        """
+        query = self.QueryBuilder()
+        query.SELECT("ANY_VALUE(r.pose_id)").FROM("results", "r").IN_BOOKMARK(
+            bookmark_name
+        )
+        if grouped_by_ligand:
+            query.GROUP_BY("r.ligand_id")
+        query_string = query.build(count=True)[0]
+        print("\n\n problematic query: ", query_string)
+        if self.db_query(query_string).fetchone():
+            return self.db_query(query_string).fetchone()[0]
+        else:
+            return 0
+
     # endregion
 
     # region crossreferencing filtered databases
