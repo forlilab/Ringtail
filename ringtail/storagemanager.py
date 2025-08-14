@@ -309,7 +309,7 @@ class StorageManager:
             query = self.QueryBuilder()
             query.SELECT("name").FROM("Filters")
             cur = self.db_query(query.build()[0])
-            bookmark_names = [row["name"].lower() for row in cur.fetchall()]
+            bookmark_names = [row[0].lower() for row in cur.fetchall()]
 
         except Exception as e:
             raise StorageError(
@@ -332,10 +332,13 @@ class StorageManager:
             int: number of poses (optionally grouped by ligand) in bookmark
         """
         query = self.QueryBuilder()
-        query.SELECT("r.pose_id").FROM("results", "r").IN_BOOKMARK(bookmark_name)
+        query.SELECT("ANY_VALUE(r.pose_id)").FROM("results", "r").IN_BOOKMARK(
+            bookmark_name
+        )
         if grouped_by_ligand:
             query.GROUP_BY("r.ligand_id")
         query_string = query.build(count=True)[0]
+        print("\n\n problematic query: ", query_string)
         if self.db_query(query_string).fetchone():
             return self.db_query(query_string).fetchone()[0]
         else:
@@ -652,30 +655,6 @@ class StorageManager:
         self._delete_from_interactions_not_in_view(bookmark_name)
         self._clear_bookmarks()
 
-    def get_bookmark_selection(
-        self,
-        bookmark_name: str,
-        selection: Union[list, str],
-        group_by: str = None,
-        order_results: str = None,
-    ) -> str:
-        """
-        Generates query to gather chosen columns based on passing poses in a bookmark
-
-        Args:
-            bookmark_name (str): bookmark name from which to get the passing poses
-            selection (Union[list, str]): what columns to have in the output query
-            group_by (str, optional): whether or not to group the output by a column
-            order_results (str, optional): Whether or not to order by a column
-
-        Raises:
-            OptionError: _description_
-
-        Returns:
-            str: sql string that describes selection of data from bookmark
-        """
-        raise_not_implemented()
-
     def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark
 
@@ -908,14 +887,12 @@ class StorageManager:
         query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
             "Ligands", "L", "ligand_id"
         ).WHERE(f"R.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
-
         if group_by:
-            query.GROUP_BY("r.ligand_id")
+            query.GROUP_BY("l.ligname")
         if order_results:
             order_by = self._format_orderby(order_results)
             if order_by:
                 query.ORDER_BY(order_by)
-
         return query.build()[0]
 
     # endregion

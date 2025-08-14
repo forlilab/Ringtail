@@ -1368,6 +1368,56 @@ class StorageManagerDuckDB(StorageManager):
 
         return query
 
+    def _format_output_fields(
+        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
+    ) -> str:
+        """Handles string or list input of column names to be outputted, will make sure LigName
+        is in the list, and make sure all options are valid
+
+        Returns:
+            list: column names for which the data is to be displayed that needs formatting with table alias
+                for which table they belong to
+
+        Raises:
+            OptionError
+        """
+        if type(outfields) == str:
+            outfields = outfields.replace(" ", "")
+            outfields_list = outfields.split(",")
+        elif type(outfields) == list:
+            outfields_list = outfields
+        else:
+            logger.warning(
+                "The provided outfields is not in a usable format (string or list). Will only use ligname"
+            )
+            outfields_list = []
+        table_formatted_outfields = []
+        if "ligname" not in [field.lower() for field in outfields_list]:
+            outfields_list.insert(0, "LigName")
+        possible_columns, table_formatted_columns = self._get_possible_output_columns()
+
+        for outfield in outfields_list:
+            if outfield.lower() in possible_columns:
+                table_formatted_outfields.append(
+                    table_formatted_columns[possible_columns.index(outfield.lower())]
+                )
+            else:
+                logger.warning(
+                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
+                )
+        formatted_outfields = [
+            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
+            for outfield in table_formatted_outfields
+        ]
+        # NOTE Inaccurate patch, need to specify how to aggregate if grouing the results
+        # this is added here assuming it will be grouped, and is for testing duckdb performance
+        # only. Will need to be made more rigorous if including duckdb in prod.
+        duck_formatted_outfields = [
+            f"ANY_VALUE({field})" for field in formatted_outfields
+        ]
+
+        return duck_formatted_outfields
+
     # endregion
 
     # region crossreferencing filtered databases
@@ -2023,13 +2073,13 @@ class StorageManagerDuckDB(StorageManager):
             ) from e
         return cur
 
-    def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
+    def db_update(self, query: str, parameters: list[list], commit=True) -> iter:
         """
         A db query that also commits if/when specified
 
         Args:
             query (str): duckdb formatted query string
-            parameters (list[tuple]): assumes appropriate place holders in query
+            parameters (list[list]): assumes appropriate place holders in query
             commit (bool, optional): whether to commit the transaction in open connection. Defaults to True.
 
         Raises:
@@ -2039,13 +2089,20 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             iter: if requesting return value(s)
         """
-        # TODO this is not working for duckdb
-        if type(parameters) == tuple:
-            parameters = [parameters]
-        elif type(parameters) != list:
+        if type(parameters) != list:
             raise OptionError(
-                "Cannot use a non-list or non-tuple as insert parameters, please format appropriately."
+                "Input for duckdb execute many needs to be list[list], wrong type used:",
+                parameters,
             )
+        if type(parameters[0]) != list:
+            if type(parameters[0]) == tuple:
+                # just convert tuple to list
+                parameters = [list(row) for row in parameters]
+            else:
+                raise OptionError(
+                    "Input for duckdb execute many needs to be list[list], wrong type used:",
+                    parameters,
+                )
         try:
             cur = self.conn.cursor()
             cur.executemany(query, parameters)
@@ -2211,33 +2268,31 @@ class StorageManagerDuckDB(StorageManager):
         """
         Creates pose status tables if needed
         """
-        self.db_update(
+        self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Accepted 
                 (Pose_ID INTEGER UNIQUE,
                 FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
-            (),
         )
 
         # create maybe table
-        self.db_update(
+        self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Maybe 
                 (Pose_ID INTEGER UNIQUE,
                 FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
-            (),
         )
 
         # create rejected table
-        self.db_update(
+        self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Rejected 
                 (Pose_ID INTEGER UNIQUE,
                 FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
-            (),
+            commit=True,
         )
 
         return None
