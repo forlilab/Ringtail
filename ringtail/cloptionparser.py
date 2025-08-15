@@ -242,6 +242,14 @@ def cmdline_parser(defaults: dict = {}):
         metavar="DATABASE",
     )
     read_parser.add_argument(
+        "-st",
+        "--storage_type",
+        help="specify a database file to perform actions with",
+        action="store",
+        type=str,
+        metavar="sqlite",
+    )
+    read_parser.add_argument(
         "-s",
         "--bookmark_name",
         help="Specify name for db view of passing results to create or export from",
@@ -724,11 +732,15 @@ class CLOptionParser:
             raise OptionError(
                 f"The chosen docking mode {parsed_opts.docking_mode} is not supported. Please choose either 'dlg' or 'vina'."
             )
-
+        if parsed_opts.storage_type:
+            storage_type = parsed_opts.storage_type.lower()
+        else:
+            storage_type = "sqlite"
         self.rtcore = RingtailCore(
             db_file=db_file,
             docking_mode=docking_alias_to_mode[parsed_opts.docking_mode.lower()],
             logging_level=log_level,
+            storage_type=storage_type,
         )
         # make sure we log the command line prompt
         self.rtcore.logger.info("Command line prompt: " + self.cmd_line_prompt)
