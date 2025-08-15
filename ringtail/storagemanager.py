@@ -58,7 +58,6 @@ class StorageManager:
     # region database access
     def __init__(self):
         self.keyboard_interrupt_allowed = False
-        self.active_connection = True
 
     def __enter__(self):
         """Used to access the database if using storage manager as a context manager
@@ -88,9 +87,8 @@ class StorageManager:
         Returns:
             instance: of class with closed database connection
         """
-        if self.active_connection:
-            self.close_storage()
-            self.active_connection = False
+
+        self.close_storage()
         if exc_type:
             logger.error(str(exc_value))
             raise exc_value from None
@@ -176,17 +174,23 @@ class StorageManager:
         ligands_array = [
             docked_ligand["ligand_row"] for docked_ligand in docking_data.values()
         ]
+        time0 = time.time()
         # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
-        ligand_ids = self._insert_ligands(ligands_array)
-
+        self._insert_ligands(ligands_array)
+        time1 = time.time()
+        print("time to insert ligands: ", time1 - time0)
         # add ligand ids to results array and make result array list of poses
-        results_array = []
-        for index, docked_ligand in enumerate(docking_data.values()):
-            for pose in docked_ligand["poses_results"]:
-                results_array.append([ligand_ids[index]] + pose)
+        results_array = [
+            docked_ligand["poses_results"] for docked_ligand in docking_data.values()
+        ]
+        time2 = time.time()
+        print("parse results rows: ", time2 - time1)
         # get unique pose ids and duplicate handling info
         Pose_IDs, duplicates = self._insert_results(results_array, write_options)
+        # I need to insert interactions and results at the same time
         # check if are interactions:
+        time3 = time.time()
+        print("time to insert results: ", time3 - time2)
         if any(
             docked_ligand.get("poses_interactions") not in (None, [])
             for docked_ligand in docking_data.values()
@@ -198,6 +202,8 @@ class StorageManager:
                 duplicates,
                 write_options.get("duplicate_handling"),
             )
+            time4 = time.time()
+            print("Time to insert interactions: ", time4 - time3)
 
     def insert_receptor(self, receptor_data: list):
         """
@@ -918,7 +924,9 @@ class StorageManager:
                 signal(
                     SIGINT, self._sigint_handler
                 )  # signal handler to catch keyboard interupts
-            logger.debug(f"Ringtail connected to database {self.db_file}.")
+            logger.debug(
+                f"Ringtail connected to database {self.db_file} with connection: {self.conn}"
+            )
         except Exception as e:
             raise StorageError(f"Error while creating or connecting to database: {e}.")
 
@@ -938,6 +946,7 @@ class StorageManager:
 
     @classmethod
     def _generate_results_row(cls, ligand_dict, pose_rank, run_number) -> list:
+        # TODO this might be better served handing back a dict so order does not need be assumed
         """generate list of lists of ligand values to be
             inserted into duckdb database for a given pose
 
@@ -983,6 +992,7 @@ class StorageManager:
             dihedrals, [31]
             ligand_coordinates, [32]
             flexible_res_coordinates [33]
+            ligname [business key]
         """
         ligand_data_keys = [
             "cluster_rmsds",
@@ -1076,6 +1086,8 @@ class StorageManager:
         ligand_data_list.append(
             json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank])
         )
+        # append ligand name as business key to Ligands table
+        ligand_data_list.append(ligand_dict["ligname"])
 
         return ligand_data_list
 

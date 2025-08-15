@@ -96,20 +96,9 @@ class StorageManagerDuckDB(StorageManager):
         input_model
         ) VALUES
         (?,?,?,?,?,?)
-        ON CONFLICT(LigName) DO NOTHING"""
-        ligand_ids = []
-        try:
-            for ligand in ligand_array:
-                self.db_query(sql_insert, params=ligand, commit=True)
-                ligand_id = self.db_query(
-                    """SELECT ligand_id FROM Ligands WHERE LigName = ?;""",
-                    params=[ligand[0]],
-                ).fetchone()[0]
-                ligand_ids.append(ligand_id)
-            return ligand_ids
+        ON CONFLICT DO NOTHING"""
 
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError("Error while inserting ligands.") from e
+        self.db_update(sql_insert, ligand_array, False)
 
     def _create_results_table(self, name="Results"):
         """Creates table for results."""
@@ -169,6 +158,49 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             DatabaseInsertionError
         """
+        # make temp table
+        create_temp_table = """CREATE TEMP TABLE 
+        Results_temp(
+            receptor            VARCHAR,
+            pose_rank           INTEGER,
+            run_number          INTEGER,
+            docking_score       FLOAT,
+            leff                FLOAT,
+            deltas              FLOAT,
+            cluster_rmsd        FLOAT,
+            cluster_size        INTEGER,
+            reference_rmsd      FLOAT,
+            energies_inter      FLOAT,
+            energies_vdw        FLOAT,
+            energies_electro    FLOAT,
+            energies_flexLig    FLOAT,
+            energies_flexLR     FLOAT,
+            energies_intra      FLOAT,
+            energies_torsional  FLOAT,
+            unbound_energy      FLOAT,
+            nr_interactions     INTEGER,
+            num_hb              INTEGER,
+            about_x             FLOAT,
+            about_y             FLOAT,
+            about_z             FLOAT,
+            trans_x             FLOAT,
+            trans_y             FLOAT,
+            trans_z             FLOAT,
+            axisangle_x         FLOAT,
+            axisangle_y         FLOAT,
+            axisangle_z         FLOAT,
+            axisangle_w         FLOAT,
+            dihedrals           VARCHAR,
+            ligand_coordinates         VARCHAR,
+            flexible_res_coordinates   VARCHAR,
+            ligname             VARCHAR);
+            """
+        self.conn.execute(create_temp_table)
+        temp_insert = f"""
+            INSERT INTO Results_temp VALUES 
+                ({",".join(["?"]*len(results_array[0][0]))}
+                );"""
+        self.conn.executemany(temp_insert, results_array[0])
 
         sql_insert = """INSERT INTO Results (
                         ligand_id,
@@ -204,54 +236,93 @@ class StorageManagerDuckDB(StorageManager):
                         dihedrals,
                         ligand_coordinates,
                         flexible_res_coordinates
-                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"""
+                        ) 
+                    SELECT 
+                        L.ligand_id, 
+                        T.receptor,
+                        T.pose_rank,
+                        T.run_number,
+                        T.cluster_rmsd,
+                        T.reference_rmsd,
+                        T.docking_score,
+                        T.leff,
+                        T.deltas,
+                        T.energies_inter,
+                        T.energies_vdw,
+                        T.energies_electro,
+                        T.energies_flexLig,
+                        T.energies_flexLR,
+                        T.energies_intra,
+                        T.energies_torsional,
+                        T.unbound_energy,
+                        T.nr_interactions,
+                        T.num_hb,
+                        T.cluster_size,
+                        T.about_x,
+                        T.about_y,
+                        T.about_z,
+                        T.trans_x,
+                        T.trans_y,
+                        T.trans_z,
+                        T.axisangle_x,
+                        T.axisangle_y,
+                        T.axisangle_z,
+                        T.axisangle_w,
+                        T.dihedrals,
+                        T.ligand_coordinates,
+                        T.flexible_res_coordinates
+                    FROM Results_temp AS T
+                    JOIN Ligands AS L ON L.LigName = T.LigName;"""
+        self.conn.execute(sql_insert)
+        self.conn.commit()
 
-        try:
-            Pose_IDs = []
-            duplicates = []
-            cur = self.conn.cursor()
-            # for each pose/docking result
-            # TODO unsure if duplicate handling works
-            for result in results_array:
-                Pose_ID = (
-                    -1
-                )  # nonsensical table index to initialize row index if checking for duplicates
-                if options.get("duplicate_handling"):
-                    Pose_ID = self._check_unique_results_row(result)
+        return None, None
+        # try:
+        #     Pose_IDs = []
+        #     duplicates = []
+        #     cur = self.conn.cursor()
+        #     # for each pose/docking result
+        #     # TODO unsure if duplicate handling works
+        #     for result in results_array:
+        #         Pose_ID = (
+        #             -1
+        #         )  # nonsensical table index to initialize row index if checking for duplicates
+        #         if options.get("duplicate_handling"):
+        #             Pose_ID = self._check_unique_results_row(result)
 
-                if Pose_ID != -1:  # row exists in table
-                    duplicates.append(Pose_ID)
-                    # row exist, evaluate if ignore or replace
-                    if options.get("duplicate_handling").upper() == "IGNORE":
-                        # do not add the new, duplicated row
-                        pass
-                    elif options.get("duplicate_handling").upper() == "REPLACE":
-                        # update the existing row with the new results
-                        # reformat duckdb query to update
-                        sql_replace = sql_insert.replace(
-                            "INSERT INTO Results", "UPDATE Results SET"
-                        )
-                        sql_replace = sql_replace.replace("VALUES", "=")
-                        sql_replace = sql_replace.replace(";", " WHERE Pose_ID = ?;")
-                        result.append(
-                            Pose_ID
-                        )  # add pose ID to the data being processed in duckdb statement
-                        cur.execute(sql_replace, result)
+        #         if Pose_ID != -1:  # row exists in table
+        #             duplicates.append(Pose_ID)
+        #             # row exist, evaluate if ignore or replace
+        #             if options.get("duplicate_handling").upper() == "IGNORE":
+        #                 # do not add the new, duplicated row
+        #                 pass
+        #             elif options.get("duplicate_handling").upper() == "REPLACE":
+        #                 # update the existing row with the new results
+        #                 # reformat duckdb query to update
+        #                 sql_replace = sql_insert.replace(
+        #                     "INSERT INTO Results", "UPDATE Results SET"
+        #                 )
+        #                 sql_replace = sql_replace.replace("VALUES", "=")
+        #                 sql_replace = sql_replace.replace(";", " WHERE Pose_ID = ?;")
+        #                 result.append(
+        #                     Pose_ID
+        #                 )  # add pose ID to the data being processed in duckdb statement
+        #                 cur.execute(sql_replace, result)
 
-                else:  # row does not exist
-                    duplicates.append(None)
-                    cur.execute(sql_insert, result)
-                    Pose_ID = cur.execute("SELECT currval('seq_poseid')").fetchone()[0]
-                # create list of pose ids just processed
-                Pose_IDs.append(Pose_ID)
+        #         else:  # row does not exist
+        #             duplicates.append(None)
+        #             cur.execute(sql_insert, result)
+        #             Pose_ID = cur.execute("SELECT currval('seq_poseid')").fetchone()[0]
+        #         # create list of pose ids just processed
+        #         Pose_IDs.append(Pose_ID)
 
-            self.conn.commit()
-            cur.close()
+        #     self.conn.commit()
+        #     cur.close()
 
-            return Pose_IDs, duplicates
+        #     return Pose_IDs, duplicates
 
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError("Error while inserting results.") from e
+        # except duckdb.OperationalError as e:
+        #     raise DatabaseInsertionError("Error while inserting results.") from e
 
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
@@ -1438,11 +1509,54 @@ class StorageManagerDuckDB(StorageManager):
         if grouped_by_ligand:
             query.GROUP_BY("r.ligand_id")
         query_string = query.build(count=True)[0]
-        print("\n\n problematic query: ", query_string)
+        # TODO problematic query: ", query_string
         if self.db_query(query_string).fetchone():
             return self.db_query(query_string).fetchone()[0]
         else:
             return 0
+
+    def get_bookmark_selection(
+        self,
+        bookmark_name: str,
+        selection: Union[list, str],
+        group_by: str = None,
+        order_results: str = None,
+    ) -> str:
+        """
+        Generates query to gather chosen columns based on passing poses in a bookmark
+
+        Args:
+            bookmark_name (str): bookmark name from which to get the passing poses
+            selection (Union[list, str]): what columns to have in the output query
+            group_by (str, optional): whether or not to group the output by a column
+            order_results (str, optional): Whether or not to order by a column
+
+        Raises:
+            OptionError: _description_
+
+        Returns:
+            str: sql string that describes selection of data from bookmark
+        """
+
+        if selection and selection != "*":
+            outfields_list = self._format_output_fields(selection, "R", "L")
+        elif selection == "*":
+            raise OptionError(
+                "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
+            )
+        # start formatting write query
+        query = self.QueryBuilder()
+        # select stuff from results where pose id in filter poses join ligands for extra fields
+        query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
+            "Ligands", "L", "ligand_id"
+        ).WHERE(f"R.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
+        if group_by:
+            query.GROUP_BY("l.ligname")
+        if order_results:
+            order_by = self._format_orderby(order_results)
+            if order_by:
+                query.ORDER_BY(order_by)
+        return query.build()[0]
 
     # endregion
 
@@ -1973,11 +2087,9 @@ class StorageManagerDuckDB(StorageManager):
             vacuum (bool, optional): whether or not to vacuum file to save space. Defaults to None.
         """
         # TODO maybe, check attached + vacuuming
-        if attached_db or vacuum:
-            self._cleanup_storage(attached_db, vacuum)
 
         # close db itself
-        logger.debug("Closing database")
+        logger.debug(f"Closing database connection {self.conn}")
         self.conn.close()
 
     def _cleanup_storage(
