@@ -87,18 +87,32 @@ class StorageManagerDuckDB(StorageManager):
         duck db implementation of parent method
 
         """
-        sql_insert = """INSERT INTO Ligands (
-        LigName,
-        ligand_smile,
-        rdmol,
-        atom_index_map,
-        hydrogen_parents,
-        input_model
-        ) VALUES
-        (?,?,?,?,?,?)
-        ON CONFLICT DO NOTHING"""
+        df = pd.DataFrame(
+            ligand_array,
+            columns=[
+                "LigName",
+                "ligand_smile",
+                "rdmol",
+                "atom_index_map",
+                "hydrogen_parents",
+                "input_model",
+            ],
+        )
+        self.conn.register("df_view", df)
+        # to insert interaction if unique
+        sql_insert = """
+        INSERT INTO Ligands (
+            LigName,
+            ligand_smile,
+            rdmol,
+            atom_index_map,
+            hydrogen_parents,
+            input_model
+            ) 
+        SELECT * FROM df_view
+        ON CONFLICT DO NOTHING;"""
 
-        self.db_update(sql_insert, ligand_array, False)
+        self.conn.execute(sql_insert)
 
     def _create_results_table(self, name="Results"):
         """Creates table for results."""
