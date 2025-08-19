@@ -82,7 +82,7 @@ class StorageManagerDuckDB(StorageManager):
 
         self.db_query(ligand_table, commit=True)
 
-    def _insert_ligands(self, ligand_array: list) -> list:
+    def _insert_ligands(self, ligand_array: list = []) -> list:
         """
         duck db implementation of parent method
 
@@ -144,7 +144,7 @@ class StorageManagerDuckDB(StorageManager):
 
         self.db_query(sql_results_table, commit=True)
 
-    def _insert_results(self, results_array, options: dict) -> tuple:
+    def _insert_results(self, results_array, interactions, options: dict) -> tuple:
         """Takes list of database rows to insert, adds data to results table. Will handle duplicates if specified
 
         Args:
@@ -158,126 +158,384 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             DatabaseInsertionError
         """
-        # make temp table
-        create_temp_table = """CREATE TEMP TABLE 
-        Results_temp(
-            receptor            VARCHAR,
-            pose_rank           INTEGER,
-            run_number          INTEGER,
-            docking_score       FLOAT,
-            leff                FLOAT,
-            deltas              FLOAT,
-            cluster_rmsd        FLOAT,
-            cluster_size        INTEGER,
-            reference_rmsd      FLOAT,
-            energies_inter      FLOAT,
-            energies_vdw        FLOAT,
-            energies_electro    FLOAT,
-            energies_flexLig    FLOAT,
-            energies_flexLR     FLOAT,
-            energies_intra      FLOAT,
-            energies_torsional  FLOAT,
-            unbound_energy      FLOAT,
-            nr_interactions     INTEGER,
-            num_hb              INTEGER,
-            about_x             FLOAT,
-            about_y             FLOAT,
-            about_z             FLOAT,
-            trans_x             FLOAT,
-            trans_y             FLOAT,
-            trans_z             FLOAT,
-            axisangle_x         FLOAT,
-            axisangle_y         FLOAT,
-            axisangle_z         FLOAT,
-            axisangle_w         FLOAT,
-            dihedrals           VARCHAR,
-            ligand_coordinates         VARCHAR,
-            flexible_res_coordinates   VARCHAR,
-            ligname             VARCHAR);
+        # dont worry about duplicates, just work on insert for now
+        # but use the temp tables
+        try:
+            # make temp table
+            create_temp_results = """
+            CREATE TEMP TABLE 
+            Results_temp(
+                receptor            VARCHAR,
+                pose_rank           INTEGER,
+                run_number          INTEGER,
+                docking_score       FLOAT,
+                leff                FLOAT,
+                deltas              FLOAT,
+                cluster_rmsd        FLOAT,
+                cluster_size        INTEGER,
+                reference_rmsd      FLOAT,
+                energies_inter      FLOAT,
+                energies_vdw        FLOAT,
+                energies_electro    FLOAT,
+                energies_flexLig    FLOAT,
+                energies_flexLR     FLOAT,
+                energies_intra      FLOAT,
+                energies_torsional  FLOAT,
+                unbound_energy      FLOAT,
+                nr_interactions     INTEGER,
+                num_hb              INTEGER,
+                about_x             FLOAT,
+                about_y             FLOAT,
+                about_z             FLOAT,
+                trans_x             FLOAT,
+                trans_y             FLOAT,
+                trans_z             FLOAT,
+                axisangle_x         FLOAT,
+                axisangle_y         FLOAT,
+                axisangle_z         FLOAT,
+                axisangle_w         FLOAT,
+                dihedrals           VARCHAR,
+                ligand_coordinates         VARCHAR,
+                flexible_res_coordinates   VARCHAR,
+                ligname             VARCHAR);
+                """
+            create_temp_interactions = """
+            CREATE TEMP TABLE Interactions_temp(
+                ligand_name         VARCHAR,
+                pose_rank           INTEGER,
+                run_number          INTEGER,
+                interaction_type    VARCHAR,
+                rec_chain           VARCHAR,
+                rec_resname         VARCHAR,
+                rec_resid           VARCHAR,
+                rec_atom            VARCHAR,
+                rec_atomid          VARCHAR);
             """
-        self.conn.execute(create_temp_table)
-        temp_insert = f"""
-            INSERT INTO Results_temp VALUES 
-                ({",".join(["?"]*len(results_array[0][0]))}
-                );"""
-        self.conn.executemany(temp_insert, results_array[0])
+            # create temporary tables
+            self.conn.execute(create_temp_results)
+            self.conn.execute(create_temp_interactions)
+            # insert results rows
+            temp_insert = f"""
+                INSERT INTO Results_temp VALUES 
+                    ({",".join(["?"]*len(results_array[0]))}
+                    );"""
 
-        sql_insert = """INSERT INTO Results (
-                        ligand_id,
-                        receptor,
-                        pose_rank,
-                        run_number,
-                        cluster_rmsd,
-                        reference_rmsd,
-                        docking_score,
-                        leff,
-                        deltas,
-                        energies_inter,
-                        energies_vdw,
-                        energies_electro,
-                        energies_flexLig,
-                        energies_flexLR,
-                        energies_intra,
-                        energies_torsional,
-                        unbound_energy,
-                        nr_interactions,
-                        num_hb,
-                        cluster_size,
-                        about_x,
-                        about_y,
-                        about_z,
-                        trans_x,
-                        trans_y,
-                        trans_z,
-                        axisangle_x,
-                        axisangle_y,
-                        axisangle_z,
-                        axisangle_w,
-                        dihedrals,
-                        ligand_coordinates,
-                        flexible_res_coordinates
-                        ) 
-                    SELECT 
-                        L.ligand_id, 
-                        T.receptor,
-                        T.pose_rank,
-                        T.run_number,
-                        T.cluster_rmsd,
-                        T.reference_rmsd,
-                        T.docking_score,
-                        T.leff,
-                        T.deltas,
-                        T.energies_inter,
-                        T.energies_vdw,
-                        T.energies_electro,
-                        T.energies_flexLig,
-                        T.energies_flexLR,
-                        T.energies_intra,
-                        T.energies_torsional,
-                        T.unbound_energy,
-                        T.nr_interactions,
-                        T.num_hb,
-                        T.cluster_size,
-                        T.about_x,
-                        T.about_y,
-                        T.about_z,
-                        T.trans_x,
-                        T.trans_y,
-                        T.trans_z,
-                        T.axisangle_x,
-                        T.axisangle_y,
-                        T.axisangle_z,
-                        T.axisangle_w,
-                        T.dihedrals,
-                        T.ligand_coordinates,
-                        T.flexible_res_coordinates
-                    FROM Results_temp AS T
-                    JOIN Ligands AS L ON L.LigName = T.LigName;"""
-        self.conn.execute(sql_insert)
-        self.conn.commit()
+            time0 = time.time()
+            self.conn.executemany(temp_insert, results_array)
+            time1 = time.time()
+            # if not options.get("duplicate_handling"):
+            sql_insert = """INSERT INTO Results (
+                            ligand_id,
+                            receptor,
+                            pose_rank,
+                            run_number,
+                            cluster_rmsd,
+                            reference_rmsd,
+                            docking_score,
+                            leff,
+                            deltas,
+                            energies_inter,
+                            energies_vdw,
+                            energies_electro,
+                            energies_flexLig,
+                            energies_flexLR,
+                            energies_intra,
+                            energies_torsional,
+                            unbound_energy,
+                            nr_interactions,
+                            num_hb,
+                            cluster_size,
+                            about_x,
+                            about_y,
+                            about_z,
+                            trans_x,
+                            trans_y,
+                            trans_z,
+                            axisangle_x,
+                            axisangle_y,
+                            axisangle_z,
+                            axisangle_w,
+                            dihedrals,
+                            ligand_coordinates,
+                            flexible_res_coordinates
+                            ) 
+                        SELECT 
+                            L.ligand_id, 
+                            T.receptor,
+                            T.pose_rank,
+                            T.run_number,
+                            T.cluster_rmsd,
+                            T.reference_rmsd,
+                            T.docking_score,
+                            T.leff,
+                            T.deltas,
+                            T.energies_inter,
+                            T.energies_vdw,
+                            T.energies_electro,
+                            T.energies_flexLig,
+                            T.energies_flexLR,
+                            T.energies_intra,
+                            T.energies_torsional,
+                            T.unbound_energy,
+                            T.nr_interactions,
+                            T.num_hb,
+                            T.cluster_size,
+                            T.about_x,
+                            T.about_y,
+                            T.about_z,
+                            T.trans_x,
+                            T.trans_y,
+                            T.trans_z,
+                            T.axisangle_x,
+                            T.axisangle_y,
+                            T.axisangle_z,
+                            T.axisangle_w,
+                            T.dihedrals,
+                            T.ligand_coordinates,
+                            T.flexible_res_coordinates
+                        FROM Results_temp AS T
+                        JOIN Ligands AS L ON L.LigName = T.LigName;"""
+            # move results to main results table with ligand id
+            self.conn.execute(sql_insert)
+            time2 = time.time()
+            print("Time to insert initial results: ", time1 - time0)
+            print("Time to move results to main table: ", time2 - time1)
 
-        return None, None
-        # try:
+            # now I have to do something with interactions
+            temp_interaction_insert = """
+            INSERT INTO Interactions_temp(
+                ligand_name,
+                pose_rank,
+                run_number,
+                interaction_type,
+                rec_chain,
+                rec_resname,
+                rec_resid,
+                rec_atom,
+                rec_atomid)
+            VALUES
+                (?,?,?,?,?,?,?,?,?)
+            """
+            self.conn.executemany(temp_interaction_insert, interactions)
+            time3 = time.time()
+            print("time tp insert interactions into temp", time3 - time2)
+            get_pose_id = """
+            INSERT INTO Interactions(pose_id, interaction_id)
+            SELECT R.pose_id, II.interaction_id
+            FROM Results AS R
+            JOIN Ligands AS L
+                ON R.ligand_id    = L.ligand_id
+            JOIN Interactions_temp AS IT
+                ON L.LigName      = IT.ligand_name
+                AND R.pose_rank    = IT.pose_rank
+                AND R.run_number   = IT.run_number
+            JOIN Interaction_indices AS II
+                ON II.interaction_type = IT.interaction_type
+                AND II.rec_chain        = IT.rec_chain
+                AND II.rec_resname      = IT.rec_resname
+                AND II.rec_resid        = IT.rec_resid
+                AND II.rec_atom         = IT.rec_atom
+                AND II.rec_atomid       = IT.rec_atomid;
+            """
+            self.conn.execute(get_pose_id)
+            time4 = time.time()
+            print("Time to move interactions into interactions: ", time4 - time3)
+
+            # insert into interactions
+            # elif options.get("duplicate_handling").lower() == "ignore":
+            #     # only insert into interactions the poses that don't already exist in results
+            #     # insert into interactions
+            #     sql_insert = """INSERT INTO Results (
+            #                     ligand_id,
+            #                     re rank,
+            #                     run_number,
+            #                     cluster_rmsd,
+            #                     reference_rmsd,
+            #                     docking_score,
+            #                     leff,
+            #                     deltas,
+            #                     energies_inter,
+            #                     energies_vdw,
+            #                     energies_electro,
+            #                     energies_flexLig,
+            #                     energies_flexLR,
+            #                     energies_intra,
+            #                     energies_torsional,
+            #                     unbound_energy,
+            #                     nr_interactions,
+            #                     num_hb,
+            #                     cluster_size,
+            #                     about_x,
+            #                     about_y,
+            #                     about_z,
+            #                     trans_x,
+            #                     trans_y,
+            #                     trans_z,
+            #                     axisangle_x,
+            #                     axisangle_y,
+            #                     axisangle_z,
+            #                     axisangle_w,
+            #                     dihedrals,
+            #                     ligand_coordinates,
+            #                     flexible_res_coordinates
+            #                     )
+            #                 SELECT
+            #                     L.ligand_id,
+            #                     T.receptor,
+            #                     T.pose_rank,
+            #                     T.run_number,
+            #                     T.cluster_rmsd,
+            #                     T.reference_rmsd,
+            #                     T.docking_score,
+            #                     T.leff,
+            #                     T.deltas,
+            #                     T.energies_inter,
+            #                     T.energies_vdw,
+            #                     T.energies_electro,
+            #                     T.energies_flexLig,
+            #                     T.energies_flexLR,
+            #                     T.energies_intra,
+            #                     T.energies_torsional,
+            #                     T.unbound_energy,
+            #                     T.nr_interactions,
+            #                     T.num_hb,
+            #                     T.cluster_size,
+            #                     T.about_x,
+            #                     T.about_y,
+            #                     T.about_z,
+            #                     T.trans_x,
+            #                     T.trans_y,
+            #                     T.trans_z,
+            #                     T.axisangle_x,
+            #                     T.axisangle_y,
+            #                     T.axisangle_z,
+            #                     T.axisangle_w,
+            #                     T.dihedrals,
+            #                     T.ligand_coordinates,
+            #                     T.flexible_res_coordinates
+            #                 FROM Results_temp AS T
+            #                 JOIN Ligands AS L ON L.LigName = T.LigName
+            #                 ON CONFLICT DO NOTHING;"""
+            # elif options.get("duplicate_handling").lower() == "replace":
+            #     # delete from interactions the pose_id whose special columns
+            #     # are replicates in the incoming datau
+            #     # delete results
+            #     interaction_delete = """
+            #     DELETE FROM Interaction_indices AS ii
+            #     USING Results_temp AS T
+            #     WHERE ii.pose_id  = (
+            #         SELECT pose_id FROM Results AS R
+            #         WHERE
+            #             R.ligand_id = (SELECT ligand_id FROM Ligands WHERE Ligands.LigName = T.LigName)
+            #             AND R.receptor = T.receptor
+            #             AND R.about_x = T.about_x
+            #             AND R.about_y = T.about_y
+            #             AND R.about_z = T.about_z
+            #             AND R.trans_x = T.trans_x
+            #             AND R.trans_y = T.trans_y
+            #             AND R.trans_z = T.trans_z
+            #             AND R.axisangle_x = T.axisangle_x
+            #             AND R.axisangle_y = T.axisangle_y
+            #             AND R.axisangle_z = T.axisangle_z
+            #             AND R.axisangle_w = T.axisangle_w
+            #             AND R.dihedrals = T.dihedrals) AS deleting_poseid
+            #     """
+            #     sql_delete = """
+            #         DELETE FROM Results AS R
+            #         USING Results_temp AS T
+            #         WHERE
+            #             R.ligand_id = (SELECT ligand_id FROM Ligands WHERE Ligands.LigName = T.LigName)
+            #             AND R.receptor = T.receptor
+            #             AND R.about_x = T.about_x
+            #             AND R.about_y = T.about_y
+            #             AND R.about_z = T.about_z
+            #             AND R.trans_x = T.trans_x
+            #             AND R.trans_y = T.trans_y
+            #             AND R.trans_z = T.trans_z
+            #             AND R.axisangle_x = T.axisangle_x
+            #             AND R.axisangle_y = T.axisangle_y
+            #             AND R.axisangle_z = T.axisangle_z
+            #             AND R.axisangle_w = T.axisangle_w
+            #             AND R.dihedrals = T.dihedrals;
+            #     """
+            #     self.conn.execute(sql_delete)
+
+            #     # TODO also have to delete interactions here
+            #     sql_insert = """INSERT INTO Results (
+            #                     ligand_id,
+            #                     receptor,
+            #                     pose_rank,
+            #                     run_number,
+            #                     cluster_rmsd,
+            #                     reference_rmsd,
+            #                     docking_score,
+            #                     leff,
+            #                     deltas,
+            #                     energies_inter,
+            #                     energies_vdw,
+            #                     energies_electro,
+            #                     energies_flexLig,
+            #                     energies_flexLR,
+            #                     energies_intra,
+            #                     energies_torsional,
+            #                     unbound_energy,
+            #                     nr_interactions,
+            #                     num_hb,
+            #                     cluster_size,
+            #                     about_x,
+            #                     about_y,
+            #                     about_z,
+            #                     trans_x,
+            #                     trans_y,
+            #                     trans_z,
+            #                     axisangle_x,
+            #                     axisangle_y,
+            #                     axisangle_z,
+            #                     axisangle_w,
+            #                     dihedrals,
+            #                     ligand_coordinates,
+            #                     flexible_res_coordinates
+            #                     )
+            #                 SELECT
+            #                     L.ligand_id,
+            #                     T.receptor,
+            #                     T.pose_rank,
+            #                     T.run_number,
+            #                     T.cluster_rmsd,
+            #                     T.reference_rmsd,
+            #                     T.docking_score,
+            #                     T.leff,
+            #                     T.deltas,
+            #                     T.energies_inter,
+            #                     T.energies_vdw,
+            #                     T.energies_electro,
+            #                     T.energies_flexLig,
+            #                     T.energies_flexLR,
+            #                     T.energies_intra,
+            #                     T.energies_torsional,
+            #                     T.unbound_energy,
+            #                     T.nr_interactions,
+            #                     T.num_hb,
+            #                     T.cluster_size,
+            #                     T.about_x,
+            #                     T.about_y,
+            #                     T.about_z,
+            #                     T.trans_x,
+            #                     T.trans_y,
+            #                     T.trans_z,
+            #                     T.axisangle_x,
+            #                     T.axisangle_y,
+            #                     T.axisangle_z,
+            #                     T.axisangle_w,
+            #                     T.dihedrals,
+            #                     T.ligand_coordinates,
+            #                     T.flexible_res_coordinates
+            #                 FROM Results_temp AS T
+            #                 JOIN Ligands AS L ON L.LigName = T.LigName;"""
+            #     self.conn.execute(sql_insert)
+
+        # before writing to results, check if there is requested duplicate handling
+
         #     Pose_IDs = []
         #     duplicates = []
         #     cur = self.conn.cursor()
@@ -321,8 +579,9 @@ class StorageManagerDuckDB(StorageManager):
 
         #     return Pose_IDs, duplicates
 
-        # except duckdb.OperationalError as e:
-        #     raise DatabaseInsertionError("Error while inserting results.") from e
+        except duckdb.OperationalError as e:
+            raise DatabaseInsertionError("Error while inserting results.") from e
+        self.conn.commit()
 
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
@@ -561,7 +820,7 @@ class StorageManagerDuckDB(StorageManager):
                 f"Error while inserting an interaction row: {e}"
             ) from e
 
-    def _insert_interaction_index_row(self, interaction_tuple) -> int:
+    def _insert_interaction_index_row(self, interactions: list[list[str]]) -> int:
         """
         Writes unique interactions and returns the interaction_id of the given interaction
 
@@ -574,37 +833,29 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             DatabaseInsertionError
         """
+        df = pd.DataFrame(
+            interactions,
+            columns=[
+                "interaction_type",
+                "rec_chain",
+                "rec_resname",
+                "rec_resid",
+                "rec_atom",
+                "rec_atomid",
+            ],
+        )
+        self.conn.register("df_view", df)
         # to insert interaction if unique
-        sql_insert = """INSERT INTO Interaction_indices (interaction_id, interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
-                        VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING;"""
-        # to get interaction_id from the given interaction
-        sql_query = f"""SELECT interaction_id FROM Interaction_indices 
-        WHERE interaction_type = ?
-        AND rec_chain = ?
-        AND rec_resname = ?
-        AND rec_resid = ?
-        AND rec_atom = ?
-        AND rec_atomid = ?"""
-
+        alt_sql_insert = """
+                    INSERT INTO Interaction_indices(interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
+                    SELECT * FROM df_view
+                    ON CONFLICT DO NOTHING;
+                    """
         try:
-            cur = self.conn.cursor()
-            cur.execute(sql_query, interaction_tuple)
-            self.conn.commit()
-            interaction_index = cur.fetchall()
-            if not interaction_index:
-                # get table length and use that as index
-                interaction_index = (self._get_length_of_table("Interaction_indices"),)
-                # create and insert new interaction id
-                input_tuple = interaction_index + interaction_tuple
-                cur.execute(sql_insert, input_tuple)
-                self.conn.commit()
-            else:
-                interaction_index = interaction_index[0]
-            cur.close()
-            return interaction_index
+            self.conn.execute(alt_sql_insert)
         except duckdb.OperationalError as e:
             raise DatabaseInsertionError(
-                f"Error inserting unique interaction tuples in index table: {e}"
+                f"Error inserting unique interactions in index table: {e}"
             ) from e
 
     def _delete_interactions(self, Pose_IDs):
@@ -2227,6 +2478,8 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             iter: if requesting return value(s)
         """
+        if not parameters:
+            return
         if type(parameters) != list:
             raise OptionError(
                 "Input for duckdb execute many needs to be list[list], wrong type used:",

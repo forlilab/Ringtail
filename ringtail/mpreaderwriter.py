@@ -326,11 +326,11 @@ class Writer(mp.Process):
                 sm.insert_receptor(self.receptor_row)
                 self.receptor_written_to_db = True
                 self.receptor_row = None
-
-            sm.insert_data(
-                self.data_chunks,
-                self.options,
-            )
+            if self.data_chunks:
+                sm.insert_data(
+                    self.data_chunks,
+                    self.options,
+                )
 
         # calulate time for processing/writing speed
         self.num_files_written += self.counter

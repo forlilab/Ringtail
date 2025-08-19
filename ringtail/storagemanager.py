@@ -174,23 +174,63 @@ class StorageManager:
         ligands_array = [
             docked_ligand["ligand_row"] for docked_ligand in docking_data.values()
         ]
-        time0 = time.time()
         # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
-        self._insert_ligands(ligands_array)
         time1 = time.time()
-        print("time to insert ligands: ", time1 - time0)
+        self._insert_ligands(ligands_array)
+        time2 = time.time()
+        print("Time to insert ligands: ", time2 - time1)
         # add ligand ids to results array and make result array list of poses
         results_array = [
-            docked_ligand["poses_results"] for docked_ligand in docking_data.values()
+            docked_ligand["poses_results"][0] for docked_ligand in docking_data.values()
         ]
-        time2 = time.time()
-        print("parse results rows: ", time2 - time1)
+
+        # new interaction data that includes ligname and pose rank
+        interaction_data = []
+        just_interactions = []
+
+        for ligname in docking_data.keys():
+            poses = docking_data[ligname]["poses_results"]
+            for index, pose in enumerate(poses):
+                pose_rank = pose[1]
+                run_number = pose[2]
+                interactions = docking_data[ligname]["poses_interactions"][index]
+                identfiers = [ligname, pose_rank, run_number]
+                for interaction in interactions:
+                    interaction = list(interaction)
+                    interaction_data.append(identfiers + interaction)
+                    just_interactions.append(interaction)
+        time3 = time.time()
+        print("Time to parse nested data: ", time3 - time2)
+        # so each poses_interactions object contains one list per pose, and that list has interaction tuples
+        # so I can e.g., make each a dict maybe of ligname, then ligname.<pose_description>: pose rank and ligname.<
+        # insert any new interactions first
+        # this should ensure there are representative interactions in there
+        self._insert_interaction_index_row(just_interactions)
+        time4 = time.time()
+        print("Time to insert interactions: ", time4 - time3)
         # get unique pose ids and duplicate handling info
-        Pose_IDs, duplicates = self._insert_results(results_array, write_options)
+        self._insert_results(results_array, interaction_data, write_options)
+        time5 = time.time()
+        print(
+            "Total time to insert results and corresponding interactions: ",
+            time5 - time4,
+        )
         # I need to insert interactions and results at the same time
         # check if are interactions:
-        time3 = time.time()
-        print("time to insert results: ", time3 - time2)
+        # What uniquely identifies an interaction with the original docking data:
+        # ligand name and pose_rank I think, and actually probably also all the unique
+        # data but I think that is redundant because i am just checking the data internally
+        # for the interactions
+        return
+
+        """
+        data_dict = {
+            "poses_results": result_rows,
+            "poses_interactions": interaction_tuples,
+            "ligand_row": cls._generate_ligand_row(ligand_dict),
+            "receptor_row": cls._generate_receptor_row(ligand_dict),
+        }
+        """
         if any(
             docked_ligand.get("poses_interactions") not in (None, [])
             for docked_ligand in docking_data.values()
