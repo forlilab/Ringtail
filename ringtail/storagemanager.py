@@ -175,10 +175,7 @@ class StorageManager:
             docked_ligand["ligand_row"] for docked_ligand in docking_data.values()
         ]
         # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
-        time1 = time.time()
         self._insert_ligands(ligands_array)
-        time2 = time.time()
-        print("Time to insert ligands: ", time2 - time1)
         # add ligand ids to results array and make result array list of poses
         results_array = [
             docked_ligand["poses_results"][0] for docked_ligand in docking_data.values()
@@ -200,7 +197,6 @@ class StorageManager:
                     interaction_data.append(identfiers + interaction)
                     just_interactions.append(interaction)
         time3 = time.time()
-        print("Time to parse nested data: ", time3 - time2)
         # so each poses_interactions object contains one list per pose, and that list has interaction tuples
         # so I can e.g., make each a dict maybe of ligname, then ligname.<pose_description>: pose rank and ligname.<
         # insert any new interactions first
@@ -209,7 +205,7 @@ class StorageManager:
         time4 = time.time()
         print("Time to insert interactions: ", time4 - time3)
         # get unique pose ids and duplicate handling info
-        self._insert_results(results_array, interaction_data, write_options)
+        self._insert_docking_data(results_array, interaction_data, write_options)
         time5 = time.time()
         print(
             "Total time to insert results and corresponding interactions: ",
@@ -221,29 +217,7 @@ class StorageManager:
         # ligand name and pose_rank I think, and actually probably also all the unique
         # data but I think that is redundant because i am just checking the data internally
         # for the interactions
-        return
-
-        """
-        data_dict = {
-            "poses_results": result_rows,
-            "poses_interactions": interaction_tuples,
-            "ligand_row": cls._generate_ligand_row(ligand_dict),
-            "receptor_row": cls._generate_receptor_row(ligand_dict),
-        }
-        """
-        if any(
-            docked_ligand.get("poses_interactions") not in (None, [])
-            for docked_ligand in docking_data.values()
-        ):
-
-            self.insert_interactions(
-                Pose_IDs,
-                docking_data,
-                duplicates,
-                write_options.get("duplicate_handling"),
-            )
-            time4 = time.time()
-            print("Time to insert interactions: ", time4 - time3)
+        return None
 
     def insert_receptor(self, receptor_data: list):
         """
@@ -2741,7 +2715,7 @@ class StorageManager:
     def _create_indices(self):
         raise_not_implemented()
 
-    def _insert_results(self, results_array, options):
+    def _insert_docking_data(self, results_array, interactions, options):
         raise_not_implemented()
 
     def _insert_receptors(self, receptor_array):
@@ -2968,7 +2942,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while looking for unique result row."
             ) from e
 
-    def _insert_results(self, results_array, options: dict) -> tuple:
+    def _insert_docking_data(self, results_array, interactions, options: dict) -> tuple:
         """Takes list of database rows to insert, adds data to results table. Will handle duplicates if specified
 
         Args:
