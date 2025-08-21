@@ -270,10 +270,10 @@ class StorageManagerDuckDB(StorageManager):
                     ({",".join(["?"]*len(results[0]))}
                     );"""
 
-            time0 = time.time()
+            # time0 = time.time()
             self.conn.executemany(temp_insert, results)
-            time1 = time.time()
-            print("Time to insert initial results: ", time1 - time0)
+            # time1 = time.time()
+            # print("Time to insert initial results: ", time1 - time0)
             df = pd.DataFrame(
                 interactions,
                 columns=[
@@ -329,8 +329,8 @@ class StorageManagerDuckDB(StorageManager):
             # output = self.conn.executemany(temp_interaction_insert, interactions)
             self.conn.execute(temp_interaction_insert)
             # print(output.fetchall())
-            time2 = time.time()
-            print("time tp insert interactions into temp", time2 - time1)
+            # time2 = time.time()
+            # print("time tp insert interactions into temp", time2 - time1)
             # queries
             temp_to_results = """
                 INSERT INTO Results (
@@ -440,14 +440,14 @@ class StorageManagerDuckDB(StorageManager):
             if not options.get("duplicate_handling"):
                 # move results to main results table with ligand id
                 self.conn.execute(temp_to_results)
-                time_insertall = time.time()
-                print("Time to move results to main table: ", time_insertall - time2)
+                # time_insertall = time.time()
+                # print("Time to move results to main table: ", time_insertall - time2)
                 self.conn.execute(temp_to_interaction)
-                time_insertallint = time.time()
-                print(
-                    "Time to move interactions into interactions: ",
-                    time_insertallint - time_insertall,
-                )
+                # time_insertallint = time.time()
+                # print(
+                #     "Time to move interactions into interactions: ",
+                #     time_insertallint - time_insertall,
+                # )
             elif options.get("duplicate_handling").lower() == "replace":
                 # first delete duplicate results and interactions
                 # then insert all the new ones indiscrimenately

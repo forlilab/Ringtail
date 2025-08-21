@@ -122,6 +122,71 @@ class StorageManager:
         """
         result_rows = []
         interaction_dictionaries = []
+        interactions = []
+        saved_pose_idx = 0  # save index of last saved pose
+        cluster_saved_pose_map = {}  # save mapping of cluster number to saved_pose_idx
+
+        ligand_row = cls._generate_ligand_row(ligand_dict)
+
+        # iterates and essentially creates pose rows
+        for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
+            cluster = ligand_dict["cluster_list"][idx]
+            # save everything if this is a cluster top pose
+            current_interactions = {
+                "ligand_name": ligand_row[0],
+                "run_number": run_number,
+                "pose_rank": idx,
+            }
+            if run_number in ligand_dict["poses_to_save"]:
+                # Check how things are parsed here, might not be most efficient
+                result_rows.append(
+                    cls._generate_results_row(ligand_dict, idx, run_number)
+                )
+                cluster_saved_pose_map[cluster] = saved_pose_idx
+                saved_pose_idx += 1
+                if ligand_dict["interactions"] != []:
+                    # here is where I have to add run number ligname and rank
+                    current_interactions.update(ligand_dict["interactions"][idx])
+                    interaction_dictionaries.append([current_interactions])
+            elif run_number in ligand_dict["tolerated_interaction_runs"]:
+                # adds to list started by best-scoring pose in cluster
+                if cluster not in cluster_saved_pose_map:
+                    continue
+                current_interactions.update(ligand_dict["interactions"][idx])
+                interaction_dictionaries[cluster_saved_pose_map[cluster]].append(
+                    current_interactions
+                )
+        for pose_interactions in interaction_dictionaries:
+            if not any(pose_interactions):  # skip any empty dictionaries
+                continue
+            interactions.extend(cls._generate_interaction_tuples(pose_interactions))
+
+        data_dict = {
+            "ligand": ligand_row,
+            "poses": result_rows,
+            "interactions": interactions,
+            "receptor_row": cls._generate_receptor_row(ligand_dict),
+        }
+        return data_dict
+
+    @classmethod
+    def old_format_for_storage(cls, ligand_dict: dict) -> dict:
+        # TODO the only sql specific about this method is the methods it uses
+        """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
+        For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
+        We also save a mapping of the its cluster number to the index in interaction_dictionaries
+        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
+        Finally, we calculate the interaction tuple lists for each pose
+
+        Args:
+            ligand_dict (dict): Dictionary containing data from the fileparser
+
+        Returns:
+            dict: with storage formatted rows, including: results rows per pose, interactions per pose, one ligand row, and one receptor row
+
+        """
+        result_rows = []
+        interaction_dictionaries = []
         interaction_tuples = []
         saved_pose_idx = 0  # save index of last saved pose
         cluster_saved_pose_map = {}  # save mapping of cluster number to saved_pose_idx
@@ -170,47 +235,30 @@ class StorageManager:
             docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
             write_options (dict): options for how to write the data, primarily how to treat duplicates
         """
-        # parse ligand info form dict into list of ligands
-        ligands_array = [
-            docked_ligand["ligand_row"] for docked_ligand in docking_data.values()
-        ]
         # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
-        self._insert_ligands(ligands_array)
+        self._insert_ligands(docking_data["ligands"])
         # add ligand ids to results array and make result array list of poses
-        results_array = [
-            docked_ligand["poses_results"][0] for docked_ligand in docking_data.values()
-        ]
-
         # new interaction data that includes ligname and pose rank
-        interaction_data = []
-        just_interactions = []
+        interaction_data = docking_data["interactions"]
+        just_interactions = [interaction[3:] for interaction in interaction_data]
 
-        for ligname in docking_data.keys():
-            poses = docking_data[ligname]["poses_results"]
-            for index, pose in enumerate(poses):
-                pose_rank = pose[1]
-                run_number = pose[2]
-                interactions = docking_data[ligname]["poses_interactions"][index]
-                identfiers = [ligname, pose_rank, run_number]
-                for interaction in interactions:
-                    interaction = list(interaction)
-                    interaction_data.append(identfiers + interaction)
-                    just_interactions.append(interaction)
-        time3 = time.time()
+        # time3 = time.time()
         # so each poses_interactions object contains one list per pose, and that list has interaction tuples
         # so I can e.g., make each a dict maybe of ligname, then ligname.<pose_description>: pose rank and ligname.<
         # insert any new interactions first
         # this should ensure there are representative interactions in there
         self._insert_interaction_index_row(just_interactions)
-        time4 = time.time()
-        print("Time to insert interactions: ", time4 - time3)
+        # time4 = time.time()
+        # print("Time to insert interactions: ", time4 - time3)
         # get unique pose ids and duplicate handling info
-        self._insert_docking_data(results_array, interaction_data, write_options)
-        time5 = time.time()
-        print(
-            "Total time to insert results and corresponding interactions: ",
-            time5 - time4,
+        self._insert_docking_data(
+            docking_data["poses"], interaction_data, write_options
         )
+        # time5 = time.time()
+        # print(
+        #     "Total time to insert results and corresponding interactions: ",
+        #     time5 - time4,
+        # )
         # I need to insert interactions and results at the same time
         # check if are interactions:
         # What uniquely identifies an interaction with the original docking data:
@@ -1188,8 +1236,14 @@ class StorageManager:
         for pose_interactions in interaction_dictionaries:
             count = pose_interactions["count"][0]
             for i in range(int(count)):
+                # include the three values that uniquely identify a pose within a docking run
                 interactions.add(
-                    tuple(pose_interactions[kw][i] for kw in interaction_keywords)
+                    (
+                        pose_interactions["ligand_name"],
+                        pose_interactions["run_number"],
+                        pose_interactions["pose_rank"],
+                    )
+                    + tuple(pose_interactions[kw][i] for kw in interaction_keywords)
                 )
 
         return list(interactions)

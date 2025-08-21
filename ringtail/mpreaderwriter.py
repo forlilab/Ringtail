@@ -172,11 +172,8 @@ class DockingFileReader(mp.Process):
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 # put the result in the out queue
                 # the result is a dict where the singular key is the ligand name
-                data_packet = {
-                    parsed_file_dict["ligname"]: self.shared.get("format_method")(
-                        parsed_file_dict
-                    )
-                }
+                # TODO this is not working right now, the data_packet should be expected format for writer
+                data_packet = self.shared.get("format_method")(parsed_file_dict)
                 self._add_to_queueout(data_packet)
             except Exception:
                 tb = traceback.format_exc()
@@ -271,6 +268,7 @@ class Writer(mp.Process):
         self.options = options
         # initialize data array (stack of dictionaries)
         self.data_chunks = {}
+        self.docked_ligands = {"ligands": [], "poses": [], "interactions": []}
         self.receptor_written_to_db = False
         self.receptor_row = None
         # progress tracking instance variables
@@ -299,9 +297,12 @@ class Writer(mp.Process):
                     continue
 
                 if self.receptor_row is None and not self.receptor_written_to_db:
-                    self.receptor_row = list(next_task.values())[0].get("receptor_row")
+                    self.receptor_row = list(next_task.get("receptor_row"))
 
                 self.data_chunks.update(next_task)
+                self.docked_ligands["ligands"].append(next_task["ligand"])
+                self.docked_ligands["poses"].extend(next_task["poses"])
+                self.docked_ligands["interactions"].extend(next_task["interactions"])
                 self.counter += 1
 
                 # After every n (chunk size) files, write to storage
@@ -328,7 +329,7 @@ class Writer(mp.Process):
                 self.receptor_row = None
             if self.data_chunks:
                 sm.insert_data(
-                    self.data_chunks,
+                    self.docked_ligands,
                     self.options,
                 )
 
@@ -338,6 +339,7 @@ class Writer(mp.Process):
 
         # reset data holder for next chunk
         self.data_chunks = {}
+        self.docked_ligands = {"ligands": [], "poses": [], "interactions": []}
         self.counter = 0
 
     def _log_progress(self):
