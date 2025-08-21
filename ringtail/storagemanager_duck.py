@@ -231,6 +231,45 @@ class StorageManagerDuckDB(StorageManager):
             self.conn.execute(create_temp_results)
             self.conn.execute(create_temp_interactions)
             # insert results rows
+            res_df = pd.DataFrame(
+                results,
+                columns=[
+                    "receptor",
+                    "pose_rank",
+                    "run_number",
+                    "cluster_rmsd",
+                    "reference_rmsd",
+                    "docking_score",
+                    "leff",
+                    "deltas",
+                    "energies_inter",
+                    "energies_vdw",
+                    "energies_electro",
+                    "energies_flexLig",
+                    "energies_flexLR",
+                    "energies_intra",
+                    "energies_torsional",
+                    "unbound_energy",
+                    "nr_interactions",
+                    "num_hb",
+                    "cluster_size",
+                    "about_x",
+                    "about_y",
+                    "about_z",
+                    "trans_x",
+                    "trans_y",
+                    "trans_z",
+                    "axisangle_x",
+                    "axisangle_y",
+                    "axisangle_z",
+                    "axisangle_w",
+                    "dihedrals",
+                    "ligand_coordinates",
+                    "flexible_res_coordinates",
+                    "ligname",
+                ],
+            )
+            self.conn.register("incoming_poses", res_df)
             temp_insert = f"""
                 INSERT INTO Results_temp(
                     receptor,
@@ -266,15 +305,13 @@ class StorageManagerDuckDB(StorageManager):
                     ligand_coordinates,
                     flexible_res_coordinates,
                     ligname) 
-                VALUES 
-                    ({",".join(["?"]*len(results[0]))}
-                    );"""
+                SELECT * FROM incoming_poses;"""
 
             # time0 = time.time()
-            self.conn.executemany(temp_insert, results)
+            self.conn.execute(temp_insert)
             # time1 = time.time()
             # print("Time to insert initial results: ", time1 - time0)
-            df = pd.DataFrame(
+            int_df = pd.DataFrame(
                 interactions,
                 columns=[
                     "ligand_name",
@@ -288,45 +325,15 @@ class StorageManagerDuckDB(StorageManager):
                     "rec_atomid",
                 ],
             )
-            temp_interaction_insert = """
-            EXPLAIN ANALYZE
-            WITH incoming_interaction(ligand_name, pose_rank, run_number,
-              interaction_type, rec_chain, rec_resname,
-              rec_resid, rec_atom, rec_atomid) AS (
-                VALUES (?,?,?,?,?,?,?,?,?)
-            )
-            INSERT INTO Interactions_temp (
-                temp_poseid,
-                interaction_type,
-                rec_chain,
-                rec_resname,
-                rec_resid,
-                rec_atom,
-                rec_atomid
-            )
-            SELECT
-                RT.temp_poseid,
-                ini.interaction_type,
-                ini.rec_chain,
-                ini.rec_resname,
-                ini.rec_resid,
-                ini.rec_atom,
-                ini.rec_atomid
-            FROM incoming_interaction AS ini
-            JOIN Results_temp AS RT
-                ON RT.ligname  = ini.ligand_name
-                AND RT.pose_rank   = ini.pose_rank
-                AND RT.run_number  = ini.run_number;
-            """
+            self.conn.register("incoming_interaction", int_df)
             temp_interaction_insert = """
             INSERT INTO Interactions_temp (temp_poseid, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
             SELECT RT.temp_poseid, df.interaction_type, df.rec_chain, df.rec_resname, df.rec_resid, df.rec_atom, df.rec_atomid
-            FROM df
+            FROM incoming_interaction AS df
             JOIN Results_temp RT
                 ON RT.ligname = df.ligand_name
                 AND RT.pose_rank = df.pose_rank
                 AND RT.run_number = df.run_number;"""
-            # output = self.conn.executemany(temp_interaction_insert, interactions)
             self.conn.execute(temp_interaction_insert)
             # print(output.fetchall())
             # time2 = time.time()
@@ -457,172 +464,8 @@ class StorageManagerDuckDB(StorageManager):
                 # then insert all new data indiscrimenately
                 pass
 
-            # elif options.get("duplicate_handling").lower() == "replace":
-            #     # delete from interactions the pose_id whose special columns
-            #     # are replicates in the incoming datau
-            #     # delete results
-            #     interaction_delete = """
-            #     DELETE FROM Interaction_indices AS ii
-            #     USING Results_temp AS T
-            #     WHERE ii.pose_id  = (
-            #         SELECT pose_id FROM Results AS R
-            #         WHERE
-            #             R.ligand_id = (SELECT ligand_id FROM Ligands WHERE Ligands.LigName = T.LigName)
-            #             AND R.receptor = T.receptor
-            #             AND R.about_x = T.about_x
-            #             AND R.about_y = T.about_y
-            #             AND R.about_z = T.about_z
-            #             AND R.trans_x = T.trans_x
-            #             AND R.trans_y = T.trans_y
-            #             AND R.trans_z = T.trans_z
-            #             AND R.axisangle_x = T.axisangle_x
-            #             AND R.axisangle_y = T.axisangle_y
-            #             AND R.axisangle_z = T.axisangle_z
-            #             AND R.axisangle_w = T.axisangle_w
-            #             AND R.dihedrals = T.dihedrals) AS deleting_poseid
-            #     """
-            #     sql_delete = """
-            #         DELETE FROM Results AS R
-            #         USING Results_temp AS T
-            #         WHERE
-            #             R.ligand_id = (SELECT ligand_id FROM Ligands WHERE Ligands.LigName = T.LigName)
-            #             AND R.receptor = T.receptor
-            #             AND R.about_x = T.about_x
-            #             AND R.about_y = T.about_y
-            #             AND R.about_z = T.about_z
-            #             AND R.trans_x = T.trans_x
-            #             AND R.trans_y = T.trans_y
-            #             AND R.trans_z = T.trans_z
-            #             AND R.axisangle_x = T.axisangle_x
-            #             AND R.axisangle_y = T.axisangle_y
-            #             AND R.axisangle_z = T.axisangle_z
-            #             AND R.axisangle_w = T.axisangle_w
-            #             AND R.dihedrals = T.dihedrals;
-            #     """
-            #     self.conn.execute(sql_delete)
-
-            #     # TODO also have to delete interactions here
-            #     sql_insert = """INSERT INTO Results (
-            #                     ligand_id,
-            #                     receptor,
-            #                     pose_rank,
-            #                     run_number,
-            #                     cluster_rmsd,
-            #                     reference_rmsd,
-            #                     docking_score,
-            #                     leff,
-            #                     deltas,
-            #                     energies_inter,
-            #                     energies_vdw,
-            #                     energies_electro,
-            #                     energies_flexLig,
-            #                     energies_flexLR,
-            #                     energies_intra,
-            #                     energies_torsional,
-            #                     unbound_energy,
-            #                     nr_interactions,
-            #                     num_hb,
-            #                     cluster_size,
-            #                     about_x,
-            #                     about_y,
-            #                     about_z,
-            #                     trans_x,
-            #                     trans_y,
-            #                     trans_z,
-            #                     axisangle_x,
-            #                     axisangle_y,
-            #                     axisangle_z,
-            #                     axisangle_w,
-            #                     dihedrals,
-            #                     ligand_coordinates,
-            #                     flexible_res_coordinates
-            #                     )
-            #                 SELECT
-            #                     L.ligand_id,
-            #                     T.receptor,
-            #                     T.pose_rank,
-            #                     T.run_number,
-            #                     T.cluster_rmsd,
-            #                     T.reference_rmsd,
-            #                     T.docking_score,
-            #                     T.leff,
-            #                     T.deltas,
-            #                     T.energies_inter,
-            #                     T.energies_vdw,
-            #                     T.energies_electro,
-            #                     T.energies_flexLig,
-            #                     T.energies_flexLR,
-            #                     T.energies_intra,
-            #                     T.energies_torsional,
-            #                     T.unbound_energy,
-            #                     T.nr_interactions,
-            #                     T.num_hb,
-            #                     T.cluster_size,
-            #                     T.about_x,
-            #                     T.about_y,
-            #                     T.about_z,
-            #                     T.trans_x,
-            #                     T.trans_y,
-            #                     T.trans_z,
-            #                     T.axisangle_x,
-            #                     T.axisangle_y,
-            #                     T.axisangle_z,
-            #                     T.axisangle_w,
-            #                     T.dihedrals,
-            #                     T.ligand_coordinates,
-            #                     T.flexible_res_coordinates
-            #                 FROM Results_temp AS T
-            #                 JOIN Ligands AS L ON L.LigName = T.LigName;"""
-            #     self.conn.execute(sql_insert)
-
-        # before writing to results, check if there is requested duplicate handling
-
-        #     Pose_IDs = []
-        #     duplicates = []
-        #     cur = self.conn.cursor()
-        #     # for each pose/docking result
-        #     # TODO unsure if duplicate handling works
-        #     for result in results:
-        #         Pose_ID = (
-        #             -1
-        #         )  # nonsensical table index to initialize row index if checking for duplicates
-        #         if options.get("duplicate_handling"):
-        #             Pose_ID = self._check_unique_results_row(result)
-
-        #         if Pose_ID != -1:  # row exists in table
-        #             duplicates.append(Pose_ID)
-        #             # row exist, evaluate if ignore or replace
-        #             if options.get("duplicate_handling").upper() == "IGNORE":
-        #                 # do not add the new, duplicated row
-        #                 pass
-        #             elif options.get("duplicate_handling").upper() == "REPLACE":
-        #                 # update the existing row with the new results
-        #                 # reformat duckdb query to update
-        #                 sql_replace = sql_insert.replace(
-        #                     "INSERT INTO Results", "UPDATE Results SET"
-        #                 )
-        #                 sql_replace = sql_replace.replace("VALUES", "=")
-        #                 sql_replace = sql_replace.replace(";", " WHERE Pose_ID = ?;")
-        #                 result.append(
-        #                     Pose_ID
-        #                 )  # add pose ID to the data being processed in duckdb statement
-        #                 cur.execute(sql_replace, result)
-
-        #         else:  # row does not exist
-        #             duplicates.append(None)
-        #             cur.execute(sql_insert, result)
-        #             Pose_ID = cur.execute("SELECT currval('seq_poseid')").fetchone()[0]
-        #         # create list of pose ids just processed
-        #         Pose_IDs.append(Pose_ID)
-
-        #     self.conn.commit()
-        #     cur.close()
-
-        #     return Pose_IDs, duplicates
-
         except duckdb.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting results.") from e
-        self.conn.commit()
 
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
@@ -861,7 +704,7 @@ class StorageManagerDuckDB(StorageManager):
                 f"Error while inserting an interaction row: {e}"
             ) from e
 
-    def s(self, interactions: list[list[str]]) -> int:
+    def _insert_interaction_index_rows(self, interactions: list[list[str]]) -> int:
         """
         Writes unique interactions and returns the interaction_id of the given interaction
 
