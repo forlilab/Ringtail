@@ -267,7 +267,6 @@ class Writer(mp.Process):
         self.chunk_size = options.pop("chunk_size")
         self.options = options
         # initialize data array (stack of dictionaries)
-        self.data_chunks = {}
         self.docked_ligands = {"ligands": [], "poses": [], "interactions": []}
         self.receptor_written_to_db = False
         self.receptor_row = None
@@ -299,7 +298,6 @@ class Writer(mp.Process):
                 if self.receptor_row is None and not self.receptor_written_to_db:
                     self.receptor_row = list(next_task.get("receptor_row"))
 
-                self.data_chunks.update(next_task)
                 self.docked_ligands["ligands"].append(next_task["ligand"])
                 self.docked_ligands["poses"].extend(next_task["poses"])
                 self.docked_ligands["interactions"].extend(next_task["interactions"])
@@ -327,7 +325,7 @@ class Writer(mp.Process):
                 sm.insert_receptor(self.receptor_row)
                 self.receptor_written_to_db = True
                 self.receptor_row = None
-            if self.data_chunks:
+            if self.docked_ligands["ligands"]:
                 sm.insert_data(
                     self.docked_ligands,
                     self.options,
@@ -338,7 +336,6 @@ class Writer(mp.Process):
         self.total_runtime = time.perf_counter() - self.time0
 
         # reset data holder for next chunk
-        self.data_chunks = {}
         self.docked_ligands = {"ligands": [], "poses": [], "interactions": []}
         self.counter = 0
 
