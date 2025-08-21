@@ -169,61 +169,6 @@ class StorageManager:
         }
         return data_dict
 
-    @classmethod
-    def old_format_for_storage(cls, ligand_dict: dict) -> dict:
-        # TODO the only sql specific about this method is the methods it uses
-        """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
-        For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
-        We also save a mapping of the its cluster number to the index in interaction_dictionaries
-        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
-        Finally, we calculate the interaction tuple lists for each pose
-
-        Args:
-            ligand_dict (dict): Dictionary containing data from the fileparser
-
-        Returns:
-            dict: with storage formatted rows, including: results rows per pose, interactions per pose, one ligand row, and one receptor row
-
-        """
-        result_rows = []
-        interaction_dictionaries = []
-        interaction_tuples = []
-        saved_pose_idx = 0  # save index of last saved pose
-        cluster_saved_pose_map = {}  # save mapping of cluster number to saved_pose_idx
-
-        for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
-            cluster = ligand_dict["cluster_list"][idx]
-            # save everything if this is a cluster top pose
-            if run_number in ligand_dict["poses_to_save"]:
-                # Check how things are parsed here, might not be most efficient
-                result_rows.append(
-                    cls._generate_results_row(ligand_dict, idx, run_number)
-                )
-                cluster_saved_pose_map[cluster] = saved_pose_idx
-                saved_pose_idx += 1
-                if ligand_dict["interactions"] != []:
-                    interaction_dictionaries.append([ligand_dict["interactions"][idx]])
-            elif run_number in ligand_dict["tolerated_interaction_runs"]:
-                # adds to list started by best-scoring pose in cluster
-                if cluster not in cluster_saved_pose_map:
-                    continue
-                interaction_dictionaries[cluster_saved_pose_map[cluster]].append(
-                    ligand_dict["interactions"][idx]
-                )
-        for idx, pose_interactions in enumerate(interaction_dictionaries):
-            if not any(pose_interactions):  # skip any empty dictionaries
-                continue
-            interaction_tuples.append(
-                cls._generate_interaction_tuples(pose_interactions)
-            )
-        data_dict = {
-            "poses_results": result_rows,
-            "poses_interactions": interaction_tuples,
-            "ligand_row": cls._generate_ligand_row(ligand_dict),
-            "receptor_row": cls._generate_receptor_row(ligand_dict),
-        }
-        return data_dict
-
     def insert_data(
         self,
         docking_data: dict,
@@ -240,14 +185,15 @@ class StorageManager:
         # add ligand ids to results array and make result array list of poses
         # new interaction data that includes ligname and pose rank
         interaction_data = docking_data["interactions"]
-        just_interactions = [interaction[3:] for interaction in interaction_data]
+        # deduplicate by using a set comprehension, then convert to list
+        just_interactions = list({interaction[3:] for interaction in interaction_data})
 
         # time3 = time.time()
         # so each poses_interactions object contains one list per pose, and that list has interaction tuples
         # so I can e.g., make each a dict maybe of ligname, then ligname.<pose_description>: pose rank and ligname.<
         # insert any new interactions first
         # this should ensure there are representative interactions in there
-        self._insert_interaction_index_row(just_interactions)
+        self._insert_interaction_index_rows(just_interactions)
         # time4 = time.time()
         # print("Time to insert interactions: ", time4 - time3)
         # get unique pose ids and duplicate handling info
@@ -279,33 +225,6 @@ class StorageManager:
         # insert receptor if database does not have already have a receptor entry
         if not receptors:
             self._insert_receptors(receptor_data)
-
-    def insert_interactions(
-        self,
-        pose_IDs: list,
-        docking_data: dict,
-        duplicates: list,
-        duplicate_handling: str = None,
-    ):
-        """Looks for interactions in the docking data, and inserts new interaction definitions
-        as well as interaction rows if there are any.
-
-        Args:
-            pose_IDs (list[int]): pose ids currently being processed
-            docking_data (dict): all parsed data from the docking fror those poses
-            duplicates (list(Pose_ID)): any duplicates identified in "insert_results", if duplicate handling has been specified
-            duplicate_handling (str): how to treat any duplicates
-
-        """
-        if duplicate_handling:
-            if duplicate_handling.lower() not in ["ignore", "replace"]:
-                logger.warning(
-                    f"duplicate_handling option {duplicate_handling} not allowed. Reverting to default behavior."
-                )
-                duplicate_handling = None
-        interaction_rows = self._insert_and_format_interactions(pose_IDs, docking_data)
-        # NOTE here as of dev meeting
-        self._insert_interaction_rows(interaction_rows, duplicates, duplicate_handling)
 
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
@@ -1247,43 +1166,6 @@ class StorageManager:
                 )
 
         return list(interactions)
-
-    def _insert_and_format_interactions(
-        self, pose_ids: list, docking_data: dict
-    ) -> list:
-        """
-        This method will evaluate the docking data, and determine whether or not there are
-        interactions to be processed and written.
-
-
-        Args:
-            pose_ids (list[int]): pose ids being processed
-            docking_data (dict): all docking data
-
-        Returns:
-            interactions_list (list): List of tuples for interactions in form
-                ("type", "chain", "residue", "resid", "recname", "recid")
-        """
-        # insert interactions if they are present
-        interaction_list = []
-        pose_counter = 0
-        for docked_ligand in docking_data.values():
-            # for each pose of that ligand
-            for pose_interactions in docked_ligand.get("poses_interactions"):
-                # for each interaction of that pose
-                Pose_ID = pose_ids[pose_counter]
-                pose_interactions_with_poseid = [
-                    (
-                        (Pose_ID,)
-                        + tuple(self._insert_interaction_index_row(interaction_tuple))
-                    )
-                    for interaction_tuple in pose_interactions
-                ]
-
-                interaction_list.extend(pose_interactions_with_poseid)
-                pose_counter += 1
-
-        return interaction_list
 
     def _check_unique_results_row(self, result_data: list) -> int:
         """Checks if a pose ID is uniquely represented in the result table, based on the following [index in result_data] columns:
@@ -2775,7 +2657,7 @@ class StorageManager:
     def _insert_receptors(self, receptor_array):
         raise_not_implemented()
 
-    def _insert_interaction_index_row(self, interaction_tuple) -> int:
+    def _insert_interaction_index_rows(self, interaction_tuple) -> int:
         """
         Writes unique interactions and returns the interaction_id of the given interaction
 
@@ -2788,11 +2670,6 @@ class StorageManager:
         Raises:
             DatabaseInsertionError
         """
-        raise_not_implemented()
-
-    def _insert_interaction_rows(
-        self, interaction_rows, duplicates, duplicate_handling
-    ):
         raise_not_implemented()
 
     def _generate_result_filtering_query(
@@ -2887,18 +2764,9 @@ class StorageManagerSQLite(StorageManager):
         input_model
         ) VALUES
         (?,?,?,?,?,?)
-        ON CONFLICT(LigName) DO 
-            UPDATE SET LigName=excluded.LigName
-        RETURNING ligand_id"""
-        ligand_ids = []
+        ON CONFLICT(LigName) DO NOTHING"""
         try:
-            cur = self.conn.cursor()
-            for ligand in ligand_array:
-                ligand_id = cur.execute(sql_insert, ligand).fetchone()[0]
-                ligand_ids.append(ligand_id)
-            self.conn.commit()
-            cur.close()
-            return ligand_ids
+            self.conn.executemany(sql_insert, ligand_array)
 
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting ligands.") from e
@@ -3250,7 +3118,7 @@ class StorageManagerSQLite(StorageManager):
 
         """
         interaction_index_table = """CREATE TABLE Interaction_indices (
-                                        interaction_id      INTEGER PRIMARY KEY,
+                                        interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
                                         interaction_type    VARCHAR[],
                                         rec_chain           VARCHAR[],
                                         rec_resname         VARCHAR[],
@@ -3298,64 +3166,7 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
 
-    def _insert_interaction_rows(
-        self, interaction_rows, duplicates, duplicate_handling
-    ):
-        """Inserts the interaction data into a "tall-and-skinny" table, with a primary autoincremented key and a Pose_ID that is 1-to-1 with Results table.
-        Table will contain as many rows with the same Pose_ID as that pose has interactions.
-
-        Args:
-            interaction_rows (list(tuple)): list of tuples containing the interaction data
-            duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones, will be treated according to duplicate_handling
-            duplicate_handling (str): how to handle duplicates
-
-        Raises:
-            DatabaseInsertionError
-        """
-        sql_insert = """INSERT INTO Interactions 
-                            (Pose_ID,
-                            interaction_id)
-                            VALUES (?,?);"""
-        try:
-            cur = self.conn.cursor()
-            if not duplicate_handling:  # add all results
-                cur.executemany(sql_insert, interaction_rows)
-            else:
-                # first, add any poses that are not duplicates
-                non_duplicates = [
-                    interaction_row
-                    for interaction_row in interaction_rows
-                    if interaction_row[0] not in duplicates
-                ]
-                # check if there are duplicates or if duplicates list contains only None
-                duplicates_exist = bool(duplicates.count(None) != len(duplicates))
-                cur.executemany(sql_insert, non_duplicates)
-
-                # only look for values to replace if there are duplicate pose ids
-                if duplicate_handling == "REPLACE" and duplicates_exist:
-                    # delete all rows pertaining to duplicated pose_ids
-                    duplicated_pose_ids = [id for id in duplicates if id is not None]
-                    self._delete_interactions(duplicated_pose_ids)
-                    # insert the interaction tuples for the new pose_ids
-                    duplicates_only = [
-                        interaction_row
-                        for interaction_row in interaction_rows
-                        if interaction_row[0] in duplicates
-                    ]
-                    cur.executemany(sql_insert, duplicates_only)
-
-                elif duplicate_handling == "IGNORE":
-                    # ignore and don't add any poses that are duplicates
-                    pass
-            self.conn.commit()
-            cur.close()
-
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                f"Error while inserting an interaction row: {e}"
-            ) from e
-
-    def _insert_interaction_index_row(self, interaction_tuple) -> int:
+    def _insert_interaction_index_rows(self, interactions) -> int:
         """
         Writes unique interactions and returns the interaction_id of the given interaction
 
@@ -3369,33 +3180,10 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
         # to insert interaction if unique
-        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_id, interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
-                        VALUES (?,?,?,?,?,?,?);"""
-        # to get interaction_id from the given interaction
-        sql_query = f"""SELECT interaction_id FROM Interaction_indices 
-        WHERE interaction_type = ?
-        AND rec_chain = ?
-        AND rec_resname = ?
-        AND rec_resid = ?
-        AND rec_atom = ?
-        AND rec_atomid = ?"""
-
+        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
+                        VALUES (?,?,?,?,?,?);"""
         try:
-            cur = self.conn.cursor()
-            cur.execute(sql_query, interaction_tuple)
-            self.conn.commit()
-            interaction_index = cur.fetchall()
-            if not interaction_index:
-                # get table length and use that as index
-                interaction_index = (self._get_length_of_table("Interaction_indices"),)
-                # create and insert new interaction id
-                input_tuple = interaction_index + interaction_tuple
-                cur.execute(sql_insert, input_tuple)
-                self.conn.commit()
-            else:
-                interaction_index = interaction_index[0]
-            cur.close()
-            return interaction_index
+            self.conn.executemany(sql_insert, interactions)
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 f"Error inserting unique interaction tuples in index table: {e}"

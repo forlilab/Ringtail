@@ -110,7 +110,7 @@ class StorageManagerDuckDB(StorageManager):
             input_model
             ) 
         SELECT * FROM df_view
-        ON CONFLICT DO NOTHING;"""
+        ON CONFLICT(LigName) DO NOTHING;"""
 
         self.conn.execute(sql_insert)
 
@@ -861,7 +861,7 @@ class StorageManagerDuckDB(StorageManager):
                 f"Error while inserting an interaction row: {e}"
             ) from e
 
-    def _insert_interaction_index_row(self, interactions: list[list[str]]) -> int:
+    def s(self, interactions: list[list[str]]) -> int:
         """
         Writes unique interactions and returns the interaction_id of the given interaction
 
