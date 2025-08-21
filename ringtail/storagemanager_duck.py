@@ -413,33 +413,33 @@ class StorageManagerDuckDB(StorageManager):
                 JOIN Ligands AS L ON L.LigName = T.LigName;"""
 
             temp_to_interaction = """
-            INSERT INTO Interactions(pose_id, interaction_id)
-            SELECT R.pose_id, II.interaction_id
-            FROM Results AS R
-            JOIN Ligands AS L
-                ON R.ligand_id    = L.ligand_id
-            JOIN Results_temp AS RT 
-                ON RT.receptor=R.receptor
-                AND RT.about_x=R.about_x
-                AND RT.about_y=R.about_y
-                AND RT.about_z=R.about_z
-                AND RT.trans_x=R.trans_x
-                AND RT.trans_y=R.trans_y
-                AND RT.trans_z=R.trans_z
-                AND RT.axisangle_x=R.axisangle_x
-                AND RT.axisangle_y=R.axisangle_y
-                AND RT.axisangle_z=R.axisangle_z
-                AND RT.axisangle_w=R.axisangle_w
-                AND RT.dihedrals=R.dihedrals
-            JOIN Interactions_temp AS IT
-                ON RT.temp_poseid      = IT.temp_poseid
-            JOIN Interaction_indices AS II
-                ON II.interaction_type = IT.interaction_type
-                AND II.rec_chain        = IT.rec_chain
-                AND II.rec_resname      = IT.rec_resname
-                AND II.rec_resid        = IT.rec_resid
-                AND II.rec_atom         = IT.rec_atom
-                AND II.rec_atomid       = IT.rec_atomid;
+                INSERT INTO Interactions(pose_id, interaction_id)
+                SELECT R.pose_id, II.interaction_id
+                FROM Results AS R
+                JOIN Ligands AS L
+                    ON R.ligand_id    = L.ligand_id
+                JOIN Results_temp AS RT 
+                    ON RT.receptor=R.receptor
+                    AND RT.about_x=R.about_x
+                    AND RT.about_y=R.about_y
+                    AND RT.about_z=R.about_z
+                    AND RT.trans_x=R.trans_x
+                    AND RT.trans_y=R.trans_y
+                    AND RT.trans_z=R.trans_z
+                    AND RT.axisangle_x=R.axisangle_x
+                    AND RT.axisangle_y=R.axisangle_y
+                    AND RT.axisangle_z=R.axisangle_z
+                    AND RT.axisangle_w=R.axisangle_w
+                    AND RT.dihedrals=R.dihedrals
+                JOIN Interactions_temp AS IT
+                    ON RT.temp_poseid      = IT.temp_poseid
+                JOIN Interaction_indices AS II
+                    ON II.interaction_type = IT.interaction_type
+                    AND II.rec_chain        = IT.rec_chain
+                    AND II.rec_resname      = IT.rec_resname
+                    AND II.rec_resid        = IT.rec_resid
+                    AND II.rec_atom         = IT.rec_atom
+                    AND II.rec_atomid       = IT.rec_atomid;
             """
             # NOTE I wonder if: I handle stuff in the temp tables (deleting from there or real table)
             # then at the end i always use the same temp_to_results and temp_to_interactions

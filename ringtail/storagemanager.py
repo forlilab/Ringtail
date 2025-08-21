@@ -135,7 +135,7 @@ class StorageManager:
             current_interactions = {
                 "ligand_name": ligand_row[0],
                 "run_number": run_number,
-                "pose_rank": idx,
+                "pose_rank": idx + 1,
             }
             if run_number in ligand_dict["poses_to_save"]:
                 # Check how things are parsed here, might not be most efficient
@@ -3011,6 +3011,131 @@ class StorageManagerSQLite(StorageManager):
             """
             self.conn.executemany(temp_int_insert, interactions)
 
+            temp_to_results = """
+                INSERT INTO Results (
+                    ligand_id,
+                    receptor,
+                    pose_rank,
+                    run_number,
+                    cluster_rmsd,
+                    reference_rmsd,
+                    docking_score,
+                    leff,
+                    deltas,
+                    energies_inter,
+                    energies_vdw,
+                    energies_electro,
+                    energies_flexLig,
+                    energies_flexLR,
+                    energies_intra,
+                    energies_torsional,
+                    unbound_energy,
+                    nr_interactions,
+                    num_hb,
+                    cluster_size,
+                    about_x,
+                    about_y,
+                    about_z,
+                    trans_x,
+                    trans_y,
+                    trans_z,
+                    axisangle_x,
+                    axisangle_y,
+                    axisangle_z,
+                    axisangle_w,
+                    dihedrals,
+                    ligand_coordinates,
+                    flexible_res_coordinates
+                    ) 
+                SELECT 
+                    L.ligand_id, 
+                    T.receptor,
+                    T.pose_rank,
+                    T.run_number,
+                    T.cluster_rmsd,
+                    T.reference_rmsd,
+                    T.docking_score,
+                    T.leff,
+                    T.deltas,
+                    T.energies_inter,
+                    T.energies_vdw,
+                    T.energies_electro,
+                    T.energies_flexLig,
+                    T.energies_flexLR,
+                    T.energies_intra,
+                    T.energies_torsional,
+                    T.unbound_energy,
+                    T.nr_interactions,
+                    T.num_hb,
+                    T.cluster_size,
+                    T.about_x,
+                    T.about_y,
+                    T.about_z,
+                    T.trans_x,
+                    T.trans_y,
+                    T.trans_z,
+                    T.axisangle_x,
+                    T.axisangle_y,
+                    T.axisangle_z,
+                    T.axisangle_w,
+                    T.dihedrals,
+                    T.ligand_coordinates,
+                    T.flexible_res_coordinates
+                FROM Results_temp AS T
+                JOIN Ligands AS L ON L.LigName = T.LigName;"""
+
+            temp_to_interaction = """
+                INSERT INTO Interactions(pose_id, interaction_id)
+                SELECT R.pose_id, II.interaction_id
+                FROM Results AS R
+                JOIN Ligands AS L
+                    ON R.ligand_id    = L.ligand_id
+                JOIN Results_temp AS RT 
+                    ON RT.receptor=R.receptor
+                    AND RT.about_x=R.about_x
+                    AND RT.about_y=R.about_y
+                    AND RT.about_z=R.about_z
+                    AND RT.trans_x=R.trans_x
+                    AND RT.trans_y=R.trans_y
+                    AND RT.trans_z=R.trans_z
+                    AND RT.axisangle_x=R.axisangle_x
+                    AND RT.axisangle_y=R.axisangle_y
+                    AND RT.axisangle_z=R.axisangle_z
+                    AND RT.axisangle_w=R.axisangle_w
+                    AND RT.dihedrals=R.dihedrals
+                JOIN Interactions_temp AS IT
+                    ON RT.temp_poseid      = IT.temp_poseid
+                JOIN Interaction_indices AS II
+                    ON II.interaction_type = IT.interaction_type
+                    AND II.rec_chain        = IT.rec_chain
+                    AND II.rec_resname      = IT.rec_resname
+                    AND II.rec_resid        = IT.rec_resid
+                    AND II.rec_atom         = IT.rec_atom
+                    AND II.rec_atomid       = IT.rec_atomid;
+                """
+            if not options.get("duplicate_handling"):
+                # move results to main results table with ligand id
+                self.conn.execute(temp_to_results)
+                # time_insertall = time.time()
+                # print("Time to move results to main table: ", time_insertall - time2)
+                try:
+                    self.conn.execute(temp_to_interaction)
+                    self.conn.commit()
+                except Exception as e:
+                    print("Exception! ", str(e))
+                # time_insertallint = time.time()
+                # print(
+                #     "Time to move interactions into interactions: ",
+                #     time_insertallint - time_insertall,
+                # )
+            elif options.get("duplicate_handling").lower() == "replace":
+                # first delete duplicate results and interactions
+                # then insert all the new ones indiscrimenately
+                pass
+            elif options.get("duplicate_handling").lower() == "ignore":
+                # delete from incoming data any duplicates
+                # then insert all new data indiscrimenately
+                pass
             print("\n\n\n\nshould get this far with sqlite\n\n\n\n")
 
             sql_insert = """
