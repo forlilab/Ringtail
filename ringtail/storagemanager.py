@@ -211,7 +211,7 @@ class StorageManager:
         # ligand name and pose_rank I think, and actually probably also all the unique
         # data but I think that is redundant because i am just checking the data internally
         # for the interactions
-        return None
+        self.conn.commit()
 
     def insert_receptor(self, receptor_data: list):
         """
@@ -2878,43 +2878,182 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             DatabaseInsertionError
         """
+        try:
+            # create temporary tables for insertion and subsequent duplication checks
+            create_temp_results = """
+            CREATE TEMP TABLE 
+            Results_temp(
+                temp_poseid         INTEGER PRIMARY KEY AUTOINCREMENT,
+                receptor            VARCHAR,
+                pose_rank           INTEGER,
+                run_number          INTEGER,
+                docking_score       FLOAT,
+                leff                FLOAT,
+                deltas              FLOAT,
+                cluster_rmsd        FLOAT,
+                cluster_size        INTEGER,
+                reference_rmsd      FLOAT,
+                energies_inter      FLOAT,
+                energies_vdw        FLOAT,
+                energies_electro    FLOAT,
+                energies_flexLig    FLOAT,
+                energies_flexLR     FLOAT,
+                energies_intra      FLOAT,
+                energies_torsional  FLOAT,
+                unbound_energy      FLOAT,
+                nr_interactions     INTEGER,
+                num_hb              INTEGER,
+                about_x             FLOAT,
+                about_y             FLOAT,
+                about_z             FLOAT,
+                trans_x             FLOAT,
+                trans_y             FLOAT,
+                trans_z             FLOAT,
+                axisangle_x         FLOAT,
+                axisangle_y         FLOAT,
+                axisangle_z         FLOAT,
+                axisangle_w         FLOAT,
+                dihedrals           VARCHAR,
+                ligand_coordinates         VARCHAR,
+                flexible_res_coordinates   VARCHAR,
+                ligname             VARCHAR);
+                """
+            create_temp_interactions = """
+            CREATE TEMP TABLE Interactions_temp(
+                temp_poseid         INTEGER References Results_temp(temp_poseid),
+                interaction_type    VARCHAR,
+                rec_chain           VARCHAR,
+                rec_resname         VARCHAR,
+                rec_resid           VARCHAR,
+                rec_atom            VARCHAR,
+                rec_atomid          VARCHAR);
+            """
+            # create temporary tables
+            self.conn.execute(create_temp_results)
+            self.conn.execute(create_temp_interactions)
 
-        sql_insert = """INSERT INTO Results (
-                        ligand_id,
-                        receptor,
-                        pose_rank,
-                        run_number,
-                        cluster_rmsd,
-                        reference_rmsd,
-                        docking_score,
-                        leff,
-                        deltas,
-                        energies_inter,
-                        energies_vdw,
-                        energies_electro,
-                        energies_flexLig,
-                        energies_flexLR,
-                        energies_intra,
-                        energies_torsional,
-                        unbound_energy,
-                        nr_interactions,
-                        num_hb,
-                        cluster_size,
-                        about_x,
-                        about_y,
-                        about_z,
-                        trans_x,
-                        trans_y,
-                        trans_z,
-                        axisangle_x,
-                        axisangle_y,
-                        axisangle_z,
-                        axisangle_w,
-                        dihedrals,
-                        ligand_coordinates,
-                        flexible_res_coordinates
-                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"""
+            # insert temp results
+            temp_results_insert = f"""
+            INSERT INTO Results_temp(
+            receptor,
+                    pose_rank,
+                    run_number,
+                    cluster_rmsd,
+                    reference_rmsd,
+                    docking_score,
+                    leff,
+                    deltas,
+                    energies_inter,
+                    energies_vdw,
+                    energies_electro,
+                    energies_flexLig,
+                    energies_flexLR,
+                    energies_intra,
+                    energies_torsional,
+                    unbound_energy,
+                    nr_interactions,
+                    num_hb,
+                    cluster_size,
+                    about_x,
+                    about_y,
+                    about_z,
+                    trans_x,
+                    trans_y,
+                    trans_z,
+                    axisangle_x,
+                    axisangle_y,
+                    axisangle_z,
+                    axisangle_w,
+                    dihedrals,
+                    ligand_coordinates,
+                    flexible_res_coordinates,
+                    ligname)
+            VALUES (
+                {",".join(["?"]*len(results_array[0]))}
+            )
+            """
+            self.conn.executemany(temp_results_insert, results_array)
 
+            temp_int_insert = f"""
+            WITH incoming(
+                ligand_name, 
+                pose_rank,
+                run_number,
+                interaction_type, 
+                rec_chain, 
+                rec_resname, 
+                rec_resid, 
+                rec_atom, 
+                rec_atomid) AS (
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                )
+            INSERT INTO Interactions_temp (
+                temp_poseid, 
+                interaction_type, 
+                rec_chain, 
+                rec_resname, 
+                rec_resid, 
+                rec_atom, 
+                rec_atomid)
+            SELECT 
+                RT.temp_poseid,
+                i.interaction_type, 
+                i.rec_chain, 
+                i.rec_resname, 
+                i.rec_resid, 
+                i.rec_atom, 
+                i.rec_atomid
+            FROM incoming AS i
+            JOIN Results_temp AS RT 
+                ON i.ligand_name = RT.ligname
+                AND i.pose_rank = RT.pose_rank
+                AND i.run_number = RT.run_number;
+            """
+            self.conn.executemany(temp_int_insert, interactions)
+
+            print("\n\n\n\nshould get this far with sqlite\n\n\n\n")
+
+            sql_insert = """
+                INSERT INTO Results (
+                ligand_id,
+                receptor,
+                pose_rank,
+                run_number,
+                cluster_rmsd,
+                reference_rmsd,
+                docking_score,
+                leff,
+                deltas,
+                energies_inter,
+                energies_vdw,
+                energies_electro,
+                energies_flexLig,
+                energies_flexLR,
+                energies_intra,
+                energies_torsional,
+                unbound_energy,
+                nr_interactions,
+                num_hb,
+                cluster_size,
+                about_x,
+                about_y,
+                about_z,
+                trans_x,
+                trans_y,
+                trans_z,
+                axisangle_x,
+                axisangle_y,
+                axisangle_z,
+                axisangle_w,
+                dihedrals,
+                ligand_coordinates,
+                flexible_res_coordinates
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"""
+
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError("Error while inserting results.") from e
+
+        return
         try:
             Pose_IDs = []
             duplicates = []
