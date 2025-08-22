@@ -437,6 +437,92 @@ class StorageManagerDuckDB(StorageManager):
                 "Error while moving results from temp table to the database."
             ) from e
 
+    def _delete_new_duplicate_results(self):
+        """Checks if a pose ID is uniquely represented in the result table, based on the following columns:
+        ligname,
+        receptor,
+        about_x,
+        about_y,
+        about_z,
+        trans_x,
+        trans_y,
+        trans_z,
+        axisangle_x,
+        axisangle_y,
+        axisangle_z,
+        axisangle_w,
+        dihedrals
+        """
+        delete_sql = """
+        WITH target_temp_poseid AS (
+            SELECT RT.temp_poseid 
+            FROM Results_temp AS RT
+            JOIN Results AS R
+                ON RT.receptor = R.receptor
+                AND RT.about_x = R.about_x
+                AND RT.about_y = R.about_y
+                AND RT.about_z = R.about_z
+                AND RT.trans_x = R.trans_x
+                AND RT.trans_y = R.trans_y
+                AND RT.trans_z = R.trans_z
+                AND RT.axisangle_x = R.axisangle_x
+                AND RT.axisangle_y = R.axisangle_y
+                AND RT.axisangle_z = R.axisangle_z
+                AND RT.axisangle_w = R.axisangle_w
+                AND RT.dihedrals = R.dihedrals
+            JOIN Ligands AS L
+                ON RT.ligname = L.ligname
+            )
+        DELETE FROM Interactions_temp
+        WHERE temp_poseid IN (SELECT temp_poseid from target_temp_poseid)
+        returning temp_poseid;
+        """
+        delete_temp_poseids = self.conn.execute(delete_sql).fetchall()
+        delete_temp_poseids_list = [row[0] for row in delete_temp_poseids]
+        placeholders = ",".join("?" for _ in delete_temp_poseids_list)
+        delete_results_sql = (
+            f"""DELETE FROM Results_temp WHERE temp_poseid IN ({placeholders});"""
+        )
+        if delete_temp_poseids:
+            self.conn.execute(
+                delete_results_sql,
+                delete_temp_poseids_list,
+            )
+
+    def _delete_old_duplicate_results(self):
+        delete_sql = """
+        WITH target_poseid AS (
+            SELECT R.pose_id
+            FROM Results AS R
+            JOIN Results_temp AS RT
+                ON RT.receptor = R.receptor
+                AND RT.about_x = R.about_x
+                AND RT.about_y = R.about_y
+                AND RT.about_z = R.about_z
+                AND RT.trans_x = R.trans_x
+                AND RT.trans_y = R.trans_y
+                AND RT.trans_z = R.trans_z
+                AND RT.axisangle_x = R.axisangle_x
+                AND RT.axisangle_y = R.axisangle_y
+                AND RT.axisangle_z = R.axisangle_z
+                AND RT.axisangle_w = R.axisangle_w
+                AND RT.dihedrals = R.dihedrals
+            JOIN Ligands AS L
+                ON RT.ligname = L.ligname
+            )
+        DELETE FROM Interactions
+        WHERE pose_id IN (SELECT pose_id from target_poseid)
+        returning pose_id;
+        """
+        delete_pose_ids = self.conn.execute(delete_sql).fetchall()
+        delete_pose_ids_list = [row[0] for row in delete_pose_ids]
+        placeholders = ",".join("?" for _ in delete_pose_ids_list)
+        if delete_pose_ids:
+            self.conn.execute(
+                f"""DELETE FROM Results WHERE pose_id IN ({placeholders});""",
+                delete_pose_ids_list,
+            )
+
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
         Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
