@@ -1167,66 +1167,51 @@ class StorageManager:
 
         return list(interactions)
 
-    def _check_unique_results_row(self, result_data: list) -> int:
-        """Checks if a pose ID is uniquely represented in the result table, based on the following [index in result_data] columns:
-        [0] ligand_id,
-        [1] receptor,
-        [20] about_x,
-        [21] about_y,
-        [22] about_z,
-        [23] trans_x,
-        [24] trans_y,
-        [25] trans_z,
-        [26] axisangle_x,
-        [27] axisangle_y,
-        [28] axisangle_z,
-        [29] axisangle_w,
-        [30] dihedrals,
-
-        #NOTE Please note that this method will only identify one duplicate in the table. If there are more than one duplicates, it will just deal with the earliest entry
+    def _insert_docking_data(self, results, interactions, options: dict):
+        # TODO docs
+        """Takes list of database rows to insert, adds data to results table. Will handle duplicates if specified
 
         Args:
-            result_data (list): data packet coming from the results processing
-
-        Raises:
-            DatabaseQueryError
+            results (list): list of arrays containing formatted result rows
+            interactions (list): list of interactions
+            options (dict): includes options on how to handle duplicates if there are any
 
         Returns:
-            Pose_ID (int): returns the Pose_ID of the duplicate if found, returns -1 of no duplicate found
+            list[int]: returns the pose ids for the ligand written to results, these are used to ensure internal consistency when writing to the interaction table
+            list[int]: found duplicates (knowledge may be needed in other methods)
 
+        Raises:
+            DatabaseInsertionError
         """
-        # create list of the data that is to be considered unique
-        unique_data_indices = [0, 1, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-        unique_data = [result_data[index] for index in unique_data_indices]
 
-        query = self.QueryBuilder()
-        query.SELECT("Pose_ID").FROM("Results").WHERE(
-            """ligand_id=?
-                    AND receptor=?
-                    AND about_x=?
-                    AND about_y=?
-                    AND about_z=?
-                    AND trans_x=?
-                    AND trans_y=?
-                    AND trans_z=?
-                    AND axisangle_x=?
-                    AND axisangle_y=?
-                    AND axisangle_z=?
-                    AND axisangle_w=?
-                    AND dihedrals=?""",
-            *unique_data,
+        self._create_temporary_results_tables()
+        self._insert_results_in_temp_tables(results, interactions)
+        dupl_handl = options.get("duplicate_handling")
+        # handle duplicates if requested
+        if dupl_handl and dupl_handl.lower() == "replace":
+            # first delete duplicate results and interactions
+            # then insert all the new ones indiscrimenately
+            pass
+        elif dupl_handl and dupl_handl.lower() == "ignore":
+            # delete from incoming data any duplicates
+            # then insert all new data indiscrimenately
+            pass
+        # then, move results from temp tables to database
+        self._move_tempresults_to_database(commit=False)
+        logger.info(
+            f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
         )
-        try:
-            data = self.db_query(*query.build())
-        except Exception as e:
-            raise e
-        row = data.fetchone()
-        if row is None:
-            Pose_ID = -1
-            logger.debug("Duplicate row not found.")
-        else:
-            Pose_ID = row[0]
-            logger.debug(f"Duplicate row found for Pose_ID {Pose_ID}")
+
+    def _create_temporary_results_tables(self):
+        pass
+
+    def _insert_results_in_temp_tables(
+        self, results_array: list, interactions_array: list
+    ):
+        pass
+
+    def _move_tempresults_to_database(self, commit: bool = True):
+        pass
 
     # endregion
 
@@ -2651,9 +2636,6 @@ class StorageManager:
     def _create_indices(self):
         raise_not_implemented()
 
-    def _insert_docking_data(self, results_array, interactions, options):
-        raise_not_implemented()
-
     def _insert_receptors(self, receptor_array):
         raise_not_implemented()
 
@@ -2864,22 +2846,8 @@ class StorageManagerSQLite(StorageManager):
                 "Error while looking for unique result row."
             ) from e
 
-    def _insert_docking_data(self, results_array, interactions, options: dict) -> tuple:
-        """Takes list of database rows to insert, adds data to results table. Will handle duplicates if specified
-
-        Args:
-            results_array (list): list of arrays containing formatted result rows
-            options (dict): includes options on how to handle duplicates if there are any
-
-        Returns:
-            list[int]: returns the pose ids for the ligand written to results, these are used to ensure internal consistency when writing to the interaction table
-            list[int]: found duplicates (knowledge may be needed in other methods)
-
-        Raises:
-            DatabaseInsertionError
-        """
+    def _create_temporary_results_tables(self):
         try:
-            # create temporary tables for insertion and subsequent duplication checks
             create_temp_results = """
             CREATE TEMP TABLE 
             Results_temp(
@@ -2931,9 +2899,14 @@ class StorageManagerSQLite(StorageManager):
             # create temporary tables
             self.conn.execute(create_temp_results)
             self.conn.execute(create_temp_interactions)
+        except sqlite3.OperationalError as e:
+            raise DatabaseInsertionError(
+                "Error while creating temporary results tables."
+            ) from e
 
-            # insert temp results
-            temp_results_insert = f"""
+    def _insert_results_in_temp_tables(self, results_array, interactions_array):
+        # insert temp results
+        temp_results_insert = f"""
             INSERT INTO Results_temp(
             receptor,
                     pose_rank,
@@ -2972,9 +2945,9 @@ class StorageManagerSQLite(StorageManager):
                 {",".join(["?"]*len(results_array[0]))}
             )
             """
-            self.conn.executemany(temp_results_insert, results_array)
+        self.conn.executemany(temp_results_insert, results_array)
 
-            temp_int_insert = f"""
+        temp_int_insert = f"""
             WITH incoming(
                 ligand_name, 
                 pose_rank,
@@ -3009,137 +2982,11 @@ class StorageManagerSQLite(StorageManager):
                 AND i.pose_rank = RT.pose_rank
                 AND i.run_number = RT.run_number;
             """
-            self.conn.executemany(temp_int_insert, interactions)
+        self.conn.executemany(temp_int_insert, interactions_array)
 
-            temp_to_results = """
-                INSERT INTO Results (
-                    ligand_id,
-                    receptor,
-                    pose_rank,
-                    run_number,
-                    cluster_rmsd,
-                    reference_rmsd,
-                    docking_score,
-                    leff,
-                    deltas,
-                    energies_inter,
-                    energies_vdw,
-                    energies_electro,
-                    energies_flexLig,
-                    energies_flexLR,
-                    energies_intra,
-                    energies_torsional,
-                    unbound_energy,
-                    nr_interactions,
-                    num_hb,
-                    cluster_size,
-                    about_x,
-                    about_y,
-                    about_z,
-                    trans_x,
-                    trans_y,
-                    trans_z,
-                    axisangle_x,
-                    axisangle_y,
-                    axisangle_z,
-                    axisangle_w,
-                    dihedrals,
-                    ligand_coordinates,
-                    flexible_res_coordinates
-                    ) 
-                SELECT 
-                    L.ligand_id, 
-                    T.receptor,
-                    T.pose_rank,
-                    T.run_number,
-                    T.cluster_rmsd,
-                    T.reference_rmsd,
-                    T.docking_score,
-                    T.leff,
-                    T.deltas,
-                    T.energies_inter,
-                    T.energies_vdw,
-                    T.energies_electro,
-                    T.energies_flexLig,
-                    T.energies_flexLR,
-                    T.energies_intra,
-                    T.energies_torsional,
-                    T.unbound_energy,
-                    T.nr_interactions,
-                    T.num_hb,
-                    T.cluster_size,
-                    T.about_x,
-                    T.about_y,
-                    T.about_z,
-                    T.trans_x,
-                    T.trans_y,
-                    T.trans_z,
-                    T.axisangle_x,
-                    T.axisangle_y,
-                    T.axisangle_z,
-                    T.axisangle_w,
-                    T.dihedrals,
-                    T.ligand_coordinates,
-                    T.flexible_res_coordinates
-                FROM Results_temp AS T
-                JOIN Ligands AS L ON L.LigName = T.LigName;"""
-
-            temp_to_interaction = """
-                INSERT INTO Interactions(pose_id, interaction_id)
-                SELECT R.pose_id, II.interaction_id
-                FROM Results AS R
-                JOIN Ligands AS L
-                    ON R.ligand_id    = L.ligand_id
-                JOIN Results_temp AS RT 
-                    ON RT.receptor=R.receptor
-                    AND RT.about_x=R.about_x
-                    AND RT.about_y=R.about_y
-                    AND RT.about_z=R.about_z
-                    AND RT.trans_x=R.trans_x
-                    AND RT.trans_y=R.trans_y
-                    AND RT.trans_z=R.trans_z
-                    AND RT.axisangle_x=R.axisangle_x
-                    AND RT.axisangle_y=R.axisangle_y
-                    AND RT.axisangle_z=R.axisangle_z
-                    AND RT.axisangle_w=R.axisangle_w
-                    AND RT.dihedrals=R.dihedrals
-                JOIN Interactions_temp AS IT
-                    ON RT.temp_poseid      = IT.temp_poseid
-                JOIN Interaction_indices AS II
-                    ON II.interaction_type = IT.interaction_type
-                    AND II.rec_chain        = IT.rec_chain
-                    AND II.rec_resname      = IT.rec_resname
-                    AND II.rec_resid        = IT.rec_resid
-                    AND II.rec_atom         = IT.rec_atom
-                    AND II.rec_atomid       = IT.rec_atomid;
-                """
-            if not options.get("duplicate_handling"):
-                # move results to main results table with ligand id
-                self.conn.execute(temp_to_results)
-                # time_insertall = time.time()
-                # print("Time to move results to main table: ", time_insertall - time2)
-                try:
-                    self.conn.execute(temp_to_interaction)
-                    self.conn.commit()
-                except Exception as e:
-                    print("Exception! ", str(e))
-                # time_insertallint = time.time()
-                # print(
-                #     "Time to move interactions into interactions: ",
-                #     time_insertallint - time_insertall,
-                # )
-            elif options.get("duplicate_handling").lower() == "replace":
-                # first delete duplicate results and interactions
-                # then insert all the new ones indiscrimenately
-                pass
-            elif options.get("duplicate_handling").lower() == "ignore":
-                # delete from incoming data any duplicates
-                # then insert all new data indiscrimenately
-                pass
-            print("\n\n\n\nshould get this far with sqlite\n\n\n\n")
-
-            sql_insert = """
-                INSERT INTO Results (
+    def _move_tempresults_to_database(self, commit: bool = True):
+        temp_to_results = """
+            INSERT INTO Results (
                 ligand_id,
                 receptor,
                 pose_rank,
@@ -3173,57 +3020,82 @@ class StorageManagerSQLite(StorageManager):
                 dihedrals,
                 ligand_coordinates,
                 flexible_res_coordinates
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"""
+                ) 
+            SELECT 
+                L.ligand_id, 
+                T.receptor,
+                T.pose_rank,
+                T.run_number,
+                T.cluster_rmsd,
+                T.reference_rmsd,
+                T.docking_score,
+                T.leff,
+                T.deltas,
+                T.energies_inter,
+                T.energies_vdw,
+                T.energies_electro,
+                T.energies_flexLig,
+                T.energies_flexLR,
+                T.energies_intra,
+                T.energies_torsional,
+                T.unbound_energy,
+                T.nr_interactions,
+                T.num_hb,
+                T.cluster_size,
+                T.about_x,
+                T.about_y,
+                T.about_z,
+                T.trans_x,
+                T.trans_y,
+                T.trans_z,
+                T.axisangle_x,
+                T.axisangle_y,
+                T.axisangle_z,
+                T.axisangle_w,
+                T.dihedrals,
+                T.ligand_coordinates,
+                T.flexible_res_coordinates
+            FROM Results_temp AS T
+            JOIN Ligands AS L ON L.LigName = T.LigName;"""
 
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError("Error while inserting results.") from e
-
-        return
+        temp_to_interaction = """
+            INSERT INTO Interactions(pose_id, interaction_id)
+            SELECT R.pose_id, II.interaction_id
+            FROM Results AS R
+            JOIN Ligands AS L
+                ON R.ligand_id    = L.ligand_id
+            JOIN Results_temp AS RT 
+                ON RT.receptor=R.receptor
+                AND RT.about_x=R.about_x
+                AND RT.about_y=R.about_y
+                AND RT.about_z=R.about_z
+                AND RT.trans_x=R.trans_x
+                AND RT.trans_y=R.trans_y
+                AND RT.trans_z=R.trans_z
+                AND RT.axisangle_x=R.axisangle_x
+                AND RT.axisangle_y=R.axisangle_y
+                AND RT.axisangle_z=R.axisangle_z
+                AND RT.axisangle_w=R.axisangle_w
+                AND RT.dihedrals=R.dihedrals
+            JOIN Interactions_temp AS IT
+                ON RT.temp_poseid      = IT.temp_poseid
+            JOIN Interaction_indices AS II
+                ON II.interaction_type = IT.interaction_type
+                AND II.rec_chain        = IT.rec_chain
+                AND II.rec_resname      = IT.rec_resname
+                AND II.rec_resid        = IT.rec_resid
+                AND II.rec_atom         = IT.rec_atom
+                AND II.rec_atomid       = IT.rec_atomid;
+            """
         try:
-            Pose_IDs = []
-            duplicates = []
-            cur = self.conn.cursor()
-            # for each pose/docking result
-            for result in results_array:
-                Pose_ID = (
-                    -1
-                )  # nonsensical table index to initialize row index if checking for duplicates
-                if options.get("duplicate_handling"):
-                    Pose_ID = self._check_unique_results_row(result)
-
-                if Pose_ID != -1:  # row exists in table
-                    duplicates.append(Pose_ID)
-                    # row exist, evaluate if ignore or replace
-                    if options.get("duplicate_handling").upper() == "IGNORE":
-                        # do not add the new, duplicated row
-                        pass
-                    elif options.get("duplicate_handling").upper() == "REPLACE":
-                        # update the existing row with the new results
-                        # reformat sqlite query to update
-                        sql_replace = sql_insert.replace(
-                            "INSERT INTO Results", "UPDATE Results SET"
-                        )
-                        sql_replace = sql_replace.replace("VALUES", "=")
-                        sql_replace = sql_replace.replace(";", " WHERE Pose_ID = ?;")
-                        result.append(
-                            Pose_ID
-                        )  # add pose ID to the data being processed in sqlite statement
-                        cur.execute(sql_replace, result)
-
-                else:  # row does not exist
-                    duplicates.append(None)
-                    cur.execute(sql_insert, result)
-                    Pose_ID = cur.lastrowid
-                # create list of pose ids just processed
-                Pose_IDs.append(Pose_ID)
-
-            self.conn.commit()
-            cur.close()
-
-            return Pose_IDs, duplicates
-
+            self.conn.execute(temp_to_results)
+            self.conn.execute(temp_to_interaction)
+            if commit:
+                self.conn.commit()
         except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError("Error while inserting results.") from e
+            raise DatabaseInsertionError(
+                "Error while moving results from temp table to the database."
+            ) from e
 
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
