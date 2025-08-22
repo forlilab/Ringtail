@@ -161,11 +161,8 @@ class StorageManagerDuckDB(StorageManager):
     def _create_temporary_results_tables(self):
         try:
             create_temp_results = """
-            DROP SEQUENCE IF EXISTS set_temp_poseid;
-            CREATE SEQUENCE set_temp_poseid START 1;
             CREATE TEMP TABLE 
             Results_temp(
-                temp_poseid         INTEGER DEFAULT nextval('set_temp_poseid') PRIMARY KEY,
                 receptor            VARCHAR,
                 pose_rank           INTEGER,
                 run_number          INTEGER,
@@ -202,7 +199,9 @@ class StorageManagerDuckDB(StorageManager):
                 """
             create_temp_interactions = """
             CREATE TEMP TABLE Interactions_temp(
-                temp_poseid        INTEGER References Results_temp(temp_poseid),
+                ligname             VARCHAR,
+                run_number          INTEGER,
+                pose_rank           INTEGER,
                 interaction_type    VARCHAR,
                 rec_chain           VARCHAR,
                 rec_resname         VARCHAR,
@@ -302,9 +301,9 @@ class StorageManagerDuckDB(StorageManager):
         int_df = pd.DataFrame(
             interactions_array,
             columns=[
-                "ligand_name",
-                "pose_rank",
+                "ligname",
                 "run_number",
+                "pose_rank",
                 "interaction_type",
                 "rec_chain",
                 "rec_resname",
@@ -315,13 +314,9 @@ class StorageManagerDuckDB(StorageManager):
         )
         self.conn.register("incoming_interaction", int_df)
         temp_interaction_insert = """
-            INSERT INTO Interactions_temp (temp_poseid, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
-            SELECT RT.temp_poseid, df.interaction_type, df.rec_chain, df.rec_resname, df.rec_resid, df.rec_atom, df.rec_atomid
-            FROM incoming_interaction AS df
-            JOIN Results_temp RT
-                ON RT.ligname = df.ligand_name
-                AND RT.pose_rank = df.pose_rank
-                AND RT.run_number = df.run_number;"""
+            INSERT INTO Interactions_temp (ligname, run_number, pose_rank, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
+            SELECT df.ligname, df.run_number, df.pose_rank, df.interaction_type, df.rec_chain, df.rec_resname, df.rec_resid, df.rec_atom, df.rec_atomid
+            FROM incoming_interaction AS df;"""
         self.conn.execute(temp_interaction_insert)
 
     def _move_tempresults_to_database(self, commit: bool = True):
@@ -418,7 +413,9 @@ class StorageManagerDuckDB(StorageManager):
                 AND RT.axisangle_w=R.axisangle_w
                 AND RT.dihedrals=R.dihedrals
             JOIN Interactions_temp AS IT
-                ON RT.temp_poseid      = IT.temp_poseid
+                ON RT.ligname      = IT.ligname
+                AND RT.pose_rank   = IT.pose_rank
+                AND RT.run_number  = IT.run_number
             JOIN Interaction_indices AS II
                 ON II.interaction_type = IT.interaction_type
                 AND II.rec_chain        = IT.rec_chain
@@ -453,41 +450,56 @@ class StorageManagerDuckDB(StorageManager):
         axisangle_w,
         dihedrals
         """
-        delete_sql = """
-        WITH target_temp_poseid AS (
-            SELECT RT.temp_poseid 
+        delete_int_sql = """
+        DELETE FROM Interactions_temp
+        WHERE EXISTS (
+            SELECT 1
             FROM Results_temp AS RT
             JOIN Results AS R
-                ON RT.receptor = R.receptor
-                AND RT.about_x = R.about_x
-                AND RT.about_y = R.about_y
-                AND RT.about_z = R.about_z
-                AND RT.trans_x = R.trans_x
-                AND RT.trans_y = R.trans_y
-                AND RT.trans_z = R.trans_z
+                ON RT.receptor    = R.receptor
+                AND RT.about_x     = R.about_x
+                AND RT.about_y     = R.about_y
+                AND RT.about_z     = R.about_z
+                AND RT.trans_x     = R.trans_x
+                AND RT.trans_y     = R.trans_y
+                AND RT.trans_z     = R.trans_z
                 AND RT.axisangle_x = R.axisangle_x
                 AND RT.axisangle_y = R.axisangle_y
                 AND RT.axisangle_z = R.axisangle_z
                 AND RT.axisangle_w = R.axisangle_w
-                AND RT.dihedrals = R.dihedrals
+                AND RT.dihedrals   = R.dihedrals
             JOIN Ligands AS L
                 ON RT.ligname = L.ligname
-            )
-        DELETE FROM Interactions_temp
-        WHERE temp_poseid IN (SELECT temp_poseid from target_temp_poseid)
-        returning temp_poseid;
+            WHERE 
+                RT.ligname   = Interactions_temp.ligname
+                AND RT.pose_rank = Interactions_temp.pose_rank
+                AND RT.run_number = Interactions_temp.run_number
+        );
         """
-        delete_temp_poseids = self.conn.execute(delete_sql).fetchall()
-        delete_temp_poseids_list = [row[0] for row in delete_temp_poseids]
-        placeholders = ",".join("?" for _ in delete_temp_poseids_list)
-        delete_results_sql = (
-            f"""DELETE FROM Results_temp WHERE temp_poseid IN ({placeholders});"""
-        )
-        if delete_temp_poseids:
-            self.conn.execute(
-                delete_results_sql,
-                delete_temp_poseids_list,
-            )
+        delete_res_sql = """
+        DELETE FROM Results_temp AS RT
+        WHERE EXISTS (
+            SELECT 1
+            FROM Results AS R
+            JOIN Ligands AS L
+                ON RT.ligname = L.ligname
+            WHERE 
+                RT.receptor  = R.receptor
+                AND RT.about_x     = R.about_x
+                AND RT.about_y     = R.about_y
+                AND RT.about_z     = R.about_z
+                AND RT.trans_x     = R.trans_x
+                AND RT.trans_y     = R.trans_y
+                AND RT.trans_z     = R.trans_z
+                AND RT.axisangle_x = R.axisangle_x
+                AND RT.axisangle_y = R.axisangle_y
+                AND RT.axisangle_z = R.axisangle_z
+                AND RT.axisangle_w = R.axisangle_w
+                AND RT.dihedrals   = R.dihedrals
+                AND L.ligand_id    = R.ligand_id);
+        """
+        self.conn.execute(delete_int_sql)
+        self.conn.execute(delete_res_sql)
 
     def _delete_old_duplicate_results(self):
         delete_sql = """
@@ -515,7 +527,7 @@ class StorageManagerDuckDB(StorageManager):
         returning pose_id;
         """
         delete_pose_ids = self.conn.execute(delete_sql).fetchall()
-        delete_pose_ids_list = [row[0] for row in delete_pose_ids]
+        delete_pose_ids_list = {row[0] for row in delete_pose_ids}
         placeholders = ",".join("?" for _ in delete_pose_ids_list)
         if delete_pose_ids:
             self.conn.execute(

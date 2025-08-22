@@ -180,37 +180,16 @@ class StorageManager:
             docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
             write_options (dict): options for how to write the data, primarily how to treat duplicates
         """
-        # get unique ligand_id (will not add duplicate, instead return existing ligand_id)
         self._insert_ligands(docking_data["ligands"])
-        # add ligand ids to results array and make result array list of poses
-        # new interaction data that includes ligname and pose rank
         interaction_data = docking_data["interactions"]
         # deduplicate by using a set comprehension, then convert to list
         just_interactions = list({interaction[3:] for interaction in interaction_data})
 
-        # time3 = time.time()
-        # so each poses_interactions object contains one list per pose, and that list has interaction tuples
-        # so I can e.g., make each a dict maybe of ligname, then ligname.<pose_description>: pose rank and ligname.<
-        # insert any new interactions first
-        # this should ensure there are representative interactions in there
         self._insert_interaction_index_rows(just_interactions)
-        # time4 = time.time()
-        # print("Time to insert interactions: ", time4 - time3)
-        # get unique pose ids and duplicate handling info
+
         self._insert_docking_data(
             docking_data["poses"], interaction_data, write_options
         )
-        # time5 = time.time()
-        # print(
-        #     "Total time to insert results and corresponding interactions: ",
-        #     time5 - time4,
-        # )
-        # I need to insert interactions and results at the same time
-        # check if are interactions:
-        # What uniquely identifies an interaction with the original docking data:
-        # ligand name and pose_rank I think, and actually probably also all the unique
-        # data but I think that is redundant because i am just checking the data internally
-        # for the interactions
         self.conn.commit()
 
     def insert_receptor(self, receptor_data: list):
