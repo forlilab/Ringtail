@@ -1191,11 +1191,11 @@ class StorageManager:
         if dupl_handl and dupl_handl.lower() == "replace":
             # first delete duplicate results and interactions
             # then insert all the new ones indiscrimenately
-            pass
+            self._delete_old_duplicate_results()
         elif dupl_handl and dupl_handl.lower() == "ignore":
             # delete from incoming data any duplicates
             # then insert all new data indiscrimenately
-            pass
+            self._delete_new_duplicate_results()
         # then, move results from temp tables to database
         self._move_tempresults_to_database(commit=False)
         logger.info(
@@ -1211,6 +1211,12 @@ class StorageManager:
         pass
 
     def _move_tempresults_to_database(self, commit: bool = True):
+        pass
+
+    def _delete_new_duplicate_results(self):
+        pass
+
+    def _delete_old_duplicate_results(self):
         pass
 
     # endregion
@@ -2550,7 +2556,7 @@ class StorageManager:
         receptor            VARCHAR,
         pose_rank           INTEGER,
         run_number          INTEGER,
-        docking_score    FLOAT,
+        docking_score       FLOAT,
         leff                FLOAT,
         deltas              FLOAT,
         cluster_rmsd        FLOAT,
@@ -2695,11 +2701,11 @@ class StorageManagerSQLite(StorageManager):
         """Create table for ligands. Columns are:
         ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-        ligand_smile        VARCHAR[],
+        ligand_smile        VARCHAR,
         rdmol               BLOB,
-        atom_index_map      VARCHAR[],
-        hydrogen_parents    VARCHAR[],
-        input_model         VARCHAR[]
+        atom_index_map      VARCHAR,
+        hydrogen_parents    VARCHAR,
+        input_model         VARCHAR
 
         Raises:
             DatabaseTableCreationError: Description
@@ -2708,11 +2714,11 @@ class StorageManagerSQLite(StorageManager):
         ligand_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-            ligand_smile        VARCHAR[],
+            ligand_smile        VARCHAR,
             rdmol        BLOB,
-            atom_index_map      VARCHAR[],
-            hydrogen_parents    VARCHAR[],
-            input_model         VARCHAR[])"""
+            atom_index_map      VARCHAR,
+            hydrogen_parents    VARCHAR,
+            input_model         VARCHAR)"""
 
         try:
             cur = self.conn.cursor()
@@ -2758,8 +2764,8 @@ class StorageManagerSQLite(StorageManager):
         Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
         ligand_id           INTEGER FOREIGN KEY from Ligands,
         receptor            VARCHAR[],
-        pose_rank           INT[],
-        run_number          INT[],
+        pose_rank           INT,
+        run_number          INT,
         docking_score    FLOAT(4),
         leff                FLOAT(4),
         deltas              FLOAT(4),
@@ -2841,17 +2847,11 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating results table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
 
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError(
-                "Error while looking for unique result row."
-            ) from e
-
     def _create_temporary_results_tables(self):
         try:
             create_temp_results = """
             CREATE TEMP TABLE 
             Results_temp(
-                temp_poseid         INTEGER PRIMARY KEY AUTOINCREMENT,
                 receptor            VARCHAR,
                 pose_rank           INTEGER,
                 run_number          INTEGER,
@@ -2882,13 +2882,15 @@ class StorageManagerSQLite(StorageManager):
                 axisangle_z         FLOAT,
                 axisangle_w         FLOAT,
                 dihedrals           VARCHAR,
-                ligand_coordinates         VARCHAR,
+                ligand_coordinates  VARCHAR,
                 flexible_res_coordinates   VARCHAR,
                 ligname             VARCHAR);
                 """
             create_temp_interactions = """
             CREATE TEMP TABLE Interactions_temp(
-                temp_poseid         INTEGER References Results_temp(temp_poseid),
+                ligname             VARCHAR,
+                run_number          INTEGER,
+                pose_rank           INTEGER,
                 interaction_type    VARCHAR,
                 rec_chain           VARCHAR,
                 rec_resname         VARCHAR,
@@ -2908,39 +2910,39 @@ class StorageManagerSQLite(StorageManager):
         # insert temp results
         temp_results_insert = f"""
             INSERT INTO Results_temp(
-            receptor,
-                    pose_rank,
-                    run_number,
-                    cluster_rmsd,
-                    reference_rmsd,
-                    docking_score,
-                    leff,
-                    deltas,
-                    energies_inter,
-                    energies_vdw,
-                    energies_electro,
-                    energies_flexLig,
-                    energies_flexLR,
-                    energies_intra,
-                    energies_torsional,
-                    unbound_energy,
-                    nr_interactions,
-                    num_hb,
-                    cluster_size,
-                    about_x,
-                    about_y,
-                    about_z,
-                    trans_x,
-                    trans_y,
-                    trans_z,
-                    axisangle_x,
-                    axisangle_y,
-                    axisangle_z,
-                    axisangle_w,
-                    dihedrals,
-                    ligand_coordinates,
-                    flexible_res_coordinates,
-                    ligname)
+                receptor,
+                pose_rank,
+                run_number,
+                cluster_rmsd,
+                reference_rmsd,
+                docking_score,
+                leff,
+                deltas,
+                energies_inter,
+                energies_vdw,
+                energies_electro,
+                energies_flexLig,
+                energies_flexLR,
+                energies_intra,
+                energies_torsional,
+                unbound_energy,
+                nr_interactions,
+                num_hb,
+                cluster_size,
+                about_x,
+                about_y,
+                about_z,
+                trans_x,
+                trans_y,
+                trans_z,
+                axisangle_x,
+                axisangle_y,
+                axisangle_z,
+                axisangle_w,
+                dihedrals,
+                ligand_coordinates,
+                flexible_res_coordinates,
+                ligname)
             VALUES (
                 {",".join(["?"]*len(results_array[0]))}
             )
@@ -2948,39 +2950,17 @@ class StorageManagerSQLite(StorageManager):
         self.conn.executemany(temp_results_insert, results_array)
 
         temp_int_insert = f"""
-            WITH incoming(
-                ligand_name, 
-                pose_rank,
-                run_number,
-                interaction_type, 
-                rec_chain, 
-                rec_resname, 
-                rec_resid, 
-                rec_atom, 
-                rec_atomid) AS (
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                )
             INSERT INTO Interactions_temp (
-                temp_poseid, 
+                ligname, 
+                run_number,
+                pose_rank, 
                 interaction_type, 
                 rec_chain, 
                 rec_resname, 
                 rec_resid, 
                 rec_atom, 
                 rec_atomid)
-            SELECT 
-                RT.temp_poseid,
-                i.interaction_type, 
-                i.rec_chain, 
-                i.rec_resname, 
-                i.rec_resid, 
-                i.rec_atom, 
-                i.rec_atomid
-            FROM incoming AS i
-            JOIN Results_temp AS RT 
-                ON i.ligand_name = RT.ligname
-                AND i.pose_rank = RT.pose_rank
-                AND i.run_number = RT.run_number;
+            VALUES (?,?,?,?,?,?,?,?,?);
             """
         self.conn.executemany(temp_int_insert, interactions_array)
 
@@ -3057,13 +3037,13 @@ class StorageManagerSQLite(StorageManager):
                 T.flexible_res_coordinates
             FROM Results_temp AS T
             JOIN Ligands AS L ON L.LigName = T.LigName;"""
-
+        # INSERT INTO Interactions(pose_id, interaction_id)
         temp_to_interaction = """
             INSERT INTO Interactions(pose_id, interaction_id)
             SELECT R.pose_id, II.interaction_id
             FROM Results AS R
             JOIN Ligands AS L
-                ON R.ligand_id    = L.ligand_id
+                ON R.ligand_id = L.ligand_id
             JOIN Results_temp AS RT 
                 ON RT.receptor=R.receptor
                 AND RT.about_x=R.about_x
@@ -3078,9 +3058,11 @@ class StorageManagerSQLite(StorageManager):
                 AND RT.axisangle_w=R.axisangle_w
                 AND RT.dihedrals=R.dihedrals
             JOIN Interactions_temp AS IT
-                ON RT.temp_poseid      = IT.temp_poseid
+                ON RT.ligname      = IT.ligname
+                AND RT.pose_rank   = IT.pose_rank
+                AND RT.run_number  = IT.run_number
             JOIN Interaction_indices AS II
-                ON II.interaction_type = IT.interaction_type
+                ON II.interaction_type  = IT.interaction_type
                 AND II.rec_chain        = IT.rec_chain
                 AND II.rec_resname      = IT.rec_resname
                 AND II.rec_resid        = IT.rec_resid
@@ -3096,6 +3078,107 @@ class StorageManagerSQLite(StorageManager):
             raise DatabaseInsertionError(
                 "Error while moving results from temp table to the database."
             ) from e
+
+    def _delete_new_duplicate_results(self):
+        """Checks if a pose ID is uniquely represented in the result table, based on the following columns:
+        ligname,
+        receptor,
+        about_x,
+        about_y,
+        about_z,
+        trans_x,
+        trans_y,
+        trans_z,
+        axisangle_x,
+        axisangle_y,
+        axisangle_z,
+        axisangle_w,
+        dihedrals
+        """
+        delete_int_sql = """
+        DELETE FROM Interactions_temp
+        WHERE EXISTS (
+            SELECT 1
+            FROM Results_temp AS RT
+            JOIN Results AS R
+                ON RT.receptor    = R.receptor
+                AND RT.about_x     = R.about_x
+                AND RT.about_y     = R.about_y
+                AND RT.about_z     = R.about_z
+                AND RT.trans_x     = R.trans_x
+                AND RT.trans_y     = R.trans_y
+                AND RT.trans_z     = R.trans_z
+                AND RT.axisangle_x = R.axisangle_x
+                AND RT.axisangle_y = R.axisangle_y
+                AND RT.axisangle_z = R.axisangle_z
+                AND RT.axisangle_w = R.axisangle_w
+                AND RT.dihedrals   = R.dihedrals
+            JOIN Ligands AS L
+                ON RT.ligname = L.ligname
+            WHERE 
+                RT.ligname   = Interactions_temp.ligname
+                AND RT.pose_rank = Interactions_temp.pose_rank
+                AND RT.run_number = Interactions_temp.run_number
+        );
+        """
+        delete_res_sql = """
+        DELETE FROM Results_temp AS RT
+        WHERE EXISTS (
+            SELECT 1
+            FROM Results AS R
+            JOIN Ligands AS L
+                ON RT.ligname = L.ligname
+            WHERE 
+                RT.receptor  = R.receptor
+                AND RT.about_x     = R.about_x
+                AND RT.about_y     = R.about_y
+                AND RT.about_z     = R.about_z
+                AND RT.trans_x     = R.trans_x
+                AND RT.trans_y     = R.trans_y
+                AND RT.trans_z     = R.trans_z
+                AND RT.axisangle_x = R.axisangle_x
+                AND RT.axisangle_y = R.axisangle_y
+                AND RT.axisangle_z = R.axisangle_z
+                AND RT.axisangle_w = R.axisangle_w
+                AND RT.dihedrals   = R.dihedrals
+                AND L.ligand_id    = R.ligand_id);
+        """
+        self.conn.execute(delete_int_sql)
+        self.conn.execute(delete_res_sql)
+
+    def _delete_old_duplicate_results(self):
+        delete_sql = """
+        WITH target_poseid AS (
+            SELECT R.pose_id
+            FROM Results AS R
+            JOIN Results_temp AS RT
+                ON RT.receptor = R.receptor
+                AND RT.about_x = R.about_x
+                AND RT.about_y = R.about_y
+                AND RT.about_z = R.about_z
+                AND RT.trans_x = R.trans_x
+                AND RT.trans_y = R.trans_y
+                AND RT.trans_z = R.trans_z
+                AND RT.axisangle_x = R.axisangle_x
+                AND RT.axisangle_y = R.axisangle_y
+                AND RT.axisangle_z = R.axisangle_z
+                AND RT.axisangle_w = R.axisangle_w
+                AND RT.dihedrals = R.dihedrals
+            JOIN Ligands AS L
+                ON RT.ligname = L.ligname
+            )
+        DELETE FROM Interactions
+        WHERE pose_id IN (SELECT pose_id from target_poseid)
+        returning pose_id;
+        """
+        delete_pose_ids = self.conn.execute(delete_sql).fetchall()
+        delete_pose_ids_list = {row[0] for row in delete_pose_ids}
+        placeholders = ",".join("?" for _ in delete_pose_ids_list)
+        if delete_pose_ids:
+            self.conn.execute(
+                f"""DELETE FROM Results WHERE pose_id IN ({placeholders});""",
+                tuple(delete_pose_ids_list),
+            )
 
     def _create_receptors_table(self):
         """Create table for receptors. Columns are:
@@ -3242,12 +3325,12 @@ class StorageManagerSQLite(StorageManager):
         """create table of data for each unique interaction, will be remade everytime db is written to.
         Columns are:
         interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-        interaction_type    VARCHAR[],
-        rec_chain           VARCHAR[],
-        rec_resname         VARCHAR[],
-        rec_resid           VARCHAR[],
-        rec_atom            VARCHAR[],
-        rec_atomid          VARCHAR[]
+        interaction_type    VARCHAR,
+        rec_chain           VARCHAR,
+        rec_resname         VARCHAR,
+        rec_resid           VARCHAR,
+        rec_atom            VARCHAR,
+        rec_atomid          VARCHAR
 
         Raises:
             DatabaseTableCreationError: Description
@@ -3255,12 +3338,12 @@ class StorageManagerSQLite(StorageManager):
         """
         interaction_index_table = """CREATE TABLE Interaction_indices (
                                         interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                                        interaction_type    VARCHAR[],
-                                        rec_chain           VARCHAR[],
-                                        rec_resname         VARCHAR[],
-                                        rec_resid           VARCHAR[],
-                                        rec_atom            VARCHAR[],
-                                        rec_atomid          VARCHAR[],
+                                        interaction_type    VARCHAR,
+                                        rec_chain           VARCHAR,
+                                        rec_resname         VARCHAR,
+                                        rec_resid           VARCHAR,
+                                        rec_atom            VARCHAR,
+                                        rec_atomid          VARCHAR,
                                         UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid) ON CONFLICT IGNORE );
                                         """
 
