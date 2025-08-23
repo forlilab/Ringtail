@@ -154,7 +154,7 @@ class StorageManager:
                     continue
                 current_interactions.update(ligand_dict["interactions"][idx])
                 interaction_dictionaries[cluster_saved_pose_map[cluster]].append(
-                    current_interactions
+                    [current_interactions]
                 )
         for pose_interactions in interaction_dictionaries:
             if not any(pose_interactions):  # skip any empty dictionaries
