@@ -75,7 +75,14 @@ def cmdline_parser(defaults: dict = {}):
         type=str,
         metavar="DATABASE",
     )
-
+    write_parser.add_argument(
+        "-st",
+        "--storage_type",
+        help="specify a database file to perform actions with",
+        action="store",
+        type=str,
+        metavar="sqlite",
+    )
     write_parser.add_argument(
         "-m",
         "--docking_mode",
