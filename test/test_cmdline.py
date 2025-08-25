@@ -264,13 +264,13 @@ class TestOutputs:
         conn.close()
 
         assert status_notol == 0
+        assert count_notol == 23
+
         assert status_tol == 0
+        assert count_tol == 0
+
         assert status_tol2 == 0
-        assert (
-            count_notol != count_tol
-            or count_tol2 != count_tol
-            or count_tol2 != count_notol
-        )
+        assert count_tol2 == 0
 
     def test_max_poses(self):
         os.system("rm output.db")
