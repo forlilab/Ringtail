@@ -107,7 +107,7 @@ class RingtailCore:
         )
         # Check if storage type is implemented
         try:
-            storageman = get_valid_storageclass(storage_type)
+            storageman: StorageManager = get_valid_storageclass(storage_type)
         except NotImplementedError as e:
             self.logger.error(e)
             raise e
@@ -543,57 +543,61 @@ class RingtailCore:
             if interaction_cluster:
                 clustering["ifp"] = interaction_cluster
 
-        with self.storageman:
-            if write_one_bookmark:
+        if write_one_bookmark:
+            with self.storageman:
                 num_passing_ligands = self.storageman.filter_results(
                     all_filters=filter_dict,
                     bookmark_name=bookmark_name,
                     filtering_bookmark=filter_bookmark,
                 )
-                print_string = ""
-            # else produce a bookmark for each interaction combination
-            elif not write_one_bookmark:
-                for ic_idx, combination in enumerate(interaction_combs):
-                    filters_copy = filters.asdict()
-                    # prepare Filter object with only desired interaction combination for storageManager
-                    temp_filters = self._prepare_interaction_combo_filters(
-                        filters_copy, combination
-                    )
-                    iterated_bookmark_name = bookmark_name + "_" + str(ic_idx)
-                    # process each interaction combination filter
+            print_string = ""
+        # else produce a bookmark for each interaction combination
+        elif not write_one_bookmark:
+            for ic_idx, combination in enumerate(interaction_combs):
+
+                filters_copy = filters.asdict()
+                # prepare Filter object with only desired interaction combination for storageManager
+                temp_filters = self._prepare_interaction_combo_filters(
+                    filters_copy, combination
+                )
+                iterated_bookmark_name = bookmark_name + "_" + str(ic_idx)
+                # process each interaction combination filter
+                with self.storageman:
                     num_passing_ligands = self.storageman.filter_results(
                         temp_filters,
                         iterated_bookmark_name,
                         filter_bookmark,
                     )
-                    if num_passing_ligands:
-                        print(
-                            f"\nNumber passing ligands filter combination {str(combination)}:",
-                            num_passing_ligands,
-                        )
-                        self._write_filter_output(
-                            iterated_bookmark_name,
-                            temp_filters,
-                            num_passing_ligands,
-                            log_file,
-                            outfields,
-                            output_all_poses,
-                            order_results,
-                        )
-                    else:
-                        print("\nNo ligands passing filters")
-                        self.logger.warning(
-                            f"WARNING: No ligands found passing filter combination {str(combination)}."
-                        )
+                if num_passing_ligands:
+                    print(
+                        f"\nNumber passing ligands filter combination {str(combination)}:",
+                        num_passing_ligands,
+                    )
+                    self._write_filter_output(
+                        iterated_bookmark_name,
+                        temp_filters,
+                        num_passing_ligands,
+                        log_file,
+                        outfields,
+                        output_all_poses,
+                        order_results,
+                    )
+                else:
+                    print("\nNo ligands passing filters")
+                    self.logger.warning(
+                        f"WARNING: No ligands found passing filter combination {str(combination)}."
+                    )
+                    with self.storageman:
                         self.storageman.delete_bookmark(iterated_bookmark_name)
 
-                # Process the union of the max miss combinations of interactions
+            # Process the union of the max miss combinations of interactions
+            with self.storageman:
                 num_passing_ligands, bookmark_name = self.storageman.get_maxmiss_union(
                     len(interaction_combs), bookmark_name, filters_copy
                 )
-                # rename so can be reused in common method below
-                filter_dict = filters_copy
-                print_string = " in max_miss union"
+            # rename so can be reused in common method below
+            filter_dict = filters_copy
+            print_string = " in max_miss union"
 
         if num_passing_ligands:
             print(
