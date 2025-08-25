@@ -153,9 +153,7 @@ class StorageManager:
                 if cluster not in cluster_saved_pose_map:
                     continue
                 current_interactions.update(ligand_dict["interactions"][idx])
-                interaction_dictionaries[cluster_saved_pose_map[cluster]].append(
-                    [current_interactions]
-                )
+                interaction_dictionaries.append([current_interactions])
         for pose_interactions in interaction_dictionaries:
             if not any(pose_interactions):  # skip any empty dictionaries
                 continue
@@ -326,6 +324,9 @@ class StorageManager:
         Args:
             bookmark_name (str): bookmark to delete
         """
+        # make sure bookmark needs deleting
+        if not self.is_bookmark(bookmark_name):
+            return
         # get filter id
         query = self.QueryBuilder()
         query.SELECT("filter_id").FROM("Filters").WHERE("name=?", bookmark_name)
