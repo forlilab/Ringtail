@@ -214,106 +214,55 @@ class TestOutputs:
         os.system("rm output.db")
         os.system("rm query.csv")
 
-    def test_interaction_tolerance(self):
+    def test_interaction_tolerance(self, tablecount):
         status_notol = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz"
         )
-        query_to_check = """
-        SELECT * FROM Interactions 
-        WHERE Pose_ID in 
-        (SELECT Pose_ID FROM Results 
-            WHERE ligand_id = 
-                (SELECT ligand_id from Ligands WHERE LigName = '127458')
-            AND run_number = 13)"""
-
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-
-        cur.execute(query_to_check)
-        count_notol = len(cur.fetchall())
-
-        cur.close()
-        conn.close()
-
+        count_notol = tablecount("Interactions")
         os.system("rm output.db")
+
+        assert status_notol == 0
+        assert count_notol == 53
 
         status_tol = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance"
         )
 
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute(query_to_check)
-        count_tol = len(cur.fetchall())
-
-        cur.close()
-        conn.close()
-
+        count_tol = tablecount("Interactions")
         os.system("rm output.db")
+
+        assert status_tol == 0
+        assert count_tol == 54
 
         status_tol2 = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance 2.0"
         )
 
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute(query_to_check)
-        count_tol2 = len(cur.fetchall())
-
-        cur.close()
-        conn.close()
-
-        assert status_notol == 0
-        assert count_notol == 23
-
-        assert status_tol == 0
-        assert count_tol == 0
+        count_tol2 = tablecount("Interactions")
+        os.system("rm output.db")
 
         assert status_tol2 == 0
-        assert count_tol2 == 0
+        assert count_tol2 == 57
 
-    def test_max_poses(self):
-        os.system("rm output.db")
+    def test_max_poses(self, tablecount):
         status3 = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
         )
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Results")
-        count3 = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
+        count3 = tablecount("Results")
         os.system("rm output.db")
 
         status1 = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --max_poses 1"
         )
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Results")
-        count1 = cur.fetchone()[0]
+        count1 = tablecount("Results")
 
-        cur.execute("SELECT COUNT(*) FROM Ligands")
-        ligcount1 = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
+        ligcount1 = tablecount("Ligands")
         os.system("rm output.db")
 
         status5 = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --max_poses 5"
         )
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Results")
-        count5 = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
+        count5 = tablecount("Results")
         os.system("rm output.db")
 
         assert status1 == 0

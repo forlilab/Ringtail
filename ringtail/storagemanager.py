@@ -122,47 +122,61 @@ class StorageManager:
         """
         result_rows = []
         interaction_dictionaries = []
-        interactions = []
-        saved_pose_idx = 0  # save index of last saved pose
-        cluster_saved_pose_map = {}  # save mapping of cluster number to saved_pose_idx
-
+        cluster_map_to_run_pose = (
+            {}
+        )  # save mapping of cluster number/id to run number and pose rank, as additional interactions from clustered data don't get their own results row
         ligand_row = cls._generate_ligand_row(ligand_dict)
 
         # iterates and essentially creates pose rows
         for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
             cluster = ligand_dict["cluster_list"][idx]
+            pose_rank = idx + 1
             # save everything if this is a cluster top pose
             current_interactions = {
                 "ligand_name": ligand_row[0],
-                "run_number": run_number,
-                "pose_rank": idx + 1,
             }
             if run_number in ligand_dict["poses_to_save"]:
+                cluster_map_to_run_pose[cluster] = {
+                    "run_number": run_number,
+                    "pose_rank": pose_rank,
+                }
+                current_interactions.update(cluster_map_to_run_pose[cluster])
                 # Check how things are parsed here, might not be most efficient
                 result_rows.append(
                     cls._generate_results_row(ligand_dict, idx, run_number)
                 )
-                cluster_saved_pose_map[cluster] = saved_pose_idx
-                saved_pose_idx += 1
                 if ligand_dict["interactions"] != []:
                     # here is where I have to add run number ligname and rank
                     current_interactions.update(ligand_dict["interactions"][idx])
-                    interaction_dictionaries.append([current_interactions])
+                    interaction_dictionaries.append(current_interactions)
             elif run_number in ligand_dict["tolerated_interaction_runs"]:
+                """
+                one pose may represent more poses, if they are clustered similar enough
+                such a pose will only get one results row, but interactions from the other
+                clustered 'child poses' may be considered. They will get the same run number
+                and pose rank as the best cluster pose
+                """
                 # adds to list started by best-scoring pose in cluster
-                if cluster not in cluster_saved_pose_map:
+                if cluster not in cluster_map_to_run_pose.keys():
                     continue
+                else:
+                    current_interactions.update(
+                        {
+                            "run_number": cluster_map_to_run_pose[cluster][
+                                "run_number"
+                            ],
+                            "pose_rank": cluster_map_to_run_pose[cluster]["pose_rank"],
+                        }
+                    )
                 current_interactions.update(ligand_dict["interactions"][idx])
-                interaction_dictionaries.append([current_interactions])
-        for pose_interactions in interaction_dictionaries:
-            if not any(pose_interactions):  # skip any empty dictionaries
-                continue
-            interactions.extend(cls._generate_interaction_tuples(pose_interactions))
+                interaction_dictionaries.append(current_interactions)
+
+        interactions_tuples = cls._generate_interaction_tuples(interaction_dictionaries)
 
         data_dict = {
             "ligand": ligand_row,
             "poses": result_rows,
-            "interactions": interactions,
+            "interactions": interactions_tuples,
             "receptor_row": cls._generate_receptor_row(ligand_dict),
         }
         return data_dict
@@ -2743,38 +2757,38 @@ class StorageManagerSQLite(StorageManager):
         """Creates table for results. Columns are:
         Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
         ligand_id           INTEGER FOREIGN KEY from Ligands,
-        receptor            VARCHAR[],
-        pose_rank           INT,
-        run_number          INT,
-        docking_score    FLOAT(4),
-        leff                FLOAT(4),
-        deltas              FLOAT(4),
-        cluster_rmsd        FLOAT(4),
-        cluster_size        INT[],
-        reference_rmsd      FLOAT(4),
-        energies_inter      FLOAT(4),
-        energies_vdw        FLOAT(4),
-        energies_electro    FLOAT(4),
-        energies_flexLig    FLOAT(4),
-        energies_flexLR     FLOAT(4),
-        energies_intra      FLOAT(4),
-        energies_torsional  FLOAT(4),
-        unbound_energy      FLOAT(4),
-        nr_interactions     INT[],
-        num_hb              INT[],
-        about_x             FLOAT(4),
-        about_y             FLOAT(4),
-        about_z             FLOAT(4),
-        trans_x             FLOAT(4),
-        trans_y             FLOAT(4),
-        trans_z             FLOAT(4),
-        axisangle_x         FLOAT(4),
-        axisangle_y         FLOAT(4),
-        axisangle_z         FLOAT(4),
-        axisangle_w         FLOAT(4),
-        dihedrals           VARCHAR[],
-        ligand_coordinates         VARCHAR[],
-        flexible_res_coordinates   VARCHAR[]
+        receptor            VARCHAR,
+        pose_rank           INTEGER,
+        run_number          INTEGER,
+        docking_score       FLOAT,
+        leff                FLOAT,
+        deltas              FLOAT,
+        cluster_rmsd        FLOAT,
+        cluster_size        INTEGER,
+        reference_rmsd      FLOAT,
+        energies_inter      FLOAT,
+        energies_vdw        FLOAT,
+        energies_electro    FLOAT,
+        energies_flexLig    FLOAT,
+        energies_flexLR     FLOAT,
+        energies_intra      FLOAT,
+        energies_torsional  FLOAT,
+        unbound_energy      FLOAT,
+        nr_interactions     INTEGER,
+        num_hb              INTEGER,
+        about_x             FLOAT,
+        about_y             FLOAT,
+        about_z             FLOAT,
+        trans_x             FLOAT,
+        trans_y             FLOAT,
+        trans_z             FLOAT,
+        axisangle_x         FLOAT,
+        axisangle_y         FLOAT,
+        axisangle_z         FLOAT,
+        axisangle_w         FLOAT,
+        dihedrals           VARCHAR,
+        ligand_coordinates         VARCHAR,
+        flexible_res_coordinates   VARCHAR
 
         Raises:
             DatabaseTableCreationError: Description
@@ -2782,39 +2796,39 @@ class StorageManagerSQLite(StorageManager):
 
         sql_results_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
-            ligand_id           INT[],
-            receptor            VARCHAR[],
-            pose_rank           INT[],
-            run_number          INT[],
-            docking_score       FLOAT(4),
-            leff                FLOAT(4),
-            deltas              FLOAT(4),
-            cluster_rmsd        FLOAT(4),
-            cluster_size        INT[],
-            reference_rmsd      FLOAT(4),
-            energies_inter      FLOAT(4),
-            energies_vdw        FLOAT(4),
-            energies_electro    FLOAT(4),
-            energies_flexLig    FLOAT(4),
-            energies_flexLR     FLOAT(4),
-            energies_intra      FLOAT(4),
-            energies_torsional  FLOAT(4),
-            unbound_energy      FLOAT(4),
-            nr_interactions     INT[],
-            num_hb              INT[],
-            about_x             FLOAT(4),
-            about_y             FLOAT(4),
-            about_z             FLOAT(4),
-            trans_x             FLOAT(4),
-            trans_y             FLOAT(4),
-            trans_z             FLOAT(4),
-            axisangle_x         FLOAT(4),
-            axisangle_y         FLOAT(4),
-            axisangle_z         FLOAT(4),
-            axisangle_w         FLOAT(4),
-            dihedrals           VARCHAR[],
-            ligand_coordinates         VARCHAR[],
-            flexible_res_coordinates   VARCHAR[],
+            ligand_id           INT,
+            receptor            VARCHAR,
+            pose_rank           INTEGER,
+            run_number          INTEGER,
+            docking_score       FLOAT,
+            leff                FLOAT,
+            deltas              FLOAT,
+            cluster_rmsd        FLOAT,
+            cluster_size        INTEGER,
+            reference_rmsd      FLOAT,
+            energies_inter      FLOAT,
+            energies_vdw        FLOAT,
+            energies_electro    FLOAT,
+            energies_flexLig    FLOAT,
+            energies_flexLR     FLOAT,
+            energies_intra      FLOAT,
+            energies_torsional  FLOAT,
+            unbound_energy      FLOAT,
+            nr_interactions     INTEGER,
+            num_hb              INTEGER,
+            about_x             FLOAT,
+            about_y             FLOAT,
+            about_z             FLOAT,
+            trans_x             FLOAT,
+            trans_y             FLOAT,
+            trans_z             FLOAT,
+            axisangle_x         FLOAT,
+            axisangle_y         FLOAT,
+            axisangle_z         FLOAT,
+            axisangle_w         FLOAT,
+            dihedrals           VARCHAR,
+            ligand_coordinates         VARCHAR,
+            flexible_res_coordinates   VARCHAR,
             FOREIGN KEY (ligand_id) REFERENCES Ligands(ligand_id)
             ); """
 
@@ -3021,10 +3035,12 @@ class StorageManagerSQLite(StorageManager):
         temp_to_interaction = """
             INSERT INTO Interactions(pose_id, interaction_id)
             SELECT R.pose_id, II.interaction_id
-            FROM Results AS R
-            JOIN Ligands AS L
-                ON R.ligand_id = L.ligand_id
-            JOIN Results_temp AS RT 
+            FROM Interactions_temp AS IT
+            LEFT JOIN Results_temp RT 
+                ON RT.ligname      = IT.ligname
+                AND RT.pose_rank   = IT.pose_rank
+                AND RT.run_number  = IT.run_number    
+            LEFT JOIN Results AS R
                 ON RT.receptor=R.receptor
                 AND RT.about_x=R.about_x
                 AND RT.about_y=R.about_y
@@ -3036,18 +3052,14 @@ class StorageManagerSQLite(StorageManager):
                 AND RT.axisangle_y=R.axisangle_y
                 AND RT.axisangle_z=R.axisangle_z
                 AND RT.axisangle_w=R.axisangle_w
-                AND RT.dihedrals=R.dihedrals
-            JOIN Interactions_temp AS IT
-                ON RT.ligname      = IT.ligname
-                AND RT.pose_rank   = IT.pose_rank
-                AND RT.run_number  = IT.run_number
+                AND RT.dihedrals=R.dihedrals 
             JOIN Interaction_indices AS II
                 ON II.interaction_type  = IT.interaction_type
                 AND II.rec_chain        = IT.rec_chain
                 AND II.rec_resname      = IT.rec_resname
                 AND II.rec_resid        = IT.rec_resid
                 AND II.rec_atom         = IT.rec_atom
-                AND II.rec_atomid       = IT.rec_atomid;
+                AND II.rec_atomid       = IT.rec_atomid;  
             """
         try:
             self.conn.execute(temp_to_results)
