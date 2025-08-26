@@ -231,7 +231,12 @@ class TestRingtailCore:
         os.system(("rm " + log_file_name))
 
     def test_similar_ligands_interaction(self, monkeypatch):
-        rtc = RingtailCore(db_file="output.db")
+
+        rtc = RingtailCore(db_file="cluster.db")
+        rtc.add_results_from_files(
+            # file_list="test_data/filelist1.txt",
+            file_path=["test_data/adgpu/group1/", "test_data/adgpu/group2/"],
+        )
         ligand_name = "28837"
         rtc.filter(ebest=-6, interaction_cluster=0.5)
         monkeypatch.setattr("builtins.input", lambda _: 0)  # provides terminal input
@@ -240,12 +245,12 @@ class TestRingtailCore:
         assert number_similar == 13
 
     def test_similar_ligands_mfpt(self, monkeypatch):
-        rtc = RingtailCore(db_file="output.db")
+        rtc = RingtailCore(db_file="cluster.db")
         ligand_name = "287065"
         rtc.filter(ebest=-6, mfpt_cluster=0.5)
         monkeypatch.setattr("builtins.input", lambda _: 1)  # provides terminal input
         number_similar = rtc.find_similar_ligands(ligand_name)
-
+        os.system("rm cluster.db")
         assert number_similar == 8
 
     def test_create_rdkitmol(self):
