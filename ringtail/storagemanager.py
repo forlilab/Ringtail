@@ -17,7 +17,7 @@ from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters
-from .util import numlist2str, raise_not_implemented, statuses
+from .util import numlist2str, statuses
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -515,7 +515,7 @@ class StorageManager:
             attached_db (str, optional): name of attached DB (not including file extension)
             vacuum (bool, optional): indicates that database should be vacuumed before closing
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def check_ringtaildb_version(self):
         """
@@ -525,7 +525,7 @@ class StorageManager:
             bool: whether or not db is compatible with the code base
             str: current database version
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def finalize_database_write(self):
         """
@@ -541,7 +541,7 @@ class StorageManager:
         Args:
             backup_name (str, optional): name of the cloned database
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def update_database_version(self, new_version, consent=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
@@ -555,7 +555,7 @@ class StorageManager:
         Returns:
             bool: final consent
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def db_query(self, query, params: iter) -> iter:
         """Executes provided sql query. Returns iter for results.
@@ -567,7 +567,7 @@ class StorageManager:
         Returns:
             iter: Contains results of query
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
         """
@@ -585,7 +585,7 @@ class StorageManager:
         Returns:
             iter: if requesting return value(s)
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def merge_databases(self, merging_db: str, backup: bool = True):
         """
@@ -605,7 +605,7 @@ class StorageManager:
         Raises:
             MergeError
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def table_length(self, table) -> int:
         """
@@ -617,7 +617,7 @@ class StorageManager:
         Returns:
             int: number of poses in table/bookmark
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def prune_nonpassing(self, bookmark_name: str):
         """
@@ -642,7 +642,7 @@ class StorageManager:
             Returns:
                 dict: containing the filter data
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_filters_and_filterwindow(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark
@@ -654,7 +654,7 @@ class StorageManager:
             Returns:
                 tuple(dict, str): containing the filter data and filter window
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
@@ -665,7 +665,7 @@ class StorageManager:
         Raises:
             ValueError: wrong terminal input
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_summary_data(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
@@ -684,7 +684,7 @@ class StorageManager:
         Returns:
             dict: of data summary
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_flexres_info(self, receptor):
         """fetch flexible residues names and atomname lists
@@ -692,7 +692,7 @@ class StorageManager:
         Returns:
             tuple: (flexible_residues, flexres_atomnames)
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_passing_ligands_rdkit_relevant_info(self, bookmark_name: str) -> iter:
         """fetch information required by vsmanager for writing out molecules
@@ -701,7 +701,7 @@ class StorageManager:
             iter: contains LigName, rdmol,
                 atom_index_map, hydrogen_parents
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_ligand_rdkit_relevant_info(self, ligname: str) -> tuple:
         """fetch information required by vsmanager for writing out molecules
@@ -709,7 +709,7 @@ class StorageManager:
         Returns:
             tuple: contains rdmol, atom_index_map, hydrogen_parents
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_lignames_and_poses_for_selection(
         self, selection: str
@@ -724,7 +724,7 @@ class StorageManager:
         Returns:
             dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_pose_interactions(self, Pose_ID) -> iter:
         """
@@ -736,13 +736,13 @@ class StorageManager:
         Returns:
             iter: of interaction information for given Pose_ID
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def create_status_tables(self):
         """
         Creates status tables if needed
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def accept_pose(self, pose_id: int):
         """
@@ -751,7 +751,7 @@ class StorageManager:
         Args:
             pose_id (int)
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def maybe_pose(self, pose_id: int):
         """
@@ -760,7 +760,7 @@ class StorageManager:
         Args:
             pose_id (int)
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def reject_pose(self, pose_id: int):
         """
@@ -769,7 +769,7 @@ class StorageManager:
         Args:
             pose_id (int)
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_viewable_data_columns_from(
         self, table: str, length: int, last_pose_id: int = 0
@@ -780,7 +780,7 @@ class StorageManager:
         Returns:
             iter: iterable/cursor of the columns
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
         """
@@ -793,7 +793,7 @@ class StorageManager:
         Returns:
             Union[None, int]: rowid if any
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def tables_in_db(self) -> list:
         """
@@ -802,7 +802,7 @@ class StorageManager:
         Returns:
             list: list of table names
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
         """
@@ -815,7 +815,7 @@ class StorageManager:
         Returns:
             list[int]: selected poses for ligand
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def get_starting_rowid(self, table: str) -> int:
         """
@@ -828,7 +828,7 @@ class StorageManager:
         Returns:
             int: first row id belonging to that selection
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def get_bookmark_selection(
         self,
@@ -2634,10 +2634,10 @@ class StorageManager:
         pass
 
     def _create_indices(self):
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def _insert_receptors(self, receptor_array):
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def _insert_interaction_index_rows(self, interaction_tuple) -> int:
         """
@@ -2652,15 +2652,15 @@ class StorageManager:
         Raises:
             DatabaseInsertionError
         """
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def _generate_result_filtering_query(
         self, filters_dict, bookmark_name, filter_bookmark
     ):
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     def _insert_receptor_blob(self, receptor, rec_name):
-        raise_not_implemented()
+        raise NotImplementedError("Method needs to be implemented in child class.")
 
     # endregion
 
