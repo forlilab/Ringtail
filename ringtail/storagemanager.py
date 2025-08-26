@@ -1408,7 +1408,12 @@ class StorageManager:
                     )
             return smarts_mol
 
-        select_statement = "SELECT R.Pose_id, Ligands.ligand_id, Ligands.rdmol "
+        select_statement = "SELECT R.pose_id, Ligands.ligand_id, Ligands.rdmol "
+        headers = [
+            "pose_id",
+            "ligand_id",
+            "rdmol",
+        ]
         # handle substruct
         if "ligand_substruct" in ligand_filters:
             for substruct in ligand_filters["ligand_substruct"]:
@@ -1419,6 +1424,7 @@ class StorageManager:
             position = True
             # we need additional info if doing position search
             select_statement += ", Ligands.atom_index_map, R.ligand_coordinates "
+            headers.extend(["atom_index_map", "ligand_coordinates"])
         # build full query
         query = select_statement + partial_query
 
@@ -1496,13 +1502,14 @@ class StorageManager:
         ligands_checked = 0
         filtered_ligands = {}
         for ligandrow in _stream_query(query):
+            ligandict = dict(zip(headers, ligandrow))
             # substruct and maxatoms do not discriminate on poses, check if ligand has already been accounted for
-            if not position and ligandrow["ligand_id"] in filtered_ligands:
-                filtered_ligands[ligandrow["ligand_id"]].append(ligandrow["pose_id"])
+            if not position and ligandict["ligand_id"] in filtered_ligands:
+                filtered_ligands[ligandict["ligand_id"]].append(ligandict["pose_id"])
             # the real workhorse
             else:
                 # deserialize binary rdmol
-                ligand_mol = Chem.Mol(ligandrow["rdmol"])
+                ligand_mol = Chem.Mol(ligandict["rdmol"])
                 # check if qualify for maxatoms
                 if maxatoms > 0:
                     if not ligand_mol.GetNumHeavyAtoms() <= maxatoms:
@@ -1545,8 +1552,8 @@ class StorageManager:
                     for filterrow in substruct_pos:
                         # filterrow[0] should be the smarts pattern
                         smarts_mol = _smarts_to_mol(filterrow[0])
-                        ligand_index_map = _ligand_indexmap(ligandrow["atom_index_map"])
-                        ligand_coordinates = ligandrow["ligand_coordinates"]
+                        ligand_index_map = _ligand_indexmap(ligandict["atom_index_map"])
+                        ligand_coordinates = ligandict["ligand_coordinates"]
                         # filterrow [1:] should be indices, distance allowance, and coordinates for smarts match
                         substruct_pos_filter = filterrow[1:]
                         for hit in ligand_mol.GetSubstructMatches(smarts_mol):
@@ -1574,12 +1581,12 @@ class StorageManager:
 
             # ligand only makes it here if it passed all specified rdkit filters
             # add pose id to list if ligand already in the list
-            if ligandrow["ligand_id"] in filtered_ligands:
+            if ligandict["ligand_id"] in filtered_ligands:
 
-                filtered_ligands[ligandrow["ligand_id"]].append(ligandrow["pose_id"])
+                filtered_ligands[ligandict["ligand_id"]].append(ligandict["pose_id"])
             # add new ligand in the list of passing ligands
             else:
-                filtered_ligands[ligandrow["ligand_id"]] = [ligandrow["pose_id"]]
+                filtered_ligands[ligandict["ligand_id"]] = [ligandict["pose_id"]]
 
         return filtered_ligands
 
@@ -2892,9 +2899,17 @@ class StorageManagerSQLite(StorageManager):
                 rec_atom            VARCHAR,
                 rec_atomid          VARCHAR);
             """
+            create_temp_mapping_table = """
+            CREATE TEMP TABLE pose_map(
+                pose_id             INTEGER,
+                ligand_id           INTEGER,
+                run_number          INTEGER,
+                pose_rank           INTEGER);
+            """
             # create temporary tables
             self.conn.execute(create_temp_results)
             self.conn.execute(create_temp_interactions)
+            self.conn.execute(create_temp_mapping_table)
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error while creating temporary results tables."
@@ -3030,39 +3045,32 @@ class StorageManagerSQLite(StorageManager):
                 T.ligand_coordinates,
                 T.flexible_res_coordinates
             FROM Results_temp AS T
-            JOIN Ligands AS L ON L.LigName = T.LigName;"""
-        # INSERT INTO Interactions(pose_id, interaction_id)
+            JOIN Ligands AS L ON L.LigName = T.LigName
+            RETURNING pose_id, ligand_id, run_number, pose_rank;"""
+
         temp_to_interaction = """
             INSERT INTO Interactions(pose_id, interaction_id)
-            SELECT R.pose_id, II.interaction_id
-            FROM Interactions_temp AS IT
-            LEFT JOIN Results_temp RT 
-                ON RT.ligname      = IT.ligname
-                AND RT.pose_rank   = IT.pose_rank
-                AND RT.run_number  = IT.run_number    
-            LEFT JOIN Results AS R
-                ON RT.receptor=R.receptor
-                AND RT.about_x=R.about_x
-                AND RT.about_y=R.about_y
-                AND RT.about_z=R.about_z
-                AND RT.trans_x=R.trans_x
-                AND RT.trans_y=R.trans_y
-                AND RT.trans_z=R.trans_z
-                AND RT.axisangle_x=R.axisangle_x
-                AND RT.axisangle_y=R.axisangle_y
-                AND RT.axisangle_z=R.axisangle_z
-                AND RT.axisangle_w=R.axisangle_w
-                AND RT.dihedrals=R.dihedrals 
-            JOIN Interaction_indices AS II
-                ON II.interaction_type  = IT.interaction_type
-                AND II.rec_chain        = IT.rec_chain
-                AND II.rec_resname      = IT.rec_resname
-                AND II.rec_resid        = IT.rec_resid
-                AND II.rec_atom         = IT.rec_atom
-                AND II.rec_atomid       = IT.rec_atomid;  
-            """
+            SELECT M.pose_id, II.interaction_id
+            FROM Interactions_temp IT
+            JOIN pose_map M
+                ON IT.ligname = L.ligname
+                AND IT.pose_rank = M.pose_rank
+                AND IT.run_number = M.run_number
+            JOIN Ligands L
+                ON M.ligand_id = L.ligand_id
+            JOIN Interaction_indices II
+                ON II.interaction_type = IT.interaction_type
+                AND II.rec_chain = IT.rec_chain
+                AND II.rec_resname = IT.rec_resname
+                AND II.rec_resid = IT.rec_resid
+                AND II.rec_atom = IT.rec_atom
+                AND II.rec_atomid = IT.rec_atomid;"""
         try:
-            self.conn.execute(temp_to_results)
+            mapping = self.conn.execute(temp_to_results)
+            self.conn.executemany(
+                "INSERT INTO pose_map (pose_id, ligand_id, run_number, pose_rank) VALUES (?, ?, ?, ?)",
+                mapping,
+            )
             self.conn.execute(temp_to_interaction)
             if commit:
                 self.conn.commit()
@@ -5184,7 +5192,7 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             con = sqlite3.connect(self.db_file)
-            con.row_factory = sqlite3.Row
+            # con.row_factory = sqlite3.Row
             cursor = con.execute("PRAGMA synchronous = OFF;")
             cursor.execute("PRAGMA journal_mode = MEMORY;")
             con.commit()
