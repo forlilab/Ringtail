@@ -4,13 +4,10 @@
 # Ringtail storage adaptor for DuckDB
 #
 
-import time
-import json
 import os.path
 import pandas as pd
 from .logutils import LOGGER as logger
 from typing import Union
-import time
 from importlib.metadata import version
 from .util import numlist2str, statuses
 from .exceptions import (
@@ -76,7 +73,7 @@ class StorageManagerDuckDB(StorageManager):
             hydrogen_parents    VARCHAR,
             input_model         VARCHAR)"""
 
-        self.db_query(ligand_table, commit=True)
+        self.db_query(ligand_table)
 
     def _insert_ligands(self, ligand_array: list = []) -> list:
         """
@@ -152,7 +149,7 @@ class StorageManagerDuckDB(StorageManager):
             flexible_res_coordinates   VARCHAR,
             ); """
 
-        self.db_query(sql_results_table, commit=True)
+        self.db_query(sql_results_table)
 
     def _create_temporary_results_tables(self):
         try:
@@ -563,8 +560,8 @@ class StorageManagerDuckDB(StorageManager):
             flexible_residues   VARCHAR,
             flexres_atomnames   VARCHAR,
             receptor_object     BLOB
-        )"""
-        self.db_query(receptors_table, commit=True)
+        );"""
+        self.db_query(receptors_table)
 
     def _insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
@@ -592,7 +589,7 @@ class StorageManagerDuckDB(StorageManager):
         except duckdb.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting receptor.") from e
 
-    def _insert_receptor_blob(self, receptor: bytes, rec_name: str):
+    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
 
         Args:
@@ -640,7 +637,7 @@ class StorageManagerDuckDB(StorageManager):
         docking_mode        VARCHAR,
         number_of_poses     VARCHAR)"""
 
-        self.db_query(sql_str, commit=True)
+        self.db_query(sql_str)
 
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
@@ -697,7 +694,7 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         self.db_query("""DROP TABLE IF EXISTS Interaction_indices""")
-        self.db_query(interaction_index_table, commit=True)
+        self.db_query(interaction_index_table)
 
     def _create_interaction_table(self):
         """Create table a "tall-skinny" table of each pose-interaction.
@@ -718,7 +715,7 @@ class StorageManagerDuckDB(StorageManager):
         Pose_ID   INTEGER REFERENCES Results(pose_id),
         interaction_id INTEGER REFERENCES Interaction_indices(interaction_id))"""
 
-        self.db_query(interaction_table, commit=True)
+        self.db_query(interaction_table)
 
     def _insert_interaction_rows(
         self, interaction_rows, duplicates, duplicate_handling
@@ -861,7 +858,7 @@ class StorageManagerDuckDB(StorageManager):
         pose_id             INTEGER REFERENCES Results(pose_id));"""
 
         self.db_query(filters_sql)
-        self.db_query(filter_pose_sql, commit=True)
+        self.db_query(filter_pose_sql)
 
     def _insert_cluster_data(
         self,
@@ -932,6 +929,15 @@ class StorageManagerDuckDB(StorageManager):
         logger.info(
             "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
         )
+
+    def _delete_nontables(self):
+        """
+        Deletes objects in the database that are not tables (handled separately)
+        """
+        sequences = self.db_query("""SELECT sequence_name FROM duckdb_sequences();""")
+        if sequences:
+            for sequence in sequences.fetchall():
+                self.db_query(f"DROP SEQUENCE {sequence[0]};")
 
     # endregion
 
@@ -2049,7 +2055,7 @@ class StorageManagerDuckDB(StorageManager):
 
             return summary_data
 
-        except duckdb.OperationalError as e:
+        except duckdb.Error as e:
             raise StorageError("Error while fetching summary data!") from e
 
     def fetch_clustered_similars(self, ligname: str):
@@ -2212,22 +2218,6 @@ class StorageManagerDuckDB(StorageManager):
             bool: whether or not db is compatible with the code base
             str: current database version
         """
-        # cur = self.conn.cursor()
-        # db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
-        # if db_version == "0":
-        #     # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
-        #     cur.execute(
-        #         "SELECT EXISTS(SELECT 1 FROM duckdb_master WHERE type='table' AND name='Results');"
-        #     )
-        #     # if db version is 0 but has a results table, it is 1.0.0
-        #     if cur.fetchone()[0] != 0:
-        #         db_version = "100"
-        #     # else empty or corrupt database
-        #     else:
-        #         raise StorageError(
-        #             f"The database requested {self.db_file} does not exist or does not have any tables. Check for spelling errors, else the database may be corrupt (delete the file before using the same name again)"
-        #         )
-        # db_schema_ver = ".".join([*db_version])
         db_schema_ver = "3.0.0"
         if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
             is_compatible = True

@@ -10,7 +10,6 @@ import os.path
 import pandas as pd
 from .logutils import LOGGER as logger
 import sys
-import re
 from signal import signal, SIGINT
 from rdkit import Chem
 from typing import Union
@@ -106,11 +105,10 @@ class StorageManager:
 
     @classmethod
     def format_for_storage(cls, ligand_dict: dict) -> dict:
-        # TODO the only sql specific about this method is the methods it uses
         """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
         For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
         We also save a mapping of the its cluster number to the index in interaction_dictionaries
-        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_saved_pose_map
+        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_map_to_run_pose
         Finally, we calculate the interaction tuple lists for each pose
 
         Args:
@@ -122,9 +120,7 @@ class StorageManager:
         """
         result_rows = []
         interaction_dictionaries = []
-        cluster_map_to_run_pose = (
-            {}
-        )  # save mapping of cluster number/id to run number and pose rank, as additional interactions from clustered data don't get their own results row
+        cluster_map_to_run_pose = {}
         ligand_row = cls._generate_ligand_row(ligand_dict)
 
         # iterates and essentially creates pose rows
@@ -150,12 +146,6 @@ class StorageManager:
                     current_interactions.update(ligand_dict["interactions"][idx])
                     interaction_dictionaries.append(current_interactions)
             elif run_number in ligand_dict["tolerated_interaction_runs"]:
-                """
-                one pose may represent more poses, if they are clustered similar enough
-                such a pose will only get one results row, but interactions from the other
-                clustered 'child poses' may be considered. They will get the same run number
-                and pose rank as the best cluster pose
-                """
                 # adds to list started by best-scoring pose in cluster
                 if cluster not in cluster_map_to_run_pose.keys():
                     continue
@@ -216,16 +206,6 @@ class StorageManager:
         # insert receptor if database does not have already have a receptor entry
         if not receptors:
             self._insert_receptors(receptor_data)
-
-    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
-        """Takes object of Receptor class, updates the column in Receptor table
-
-        Args:
-            receptor (bytes): bytes receptor object to be inserted into DB
-            rec_name (string): Name of receptor. Used to insert into correct row of DB
-        """
-        # TODO make virtual
-        self._insert_receptor_blob(receptor, rec_name)
 
     def filter_results(
         self,
@@ -346,11 +326,6 @@ class StorageManager:
         query.SELECT("filter_id").FROM("Filters").WHERE("name=?", bookmark_name)
 
         filter_id = self.db_query(*query.build()).fetchone()[0]
-        # delete from filters
-        query = self.QueryBuilder()
-        self.db_query(
-            *query.DELETE_FROM("Filters").WHERE("filter_id = ?", filter_id).build()
-        )
         # delete from filtered_poses table
         query = self.QueryBuilder()
         self.db_query(
@@ -358,6 +333,11 @@ class StorageManager:
             .WHERE("filter_id = ?", filter_id)
             .build(),
             commit=True,
+        )
+        # delete from filters
+        query = self.QueryBuilder()
+        self.db_query(
+            *query.DELETE_FROM("Filters").WHERE("filter_id = ?", filter_id).build()
         )
         logger.info(
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
@@ -918,6 +898,7 @@ class StorageManager:
         self._create_filtering_tables()
 
         self._set_ringtail_db_schema_version(self._db_schema_ver)
+        self.conn.commit()
 
     @classmethod
     def _generate_results_row(cls, ligand_dict, pose_rank, run_number) -> list:
@@ -2467,13 +2448,18 @@ class StorageManager:
         Raises:
             StorageError
         """
-
-        # fetch existing tables
+        # first, delete tables with foreign keys
+        self._delete_table("Filtered_poses")
+        self._delete_table("Interactions")
+        self._delete_table("Interaction_indices")
+        self._delete_table("Results")
+        # then, fetch remaining tables
         tables = self.tables_in_db()
-
-        # drop tables
         for table in tables:
             self._delete_table(table)
+        # check if has sequences
+        self._delete_nontables()
+        self.conn.commit()
 
     def _delete_table(self, table_name: str, db_alias: str = None):
         """
@@ -2490,7 +2476,13 @@ class StorageManager:
             name = table_name
         query = self.QueryBuilder()
         query.DROP_IF_EXISTS(name)
-        return self.db_query(query.build()[0], commit=True)
+        return self.db_query(query.build()[0])
+
+    def _delete_nontables(self):
+        """
+        Deletes objects in the database that are not tables (handled separately)
+        """
+        pass
 
     def is_bookmark(self, table: str) -> bool:
         """
@@ -2666,7 +2658,13 @@ class StorageManager:
     ):
         raise NotImplementedError("Method needs to be implemented in child class.")
 
-    def _insert_receptor_blob(self, receptor, rec_name):
+    def insert_receptor_blob(self, receptor, rec_name):
+        """Takes object of Receptor class, updates the column in Receptor table
+
+        Args:
+            receptor (bytes): bytes receptor object to be inserted into DB
+            rec_name (string): Name of receptor. Used to insert into correct row of DB
+        """
         raise NotImplementedError("Method needs to be implemented in child class.")
 
     # endregion
@@ -3184,11 +3182,11 @@ class StorageManagerSQLite(StorageManager):
         """Create table for receptors. Columns are:
         Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
         RecName             VARCHAR,
-        box_dim             VARCHAR[],
-        box_center          VARCHAR[],
-        grid_spacing        FLOAT(4),
-        flexible_residues   VARCHAR[],
-        flexres_atomnames   VARCHAR[],
+        box_dim             VARCHAR,
+        box_center          VARCHAR,
+        grid_spacing        FLOAT,
+        flexible_residues   VARCHAR,
+        flexres_atomnames   VARCHAR,
         receptor_object     BLOB
 
         Raises:
@@ -3240,7 +3238,7 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError("Error while inserting receptor.") from e
 
-    def _insert_receptor_blob(self, receptor: bytes, rec_name: str):
+    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
 
         Args:
@@ -4739,10 +4737,7 @@ class StorageManagerSQLite(StorageManager):
         if code_version in self._db_schema_code_compatibility[db_version]:
             rtdb_version = db_version.replace(".", "")
             # if so, proceed to set db schema version
-            cur = self.conn.cursor()
-            cur.execute(f"PRAGMA user_version = {rtdb_version}")
-            self.conn.commit()
-            cur.close()
+            self.conn.execute(f"PRAGMA user_version = {rtdb_version}")
             logger.info("Database version set to {0}".format(rtdb_version))
         else:
             raise StorageError(
@@ -4899,9 +4894,9 @@ class StorageManagerSQLite(StorageManager):
             "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
         )
         try:
-            self.conn.commit()
             cur.close()
             self._set_ringtail_db_schema_version("1.1.0")
+            self.conn.commit()
         except sqlite3.OperationalError as e:
             raise DatabaseConnectionError(
                 f"Error while updating database from v1.0.0 to v1.1.0: {e}"
@@ -4946,10 +4941,10 @@ class StorageManagerSQLite(StorageManager):
             )
             # drop old bitvector table
             cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
-            self.conn.commit()
             # index certain tables
             self._create_indices()
             self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
+            self.conn.commit()
         except sqlite3.OperationalError as e:
             raise DatabaseConnectionError(
                 f"Error while creating new interaction tables: {e}"
@@ -5140,12 +5135,13 @@ class StorageManagerSQLite(StorageManager):
         # delete old table
         self._delete_table("Results")
         # rename new table
-        self.db_query("ALTER TABLE Results_new RENAME TO Results;", commit=True)
+        self.db_query("ALTER TABLE Results_new RENAME TO Results;")
 
         # build new indices if you got this far successfully
         self._create_indices()
-        self.db_query("REINDEX", commit=True)
+        self.db_query("REINDEX")
         self._set_ringtail_db_schema_version("3.0.0")
+        self.conn.commit()
 
     def _delete_filter_data(self, db_alias: str = None):
         """
