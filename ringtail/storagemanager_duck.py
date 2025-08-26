@@ -1934,11 +1934,8 @@ class StorageManagerDuckDB(StorageManager):
             iter: of interaction information for given Pose_ID
         """
         # check if table exist
-        cur = self.db_query(
-            """SELECT name FROM duckdb_master WHERE type='table' AND name='Interactions';"""
-        )
-        if len(cur.fetchall()) == 0:
-            return None
+        if not "Interactions" in self.tables_in_db():
+            return
 
         query = self.QueryBuilder()
         query.SELECT(
