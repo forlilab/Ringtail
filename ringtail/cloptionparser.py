@@ -741,8 +741,6 @@ class CLOptionParser:
             )
         if parsed_opts.storage_type:
             storage_type = parsed_opts.storage_type.lower()
-        else:
-            storage_type = "sqlite"
         self.rtcore = RingtailCore(
             db_file=db_file,
             docking_mode=docking_alias_to_mode[parsed_opts.docking_mode.lower()],

@@ -80,8 +80,8 @@ class RingtailCore:
 
     def __init__(
         self,
-        db_file: str = "output.db",
-        storage_type: str = "sqlite",
+        db_file: str = RingtailDefaults.output_db,
+        storage_type: str = RingtailDefaults.storage_type,
         docking_mode: str = RingtailDefaults.docking_mode,
         logging_level: str = "WARNING",
     ):
