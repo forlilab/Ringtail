@@ -9,13 +9,9 @@ import json
 import os.path
 import pandas as pd
 from .logutils import LOGGER as logger
-import sys
-from signal import signal, SIGINT
-from rdkit import Chem
 from typing import Union
 import time
 from importlib.metadata import version
-from .ringtailoptions import Filters
 from .util import numlist2str, statuses
 from .exceptions import (
     StorageError,
@@ -209,9 +205,17 @@ class StorageManagerDuckDB(StorageManager):
                 rec_atom            VARCHAR,
                 rec_atomid          VARCHAR);
             """
+            create_temp_mapping_table = """
+            CREATE TEMP TABLE pose_map(
+                pose_id             INTEGER,
+                ligand_id           INTEGER,
+                run_number          INTEGER,
+                pose_rank           INTEGER);
+            """
             # create temporary tables
             self.conn.execute(create_temp_results)
             self.conn.execute(create_temp_interactions)
+            # self.conn.execute(create_temp_mapping_table)
         except duckdb.OperationalError as e:
             raise DatabaseInsertionError(
                 "Error while creating temporary results tables."
@@ -321,7 +325,7 @@ class StorageManagerDuckDB(StorageManager):
 
     def _move_tempresults_to_database(self, commit: bool = True):
         temp_to_results = """
-            INSERT INTO Results (
+        INSERT INTO Results (
                 ligand_id,
                 receptor,
                 pose_rank,
@@ -391,7 +395,8 @@ class StorageManagerDuckDB(StorageManager):
                 T.ligand_coordinates,
                 T.flexible_res_coordinates
             FROM Results_temp AS T
-            JOIN Ligands AS L ON L.LigName = T.LigName;"""
+            JOIN Ligands AS L ON L.LigName = T.LigName
+            RETURNING pose_id, ligand_id, run_number, pose_rank;"""
 
         temp_to_interaction = """
             INSERT INTO Interactions(pose_id, interaction_id)
