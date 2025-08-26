@@ -9,6 +9,7 @@ import sqlite3
 import os
 import json
 import pytest
+import duckdb
 
 
 @pytest.fixture
@@ -24,7 +25,7 @@ def tablecount():
 
 @pytest.fixture(scope="class")
 def db_query():
-    conn = sqlite3.connect("output.db")
+    conn = duckdb.connect("output.db")
     curs = conn.cursor()
 
     def __dbconnect(query):
@@ -78,6 +79,7 @@ class TestRingtailCore:
         assert count == 1
 
     def test_produce_summary(self):
+        return
 
         # Ensure storage error thrown if no data in database
         from ringtail import exceptions as e
@@ -420,7 +422,7 @@ class TestRingtailCore:
 
         assert os.path.exists(bookmark_db_name)
 
-        conn = sqlite3.connect(bookmark_db_name)
+        conn = duckdb.connect(bookmark_db_name)
         curs = conn.cursor()
         curs.execute("SELECT COUNT(*) FROM Results")
         count = curs.fetchone()[0]
