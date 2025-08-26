@@ -955,8 +955,8 @@ class RingtailCore:
             new_data = self.storageman.fetch_data_for_passing_results(
                 bookmark_name, outfields, order_results
             )
-        with OutputManager(log_file) as opm:
-            opm.write_filter_results_in_log(new_data)
+            with OutputManager(log_file) as opm:
+                opm.write_filter_results_in_log(new_data)
 
     def get_previous_filters(self, bookmark_name: str) -> tuple[dict, str]:
         with self.storageman as sm:
