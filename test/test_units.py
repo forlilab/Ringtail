@@ -17,7 +17,7 @@ def tablecount():
     def __dbconnect(table, database="output.db"):
         rtc = RingtailCore(database)
         with rtc.storageman as sm:
-            count = sm.db_query(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            count = sm.db_query(f"SELECT COUNT(*) FROM {table};").fetchone()[0]
         return count
 
     return __dbconnect
@@ -39,7 +39,7 @@ def db_query():
 
 class TestRingtailCore:
     def test_add_file(self, tablecount):
-        os.system("rm output.db")
+        os.system("rm output.db*")
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(
             file="test_data/adgpu/group1/1451.dlg.gz", max_poses=3
@@ -106,7 +106,9 @@ class TestRingtailCore:
         assert len(summary_items.data) == 38
 
     def test_append_to_database(self, tablecount):
+        print("I am the next test")
         rtc = RingtailCore(db_file="output.db")
+        print("do i have ringtail object", rtc.storageman.conn)
         rtc.add_results_from_files(file_path="test_data/adgpu/group2/")
         count = tablecount("Ligands")
 
@@ -434,7 +436,7 @@ class TestRingtailCore:
         os.system("rm " + bookmark_db_name)
 
     def test_duplicate_handling(self, tablecount):
-        os.system("rm output.db output_log.txt")
+        os.system("rm output.db* output_log.txt")
 
         rtc = RingtailCore(db_file="output.db")
         file = "test_data/adgpu/group1/1451.dlg.gz"
@@ -451,7 +453,7 @@ class TestRingtailCore:
         result_count_ignore = tablecount("Results")
         inter_count_ignore = tablecount("Interactions")
 
-        os.system("rm output.db")
+        os.system("rm output.db*")
         # add same file but allow the duplicate
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file=file)
@@ -472,7 +474,7 @@ class TestRingtailCore:
             == inter_count_dupl / 2
         )
 
-        os.system("rm output.db")
+        os.system("rm output.db*")
 
     def test_db_num_poses_warning(self):
         # make sure we make ringtail core object with log file
@@ -495,7 +497,7 @@ class TestRingtailCore:
             else:
                 warning_worked = False
 
-        os.system("rm output.db")
+        os.system("rm output.db*")
 
         assert warning_worked
 
@@ -508,7 +510,7 @@ class TestRingtailCore:
         )
         count_ligands_passing = rtc.filter(reactive_interactions=[("A:TYR:212:", True)])
 
-        os.system("rm output.db")
+        os.system("rm output.db*")
 
         assert count_ligands_passing == 10
 
@@ -525,7 +527,7 @@ class TestVinaHandling:
             save_receptor=True,
         ),
         count = tablecount("Results")
-        os.system("rm output.db")
+        os.system("rm output.db*")
 
         assert count == 6
 
@@ -542,7 +544,7 @@ class TestVinaHandling:
             save_receptor=True,
         )
         count = tablecount("Results")
-        os.system("rm output.db")
+        os.system("rm output.db*")
 
         assert count == 6
 
@@ -557,7 +559,7 @@ class TestVinaHandling:
             add_interactions=True,
         )
         count = tablecount("Interaction_indices")
-        os.system("rm output.db")
+        os.system("rm output.db*")
 
         assert count == 45
 
@@ -579,7 +581,7 @@ class TestVinaHandling:
             else:
                 warning_worked = False
 
-        os.system("rm output.db")
+        os.system("rm output.db*")
 
         assert warning_worked
 
@@ -649,7 +651,7 @@ class TestStorageMan:
         rtc = RingtailCore("output.db")
         with rtc.storageman:
             versionmatch, db_version = rtc.storageman.check_ringtaildb_version()
-        os.system("rm output.db output_log.txt")
+        os.system("rm output.db* output_log.txt")
         assert versionmatch
         assert db_version == version("ringtail")
 
@@ -751,6 +753,6 @@ class TestOptions:
     def test_cleanup(self):
         # Alter this method if you wish to not delete all log files after testing automatically
         os.system("rm *_ringtail.log")
-        os.system("rm output.db output2.db")
+        os.system("rm output.db* output2.db")
         os.system("rm different_log.txt")
         os.system("rm cluster_log.txt")
