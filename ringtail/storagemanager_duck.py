@@ -1799,7 +1799,7 @@ class StorageManagerDuckDB(StorageManager):
             StorageError
         """
         data = self.db_query(f"PRAGMA table_info({table})").fetchall()
-        return [column_tuple[1] for column_tuple in data]
+        return [column_tuple[1].lower() for column_tuple in data]
 
     def fetch_summary_data(
         self,
@@ -1934,21 +1934,36 @@ class StorageManagerDuckDB(StorageManager):
             float: effective cutoff value of results based on percentile
         """
         # get total number of ligands
+        MIN_columns = [
+            "docking_score",
+            "leff",
+            "energies_inter",
+            "energies_vdw",
+            "energies_electro",
+            "energies_flexLig",
+            "energies_flexLR",
+            "energies_intra",
+            "energies_torsional",
+            "unbound_energy",
+        ]
+        # whether the best value in a column is lowest or highest value
+        if column in MIN_columns:
+            lim_kw = "MIN"
+        else:
+            lim_kw = "MAX"
         try:
             logger.debug(f"Generating percentile filter query for {column}")
-            cur = self.conn.cursor()
-            cur.execute("SELECT COUNT(ligand_id) FROM Ligands")
-            n_ligands = int(cur.fetchone()[0])
-            n_passing = int((percentile / 100) * n_ligands)
-            # find energy cutoff
-            counter = 0
-            for i in self.db_query(
-                f"SELECT MIN({column}) FROM Results GROUP BY ligand_id ORDER BY ANY_VALUE({column})"
-            ).fetchall():
-                if counter == n_passing:
-                    cutoff = i[0]
-                    break
-                counter += 1
+            # use duckdb internal method to calculate percentile, may differ slightly from sqlite manual calc
+            percentile_fraction = percentile / 100
+            query = f"""
+            SELECT quantile_disc(min_val, {percentile_fraction}) AS cutoff
+            FROM (
+                SELECT {lim_kw}({column}) AS min_val
+                FROM Results
+                GROUP BY ligand_id
+            ) percentile_cutoff
+            """
+            cutoff = self.db_query(query).fetchone()[0]
             logger.debug(f"{column} percentile cutoff is {cutoff}")
             return cutoff
         except duckdb.OperationalError as e:
