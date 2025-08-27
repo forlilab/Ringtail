@@ -28,7 +28,7 @@ class ResultsManager:
         docking_mode: str,
         storageman_class: StorageManager,
         duplicate_handling: str,
-        chunk_size: int = 5000,
+        chunk_size: int = 10000,
     ):
 
         self.writer_options = {
