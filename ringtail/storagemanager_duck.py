@@ -740,6 +740,7 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(filters_sql)
         self.db_query(filter_pose_sql)
 
+    # TODO biggie, rejigger
     def _insert_cluster_data(
         self,
         clusters: list,
@@ -1276,16 +1277,18 @@ class StorageManagerDuckDB(StorageManager):
     # region Methods for dealing with bookmarks and filtering
 
     def _generate_result_filtering_query(
-        self, filters_dict, bookmark_name: str, filter_bookmark: str
-    ):
-        # TODO save for later
-        """takes lists of filters, writes sql filtering string
+        self, filters_dict: dict, bookmark_name: str, filter_bookmark: str = None
+    ) -> str:
+        """
+        Takes dict of filters, writes sql filtering string
 
         Args:
-            filters_dict (dict): dict of filters. Keys names and value formats must match those found in the Filters class
+            filters_dict (dict): Keys names and value formats must match those found in the Filters class
+            bookmark_name (str): Name of resulting bookmark to which passing poses are saved
+            filter_bookmark (str, optional): Option to filter across pre-filtered data instead of entire database. Defaults to None
 
         Returns:
-            str: duckdb-formatted string for filtering query
+            str: database engine formatted query string
         """
         # table to filter over
         filtering_window = "Results"
@@ -1566,32 +1569,6 @@ class StorageManagerDuckDB(StorageManager):
 
         return duck_formatted_outfields
 
-    def get_passing_poses_count(
-        self, bookmark_name: str, grouped_by_ligand: bool = False
-    ) -> int:
-        """
-        Count poses in bookmark
-
-        Args:
-            bookmark_name (str): bookmark name in which to count
-            grouped_by_ligand (bool, optional): if grouping by ligand, essentially returns passing ligands
-
-        Returns:
-            int: number of poses (optionally grouped by ligand) in bookmark
-        """
-        query = self.QueryBuilder()
-        query.SELECT("ANY_VALUE(r.pose_id)").FROM("results", "r").IN_BOOKMARK(
-            bookmark_name
-        )
-        if grouped_by_ligand:
-            query.GROUP_BY("r.ligand_id")
-        query_string = query.build(count=True)[0]
-        # TODO problematic query: ", query_string
-        if self.db_query(query_string).fetchone():
-            return self.db_query(query_string).fetchone()[0]
-        else:
-            return 0
-
     def get_bookmark_selection(
         self,
         bookmark_name: str,
@@ -1726,9 +1703,7 @@ class StorageManagerDuckDB(StorageManager):
     # endregion
 
     # region fetching specific columns
-
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
-        # TODO database specific proably
         """
         Gets all column names from given tables
 
@@ -1742,7 +1717,7 @@ class StorageManagerDuckDB(StorageManager):
         columns = []
         columns_with_tablename = []
         for table in tables:
-            columns_info = self.db_query(f"PRAGMA table_info({table})").fetchall()
+            columns_info = self._fetch_table_column_names(table)
             columns.extend([col[1].lower() for col in columns_info])
             columns_with_tablename.extend(
                 [
@@ -1786,36 +1761,6 @@ class StorageManagerDuckDB(StorageManager):
             ).fetchall()
         ]
 
-    def fetch_pose_interactions(self, Pose_ID) -> iter:
-        """
-        Fetch all interactions parameters belonging to a Pose_ID
-
-        Args:
-            Pose_ID (int): pose id, 1-1 with Results table
-
-        Returns:
-            iter: of interaction information for given Pose_ID
-        """
-        # check if table exist
-        if not "Interactions" in self.tables_in_db():
-            return
-
-        query = self.QueryBuilder()
-        query.SELECT(
-            "ii.interaction_type",
-            "ii.rec_chain",
-            "ii.rec_resname",
-            "ii.rec_resid",
-            "ii.rec_atom",
-            "ii.rec_atomid",
-        ).FROM("Interaction_indices", "ii").JOIN(
-            "Interactions", "i", "interaction_id"
-        ).WHERE(
-            "i.pose_id = ?", Pose_ID
-        )
-
-        return self.db_query(*query.build()).fetchall()
-
     def tables_in_db(self) -> list:
         """
         Returns a list of all table names in the database
@@ -1844,7 +1789,7 @@ class StorageManagerDuckDB(StorageManager):
                 "Error fetching columns from Ligand_clusters table. Confirm that ligand clustering has been previously performed."
             )
 
-    def _fetch_results_column_names(self) -> list:
+    def _fetch_table_column_names(self, table: str) -> list:
         """Fetches list of string for column names in results table
 
         Returns:
@@ -1853,18 +1798,13 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             StorageError
         """
-        try:
-            return [
-                column_tuple[1]
-                for column_tuple in self.conn.execute("PRAGMA table_info(Results)")
-            ]
-        except duckdb.OperationalError as e:
-            raise StorageError(
-                "Error while fetching column names from Results table"
-            ) from e
+        data = self.db_query(f"PRAGMA table_info({table})").fetchall()
+        return [column_tuple[1] for column_tuple in data]
 
     def fetch_summary_data(
-        self, columns=["docking_score", "leff"], percentiles=[1, 10]
+        self,
+        columns: list[str] = ["docking_score", "leff"],
+        percentiles: list[int] = [1, 10],
     ) -> dict:
         """Collect summary data for database:
             Num Ligands
@@ -1880,43 +1820,45 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             dict: of data summary
         """
-        try:
-            summary_data = {}
-            cur = self.conn.cursor()
-            summary_data["num_ligands"] = cur.execute(
-                "SELECT COUNT(ligand_id) FROM Ligands"
-            ).fetchone()[0]
-            if summary_data["num_ligands"] == 0:
-                raise StorageError("There is no ligand data in the database. ")
-            summary_data["num_poses"] = cur.execute(
-                "SELECT COUNT(Pose_id) FROM Results"
-            ).fetchone()[0]
-            summary_data["num_unique_interactions"] = cur.execute(
-                "SELECT COUNT(interaction_id) FROM Interaction_indices"
-            ).fetchone()[0]
-            summary_data["num_interacting_residues"] = cur.execute(
-                "SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)"
-            ).fetchone()[0]
+        if self.db_empty():
+            raise StorageError("There is no data in the database.")
 
-            allowed_columns = self._fetch_results_column_names()
-            for col in columns:
-                if col not in allowed_columns:
-                    raise StorageError(
-                        f"Requested summary column {col} not found in Results table! Available columns: {allowed_columns}"
-                    )
-                summary_data[f"min_{col}"] = cur.execute(
-                    f"SELECT MIN({col}) FROM Results"
-                ).fetchone()[0]
-                summary_data[f"max_{col}"] = cur.execute(
-                    f"SELECT MAX({col}) FROM Results"
-                ).fetchone()[0]
-                for p in percentiles:
-                    summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
+        query = """
+        SELECT 
+            (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
+            (SELECT COUNT(Pose_id) FROM Results) AS num_poses,
+            (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
+            (SELECT COUNT(*) 
+            FROM (SELECT ANY_VALUE(interaction_id) 
+                    FROM Interaction_indices 
+                    GROUP BY interaction_type, rec_resid, rec_chain)
+            ) AS num_interacting_residues;"""
+        data = self.db_query(query).fetchone()
+        summary_data = {
+            "num_ligands": data[0],
+            "num_poses": data[1],
+            "num_unique_interactions": data[2],
+            "num_interacting_residues": data[3],
+        }
 
-            return summary_data
+        allowed_columns = self._fetch_table_column_names("Results")
+        for col in columns:
+            if col not in allowed_columns:
+                logger.warning(
+                    f"Requested column {col} not found in Results table and will not be used for the summary. Allowed columns: {allowed_columns}"
+                )
+                columns.pop(col)
+                continue
+            data = self.db_query(
+                f"SELECT MIN({col}), MAX({col}) FROM Results"
+            ).fetchone()
+            summary_data[f"min_{col}"] = data[0]
+            summary_data[f"max_{col}"] = data[1]
 
-        except duckdb.Error as e:
-            raise StorageError("Error while fetching summary data!") from e
+            for p in percentiles:
+                summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
+
+        return summary_data
 
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
@@ -2000,9 +1942,9 @@ class StorageManagerDuckDB(StorageManager):
             n_passing = int((percentile / 100) * n_ligands)
             # find energy cutoff
             counter = 0
-            for i in cur.execute(
-                f"SELECT {column} FROM Results GROUP BY ligand_id ORDER BY {column}"
-            ):
+            for i in self.db_query(
+                f"SELECT MIN({column}) FROM Results GROUP BY ligand_id ORDER BY ANY_VALUE({column})"
+            ).fetchall():
                 if counter == n_passing:
                     cutoff = i[0]
                     break

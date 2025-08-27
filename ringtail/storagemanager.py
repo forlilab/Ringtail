@@ -57,6 +57,7 @@ class StorageManager:
     # region database access
     def __init__(self):
         self.keyboard_interrupt_allowed = False
+        self.db_file: str
 
     def __enter__(self):
         """Used to access the database if using storage manager as a context manager
@@ -258,21 +259,15 @@ class StorageManager:
         return count
 
     def get_all_bookmark_names(self) -> list[str]:
-        """Get all bookmarks in sql database as a list of names. Bookmarks are a Ringtail-specific saved query (much like views)
+        """Get all bookmarks in sql database as a list of names.
 
         Returns:
             list: of bookmark names
         """
-        try:
-            query = self.QueryBuilder()
-            query.SELECT("name").FROM("Filters")
-            cur = self.db_query(query.build()[0])
-            bookmark_names = [row[0].lower() for row in cur.fetchall()]
-
-        except Exception as e:
-            raise StorageError(
-                "Error occured while fetching existing bookmark names"
-            ) from e
+        query = self.QueryBuilder()
+        query.SELECT("name").FROM("Filters")
+        cur = self.db_query(query.build()[0])
+        bookmark_names = [row[0].lower() for row in cur.fetchall()]
 
         return bookmark_names
 
@@ -386,8 +381,7 @@ class StorageManager:
             f"filter_id IN ({subq.build()[0]})"
         )
         bookmark_name = f"{bookmark_name}_union"
-        logger.debug("Saving union bookmark...")
-        logger.debug("Running union query...")
+        logger.debug("Running interaction union query")
         self._populate_filter_tables(
             name=bookmark_name, query=query.build()[0], filters=all_filters
         )
@@ -725,7 +719,25 @@ class StorageManager:
         Returns:
             iter: of interaction information for given Pose_ID
         """
-        raise NotImplementedError("Method needs to be implemented in child class.")
+        # check if table exist
+        if not "Interactions" in self.tables_in_db():
+            return
+
+        query = self.QueryBuilder()
+        query.SELECT(
+            "ii.interaction_type",
+            "ii.rec_chain",
+            "ii.rec_resname",
+            "ii.rec_resid",
+            "ii.rec_atom",
+            "ii.rec_atomid",
+        ).FROM("Interaction_indices", "ii").JOIN(
+            "Interactions", "i", "interaction_id"
+        ).WHERE(
+            "i.pose_id = ?", Pose_ID
+        )
+
+        return self.db_query(*query.build()).fetchall()
 
     def create_status_tables(self):
         """
@@ -791,7 +803,7 @@ class StorageManager:
         Returns:
             list: list of table names
         """
-        raise NotImplementedError("Method needs to be implemented in child class.")
+        raise NotImplementedError
 
     def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
         """
@@ -896,7 +908,7 @@ class StorageManager:
 
     def _create_tables(self) -> None:
         """
-        Creates all tables needed for a Ringtail database of a specific version
+        Creates all tables needed for a Ringtail database
         """
         self._create_ligands_table()
         self._create_results_table()
@@ -911,7 +923,6 @@ class StorageManager:
 
     @classmethod
     def _generate_results_row(cls, ligand_dict, pose_rank, run_number) -> list:
-        # TODO this might be better served handing back a dict so order does not need be assumed
         """generate list of lists of ligand values to be
             inserted into duckdb database for a given pose
 
@@ -1117,15 +1128,16 @@ class StorageManager:
 
     @classmethod
     def _generate_interaction_tuples(cls, interaction_dictionaries: list) -> list:
-        """takes dictionary of file results, formats as
-        list of tuples for interactions
+        """Takes dictionary of file results, formats as list of tuples for interactions.
+        To each interaction description is added business keys/columns that identifies
+        which results row/pose each interaction belongs to
 
         Args:
             interaction_dictionaries (list): List of pose interaction
                 dictionaries from parser
 
         Returns:
-            list: List of tuples of interaction data
+            list: of tuples of interaction data
         """
         interaction_keywords = [
             "type",
@@ -1200,14 +1212,7 @@ class StorageManager:
         self.db_query(*(query.DROP_IF_EXISTS("Filtered_poses").build()))
         self._create_filtering_tables()
 
-    def _process_filters_for_query(self, filters_dict: dict):
-        score_maxmin_to_duckdb_call = {
-            "eworst": "docking_score <= {value}",
-            "ebest": "docking_score >= {value}",
-            "leworst": "leff <= {value}",
-            "lebest": "leff >= {value}",
-        }
-        # NOTE this method can maybe be a main class method once we get more database types
+    def _process_filters_for_query(self, filters_dict: dict) -> dict:
         """
         Method that reformats the filters to the specified database columns, handles less than/more than filters, etc
 
@@ -1215,9 +1220,15 @@ class StorageManager:
             filters_dict (dict): all Ringtail filters, okay to contain None
 
         Returns:
-            list: list of numerical filters formatted to be inserted in a query
-            list: list of interaction filters formatted to be inserted in a query
+            dict: of lists of numerical, interaction, and ligand filters + maxmiss
         """
+        score_maxmin_to_sql = {
+            "eworst": "docking_score <= {value}",
+            "ebest": "docking_score >= {value}",
+            "leworst": "leff <= {value}",
+            "lebest": "leff >= {value}",
+        }
+
         # write energy filters and compile list of interactions to search for
         numerical_filters = []
         interaction_filters = []
@@ -1246,9 +1257,7 @@ class StorageManager:
                     )
                 else:
                     numerical_filters.append(
-                        score_maxmin_to_duckdb_call[filter_key].format(
-                            value=filter_value
-                        )
+                        score_maxmin_to_sql[filter_key].format(value=filter_value)
                     )
 
             # write hb count filter(s)
@@ -2349,9 +2358,11 @@ class StorageManager:
             tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
                                             and column is the key, value is the row-col cell value
         """
-        rows = self.db_query(query).fetchall()
-        column_names = rows[0].keys() if rows else []
-        return list(column_names), [dict(row) for row in rows]
+        cur = self.db_query(query)
+        rows = cur.fetchall()
+        column_names = [desc[0] for desc in cur.description] if cur.description else []
+        dict_rows = [dict(zip(column_names, row)) for row in rows]
+        return column_names, dict_rows
 
     def overwrite_storage(self):
         """
@@ -2436,7 +2447,7 @@ class StorageManager:
             self.keyboard_interrupt_allowed = True
 
     def _drop_existing_tables(self):
-        """drop any existing tables.
+        """Drops existing tables, in order of foreign key dependency
 
         Raises:
             StorageError
@@ -2471,12 +2482,6 @@ class StorageManager:
         query.DROP_IF_EXISTS(name)
         return self.db_query(query.build()[0])
 
-    def _delete_nontables(self):
-        """
-        Deletes objects in the database that are not tables (handled separately)
-        """
-        pass
-
     def is_bookmark(self, table: str) -> bool:
         """
         Returns True if table name is actually a bookmark
@@ -2503,14 +2508,13 @@ class StorageManager:
         Returns:
             bool: if table name is a status table
         """
-        # TODO hardcoded, need to find better way
         if table.lower() in ["accepted", "maybe", "rejected"]:
             return True
         else:
             return False
 
     def db_empty(self):
-        """empty database, for example if overwrite
+        """Checks if database is empty (has rows in Results)
 
         Returns:
             bool: whether or not db is empty
@@ -2725,10 +2729,42 @@ class StorageManager:
         """
         raise NotImplementedError
 
+    def _delete_nontables(self):
+        """
+        Deletes objects in the database that are not tables
+        """
+        pass
+
     def _generate_result_filtering_query(
         self, filters_dict, bookmark_name, filter_bookmark
     ):
         raise NotImplementedError("Method needs to be implemented in child class.")
+
+    def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
+        """
+        Gets all column names from given tables
+
+        Args:
+            tables (list, optional): Defaults to ["Results", "Ligands"].
+
+        Returns:
+            columns (list[str]): list of column names for all listed tables
+            columns_with_tablename (list[str.format]): needs formatted with table_alias (one per table) for use
+        """
+        raise NotImplementedError
+
+    def _get_numeric_columns(self, table_name: str) -> list:
+        """
+        Method to get the names of all numeric columns in a table, for example for
+        allowable sorting options
+
+        Args:
+            table_name (str): table name to evaluate
+
+        Returns:
+            list: column names that has a numeric type
+        """
+        raise NotImplementedError
 
     # endregion
 
@@ -2756,7 +2792,7 @@ class StorageManagerSQLite(StorageManager):
     ):
         self.db_file = db_file
         super().__init__()
-        # self.conn: sqlite3.Connection
+        self.conn: sqlite3.Connection
 
     # region Methods for creating and inserting into tables the database
 
@@ -4226,15 +4262,11 @@ class StorageManagerSQLite(StorageManager):
         columns = []
         columns_with_tablename = []
         for table in tables:
-            columns_info = self.db_query(f"PRAGMA table_info({table})").fetchall()
-            columns.extend([col[1].lower() for col in columns_info])
+            columns_info = self._fetch_table_column_names(table)
+            columns.extend(columns_info)
             columns_with_tablename.extend(
                 [
-                    (
-                        "{{{table_alias}_alias}}.{col}".format(
-                            col=col[1], table_alias=table
-                        )
-                    )
+                    ("{{{table_alias}_alias}}.{col}".format(col=col, table_alias=table))
                     for col in columns_info
                 ]
             )
@@ -4355,30 +4387,6 @@ class StorageManagerSQLite(StorageManager):
         ).WHERE(f"ligname = ?", ligname)
         return self.db_query(*query.build()).fetchone()
 
-    def fetch_pose_interactions(self, Pose_ID) -> iter:
-        """
-        Fetch all interactions parameters belonging to a Pose_ID
-
-        Args:
-            Pose_ID (int): pose id, 1-1 with Results table
-
-        Returns:
-            iter: of interaction information for given Pose_ID
-        """
-        # check if table exist
-        cur = self.db_query(
-            """SELECT name FROM sqlite_master WHERE type='table' AND name='Interactions';"""
-        )
-        if len(cur.fetchall()) == 0:
-            return None
-
-        query = f"""SELECT ii.interaction_type, ii.rec_chain, ii.rec_resname, ii.rec_resid, ii.rec_atom, ii.rec_atomid 
-        FROM Interaction_indices ii 
-        JOIN Interactions i ON i.interaction_id = ii.interaction_id
-        WHERE i.Pose_ID = ?"""
-
-        return self.db_query(query, (Pose_ID,)).fetchall()
-
     def _fetch_ligand_cluster_columns(self) -> list:
         """fetching columns from Ligand_clusters table
 
@@ -4394,11 +4402,12 @@ class StorageManagerSQLite(StorageManager):
                 for c in self.db_query("PRAGMA table_info(Ligand_clusters)").fetchall()
             ][1:]
         except IndexError:
+            # TODO this exception wont work
             raise IndexError(
                 "Error fetching columns from Ligand_clusters table. Confirm that ligand clustering has been previously performed."
             )
 
-    def _fetch_results_column_names(self) -> list:
+    def _fetch_table_column_names(self, table: str) -> list:
         """Fetches list of string for column names in results table
 
         Returns:
@@ -4407,18 +4416,15 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             StorageError
         """
-        try:
-            return [
-                column_tuple[1]
-                for column_tuple in self.conn.execute("PRAGMA table_info(Results)")
-            ]
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                "Error while fetching column names from Results table"
-            ) from e
+        return [
+            column_tuple[1].lower()
+            for column_tuple in self.db_query(f"PRAGMA table_info({table})")
+        ]
 
     def fetch_summary_data(
-        self, columns=["docking_score", "leff"], percentiles=[1, 10]
+        self,
+        columns: list[str] = ["docking_score", "leff"],
+        percentiles: list[int] = [1, 10],
     ) -> dict:
         """Collect summary data for database:
             Num Ligands
@@ -4434,43 +4440,44 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             dict: of data summary
         """
-        try:
-            summary_data = {}
-            cur = self.conn.cursor()
-            summary_data["num_ligands"] = cur.execute(
-                "SELECT COUNT(ligand_id) FROM Ligands"
-            ).fetchone()[0]
-            if summary_data["num_ligands"] == 0:
-                raise StorageError("There is no ligand data in the database. ")
-            summary_data["num_poses"] = cur.execute(
-                "SELECT COUNT(Pose_id) FROM Results"
-            ).fetchone()[0]
-            summary_data["num_unique_interactions"] = cur.execute(
-                "SELECT COUNT(interaction_id) FROM Interaction_indices"
-            ).fetchone()[0]
-            summary_data["num_interacting_residues"] = cur.execute(
-                "SELECT COUNT(*) FROM (SELECT interaction_id FROM Interaction_indices GROUP BY interaction_type,rec_resid,rec_chain)"
-            ).fetchone()[0]
+        if self.db_empty():
+            raise StorageError("There is no data in the database.")
 
-            allowed_columns = self._fetch_results_column_names()
-            for col in columns:
-                if col not in allowed_columns:
-                    raise StorageError(
-                        f"Requested summary column {col} not found in Results table! Available columns: {allowed_columns}"
-                    )
-                summary_data[f"min_{col}"] = cur.execute(
-                    f"SELECT MIN({col}) FROM Results"
-                ).fetchone()[0]
-                summary_data[f"max_{col}"] = cur.execute(
-                    f"SELECT MAX({col}) FROM Results"
-                ).fetchone()[0]
-                for p in percentiles:
-                    summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
+        query = """
+        SELECT 
+            (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
+            (SELECT COUNT(Pose_id) FROM Results) AS num_poses,
+            (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
+            (SELECT COUNT(*) 
+            FROM (SELECT interaction_id
+                    FROM Interaction_indices 
+                    GROUP BY interaction_type, rec_resid, rec_chain)
+            ) AS num_interacting_residues;"""
+        data = self.db_query(query).fetchone()
+        summary_data = {
+            "num_ligands": data[0],
+            "num_poses": data[1],
+            "num_unique_interactions": data[2],
+            "num_interacting_residues": data[3],
+        }
 
-            return summary_data
+        allowed_columns = self._fetch_table_column_names("Results")
+        for col in columns:
+            if col not in allowed_columns:
+                logger.warning(
+                    f"Requested column {col} not found in Results table and will not be used for the summary. Allowed columns: {allowed_columns}"
+                )
+                columns.pop(col)
+                continue
+            data = self.db_query(
+                f"SELECT MIN({col}), MAX({col}) FROM Results"
+            ).fetchone()
+            summary_data[f"min_{col}"] = data[0]
+            summary_data[f"max_{col}"] = data[1]
+            for p in percentiles:
+                summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
 
-        except sqlite3.OperationalError as e:
-            raise StorageError("Error while fetching summary data!") from e
+        return summary_data
 
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
