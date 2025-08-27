@@ -515,6 +515,15 @@ class StorageManager:
         self._create_indices()
         logger.info("Database write session completed successfully.")
 
+    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
+        """Takes object of Receptor class, updates the column in Receptor table
+
+        Args:
+            receptor (bytes): bytes receptor object to be inserted into DB
+            rec_name (string): Name of receptor. Used to insert into correct row of DB
+        """
+        raise NotImplementedError
+
     def clone(self, backup_name=None):
         """Creates a copy of the db
 
@@ -1172,27 +1181,10 @@ class StorageManager:
             # then insert all new data indiscrimenately
             self._delete_new_duplicate_results()
         # then, move results from temp tables to database
-        self._move_tempresults_to_database(commit=False)
+        self._move_tempresults_to_database()
         logger.info(
             f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
         )
-
-    def _create_temporary_results_tables(self):
-        pass
-
-    def _insert_results_in_temp_tables(
-        self, results_array: list, interactions_array: list
-    ):
-        pass
-
-    def _move_tempresults_to_database(self, commit: bool = True):
-        pass
-
-    def _delete_new_duplicate_results(self):
-        pass
-
-    def _delete_old_duplicate_results(self):
-        pass
 
     # endregion
 
@@ -1723,7 +1715,8 @@ class StorageManager:
         """
 
         # fetch filtered poses
-        passing_poses_tuples = self.db_query(query).fetchall()
+        cursor = self.db_query(query)
+        passing_poses_tuples = cursor.fetchall()
         passing_poses = [row[0] for row in passing_poses_tuples]
         if passing_poses:
             # make sure bookmark name is not a table name
@@ -2579,10 +2572,8 @@ class StorageManager:
         ligand_coordinates         VARCHAR,
         flexible_res_coordinates   VARCHAR
 
-        Raises:
-            DatabaseTableCreationError: Description
         """
-        pass
+        raise NotImplementedError
 
     def _create_ligands_table(self, name="Ligands") -> None:
         """Create table for ligands. Columns are:
@@ -2593,78 +2584,150 @@ class StorageManager:
         atom_index_map      VARCHAR,
         hydrogen_parents    VARCHAR,
         input_model         VARCHAR
-
-        Raises:
-            DatabaseTableCreationError: Description
         """
         pass
 
     def _create_receptors_table(self):
-        pass
+        """Create table for receptors. Has primary key although only one receptor allowed"""
+        raise NotImplementedError
 
     def _create_interaction_index_table(self):
-        pass
+        """Creates a table describing unique interactions in the database"""
+        raise NotImplementedError
 
     def _create_interaction_table(self):
-        pass
+        """Creates a table of each pose-interaction combination."""
+        raise NotImplementedError
 
     def _create_db_properties_table(self):
-        pass
+        """Create table of database properties used during write session to the database. Columns are:
+        DB_write_session int (primary key)
+        docking_mode (vina or adgpu)
+        num_of_poses ("all" or str(int))
+        """
+        raise NotImplementedError
+
+    def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
+        """Insert db properties into database properties table
+
+        Args:
+            docking_mode (str): docking mode for the current dataset being written
+            number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
+        """
+        raise NotImplementedError
+
+    def _create_temporary_results_tables(self):
+        """
+        Creates temporary tables for results and interactions, which will be
+        used for staging incoming data.
+        """
+        raise NotImplementedError
+
+    def _insert_results_in_temp_tables(
+        self, results_array: list, interactions_array: list
+    ):
+        """
+        Inserts docking results and interactions into their respective
+        temporary tables
+
+        Args:
+            results_array (list): list of result rows
+            interactions_array (list): list of interaction rows
+        """
+        raise NotImplementedError
+
+    def _move_tempresults_to_database(self):
+        """Inserts data from the temporary results tables to their permanent
+        database equivalents"""
+        raise NotImplementedError
+
+    def _delete_new_duplicate_results(self):
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from the staged incoming data if duplicated.
+        Based on the following columns:
+        ligname,
+        receptor,
+        about_x,
+        about_y,
+        about_z,
+        trans_x,
+        trans_y,
+        trans_z,
+        axisangle_x,
+        axisangle_y,
+        axisangle_z,
+        axisangle_w,
+        dihedrals
+        """
+        raise NotImplementedError
+
+    def _delete_old_duplicate_results(self):
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from Results if duplicated.
+        Based on the following columns:
+        ligname,
+        receptor,
+        about_x,
+        about_y,
+        about_z,
+        trans_x,
+        trans_y,
+        trans_z,
+        axisangle_x,
+        axisangle_y,
+        axisangle_z,
+        axisangle_w,
+        dihedrals
+        """
+        raise NotImplementedError
 
     def _create_filtering_tables(self):
-        pass
+        """
+        Creates a Filter table which includes filter_id (PK), name (bookmark_name), duckdb formatted query,
+        and dictionary of filters used, as well as Filtered_poses, which uses filter_id as FK,
+        and lists all poses passing that filter_id
+        """
+        raise NotImplementedError
 
     def _set_ringtail_db_schema_version(self):
         pass
 
-    def _insert_ligands(self, ligand_array: list) -> list:
+    def _insert_ligands(self, ligands: list):
         """Takes array of ligand rows, inserts into Ligands table.
 
         Args:
             ligand_array (list[list]): list of lists containing formatted ligand rows
 
-        Returns:
-            list: of ligand IDs just inserted
-
-        Raises:
-            DatabaseInsertionError
-
         """
-        pass
+        raise NotImplementedError
 
     def _create_indices(self):
-        raise NotImplementedError("Method needs to be implemented in child class.")
-
-    def _insert_receptors(self, receptor_array):
-        raise NotImplementedError("Method needs to be implemented in child class.")
-
-    def _insert_interaction_index_rows(self, interaction_tuple) -> int:
         """
-        Writes unique interactions and returns the interaction_id of the given interaction
+        Creates specific indices on tables for those databases that use indices
+        """
+        raise NotImplementedError
+
+    def _insert_receptors(self, receptor_array: list):
+        """Takes array of receptor rows, inserts into Receptors table
 
         Args:
-            interaction_tuple (tuple): (rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
-
-        Returns:
-            int: interaction index
-
-        Raises:
-            DatabaseInsertionError
+            receptor_array (list): List of lists
+                containing formatted receptor rows
         """
-        raise NotImplementedError("Method needs to be implemented in child class.")
+        raise NotImplementedError
+
+    def _insert_interaction_index_rows(self, interactions: list[tuple]):
+        """
+        Writes unique interactions to database
+
+        Args:
+            interaction_tuple (list[tuple]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
+        """
+        raise NotImplementedError
 
     def _generate_result_filtering_query(
         self, filters_dict, bookmark_name, filter_bookmark
     ):
-        raise NotImplementedError("Method needs to be implemented in child class.")
-
-    def insert_receptor_blob(self, receptor, rec_name):
-        """Takes object of Receptor class, updates the column in Receptor table
-
-        Args:
-            receptor (bytes): bytes receptor object to be inserted into DB
-            rec_name (string): Name of receptor. Used to insert into correct row of DB
-        """
         raise NotImplementedError("Method needs to be implemented in child class.")
 
     # endregion
@@ -2693,49 +2756,28 @@ class StorageManagerSQLite(StorageManager):
     ):
         self.db_file = db_file
         super().__init__()
+        # self.conn: sqlite3.Connection
 
     # region Methods for creating and inserting into tables the database
 
     def _create_ligands_table(self, name="Ligands") -> None:
-        """Create table for ligands. Columns are:
-        ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-        ligand_smile        VARCHAR,
-        rdmol               BLOB,
-        atom_index_map      VARCHAR,
-        hydrogen_parents    VARCHAR,
-        input_model         VARCHAR
-
-        Raises:
-            DatabaseTableCreationError: Description
-
-        """
+        """Create table for ligands"""
         ligand_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
             ligand_smile        VARCHAR,
-            rdmol        BLOB,
+            rdmol               BLOB,
             atom_index_map      VARCHAR,
             hydrogen_parents    VARCHAR,
             input_model         VARCHAR)"""
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(ligand_table)
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating ligands table. If database already exists, use --overwrite to drop existing tables"
-            ) from e
+        self.db_query(ligand_table)
 
-    def _insert_ligands(self, ligand_array: list) -> list:
-        """Takes array of ligand rows, inserts into Ligands table.
+    def _insert_ligands(self, ligands: list):
+        """Takes list of ligand rows, inserts into Ligands table using executemany.
 
         Args:
             ligand_array (list[list]): list of lists containing formatted ligand rows
-
-        Returns:
-            list: of ligand IDs just inserted
 
         Raises:
             DatabaseInsertionError
@@ -2752,52 +2794,11 @@ class StorageManagerSQLite(StorageManager):
         ) VALUES
         (?,?,?,?,?,?)
         ON CONFLICT(LigName) DO NOTHING"""
-        try:
-            self.conn.executemany(sql_insert, ligand_array)
 
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError("Error while inserting ligands.") from e
+        self.db_update(sql_insert, ligands, commit=False)
 
     def _create_results_table(self, name="Results"):
-        """Creates table for results. Columns are:
-        Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
-        ligand_id           INTEGER FOREIGN KEY from Ligands,
-        receptor            VARCHAR,
-        pose_rank           INTEGER,
-        run_number          INTEGER,
-        docking_score       FLOAT,
-        leff                FLOAT,
-        deltas              FLOAT,
-        cluster_rmsd        FLOAT,
-        cluster_size        INTEGER,
-        reference_rmsd      FLOAT,
-        energies_inter      FLOAT,
-        energies_vdw        FLOAT,
-        energies_electro    FLOAT,
-        energies_flexLig    FLOAT,
-        energies_flexLR     FLOAT,
-        energies_intra      FLOAT,
-        energies_torsional  FLOAT,
-        unbound_energy      FLOAT,
-        nr_interactions     INTEGER,
-        num_hb              INTEGER,
-        about_x             FLOAT,
-        about_y             FLOAT,
-        about_z             FLOAT,
-        trans_x             FLOAT,
-        trans_y             FLOAT,
-        trans_z             FLOAT,
-        axisangle_x         FLOAT,
-        axisangle_y         FLOAT,
-        axisangle_z         FLOAT,
-        axisangle_w         FLOAT,
-        dihedrals           VARCHAR,
-        ligand_coordinates         VARCHAR,
-        flexible_res_coordinates   VARCHAR
-
-        Raises:
-            DatabaseTableCreationError: Description
-        """
+        """Creates table for results."""
 
         sql_results_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2837,83 +2838,84 @@ class StorageManagerSQLite(StorageManager):
             FOREIGN KEY (ligand_id) REFERENCES Ligands(ligand_id)
             ); """
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(sql_results_table)
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating results table. If database already exists, use 'overwrite' to drop existing tables"
-            ) from e
+        self.db_query(sql_results_table)
 
     def _create_temporary_results_tables(self):
-        try:
-            create_temp_results = """
-            CREATE TEMP TABLE 
-            Results_temp(
-                receptor            VARCHAR,
-                pose_rank           INTEGER,
-                run_number          INTEGER,
-                docking_score       FLOAT,
-                leff                FLOAT,
-                deltas              FLOAT,
-                cluster_rmsd        FLOAT,
-                cluster_size        INTEGER,
-                reference_rmsd      FLOAT,
-                energies_inter      FLOAT,
-                energies_vdw        FLOAT,
-                energies_electro    FLOAT,
-                energies_flexLig    FLOAT,
-                energies_flexLR     FLOAT,
-                energies_intra      FLOAT,
-                energies_torsional  FLOAT,
-                unbound_energy      FLOAT,
-                nr_interactions     INTEGER,
-                num_hb              INTEGER,
-                about_x             FLOAT,
-                about_y             FLOAT,
-                about_z             FLOAT,
-                trans_x             FLOAT,
-                trans_y             FLOAT,
-                trans_z             FLOAT,
-                axisangle_x         FLOAT,
-                axisangle_y         FLOAT,
-                axisangle_z         FLOAT,
-                axisangle_w         FLOAT,
-                dihedrals           VARCHAR,
-                ligand_coordinates  VARCHAR,
-                flexible_res_coordinates   VARCHAR,
-                ligname             VARCHAR);
-                """
-            create_temp_interactions = """
-            CREATE TEMP TABLE Interactions_temp(
-                ligname             VARCHAR,
-                run_number          INTEGER,
-                pose_rank           INTEGER,
-                interaction_type    VARCHAR,
-                rec_chain           VARCHAR,
-                rec_resname         VARCHAR,
-                rec_resid           VARCHAR,
-                rec_atom            VARCHAR,
-                rec_atomid          VARCHAR);
+        """
+        Creates temporary tables for results and interactions, which will be
+        used for staging incoming data.
+        """
+
+        create_temp_results = """
+        CREATE TEMP TABLE 
+        Results_temp(
+            receptor            VARCHAR,
+            pose_rank           INTEGER,
+            run_number          INTEGER,
+            docking_score       FLOAT,
+            leff                FLOAT,
+            deltas              FLOAT,
+            cluster_rmsd        FLOAT,
+            cluster_size        INTEGER,
+            reference_rmsd      FLOAT,
+            energies_inter      FLOAT,
+            energies_vdw        FLOAT,
+            energies_electro    FLOAT,
+            energies_flexLig    FLOAT,
+            energies_flexLR     FLOAT,
+            energies_intra      FLOAT,
+            energies_torsional  FLOAT,
+            unbound_energy      FLOAT,
+            nr_interactions     INTEGER,
+            num_hb              INTEGER,
+            about_x             FLOAT,
+            about_y             FLOAT,
+            about_z             FLOAT,
+            trans_x             FLOAT,
+            trans_y             FLOAT,
+            trans_z             FLOAT,
+            axisangle_x         FLOAT,
+            axisangle_y         FLOAT,
+            axisangle_z         FLOAT,
+            axisangle_w         FLOAT,
+            dihedrals           VARCHAR,
+            ligand_coordinates  VARCHAR,
+            flexible_res_coordinates   VARCHAR,
+            ligname             VARCHAR);
             """
-            create_temp_mapping_table = """
-            CREATE TEMP TABLE pose_map(
-                pose_id             INTEGER,
-                ligand_id           INTEGER,
-                run_number          INTEGER,
-                pose_rank           INTEGER);
-            """
-            # create temporary tables
-            self.conn.execute(create_temp_results)
-            self.conn.execute(create_temp_interactions)
-            self.conn.execute(create_temp_mapping_table)
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while creating temporary results tables."
-            ) from e
+        create_temp_interactions = """
+        CREATE TEMP TABLE Interactions_temp(
+            ligname             VARCHAR,
+            run_number          INTEGER,
+            pose_rank           INTEGER,
+            interaction_type    VARCHAR,
+            rec_chain           VARCHAR,
+            rec_resname         VARCHAR,
+            rec_resid           VARCHAR,
+            rec_atom            VARCHAR,
+            rec_atomid          VARCHAR);
+        """
+        create_temp_mapping_table = """
+        CREATE TEMP TABLE pose_map(
+            pose_id             INTEGER,
+            ligand_id           INTEGER,
+            run_number          INTEGER,
+            pose_rank           INTEGER);
+        """
+        # create temporary tables
+        self.db_query(create_temp_results)
+        self.db_query(create_temp_interactions)
+        self.db_query(create_temp_mapping_table)
 
     def _insert_results_in_temp_tables(self, results_array, interactions_array):
+        """
+        Inserts docking results and interactions into their respective
+        temporary tables
+
+        Args:
+            results_array (list): list of result rows
+            interactions_array (list): list of interaction rows
+        """
         # insert temp results
         temp_results_insert = f"""
             INSERT INTO Results_temp(
@@ -2954,7 +2956,7 @@ class StorageManagerSQLite(StorageManager):
                 {",".join(["?"]*len(results_array[0]))}
             )
             """
-        self.conn.executemany(temp_results_insert, results_array)
+        self.db_update(temp_results_insert, results_array, commit=False)
 
         temp_int_insert = f"""
             INSERT INTO Interactions_temp (
@@ -2969,9 +2971,12 @@ class StorageManagerSQLite(StorageManager):
                 rec_atomid)
             VALUES (?,?,?,?,?,?,?,?,?);
             """
-        self.conn.executemany(temp_int_insert, interactions_array)
+        self.db_update(temp_int_insert, interactions_array, commit=False)
 
-    def _move_tempresults_to_database(self, commit: bool = True):
+    def _move_tempresults_to_database(self):
+        """Inserts data from the temporary results tables to their permanent
+        database equivalents"""
+
         temp_to_results = """
             INSERT INTO Results (
                 ligand_id,
@@ -3063,22 +3068,17 @@ class StorageManagerSQLite(StorageManager):
                 AND II.rec_resid = IT.rec_resid
                 AND II.rec_atom = IT.rec_atom
                 AND II.rec_atomid = IT.rec_atomid;"""
-        try:
-            mapping = self.conn.execute(temp_to_results)
-            self.conn.executemany(
-                "INSERT INTO pose_map (pose_id, ligand_id, run_number, pose_rank) VALUES (?, ?, ?, ?)",
-                mapping,
-            )
-            self.conn.execute(temp_to_interaction)
-            if commit:
-                self.conn.commit()
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while moving results from temp table to the database."
-            ) from e
+        mapping = self.db_query(temp_to_results)
+        self.db_update(
+            "INSERT INTO pose_map (pose_id, ligand_id, run_number, pose_rank) VALUES (?, ?, ?, ?)",
+            mapping,
+        )
+        self.db_query(temp_to_interaction)
 
     def _delete_new_duplicate_results(self):
-        """Checks if a pose ID is uniquely represented in the result table, based on the following columns:
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from the staged incoming data if duplicated.
+        Based on the following columns:
         ligname,
         receptor,
         about_x,
@@ -3141,10 +3141,27 @@ class StorageManagerSQLite(StorageManager):
                 AND RT.dihedrals   = R.dihedrals
                 AND L.ligand_id    = R.ligand_id);
         """
-        self.conn.execute(delete_int_sql)
-        self.conn.execute(delete_res_sql)
+        self.db_query(delete_int_sql)
+        self.db_query(delete_res_sql)
 
     def _delete_old_duplicate_results(self):
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from Results if duplicated.
+        Based on the following columns:
+        ligname,
+        receptor,
+        about_x,
+        about_y,
+        about_z,
+        trans_x,
+        trans_y,
+        trans_z,
+        axisangle_x,
+        axisangle_y,
+        axisangle_z,
+        axisangle_w,
+        dihedrals
+        """
         delete_sql = """
         WITH target_poseid AS (
             SELECT R.pose_id
@@ -3169,48 +3186,30 @@ class StorageManagerSQLite(StorageManager):
         WHERE pose_id IN (SELECT pose_id from target_poseid)
         returning pose_id;
         """
-        delete_pose_ids = self.conn.execute(delete_sql).fetchall()
+        # TODO this might be a candidate for passing cursor as input
+        delete_pose_ids = self.db_query(delete_sql).fetchall()
         delete_pose_ids_list = {row[0] for row in delete_pose_ids}
         placeholders = ",".join("?" for _ in delete_pose_ids_list)
         if delete_pose_ids:
-            self.conn.execute(
+            self.db_query(
                 f"""DELETE FROM Results WHERE pose_id IN ({placeholders});""",
                 tuple(delete_pose_ids_list),
             )
 
     def _create_receptors_table(self):
-        """Create table for receptors. Columns are:
-        Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
-        RecName             VARCHAR,
-        box_dim             VARCHAR,
-        box_center          VARCHAR,
-        grid_spacing        FLOAT,
-        flexible_residues   VARCHAR,
-        flexres_atomnames   VARCHAR,
-        receptor_object     BLOB
-
-        Raises:
-            DatabaseTableCreationError: Description
-        """
+        """Create table for receptors."""
         receptors_table = """CREATE TABLE IF NOT EXISTS Receptors (
             Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
             RecName             VARCHAR,
-            box_dim             VARCHAR[],
-            box_center          VARCHAR[],
-            grid_spacing        FLOAT(4),
-            flexible_residues   VARCHAR[],
-            flexres_atomnames   VARCHAR[],
+            box_dim             VARCHAR,
+            box_center          VARCHAR,
+            grid_spacing        FLOAT,
+            flexible_residues   VARCHAR,
+            flexres_atomnames   VARCHAR,
             receptor_object     BLOB
-        )"""
+        );"""
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(receptors_table)
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating receptor table. If database already exists, use --overwrite to drop existing tables"
-            ) from e
+        self.db_query(receptors_table)
 
     def _insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
@@ -3231,12 +3230,7 @@ class StorageManagerSQLite(StorageManager):
         flexres_atomnames
         ) VALUES
         (?,?,?,?,?,?)"""
-
-        try:
-            self.db_update(sql_insert, [receptor_array])
-
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError("Error while inserting receptor.") from e
+        self.db_update(sql_insert, [receptor_array])
 
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
@@ -3244,54 +3238,34 @@ class StorageManagerSQLite(StorageManager):
         Args:
             receptor (bytes): bytes receptor object to be inserted into DB
             rec_name (string): Name of receptor. Used to insert into correct row of DB
-
-        Raises:
-            DatabaseInsertionError: Description
         """
         # Check if there is already a row for the receptor
-        cur = self.conn.execute("SELECT COUNT(*) FROM Receptors")
-        count = cur.fetchone()[0]
+        count = self.table_length("Receptors")
+
         if count == 0:
             # Insert receptor statement
             query = f"""INSERT INTO Receptors (
                       RecName,
                       receptor_object)
-                      VALUES (?,?)"""
+                      VALUES (?,?);"""
 
         else:
             query = """UPDATE Receptors SET RecName = ?, receptor_object = ? WHERE Receptor_ID == 1"""
-        try:
-            cur = self.conn.execute(query, (rec_name, receptor))
-            self.conn.commit()
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while adding receptor blob to database"
-            ) from e
+        self.db_query(query, (rec_name, receptor), commit=True)
 
     def _create_db_properties_table(self):
         """Create table of database properties used during write session to the database. Columns are:
         DB_write_session int (primary key)
         docking_mode (vina or dlg)
         num_of_poses ("all" or int)
-
-        Raises:
-            DatabaseTableCreationError
         """
 
         sql_str = """CREATE TABLE IF NOT EXISTS DB_properties (
         DB_write_session    INTEGER PRIMARY KEY AUTOINCREMENT,
-        docking_mode        VARCHAR[],
-        number_of_poses     VARCHAR[])"""
+        docking_mode        VARCHAR,
+        number_of_poses     VARCHAR)"""
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(sql_str)
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating db properties table. If database already exists, use --overwrite to drop existing tables"
-            ) from e
+        self.db_query(sql_str)
 
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
@@ -3299,42 +3273,16 @@ class StorageManagerSQLite(StorageManager):
         Args:
             docking_mode (str): docking mode for the current dataset being written
             number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
-
-        Raises:
-            DatabaseInsertionError
         """
         sql_insert = """INSERT INTO DB_properties (
         docking_mode,
         number_of_poses
-        ) VALUES (?,?)"""
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute(sql_insert, [docking_mode, number_of_poses])
-            self.conn.commit()
-            cur.close()
-
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while inserting database properties info into DB_properties table"
-            ) from e
+        ) VALUES (?,?);"""
+        self.db_query(sql_insert, [docking_mode, number_of_poses], commit=True)
 
     def _create_interaction_index_table(self):
-        """create table of data for each unique interaction, will be remade everytime db is written to.
-        Columns are:
-        interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-        interaction_type    VARCHAR,
-        rec_chain           VARCHAR,
-        rec_resname         VARCHAR,
-        rec_resid           VARCHAR,
-        rec_atom            VARCHAR,
-        rec_atomid          VARCHAR
-
-        Raises:
-            DatabaseTableCreationError: Description
-
-        """
-        interaction_index_table = """CREATE TABLE Interaction_indices (
+        """Creates a table describing unique interactions in the database"""
+        interaction_index_table = """CREATE TABLE IF NOT EXISTS Interaction_indices (
                                         interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
                                         interaction_type    VARCHAR,
                                         rec_chain           VARCHAR,
@@ -3344,28 +3292,10 @@ class StorageManagerSQLite(StorageManager):
                                         rec_atomid          VARCHAR,
                                         UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid) ON CONFLICT IGNORE );
                                         """
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute("""DROP TABLE IF EXISTS Interaction_indices""")
-            cur.execute(interaction_index_table)
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                f"Error while creating interaction index table: {e}"
-            ) from e
+        self.db_query(interaction_index_table)
 
     def _create_interaction_table(self):
-        """Create table a "tall-skinny" table of each pose-interaction.
-        This table enables proper handling of duplicates if specified.
-        Columns are:
-        interaction_pose_id INTERGER PRIMARY KEY AUTOINCREMENT,
-        Pose_ID             INTEGER FOREIGN KEY from RESULTS,
-        interaction_id      INTEGER FOREIGN KEY from Interaction_indices
-
-        Raises:
-            DatabaseTableCreationError: Description
-        """
+        """Creates a table of each pose-interaction combination."""
 
         interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
         interaction_pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3374,76 +3304,33 @@ class StorageManagerSQLite(StorageManager):
         FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID),
         FOREIGN KEY (interaction_id) REFERENCES Interaction_indices(interaction_id))"""
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(interaction_table)
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
-            ) from e
+        self.db_query(interaction_table)
 
-    def _insert_interaction_index_rows(self, interactions) -> int:
+    def _insert_interaction_index_rows(self, interactions: list[tuple]):
         """
-        Writes unique interactions and returns the interaction_id of the given interaction
+        Writes unique interactions to database
 
         Args:
-            interaction_tuple (tuple): (rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
-
-        Returns:
-            int: interaction index
-
-        Raises:
-            DatabaseInsertionError
+            interaction_tuple (list[tuple]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         # to insert interaction if unique
         sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
                         VALUES (?,?,?,?,?,?);"""
-        try:
-            self.conn.executemany(sql_insert, interactions)
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                f"Error inserting unique interaction tuples in index table: {e}"
-            ) from e
-
-    def _delete_interactions(self, Pose_IDs):
-        """Remove rows from interactions table where pose id is represented in Pose_IDs
-
-        Args:
-            Pose_IDs (list(int)): list of pose ids to delete from the table
-
-        Raises:
-            StorageError: Description
-        """
-        Pose_IDs_string = ",".join(map(str, Pose_IDs))
-        sql_delete = f"DELETE FROM Interactions WHERE Pose_ID IN ({Pose_IDs_string});"
-        try:
-            cur = self.conn.cursor()
-            cur.execute(sql_delete)
-            self.conn.commit()
-            cur.close()
-
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                "Error while deleting rows in the Interaction table"
-            ) from e
+        self.db_update(sql_insert, interactions, commit=False)
 
     def _create_filtering_tables(self):
         """
         Creates a Filter table which includes filter_id (PK), name (bookmark_name), sqlite formatted query,
         and dictionary of filters used, as well as Filtered_poses, which uses filter_id as FK,
         and lists all poses passing that filter_id
-
-        Raises:
-            DatabaseTableCreationError
         """
         # Create filters table keeping track of filter id etc
         filters_sql = """CREATE TABLE IF NOT EXISTS Filters (
         filter_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        name                VARCHAR[],
-        query               VARCHAR[],
-        filters             VARCHAR[],
-        filter_window       VARCHAR[]);"""
+        name                VARCHAR,
+        query               VARCHAR,
+        filters             VARCHAR,
+        filter_window       VARCHAR);"""
 
         filter_pose_sql = """CREATE TABLE IF NOT EXISTS Filtered_poses (
         filter_id           INTEGER,
@@ -3451,16 +3338,8 @@ class StorageManagerSQLite(StorageManager):
         FOREIGN KEY(filter_id) REFERENCES Filters(filter_id),
         FOREIGN KEY(pose_id) REFERENCES Results(pose_id));"""
 
-        try:
-            cur = self.conn.cursor()
-            cur.execute(filters_sql)
-            cur.execute(filter_pose_sql)
-            self.conn.commit()
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                "Error while creating bookmark table. If database already exists, use --overwrite to drop existing tables"
-            ) from e
+        self.db_query(filters_sql)
+        self.db_query(filter_pose_sql)
 
     def _insert_cluster_data(
         self,
@@ -3510,31 +3389,24 @@ class StorageManagerSQLite(StorageManager):
             raise StorageError("Error occurred while inserting cluster data") from e
 
     def _create_indices(self):
-        """Create index for specified tables and columns. 'ak' stands for 'alternate key' and is prepended to index name to avoid naming conflicts
-
-        Raises:
-            StorageError
+        """Create index for specified tables and columns. 'ak' stands for 'alternate key'
+        and is prepended to index name to avoid naming conflicts
         """
-        try:
-            cur = self.conn.cursor()
-            logger.debug("Creating columns indices...")
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
-            )
-            cur.execute("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
-            self.conn.commit()
-            cur.close()
-            logger.info(
-                "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
-            )
-        except sqlite3.OperationalError as e:
-            raise StorageError("Error occurred while indexing") from e
+        logger.debug("Creating columns indices...")
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
+        )
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
+        )
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
+        )
+        self.db_query("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
+        self.conn.commit()
+        logger.info(
+            "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
+        )
 
     # endregion
 
@@ -5188,7 +5060,6 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             con = sqlite3.connect(self.db_file)
-            # con.row_factory = sqlite3.Row
             cursor = con.execute("PRAGMA synchronous = OFF;")
             cursor.execute("PRAGMA journal_mode = MEMORY;")
             con.commit()
@@ -5379,12 +5250,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             iter: if requesting return value(s)
         """
-        if type(parameters) == tuple:
-            parameters = [parameters]
-        elif type(parameters) != list:
-            raise OptionError(
-                "Cannot use a non-list or non-tuple as insert parameters, please format appropriately."
-            )
+
         try:
             cur = self.conn.cursor()
             cur.executemany(query, parameters)

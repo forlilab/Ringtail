@@ -52,15 +52,17 @@ class StorageManagerDuckDB(StorageManager):
     ):
         self.db_file = db_file
         super().__init__()
+        self.conn: duckdb.DuckDBPyConnection
 
     # region Methods for creating and inserting into tables the database
 
     def _create_ligands_table(self, name="Ligands"):
         """
-        Creates ligands table
+        Creates ligands table with a primary key defined by a
+        sequence
 
         Args:
-            name (str, optional): _description_. Defaults to "Ligands".
+            name (str, optional): Defaults to "Ligands".
         """
         ligand_table = f"""
             CREATE SEQUENCE seq_ligandid START 1;
@@ -75,13 +77,19 @@ class StorageManagerDuckDB(StorageManager):
 
         self.db_query(ligand_table)
 
-    def _insert_ligands(self, ligand_array: list = []) -> list:
+    def _insert_ligands(self, ligands: list):
         """
-        duck db implementation of parent method
+        Writes a list of ligands to the Ligands table by first writing
+        to a pandas dataframe, which is then registered in the database
+        connection, and used to write to the main table.
 
+        Args:
+            ligands (list): list of list of expected ligand info
+                in expected order
         """
+
         df = pd.DataFrame(
-            ligand_array,
+            ligands,
             columns=[
                 "LigName",
                 "ligand_smile",
@@ -108,7 +116,13 @@ class StorageManagerDuckDB(StorageManager):
         self.conn.execute(sql_insert)
 
     def _create_results_table(self, name="Results"):
-        """Creates table for results."""
+        """
+        Creates table for results, including a sequence creating the primary key
+        pose_id as well as referencing foreign key ligand_id
+
+        Args:
+            name (str, optional): _description_. Defaults to "Results".
+        """
 
         sql_results_table = f"""
             CREATE SEQUENCE seq_poseid START 1;
@@ -152,75 +166,83 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(sql_results_table)
 
     def _create_temporary_results_tables(self):
-        try:
-            create_temp_results = """
-            CREATE TEMP TABLE 
-            Results_temp(
-                receptor            VARCHAR,
-                pose_rank           INTEGER,
-                run_number          INTEGER,
-                docking_score       FLOAT,
-                leff                FLOAT,
-                deltas              FLOAT,
-                cluster_rmsd        FLOAT,
-                cluster_size        INTEGER,
-                reference_rmsd      FLOAT,
-                energies_inter      FLOAT,
-                energies_vdw        FLOAT,
-                energies_electro    FLOAT,
-                energies_flexLig    FLOAT,
-                energies_flexLR     FLOAT,
-                energies_intra      FLOAT,
-                energies_torsional  FLOAT,
-                unbound_energy      FLOAT,
-                nr_interactions     INTEGER,
-                num_hb              INTEGER,
-                about_x             FLOAT,
-                about_y             FLOAT,
-                about_z             FLOAT,
-                trans_x             FLOAT,
-                trans_y             FLOAT,
-                trans_z             FLOAT,
-                axisangle_x         FLOAT,
-                axisangle_y         FLOAT,
-                axisangle_z         FLOAT,
-                axisangle_w         FLOAT,
-                dihedrals           VARCHAR,
-                ligand_coordinates         VARCHAR,
-                flexible_res_coordinates   VARCHAR,
-                ligname             VARCHAR);
-                """
-            create_temp_interactions = """
-            CREATE TEMP TABLE Interactions_temp(
-                ligname             VARCHAR,
-                run_number          INTEGER,
-                pose_rank           INTEGER,
-                interaction_type    VARCHAR,
-                rec_chain           VARCHAR,
-                rec_resname         VARCHAR,
-                rec_resid           VARCHAR,
-                rec_atom            VARCHAR,
-                rec_atomid          VARCHAR);
+        """
+        Creates temporary tables for results and interactions, which will be
+        used for staging incoming data.
+        """
+        create_temp_results = """
+        CREATE TEMP TABLE 
+        Results_temp(
+            receptor            VARCHAR,
+            pose_rank           INTEGER,
+            run_number          INTEGER,
+            docking_score       FLOAT,
+            leff                FLOAT,
+            deltas              FLOAT,
+            cluster_rmsd        FLOAT,
+            cluster_size        INTEGER,
+            reference_rmsd      FLOAT,
+            energies_inter      FLOAT,
+            energies_vdw        FLOAT,
+            energies_electro    FLOAT,
+            energies_flexLig    FLOAT,
+            energies_flexLR     FLOAT,
+            energies_intra      FLOAT,
+            energies_torsional  FLOAT,
+            unbound_energy      FLOAT,
+            nr_interactions     INTEGER,
+            num_hb              INTEGER,
+            about_x             FLOAT,
+            about_y             FLOAT,
+            about_z             FLOAT,
+            trans_x             FLOAT,
+            trans_y             FLOAT,
+            trans_z             FLOAT,
+            axisangle_x         FLOAT,
+            axisangle_y         FLOAT,
+            axisangle_z         FLOAT,
+            axisangle_w         FLOAT,
+            dihedrals           VARCHAR,
+            ligand_coordinates         VARCHAR,
+            flexible_res_coordinates   VARCHAR,
+            ligname             VARCHAR);
             """
-            create_temp_mapping_table = """
-            CREATE TEMP TABLE pose_map(
-                pose_id             INTEGER,
-                ligand_id           INTEGER,
-                run_number          INTEGER,
-                pose_rank           INTEGER);
-            """
-            # create temporary tables
-            self.conn.execute(create_temp_results)
-            self.conn.execute(create_temp_interactions)
-            # self.conn.execute(create_temp_mapping_table)
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while creating temporary results tables."
-            ) from e
+        create_temp_interactions = """
+        CREATE TEMP TABLE Interactions_temp(
+            ligname             VARCHAR,
+            run_number          INTEGER,
+            pose_rank           INTEGER,
+            interaction_type    VARCHAR,
+            rec_chain           VARCHAR,
+            rec_resname         VARCHAR,
+            rec_resid           VARCHAR,
+            rec_atom            VARCHAR,
+            rec_atomid          VARCHAR);
+        """
+        # FIXME this is not working correctly, it messes up when inserting duplicates
+        create_temp_mapping_table = """
+        CREATE TEMP TABLE pose_map(
+            pose_id             INTEGER,
+            ligand_id           INTEGER,
+            run_number          INTEGER,
+            pose_rank           INTEGER);
+        """
+        # create temporary tables
+        self.db_query(create_temp_results)
+        self.db_query(create_temp_interactions)
+        # self.conn.execute(create_temp_mapping_table)
 
     def _insert_results_in_temp_tables(
         self, results_array: list, interactions_array: list
     ):
+        """
+        Inserts docking results and interactions into their respective temporary
+        tables via a pandas dataframe
+
+        Args:
+            results_array (list): list of result rows
+            interactions_array (list): list of interaction rows
+        """
         # insert results rows
         res_df = pd.DataFrame(
             results_array,
@@ -298,7 +320,8 @@ class StorageManagerDuckDB(StorageManager):
                     ligname) 
                 SELECT * FROM incoming_poses;"""
 
-        self.conn.execute(temp_insert)
+        self.db_query(temp_insert)
+
         int_df = pd.DataFrame(
             interactions_array,
             columns=[
@@ -318,9 +341,13 @@ class StorageManagerDuckDB(StorageManager):
             INSERT INTO Interactions_temp (ligname, run_number, pose_rank, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
             SELECT df.ligname, df.run_number, df.pose_rank, df.interaction_type, df.rec_chain, df.rec_resname, df.rec_resid, df.rec_atom, df.rec_atomid
             FROM incoming_interaction AS df;"""
-        self.conn.execute(temp_interaction_insert)
+        self.db_query(temp_interaction_insert)
 
-    def _move_tempresults_to_database(self, commit: bool = True):
+    def _move_tempresults_to_database(self):
+        """
+        Inserts data from the temporary results tables to their permanent
+        database equivalents
+        """
         temp_to_results = """
         INSERT INTO Results (
                 ligand_id,
@@ -426,18 +453,13 @@ class StorageManagerDuckDB(StorageManager):
                 AND II.rec_atom         = IT.rec_atom
                 AND II.rec_atomid       = IT.rec_atomid;
         """
-        try:
-            self.conn.execute(temp_to_results)
-            self.conn.execute(temp_to_interaction)
-            if commit:
-                self.conn.commit()
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while moving results from temp table to the database."
-            ) from e
+        self.db_query(temp_to_results)
+        self.db_query(temp_to_interaction)
 
     def _delete_new_duplicate_results(self):
-        """Checks if a pose ID is uniquely represented in the result table, based on the following columns:
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from the staged incoming data if duplicated.
+        Based on the following columns:
         ligname,
         receptor,
         about_x,
@@ -500,10 +522,27 @@ class StorageManagerDuckDB(StorageManager):
                 AND RT.dihedrals   = R.dihedrals
                 AND L.ligand_id    = R.ligand_id);
         """
-        self.conn.execute(delete_int_sql)
-        self.conn.execute(delete_res_sql)
+        self.db_query(delete_int_sql)
+        self.db_query(delete_res_sql)
 
     def _delete_old_duplicate_results(self):
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from Results if duplicated.
+        Based on the following columns:
+        ligname,
+        receptor,
+        about_x,
+        about_y,
+        about_z,
+        trans_x,
+        trans_y,
+        trans_z,
+        axisangle_x,
+        axisangle_y,
+        axisangle_z,
+        axisangle_w,
+        dihedrals
+        """
         delete_sql = """
         WITH target_poseid AS (
             SELECT R.pose_id
@@ -528,27 +567,17 @@ class StorageManagerDuckDB(StorageManager):
         WHERE pose_id IN (SELECT pose_id from target_poseid)
         returning pose_id;
         """
-        delete_pose_ids = self.conn.execute(delete_sql).fetchall()
+        delete_pose_ids = self.db_query(delete_sql).fetchall()
         delete_pose_ids_list = {row[0] for row in delete_pose_ids}
         placeholders = ",".join("?" for _ in delete_pose_ids_list)
         if delete_pose_ids:
-            self.conn.execute(
+            self.db_query(
                 f"""DELETE FROM Results WHERE pose_id IN ({placeholders});""",
                 delete_pose_ids_list,
             )
 
     def _create_receptors_table(self):
-        """Create table for receptors. Columns are:
-        Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
-        RecName             VARCHAR,
-        box_dim             VARCHAR,
-        box_center          VARCHAR,
-        grid_spacing        FLOAT,
-        flexible_residues   VARCHAR,
-        flexres_atomnames   VARCHAR,
-        receptor_object     BLOB
-
-        """
+        """Create table for receptors. Has primary key although only one receptor allowed"""
         receptors_table = """
             CREATE SEQUENCE seq_receptorid START 1;
             CREATE TABLE IF NOT EXISTS Receptors (
@@ -563,15 +592,12 @@ class StorageManagerDuckDB(StorageManager):
         );"""
         self.db_query(receptors_table)
 
-    def _insert_receptors(self, receptor_array):
+    def _insert_receptors(self, receptor_array: list):
         """Takes array of receptor rows, inserts into Receptors table
 
         Args:
             receptor_array (list): List of lists
                 containing formatted receptor rows
-
-        Raises:
-            DatabaseInsertionError
         """
         sql_insert = """INSERT INTO Receptors (
         RecName,
@@ -583,11 +609,7 @@ class StorageManagerDuckDB(StorageManager):
         ) VALUES
         (?,?,?,?,?,?)"""
 
-        try:
-            self.db_update(sql_insert, [receptor_array])
-
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError("Error while inserting receptor.") from e
+        self.db_update(sql_insert, [receptor_array])
 
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
@@ -595,39 +617,27 @@ class StorageManagerDuckDB(StorageManager):
         Args:
             receptor (bytes): bytes receptor object to be inserted into DB
             rec_name (string): Name of receptor. Used to insert into correct row of DB
-
-        Raises:
-            DatabaseInsertionError: Description
         """
         # Check if there is already a row for the receptor
-        cur = self.conn.execute("SELECT COUNT(*) FROM Receptors")
-        count = cur.fetchone()[0]
+        # Check if there is already a row for the receptor
+        count = self.table_length("Receptors")
+
         if count == 0:
             # Insert receptor statement
             query = f"""INSERT INTO Receptors (
                       RecName,
                       receptor_object)
-                      VALUES (?,?)"""
+                      VALUES (?,?);"""
 
         else:
             query = """UPDATE Receptors SET RecName = ?, receptor_object = ? WHERE Receptor_ID == 1"""
-        try:
-            cur = self.conn.execute(query, (rec_name, receptor))
-            self.conn.commit()
-            cur.close()
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while adding receptor blob to database"
-            ) from e
+        self.db_query(query, (rec_name, receptor), commit=True)
 
     def _create_db_properties_table(self):
         """Create table of database properties used during write session to the database. Columns are:
         DB_write_session int (primary key)
-        docking_mode (vina or dlg)
-        num_of_poses ("all" or int)
-
-        Raises:
-            DatabaseTableCreationError
+        docking_mode (vina or adgpu)
+        num_of_poses ("all" or str(int))
         """
 
         sql_str = """
@@ -645,41 +655,15 @@ class StorageManagerDuckDB(StorageManager):
         Args:
             docking_mode (str): docking mode for the current dataset being written
             number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
-
-        Raises:
-            DatabaseInsertionError
         """
         sql_insert = """INSERT INTO DB_properties (
         docking_mode,
         number_of_poses
-        ) VALUES (?,?)"""
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute(sql_insert, [docking_mode, number_of_poses])
-            self.conn.commit()
-            cur.close()
-
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError(
-                "Error while inserting database properties info into DB_properties table"
-            ) from e
+        ) VALUES (?,?);"""
+        self.db_query(sql_insert, [docking_mode, number_of_poses], commit=True)
 
     def _create_interaction_index_table(self):
-        """create table of data for each unique interaction, will be remade everytime db is written to.
-        Columns are:
-        interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-        interaction_type    VARCHAR,
-        rec_chain           VARCHAR,
-        rec_resname         VARCHAR,
-        rec_resid           VARCHAR,
-        rec_atom            VARCHAR,
-        rec_atomid          VARCHAR
-
-        Raises:
-            DatabaseTableCreationError: Description
-
-        """
+        """Creates a table describing unique interactions in the database"""
         interaction_index_table = """
         CREATE SEQUENCE seq_interactionid START 1;
         CREATE TABLE Interaction_indices (
@@ -692,21 +676,10 @@ class StorageManagerDuckDB(StorageManager):
         rec_atomid          VARCHAR,
         UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid));
         """
-
-        self.db_query("""DROP TABLE IF EXISTS Interaction_indices""")
         self.db_query(interaction_index_table)
 
     def _create_interaction_table(self):
-        """Create table a "tall-skinny" table of each pose-interaction.
-        This table enables proper handling of duplicates if specified.
-        Columns are:
-        interaction_pose_id INTERGER PRIMARY KEY AUTOINCREMENT,
-        Pose_ID             INTEGER FOREIGN KEY from RESULTS,
-        interaction_id      INTEGER FOREIGN KEY from Interaction_indices
-
-        Raises:
-            DatabaseTableCreationError: Description
-        """
+        """Creates a table of each pose-interaction combination."""
 
         interaction_table = """
         CREATE SEQUENCE seq_interactionposeid START 1;
@@ -717,75 +690,12 @@ class StorageManagerDuckDB(StorageManager):
 
         self.db_query(interaction_table)
 
-    def _insert_interaction_rows(
-        self, interaction_rows, duplicates, duplicate_handling
-    ):
-        """Inserts the interaction data into a "tall-and-skinny" table, with a primary autoincremented key and a Pose_ID that is 1-to-1 with Results table.
-        Table will contain as many rows with the same Pose_ID as that pose has interactions.
+    def _insert_interaction_index_rows(self, interactions: list[tuple]):
+        """
+        Writes unique interactions to database via a pandas dataframe
 
         Args:
-            interaction_rows (list(tuple)): list of tuples containing the interaction data
-            duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones, will be treated according to duplicate_handling
-            duplicate_handling (str): how to handle duplicates
-
-        Raises:
-            DatabaseInsertionError
-        """
-        sql_insert = """INSERT INTO Interactions 
-                            (Pose_ID,
-                            interaction_id)
-                            VALUES (?,?);"""
-        try:
-            cur = self.conn.cursor()
-            if not duplicate_handling:  # add all results
-                cur.executemany(sql_insert, interaction_rows)
-            else:
-                # first, add any poses that are not duplicates
-                non_duplicates = [
-                    interaction_row
-                    for interaction_row in interaction_rows
-                    if interaction_row[0] not in duplicates
-                ]
-                # check if there are duplicates or if duplicates list contains only None
-                duplicates_exist = bool(duplicates.count(None) != len(duplicates))
-                cur.executemany(sql_insert, non_duplicates)
-
-                # only look for values to replace if there are duplicate pose ids
-                if duplicate_handling == "REPLACE" and duplicates_exist:
-                    # delete all rows pertaining to duplicated pose_ids
-                    duplicated_pose_ids = [id for id in duplicates if id is not None]
-                    self._delete_interactions(duplicated_pose_ids)
-                    # insert the interaction tuples for the new pose_ids
-                    duplicates_only = [
-                        interaction_row
-                        for interaction_row in interaction_rows
-                        if interaction_row[0] in duplicates
-                    ]
-                    cur.executemany(sql_insert, duplicates_only)
-
-                elif duplicate_handling == "IGNORE":
-                    # ignore and don't add any poses that are duplicates
-                    pass
-            self.conn.commit()
-            cur.close()
-
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError(
-                f"Error while inserting an interaction row: {e}"
-            ) from e
-
-    def _insert_interaction_index_rows(self, interactions: list[list[str]]) -> int:
-        """
-        Writes unique interactions and returns the interaction_id of the given interaction
-
-        Args:
-            interaction_tuple (tuple): (rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
-
-        Returns:
-            int: interaction index
-
-        Raises:
-            DatabaseInsertionError
+            interaction_tuple (list[tuple]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         df = pd.DataFrame(
             interactions,
@@ -805,43 +715,13 @@ class StorageManagerDuckDB(StorageManager):
                     SELECT * FROM df_view
                     ON CONFLICT DO NOTHING;
                     """
-        try:
-            self.conn.execute(alt_sql_insert)
-        except duckdb.OperationalError as e:
-            raise DatabaseInsertionError(
-                f"Error inserting unique interactions in index table: {e}"
-            ) from e
-
-    def _delete_interactions(self, Pose_IDs):
-        """Remove rows from interactions table where pose id is represented in Pose_IDs
-
-        Args:
-            Pose_IDs (list(int)): list of pose ids to delete from the table
-
-        Raises:
-            StorageError: Description
-        """
-        Pose_IDs_string = ",".join(map(str, Pose_IDs))
-        sql_delete = f"DELETE FROM Interactions WHERE Pose_ID IN ({Pose_IDs_string});"
-        try:
-            cur = self.conn.cursor()
-            cur.execute(sql_delete)
-            self.conn.commit()
-            cur.close()
-
-        except duckdb.OperationalError as e:
-            raise StorageError(
-                "Error while deleting rows in the Interaction table"
-            ) from e
+        self.db_query(alt_sql_insert)
 
     def _create_filtering_tables(self):
         """
         Creates a Filter table which includes filter_id (PK), name (bookmark_name), duckdb formatted query,
         and dictionary of filters used, as well as Filtered_poses, which uses filter_id as FK,
         and lists all poses passing that filter_id
-
-        Raises:
-            DatabaseTableCreationError
         """
         filters_sql = """
         CREATE SEQUENCE seq_filterid START 1;
@@ -908,27 +788,10 @@ class StorageManagerDuckDB(StorageManager):
             raise StorageError("Error occurred while inserting cluster data") from e
 
     def _create_indices(self):
-        """Create index for specified tables and columns. 'ak' stands for 'alternate key' and is prepended to index name to avoid naming conflicts
-
-        Raises:
-            StorageError
         """
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
-        )
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
-        )
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
-        )
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)", commit=True
-        )
-
-        logger.info(
-            "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
-        )
+        Duckdb does not use indexing like other databases
+        """
+        pass
 
     def _delete_nontables(self):
         """
@@ -2396,11 +2259,10 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         try:
-            cur = self.conn.cursor()
-            cur.execute(query, params)
+            cur = self.conn.execute(query, params)
             if commit:
                 self.conn.commit()
-        except duckdb.OperationalError as e:
+        except duckdb.Error as e:
             raise DatabaseQueryError(
                 f"Unable to execute query -{query}- with given parameters -{params}-: -{e}-"
             ) from e
