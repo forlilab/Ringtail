@@ -25,9 +25,7 @@ def passingcount():
 def tablecount():
     def __dbconnect(table):
         rtc = RingtailCore("output.db")
-        with rtc.storageman as sm:
-            count = sm.db_query(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-        return count
+        return rtc.table_length(table)
 
     return __dbconnect
 
@@ -599,7 +597,7 @@ class TestOtherScripts:
         os.system(
             "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -6"
         )
-        # filter producing 5 ligands
+        # filter producing 6 ligands
         os.system(
             "python ../ringtail/cli/rt_process_vs.py read --input_db output2.db --eworst -7"
         )
@@ -610,7 +608,7 @@ class TestOtherScripts:
         with open("compared_ligands.txt") as f:
             for pos, line in enumerate(f):
                 if pos + 1 == 4:  # zero based line indexing
-                    assert line == "Number passing ligands: 24 \n"
+                    assert line == "Number passing ligands: 25 \n"
                     break
 
         os.system("rm output.db output2.db compared_ligands.txt output_log.txt")

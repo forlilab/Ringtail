@@ -3,78 +3,50 @@
 #
 # Ringtail unit testing
 #
-import ringtail
 from ringtail import RingtailCore, ringtailoptions, QueryBuilder
-import sqlite3
 import os
 import json
 import pytest
-import duckdb
-
-
-@pytest.fixture
-def tablecount():
-    def __dbconnect(table, database="output.db"):
-        rtc = RingtailCore(database)
-        with rtc.storageman as sm:
-            count = sm.db_query(f"SELECT COUNT(*) FROM {table};").fetchone()[0]
-        return count
-
-    return __dbconnect
-
-
-@pytest.fixture(scope="class")
-def db_query():
-    conn = duckdb.connect("output.db")
-    curs = conn.cursor()
-
-    def __dbconnect(query):
-        curs.execute(query)
-        return curs
-
-    yield __dbconnect
-    curs.close()
-    conn.close()
 
 
 class TestRingtailCore:
-    def test_add_file(self, tablecount):
+    def test_add_file(self):
         os.system("rm output.db*")
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(
             file="test_data/adgpu/group1/1451.dlg.gz", max_poses=3
         )
-        count = tablecount("Results")
+        count = rtc.table_length("Results")
         assert count == 3
 
-    def test_storeallposes(self, tablecount):
+    def test_storeallposes(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(
             file="test_data/adgpu/group1/1451.dlg.gz",
             store_all_poses=True,
             overwrite=True,
         )
-        count = tablecount("Results")
+        count = rtc.table_length("Results")
         assert count == 20
 
-    def test_add_folder(self, tablecount):
+    def test_add_folder(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file_path="test_data/adgpu/group1", overwrite=True)
-        count = tablecount("Ligands")
+        count = rtc.table_length("Ligands")
         assert count == 138
 
-    def test_save_receptor(self, db_query):
+    def test_save_receptor(self):
         rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
-        count0 = db_query(
+        count0 = rtc.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
-        ).fetchone()[0]
+        )[0][0]
 
         assert count0 == 0
 
         rtc.save_receptor(receptor_file="test_data/adgpu/4j8m.pdbqt")
-        count = db_query(
+        count = rtc.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
-        ).fetchone()[0]
+        )[0][0]
 
         assert count == 1
 
@@ -105,12 +77,10 @@ class TestRingtailCore:
 
         assert len(summary_items.data) == 38
 
-    def test_append_to_database(self, tablecount):
-        print("I am the next test")
+    def test_append_to_database(self):
         rtc = RingtailCore(db_file="output.db")
-        print("do i have ringtail object", rtc.storageman.conn)
         rtc.add_results_from_files(file_path="test_data/adgpu/group2/")
-        count = tablecount("Ligands")
+        count = rtc.table_length("Ligands")
 
         assert count == 217
 
@@ -320,11 +290,10 @@ class TestRingtailCore:
         assert os.path.exists("export_csv.csv")
         os.system("rm export_csv.csv")
 
-    def test_export_receptor(self, db_query):
+    def test_export_receptor(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.export_receptor()
-        curs = db_query("SELECT RecName FROM Receptors;")
-        receptor_name = curs.fetchone()[0]
+        receptor_name = rtc.db_query("SELECT RecName FROM Receptors;")[0][0]
         receptor_file = receptor_name + ".pdbqt"
 
         assert os.path.exists(receptor_file)
@@ -423,43 +392,38 @@ class TestRingtailCore:
         bookmark_db_name = rtc.export_bookmark_db("export_db")
 
         assert os.path.exists(bookmark_db_name)
-
-        conn = duckdb.connect(bookmark_db_name)
-        curs = conn.cursor()
-        curs.execute("SELECT COUNT(*) FROM Results")
-        count = curs.fetchone()[0]
-        curs.close()
-        conn.close()
+        rtc_bm = RingtailCore(db_file=bookmark_db_name)
+        count = rtc_bm.table_length("Results")
 
         assert count == 8
 
         os.system("rm " + bookmark_db_name)
 
-    def test_duplicate_handling(self, tablecount):
+    def test_duplicate_handling(self):
         os.system("rm output.db* output_log.txt")
 
         rtc = RingtailCore(db_file="output.db")
         file = "test_data/adgpu/group1/1451.dlg.gz"
         rtc.add_results_from_files(file=file)
         # ensure three results rows were added
-        result_count = tablecount("Results")
-        inter_count = tablecount("Interactions")
+        result_count = rtc.table_length("Results")
+        inter_count = rtc.table_length("Interactions")
         # add same file but replace the duplicate
         rtc.add_results_from_files(file=file, duplicate_handling="replace")
-        result_count_replace = tablecount("Results")
-        inter_count_replace = tablecount("Interactions")
+        result_count_replace = rtc.table_length("Results")
+        inter_count_replace = rtc.table_length("Interactions")
         # add same file but ignore the duplicate
         rtc.add_results_from_files(file=file, duplicate_handling="ignore")
-        result_count_ignore = tablecount("Results")
-        inter_count_ignore = tablecount("Interactions")
+        result_count_ignore = rtc.table_length("Results")
+        inter_count_ignore = rtc.table_length("Interactions")
 
         os.system("rm output.db*")
         # add same file but allow the duplicate
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file=file)
         rtc.add_results_from_files(file=file)
-        result_count_dupl = tablecount("Results")
-        inter_count_dupl = tablecount("Interactions")
+        result_count_dupl = rtc.table_length("Results")
+        inter_count_dupl = rtc.table_length("Interactions")
 
         assert (
             result_count
@@ -517,7 +481,7 @@ class TestRingtailCore:
 
 class TestVinaHandling:
 
-    def test_vina_file_add(self, tablecount):
+    def test_vina_file_add(self):
         vina_path = "test_data/vina"
         rtc = RingtailCore("output.db")
         rtc.docking_mode = "vina"
@@ -526,12 +490,12 @@ class TestVinaHandling:
             receptor_file=vina_path + "/receptor.pdbqt",
             save_receptor=True,
         ),
-        count = tablecount("Results")
+        count = rtc.table_length("Results")
         os.system("rm output.db*")
 
         assert count == 6
 
-    def test_vina_string_add(self, tablecount):
+    def test_vina_string_add(self):
         vina_path = "test_data/vina"
         with open("test_data/vina/sample-result.pdbqt") as f:
             sample1 = f.read()
@@ -543,12 +507,12 @@ class TestVinaHandling:
             receptor_file=vina_path + "/receptor.pdbqt",
             save_receptor=True,
         )
-        count = tablecount("Results")
+        count = rtc.table_length("Results")
         os.system("rm output.db*")
 
         assert count == 6
 
-    def test_add_interactions(self, tablecount):
+    def test_add_interactions(self):
         vina_path = "test_data/vina"
         rtc = RingtailCore("output.db", logging_level="DEBUG")
         rtc.docking_mode = "vina"
@@ -558,7 +522,7 @@ class TestVinaHandling:
             save_receptor=True,
             add_interactions=True,
         )
-        count = tablecount("Interaction_indices")
+        count = rtc.table_length("Interaction_indices")
         os.system("rm output.db*")
 
         assert count == 45
@@ -612,7 +576,7 @@ class TestStorageMan:
             "10%_leff": -0.444,
         }
 
-    def test_bookmark_info(self, db_query):
+    def test_bookmark_info(self):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
             file_path="test_data/adgpu/group2",
@@ -630,8 +594,7 @@ class TestStorageMan:
             .WHERE("name='bookmark_info'")
             .build()[0]
         )
-        curs = db_query(query_string)
-        bookmark_filters_db_str = curs.fetchone()[0]
+        bookmark_filters_db_str = rtc.db_query(query_string)[0][0]
 
         assert (
             json.loads(bookmark_filters_db_str)
@@ -657,7 +620,7 @@ class TestStorageMan:
 
 
 class TestMergeDB:
-    def test_db_write(self, tablecount):
+    def test_db_write(self):
         rtc1 = RingtailCore("primary.db")
         rtc1.add_results_from_files("test_data/adgpu/group1/1451.dlg.gz")
 
@@ -669,25 +632,25 @@ class TestMergeDB:
 
         # they should all have one ligand each
         assert (
-            tablecount("Ligands", "primary.db")
-            == tablecount("Ligands", "secondary.db")
-            == tablecount("Ligands", "tertiary.db")
+            rtc1.table_length("Ligands")
+            == rtc2.table_length("Ligands")
+            == rtc3.table_length("Ligands")
             == 1
         )
 
-    def test_before_merge(self, tablecount):
+    def test_before_merge(self):
         rtc1 = RingtailCore("primary.db")
         # should not be any poses in this interval
         assert rtc1.filter(eworst=-2, ebest=-5) == 0
         assert rtc1.filter(eworst=-5) == 1
-        assert tablecount("filtered_poses", "primary.db") == 3
+        assert rtc1.table_length("filtered_poses") == 3
 
-    def test_after_merge(self, tablecount):
+    def test_after_merge(self):
         rtc1 = RingtailCore("primary.db")
         rtc1.merge_databases("secondary.db", False)
         rtc1.merge_databases("tertiary.db", False)
         # this should add two more ligands
-        assert tablecount("Ligands", "primary.db") == 3
+        assert rtc1.table_length("Ligands") == 3
         # should now be data in this interval
         assert rtc1.filter(eworst=-2, ebest=-5) == 2
 
@@ -739,13 +702,13 @@ class TestOptions:
         assert rtc.filters.eworst == -6
         assert rtc.filters.score_percentile == None
 
-    def test_overwrite_db(self, tablecount):
+    def test_overwrite_db(self):
         rtc = RingtailCore()
         rtc.add_results_from_files(file_list="test_data/filelist1.txt")
-        count_old_db = tablecount("Ligands")
+        count_old_db = rtc.table_length("Ligands")
 
         rtc.add_results_from_files(file_list="test_data/filelist2.txt", overwrite=True)
-        count_new_db = tablecount("Ligands")
+        count_new_db = rtc.table_length("Ligands")
 
         assert count_old_db == 3
         assert count_new_db == 2
