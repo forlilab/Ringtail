@@ -2730,9 +2730,6 @@ class StorageManager:
 
         Args:
             table_name (str): name for temp table
-
-        Raises:
-            DatabaseTableCreationError
         """
         raise NotImplementedError
 

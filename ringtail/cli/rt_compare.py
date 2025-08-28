@@ -12,7 +12,7 @@ from ringtail import OutputManager, OptionError
 from ringtail import OptionError
 from ringtail import logutils
 from ringtail import QueryBuilder
-from ringtail import get_valid_storageclass
+from ringtail import get_valid_storageclass, RingtailDefaults
 import traceback
 
 
@@ -199,9 +199,9 @@ def main():
 
         logger.info("Starting cross-reference process")
 
-        # set database type to default sqlite if not specified in cmdline args
+        # set database type to default if not specified in cmdline args
         if args.database_type is None:
-            args.database_type = "sqlite"
+            args.database_type = RingtailDefaults.storage_type
         # ensure the specified database types are supported
         storagemanager = get_valid_storageclass(args.database_type)
 

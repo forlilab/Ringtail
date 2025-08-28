@@ -1472,21 +1472,10 @@ class StorageManagerSQLite(StorageManager):
 
         Args:
             table_name (str): name for temp table
-
-        Raises:
-            DatabaseTableCreationError
         """
 
         create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID, ligname)"
-        try:
-            cur = self.conn.cursor()
-            cur.execute(create_table_str)
-            self.conn.commit()
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                f"Error while creating temporary table {table_name}"
-            ) from e
+        self.db_query(create_table_str)
 
     # endregion
 
