@@ -403,7 +403,7 @@ class StorageManager:
         time0 = time.perf_counter()
 
         query = self.QueryBuilder()
-        # TODO handle if table is Results
+
         if cluster_type.lower() == "ifp":
             query.SELECT("r.pose_id", "r.leff").FROM("Results", "R")
 
@@ -2730,6 +2730,28 @@ class StorageManager:
 
         Args:
             table_name (str): name for temp table
+        """
+        raise NotImplementedError
+
+    def _insert_cluster_data(
+        self,
+        clusters: list,
+        poseid_list: list,
+        cluster_type: str,
+        cluster_cutoff: str,
+        bookmark_name: str,
+    ) -> str:
+        """Insert cluster data into ligand cluster table
+
+        Args:
+            clusters (list[list]): list of clusters
+            poseid_list (list): representative poses for each sluter
+            cluster_type (str): how clustering was performed
+            cluster_cutoff (str): distance to representative pose
+            bookmark_name (str): bookmark name which is clustered over
+
+        Returns:
+            str: name of cluster bookmark
         """
         raise NotImplementedError
 
