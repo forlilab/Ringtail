@@ -1279,6 +1279,7 @@ class StorageManagerDuckDB(StorageManager):
     def _generate_result_filtering_query(
         self, filters_dict: dict, bookmark_name: str, filter_bookmark: str = None
     ) -> str:
+        # TODO will only work for some filters
         """
         Takes dict of filters, writes sql filtering string
 
@@ -1522,6 +1523,7 @@ class StorageManagerDuckDB(StorageManager):
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
     ) -> str:
+        # TODO
         """Handles string or list input of column names to be outputted, will make sure LigName
         is in the list, and make sure all options are valid
 
@@ -1568,49 +1570,6 @@ class StorageManagerDuckDB(StorageManager):
         ]
 
         return duck_formatted_outfields
-
-    def get_bookmark_selection(
-        self,
-        bookmark_name: str,
-        selection: Union[list, str],
-        group_by: str = None,
-        order_results: str = None,
-    ) -> str:
-        """
-        Generates query to gather chosen columns based on passing poses in a bookmark
-
-        Args:
-            bookmark_name (str): bookmark name from which to get the passing poses
-            selection (Union[list, str]): what columns to have in the output query
-            group_by (str, optional): whether or not to group the output by a column
-            order_results (str, optional): Whether or not to order by a column
-
-        Raises:
-            OptionError: _description_
-
-        Returns:
-            str: sql string that describes selection of data from bookmark
-        """
-
-        if selection and selection != "*":
-            outfields_list = self._format_output_fields(selection, "R", "L")
-        elif selection == "*":
-            raise OptionError(
-                "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
-            )
-        # start formatting write query
-        query = self.QueryBuilder()
-        # select stuff from results where pose id in filter poses join ligands for extra fields
-        query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
-            "Ligands", "L", "ligand_id"
-        ).WHERE(f"R.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
-        if group_by:
-            query.GROUP_BY("l.ligname")
-        if order_results:
-            order_by = self._format_orderby(order_results)
-            if order_by:
-                query.ORDER_BY(order_by)
-        return query.build()[0]
 
     # endregion
 
@@ -1702,35 +1661,7 @@ class StorageManagerDuckDB(StorageManager):
 
     # endregion
 
-    # region fetching specific columns
-    def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
-        """
-        Gets all column names from given tables
-
-        Args:
-            tables (list, optional): Defaults to ["Results", "Ligands"].
-
-        Returns:
-            columns (list[str]): list of column names for all listed tables
-            columns_with_tablename (list[str.format]): needs formatted with table_alias (one per table) for use
-        """
-        columns = []
-        columns_with_tablename = []
-        for table in tables:
-            columns_info = self._fetch_table_column_names(table)
-            columns.extend([col[1].lower() for col in columns_info])
-            columns_with_tablename.extend(
-                [
-                    (
-                        "{{{table_alias}_alias}}.{col}".format(
-                            col=col[1], table_alias=table
-                        )
-                    )
-                    for col in columns_info
-                ]
-            )
-
-        return columns, columns_with_tablename
+    # region data
 
     def _get_numeric_columns(self, table_name: str) -> list:
         """
@@ -1760,15 +1691,6 @@ class StorageManagerDuckDB(StorageManager):
                             END ='numerical';"""
             ).fetchall()
         ]
-
-    def tables_in_db(self) -> list:
-        """
-        Returns a list of all table names in the database
-
-        Returns:
-            list: list of table names
-        """
-        return [row[0].lower() for row in self.db_query("SHOW TABLES").fetchall()]
 
     def _fetch_ligand_cluster_columns(self) -> list:
         """fetching columns from Ligand_clusters table
@@ -1972,6 +1894,14 @@ class StorageManagerDuckDB(StorageManager):
     # endregion
 
     # region general database operations
+    def tables_in_db(self) -> list:
+        """
+        Returns a list of all table names in the database
+
+        Returns:
+            list: list of table names
+        """
+        return [row[0].lower() for row in self.db_query("SHOW TABLES").fetchall()]
 
     def _get_length_of_table(self, table_name: str):
         """
@@ -1983,48 +1913,27 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             int: length of the table
         """
-        query = f"""SELECT COUNT(*) from {table_name}"""
+        query = f"""SELECT COUNT(*) from {table_name};"""
 
         return self.db_query(query).fetchone()[0]
 
-    def clone(self, backup_name=None):
+    def clone(self, backup_name: str = None) -> str:
+        import shutil
+
         """Creates a copy of the db
 
         Args:
             backup_name (str, optional): name of the cloned database
+        
+        Returns:
+            str: path of backed up database
         """
-        # TODO
         if backup_name is None:
             backup_name = self.db_file + ".bk"
-        bck = duckdb.connect(backup_name)
-        with bck:
-            self.conn.backup(bck, pages=1)
-        bck.close()
+        shutil.copy(self.db_file, backup_name)
+
         logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
-
-    def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
-        # TODO rejigger for duckdb, metadata table?
-        # TODO this might be the only onw I need working for testing
-        """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
-
-        Raises:
-            StorageError: if versions are incompatible
-        """
-        return
-        # check that code base is compatible with db schema version
-        code_version = version("ringtail")
-        if code_version in self._db_schema_code_compatibility[db_version]:
-            rtdb_version = db_version.replace(".", "")
-            # if so, proceed to set db schema version
-            cur = self.conn.cursor()
-            cur.execute(f"PRAGMA user_version = {rtdb_version}")
-            self.conn.commit()
-            cur.close()
-            logger.info("Database version set to {0}".format(rtdb_version))
-        else:
-            raise StorageError(
-                f"Code base version {code_version} is not compatible with database schema version {db_version}."
-            )
+        return backup_name
 
     def check_ringtaildb_version(self) -> tuple[bool, str]:
         # TODO rejigger for duckdb, metadata table?
@@ -2043,7 +1952,6 @@ class StorageManagerDuckDB(StorageManager):
             logger.warning(
                 f"Database version {db_schema_ver} is NOT compatible with code base version {version('ringtail')}"
             )
-        # cur.close()
         return is_compatible, db_schema_ver
 
     def _check_if_db_compatible_for_merge(self, merging_db_alias: str) -> bool:
@@ -2121,13 +2029,7 @@ class StorageManagerDuckDB(StorageManager):
             reindex (bool, optional): deletes and reruns all indixes. Defaults to False.
 
         """
-        if attached_db_alias is not None:
-            self._detach_db(attached_db_alias)
-        if reindex:
-            self.db_query("REINDEX", commit=True)
-        # vacuum database
-        if vacuum:
-            self._vacuum()
+        pass
 
     def table_length(self, table: str) -> int:
         """
@@ -2150,32 +2052,6 @@ class StorageManagerDuckDB(StorageManager):
             return None
 
         return self.db_query(query, params).fetchone()[0]
-
-    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
-        """
-        Find the row id of a pose in a given table
-
-        Args:
-            table (str)
-            pose_id (int)
-
-        Returns:
-            Union[None, int]: rowid if any
-        """
-        query = self.QueryBuilder()
-        query.SELECT("rowid")
-        if self.is_bookmark(table):
-            query.FROM("Filtered_poses").WHERE(
-                "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
-            )
-        else:
-            query.FROM(table)
-        query.WHERE("pose_id = ?", pose_id)
-        row = self.db_query(*query.build()).fetchone()
-        if row:
-            return row[0]
-        else:
-            return None
 
     def _vacuum(self):
         """#TODO duckdb doesn't really have this, can VACUUM ANALYZE <table>"""
@@ -2268,68 +2144,36 @@ class StorageManagerDuckDB(StorageManager):
     # endregion
 
     # region GUI specific API
-    def fetch_viewable_data_columns_from(
-        self, table: str, length: int, starting_rowid: int = 0, reverse=False
-    ) -> dict[list[str], list]:
+
+    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
         """
-        Makes a selection of columns and includes the status of the pose
+        Find the row id of a pose in a given table
+
+        Args:
+            table (str)
+            pose_id (int)
 
         Returns:
-            dict[list[str], list]: dict of headers and data
+            Union[None, int]: rowid if any
         """
-
-        if reverse:
-            where_operator = "<="
-        else:
-            where_operator = ">="
         query = self.QueryBuilder()
-        query.FROM("Results", "R")
-        status_assignement = """CASE
-            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
-            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
-            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
-            ELSE 'not evaluated'
-        END AS status,"""
-
-        if table.lower() == "results":
-            rowid = "R.rowid"
-
-        elif self._is_statustable(table):
-            query.JOIN(table, "T", "pose_id")
-            rowid = "T.rowid"
-            # status assignement doesn't make sense for status tables
-            status_assignement = f"""'{table.lower()}',"""
-
-        elif self.is_bookmark(table):
-            query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
-                "filters", "f", "filter_id", "filtered_poses"
-            ).WHERE("f.name = ?", table)
-            rowid = "fp.rowid"
-
-        ordered_columns = f"""
-        {status_assignement}
-        R.Pose_ID, L.LigName, R.docking_score, 
-        R.leff, R.cluster_size, R.cluster_rmsd, 
-        R.pose_rank, R.num_hb, R.receptor, R.run_number, 
-        R.deltas, R.nr_interactions, R.unbound_energy, 
-        R.reference_RMSD, R.energies_inter, R.energies_vdw, 
-        R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
-        R.energies_intra, R.energies_torsional, R.about_x, R.about_y, 
-        R.about_z, R.trans_x, R.trans_y, R.trans_z, R.axisangle_x, 
-        R.axisangle_y, R.axisangle_z, R.axisangle_w, R.dihedrals, {rowid}"""
-
-        query.SELECT(ordered_columns)
-
-        query.JOIN("Ligands", "L", "ligand_id", "results").WHERE(
-            f"{rowid} {where_operator} ?", starting_rowid
-        ).ORDER_BY(rowid).LIMIT(length).DESC(reverse)
-
-        cursor = self.db_query(*query.build())
-        headers = [desc[0] for desc in cursor.description]
-        data = cursor.fetchall()
-        return {"headers": headers, "data": data}
+        # TODO this will not work for duckdb
+        query.SELECT("rowid")
+        if self.is_bookmark(table):
+            query.FROM("Filtered_poses").WHERE(
+                "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
+            )
+        else:
+            query.FROM(table)
+        query.WHERE("pose_id = ?", pose_id)
+        row = self.db_query(*query.build()).fetchone()
+        if row:
+            return row[0]
+        else:
+            return None
 
     def get_starting_rowid(self, table: str) -> int:
+        # TODO might have problems with rowid
         """
         Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
         (whose rows are inside Filtered_poses)
@@ -2354,69 +2198,6 @@ class StorageManagerDuckDB(StorageManager):
             logger.error(f"Table -{table}- does not exist in the database.")
             return None
         return self.db_query(*query.build()).fetchone()[0]
-
-    def fetch_lignames_and_poses_for_selection(
-        self, selection: str
-    ) -> dict[str, list[int]]:
-        """
-        Creates a dictionary of ligands and the selected poses that appear in a selection,
-        such as a bookmark or a status table (where only poses are given).
-
-        Args:
-            selection (str): name of bookmark or status table
-
-        Returns:
-            dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
-        """
-        query = self.QueryBuilder()
-        query.SELECT("L.Ligname", "r.pose_id").FROM("Ligands", "L").JOIN(
-            "Results", "R", "ligand_id"
-        )
-        if self.is_bookmark(selection):
-            query.IN_BOOKMARK(selection)
-        elif selection.lower() in statuses:
-            query.WHERE(f"R.pose_id IN {selection}")
-        else:
-            logger.error(
-                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
-            )
-            return
-        rows = self.db_query(query.build()[0]).fetchall()
-        ligand_poses = defaultdict(list)
-        for name, id in rows:
-            ligand_poses[name].append(id)
-        # convert to normal dict
-        return dict(ligand_poses)
-
-    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
-        """
-        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
-
-        Args:
-            ligand_name (str)
-            selection (str): status table or bookmark name
-
-        Returns:
-            list[int]: selected poses for ligand
-        """
-        query = self.QueryBuilder()
-        query.SELECT("R.Pose_id").FROM("Results", "R").WHERE(
-            "L.LigName = ?", ligand_name
-        ).JOIN("Ligands", "L", "ligand_id")
-
-        if self.is_bookmark(selection):
-            query.IN_BOOKMARK(selection)
-        elif selection == None:
-            # get all poses for ligand, no WHERE clause for pose_id
-            pass
-        elif selection.lower() in statuses:
-            query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")
-        else:
-            logger.error(
-                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
-            )
-            return
-        return [row[0] for row in self.db_query(*query.build()).fetchall()]
 
     def create_status_tables(self) -> None:
         """
@@ -2450,62 +2231,5 @@ class StorageManagerDuckDB(StorageManager):
         )
 
         return None
-
-    def accept_pose(self, pose_id: int):
-        """
-        Will add pose_id to accepted, and delete from maybe and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Accepted (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
-
-    def maybe_pose(self, pose_id: int):
-        """
-        Will add pose_id to maybe, and delete from accepted and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Maybe (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
-
-    def reject_pose(self, pose_id: int):
-        """
-        Will add pose_id to rejected, and delete from accepted and maybe if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Rejected (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
 
     # endregion

@@ -1038,6 +1038,187 @@ class StorageManager:
 
         return self.get_query_data_as_dicts(query.build()[0])
 
+    def fetch_viewable_data_columns_from(
+        self, table: str, length: int, starting_rowid: int = 0, reverse=False
+    ) -> dict[list[str], list]:
+        """
+        Makes a selection of columns and includes the status of the pose
+
+        Returns:
+            dict[list[str], list]: dict of headers and data
+        """
+
+        if reverse:
+            where_operator = "<="
+        else:
+            where_operator = ">="
+        query = self.QueryBuilder()
+        query.FROM("Results", "R")
+        status_assignement = """CASE
+            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
+            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
+            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
+            ELSE 'not evaluated'
+        END AS status,"""
+
+        if table.lower() == "results":
+            rowid = "R.rowid"
+
+        elif self._is_statustable(table):
+            query.JOIN(table, "T", "pose_id")
+            rowid = "T.rowid"
+            # status assignement doesn't make sense for status tables
+            status_assignement = f"""'{table.lower()}',"""
+
+        elif self.is_bookmark(table):
+            query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
+                "filters", "f", "filter_id", "filtered_poses"
+            ).WHERE("f.name = ?", table)
+            rowid = "fp.rowid"
+
+        ordered_columns = f"""
+        {status_assignement}
+        R.Pose_ID, L.LigName, R.docking_score, 
+        R.leff, R.cluster_size, R.cluster_rmsd, 
+        R.pose_rank, R.num_hb, R.receptor, R.run_number, 
+        R.deltas, R.nr_interactions, R.unbound_energy, 
+        R.reference_RMSD, R.energies_inter, R.energies_vdw, 
+        R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
+        R.energies_intra, R.energies_torsional, R.about_x, R.about_y, 
+        R.about_z, R.trans_x, R.trans_y, R.trans_z, R.axisangle_x, 
+        R.axisangle_y, R.axisangle_z, R.axisangle_w, R.dihedrals, {rowid}"""
+
+        query.SELECT(ordered_columns)
+
+        query.JOIN("Ligands", "L", "ligand_id", "results").WHERE(
+            f"{rowid} {where_operator} ?", starting_rowid
+        ).ORDER_BY(rowid).LIMIT(length).DESC(reverse)
+
+        cursor = self.db_query(*query.build())
+        headers = [desc[0] for desc in cursor.description]
+        data = cursor.fetchall()
+        return {"headers": headers, "data": data}
+
+    def fetch_lignames_and_poses_for_selection(
+        self, selection: str
+    ) -> dict[str, list[int]]:
+        """
+        Creates a dictionary of ligands and the selected poses that appear in a selection,
+        such as a bookmark or a status table (where only poses are given).
+
+        Args:
+            selection (str): name of bookmark or status table
+
+        Returns:
+            dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
+        """
+        query = self.QueryBuilder()
+        query.SELECT("L.Ligname", "r.pose_id").FROM("Ligands", "L").JOIN(
+            "Results", "R", "ligand_id"
+        )
+        if self.is_bookmark(selection):
+            query.IN_BOOKMARK(selection)
+        elif selection.lower() in statuses:
+            query.WHERE(f"R.pose_id IN {selection}")
+        else:
+            logger.error(
+                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
+            )
+            return
+        rows = self.db_query(query.build()[0]).fetchall()
+        ligand_poses = defaultdict(list)
+        for name, id in rows:
+            ligand_poses[name].append(id)
+        # convert to normal dict
+        return dict(ligand_poses)
+
+    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
+        """
+        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
+
+        Args:
+            ligand_name (str)
+            selection (str): status table or bookmark name
+
+        Returns:
+            list[int]: selected poses for ligand
+        """
+        query = self.QueryBuilder()
+        query.SELECT("R.Pose_id").FROM("Results", "R").WHERE(
+            "L.LigName = ?", ligand_name
+        ).JOIN("Ligands", "L", "ligand_id")
+
+        if self.is_bookmark(selection):
+            query.IN_BOOKMARK(selection)
+        elif selection == None:
+            # get all poses for ligand, no WHERE clause for pose_id
+            pass
+        elif selection.lower() in statuses:
+            query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")
+        else:
+            logger.error(
+                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
+            )
+            return
+        return [row[0] for row in self.db_query(*query.build()).fetchall()]
+
+    def accept_pose(self, pose_id: int):
+        """
+        Will add pose_id to accepted, and delete from maybe and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_query(
+            """INSERT OR IGNORE INTO Accepted (pose_id) VALUES (?);""",
+            [pose_id],
+            commit=False,
+        )
+        self.db_query(
+            """DELETE FROM Maybe WHERE Pose_id = ?;""", [pose_id], commit=False
+        )
+        self.db_query(
+            """DELETE FROM Rejected WHERE Pose_id = ?;""", [pose_id], commit=True
+        )
+
+    def maybe_pose(self, pose_id: int):
+        """
+        Will add pose_id to maybe, and delete from accepted and rejected if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_query(
+            """INSERT OR IGNORE INTO Maybe (pose_id) VALUES (?);""",
+            [pose_id],
+            commit=False,
+        )
+        self.db_query(
+            """DELETE FROM Accepted WHERE Pose_id = ?;""", [pose_id], commit=False
+        )
+        self.db_query(
+            """DELETE FROM Rejected WHERE Pose_id = ?;""", [pose_id], commit=True
+        )
+
+    def reject_pose(self, pose_id: int):
+        """
+        Will add pose_id to rejected, and delete from accepted and maybe if needed
+
+        Args:
+            pose_id (int)
+        """
+        self.db_query(
+            """INSERT OR IGNORE INTO Rejected (pose_id) VALUES (?);""",
+            [pose_id],
+            commit=False,
+        )
+        self.db_query(
+            """DELETE FROM Accepted WHERE Pose_id = ?;""", [pose_id], commit=False
+        )
+        self.db_query(
+            """DELETE FROM Maybe WHERE Pose_id = ?;""", [pose_id], commit=True
+        )
+
     # endregion
 
     # region virtual public api
@@ -1186,62 +1367,9 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def fetch_lignames_and_poses_for_selection(
-        self, selection: str
-    ) -> dict[str, list[int]]:
-        """
-        Creates a dictionary of ligands and the selected poses that appear in a selection,
-        such as a bookmark or a status table (where only poses are given).
-
-        Args:
-            selection (str): name of bookmark or status table
-
-        Returns:
-            dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
-        """
-        raise NotImplementedError
-
     def create_status_tables(self):
         """
         Creates status tables if needed
-        """
-        raise NotImplementedError
-
-    def accept_pose(self, pose_id: int):
-        """
-        Will add pose_id to accepted, and delete from maybe and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        raise NotImplementedError
-
-    def maybe_pose(self, pose_id: int):
-        """
-        Will add pose_id to maybe, and delete from accepted and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        raise NotImplementedError
-
-    def reject_pose(self, pose_id: int):
-        """
-        Will add pose_id to rejected, and delete from accepted and maybe if needed
-
-        Args:
-            pose_id (int)
-        """
-        raise NotImplementedError
-
-    def fetch_viewable_data_columns_from(
-        self, table: str, length: int, last_pose_id: int = 0
-    ) -> iter:
-        """
-        Makes a selection of columns and includes the status of the pose
-
-        Returns:
-            iter: iterable/cursor of the columns
         """
         raise NotImplementedError
 
@@ -1264,19 +1392,6 @@ class StorageManager:
 
         Returns:
             list: list of table names
-        """
-        raise NotImplementedError
-
-    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
-        """
-        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
-
-        Args:
-            ligand_name (str)
-            selection (str): status table or bookmark name
-
-        Returns:
-            list[int]: selected poses for ligand
         """
         raise NotImplementedError
 
@@ -1706,50 +1821,6 @@ class StorageManager:
             return order_by
         else:
             return None
-
-    def _format_output_fields(
-        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
-    ) -> str:
-        """Handles string or list input of column names to be outputted, will make sure LigName
-        is in the list, and make sure all options are valid
-
-        Returns:
-            list: column names for which the data is to be displayed that needs formatting with table alias
-                for which table they belong to
-
-        Raises:
-            OptionError
-        """
-        if type(outfields) == str:
-            outfields = outfields.replace(" ", "")
-            outfields_list = outfields.split(",")
-        elif type(outfields) == list:
-            outfields_list = outfields
-        else:
-            logger.warning(
-                "The provided outfields is not in a usable format (string or list). Will only use ligname"
-            )
-            outfields_list = []
-        table_formatted_outfields = []
-        if "ligname" not in [field.lower() for field in outfields_list]:
-            outfields_list.insert(0, "LigName")
-        possible_columns, table_formatted_columns = self._get_possible_output_columns()
-
-        for outfield in outfields_list:
-            if outfield.lower() in possible_columns:
-                table_formatted_outfields.append(
-                    table_formatted_columns[possible_columns.index(outfield.lower())]
-                )
-            else:
-                logger.warning(
-                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
-                )
-        formatted_outfields = [
-            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
-            for outfield in table_formatted_outfields
-        ]
-
-        return formatted_outfields
 
     def _process_filters_for_query(self, filters_dict: dict) -> dict:
         """
@@ -2300,6 +2371,31 @@ class StorageManager:
                 logger.info("Successfully wrote filtered poses to database.")
         return bool(passing_poses)
 
+    def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
+        """
+        Gets all column names from given tables
+
+        Args:
+            tables (list, optional): Defaults to ["Results", "Ligands"].
+
+        Returns:
+            columns (list[str]): list of column names for all listed tables
+            columns_with_tablename (list[str.format]): needs formatted with table_alias (one per table) for use
+        """
+        columns = []
+        columns_with_tablename = []
+        for table in tables:
+            columns_info = self._fetch_table_column_names(table)
+            columns.extend(columns_info)
+            columns_with_tablename.extend(
+                [
+                    ("{{{table_alias}_alias}}.{col}".format(col=col, table_alias=table))
+                    for col in columns_info
+                ]
+            )
+
+        return columns, columns_with_tablename
+
     # endregion
 
     # region virtual private methods
@@ -2516,19 +2612,6 @@ class StorageManager:
     ):
         raise NotImplementedError("Method needs to be implemented in child class.")
 
-    def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
-        """
-        Gets all column names from given tables
-
-        Args:
-            tables (list, optional): Defaults to ["Results", "Ligands"].
-
-        Returns:
-            columns (list[str]): list of column names for all listed tables
-            columns_with_tablename (list[str.format]): needs formatted with table_alias (one per table) for use
-        """
-        raise NotImplementedError
-
     def _get_numeric_columns(self, table_name: str) -> list:
         """
         Method to get the names of all numeric columns in a table, for example for
@@ -2539,6 +2622,21 @@ class StorageManager:
 
         Returns:
             list: column names that has a numeric type
+        """
+        raise NotImplementedError
+
+    def _format_output_fields(
+        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
+    ) -> str:
+        """Handles string or list input of column names to be outputted, will make sure LigName
+        is in the list, and make sure all options are valid
+
+        Returns:
+            list: column names for which the data is to be displayed that needs formatting with table alias
+                for which table they belong to
+
+        Raises:
+            OptionError
         """
         raise NotImplementedError
 
@@ -3475,14 +3573,14 @@ class StorageManagerSQLite(StorageManager):
             # create mergedata table: merge_id (PK), dbfile, timestamp, numofrows table
             mergetbl_sql = """CREATE TABLE IF NOT EXISTS merged_tables (
             merge_id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            dbfile                  VARCHAR[],
+            dbfile                  VARCHAR,
             merge_start             DATETIME DEFAULT CURRENT_TIMESTAMP);"""
             cur.execute(mergetbl_sql)
 
             # create PK table: merge_id(FK), table, original_val, merge_val
             pktable_sql = """CREATE TABLE IF NOT EXISTS PK_conversions (
             merge_id        INTEGER,
-            table_name      VARCHAR[],
+            table_name      VARCHAR,
             original_PK     INTEGER,
             merged_PK       INTEGER,
             FOREIGN KEY(merge_id) REFERENCES merged_tables(merge_id));"""
@@ -4077,6 +4175,50 @@ class StorageManagerSQLite(StorageManager):
 
         return query
 
+    def _format_output_fields(
+        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
+    ) -> str:
+        """Handles string or list input of column names to be outputted, will make sure LigName
+        is in the list, and make sure all options are valid
+
+        Returns:
+            list: column names for which the data is to be displayed that needs formatting with table alias
+                for which table they belong to
+
+        Raises:
+            OptionError
+        """
+        if type(outfields) == str:
+            outfields = outfields.replace(" ", "")
+            outfields_list = outfields.split(",")
+        elif type(outfields) == list:
+            outfields_list = outfields
+        else:
+            logger.warning(
+                "The provided outfields is not in a usable format (string or list). Will only use ligname"
+            )
+            outfields_list = []
+        table_formatted_outfields = []
+        if "ligname" not in [field.lower() for field in outfields_list]:
+            outfields_list.insert(0, "LigName")
+        possible_columns, table_formatted_columns = self._get_possible_output_columns()
+
+        for outfield in outfields_list:
+            if outfield.lower() in possible_columns:
+                table_formatted_outfields.append(
+                    table_formatted_columns[possible_columns.index(outfield.lower())]
+                )
+            else:
+                logger.warning(
+                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
+                )
+        formatted_outfields = [
+            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
+            for outfield in table_formatted_outfields
+        ]
+
+        return formatted_outfields
+
     # endregion
 
     # region crossreferencing filtered databases
@@ -4167,32 +4309,7 @@ class StorageManagerSQLite(StorageManager):
 
     # endregion
 
-    # region fetching specific columns
-
-    def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
-        """
-        Gets all column names from given tables
-
-        Args:
-            tables (list, optional): Defaults to ["Results", "Ligands"].
-
-        Returns:
-            columns (list[str]): list of column names for all listed tables
-            columns_with_tablename (list[str.format]): needs formatted with table_alias (one per table) for use
-        """
-        columns = []
-        columns_with_tablename = []
-        for table in tables:
-            columns_info = self._fetch_table_column_names(table)
-            columns.extend(columns_info)
-            columns_with_tablename.extend(
-                [
-                    ("{{{table_alias}_alias}}.{col}".format(col=col, table_alias=table))
-                    for col in columns_info
-                ]
-            )
-
-        return columns, columns_with_tablename
+    # region data
 
     def _get_numeric_columns(self, table_name: str) -> list:
         """
@@ -4413,6 +4530,23 @@ class StorageManagerSQLite(StorageManager):
 
     # region general database operations
 
+    def tables_in_db(self) -> list:
+        """
+        Returns a list of all table names in the database
+
+        Returns:
+            list: list of table names
+        """
+        tables = [
+            name[0].lower()
+            for name in self.db_query(
+                "SELECT name FROM sqlite_master WHERE type='table';"
+            ).fetchall()
+        ]
+        if "sqlite_sequence" in tables:
+            tables.remove("sqlite_sequence")
+        return tables
+
     def _get_length_of_table(self, table_name: str):
         """
         Finds the rowcount/length of a table based on the rowid
@@ -4523,23 +4657,6 @@ class StorageManagerSQLite(StorageManager):
             return False
 
         return True
-
-    def tables_in_db(self) -> list:
-        """
-        Returns a list of all table names in the database
-
-        Returns:
-            list: list of table names
-        """
-        tables = [
-            name[0].lower()
-            for name in self.db_query(
-                "SELECT name FROM sqlite_master WHERE type='table';"
-            ).fetchall()
-        ]
-        if "sqlite_sequence" in tables:
-            tables.remove("sqlite_sequence")
-        return tables
 
     def update_database_version(self, new_version, consent=False):
         """method that updates sqlite database schema 1.0.0 through 3.0.0.
@@ -4975,32 +5092,6 @@ class StorageManagerSQLite(StorageManager):
 
         return self.db_query(query, params).fetchone()[0]
 
-    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
-        """
-        Find the row id of a pose in a given table
-
-        Args:
-            table (str)
-            pose_id (int)
-
-        Returns:
-            Union[None, int]: rowid if any
-        """
-        query = self.QueryBuilder()
-        query.SELECT("rowid")
-        if self.is_bookmark(table):
-            query.FROM("Filtered_poses").WHERE(
-                "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
-            )
-        else:
-            query.FROM(table)
-        query.WHERE("pose_id = ?", pose_id)
-        row = self.db_query(*query.build()).fetchone()
-        if row:
-            return row[0]
-        else:
-            return None
-
     def _vacuum(self):
         """SQLite vacuum rebuilds the database file, repacking it into a minimal amount of disk space
 
@@ -5096,7 +5187,6 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             iter: if requesting return value(s)
         """
-
         try:
             cur = self.conn.cursor()
             cur.executemany(query, parameters)
@@ -5108,66 +5198,32 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region GUI specific API
-    def fetch_viewable_data_columns_from(
-        self, table: str, length: int, starting_rowid: int = 0, reverse=False
-    ) -> dict[list[str], list]:
+
+    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
         """
-        Makes a selection of columns and includes the status of the pose
+        Find the row id of a pose in a given table
+
+        Args:
+            table (str)
+            pose_id (int)
 
         Returns:
-            dict[list[str], list]: dict of headers and data
+            Union[None, int]: rowid if any
         """
-
-        if reverse:
-            where_operator = "<="
-        else:
-            where_operator = ">="
         query = self.QueryBuilder()
-        query.FROM("Results", "R")
-        status_assignement = """CASE
-            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
-            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
-            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
-            ELSE 'not evaluated'
-        END AS status,"""
-
-        if table.lower() == "results":
-            rowid = "R.rowid"
-
-        elif self._is_statustable(table):
-            query.JOIN(table, "T", "pose_id")
-            rowid = "T.rowid"
-            # status assignement doesn't make sense for status tables
-            status_assignement = f"""'{table.lower()}',"""
-
-        elif self.is_bookmark(table):
-            query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
-                "filters", "f", "filter_id", "filtered_poses"
-            ).WHERE("f.name = ?", table)
-            rowid = "fp.rowid"
-
-        ordered_columns = f"""
-        {status_assignement}
-        R.Pose_ID, L.LigName, R.docking_score, 
-        R.leff, R.cluster_size, R.cluster_rmsd, 
-        R.pose_rank, R.num_hb, R.receptor, R.run_number, 
-        R.deltas, R.nr_interactions, R.unbound_energy, 
-        R.reference_RMSD, R.energies_inter, R.energies_vdw, 
-        R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
-        R.energies_intra, R.energies_torsional, R.about_x, R.about_y, 
-        R.about_z, R.trans_x, R.trans_y, R.trans_z, R.axisangle_x, 
-        R.axisangle_y, R.axisangle_z, R.axisangle_w, R.dihedrals, {rowid}"""
-
-        query.SELECT(ordered_columns)
-
-        query.JOIN("Ligands", "L", "ligand_id", "results").WHERE(
-            f"{rowid} {where_operator} ?", starting_rowid
-        ).ORDER_BY(rowid).LIMIT(length).DESC(reverse)
-
-        cursor = self.db_query(*query.build())
-        headers = [desc[0] for desc in cursor.description]
-        data = cursor.fetchall()
-        return {"headers": headers, "data": data}
+        query.SELECT("rowid")
+        if self.is_bookmark(table):
+            query.FROM("Filtered_poses").WHERE(
+                "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
+            )
+        else:
+            query.FROM(table)
+        query.WHERE("pose_id = ?", pose_id)
+        row = self.db_query(*query.build()).fetchone()
+        if row:
+            return row[0]
+        else:
+            return None
 
     def get_starting_rowid(self, table: str) -> int:
         """
@@ -5194,69 +5250,6 @@ class StorageManagerSQLite(StorageManager):
             logger.error(f"Table -{table}- does not exist in the database.")
             return None
         return self.db_query(*query.build()).fetchone()[0]
-
-    def fetch_lignames_and_poses_for_selection(
-        self, selection: str
-    ) -> dict[str, list[int]]:
-        """
-        Creates a dictionary of ligands and the selected poses that appear in a selection,
-        such as a bookmark or a status table (where only poses are given).
-
-        Args:
-            selection (str): name of bookmark or status table
-
-        Returns:
-            dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
-        """
-        query = self.QueryBuilder()
-        query.SELECT("L.Ligname", "r.pose_id").FROM("Ligands", "L").JOIN(
-            "Results", "R", "ligand_id"
-        )
-        if self.is_bookmark(selection):
-            query.IN_BOOKMARK(selection)
-        elif selection.lower() in statuses:
-            query.WHERE(f"R.pose_id IN {selection}")
-        else:
-            logger.error(
-                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
-            )
-            return
-        rows = self.db_query(query.build()[0]).fetchall()
-        ligand_poses = defaultdict(list)
-        for name, id in rows:
-            ligand_poses[name].append(id)
-        # convert to normal dict
-        return dict(ligand_poses)
-
-    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
-        """
-        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
-
-        Args:
-            ligand_name (str)
-            selection (str): status table or bookmark name
-
-        Returns:
-            list[int]: selected poses for ligand
-        """
-        query = self.QueryBuilder()
-        query.SELECT("R.Pose_id").FROM("Results", "R").WHERE(
-            "L.LigName = ?", ligand_name
-        ).JOIN("Ligands", "L", "ligand_id")
-
-        if self.is_bookmark(selection):
-            query.IN_BOOKMARK(selection)
-        elif selection == None:
-            # get all poses for ligand, no WHERE clause for pose_id
-            pass
-        elif selection.lower() in statuses:
-            query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")
-        else:
-            logger.error(
-                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
-            )
-            return
-        return [row[0] for row in self.db_query(*query.build()).fetchall()]
 
     def create_status_tables(self) -> None:
         """
@@ -5292,62 +5285,5 @@ class StorageManagerSQLite(StorageManager):
         )
 
         return None
-
-    def accept_pose(self, pose_id: int):
-        """
-        Will add pose_id to accepted, and delete from maybe and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Accepted (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
-
-    def maybe_pose(self, pose_id: int):
-        """
-        Will add pose_id to maybe, and delete from accepted and rejected if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Maybe (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
-
-    def reject_pose(self, pose_id: int):
-        """
-        Will add pose_id to rejected, and delete from accepted and maybe if needed
-
-        Args:
-            pose_id (int)
-        """
-        self.db_update(
-            """INSERT OR IGNORE INTO Rejected (pose_id) VALUES (?);""",
-            (pose_id,),
-            commit=False,
-        )
-        self.db_update(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", (pose_id,), commit=False
-        )
-        self.db_update(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", (pose_id,), commit=True
-        )
 
     # endregion
