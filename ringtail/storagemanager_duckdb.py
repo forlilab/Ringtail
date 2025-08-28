@@ -218,18 +218,9 @@ class StorageManagerDuckDB(StorageManager):
             rec_atom            VARCHAR,
             rec_atomid          VARCHAR);
         """
-        # FIXME this is not working correctly, it messes up when inserting duplicates
-        create_temp_mapping_table = """
-        CREATE TEMP TABLE pose_map(
-            pose_id             INTEGER,
-            ligand_id           INTEGER,
-            run_number          INTEGER,
-            pose_rank           INTEGER);
-        """
         # create temporary tables
         self.db_query(create_temp_results)
         self.db_query(create_temp_interactions)
-        # self.conn.execute(create_temp_mapping_table)
 
     def _insert_results_in_temp_tables(
         self, results_array: list, interactions_array: list
@@ -421,38 +412,71 @@ class StorageManagerDuckDB(StorageManager):
             JOIN Ligands AS L ON L.LigName = T.LigName
             RETURNING pose_id, ligand_id, run_number, pose_rank;"""
 
+        # temp_to_interaction = """
+        #     INSERT INTO Interactions(pose_id, interaction_id)
+        #     SELECT R.pose_id, II.interaction_id
+        #     FROM Results AS R
+        #     JOIN Ligands AS L
+        #         ON R.ligand_id    = L.ligand_id
+        #     JOIN Results_temp AS RT
+        #         ON RT.receptor=R.receptor
+        #         AND RT.about_x=R.about_x
+        #         AND RT.about_y=R.about_y
+        #         AND RT.about_z=R.about_z
+        #         AND RT.trans_x=R.trans_x
+        #         AND RT.trans_y=R.trans_y
+        #         AND RT.trans_z=R.trans_z
+        #         AND RT.axisangle_x=R.axisangle_x
+        #         AND RT.axisangle_y=R.axisangle_y
+        #         AND RT.axisangle_z=R.axisangle_z
+        #         AND RT.axisangle_w=R.axisangle_w
+        #         AND RT.dihedrals=R.dihedrals
+        #     JOIN Interactions_temp AS IT
+        #         ON RT.ligname      = IT.ligname
+        #         AND RT.pose_rank   = IT.pose_rank
+        #         AND RT.run_number  = IT.run_number
+        #     JOIN Interaction_indices AS II
+        #         ON II.interaction_type = IT.interaction_type
+        #         AND II.rec_chain        = IT.rec_chain
+        #         AND II.rec_resname      = IT.rec_resname
+        #         AND II.rec_resid        = IT.rec_resid
+        #         AND II.rec_atom         = IT.rec_atom
+        #         AND II.rec_atomid       = IT.rec_atomid;
+        # """
         temp_to_interaction = """
             INSERT INTO Interactions(pose_id, interaction_id)
-            SELECT R.pose_id, II.interaction_id
-            FROM Results AS R
+            SELECT M.pose_id, II.interaction_id
+            FROM Interactions_temp AS IT
+            JOIN pose_map AS M
+                ON IT.pose_rank = M.pose_rank
+                AND IT.run_number = M.run_number
             JOIN Ligands AS L
-                ON R.ligand_id    = L.ligand_id
-            JOIN Results_temp AS RT 
-                ON RT.receptor=R.receptor
-                AND RT.about_x=R.about_x
-                AND RT.about_y=R.about_y
-                AND RT.about_z=R.about_z
-                AND RT.trans_x=R.trans_x
-                AND RT.trans_y=R.trans_y
-                AND RT.trans_z=R.trans_z
-                AND RT.axisangle_x=R.axisangle_x
-                AND RT.axisangle_y=R.axisangle_y
-                AND RT.axisangle_z=R.axisangle_z
-                AND RT.axisangle_w=R.axisangle_w
-                AND RT.dihedrals=R.dihedrals
-            JOIN Interactions_temp AS IT
-                ON RT.ligname      = IT.ligname
-                AND RT.pose_rank   = IT.pose_rank
-                AND RT.run_number  = IT.run_number
+                ON M.ligand_id = L.ligand_id
+                AND IT.ligname = L.ligname
             JOIN Interaction_indices AS II
                 ON II.interaction_type = IT.interaction_type
-                AND II.rec_chain        = IT.rec_chain
-                AND II.rec_resname      = IT.rec_resname
-                AND II.rec_resid        = IT.rec_resid
-                AND II.rec_atom         = IT.rec_atom
-                AND II.rec_atomid       = IT.rec_atomid;
+                AND II.rec_chain = IT.rec_chain
+                AND II.rec_resname = IT.rec_resname
+                AND II.rec_resid = IT.rec_resid
+                AND II.rec_atom = IT.rec_atom
+                AND II.rec_atomid = IT.rec_atomid;"""
+
+        mapping = self.db_query(temp_to_results).fetchall()
+
+        create_temp_mapping_table = """
+        CREATE TEMP TABLE pose_map(
+            pose_id             INTEGER,
+            ligand_id           INTEGER,
+            run_number          INTEGER,
+            pose_rank           INTEGER);
         """
-        self.db_query(temp_to_results)
+
+        self.db_query(create_temp_mapping_table)
+        self.db_update(
+            "INSERT INTO pose_map (pose_id, ligand_id, run_number, pose_rank) VALUES (?, ?, ?, ?);",
+            mapping,
+            commit=False,
+        )
         self.db_query(temp_to_interaction)
 
     def _delete_new_duplicate_results(self):
@@ -2054,25 +2078,24 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             iter: if requesting return value(s)
         """
-        if not parameters:
-            return
-        if type(parameters) != list:
-            raise OptionError(
-                "Input for duckdb execute many needs to be list[list], wrong type used:",
-                parameters,
-            )
-        if type(parameters[0]) != list:
-            if type(parameters[0]) == tuple:
-                # just convert tuple to list
-                parameters = [list(row) for row in parameters]
-            else:
-                raise OptionError(
-                    "Input for duckdb execute many needs to be list[list], wrong type used:",
-                    parameters,
-                )
+        # if not parameters:
+        #     return
+        # if type(parameters) != list:
+        #     raise OptionError(
+        #         "Input for duckdb execute many needs to be list[list], wrong type used:",
+        #         parameters,
+        #     )
+        # if type(parameters[0]) != list:
+        #     if type(parameters[0]) == tuple:
+        #         # just convert tuple to list
+        #         parameters = [list(row) for row in parameters]
+        #     else:
+        #         raise OptionError(
+        #             "Input for duckdb execute many needs to be list[list], wrong type used:",
+        #             parameters,
+        #         )
         try:
-            cur = self.conn.cursor()
-            cur.executemany(query, parameters)
+            cur = self.conn.executemany(query, parameters)
             if commit:
                 self.conn.commit()
         except duckdb.OperationalError as e:
