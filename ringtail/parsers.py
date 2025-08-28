@@ -409,7 +409,7 @@ def parse_single_dlg(fname):
     ):
         raise FileParsingError("Incomplete data in " + fname)
     # calculate ligand efficiency and deltas from the best pose
-    leff = [x / heavy_at_count for x in scores]
+    leff = [round(x / heavy_at_count, 2) for x in scores]
     delta = [x - scores[0] for x in scores]
 
     return {
@@ -568,7 +568,7 @@ def parse_vina_result(data_pointer) -> dict:
                 raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, name))
 
         # calculate ligand efficiency and deltas from the best pose
-        leff = [x / num_heavy_atoms for x in scores]
+        leff = [round(x / num_heavy_atoms, 2) for x in scores]
         delta = [x - scores[0] for x in scores]
 
         return {
