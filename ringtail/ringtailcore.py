@@ -570,15 +570,16 @@ class RingtailCore:
                         f"\nNumber passing ligands filter combination {str(combination)}:",
                         num_passing_ligands,
                     )
-                    self._write_filter_output(
-                        iterated_bookmark_name,
-                        temp_filters,
-                        num_passing_ligands,
-                        log_file,
-                        outfields,
-                        output_all_poses,
-                        order_results,
-                    )
+                    if self._run_mode.lower() != "gui":
+                        self._write_filter_output(
+                            iterated_bookmark_name,
+                            temp_filters,
+                            num_passing_ligands,
+                            log_file,
+                            outfields,
+                            output_all_poses,
+                            order_results,
+                        )
                 else:
                     print("\nNo ligands passing filters")
                     self.logger.warning(
@@ -606,16 +607,17 @@ class RingtailCore:
                     clustering, bookmark_name
                 )
             # use original filters for final output log write
-            self._write_filter_output(
-                bookmark_name,
-                filters.asdict(),
-                num_passing_ligands,
-                log_file,
-                outfields,
-                output_all_poses,
-                order_results,
-                clustering,
-            )
+            if self._run_mode.lower() != "gui":
+                self._write_filter_output(
+                    bookmark_name,
+                    filters.asdict(),
+                    num_passing_ligands,
+                    log_file,
+                    outfields,
+                    output_all_poses,
+                    order_results,
+                    clustering,
+                )
         else:
             self.logger.warning(
                 f"WARNING: No ligands found passing filters{print_string}."
@@ -907,6 +909,9 @@ class RingtailCore:
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
+        with self.storageman:
+            self.storageman.create_subset_database(bookmark_name, bookmark_db_name)
+        return
         with self.storageman:
             self.storageman.clone(bookmark_db_name)
         # connect to cloned database
