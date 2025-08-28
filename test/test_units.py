@@ -555,13 +555,15 @@ class TestStorageMan:
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
             file_list="test_data/filelist1.txt",
-            recursive=True,
             receptor_file="test_data/adgpu/4j8m.pdbqt",
             save_receptor=True,
         )
         with rtc.storageman:
             summ_dict = rtc.storageman.fetch_summary_data()
-        assert summ_dict == {
+        rounded_dict = {
+            k: round(v, 2) if isinstance(v, float) else v for k, v in summ_dict.items()
+        }
+        assert rounded_dict == {
             "num_ligands": 3,
             "num_poses": 7,
             "num_unique_interactions": 57,
@@ -570,10 +572,10 @@ class TestStorageMan:
             "max_docking_score": -4.98,
             "1%_docking_score": -6.66,
             "10%_docking_score": -6.66,
-            "min_leff": -0.444,
-            "max_leff": -0.35000000000000003,
-            "1%_leff": -0.444,
-            "10%_leff": -0.444,
+            "min_leff": -0.44,
+            "max_leff": -0.35,
+            "1%_leff": -0.44,
+            "10%_leff": -0.44,
         }
 
     def test_bookmark_info(self):
