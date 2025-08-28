@@ -631,7 +631,7 @@ class StorageManager:
             "Ligands", "L", "ligand_id"
         ).WHERE(f"R.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
         if group_by:
-            query.GROUP_BY("l.ligand_id")
+            query.GROUP_BY("l.ligname")
         if order_results:
             order_by = self._format_orderby(order_results)
             if order_by:
@@ -888,13 +888,13 @@ class StorageManager:
         query = self.QueryBuilder()
         query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
             f"R.pose_id IN ({bookmark_selection})"
-        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("R.ligand_id")
+        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("L.ligname")
         if order_results:
             order_by = self._format_orderby(order_results)
             if order_by:
                 query.ORDER_BY(order_by)
 
-        return self.db_query(query.build()[0])
+        return self.db_query(query.build()[0]).fetchall()
 
     def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark

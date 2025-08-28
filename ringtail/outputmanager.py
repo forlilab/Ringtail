@@ -88,9 +88,17 @@ class OutputManager:
         """
         try:
             for line in lines:
+                formatted_tuple = tuple(
+                    round(item, 2) if type(item) == float else item for item in line
+                )
                 self._write_log_line(
-                    str(tuple(line)).replace("(", "").replace(")", "")
-                )  # strip parens from line, which is natively a tuple
+                    ", ".join(
+                        (
+                            str(item) if type(item) != str else item
+                            for item in formatted_tuple
+                        )
+                    )
+                )
             self._write_log_line("***************\n")
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e

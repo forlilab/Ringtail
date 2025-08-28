@@ -1588,9 +1588,7 @@ class StorageManagerDuckDB(StorageManager):
         # NOTE Inaccurate patch, need to specify how to aggregate if grouing the results
         # this is added here assuming it will be grouped, and is for testing duckdb performance
         # only. Will need to be made more rigorous if including duckdb in prod.
-        duck_formatted_outfields = [
-            f"ANY_VALUE({field})" for field in formatted_outfields
-        ]
+        duck_formatted_outfields = [f"{field}" for field in formatted_outfields]
 
         return duck_formatted_outfields
 
