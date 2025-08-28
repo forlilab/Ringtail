@@ -2553,8 +2553,17 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _set_ringtail_db_schema_version(self):
-        """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail))."""
+    def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
+        """
+        Will check current storage manager db schema version and only set if it
+        is compatible with the code base version (i.e., version(ringtail)).
+
+        Args:
+            db_version (str, optional): _description_. Defaults to "3.0.0".
+
+        Raises:
+            StorageError: _description_
+        """
         pass
 
     def _insert_ligands(self, ligands: list):

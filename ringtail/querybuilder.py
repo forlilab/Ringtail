@@ -205,8 +205,22 @@ class QueryBuilderSQLite(QueryBuilder):
 
 
 class QueryBuilderDuck(QueryBuilder):
+    """
+    At some point I need to keep a wrapped SELECTS list so I can keep track,
+    some times I might need to modify how it is wrapped
+    """
 
-    pass
-    # def build(self):
-    #     # need to if: group by, add ANY_VALUE else specified for each selected item
-    #     pass
+    def GROUP_BY(self, *fields):
+        self.group_bys.extend(fields)
+        # add ANY_VALUE() to SELECT fields
+        for index, item in enumerate(self.selects):
+            if "ANY_VALUE" not in item:
+                self.selects[index] = f"ANY_VALUE({item})"
+
+        return self
+
+    # def ORDER_BY(self, column):
+    #     self.order_by = column
+    #     if column not in self.group_bys:
+    #         self.GROUP_BY(column)
+    #     return self

@@ -1794,11 +1794,17 @@ class StorageManagerSQLite(StorageManager):
         logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
 
     def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
-        """Will check current storage manager db schema version and only set if it is compatible with the code base version (i.e., version(ringtail)).
+        """
+        Will check current storage manager db schema version and only set if it
+        is compatible with the code base version (i.e., version(ringtail)).
+
+        Args:
+            db_version (str, optional): _description_. Defaults to "3.0.0".
 
         Raises:
-            StorageError: if versions are incompatible
+            StorageError: _description_
         """
+
         # check that code base is compatible with db schema version
         code_version = version("ringtail")
         if code_version in self._db_schema_code_compatibility[db_version]:
