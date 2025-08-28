@@ -72,7 +72,7 @@ class RingtailDefaults:
     store_all_poses: bool = False
     bookmark_name: str = "passing_results"
     enumerate_interaction_combs: bool = False
-    log_file: str = "output_log.txt"
+    log_file: str = None
     output_all_poses: bool = False
     input_db: str = None
     print_summary: bool = None

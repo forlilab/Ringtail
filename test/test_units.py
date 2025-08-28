@@ -400,7 +400,7 @@ class TestRingtailCore:
         os.system("rm " + bookmark_db_name)
 
     def test_duplicate_handling(self):
-        os.system("rm output.db* output_log.txt")
+        os.system("rm output.db*")
 
         rtc = RingtailCore(db_file="output.db")
         file = "test_data/adgpu/group1/1451.dlg.gz"
@@ -616,7 +616,7 @@ class TestStorageMan:
         rtc = RingtailCore("output.db")
         with rtc.storageman:
             versionmatch, db_version = rtc.storageman.check_ringtaildb_version()
-        os.system("rm output.db* output_log.txt")
+        os.system("rm output.db*")
         assert versionmatch
         assert db_version == version("ringtail")
 
@@ -672,7 +672,7 @@ class TestMergeDB:
         )[0][0]
         assert secondary_db_pose_as_merged != secondary_db_pose_as_main
 
-        os.system("rm primary.db secondary.db tertiary.db output_log.txt")
+        os.system("rm primary.db secondary.db tertiary.db")
 
 
 class TestLogger:

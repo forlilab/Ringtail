@@ -612,4 +612,4 @@ class TestOtherScripts:
                     assert line == "Number passing ligands: 24 \n"
                     break
 
-        os.system("rm output.db output2.db compared_ligands.txt output_log.txt")
+        os.system("rm output.db output2.db compared_ligands.txt")

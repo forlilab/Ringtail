@@ -391,7 +391,7 @@ class RingtailCore:
         output_all_poses: bool = None,
         mfpt_cluster: float = None,
         interaction_cluster: float = None,
-        log_file: str = "output_log.txt",
+        log_file: str = None,
         outfields: str = "Ligname,docking_score",
         order_results: str = None,
         bookmark_name: str = "passing_results",
@@ -570,7 +570,7 @@ class RingtailCore:
                         f"\nNumber passing ligands filter combination {str(combination)}:",
                         num_passing_ligands,
                     )
-                    if self._run_mode.lower() != "gui":
+                    if log_file:
                         self._write_filter_output(
                             iterated_bookmark_name,
                             temp_filters,
@@ -607,7 +607,7 @@ class RingtailCore:
                     clustering, bookmark_name
                 )
             # use original filters for final output log write
-            if self._run_mode.lower() != "gui":
+            if log_file:
                 self._write_filter_output(
                     bookmark_name,
                     filters.asdict(),

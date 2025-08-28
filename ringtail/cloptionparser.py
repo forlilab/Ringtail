@@ -295,9 +295,10 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-l",
         "--log_file",
-        help='by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file',
+        help="if this option is used, ligands and requested info passing the filters will be written to specified file. Can be used as a flag, which will write to output_log.txt.",
         action="store",
         type=str,
+        const="output_log.txt",
         metavar="[FILE_NAME].TXT",
     )
     output_group.add_argument(
