@@ -299,6 +299,7 @@ def cmdline_parser(defaults: dict = {}):
         action="store",
         type=str,
         const="output_log.txt",
+        nargs="?",
         metavar="[FILE_NAME].TXT",
     )
     output_group.add_argument(
