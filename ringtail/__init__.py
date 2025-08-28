@@ -6,7 +6,9 @@
 
 from .cloptionparser import CLOptionParser
 from .util import *
-from .storagemanager import StorageManager, StorageManagerSQLite
+from .storagemanager import StorageManager
+from .storagemanager_sqlite import StorageManagerSQLite
+from .storagemanager_duckdb import StorageManagerDuckDB
 from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import parse_single_dlg, parse_vina_result
@@ -43,6 +45,7 @@ __all__ = [
     "CLOptionParser",
     "StorageManager",
     "StorageManagerSQLite",
+    "StorageManagerDuckDB",
     "MPManager",
     "DockingFileReader",
     "Writer",

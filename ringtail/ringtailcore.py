@@ -20,12 +20,9 @@ from .exceptions import RTCoreError, OutputError, StorageError, ResultsProcessin
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
-from .storagemanager import (
-    StorageManager,
-    StorageManagerSQLite,
-    HAS_SQLITE,
-)
-from .storagemanager_duck import StorageManagerDuckDB, HAS_DUCK
+from .storagemanager import StorageManager
+from .storagemanager_duckdb import StorageManagerDuckDB, HAS_DUCK
+from .storagemanager_sqlite import StorageManagerSQLite, HAS_SQLITE
 
 storage_types = {}
 if HAS_SQLITE:

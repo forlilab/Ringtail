@@ -9,7 +9,7 @@ import pandas as pd
 from .logutils import LOGGER as logger
 from typing import Union
 from importlib.metadata import version
-from .util import numlist2str, statuses
+from .util import numlist2str
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -22,7 +22,6 @@ from .exceptions import (
 from .clustermanager import *
 from .storagemanager import StorageManager
 from .querybuilder import QueryBuilderDuck
-from collections import defaultdict
 
 try:
     import duckdb
