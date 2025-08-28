@@ -2640,6 +2640,38 @@ class StorageManager:
         """
         raise NotImplementedError
 
+    def _detach_db(self, new_db_alias):
+        """Detaches new database file from current database
+
+        Args:
+            new_db_name (str): db name for database to detach
+
+        Raises:
+            StorageError
+        """
+        raise NotImplementedError
+
+    def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
+        """Attaches new database file to current database
+
+        Args:
+            new_db (str): file name for database to attach
+            new_db_name (str): name of new database
+
+        """
+        raise NotImplementedError
+
+    def _create_crossref_temp_table(self, table_name: str):
+        """create temporary table with given name and with ligand name and pose_id information
+
+        Args:
+            table_name (str): name for temp table
+
+        Raises:
+            DatabaseTableCreationError
+        """
+        raise NotImplementedError
+
     # endregion
 
     # region cross referencing filtered databases
@@ -2681,7 +2713,7 @@ class StorageManager:
         temp_insert_query = self._generate_selective_insert_query(
             bookmark1_name, bookmark2_name, selection, new_db_name, temp_name
         )
-        self.db_update(temp_insert_query, ())
+        self.db_query(temp_insert_query, commit=True)
 
         num_passing = self._count_ligands_in_temptable(temp_name)
         print("\n\n Number passing the cross referenced filters: ", num_passing)

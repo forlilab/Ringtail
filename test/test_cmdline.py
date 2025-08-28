@@ -585,6 +585,7 @@ class TestFilters:
 
 class TestOtherScripts:
     def test_rt_compare(self):
+        os.system("rm output.db output2.db compared_ligands.txt output_log.txt")
         # first database
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1"
@@ -601,14 +602,14 @@ class TestOtherScripts:
         os.system(
             "python ../ringtail/cli/rt_process_vs.py read --input_db output2.db --eworst -7"
         )
-        # should produce 25 ligands
+        # should produce 24 ligands
         os.system(
             "python ../ringtail/cli/rt_compare.py --wanted output.db --unwanted output2.db --log compared_ligands.txt"
         )
         with open("compared_ligands.txt") as f:
             for pos, line in enumerate(f):
                 if pos + 1 == 4:  # zero based line indexing
-                    assert line == "Number passing ligands: 25 \n"
+                    assert line == "Number passing ligands: 24 \n"
                     break
 
         os.system("rm output.db output2.db compared_ligands.txt output_log.txt")
