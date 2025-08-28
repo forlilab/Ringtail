@@ -943,6 +943,8 @@ class RingtailCore:
             order_results (str, optional): how to order the data. Defaults to "ligname".
             log_file (str, optional): log file name to write to. Defaults to None.
         """
+        if log_file is None:
+            log_file = "output_log.txt"
         if bookmark_name is None:
             raise OptionError("A bookmark name has to be provided")
         with self.storageman:
