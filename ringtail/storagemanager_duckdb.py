@@ -2063,7 +2063,8 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             StorageError
         """
-        pass
+        attach = f"""ATTACH '{new_db}' AS {new_db_alias};"""
+        self.db_query(attach)
 
     def _detach_db(self, new_db_alias):
         """Detaches new database file from current database
@@ -2074,7 +2075,7 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             StorageError
         """
-        pass
+        self.db_query(f"""DETACH {new_db_alias};""")
 
     def db_query(self, query, params: tuple = (), commit=False) -> iter:
         """Executes provided duckdb query. Returns cursor for results.

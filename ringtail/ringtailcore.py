@@ -911,16 +911,6 @@ class RingtailCore:
             return
         with self.storageman:
             self.storageman.create_subset_database(bookmark_name, bookmark_db_name)
-        return
-        with self.storageman:
-            self.storageman.clone(bookmark_db_name)
-        # connect to cloned database
-        db_clone: StorageManager = get_valid_storageclass(self.storagetype)(
-            bookmark_db_name
-        )
-        with db_clone:
-            db_clone.prune_nonpassing(bookmark_name)
-            db_clone.close_storage(vacuum=True)
 
         return bookmark_db_name
 
