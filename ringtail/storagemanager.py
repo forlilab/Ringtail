@@ -498,8 +498,9 @@ class StorageManager:
 
         self._delete_from_results(bookmark_name)
         self._delete_from_ligands(bookmark_name)
-        self._delete_from_interactions_not_in_view(bookmark_name)
+        self._delete_from_interactions(bookmark_name)
         self._clear_bookmarks()
+        self.conn.commit()
 
     def fetch_pose_interactions(self, Pose_ID) -> iter:
         """
@@ -2672,6 +2673,22 @@ class StorageManager:
         """
         raise NotImplementedError
 
+    def _delete_from_ligands(self, bookmark_name: str):
+        """Remove rows from ligands table if they did not pass filtering"""
+        raise NotImplementedError
+
+    def _delete_from_results(self, bookmark_name: str):
+        """Remove rows from results table if they did not pass filtering"""
+        raise NotImplementedError
+
+    def _delete_from_interactions(self, bookmark_name: str):
+        """Remove rows from interactions table if they were not used for poses that passed filtering.
+
+        Args:
+            bookmark_name (str): defines which poses are passing
+        """
+        raise NotImplementedError
+
     # endregion
 
     # region cross referencing filtered databases
@@ -4256,67 +4273,38 @@ class StorageManagerSQLite(StorageManager):
     # region crossreferencing filtered databases
 
     def _delete_from_ligands(self, bookmark_name: str):
-        """Remove rows from ligands table if they did not pass filtering
-
-        Raises:
-            StorageError
-        """
+        """Remove rows from ligands table if they did not pass filtering"""
         passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
 
-        try:
-            self.db_update(
-                f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query}))",
-                (),
-            )
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                f"Error occured while pruning Ligands not in {bookmark_name}"
-            ) from e
+        self.db_query(
+            f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query}))",
+        )
 
     def _delete_from_results(self, bookmark_name: str):
-        """Remove rows from results table if they did not pass filtering
-
-        Raises:
-            StorageError
-        """
+        """Remove rows from results table if they did not pass filtering"""
         passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
-        try:
-            self.db_update(
-                f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})", ()
-            )
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                f"Error occured while pruning Results not in {bookmark_name}"
-            ) from e
+        self.db_query(
+            f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})"
+        )
 
-    def _delete_from_interactions_not_in_view(self, bookmark_name: str):
+    def _delete_from_interactions(self, bookmark_name: str):
         """Remove rows from interactions table if they were not used for poses that passed filtering.
 
         Args:
             bookmark_name (str): defines which poses are passing
-
-        Raises:
-            StorageError: Description
         """
         passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
-        try:
-            self.db_update(
-                f"DELETE FROM Interactions WHERE Pose_ID NOT IN ({passing_poses_query})",
-                (),
-            )
-            # remove unused interaction indices, if any
-            self.db_update(
-                """DELETE FROM Interaction_indices WHERE interaction_id IN
-                            (SELECT ii.interaction_id FROM Interaction_indices ii 
-                            LEFT JOIN Interactions i ON ii.interaction_id=i.interaction_id 
-                            WHERE i.interaction_id IS NULL);""",
-                (),
-            )
 
-        except sqlite3.OperationalError as e:
-            raise StorageError(
-                f"Error occured while pruning Interactions not in {bookmark_name}"
-            ) from e
+        self.db_query(
+            f"DELETE FROM Interactions WHERE Pose_ID NOT IN ({passing_poses_query})",
+        )
+        # remove unused interaction indices, if any
+        self.db_query(
+            """DELETE FROM Interaction_indices WHERE interaction_id IN
+                        (SELECT ii.interaction_id FROM Interaction_indices ii 
+                        LEFT JOIN Interactions i ON ii.interaction_id=i.interaction_id 
+                        WHERE i.interaction_id IS NULL);""",
+        )
 
     def _create_crossref_temp_table(self, table_name: str):
         """create temporary table with given name and with ligand name and pose_id information
@@ -5287,33 +5275,31 @@ class StorageManagerSQLite(StorageManager):
         """
         Creates pose status tables if needed
         """
-        self.db_update(
+        self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Accepted 
                 (Pose_ID INTEGER UNIQUE,
                 FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
-            (),
         )
 
         # create maybe table
-        self.db_update(
+        self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Maybe 
                 (Pose_ID INTEGER UNIQUE,
                 FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
-            (),
         )
 
         # create rejected table
-        self.db_update(
+        self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Rejected 
                 (Pose_ID INTEGER UNIQUE,
                 FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
-            (),
+            commit=True,
         )
 
         return None

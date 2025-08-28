@@ -609,7 +609,7 @@ class StorageManagerDuckDB(StorageManager):
         ) VALUES
         (?,?,?,?,?,?)"""
 
-        self.db_update(sql_insert, [receptor_array])
+        self.db_query(sql_insert, receptor_array)
 
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
@@ -1584,9 +1584,8 @@ class StorageManagerDuckDB(StorageManager):
         passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
 
         try:
-            self.db_update(
+            self.db_query(
                 f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query}))",
-                (),
             )
         except duckdb.OperationalError as e:
             raise StorageError(
@@ -1601,8 +1600,8 @@ class StorageManagerDuckDB(StorageManager):
         """
         passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
         try:
-            self.db_update(
-                f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})", ()
+            self.db_query(
+                f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})"
             )
         except duckdb.OperationalError as e:
             raise StorageError(
@@ -1620,17 +1619,15 @@ class StorageManagerDuckDB(StorageManager):
         """
         passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
         try:
-            self.db_update(
+            self.db_query(
                 f"DELETE FROM Interactions WHERE Pose_ID NOT IN ({passing_poses_query})",
-                (),
             )
             # remove unused interaction indices, if any
-            self.db_update(
+            self.db_query(
                 """DELETE FROM Interaction_indices WHERE interaction_id IN
                             (SELECT ii.interaction_id FROM Interaction_indices ii 
                             LEFT JOIN Interactions i ON ii.interaction_id=i.interaction_id 
                             WHERE i.interaction_id IS NULL);""",
-                (),
             )
 
         except duckdb.OperationalError as e:
