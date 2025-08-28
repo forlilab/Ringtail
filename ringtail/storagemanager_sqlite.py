@@ -652,7 +652,7 @@ class StorageManagerSQLite(StorageManager):
 
         Args:
             clusters (list[list]): list of clusters
-            poseid_list (list): representative poses for each sluter
+            poseid_list (list): representative poses for each cluster
             cluster_type (str): how clustering was performed
             cluster_cutoff (str): distance to representative pose
             bookmark_name (str): bookmark name which is clustered over
@@ -660,7 +660,77 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: name of cluster bookmark
         """
-        # TODO
+        # create a cluster description table
+        self.db_query(
+            """
+            CREATE TABLE IF NOT EXISTS
+            Clusters (
+                cluster_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR,
+                description VARCHAR,
+                cluster_window VARCHAR,
+                num_clusters INTEGER
+                );
+            """
+        )
+        # create a table with cluster_id and cluster_group and representative pose
+        self.db_query(
+            """
+            CREATE TABLE IF NOT EXISTS
+            Cluster_groups (
+                cluste_id REFERENCES Clusters(cluster_id),
+                cluster_group INTEGER,
+                representative INTEGER REFERENCES Results(pose_id)
+                )
+            """
+        )
+        # create a table of pose and cluster_id and cluster_group
+        self.db_query(
+            """
+                      CREATE TABLE IF NOT EXISTS 
+                      Pose_clusters(
+                        pose_id INTEGER REFERENCES Results(pose_id),
+                        cluster_id INTEGER REFERENCES Clusters(cluster_id),
+                        cluster_group INTEGER REFERENCES Cluster_groups(cluster_group))"""
+        )
+        cluster_name = f"{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
+        bookmark_name = f"{bookmark_name}_{cluster_name}"
+        # insert cluster information, produce cluster_id
+        cluster_id = self.db_query(
+            """
+            INSERT INTO Clusters (name, description, cluster_window, num_clusters)
+                       VALUES (?,?,?,?) RETURNING cluster_id;""",
+            (
+                cluster_name,
+                "",
+                bookmark_name,
+                len(clusters),
+            ),
+        ).fetchone()[0]
+
+        # populate custer group table
+        # a list of integers describing which group inside the cluster it is part of
+        cluster_groups = []
+        pose_rows = []
+        for group_index, cluster in enumerate(clusters):
+            cluster_groups.append([cluster_id, group_index, poseid_list[group_index]])
+            for pose in cluster:
+                pose_rows.append([pose, cluster_id, group_index])
+
+        self.db_update(
+            """INSERT INTO Cluster_groups VALUES (?,?,?);""",
+            cluster_groups,
+            commit=False,
+        )
+
+        self.db_update(
+            """
+                INSERT INTO Pose_clusters VALUES (?,?,?);
+                """,
+            pose_rows,
+            commit=False,
+        )
+
         cur = self.conn.cursor()
         cur.execute(
             "CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)"
@@ -683,7 +753,7 @@ class StorageManagerSQLite(StorageManager):
             cur.close()
             self.conn.commit()
 
-            return column_name
+            return bookmark_name
         except sqlite3.OperationalError as e:
             raise StorageError("Error occurred while inserting cluster data") from e
 
