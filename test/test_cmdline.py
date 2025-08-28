@@ -4,7 +4,6 @@
 # Ringtail command line tool end-to-end testing
 #
 
-import sqlite3
 import os
 import pytest
 from ringtail import RingtailCore
@@ -273,17 +272,9 @@ class TestOutputs:
         status = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --store_all_poses"
         )
-        conn = sqlite3.connect("output.db")
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM Results")
-        count = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM Ligands")
-        ligcount = cur.fetchone()[0]
-
-        cur.close()
-        conn.close()
-
+        rtc = RingtailCore("output.db")
+        count = rtc.table_length("Results")
+        ligcount = rtc.table_length("Ligands")
         os.system("rm output.db")
 
         assert status == 0
