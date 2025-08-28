@@ -1467,40 +1467,6 @@ class StorageManagerSQLite(StorageManager):
 
     # region crossreferencing filtered databases
 
-    def _delete_from_ligands(self, bookmark_name: str):
-        """Remove rows from ligands table if they did not pass filtering"""
-        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
-
-        self.db_query(
-            f"DELETE FROM Ligands WHERE ligand_id NOT IN (SELECT ligand_id from Results WHERE Pose_ID IN ({passing_poses_query}))",
-        )
-
-    def _delete_from_results(self, bookmark_name: str):
-        """Remove rows from results table if they did not pass filtering"""
-        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
-        self.db_query(
-            f"DELETE FROM Results WHERE Pose_ID NOT IN ({passing_poses_query})"
-        )
-
-    def _delete_from_interactions(self, bookmark_name: str):
-        """Remove rows from interactions table if they were not used for poses that passed filtering.
-
-        Args:
-            bookmark_name (str): defines which poses are passing
-        """
-        passing_poses_query = self._get_bookmark_poses_query(bookmark_name)
-
-        self.db_query(
-            f"DELETE FROM Interactions WHERE Pose_ID NOT IN ({passing_poses_query})",
-        )
-        # remove unused interaction indices, if any
-        self.db_query(
-            """DELETE FROM Interaction_indices WHERE interaction_id IN
-                        (SELECT ii.interaction_id FROM Interaction_indices ii 
-                        LEFT JOIN Interactions i ON ii.interaction_id=i.interaction_id 
-                        WHERE i.interaction_id IS NULL);""",
-        )
-
     def _create_crossref_temp_table(self, table_name: str):
         """create temporary table with given name and with ligand name and pose_id information
 

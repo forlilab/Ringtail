@@ -565,21 +565,6 @@ class StorageManager:
         self._detach_db(alias)
         logger.info(f"Subset database {database_name} has been successfully created.")
 
-    def prune_nonpassing(self, bookmark_name: str):
-        """
-        Used when creating a new database from filtered data, will remove the data
-        that did not pass filtering
-
-        Args:
-            bookmark_name (str): bookmark name which has the only poses to save
-        """
-
-        self._clear_bookmarks()
-        self._delete_from_interactions(bookmark_name)
-        self._delete_from_results(bookmark_name)
-        self._delete_from_ligands(bookmark_name)
-        self.conn.commit()
-
     def fetch_pose_interactions(self, Pose_ID) -> iter:
         """
         Fetch all interactions parameters belonging to a Pose_ID
@@ -1840,16 +1825,6 @@ class StorageManager:
         self._delete_nontables()
         self.conn.commit()
 
-    def _clear_bookmarks(self):
-        """
-        Clears all filters and filtered poses
-        """
-        query = self.QueryBuilder()
-        self.db_query(*(query.DROP_IF_EXISTS("Filters").build()))
-        query = self.QueryBuilder()
-        self.db_query(*(query.DROP_IF_EXISTS("Filtered_poses").build()))
-        self._create_filtering_tables()
-
     def _delete_table(self, table_name: str, db_alias: str = None):
         """
         Method to delete a table
@@ -2758,22 +2733,6 @@ class StorageManager:
 
         Raises:
             DatabaseTableCreationError
-        """
-        raise NotImplementedError
-
-    def _delete_from_ligands(self, bookmark_name: str):
-        """Remove rows from ligands table if they did not pass filtering"""
-        raise NotImplementedError
-
-    def _delete_from_results(self, bookmark_name: str):
-        """Remove rows from results table if they did not pass filtering"""
-        raise NotImplementedError
-
-    def _delete_from_interactions(self, bookmark_name: str):
-        """Remove rows from interactions table if they were not used for poses that passed filtering.
-
-        Args:
-            bookmark_name (str): defines which poses are passing
         """
         raise NotImplementedError
 
