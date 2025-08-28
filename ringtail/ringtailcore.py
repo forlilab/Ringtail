@@ -107,7 +107,7 @@ class RingtailCore:
         )
         # Check if storage type is implemented
         try:
-            storageman: StorageManager = get_valid_storageclass(storage_type)
+            storageman = get_valid_storageclass(storage_type)
         except NotImplementedError as e:
             self.logger.error(e)
             raise e
@@ -115,7 +115,7 @@ class RingtailCore:
         # initialize remaining variables and storagemanager
         self.storagetype = storage_type
         self.db_file = db_file
-        self.storageman = storageman(db_file)
+        self.storageman: StorageManager = storageman(db_file)
         self._run_mode = "api"
         self._docking_mode = docking_mode
 
