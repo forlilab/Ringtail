@@ -16,7 +16,7 @@ from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters
-from .util import numlist2str, statuses
+from .util import statuses
 from .exceptions import (
     StorageError,
     OptionError,
