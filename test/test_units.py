@@ -198,8 +198,8 @@ class TestRingtailCore:
 
         final_line = linecache.getline(log_file_name, 11)
 
-        assert "'11991', 0.0, 226.06" in file_contents
-        assert "'3961', 0.0, 215.96" in file_contents
+        assert "11991, 0.0, 226.06" in file_contents
+        assert "3961, 0.0, 215.96" in file_contents
         assert final_line == "***************\n"
 
         os.system(("rm " + log_file_name))
@@ -377,7 +377,7 @@ class TestRingtailCore:
                 if line_no == target_line_no:
                     break
 
-        assert line_content == "'11128', -7.25\n"
+        assert line_content == "11128, -7.25\n"
 
     def test_plot(self):
         rtcore = RingtailCore(db_file="output.db")
