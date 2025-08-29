@@ -678,7 +678,7 @@ class StorageManagerSQLite(StorageManager):
             """
             CREATE TABLE IF NOT EXISTS
             Cluster_groups (
-                cluste_id REFERENCES Clusters(cluster_id),
+                cluster_id REFERENCES Clusters(cluster_id),
                 cluster_group INTEGER,
                 representative INTEGER REFERENCES Results(pose_id)
                 )
@@ -687,14 +687,14 @@ class StorageManagerSQLite(StorageManager):
         # create a table of pose and cluster_id and cluster_group
         self.db_query(
             """
-                      CREATE TABLE IF NOT EXISTS 
-                      Pose_clusters(
-                        pose_id INTEGER REFERENCES Results(pose_id),
-                        cluster_id INTEGER REFERENCES Clusters(cluster_id),
-                        cluster_group INTEGER REFERENCES Cluster_groups(cluster_group))"""
+            CREATE TABLE IF NOT EXISTS 
+            Pose_clusters (
+                pose_id INTEGER REFERENCES Results(pose_id),
+                cluster_id INTEGER REFERENCES Clusters(cluster_id),
+                cluster_group INTEGER REFERENCES Cluster_groups(cluster_group)
+                )"""
         )
-        cluster_name = f"{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
-        bookmark_name = f"{bookmark_name}_{cluster_name}"
+        cluster_name = f"{cluster_type}_{str(cluster_cutoff)}"
         # insert cluster information, produce cluster_id
         cluster_id = self.db_query(
             """
@@ -708,15 +708,19 @@ class StorageManagerSQLite(StorageManager):
             ),
         ).fetchone()[0]
 
-        # populate custer group table
-        # a list of integers describing which group inside the cluster it is part of
+        # a list of integers describing which group inside the cluster a given pose is part of
         cluster_groups = []
         pose_rows = []
         for group_index, cluster in enumerate(clusters):
-            cluster_groups.append([cluster_id, group_index, poseid_list[group_index]])
+            cluster = list(cluster)
+            representative_pose = poseid_list[group_index]
+            cluster_groups.append([cluster_id, group_index, representative_pose])
+            # make sure we add the representative pose
+            cluster.append(representative_pose)
             for pose in cluster:
                 pose_rows.append([pose, cluster_id, group_index])
-
+        print("first few cluster groups: ", cluster_groups[:5])
+        print("first few pose rows: ", pose_rows[:5])
         self.db_update(
             """INSERT INTO Cluster_groups VALUES (?,?,?);""",
             cluster_groups,
@@ -731,31 +735,9 @@ class StorageManagerSQLite(StorageManager):
             commit=False,
         )
 
-        cur = self.conn.cursor()
-        cur.execute(
-            "CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INT[] UNIQUE)"
-        )
-        ligand_cluster_columns = self._fetch_ligand_cluster_columns()
-        column_name = (
-            f"{bookmark_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
-        )
-        try:
-            if column_name not in ligand_cluster_columns:
-                cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
-            for ci, cl in enumerate(clusters):
-                for i in cl:
-                    poseid = poseid_list[i]
-                    cur.execute(
-                        f"INSERT INTO Ligand_clusters (pose_id, {column_name}) VALUES (?,?) ON CONFLICT (pose_id) DO UPDATE SET {column_name}=excluded.{column_name}",
-                        (poseid, ci),
-                    )
+        bookmark_name = f"{bookmark_name}_{cluster_name}"
 
-            cur.close()
-            self.conn.commit()
-
-            return bookmark_name
-        except sqlite3.OperationalError as e:
-            raise StorageError("Error occurred while inserting cluster data") from e
+        return bookmark_name
 
     def _create_indices(self):
         """Create index for specified tables and columns. 'ak' stands for 'alternate key'
@@ -847,6 +829,7 @@ class StorageManagerSQLite(StorageManager):
         # delete incompatible tables
         # for main db
         self._delete_filter_data()
+        # TODO delete cluster data
         self._delete_table("Ligand_clusters")
         # for attached db
         self._delete_filter_data(merging_db_alias)
@@ -1580,26 +1563,6 @@ class StorageManagerSQLite(StorageManager):
             ).fetchall()
         ]
 
-    def _fetch_ligand_cluster_columns(self) -> list:
-        """fetching columns from Ligand_clusters table
-
-        Raises:
-            IndexError
-
-        Returns:
-            list: columns from ligand clusters table
-        """
-        try:
-            return [
-                c[1]
-                for c in self.db_query("PRAGMA table_info(Ligand_clusters)").fetchall()
-            ][1:]
-        except IndexError:
-            # TODO this exception wont work
-            raise IndexError(
-                "Error fetching columns from Ligand_clusters table. Confirm that ligand clustering has been previously performed."
-            )
-
     def _fetch_table_column_names(self, table: str) -> list:
         """Fetches list of string for column names in results table
 
@@ -1672,7 +1635,7 @@ class StorageManagerSQLite(StorageManager):
 
         return summary_data
 
-    def fetch_clustered_similars(self, ligname: str):
+    def fetch_clustered_similars(self, ligname: str) -> tuple[list, str, str]:
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
 
         Args:
@@ -1685,10 +1648,11 @@ class StorageManagerSQLite(StorageManager):
         logger.warning(
             "N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters."
         )
-        cur = self.conn.cursor()
-        # TODO should be able to just check what clusters the ligand is a part of, and then offer them here
-        # nothing somehow what filters were involved before the clustering perhaps?
-        ligand_cluster_columns = self._fetch_ligand_cluster_columns()
+
+        cluster_info = self.db_query(
+            "SELECT cluster_id, cluster_window, name FROM Clusters;"
+        ).fetchall()
+
         print(
             "Here are the existing clustering groups. Please ensure that you query ligand(s) is a part of the group you select."
         )
@@ -1698,42 +1662,65 @@ class StorageManagerSQLite(StorageManager):
         print(
             "----------------------------------------------------------------------------------------------------------"
         )
-        for i, col in enumerate(ligand_cluster_columns):
-            col_info = col.split("_")
-            option_list = (
-                [str(i)]
-                + ["_".join(col_info[:-2])]
-                + [col_info[-2]]
-                + [col_info[-1].replace("p", ".")]
-            )
-            print(f"{'    |    '.join(option_list)}")
+        cluster_options = []
+        for cluster_id, filter_window, name in cluster_info:
+            cluster_options.append(cluster_id)
+            option_list = [str(cluster_id), filter_window, name]
+            print(f"{'             |    '.join(option_list)}")
+
         cluster_choice = input(
             "Please specify choice number for the cluster you would like to return similar ligands from: "
         )
-        try:
-            cluster_col_choice = ligand_cluster_columns[int(cluster_choice)]
-        except ValueError:
+        if not int(cluster_choice) in cluster_options:
             raise ValueError(
-                f"Given cluster number {cluster_choice} cannot be converted to int. Please be sure you are specifying integer."
+                f"Given cluster number {cluster_choice} does not exist in the database. Please be sure you are specifying an integer in the given cluster options."
             )
-        query_ligand_cluster = cur.execute(
-            f"SELECT {cluster_col_choice} FROM Ligand_clusters WHERE pose_id IN (SELECT Pose_ID FROM Results WHERE ligand_id = (SELECT ligand_id FROM Ligands WHERE LigName =  '{ligname}'))"
-        ).fetchone()
-        if query_ligand_cluster is None:
-            raise DatabaseQueryError(
-                f"Requested ligand name {ligname} not found in cluster {cluster_col_choice}!"
+        # get group(s) that poses of that ligand belongs to, make set so unique groups only
+        groups = {
+            row[0]
+            for row in self.db_query(
+                """
+                SELECT cluster_group FROM pose_clusters
+                    WHERE cluster_id = ? 
+                    AND pose_id IN (
+                        SELECT pose_id FROM Results
+                        WHERE ligand_id = (
+                            SELECT ligand_id FROM Ligands 
+                                WHERE ligname = ?));
+                """,
+                (
+                    cluster_id,
+                    ligname,
+                ),
+            ).fetchall()
+        }
+        # group with those poses
+        input_params = [cluster_id, *groups]
+        placeholders = ",".join(["?"] * len(groups))
+        ligands = self.db_query(
+            f"""
+            SELECT L.LigName FROM Ligands AS L
+            JOIN Results AS R
+                ON R.ligand_id = L.ligand_id
+            WHERE R.pose_id IN (
+                SELECT pose_id FROM Pose_clusters 
+                WHERE cluster_id = ?
+                AND cluster_group IN ({placeholders}))
+            GROUP BY L.Ligname;
+            """,
+            input_params,
+        ).fetchall()
+        cluster_name = (
+            self.db_query(
+                "SELECT name FROM Clusters WHERE cluster_id = ?;", [cluster_id]
             )
-        query_ligand_cluster = query_ligand_cluster[0]  # extract from tuple
+            .fetchone()[0]
+            .replace(".", "p")
+        )
 
-        # TODO this is not ideal or optimized, but it does what it needs to do.
-        sql_query = f"""
-        SELECT LigName FROM Ligands WHERE ligand_id IN (SELECT ligand_id FROM Results WHERE Pose_ID IN 
-        (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}))
-        GROUP BY ligand_id"""
+        bookmark_name = f"similar_{ligname}_{cluster_name}"
 
-        bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
-
-        return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
+        return ligands, bookmark_name, cluster_name
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
