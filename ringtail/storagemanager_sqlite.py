@@ -692,10 +692,24 @@ class StorageManagerSQLite(StorageManager):
                 pose_id INTEGER REFERENCES Results(pose_id),
                 cluster_id INTEGER REFERENCES Clusters(cluster_id),
                 cluster_group INTEGER REFERENCES Cluster_groups(cluster_group)
-                )"""
+                );
+            """
         )
-        # TODO if inserting existing cluster, stop
         cluster_name = f"{cluster_type}_{str(cluster_cutoff)}"
+        cluster_bookmark = f"{bookmark_name}_{cluster_name}"
+        # check if clusters already exist
+        clusters_exist = self.db_query(
+            "SELECT num_clusters FROM Clusters WHERE name=? and cluster_window=?",
+            (
+                cluster_name,
+                bookmark_name,
+            ),
+        ).fetchone()
+        if clusters_exist:
+            logger.warning(
+                f"This cluster has been ran before, will reuse bookmark {cluster_bookmark}."
+            )
+            return (cluster_bookmark, clusters_exist[0])
         # insert cluster information, produce cluster_id
         cluster_id = self.db_query(
             """
@@ -713,6 +727,8 @@ class StorageManagerSQLite(StorageManager):
         cluster_groups = []
         pose_rows = []
         for group_index, cluster in enumerate(clusters):
+            print(cluster)
+            print(group_index)
             cluster = list(cluster)
             representative_pose = poseid_list[group_index]
             cluster_groups.append([cluster_id, group_index, representative_pose])
@@ -734,9 +750,7 @@ class StorageManagerSQLite(StorageManager):
             commit=False,
         )
 
-        bookmark_name = f"{bookmark_name}_{cluster_name}"
-
-        return bookmark_name
+        return cluster_bookmark
 
     def _create_indices(self):
         """Create index for specified tables and columns. 'ak' stands for 'alternate key'

@@ -438,7 +438,8 @@ class StorageManager:
         # print some stats
         max_len = max(len(lst) for lst in clusters)
         min_len = min(len(lst) for lst in clusters)
-        logger.info(f"Number of {cluster_type} clusters: {len(clusters)}")
+        num_clusters = len(clusters)
+        logger.info(f"Number of {cluster_type} clusters: {num_clusters}")
         logger.info(
             f"Biggest {cluster_type} cluster contains {max_len} poses while the smallest cluster contains {min_len} poses."
         )
@@ -450,22 +451,27 @@ class StorageManager:
             str(cutoff),
             bookmark_name,
         )
+        if type(cluster_bookmark_name) == tuple:
+            logger.info("Clustering has been ran before, old bookmark will be used.")
+            num_clusters = cluster_bookmark_name[1]
+            cluster_bookmark_name = cluster_bookmark_name[0]
+        else:
 
-        clustered_poses = self.QueryBuilder()
-        clustered_poses.SELECT("pose_id").FROM("results").WHERE(
-            f"pose_id IN ({','.join(representatives)})"
-        )
+            clustered_poses = self.QueryBuilder()
+            clustered_poses.SELECT("pose_id").FROM("results").WHERE(
+                f"pose_id IN ({','.join(representatives)})"
+            )
 
-        self._populate_filter_tables(
-            cluster_bookmark_name,
-            clustered_poses.build()[0],
-            {"cluster_type": cluster_type, "cutoff": cutoff},
-            bookmark_name,
-        )
+            self._populate_filter_tables(
+                cluster_bookmark_name,
+                clustered_poses.build()[0],
+                {"cluster_type": cluster_type, "cutoff": cutoff},
+                bookmark_name,
+            )
 
         logger.info(f"Time to cluster data: {time.perf_counter() - time0:.2f} seconds")
 
-        return cluster_bookmark_name, len(clusters)
+        return cluster_bookmark_name, num_clusters
 
     def finalize_database_write(self):
         """
