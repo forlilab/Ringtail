@@ -445,7 +445,7 @@ class StorageManager:
         # write to db
         cluster_bookmark_name = self._insert_cluster_data(
             clusters,
-            pose_ids,
+            [int(item) for item in representatives],
             cluster_type.lower(),
             str(cutoff),
             bookmark_name,
