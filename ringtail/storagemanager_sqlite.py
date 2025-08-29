@@ -694,6 +694,7 @@ class StorageManagerSQLite(StorageManager):
                 cluster_group INTEGER REFERENCES Cluster_groups(cluster_group)
                 )"""
         )
+        # TODO if inserting existing cluster, stop
         cluster_name = f"{cluster_type}_{str(cluster_cutoff)}"
         # insert cluster information, produce cluster_id
         cluster_id = self.db_query(
@@ -719,8 +720,6 @@ class StorageManagerSQLite(StorageManager):
             cluster.append(representative_pose)
             for pose in cluster:
                 pose_rows.append([pose, cluster_id, group_index])
-        print("first few cluster groups: ", cluster_groups[:5])
-        print("first few pose rows: ", pose_rows[:5])
         self.db_update(
             """INSERT INTO Cluster_groups VALUES (?,?,?);""",
             cluster_groups,
@@ -1699,8 +1698,8 @@ class StorageManagerSQLite(StorageManager):
         placeholders = ",".join(["?"] * len(groups))
         ligands = self.db_query(
             f"""
-            SELECT L.LigName FROM Ligands AS L
-            JOIN Results AS R
+            SELECT L.LigName FROM Results AS R
+            JOIN Ligands AS L
                 ON R.ligand_id = L.ligand_id
             WHERE R.pose_id IN (
                 SELECT pose_id FROM Pose_clusters 
@@ -1710,6 +1709,7 @@ class StorageManagerSQLite(StorageManager):
             """,
             input_params,
         ).fetchall()
+
         cluster_name = (
             self.db_query(
                 "SELECT name FROM Clusters WHERE cluster_id = ?;", [cluster_id]
