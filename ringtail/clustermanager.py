@@ -44,6 +44,7 @@ class MorganFingerprintCluster:
             for index in cluster_group:
                 cluster.append(self.unclustered_items[index])
             clusters.append(cluster)
+
         return clusters, top_score_per_cluster(
             cluster_indices, self.rating_data, self.unclustered_items
         )
@@ -116,6 +117,7 @@ class InteractionBitvectorCluster:
             for index in cluster_group:
                 cluster.append(self.unclustered_items[index])
             clusters.append(cluster)
+
         return clusters, top_score_per_cluster(
             cluster_indices, self.rating_data, self.unclustered_items
         )
