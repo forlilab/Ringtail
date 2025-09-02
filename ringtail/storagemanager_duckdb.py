@@ -785,7 +785,7 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(
             """
 
-        CREATE SEQUENCE seq_clusterid START 1;
+        CREATE SEQUENCE IF NOT EXISTS seq_clusterid START 1;
             CREATE TABLE IF NOT EXISTS
             Clusters (
                 cluster_id INTEGER DEFAULT nextval('seq_clusterid') PRIMARY KEY,
@@ -883,7 +883,6 @@ class StorageManagerDuckDB(StorageManager):
             cluster_groups,
             commit=False,
         )
-        print("What am I trying to insert: ", pose_rows)
 
         self.db_update(
             """
@@ -1708,25 +1707,6 @@ class StorageManagerDuckDB(StorageManager):
             ).fetchall()
         ]
 
-    def _fetch_ligand_cluster_columns(self) -> list:
-        """fetching columns from Ligand_clusters table
-
-        Raises:
-            IndexError
-
-        Returns:
-            list: columns from ligand clusters table
-        """
-        try:
-            return [
-                c[1]
-                for c in self.db_query("PRAGMA table_info(Ligand_clusters)").fetchall()
-            ][1:]
-        except IndexError:
-            raise IndexError(
-                "Error fetching columns from Ligand_clusters table. Confirm that ligand clustering has been previously performed."
-            )
-
     def _fetch_table_column_names(self, table: str) -> list:
         """Fetches list of string for column names in results table
 
@@ -1798,7 +1778,7 @@ class StorageManagerDuckDB(StorageManager):
 
         return summary_data
 
-    def fetch_clustered_similars(self, ligname: str):
+    def fetch_clustered_similars(self, ligname: str) -> tuple[list, str, str]:
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
 
         Args:
@@ -1811,55 +1791,80 @@ class StorageManagerDuckDB(StorageManager):
         logger.warning(
             "N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters."
         )
-        cur = self.conn.cursor()
-        # TODO should be able to just check what clusters the ligand is a part of, and then offer them here
-        # nothing somehow what filters were involved before the clustering perhaps?
-        ligand_cluster_columns = self._fetch_ligand_cluster_columns()
+
+        cluster_info = self.db_query(
+            "SELECT cluster_id, cluster_window, name FROM Clusters;"
+        ).fetchall()
+
         print(
             "Here are the existing clustering groups. Please ensure that you query ligand(s) is a part of the group you select."
         )
         print(
-            "   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint?   |   cutoff   "
+            "   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint_cutoff   "
         )
         print(
             "----------------------------------------------------------------------------------------------------------"
         )
-        for i, col in enumerate(ligand_cluster_columns):
-            col_info = col.split("_")
-            option_list = (
-                [str(i)]
-                + ["_".join(col_info[:-2])]
-                + [col_info[-2]]
-                + [col_info[-1].replace("p", ".")]
-            )
-            print(f"{'    |    '.join(option_list)}")
+        cluster_options = []
+        for cluster_id, filter_window, name in cluster_info:
+            cluster_options.append(cluster_id)
+            option_list = [str(cluster_id), filter_window, name]
+            print(f"{'             |    '.join(option_list)}")
+
         cluster_choice = input(
             "Please specify choice number for the cluster you would like to return similar ligands from: "
         )
-        try:
-            cluster_col_choice = ligand_cluster_columns[int(cluster_choice)]
-        except ValueError:
+        if not int(cluster_choice) in cluster_options:
             raise ValueError(
-                f"Given cluster number {cluster_choice} cannot be converted to int. Please be sure you are specifying integer."
+                f"Given cluster number {cluster_choice} does not exist in the database. Please be sure you are specifying an integer in the given cluster options."
             )
-        query_ligand_cluster = cur.execute(
-            f"SELECT {cluster_col_choice} FROM Ligand_clusters WHERE pose_id IN (SELECT Pose_ID FROM Results WHERE ligand_id = (SELECT ligand_id FROM Ligands WHERE LigName =  '{ligname}'))"
-        ).fetchone()
-        if query_ligand_cluster is None:
-            raise DatabaseQueryError(
-                f"Requested ligand name {ligname} not found in cluster {cluster_col_choice}!"
+        # get group(s) that poses of that ligand belongs to, make set so unique groups only
+        groups = {
+            row[0]
+            for row in self.db_query(
+                """
+                SELECT cluster_group FROM pose_clusters
+                    WHERE cluster_id = ? 
+                    AND pose_id IN (
+                        SELECT pose_id FROM Results
+                        WHERE ligand_id = (
+                            SELECT ligand_id FROM Ligands 
+                                WHERE ligname = ?));
+                """,
+                (
+                    cluster_id,
+                    ligname,
+                ),
+            ).fetchall()
+        }
+        # group with those poses
+        input_params = [cluster_id, *groups]
+        placeholders = ",".join(["?"] * len(groups))
+        ligands = self.db_query(
+            f"""
+            SELECT L.LigName FROM Results AS R
+            JOIN Ligands AS L
+                ON R.ligand_id = L.ligand_id
+            WHERE R.pose_id IN (
+                SELECT pose_id FROM Pose_clusters 
+                WHERE cluster_id = ?
+                AND cluster_group IN ({placeholders}))
+            GROUP BY L.LigName;
+            """,
+            input_params,
+        ).fetchall()
+
+        cluster_name = (
+            self.db_query(
+                "SELECT name FROM Clusters WHERE cluster_id = ?;", [cluster_id]
             )
-        query_ligand_cluster = query_ligand_cluster[0]  # extract from tuple
+            .fetchone()[0]
+            .replace(".", "p")
+        )
 
-        # TODO this is not ideal or optimized, but it does what it needs to do.
-        sql_query = f"""
-        SELECT LigName FROM Ligands WHERE ligand_id IN (SELECT ligand_id FROM Results WHERE Pose_ID IN 
-        (SELECT pose_id FROM Ligand_clusters WHERE {cluster_col_choice}={query_ligand_cluster}))
-        GROUP BY ligand_id"""
+        bookmark_name = f"similar_{ligname}_{cluster_name}"
 
-        bookmark_name = f"similar_{ligname}_{cluster_col_choice}"
-
-        return self.db_query(sql_query).fetchall(), bookmark_name, cluster_col_choice
+        return ligands, bookmark_name, cluster_name
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff

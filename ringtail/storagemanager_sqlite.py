@@ -1720,12 +1720,10 @@ class StorageManagerSQLite(StorageManager):
                 SELECT pose_id FROM Pose_clusters 
                 WHERE cluster_id = ?
                 AND cluster_group IN ({placeholders}))
-;
+            GROUP BY L.LigName;
             """,
             input_params,
         ).fetchall()
-        print("ligandsL ", ligands)
-        print("ligands set:", set(ligands))
 
         cluster_name = (
             self.db_query(

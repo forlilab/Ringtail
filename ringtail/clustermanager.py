@@ -23,8 +23,8 @@ class MorganFingerprintCluster:
     ):
         self.unclustered_items = unclustered_items
         self.rating_data = rating_data
-        self.cutoff = cutoff_distance
         self.rdmols = rdmols
+        self.cutoff = cutoff_distance
 
     def cluster(self) -> tuple[list, list]:
         """
@@ -34,13 +34,18 @@ class MorganFingerprintCluster:
             list: of clusters
             list: of top rated item for each cluster
         """
-        clusters = butina_cluster_fingerprints(
+        cluster_indices = butina_cluster_fingerprints(
             self.generate_morgan_fingerprints(),
             self.cutoff,
         )
-
+        clusters = []
+        for cluster_group in cluster_indices:
+            cluster = []
+            for index in cluster_group:
+                cluster.append(self.unclustered_items[index])
+            clusters.append(cluster)
         return clusters, top_score_per_cluster(
-            clusters, self.rating_data, self.unclustered_items
+            cluster_indices, self.rating_data, self.unclustered_items
         )
 
     def generate_morgan_fingerprints(
@@ -98,15 +103,21 @@ class InteractionBitvectorCluster:
             list: of clusters
             list: of top rated item for each cluster
         """
-        clusters = butina_cluster_fingerprints(
+        cluster_indices = butina_cluster_fingerprints(
             [
                 DataStructs.CreateFromBitString(bitvector)
                 for bitvector in self.bitvectors
             ],
             self.cutoff,
         )
+        clusters = []
+        for cluster_group in cluster_indices:
+            cluster = []
+            for index in cluster_group:
+                cluster.append(self.unclustered_items[index])
+            clusters.append(cluster)
         return clusters, top_score_per_cluster(
-            clusters, self.rating_data, self.unclustered_items
+            cluster_indices, self.rating_data, self.unclustered_items
         )
 
 
@@ -138,7 +149,7 @@ def top_score_per_cluster(
     return cluster_representatives
 
 
-def butina_cluster_fingerprints(fps, cutoff):
+def butina_cluster_fingerprints(fps, cutoff) -> tuple[tuple]:
     """
     Uses Butina algorithm to cluster the provided bitvectors/fingerprints
     https://macinchem.org/2023/03/05/options-for-clustering-large-datasets-of-molecules/
