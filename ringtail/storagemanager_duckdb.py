@@ -14,7 +14,6 @@ from .exceptions import (
     StorageError,
     DatabaseInsertionError,
     DatabaseConnectionError,
-    DatabaseTableCreationError,
     DatabaseQueryError,
     OptionError,
     MergeError,
@@ -763,54 +762,6 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(filters_sql)
         self.db_query(filter_pose_sql)
 
-    # TODO biggie, rejigger
-    def _insert_cluster_data(
-        self,
-        clusters: list,
-        poseid_list: list,
-        cluster_type: str,
-        cluster_cutoff: str,
-        bookmark_name: str,
-    ) -> str:
-        """Insert cluster data into ligand cluster table
-
-        Args:
-            clusters (list[list]): list of clusters
-            poseid_list (list): representative poses for each sluter
-            cluster_type (str): how clustering was performed
-            cluster_cutoff (str): distance to representative pose
-            bookmark_name (str): bookmark name which is clustered over
-
-        Returns:
-            str: name of cluster bookmark
-        """
-        # TODO rethink this later
-        cur = self.conn.cursor()
-        cur.execute(
-            "CREATE TABLE IF NOT EXISTS Ligand_clusters (pose_id  INTEGER UNIQUE)"
-        )
-        ligand_cluster_columns = self._fetch_ligand_cluster_columns()
-        column_name = (
-            f"{bookmark_name}_{cluster_type}_{cluster_cutoff.replace('.', 'p')}"
-        )
-        try:
-            if column_name not in ligand_cluster_columns:
-                cur.execute(f"ALTER TABLE Ligand_clusters ADD COLUMN {column_name}")
-            for ci, cl in enumerate(clusters):
-                for i in cl:
-                    poseid = poseid_list[i]
-                    cur.execute(
-                        f"INSERT INTO Ligand_clusters (pose_id, {column_name}) VALUES (?,?) ON CONFLICT (pose_id) DO UPDATE SET {column_name}=excluded.{column_name}",
-                        (poseid, ci),
-                    )
-
-            cur.close()
-            self.conn.commit()
-
-            return column_name
-        except duckdb.OperationalError as e:
-            raise StorageError("Error occurred while inserting cluster data") from e
-
     def _create_indices(self):
         """
         Duckdb does not use indexing like other databases
@@ -825,6 +776,122 @@ class StorageManagerDuckDB(StorageManager):
         if sequences:
             for sequence in sequences.fetchall():
                 self.db_query(f"DROP SEQUENCE {sequence[0]};")
+
+    def _create_cluster_tables(self):
+        """
+        Creates cluster tables if they don't already exist
+        """
+        # create a cluster description table
+        self.db_query(
+            """
+
+        CREATE SEQUENCE seq_clusterid START 1;
+            CREATE TABLE IF NOT EXISTS
+            Clusters (
+                cluster_id INTEGER DEFAULT nextval('seq_clusterid') PRIMARY KEY,
+                name VARCHAR,
+                description VARCHAR,
+                cluster_window VARCHAR,
+                num_clusters INTEGER
+                );
+            """
+        )
+        # create a table with cluster_id and cluster_group and representative pose
+        self.db_query(
+            """
+            CREATE TABLE IF NOT EXISTS
+            Cluster_groups (
+                cluster_id INTEGER REFERENCES Clusters(cluster_id),
+                cluster_group INTEGER,
+                representative INTEGER REFERENCES Results(pose_id)
+                )
+            """
+        )
+        # create a table of pose and cluster_id and cluster_group
+        self.db_query(
+            """
+            CREATE TABLE IF NOT EXISTS 
+            Pose_clusters (
+                cluster_id INTEGER REFERENCES Clusters(cluster_id),
+                cluster_group INTEGER,
+                pose_id INTEGER REFERENCES Results(pose_id)
+                );
+            """
+        )
+
+    def _cluster_exists(
+        self, cluster_name: str, cluster_window: str
+    ) -> Union[int, None]:
+        """
+        Checks if a cluster already exists, based on what window was clustered over,
+        and the standardized cluster name. Method will not work if cluster name starts
+        to be non-standardized
+
+        Args:
+            cluster_name (str):
+            cluster_window (str):
+
+        Returns:
+            int: number of clusters in that cluster if any, else None
+        """
+        return self.db_query(
+            "SELECT num_clusters FROM Clusters WHERE name=? and cluster_window=?",
+            (
+                cluster_name,
+                cluster_window,
+            ),
+        ).fetchone()
+
+    def _insert_new_cluster_info(
+        self, name: str, description: str, cluster_window: str, length: int
+    ) -> int:
+        """
+        Inserts the basic info about a clustering exercise, but not the clustered data itself
+
+        Args:
+            name (str): name of cluster (standardized)
+            description (str): placeholder for if/when more info is needed about clusters
+            cluster_window (str): what was clustered over, bookmark or all results
+            length (int): number of clusters
+
+        Returns:
+            int: cluster id of the new inserted cluster
+        """
+        return self.db_query(
+            """
+            INSERT INTO Clusters (name, description, cluster_window, num_clusters)
+                       VALUES (?,?,?,?) RETURNING cluster_id;""",
+            (
+                name,
+                description,
+                cluster_window,
+                length,
+            ),
+        ).fetchone()[0]
+
+    def _insert_clusters(self, cluster_groups: list, pose_rows: list):
+        """
+        Inserts all cluster data, including each grouping and its representative
+        pose, and all poses involved and which clusters they belong to
+
+        Args:
+            cluster_groups (list): each cluster from the clustering exercise
+            pose_rows (list): pose and cluster id and group id
+        """
+        self.db_update(
+            """INSERT INTO Cluster_groups VALUES (?,?,?);""",
+            cluster_groups,
+            commit=False,
+        )
+        print("What am I trying to insert: ", pose_rows)
+
+        self.db_update(
+            """
+                INSERT INTO Pose_clusters VALUES (?,?,?);
+                """,
+            pose_rows,
+            commit=False,
+        )
 
     # endregion
 

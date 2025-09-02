@@ -1773,6 +1773,61 @@ class StorageManager:
             f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
         )
 
+    def _insert_cluster_data(
+        self,
+        clusters: list,
+        poseid_list: list,
+        cluster_type: str,
+        cluster_cutoff: str,
+        bookmark_name: str,
+    ) -> str:
+        """Insert cluster data into ligand cluster table
+
+        Args:
+            clusters (list[list]): list of clusters
+            poseid_list (list): representative poses for each cluster
+            cluster_type (str): how clustering was performed
+            cluster_cutoff (str): distance to representative pose
+            bookmark_name (str): bookmark name which is clustered over
+
+        Returns:
+            str: name of cluster bookmark
+        """
+        self._create_cluster_tables()
+
+        cluster_name = f"{cluster_type}_{str(cluster_cutoff)}"
+
+        cluster_bookmark = f"{bookmark_name}_{cluster_name}"
+        # check if clusters already exist
+        clusters_exist = self._cluster_exists(cluster_name, bookmark_name)
+        if clusters_exist:
+            logger.warning(
+                f"This cluster has been ran before, will reuse bookmark {cluster_bookmark}."
+            )
+            return (cluster_bookmark, clusters_exist[0])
+
+        cluster_id = self._insert_new_cluster_info(
+            cluster_name, "", bookmark_name, len(clusters)
+        )
+        print(
+            f"Length of clusters coming in: {len(clusters)}, and length of representative\n poses: {len(poseid_list)}"
+        )
+        cluster_groups = []
+        pose_rows = []
+        for group_index, cluster in enumerate(clusters):
+            cluster = list(cluster)
+            representative_pose = poseid_list[group_index]
+            cluster_groups.append([cluster_id, group_index, representative_pose])
+            # make sure we add the representative pose
+            cluster.append(representative_pose)
+            for pose in cluster:
+                pose_rows.append([cluster_id, group_index, pose])
+
+        self._insert_clusters(cluster_groups, pose_rows)
+        self.conn.commit()
+
+        return cluster_bookmark
+
     def _open_storage(self):
         """Create connection to db. Then, check if db needs to be created.
 
@@ -1819,6 +1874,9 @@ class StorageManager:
     def _drop_existing_tables(self):
         """Drops existing tables, in order of foreign key dependency"""
         # first, delete tables with foreign keys
+        self._delete_table("Pose_clusters")
+        self._delete_table("Cluster_groups")
+        self._delete_table("Clusters")
         self._delete_table("Filtered_poses")
         self._delete_table("Interactions")
         self._delete_table("Interaction_indices")
@@ -2680,7 +2738,58 @@ class StorageManager:
     def _generate_result_filtering_query(
         self, filters_dict, bookmark_name, filter_bookmark
     ):
-        raise NotImplementedError("Method needs to be implemented in child class.")
+        raise NotImplementedError
+
+    def _create_cluster_tables(self):
+        """
+        Creates cluster tables if they don't already exist
+        """
+        raise NotImplementedError
+
+    def _cluster_exists(
+        self, cluster_name: str, cluster_window: str
+    ) -> Union[int, None]:
+        """
+        Checks if a cluster already exists, based on what window was clustered over,
+        and the standardized cluster name. Method will not work if cluster name starts
+        to be non-standardized
+
+        Args:
+            cluster_name (str):
+            cluster_window (str):
+
+        Returns:
+            int: number of clusters in that cluster if any, else None
+        """
+        raise NotImplementedError
+
+    def _insert_new_cluster_info(
+        self, name: str, description: str, cluster_window: str, length: int
+    ) -> int:
+        """
+        Inserts the basic info about a clustering exercise, but not the clustered data itself
+
+        Args:
+            name (str): name of cluster (standardized)
+            description (str): placeholder for if/when more info is needed about clusters
+            cluster_window (str): what was clustered over, bookmark or all results
+            length (int): number of clusters
+
+        Returns:
+            int: cluster id of the new inserted cluster
+        """
+        raise NotImplementedError
+
+    def _insert_clusters(self, cluster_groups: list, pose_rows: list):
+        """
+        Inserts all cluster data, including each grouping and its representative
+        pose, and all poses involved and which clusters they belong to
+
+        Args:
+            cluster_groups (list): each cluster from the clustering exercise
+            pose_rows (list): pose and cluster id and group id
+        """
+        raise NotImplementedError
 
     def _get_numeric_columns(self, table_name: str) -> list:
         """
@@ -2736,28 +2845,6 @@ class StorageManager:
 
         Args:
             table_name (str): name for temp table
-        """
-        raise NotImplementedError
-
-    def _insert_cluster_data(
-        self,
-        clusters: list,
-        poseid_list: list,
-        cluster_type: str,
-        cluster_cutoff: str,
-        bookmark_name: str,
-    ) -> str:
-        """Insert cluster data into ligand cluster table
-
-        Args:
-            clusters (list[list]): list of clusters
-            poseid_list (list): representative poses for each sluter
-            cluster_type (str): how clustering was performed
-            cluster_cutoff (str): distance to representative pose
-            bookmark_name (str): bookmark name which is clustered over
-
-        Returns:
-            str: name of cluster bookmark
         """
         raise NotImplementedError
 

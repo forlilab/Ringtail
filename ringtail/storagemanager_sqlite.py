@@ -640,25 +640,9 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(filters_sql)
         self.db_query(filter_pose_sql)
 
-    def _insert_cluster_data(
-        self,
-        clusters: list,
-        poseid_list: list,
-        cluster_type: str,
-        cluster_cutoff: str,
-        bookmark_name: str,
-    ) -> str:
-        """Insert cluster data into ligand cluster table
-
-        Args:
-            clusters (list[list]): list of clusters
-            poseid_list (list): representative poses for each cluster
-            cluster_type (str): how clustering was performed
-            cluster_cutoff (str): distance to representative pose
-            bookmark_name (str): bookmark name which is clustered over
-
-        Returns:
-            str: name of cluster bookmark
+    def _create_cluster_tables(self):
+        """
+        Creates cluster tables if they don't already exist
         """
         # create a cluster description table
         self.db_query(
@@ -678,7 +662,7 @@ class StorageManagerSQLite(StorageManager):
             """
             CREATE TABLE IF NOT EXISTS
             Cluster_groups (
-                cluster_id REFERENCES Clusters(cluster_id),
+                cluster_id INTEGER REFERENCES Clusters(cluster_id),
                 cluster_group INTEGER,
                 representative INTEGER REFERENCES Results(pose_id)
                 )
@@ -689,53 +673,72 @@ class StorageManagerSQLite(StorageManager):
             """
             CREATE TABLE IF NOT EXISTS 
             Pose_clusters (
-                pose_id INTEGER REFERENCES Results(pose_id),
                 cluster_id INTEGER REFERENCES Clusters(cluster_id),
-                cluster_group INTEGER REFERENCES Cluster_groups(cluster_group)
+                cluster_group INTEGER,
+                pose_id INTEGER REFERENCES Results(pose_id)
                 );
             """
         )
-        cluster_name = f"{cluster_type}_{str(cluster_cutoff)}"
-        cluster_bookmark = f"{bookmark_name}_{cluster_name}"
-        # check if clusters already exist
-        clusters_exist = self.db_query(
+
+    def _cluster_exists(
+        self, cluster_name: str, cluster_window: str
+    ) -> Union[int, None]:
+        """
+        Checks if a cluster already exists, based on what window was clustered over,
+        and the standardized cluster name. Method will not work if cluster name starts
+        to be non-standardized
+
+        Args:
+            cluster_name (str):
+            cluster_window (str):
+
+        Returns:
+            int: number of clusters in that cluster if any, else None
+        """
+        return self.db_query(
             "SELECT num_clusters FROM Clusters WHERE name=? and cluster_window=?",
             (
                 cluster_name,
-                bookmark_name,
+                cluster_window,
             ),
         ).fetchone()
-        if clusters_exist:
-            logger.warning(
-                f"This cluster has been ran before, will reuse bookmark {cluster_bookmark}."
-            )
-            return (cluster_bookmark, clusters_exist[0])
-        # insert cluster information, produce cluster_id
-        cluster_id = self.db_query(
+
+    def _insert_new_cluster_info(
+        self, name: str, description: str, cluster_window: str, length: int
+    ) -> int:
+        """
+        Inserts the basic info about a clustering exercise, but not the clustered data itself
+
+        Args:
+            name (str): name of cluster (standardized)
+            description (str): placeholder for if/when more info is needed about clusters
+            cluster_window (str): what was clustered over, bookmark or all results
+            length (int): number of clusters
+
+        Returns:
+            int: cluster id of the new inserted cluster
+        """
+        return self.db_query(
             """
             INSERT INTO Clusters (name, description, cluster_window, num_clusters)
                        VALUES (?,?,?,?) RETURNING cluster_id;""",
             (
-                cluster_name,
-                "",
-                bookmark_name,
-                len(clusters),
+                name,
+                description,
+                cluster_window,
+                length,
             ),
         ).fetchone()[0]
 
-        # a list of integers describing which group inside the cluster a given pose is part of
-        cluster_groups = []
-        pose_rows = []
-        for group_index, cluster in enumerate(clusters):
-            print(cluster)
-            print(group_index)
-            cluster = list(cluster)
-            representative_pose = poseid_list[group_index]
-            cluster_groups.append([cluster_id, group_index, representative_pose])
-            # make sure we add the representative pose
-            cluster.append(representative_pose)
-            for pose in cluster:
-                pose_rows.append([pose, cluster_id, group_index])
+    def _insert_clusters(self, cluster_groups: list, pose_rows: list):
+        """
+        Inserts all cluster data, including each grouping and its representative
+        pose, and all poses involved and which clusters they belong to
+
+        Args:
+            cluster_groups (list): each cluster from the clustering exercise
+            pose_rows (list): pose and cluster id and group id
+        """
         self.db_update(
             """INSERT INTO Cluster_groups VALUES (?,?,?);""",
             cluster_groups,
@@ -749,8 +752,6 @@ class StorageManagerSQLite(StorageManager):
             pose_rows,
             commit=False,
         )
-
-        return cluster_bookmark
 
     def _create_indices(self):
         """Create index for specified tables and columns. 'ak' stands for 'alternate key'
@@ -1670,7 +1671,7 @@ class StorageManagerSQLite(StorageManager):
             "Here are the existing clustering groups. Please ensure that you query ligand(s) is a part of the group you select."
         )
         print(
-            "   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint?   |   cutoff   "
+            "   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint_cutoff   "
         )
         print(
             "----------------------------------------------------------------------------------------------------------"
@@ -1719,10 +1720,12 @@ class StorageManagerSQLite(StorageManager):
                 SELECT pose_id FROM Pose_clusters 
                 WHERE cluster_id = ?
                 AND cluster_group IN ({placeholders}))
-            GROUP BY L.Ligname;
+;
             """,
             input_params,
         ).fetchall()
+        print("ligandsL ", ligands)
+        print("ligands set:", set(ligands))
 
         cluster_name = (
             self.db_query(
