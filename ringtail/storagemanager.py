@@ -748,7 +748,7 @@ class StorageManager:
 
         # command line does not allow incompatibility, but API (and I suppose GUI) does
         if not compatible:
-            if run_mode == "cmd":
+            if run_mode == "cli":
                 raise OptionError(compatibility_string)
             else:
                 logger.warning(compatibility_string)

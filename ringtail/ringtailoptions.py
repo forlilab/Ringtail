@@ -101,8 +101,14 @@ class RingtailDefaults:
     overwrite: bool = None
     interaction_tolerance: float = None
     add_interactions: bool = None
-    interaction_cutoffs: str = "3.7,4.0"  # TODO should be list?
-    outfields: str = "LigName,docking_score"
+    interaction_cutoffs: tuple[float] = (
+        3.7,
+        4.0,
+    )
+    outfields: tuple[str] = (
+        "LigName",
+        "docking_score",
+    )
     order_results: str = None
     mfpt_cluster: float = None
     interaction_cluster: float = None

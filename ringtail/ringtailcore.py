@@ -138,7 +138,7 @@ class RingtailCore:
         max_poses: int = RingtailDefaults.max_poses,
         add_interactions: bool = RingtailDefaults.add_interactions,
         interaction_tolerance: float = RingtailDefaults.interaction_tolerance,
-        interaction_cutoffs: list = [3.7, 4.0],  # TODO default is string
+        interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         max_proc: int = RingtailDefaults.max_proc,
         finalize: bool = True,
     ):
@@ -403,9 +403,9 @@ class RingtailCore:
         mfpt_cluster: float = None,
         interaction_cluster: float = None,
         log_file: str = None,
-        outfields: str = "Ligname,docking_score",
+        outfields: str = RingtailDefaults.outfields,
         order_results: str = None,
-        bookmark_name: str = "passing_results",
+        bookmark_name: str = RingtailDefaults.bookmark_name,
         filter_bookmark: str = None,
         return_iter: bool = False,
     ) -> Union[int, iter]:
@@ -1646,7 +1646,7 @@ class RingtailCore:
         return self.storageman.update_database_version(new_version, consent)
 
     @staticmethod
-    def defaults() -> dict:
+    def defaults(mode: str = None) -> dict:
         """
         Creates a dict of all Ringtail options.
 
@@ -1654,6 +1654,11 @@ class RingtailCore:
             str: json string with options
         """
         defaults = {}
+        ringtail_defs = default_dict(RingtailDefaults())
+        if mode == "cli":
+            for key, value in ringtail_defs.items():
+                if isinstance(value, list):
+                    ringtail_defs[key] = ",".join(map(str, ringtail_defs[key]))
         defaults.update(default_dict(RingtailDefaults()))
         defaults.update(Filters().asdict())
 

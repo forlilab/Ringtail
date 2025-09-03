@@ -666,7 +666,7 @@ class CLOptionParser:
         # create parser
         try:
             # add default values from ringtailoptions
-            defaults_dict = RingtailCore.defaults()
+            defaults_dict = RingtailCore.defaults("cli")
 
             (
                 parsed_opts,
@@ -739,7 +739,7 @@ class CLOptionParser:
         # make sure we log the command line prompt
         LOGGER.info("Command line prompt: " + self.cmd_line_prompt)
         # specify core run mode as this affects how certain errors are handled
-        self.rtcore._run_mode = "cmd"
+        self.rtcore._run_mode = "cli"
         self.print_summary = parsed_opts.print_summary
 
         if self.process_mode == "write":
