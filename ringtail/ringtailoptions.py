@@ -12,55 +12,6 @@ from dataclasses import dataclass, asdict
 import copy
 
 
-class TypeSafe:
-    """Class that handles safe typesetting of values of a specified built-in type.
-    Any attribute can be set as a TypeSafe object, this ensures its type is checked whenever it is changed.
-    This makes the attribute of type 'object' as opposed to its actual type. To return the value of an attribute as
-    a native type value, you can create a '__getattribute__' method in the class that holds the attribute (see e.g., RTOptions).
-
-    It is the hope to extend this to work with custom types, such as "percentage" (float with a max and min value),
-    and direcotry (string that must end with '/').
-
-    Args:
-        object_name (str): name of type safe instance
-        type (type): any of the native types in python that the instance must adhere to
-        default (any): default value of the object, can be any including None
-        value (any): value of type type assigned to instance, can be same or different than default
-
-    Raises:
-        OptionError: if wrong type is attempted.
-    """
-
-    def __init__(self, default, type, object_name):
-        self.object_name = object_name
-        self.type = type
-        self.default = default
-        self.value = self.default
-
-    def __setattr__(self, name, value):
-        """set attribute method that does the type checking, using native data types in python.
-        The only 'exception' is allows float numbers to be written as a float or as an integer (but integers must always be integers).
-        If a value of the wrong type is attempted set, the attribute value will be reset to the default value.
-        Args:
-            name (str): name of the attribute
-            value (any): value to assign to the attribute
-        """
-
-        if name == "value":
-            if type(value) in self.type:
-                self.__dict__["value"] = value
-            elif float in self.type and type(value) in [float, int]:
-                self.__dict__["value"] = float(value)
-            else:
-                self.__dict__["value"] = self.default
-                if value is not None:
-                    raise OptionError(
-                        f"Object {self.object_name} was assigned a value of type {type(value)} but is only allowed as type {self.type}."
-                    )
-        else:
-            self.__dict__[name] = value
-
-
 @dataclass
 class RingtailDefaults:
     # maybe reconsider
