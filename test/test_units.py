@@ -721,4 +721,4 @@ class TestOptions:
         os.system("rm *_ringtail.log")
         os.system("rm output.db* output2.db")
         os.system("rm different_log.txt")
-        os.system("rm cluster_log.txt")
+        os.system("rm cluster_log.txt output_log.txt")

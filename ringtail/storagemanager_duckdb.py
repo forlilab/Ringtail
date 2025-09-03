@@ -659,7 +659,7 @@ class StorageManagerDuckDB(StorageManager):
         """Create table of database properties used during write session to the database. Columns are:
         DB_write_session int (primary key)
         docking_mode (vina or adgpu)
-        num_of_poses ("all" or str(int))
+        num_of_poses (int, -1 for all, otherwise value)
         """
 
         sql_str = """
@@ -667,7 +667,7 @@ class StorageManagerDuckDB(StorageManager):
         CREATE TABLE IF NOT EXISTS DB_properties (
         DB_write_session    INTEGER DEFAULT nextval('seq_dbwriteid') PRIMARY KEY,
         docking_mode        VARCHAR,
-        number_of_poses     VARCHAR)"""
+        number_of_poses     INTEGER)"""
 
         self.db_query(sql_str)
 

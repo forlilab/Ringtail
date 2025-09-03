@@ -556,13 +556,13 @@ class StorageManagerSQLite(StorageManager):
         """Create table of database properties used during write session to the database. Columns are:
         DB_write_session int (primary key)
         docking_mode (vina or dlg)
-        num_of_poses ("all" or int)
+        num_of_poses (int, -1 for all, otherwise value)
         """
 
         sql_str = """CREATE TABLE IF NOT EXISTS DB_properties (
         DB_write_session    INTEGER PRIMARY KEY AUTOINCREMENT,
         docking_mode        VARCHAR,
-        number_of_poses     VARCHAR)"""
+        number_of_poses     INTEGER)"""
 
         self.db_query(sql_str)
 

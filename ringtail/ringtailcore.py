@@ -1882,6 +1882,12 @@ class RingtailCore:
                 "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
             )
             interaction_tolerance = None
+        # parse how many poses to store
+        # will prioritize all poses if specified
+        if store_all_poses:
+            num_poses = -1
+        elif max_poses:
+            num_poses = max_poses
         # TODO place to use -1 for all poses
         processing_options = {
             "max_poses": max_poses,
@@ -1897,12 +1903,7 @@ class RingtailCore:
             if overwrite:
                 self.storageman.overwrite_storage()
 
-            self.storageman.check_storage_ready(
-                self._run_mode,
-                docking_mode,
-                store_all_poses,
-                max_poses,
-            )
+            self.storageman.check_storage_ready(self._run_mode, docking_mode, num_poses)
 
         if results.save_receptor:
             self.save_receptor(results.receptor_file_path)
