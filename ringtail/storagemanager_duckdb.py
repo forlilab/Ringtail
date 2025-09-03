@@ -1916,10 +1916,10 @@ class StorageManagerDuckDB(StorageManager):
 
     # region general database operations
 
-    def begin_transaction(self):
+    def _begin_transaction(self):
         self.conn.execute("BEGIN TRANSACTION;")
 
-    def rollback(self):
+    def _rollback(self):
         self.conn.execute("ROLLBACK;")
 
     def tables_in_db(self) -> list:

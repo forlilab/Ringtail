@@ -2471,7 +2471,7 @@ class StorageManager:
             )
             self.delete_bookmark(name)
 
-        self.begin_transaction()
+        self._begin_transaction()
         insert_query = self.QueryBuilder()
         insert_query.INSERT_INTO(
             "Filters", "name", "query", "filters", "filter_window"
@@ -2532,6 +2532,12 @@ class StorageManager:
         Raises:
             DatabaseConnectionError
         """
+        raise NotImplementedError
+
+    def _begin_transaction(self):
+        raise NotImplementedError
+
+    def _rollback(self):
         raise NotImplementedError
 
     def _create_results_table(self, name="Results"):
