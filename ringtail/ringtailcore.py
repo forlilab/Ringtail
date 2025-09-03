@@ -15,8 +15,21 @@ from rdkit import Chem
 
 from .util import *
 from .logutils import LOGGER
-from .ringtailoptions import *
-from .exceptions import RTCoreError, OutputError, StorageError, ResultsProcessingError
+from .ringtailoptions import (
+    RingtailDefaults,
+    Filters,
+    ResultsObject,
+    default_dict,
+    statuses,
+    validate_docking_mode,
+)
+from .exceptions import (
+    RTCoreError,
+    OutputError,
+    StorageError,
+    ResultsProcessingError,
+    OptionError,
+)
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
@@ -52,14 +65,6 @@ def get_valid_storageclass(storage_type) -> StorageManager:
         )
 
 
-docking_modes = {"adgpu": {"adgpu", "dlg", "gpu"}, "vina": {"vina", "pdbqt"}}
-
-docking_alias_to_mode = {}
-for canonical, aliases in docking_modes.items():
-    for alias in aliases:
-        docking_alias_to_mode[alias] = canonical
-
-
 class RingtailCore:
     """Core class for coordinating different actions on virtual screening
     including adding results to storage, filtering and clusteirng, and outputting data as
@@ -71,7 +76,7 @@ class RingtailCore:
         storageman (StorageManager): Interface module with database
         resultsman (ResultsManager): Module to deal with results processing before adding to database
         storagetype (str): database type
-        logger (RaccoonLogger): handles logging
+        LOGGER (RaccoonLogger): handles logging
         _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
     """
 
@@ -79,34 +84,31 @@ class RingtailCore:
         self,
         db_file: str = RingtailDefaults.output_db,
         storage_type: str = RingtailDefaults.storage_type,
-        docking_mode: str = RingtailDefaults.docking_mode,
         logging_level: str = "WARNING",
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
-        Can set logger level here, otherwise change it by logger.setLevel("level")
+        Can set logger level here, otherwise change it by LOGGER.setLevel("level")
 
         Args:
             db_file (str): Database file to initialize core with. Defaults to "output.db".
             storage_type (str, optional): Database setup to use for interacting with the database. Defaults to "sqlite".
-            docking_mode (str, optional): Docking mode for which the database will be used
             logging_level (str, optional): Global logger level. Defaults to "DEBUG".
         """
 
         # Initiate logging
-        self.logger = LOGGER
-        self.logger.set_level(logging_level)
+        LOGGER.set_level(logging_level)
         # create log file handler if log level is debug
-        if self.logger.level() == "DEBUG":
-            self.logger.add_filehandler()
+        if LOGGER.level() == "DEBUG":
+            LOGGER.add_filehandler()
 
-        self.logger.info(
+        LOGGER.info(
             f"[     New RingtailCore object initialized with database file {db_file}    ]"
         )
         # Check if storage type is implemented
         try:
             storageman = get_valid_storageclass(storage_type)
         except NotImplementedError as e:
-            self.logger.error(e)
+            LOGGER.error(e)
             raise e
 
         # initialize remaining variables and storagemanager
@@ -114,7 +116,6 @@ class RingtailCore:
         self.db_file = db_file
         self.storageman: StorageManager = storageman(db_file)
         self._run_mode = "api"
-        self._docking_mode = docking_mode
 
     def get_previous_docking_mode(self) -> Union[None, str]:
         with self.storageman as sm:
@@ -123,20 +124,22 @@ class RingtailCore:
     # region write to database
     def add_results_from_files(
         self,
-        file: str = None,
-        file_path: str = None,
-        file_list: str = None,
-        recursive: bool = None,
-        receptor_file: str = None,
-        save_receptor: bool = None,
-        duplicate_handling: str = None,
-        overwrite: bool = None,
-        store_all_poses: bool = False,
-        max_poses: int = 3,
-        add_interactions: bool = None,
-        interaction_tolerance: float = None,
-        interaction_cutoffs: list = [3.7, 4.0],
-        max_proc: int = None,
+        file: str = RingtailDefaults.file,
+        file_path: str = RingtailDefaults.file_path,
+        file_list: str = RingtailDefaults.file_list,
+        file_pattern: str = None,
+        recursive: bool = RingtailDefaults.recursive,
+        receptor_file: str = RingtailDefaults.save_receptor,
+        save_receptor: bool = RingtailDefaults.save_receptor,
+        duplicate_handling: str = RingtailDefaults.duplicate_handling,
+        overwrite: bool = RingtailDefaults.overwrite,
+        docking_mode: str = RingtailDefaults.docking_mode,
+        store_all_poses: bool = RingtailDefaults.store_all_poses,
+        max_poses: int = RingtailDefaults.max_poses,
+        add_interactions: bool = RingtailDefaults.add_interactions,
+        interaction_tolerance: float = RingtailDefaults.interaction_tolerance,
+        interaction_cutoffs: list = [3.7, 4.0],  # TODO default is string
+        max_proc: int = RingtailDefaults.max_proc,
         finalize: bool = True,
     ):
         """
@@ -147,11 +150,13 @@ class RingtailCore:
             file (str, optional: list(str)): ligand result file
             file_path (str, optional: list(str)): list of folders containing one or more result files
             file_list (str, optional: list(str)): list of ligand result file(s)
+            file_pattern (str, optional): optional custom file pattern, such as MY_FAV_PROT_*.pdbqt*
             recursive (bool): used to recursively search file_path for folders inside folders
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             overwrite (bool): whether or not to overwrite existing storage
+            docking_mode (str): what docking engine was used to perform the docking
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
@@ -168,6 +173,7 @@ class RingtailCore:
         results_data.file = file
         results_data.file_path = file_path
         results_data.file_list = file_list
+        results_data.file_pattern = file_pattern
         results_data.recursive_path_traverse = recursive
         results_data.receptor_file_path = receptor_file
         results_data.save_receptor = save_receptor
@@ -183,6 +189,7 @@ class RingtailCore:
                 results_data,
                 duplicate_handling,
                 overwrite,
+                docking_mode,
                 store_all_poses,
                 max_poses,
                 add_interactions,
@@ -195,15 +202,16 @@ class RingtailCore:
     def add_results_from_vina_string(
         self,
         results: dict = None,
-        receptor_file: str = None,
-        save_receptor: bool = None,
-        duplicate_handling: str = None,
-        overwrite: bool = None,
-        store_all_poses: bool = None,
-        max_poses: int = 3,
-        add_interactions: bool = False,
-        interaction_cutoffs: list = None,
-        max_proc: int = None,
+        receptor_file: str = RingtailDefaults.save_receptor,
+        save_receptor: bool = RingtailDefaults.save_receptor,
+        duplicate_handling: str = RingtailDefaults.duplicate_handling,
+        overwrite: bool = RingtailDefaults.overwrite,
+        docking_mode: str = RingtailDefaults.docking_mode,
+        store_all_poses: bool = RingtailDefaults.store_all_poses,
+        max_poses: int = RingtailDefaults.max_poses,
+        add_interactions: bool = RingtailDefaults.add_interactions,
+        interaction_cutoffs: list = [3.7, 4.0],  # TODO default is string
+        max_proc: int = RingtailDefaults.max_proc,
         finalize: bool = True,
     ):
         """
@@ -217,6 +225,7 @@ class RingtailCore:
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             overwrite (bool): whether or not to overwrite existing storage
+            docking_mode (str): what docking engine was used to perform the docking
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
@@ -229,8 +238,9 @@ class RingtailCore:
 
         """
         # Method currently only works with vina output, set automatically
-        if self.docking_mode != "vina":
-            self.docking_mode = "vina"
+        # TODO check with docking mode aliases
+        if docking_mode != "vina":
+            docking_mode = "vina"
 
         # create results string object
         results_data = ResultsObject()
@@ -249,6 +259,7 @@ class RingtailCore:
                 results_data,
                 duplicate_handling,
                 overwrite,
+                docking_mode,
                 store_all_poses,
                 max_poses,
                 add_interactions,
@@ -285,7 +296,7 @@ class RingtailCore:
                         receptor_file.split(os.extsep)[0]
                         != self.get_receptor_object()[0]
                     ):
-                        logger.warning(
+                        LOGGER.warning(
                             "You attempted to add a receptor to a database that already has a receptor in it, and they do not appear to be the same receptor."
                         )
                     # throw error if receptor is already present
@@ -293,7 +304,7 @@ class RingtailCore:
                         "Expected Receptors table to have no receptor objects present, already has a receptor present. Cannot add more than 1 receptor to a database."
                     )
                 self.storageman.insert_receptor_blob(rec, rec_name)
-                self.logger.info("Receptor data was added to the database.")
+                LOGGER.info("Receptor data was added to the database.")
 
     # endregion
 
@@ -493,11 +504,13 @@ class RingtailCore:
         )
 
         # Compatibility check with docking mode
-        if self.docking_mode == "vina" and react_any:
-            self.logger.warning(
-                "Cannot use reaction filters with Vina mode. Removing react_any filter."
-            )
-            react_any = False
+        if react_any:
+            with self.storageman as sm:
+                if sm.get_previous_docking_mode() == "vina":
+                    LOGGER.warning(
+                        "Cannot use reaction filters with Vina mode. Removing react_any filter."
+                    )
+                react_any = False
         if not valid_bookmark_name(bookmark_name):
             raise OptionError(
                 "Bookmark name contains illegal symbols, please only use letters, numbers, and underscore."
@@ -508,14 +521,14 @@ class RingtailCore:
 
         # guard against unsing percentile filter with all_poses
         if output_all_poses and not (score_percentile is None or le_percentile is None):
-            self.logger.warning(
+            LOGGER.warning(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             output_all_poses = False
         # check that all filter values are valid
         filters.checks()
 
-        self.logger.info("Starting to filter results")
+        LOGGER.info("Starting to filter results")
         # get possible permutations of interaction with max_miss excluded
         if enumerate_interaction_combs and max_miss > 0:
             interaction_combs = self._generate_interaction_combinations(
@@ -582,7 +595,7 @@ class RingtailCore:
                         )
                 else:
                     print("\nNo ligands passing filters")
-                    self.logger.warning(
+                    LOGGER.warning(
                         f"WARNING: No ligands found passing filter combination {str(combination)}."
                     )
                     with self.storageman:
@@ -619,9 +632,7 @@ class RingtailCore:
                     clustering,
                 )
         else:
-            self.logger.warning(
-                f"WARNING: No ligands found passing filters{print_string}."
-            )
+            LOGGER.warning(f"WARNING: No ligands found passing filters{print_string}.")
             print(f"\nNo ligands passing filters{print_string}")
 
         if return_iter:
@@ -658,7 +669,7 @@ class RingtailCore:
                 type,
                 cutoff,
             )
-        logger.info(
+        LOGGER.info(
             f"Number of clusters: {num_clusters}.\nPassing poses saved to {bookmark_name}."
         )
         return bookmark_name
@@ -705,7 +716,7 @@ class RingtailCore:
                 get_consent = _api_cmd_consent
 
             if not get_consent(length):
-                logger.critical(
+                LOGGER.critical(
                     "Consent not given for large number of pdbs to write, exiting."
                 )
                 return
@@ -811,11 +822,11 @@ class RingtailCore:
                 }
 
         except StorageError as e:
-            self.logger.error(str(e))
+            LOGGER.error(str(e))
             return
 
         if all_mols is None:
-            self.logger.error(
+            LOGGER.error(
                 f"Selected bookmark {bookmark_name} does not exist or does not have any data, cannot write molecule SDFs."
             )
             return
@@ -826,11 +837,11 @@ class RingtailCore:
                 # will write one SDF file for all molecules in bookmark (_None if no bookmark present)
                 db_file_name = os.path.splitext(os.path.basename(self.db_file))[0]
                 sdf_file_name = f"{db_file_name}_{bookmark_name}.sdf"
-                self.logger.info(f"Writing {ligname} to {sdf_file_name}")
+                LOGGER.info(f"Writing {ligname} to {sdf_file_name}")
             else:
                 # filename is name of ligand
                 sdf_file_name = ligname + ".sdf"
-                self.logger.info("Writing " + ligname + ".sdf")
+                LOGGER.info("Writing " + ligname + ".sdf")
 
             if (
                 sdf_path is not None
@@ -838,7 +849,7 @@ class RingtailCore:
                 and not os.path.isdir(sdf_path)
             ):
                 os.makedirs(sdf_path)
-                self.logger.info(
+                LOGGER.info(
                     "Specified directory for SDF files was created in current working directory."
                 )
             with OutputManager() as opm:
@@ -903,9 +914,9 @@ class RingtailCore:
             str: name of the new, exported database
         """
         bookmark_db_name = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
-        self.logger.info("Exporting bookmark database")
+        LOGGER.info("Exporting bookmark database")
         if os.path.exists(bookmark_db_name):
-            self.logger.warning(
+            LOGGER.warning(
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
@@ -920,9 +931,7 @@ class RingtailCore:
         """
         recname, recblob = self.get_receptor_object()
         if recblob is None:
-            self.logger.warning(
-                f"No receptor pdbqt stored for {recname}. Export failed."
-            )
+            LOGGER.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
             return
         output_manager = OutputManager()
         output_manager.write_receptor_pdbqt(recname, recblob)
@@ -1029,7 +1038,7 @@ class RingtailCore:
                     "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
                 )
 
-        logger.info("Creating plot of results")
+        LOGGER.info("Creating plot of results")
         all_data, passing_data = self.get_plot_data(bookmark_name)
         xdata = []
         ydata = []
@@ -1115,7 +1124,7 @@ class RingtailCore:
             time.sleep(0.5)
 
         if not _is_pymol_running():
-            self.logger.error("PyMOL failed to start.")
+            LOGGER.error("PyMOL failed to start.")
 
         try:
             pymol = PyMol.MolViewer()
@@ -1211,7 +1220,7 @@ class RingtailCore:
                 #     # center view on receptor
                 #     pymol.server.do("zoom")
             else:
-                self.logger.debug(
+                LOGGER.debug(
                     "No receptor information in the database, receptor will not be displayed."
                 )
 
@@ -1223,7 +1232,7 @@ class RingtailCore:
                 chosen_pose = poseIDs[coords]
                 ligname = chosen_pose[1]
                 pose_id = chosen_pose[0]
-                self.logger.info(f"LigName: {ligname}; Pose_ID: {pose_id}")
+                LOGGER.info(f"LigName: {ligname}; Pose_ID: {pose_id}")
 
                 # make rdkit mol for poseid
                 mol, flexres_mols, _, flexible_residues = self.create_rdkit_mol(
@@ -1494,7 +1503,7 @@ class RingtailCore:
 
         with self.storageman:
             self.storageman.delete_bookmark(bookmark_name)
-        self.logger.info(
+        LOGGER.info(
             f"Bookmark {bookmark_name} was dropped from the database {self.db_file}"
         )
 
@@ -1609,7 +1618,7 @@ class RingtailCore:
             backup (bool, optional): whether or not to back up the current db before merging. Defaults to True.
         """
 
-        self.logger.warning(
+        LOGGER.warning(
             "If you have performed clustering, this data will be lost in the new, merged database. "
         )
         # create merge tables
@@ -1666,40 +1675,6 @@ class RingtailCore:
     # endregion
 
     # region private methods
-
-    def _validate_docking_mode(self, docking_mode: str):
-        """Method that validates specified AutoDock program used to generate results.
-
-        Args:
-            docking_mode (str): string that describes docking mode
-
-        Raises:
-            RTCoreError: if docking_mode is not supported
-        """
-        if type(docking_mode) is not str:
-            self.logger.warning(
-                f'The given docking mode was not given as a string, it will be set to default value "{RingtailDefaults.docking_mode}".'
-            )
-            self._docking_mode = RingtailDefaults.docking_mode
-        elif docking_mode.lower() not in docking_alias_to_mode:
-            raise NotImplementedError(
-                f"Docking mode {docking_mode} is not supported. Please choose between {docking_modes}."
-            )
-        else:
-            self._docking_mode = docking_alias_to_mode[docking_mode.lower()]
-            self.logger.debug(f"Docking mode set to {self.docking_mode}.")
-
-    def _get_docking_mode(self):
-        """
-        Private method to retrieve docking mode
-
-        Returns:
-            str: docking mode
-        """
-        return self._docking_mode
-
-    # making docking mode a property of the ringtail core object
-    docking_mode = property(fget=_get_docking_mode, fset=_validate_docking_mode)
 
     def _fetch_select_ligands_poses(
         self,
@@ -1867,6 +1842,7 @@ class RingtailCore:
         results: ResultsObject,
         duplicate_handling: str,
         overwrite: bool,
+        docking_mode: str,
         store_all_poses: bool,
         max_poses: int,
         add_interactions: bool,
@@ -1881,6 +1857,7 @@ class RingtailCore:
             results (ResultsObject): type checked and validated results object
             duplicate_handling (str): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             overwrite (bool): whether or not to overwrite existing storage
+            docking_mode (str): docking engine used for the docking, describes file type/results style
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
@@ -1892,13 +1869,15 @@ class RingtailCore:
         Raises:
             OptionError
         """
+        # validate docking mode
+        docking_mode = validate_docking_mode(docking_mode)
         # Docking mode compatibility check
-        if self.docking_mode == "vina" and interaction_tolerance:
-            self.logger.warning(
+        if docking_mode == "vina" and interaction_tolerance:
+            LOGGER.warning(
                 "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
             )
             interaction_tolerance = None
-
+        # TODO place to use -1 for all poses
         processing_options = {
             "max_poses": max_poses,
             "store_all_poses": store_all_poses,
@@ -1915,7 +1894,7 @@ class RingtailCore:
 
             self.storageman.check_storage_ready(
                 self._run_mode,
-                self.docking_mode,
+                docking_mode,
                 store_all_poses,
                 max_poses,
             )
@@ -1926,7 +1905,7 @@ class RingtailCore:
         # Prepare the results manager with the provided docking results sources
         self.resultsman = ResultsManager(
             self.db_file,
-            self.docking_mode,
+            docking_mode,
             get_valid_storageclass(self.storagetype),
             duplicate_handling,
         )
@@ -1944,7 +1923,7 @@ class RingtailCore:
                     "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
                 )
 
-        self.logger.info("Adding results...")
+        LOGGER.info("Adding results...")
         self.resultsman.process_docking_data(results, processing_options)
         with self.storageman:
             if finalize:
@@ -2023,7 +2002,7 @@ class RingtailCore:
                 all_interactions.append(_type + "-" + interact[0])
         # warn if max_miss greater than number of interactions
         if max_miss > len(all_interactions):
-            self.logger.warning(
+            LOGGER.warning(
                 "Requested max_miss options greater than number of interaction filters given. Defaulting to max_miss = number interaction filters"
             )
             max_miss = len(all_interactions)
@@ -2094,7 +2073,7 @@ class RingtailCore:
                     pass
                 else:
                     if max_miss_present:
-                        self.logger.warning(
+                        LOGGER.warning(
                             "'max_miss' used in filtering, but the bookmark used for sdfs writing is not the union of the search"
                         )
             # if bookmark name is not in the database
@@ -2102,7 +2081,7 @@ class RingtailCore:
                 # does bookmark name + _union resolve the issue
                 if self.storageman.is_bookmark(bookmark_name + "_union"):
                     bookmark_name = bookmark_name + "_union"
-                    self.logger.warning(
+                    LOGGER.warning(
                         "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
                     )
                 elif bookmark_name.lower() in statuses:
@@ -2110,7 +2089,7 @@ class RingtailCore:
                     pass
                 # if not, raise error
                 else:
-                    logger.error(
+                    LOGGER.error(
                         f"Filtering bookmark {bookmark_name} does not exist in database. "
                     )
                     return None
@@ -2139,9 +2118,9 @@ class RingtailCore:
         with self.storageman:
             count_poses = self.storageman.get_passing_poses_count(bookmark_name, False)
 
-        logger.info(f"Preparing to cluster {count_poses} passing poses.")
+        LOGGER.info(f"Preparing to cluster {count_poses} passing poses.")
         if len(cluster_data) > 1:
-            logger.warning(
+            LOGGER.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
             )
         if cluster_data.get("ifp"):

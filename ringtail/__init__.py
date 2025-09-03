@@ -16,8 +16,6 @@ from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .ringtailcore import (
     RingtailCore,
-    docking_modes,
-    docking_alias_to_mode,
     storage_types,
     get_valid_storageclass,
 )
@@ -41,6 +39,7 @@ from .exceptions import OutputError
 from .querybuilder import QueryBuilder
 from ._version import __version__
 
+# TODO I think maybe the All should only hold things that are exposed?
 __all__ = [
     "CLOptionParser",
     "StorageManager",
@@ -54,8 +53,6 @@ __all__ = [
     "ReceptorManager",
     "ResultsManager",
     "RingtailCore",
-    "docking_modes",
-    "docking_alias_to_mode",
     "storage_types",
     "get_valid_storageclass",
     "OutputManager",
@@ -75,6 +72,7 @@ __all__ = [
     "OutputError",
     "logutils",
     "Filters",
+    "RingtailDefaults",
     "util",
     "QueryBuilder",
 ]

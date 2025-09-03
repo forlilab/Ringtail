@@ -9,9 +9,8 @@ import argparse
 import os
 from .exceptions import OptionError
 import __main__
-from .ringtailcore import RingtailCore, docking_alias_to_mode
-from .ringtailoptions import Filters
-from .util import docking_mode_file_ext
+from .ringtailcore import RingtailCore, LOGGER
+from .ringtailoptions import Filters, validate_docking_mode
 from types import SimpleNamespace
 
 
@@ -86,7 +85,7 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-m",
         "--docking_mode",
-        help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
+        help='specify AutoDock program used to generate results. Available options are "adgpu"/"dlg" and "vina"/"pdbqt". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
         metavar="'adgpu' or 'vina'",
@@ -263,14 +262,6 @@ def cmdline_parser(defaults: dict = {}):
         action="store",
         type=str,
         metavar="STRING",
-    )
-    read_parser.add_argument(
-        "-m",
-        "--docking_mode",
-        help='specify AutoDock program used to generate results. Available options are "DLG" and "Vina". Vina mode will automatically change --pattern to *.pdbqt',
-        action="store",
-        type=str,
-        metavar="'adgpu' or 'vina'",
     )
     read_parser.add_argument(
         "-su",
@@ -737,20 +728,16 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
 
-        if parsed_opts.docking_mode.lower() not in docking_alias_to_mode:
-            raise OptionError(
-                f"The chosen docking mode {parsed_opts.docking_mode} is not supported. Please choose either 'dlg' or 'vina'."
-            )
+        docking_mode = validate_docking_mode(parsed_opts.docking_mode)
         if parsed_opts.storage_type:
             storage_type = parsed_opts.storage_type.lower()
         self.rtcore = RingtailCore(
             db_file=db_file,
-            docking_mode=docking_alias_to_mode[parsed_opts.docking_mode.lower()],
             logging_level=log_level,
             storage_type=storage_type,
         )
         # make sure we log the command line prompt
-        self.rtcore.logger.info("Command line prompt: " + self.cmd_line_prompt)
+        LOGGER.info("Command line prompt: " + self.cmd_line_prompt)
         # specify core run mode as this affects how certain errors are handled
         self.rtcore._run_mode = "cmd"
         self.print_summary = parsed_opts.print_summary
@@ -766,14 +753,6 @@ class CLOptionParser:
                     f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
                 )
 
-            if parsed_opts.file_path and parsed_opts.file_pattern:
-                if (
-                    parsed_opts.file_pattern
-                    not in docking_mode_file_ext[parsed_opts.docking_mode]
-                ):
-                    raise OptionError(
-                        f"The specified file pattern {parsed_opts.file_pattern} is not in agreement with the chosen docking mode {parsed_opts.docking_mode}, whose file extension must be {docking_mode_file_ext[parsed_opts.docking_mode]}."
-                    )
             # Create dictionary of all file sources
             self.file_sources = {
                 "file": parsed_opts.file,
@@ -782,6 +761,7 @@ class CLOptionParser:
                 "file_list": parsed_opts.file_list,
                 "receptor_file": parsed_opts.receptor_file,
                 "save_receptor": parsed_opts.save_receptor,
+                "file_pattern": parsed_opts.file_pattern,
             }
 
             if isinstance(parsed_opts.interaction_tolerance, str):
@@ -790,6 +770,7 @@ class CLOptionParser:
                 ]
 
             self.write_options = SimpleNamespace(
+                docking_mode=docking_mode,
                 duplicate_handling=parsed_opts.duplicate_handling,
                 overwrite=parsed_opts.overwrite,
                 store_all_poses=parsed_opts.store_all_poses,
@@ -844,7 +825,7 @@ class CLOptionParser:
                             found_res.append(res)
                     for res in found_res:
                         if type(res) == str:
-                            self.rtcore.logger.debug(
+                            LOGGER.debug(
                                 "cloptionparser: interaction filters provided as string"
                             )
                             wanted = True
@@ -863,7 +844,7 @@ class CLOptionParser:
                                 wanted = False
                             interactions[_type].append((res, wanted))
                         else:
-                            self.rtcore.logger.debug(
+                            LOGGER.debug(
                                 "cloptionparser: interaction filters provided as list"
                             )
                             if (

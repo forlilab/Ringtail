@@ -102,7 +102,7 @@ class DockingFileReader(mp.Process):
 
                 # generate CPU LOAD
                 # parser depends on requested docking_mode
-                if self.docking_mode == "dlg":
+                if self.docking_mode == "adgpu":
                     parsed_file_dict = parse_single_dlg(next_task)
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
@@ -120,7 +120,7 @@ class DockingFileReader(mp.Process):
                 if (
                     parsed_file_dict["receptor"] != self.shared["target"]
                     and self.shared.get("target") is not None
-                    and self.docking_mode == "dlg"
+                    and self.docking_mode == "adgpu"
                 ):
                     raise FileParsingError(
                         "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
@@ -220,7 +220,7 @@ class DockingFileReader(mp.Process):
                 store_all_poses = True
         if store_all_poses:
             poses_to_save = ligand_dict["sorted_runs"]
-        elif self.docking_mode == "dlg":
+        elif self.docking_mode == "adgpu":
             # will only select top n clusters.
             poses_to_save = ligand_dict["cluster_top_poses"][:max_poses]
         # if not adgpu, save top n poses

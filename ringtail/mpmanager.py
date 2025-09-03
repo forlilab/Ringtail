@@ -16,8 +16,9 @@ from .exceptions import MultiprocessingError, RTCoreError
 import traceback
 from datetime import datetime
 import multiprocessing as mp
-from .util import docking_mode_file_ext, iterate_nested, docking_mode_aliases
-from .ringtailoptions import ResultsObject
+
+from .util import iterate_nested
+from .ringtailoptions import ResultsObject, validate_file_pattern
 
 mp.set_start_method("fork", force=True)
 
@@ -74,13 +75,8 @@ class MPManager:
 
         # these two variables are needed for queueing files
         self.receptor_file = results.receptor_file_path
-        if self.shared["docking_mode"].lower() not in docking_mode_file_ext.keys():
-            for key, value_list in docking_mode_aliases.items():
-                if self.shared["docking_mode"].lower() in value_list:
-                    self.shared["docking_mode"] = key
-                    break
-        self.file_pattern = (
-            "*." + docking_mode_file_ext[self.shared["docking_mode"]] + "*"
+        self.file_pattern = validate_file_pattern(
+            self.shared["docking_mode"], results.file_pattern
         )
 
     def process_results(self, reader_options: dict):

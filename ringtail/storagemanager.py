@@ -15,8 +15,7 @@ from rdkit import Chem
 from typing import Union
 import time
 from importlib.metadata import version
-from .ringtailoptions import Filters
-from .util import statuses
+from .ringtailoptions import Filters, statuses
 from .exceptions import (
     StorageError,
     OptionError,
@@ -747,6 +746,7 @@ class StorageManager:
             except Exception as e:
                 raise e
 
+        # command line does not allow incompatibility, but API (and I suppose GUI) does
         if not compatible:
             if run_mode == "cmd":
                 raise OptionError(compatibility_string)
@@ -760,7 +760,7 @@ class StorageManager:
             number_of_poses = str(max_poses)
         self._insert_db_properties(docking_mode, number_of_poses)
         logger.debug("Storage compatibility has been checked and is ensured.")
-        # cannot use Signal/keyboard interrupt in the GUI bc it uses multiple threads
+        # cannot use Signal/keyboard interrupt in the GUI bc it uses threading
         if run_mode != "gui":
             self.keyboard_interrupt_allowed = True
 
@@ -1874,6 +1874,7 @@ class StorageManager:
     def _drop_existing_tables(self):
         """Drops existing tables, in order of foreign key dependency"""
         # first, delete tables with foreign keys
+        # TODO merge tables
         self._delete_table("Pose_clusters")
         self._delete_table("Cluster_groups")
         self._delete_table("Clusters")

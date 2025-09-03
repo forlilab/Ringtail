@@ -6,10 +6,70 @@
 
 import os
 from .exceptions import OptionError
-from .logutils import LOGGER as logger
+from .logutils import LOGGER
 from .util import iterate_nested
 from dataclasses import dataclass, asdict
 import copy
+
+
+docking_modes = {"adgpu": {"adgpu", "dlg", "gpu"}, "vina": {"vina", "pdbqt"}}
+
+docking_mode_file_ext = {"adgpu": "dlg", "vina": "pdbqt"}
+
+docking_alias_to_mode = {}
+for canonical, aliases in docking_modes.items():
+    for alias in aliases:
+        docking_alias_to_mode[alias] = canonical
+
+statuses = ["accepted", "maybe", "rejected"]
+
+
+def validate_docking_mode(docking_mode: str):
+    # TODO might want to build the alias to mode in here for memory?
+    """Method that validates specified AutoDock program used to generate results.
+
+    Args:
+        docking_mode (str): string that describes docking mode
+
+    Raises:
+        RTCoreError: if docking_mode is not supported
+    """
+    if type(docking_mode) is not str:
+        LOGGER.warning(
+            f'The given docking mode was not given as a string, it will be set to default value "{RingtailDefaults.docking_mode}".'
+        )
+        return RingtailDefaults.docking_mode
+    elif docking_mode.lower() not in docking_alias_to_mode:
+        raise NotImplementedError(
+            f"Docking mode {docking_mode} is not supported. Please choose between {docking_modes}."
+        )
+    else:
+        LOGGER.debug(
+            f"Docking mode {docking_mode} is valid, will be used for results parsing."
+        )
+        # return canonical docking mode
+        return docking_alias_to_mode[docking_mode.lower()]
+
+
+def validate_file_pattern(docking_mode: str, file_pattern: str = None) -> str:
+    """
+    Assumes docking_mode has been validated
+
+    Args:
+        docking_mode (str): _description_
+        file_pattern (str): _description_
+
+    Returns:
+        str: _description_
+    """
+    if not file_pattern:
+        return f"*.{docking_mode_file_ext[docking_mode]}*"
+    if docking_mode_file_ext[docking_mode] not in file_pattern:
+        raise OptionError(
+            f"Requested file pattern {file_pattern} does not contain the necessary extension for docking mode {docking_mode}."
+        )
+    else:
+        return file_pattern
 
 
 @dataclass
@@ -17,7 +77,7 @@ class RingtailDefaults:
     # maybe reconsider
     docking_mode: str = "adgpu"
     output_db: str = "output.db"
-    storage_type: str = "duckdb"
+    storage_type: str = "sqlite"
     max_proc: int = None
     max_poses: int = 3
     store_all_poses: bool = False
@@ -41,7 +101,7 @@ class RingtailDefaults:
     overwrite: bool = None
     interaction_tolerance: float = None
     add_interactions: bool = None
-    interaction_cutoffs: str = "3.7,4.0"
+    interaction_cutoffs: str = "3.7,4.0"  # TODO should be list?
     outfields: str = "LigName,docking_score"
     order_results: str = None
     mfpt_cluster: float = None
@@ -59,6 +119,9 @@ class RingtailDefaults:
     pymol: bool = None
 
 
+# TODO make method to export for command line defaults, then I can use the string fields as list for normal operations
+
+
 def default_dict(dataclass):
     return asdict(dataclass)
 
@@ -68,10 +131,13 @@ class ResultsObject:
     to traverse them, and options to store receptor.
     """
 
+    # TODO if I move docking mode to here, it can check its own internal consistency
+
     def __init__(self):
         self.file = None
         self.file_path = None
         self.file_list = None
+        self.file_pattern: str = None
         self.recursive_path_traverse: bool = None
         self.receptor_file_path: str = None
         self.save_receptor: bool = None
@@ -145,13 +211,13 @@ class Filters:
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
         if self.eworst is not None and self.score_percentile is not None:
-            logger.warning(
+            LOGGER.warning(
                 "Cannot use 'eworst' cutoff with 'score_percentile'. Overiding 'score_percentile' with 'eworst'."
             )
             self.score_percentile = None
 
         if self.leworst is not None and self.le_percentile is not None:
-            logger.warning(
+            LOGGER.warning(
                 "Cannot use 'eworst' cutoff with 'le_percentile'. Overiding 'le_percentile' with 'leworst'."
             )
             self.le_percentile = None
@@ -173,7 +239,7 @@ class Filters:
         if self.ligand_operator not in ["OR", "AND"] and (
             self.ligand_substruct or self.ligand_substruct_pos
         ):
-            logger.debug(f"'ligand_operator' set to default 'OR'.")
+            LOGGER.debug(f"'ligand_operator' set to default 'OR'.")
             self.ligand_operator = "OR"
 
         if self.max_miss < 0:

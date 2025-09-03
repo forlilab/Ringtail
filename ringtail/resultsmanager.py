@@ -7,7 +7,7 @@
 from .mpmanager import MPManager
 from .exceptions import ResultsProcessingError
 from .storagemanager import StorageManager
-from .logutils import LOGGER as logger
+from .logutils import LOGGER
 from .ringtailoptions import ResultsObject
 
 
@@ -66,12 +66,12 @@ class ResultsManager:
             logmsg = f"These are the provided files: {results.file}, directories: {results.file_path}, and file lists: {results.file_list} provided for database storage."
         else:
             logmsg = f"This is the list of ligands whos strings are being procssed: {str(results.strings.keys())}"
-        logger.debug(logmsg)
+        LOGGER.debug(logmsg)
 
         if processing_options.get("store_all_poses") and processing_options.get(
             "interaction_tolerance"
         ):
-            logger.warning(
+            LOGGER.warning(
                 "Cannot use 'interaction_tolerance' with 'store_all_poses'. Removing 'interaction_tolerance'."
             )
             processing_options["interaction_tolerance"] = None

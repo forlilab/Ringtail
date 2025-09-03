@@ -36,6 +36,7 @@ class TestRingtailCore:
         assert count == 138
 
     def test_save_receptor(self):
+        # TODO don't use sql here
         rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
         count0 = rtc.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
@@ -51,8 +52,6 @@ class TestRingtailCore:
         assert count == 1
 
     def test_produce_summary(self):
-        return
-
         # Ensure storage error thrown if no data in database
         from ringtail import exceptions as e
 
@@ -440,6 +439,8 @@ class TestRingtailCore:
         os.system("rm output.db*")
 
     def test_db_num_poses_warning(self):
+        from ringtail import LOGGER
+
         # make sure we make ringtail core object with log file
         rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
 
@@ -453,7 +454,7 @@ class TestRingtailCore:
         )
         warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1."
 
-        log_file = rtc.logger._log_fp.baseFilename
+        log_file = LOGGER._log_fp.baseFilename
         with open(log_file) as f:
             if warning_string in f.read():
                 warning_worked = True
@@ -483,11 +484,11 @@ class TestVinaHandling:
     def test_vina_file_add(self):
         vina_path = "test_data/vina"
         rtc = RingtailCore("output.db")
-        rtc.docking_mode = "vina"
         rtc.add_results_from_files(
             file_path=vina_path,
             receptor_file=vina_path + "/receptor.pdbqt",
             save_receptor=True,
+            docking_mode="vina",
         ),
         count = rtc.table_length("Results")
         os.system("rm output.db*")
@@ -514,12 +515,12 @@ class TestVinaHandling:
     def test_add_interactions(self):
         vina_path = "test_data/vina"
         rtc = RingtailCore("output.db", logging_level="DEBUG")
-        rtc.docking_mode = "vina"
         rtc.add_results_from_files(
             file_path=vina_path,
             receptor_file=vina_path + "/receptor.pdbqt",
             save_receptor=True,
             add_interactions=True,
+            docking_mode="vina",
         )
         count = rtc.table_length("Interaction_indices")
         os.system("rm output.db*")
@@ -528,16 +529,17 @@ class TestVinaHandling:
 
     def test_db_dockingmode_warning(self):
         from ringtail import RingtailDefaults
+        from ringtail import LOGGER
 
         rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
         rtc.add_results_from_files(file="test_data/adgpu/group1/1451.dlg.gz")
-        rtc = RingtailCore(
-            db_file="output.db", docking_mode="vina", logging_level="DEBUG"
+        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
+        rtc.add_results_from_files(
+            file="test_data/vina/sample-result.pdbqt", docking_mode="vina"
         )
-        rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
 
         warning_string = f"The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is {RingtailDefaults.docking_mode}."
-        log_file = rtc.logger._log_fp.baseFilename
+        log_file = LOGGER._log_fp.baseFilename
         with open(log_file, "r") as f:
             if warning_string in f.read():
                 warning_worked = True
