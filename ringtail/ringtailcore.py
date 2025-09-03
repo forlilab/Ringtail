@@ -403,7 +403,7 @@ class RingtailCore:
         mfpt_cluster: float = None,
         interaction_cluster: float = None,
         log_file: str = None,
-        outfields: str = RingtailDefaults.outfields,
+        outfields: str = list(RingtailDefaults.outfields),
         order_results: str = None,
         bookmark_name: str = RingtailDefaults.bookmark_name,
         filter_bookmark: str = None,
