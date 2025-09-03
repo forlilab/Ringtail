@@ -1772,6 +1772,12 @@ class StorageManagerSQLite(StorageManager):
 
     # region general database operations
 
+    def begin_transaction(self):
+        self.conn.execute("BEGIN TRANSACTION;")
+
+    def rollback(self):
+        self.conn.execute("ROLLBACK;")
+
     def tables_in_db(self) -> list:
         """
         Returns a list of all table names in the database

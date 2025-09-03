@@ -307,20 +307,21 @@ class StorageManager:
         query = self.QueryBuilder()
         query.SELECT("filter_id").FROM("Filters").WHERE("name=?", bookmark_name)
 
-        filter_id = self.db_query(*query.build()).fetchone()[0]
+        filter_id = self.conn.execute(*query.build()).fetchone()[0]
         # delete from filtered_poses table
         query = self.QueryBuilder()
-        self.db_query(
+        self.conn.execute(
             *query.DELETE_FROM("Filtered_poses")
             .WHERE("filter_id = ?", filter_id)
-            .build(),
-            commit=True,
+            .build()
         )
+        self.conn.commit()
         # delete from filters
         query = self.QueryBuilder()
-        self.db_query(
+        self.conn.execute(
             *query.DELETE_FROM("Filters").WHERE("filter_id = ?", filter_id).build()
         )
+        self.conn.commit()
         logger.info(
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
         )
@@ -2450,47 +2451,49 @@ class StorageManager:
             OptionError
 
         Returns:
-            bool: whether or not there are poses passing the filter
+            int: number of passing poses
         """
-        # TODO #FIXME PROBLEMATO!
-        # fetch filtered poses
-        cursor = self.db_query(query)
-        passing_poses_tuples = cursor.fetchall()
-        passing_poses = [row[0] for row in passing_poses_tuples]
-        if passing_poses:
-            # make sure bookmark name is not a table name
-            if name in self.tables_in_db():
-                raise OptionError(
-                    f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
-                )
-            # check if bookmark exists
-            if self.is_bookmark(name):
-                logger.warning(
-                    f"The bookmark {name} already exists, and will be overwritten by the current filter."
-                )
-                self.delete_bookmark(name)
+        count_query = f"""SELECT COUNT(pose_id) FROM ({query});"""
+        num_passing_poses = self.conn.execute(count_query).fetchone()[0]
 
-            insert_query = self.QueryBuilder()
-            insert_query.INSERT_INTO(
-                "Filters", "name", "query", "filters", "filter_window"
-            ).RETURNING("filter_id")
-            try:
-                filter_id = self.db_query(
-                    insert_query.build()[0],
-                    (name.lower(), query, json.dumps(filters), filtering_bookmark),
-                ).fetchone()[0]
+        if not num_passing_poses:
+            return 0
 
-                params = [(filter_id, pose_id) for pose_id in passing_poses]
-                filter_pose_insert = self.QueryBuilder()
-                filter_pose_insert.INSERT_INTO("Filtered_poses", "filter_id", "pose_id")
-                self.db_update(filter_pose_insert.build()[0], params)
-            except Exception as e:
-                raise StorageError(
-                    f"Problems while writing filtered poses to database: {e}"
-                ) from e
-            else:
-                logger.info("Successfully wrote filtered poses to database.")
-        return bool(passing_poses)
+        # make sure bookmark name is not a table name
+        if name in self.tables_in_db():
+            raise OptionError(
+                f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
+            )
+        # overwrite bookmark if it exists
+        if self.is_bookmark(name):
+            logger.warning(
+                f"The bookmark {name} already exists, and will be overwritten by the current filter."
+            )
+            self.delete_bookmark(name)
+
+        self.begin_transaction()
+        insert_query = self.QueryBuilder()
+        insert_query.INSERT_INTO(
+            "Filters", "name", "query", "filters", "filter_window"
+        ).RETURNING("filter_id")
+
+        # insert filter info, return filter_id
+        filter_id = self.conn.execute(
+            insert_query.build()[0],
+            (name.lower(), query, json.dumps(filters), filtering_bookmark),
+        ).fetchone()[0]
+
+        # insert filtered poses with filter_id
+        insert_query = f"""
+            WITH filtered_poses AS (
+                {query})
+            INSERT INTO Filtered_poses(filter_id, pose_id) 
+            SELECT {filter_id}, pose_id FROM filtered_poses;
+            """
+        self.conn.execute(insert_query)
+        self.conn.commit()
+
+        return num_passing_poses
 
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
         """
