@@ -847,12 +847,8 @@ class StorageManagerSQLite(StorageManager):
         self._delete_table("Clusters")
         self._delete_table("Filtered_poses")
         self._delete_table("Filters")
-        # for attached db
-        self._delete_table("Pose_clusters", merging_db_alias)
-        self._delete_table("Cluster_groups", merging_db_alias)
-        self._delete_table("Clusters", merging_db_alias)
-        self._delete_table("Filtered_poses", merging_db_alias)
-        self._delete_table("Filters", merging_db_alias)
+        # recreate filter tables
+        self._create_filtering_tables()
 
         # merge tables
         try:

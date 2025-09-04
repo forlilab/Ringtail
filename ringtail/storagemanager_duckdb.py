@@ -963,7 +963,7 @@ class StorageManagerDuckDB(StorageManager):
         self._delete_table("Filtered_poses")
         self._delete_table("Filters")
         self.db_query("DROP SEQUENCE IF EXISTS seq_filterid;")
-        # for attached db
+        # recreate filter tables
         self._create_filtering_tables()
 
         # merge tables
