@@ -842,12 +842,17 @@ class StorageManagerSQLite(StorageManager):
 
         # delete incompatible tables
         # for main db
-        self._delete_filter_data()
-        # TODO delete cluster data
-        self._delete_table("Ligand_clusters")
+        self._delete_table("Pose_clusters")
+        self._delete_table("Cluster_groups")
+        self._delete_table("Clusters")
+        self._delete_table("Filtered_poses")
+        self._delete_table("Filters")
         # for attached db
-        self._delete_filter_data(merging_db_alias)
-        self._delete_table("Ligand_clusters", merging_db_alias)
+        self._delete_table("Pose_clusters", merging_db_alias)
+        self._delete_table("Cluster_groups", merging_db_alias)
+        self._delete_table("Clusters", merging_db_alias)
+        self._delete_table("Filtered_poses", merging_db_alias)
+        self._delete_table("Filters", merging_db_alias)
 
         # merge tables
         try:
@@ -920,7 +925,7 @@ class StorageManagerSQLite(StorageManager):
         original_PK,
         merged_PK) SELECT 
         ?,
-        "Interaction_indices", 
+        'Interaction_indices', 
         interaction_id,
             CASE 
                 WHEN EXISTS (
@@ -1024,7 +1029,7 @@ class StorageManagerSQLite(StorageManager):
         original_PK,
         merged_PK) SELECT 
         ?,
-        "Ligands", 
+        'Ligands', 
         ligand_id,
             CASE 
                 WHEN EXISTS (
@@ -1080,7 +1085,7 @@ class StorageManagerSQLite(StorageManager):
         original_PK,
         merged_PK) SELECT 
         ?,
-        "Results", 
+        'Results', 
         Pose_ID,
         Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
         FROM merging.Results;"""
@@ -1218,7 +1223,7 @@ class StorageManagerSQLite(StorageManager):
                 original_PK,
                 merged_PK) SELECT 
                 ?,
-                "db_properties", 
+                'db_properties', 
                 DB_write_session,
                 DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
                 FROM merging.db_properties;"""
@@ -2231,21 +2236,6 @@ class StorageManagerSQLite(StorageManager):
         self.db_query("REINDEX")
         self._set_ringtail_db_schema_version("3.0.0")
         self.conn.commit()
-
-    def _delete_filter_data(self, db_alias: str = None):
-        """
-        Empties all data in the filter and filtered_poses tables
-
-        Args:
-            db_alias (str, optional): if needing to empty tables from a connected, aliased database. Defaults to None.
-        """
-        if db_alias:
-            alias_string = db_alias + "."
-        else:
-            alias_string = ""
-        self.db_query(f"DELETE FROM {alias_string}Filters")
-        # delete all rows in bookmarks table
-        self.db_query(f"DELETE FROM {alias_string}filtered_poses", commit=True)
 
     def _drop_views(self, db_alias: str = None):
         """

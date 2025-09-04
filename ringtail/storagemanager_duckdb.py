@@ -667,7 +667,7 @@ class StorageManagerDuckDB(StorageManager):
         CREATE TABLE IF NOT EXISTS DB_properties (
         DB_write_session    INTEGER DEFAULT nextval('seq_dbwriteid') PRIMARY KEY,
         docking_mode        VARCHAR,
-        number_of_poses     INTEGER)"""
+        number_of_poses     INTEGER);"""
 
         self.db_query(sql_str)
 
@@ -746,7 +746,7 @@ class StorageManagerDuckDB(StorageManager):
         and lists all poses passing that filter_id
         """
         filters_sql = """
-        CREATE SEQUENCE seq_filterid START 1;
+        CREATE SEQUENCE IF NOT EXISTS seq_filterid START 1;
         CREATE TABLE IF NOT EXISTS Filters (
         filter_id           INTEGER DEFAULT nextval('seq_filterid') PRIMARY KEY,
         name                VARCHAR,
@@ -929,10 +929,10 @@ class StorageManagerDuckDB(StorageManager):
         # add to merging table the absolute path
         mergedb_abspath = str(os.path.abspath(merging_db))
         # insert merging db name first
-        cur = self.conn.execute(
-            """INSERT INTO merged_tables(dbfile) VALUES (?)""",
-            (mergedb_abspath,),
-        )
+        merge_id = self.conn.execute(
+            """INSERT INTO merged_tables(dbfile) VALUES (?) RETURNING merge_id""",
+            [mergedb_abspath],
+        ).fetchone()[0]
         # receptor compatibility check
         receptorcheck_sql = """
         SELECT CASE 
@@ -954,18 +954,17 @@ class StorageManagerDuckDB(StorageManager):
                 "The two databases are of compatible version and receptors. Merging will proceed."
             )
 
-        # get the active merge_id to ensure we use the correct merge data moving forward
-        merge_id = self.db_query(
-            "SELECT last_insert_rowid() FROM merged_tables"
-        ).fetchone()[0]
-
         # delete incompatible tables
         # for main db
-        self._delete_filter_data()
-        self._delete_table("Ligand_clusters")
+        self._delete_table("Pose_clusters")
+        self._delete_table("Cluster_groups")
+        self.db_query("DROP SEQUENCE IF EXISTS seq_clusterid;")
+        self._delete_table("Clusters")
+        self._delete_table("Filtered_poses")
+        self._delete_table("Filters")
+        self.db_query("DROP SEQUENCE IF EXISTS seq_filterid;")
         # for attached db
-        self._delete_filter_data(merging_db_alias)
-        self._delete_table("Ligand_clusters", merging_db_alias)
+        self._create_filtering_tables()
 
         # merge tables
         try:
@@ -979,6 +978,7 @@ class StorageManagerDuckDB(StorageManager):
             logger.info(
                 "The 'Interaction_indices' and 'Interactions' tables have been merged."
             )
+            self.conn.commit()
         except Exception as e:
             raise MergeError(f"Error during database merging: {e}") from e
         else:
@@ -987,8 +987,6 @@ class StorageManagerDuckDB(StorageManager):
             )
             self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
             logger.info("The final database has neem cleaned up, and indices rebuilt.")
-        finally:
-            cur.close()
 
     def _create_merge_tables(self):
         """
@@ -998,129 +996,69 @@ class StorageManagerDuckDB(StorageManager):
             StorageError
         """
         try:
-            cur = self.conn.cursor()
             # create mergedata table: merge_id (PK), dbfile, timestamp, numofrows table
-            mergetbl_sql = """CREATE TABLE IF NOT EXISTS merged_tables (
-            merge_id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            mergetbl_sql = """
+            CREATE SEQUENCE IF NOT EXISTS seq_mergeid START 1;
+            CREATE TABLE IF NOT EXISTS merged_tables (
+            merge_id                INTEGER DEFAULT nextval('seq_mergeid') PRIMARY KEY,
             dbfile                  VARCHAR,
-            merge_start             DATETIME DEFAULT CURRENT_TIMESTAMP);"""
-            cur.execute(mergetbl_sql)
+            merge_start             TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"""
+            self.conn.execute(mergetbl_sql)
 
             # create PK table: merge_id(FK), table, original_val, merge_val
             pktable_sql = """CREATE TABLE IF NOT EXISTS PK_conversions (
-            merge_id        INTEGER,
+            merge_id        INTEGER REFERENCES merged_tables(merge_id),
             table_name      VARCHAR,
             original_PK     INTEGER,
-            merged_PK       INTEGER,
-            FOREIGN KEY(merge_id) REFERENCES merged_tables(merge_id));"""
-            cur.execute(pktable_sql)
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_merge ON PK_conversions(merge_id, original_PK)"
-            )
-            self.conn.commit()
+            merged_PK       INTEGER);"""
+            self.conn.execute(pktable_sql)
         except Exception as e:
             raise StorageError(e) from e
 
-    def _merge_interaction_tables(self, merge_id: int):
+    def _merge_db_properties_table(self, merge_id: int):
         """
-        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
-        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
+        Merges database properties table, but importantly will not check for property compatibility
 
         Args:
             merge_id (int): merge session id
 
         Raises:
-            Exception
+            StorageError
         """
-        convert_ii_sql = """INSERT INTO PK_conversions (
-        merge_id,
-        table_name,
-        original_PK,
-        merged_PK) SELECT 
-        ?,
-        "Interaction_indices", 
-        interaction_id,
-            CASE 
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM Interaction_indices
-                    WHERE 
-                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
-                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
-                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
-                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
-                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
-                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
-                    ) 
-                THEN (
-                    SELECT main.Interaction_indices.interaction_id
-                    FROM main.Interaction_indices
-                    WHERE 
-                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
-                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
-                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
-                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
-                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
-                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
-                    )
-                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
-            END AS new_interaction_id
-        FROM merging.Interaction_indices;"""
-
-        # then inserting only those that aren't already in the table
-        insert_interaction_indices = """INSERT INTO Interaction_indices (
-        interaction_id,
-        interaction_type,
-        rec_chain,
-        rec_resname,
-        rec_resid,
-        rec_atom,
-        rec_atomid)
-        SELECT 
-            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
-            interaction_type,
-            rec_chain,
-            rec_resname,
-            rec_resid,
-            rec_atom,
-            rec_atomid
-        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
-        """
-
-        # Adding new data to Interactions table with (updated) pose_id and interaction_id
-        insert_interactions = """
-        INSERT INTO Interactions (
-        Pose_ID,
-        interaction_id
-        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
-                FROM merging.Interactions I
-                LEFT JOIN (SELECT original_PK, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
-            LEFT JOIN (SELECT original_PK, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Interaction_indices' 
-                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
-
         try:
-            cur = self.conn.cursor()
-            cur.execute(
-                convert_ii_sql,
-                (merge_id,),
+            convert_dbprop_sql = """INSERT INTO PK_conversions (
+                merge_id,
+                table_name,
+                original_PK,
+                merged_PK) SELECT 
+                ?,
+                'DB_properties', 
+                DB_write_session,
+                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
+                FROM merging.db_properties;"""
+            self.conn.execute(
+                convert_dbprop_sql,
+                [merge_id],
             )
-            cur.execute(insert_interaction_indices, (merge_id,))
-            cur.execute(
-                insert_interactions,
-                (
-                    merge_id,
-                    merge_id,
-                ),
-            )
-            self.conn.commit()
+            insert_dbprops_sql = """INSERT INTO DB_properties (
+                DB_write_session,
+                docking_mode,
+                number_of_poses)
+                SELECT 
+                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
+                    docking_mode,
+                    number_of_poses
+                FROM merging.DB_properties;"""
+            self.conn.execute(insert_dbprops_sql, [merge_id])
+            db_write_id = self.conn.execute(
+                "SELECT MAX(DB_write_session) FROM DB_properties"
+            ).fetchone()[0]
+            # update the db write session sequence
+            self.conn.execute("DROP SEQUENCE IF EXISTS seq_dbwriteid;")
+            self.conn.execute(f"CREATE SEQUENCE seq_dbwriteid START {db_write_id + 1};")
         except Exception as e:
-            raise Exception(
-                f"Error during update and insertion of interactions: {e}"
+            raise StorageError(
+                f"Error encountered while merging db_properties table: {str(e)}"
             ) from e
 
     def _merge_ligands_and_results_tables(self, merge_id: int):
@@ -1142,7 +1080,7 @@ class StorageManagerDuckDB(StorageManager):
         original_PK,
         merged_PK) SELECT 
         ?,
-        "Ligands", 
+        'Ligands', 
         ligand_id,
             CASE 
                 WHEN EXISTS (
@@ -1198,7 +1136,7 @@ class StorageManagerDuckDB(StorageManager):
         original_PK,
         merged_PK) SELECT 
         ?,
-        "Results", 
+        'Results', 
         Pose_ID,
         Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
         FROM merging.Results;"""
@@ -1312,53 +1250,141 @@ class StorageManagerDuckDB(StorageManager):
                 ),
             )
 
-            self.conn.commit()
+            ligand_id = self.conn.execute(
+                "SELECT MAX(ligand_id) FROM Ligands"
+            ).fetchone()[0]
+            # update the db write session sequence
+            self.conn.execute("DROP SEQUENCE IF EXISTS seq_ligandid;")
+            self.conn.execute(f"CREATE SEQUENCE seq_ligandid START {ligand_id + 1};")
+            pose_id = self.conn.execute("SELECT MAX(pose_id) FROM Results").fetchone()[
+                0
+            ]
+            # update the db write session sequence
+            self.conn.execute("DROP SEQUENCE IF EXISTS seq_poseid;")
+            self.conn.execute(f"CREATE SEQUENCE seq_poseid START {pose_id + 1};")
         except Exception as e:
             raise StorageError(
                 f"Error encountered while merging Ligands and Results tables: \n{str(e)}"
             ) from e
 
-    def _merge_db_properties_table(self, merge_id: int):
+    def _merge_interaction_tables(self, merge_id: int):
         """
-        Merges database properties table, but importantly will not check for property compatibility
+        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
+        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
 
         Args:
             merge_id (int): merge session id
 
         Raises:
-            StorageError
+            Exception
         """
+        convert_ii_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        'Interaction_indices', 
+        interaction_id,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    ) 
+                THEN (
+                    SELECT main.Interaction_indices.interaction_id
+                    FROM main.Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    )
+                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
+            END AS new_interaction_id
+        FROM merging.Interaction_indices;"""
+
+        # then inserting only those that aren't already in the table
+        insert_interaction_indices = """INSERT INTO Interaction_indices (
+        interaction_id,
+        interaction_type,
+        rec_chain,
+        rec_resname,
+        rec_resid,
+        rec_atom,
+        rec_atomid)
+        SELECT 
+            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
+            interaction_type,
+            rec_chain,
+            rec_resname,
+            rec_resid,
+            rec_atom,
+            rec_atomid
+        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
+        """
+
+        # Adding new data to Interactions table with (updated) pose_id and interaction_id
+        insert_interactions = """
+        INSERT INTO Interactions (
+        Pose_ID,
+        interaction_id
+        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
+                FROM merging.Interactions I
+                LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
+            LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Interaction_indices' 
+                AND merge_id = ?) II ON (I.Interaction_ID = II.original_PK);"""
+
         try:
             cur = self.conn.cursor()
-            convert_dbprop_sql = """INSERT INTO PK_conversions (
-                merge_id,
-                table_name,
-                original_PK,
-                merged_PK) SELECT 
-                ?,
-                "db_properties", 
-                DB_write_session,
-                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
-                FROM merging.db_properties;"""
             cur.execute(
-                convert_dbprop_sql,
+                convert_ii_sql,
                 (merge_id,),
             )
+            cur.execute(insert_interaction_indices, (merge_id,))
+            cur.execute(
+                insert_interactions,
+                (
+                    merge_id,
+                    merge_id,
+                ),
+            )
 
-            insert_dbprops_sql = """INSERT INTO DB_properties (
-                DB_write_session,
-                docking_mode,
-                number_of_poses)
-                SELECT 
-                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
-                    docking_mode,
-                    number_of_poses
-                FROM merging.DB_properties;"""
-            cur.execute(insert_dbprops_sql, (merge_id,))
-            self.conn.commit()
+            interaction_id = self.conn.execute(
+                "SELECT MAX(interaction_id) FROM Interaction_indices"
+            ).fetchone()[0]
+            # update the db write session sequence
+            self.conn.execute("DROP SEQUENCE IF EXISTS seq_interactionid;")
+            self.conn.execute(
+                f"CREATE SEQUENCE seq_interactionid START {interaction_id+1};"
+            )
+
+            interaction_pose_id = self.conn.execute(
+                "SELECT MAX(interaction_pose_id) FROM Interactions;"
+            ).fetchone()[0]
+            # update the db write session sequence
+            self.conn.execute("DROP SEQUENCE IF EXISTS seq_interactionposeid;")
+            self.conn.execute(
+                f"CREATE SEQUENCE seq_interactionposeid START {interaction_pose_id+1};"
+            )
+
         except Exception as e:
-            raise StorageError(
-                "Error encountered while merging db_properties table"
+            raise Exception(
+                f"Error during update and insertion of interactions: {e}"
             ) from e
 
     # endregion
@@ -1983,11 +2009,11 @@ class StorageManagerDuckDB(StorageManager):
         return is_compatible, db_schema_ver
 
     def _check_if_db_compatible_for_merge(self, merging_db_alias: str) -> bool:
-        # TODO rejigger for duckdb, metadata table?
         """
         Method that checks if the database merging into main is compatible with main,
         and checks if both databases are of appropriately high version where merge has
         been implemented
+        #NOTE the ringtail duckdb currently does not track schema version
 
         Args:
             merging_db_alias (str): alias for the database being merged into main
@@ -1995,19 +2021,6 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             bool: if the two databases are compatible
         """
-        main_version = self.db_query("PRAGMA main.user_version").fetchone()[0]
-        merging_version = self.db_query(
-            f"PRAGMA {merging_db_alias}.user_version"
-        ).fetchone()[0]
-
-        if main_version != merging_version:
-            return False
-        if main_version < 300:
-            if main_version == 200:
-                logger.error(
-                    "The database is enabled for merging, but only with an older version of the code. Please contact code maintainer."
-                )
-            return False
 
         return True
 

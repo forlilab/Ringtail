@@ -1876,11 +1876,13 @@ class StorageManager:
     def _drop_existing_tables(self):
         """Drops existing tables, in order of foreign key dependency"""
         # first, delete tables with foreign keys
-        # TODO merge tables
+        self._delete_table("merged_tables")
+        self._delete_table("PK_conversions")
         self._delete_table("Pose_clusters")
         self._delete_table("Cluster_groups")
         self._delete_table("Clusters")
         self._delete_table("Filtered_poses")
+        self._delete_table("Filters")
         self._delete_table("Interactions")
         self._delete_table("Interaction_indices")
         self._delete_table("Results")
@@ -2485,10 +2487,10 @@ class StorageManager:
 
         # insert filtered poses with filter_id
         insert_query = f"""
-            WITH filtered_poses AS (
+            WITH results_poses AS (
                 {query})
             INSERT INTO Filtered_poses(filter_id, pose_id) 
-            SELECT {filter_id}, pose_id FROM filtered_poses;
+            SELECT {filter_id}, pose_id FROM results_poses;
             """
         self.conn.execute(insert_query)
         self.conn.commit()
