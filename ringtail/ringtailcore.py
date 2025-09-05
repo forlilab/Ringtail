@@ -975,7 +975,9 @@ class RingtailCore:
         x_axis: str = "docking_score",
         y_axis: str = "leff",
         limit: int = None,
-    ):
+    ) -> tuple[
+        list[tuple[float, float]], list[tuple[float, float, int, str, Union[None, str]]]
+    ]:
         """
         Get ligand efficiency and energy for all docking data and for ligands that passed
         filtering in specified bookmark. Each tuple in the respective lists contains
