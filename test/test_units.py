@@ -3,7 +3,7 @@
 #
 # Ringtail unit testing
 #
-from ringtail import RingtailCore, ringtailoptions, QueryBuilder
+from ringtail import RingtailCore, Filters, QueryBuilder
 import os
 import json
 import pytest
@@ -301,7 +301,7 @@ class TestRingtailCore:
     def test_generate_interactions_prepare_filters(self):
         test_filters = []
         rtc = RingtailCore()
-        filters = ringtailoptions.Filters(
+        filters = Filters(
             {
                 "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
                 "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
@@ -313,7 +313,7 @@ class TestRingtailCore:
             test_filters.append(nufilter)
 
         assert (
-            ringtailoptions.Filters(
+            Filters(
                 {
                     "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
                     "vdw_interactions": [("A:ARG:123:", True)],
@@ -323,7 +323,7 @@ class TestRingtailCore:
         )
 
         assert (
-            ringtailoptions.Filters(
+            Filters(
                 {
                     "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
                     "vdw_interactions": [("A:VAL:124:", True)],
@@ -333,7 +333,7 @@ class TestRingtailCore:
         )
 
         assert (
-            ringtailoptions.Filters(
+            Filters(
                 {
                     "hb_interactions": [("A:ARG:123:", True)],
                     "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
@@ -343,7 +343,7 @@ class TestRingtailCore:
         )
 
         assert (
-            ringtailoptions.Filters(
+            Filters(
                 {
                     "hb_interactions": [("A:VAL:124:", True)],
                     "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
@@ -353,7 +353,7 @@ class TestRingtailCore:
         )
 
         assert (
-            ringtailoptions.Filters(
+            Filters(
                 {
                     "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
                     "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
@@ -601,7 +601,7 @@ class TestStorageMan:
 
         assert (
             json.loads(bookmark_filters_db_str)
-            == ringtailoptions.Filters(
+            == Filters(
                 {
                     "eworst": -3.0,
                     "vdw_interactions": [["A:VAL:279:", True]],

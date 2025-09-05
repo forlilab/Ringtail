@@ -4,10 +4,9 @@
 # Ringtail multiprocess workers
 #
 
-import platform
 import time
 import sys
-from .logutils import LOGGER as logger
+from .logutils import LOGGER
 import traceback
 import queue
 from .parsers import parse_single_dlg, parse_vina_result
@@ -93,7 +92,7 @@ class DockingFileReader(mp.Process):
                     text = list(next_task.keys())[0]
                 else:
                     text = next_task
-                logger.debug("Next Task: " + str(text))
+                LOGGER.debug("Next Task: " + str(text))
                 # if a poison pill is received, this worker's job is done, quit
                 if next_task is None:
                     # before leaving, pass the poison pill back in the queue
@@ -198,7 +197,7 @@ class DockingFileReader(mp.Process):
                 self.queueOut.put(obj, block=True, timeout=timeout)
                 break
             except queue.Full:
-                logger.debug(
+                LOGGER.debug(
                     f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining."
                 )
                 attempts += 1
@@ -285,13 +284,13 @@ class Writer(mp.Process):
                 next_task = self.queue.get()
                 if next_task is None:
                     self.num_readers -= 1
-                    logger.debug(
+                    LOGGER.debug(
                         f"Closing process. Remaining open processes: {self.num_readers}"
                     )
                     if self.num_readers == 0:
-                        logger.info("Performing final database write")
+                        LOGGER.info("Performing final database write")
                         self.write_to_storage()
-                        logger.info("File processing completed")
+                        LOGGER.info("File processing completed")
                         break
                     continue
 
@@ -308,13 +307,13 @@ class Writer(mp.Process):
                     self._log_progress()
                     self.write_to_storage()
             if self.counter > 0:
-                logger.info("Performing final database write")
+                LOGGER.info("Performing final database write")
                 self.write_to_storage()
-                logger.info("File processing completed")
+                LOGGER.info("File processing completed")
 
         except Exception:
             tb = traceback.format_exc()
-            logger.error("Exception during writing:\n" + tb)
+            LOGGER.error("Exception during writing:\n" + tb)
             raise WriteToStorageError("Error occurred while writing to the database.")
 
     def write_to_storage(self):

@@ -5,28 +5,24 @@
 
 import sys
 import time
-from ringtail import CLOptionParser
-from ringtail import RingtailCore
-from ringtail import logutils
+from ringtail import RingtailCore, CLOptionParser, LOGGER
 
 
 def main():
     time0 = time.perf_counter()
 
     try:
-        # set up the logger
-        logger = logutils.LOGGER
         # parse command line options and config file (if given)
         cli = CLOptionParser()
         rtcore: RingtailCore = cli.rtcore
     except Exception as e:
-        logger.critical("ERROR: " + str(e))
+        LOGGER.critical("ERROR: " + str(e))
         sys.exit(1)
 
     # create manager object for virtual screening. Will make database if needed
     try:
         if cli.process_mode == "write":
-            logger.debug("Starting write process")
+            LOGGER.debug("Starting write process")
             # -#-#- Processes results, will add receptor if "save_receptor" is true
             rtcore.add_results_from_files(**cli.file_sources, **vars(cli.write_options))
         time1 = time.perf_counter()
@@ -37,7 +33,7 @@ def main():
 
         if cli.process_mode == "read":
             bookmark_name = cli.filter_options.bookmark_name
-            logger.debug("Starting read process")
+            LOGGER.debug("Starting read process")
 
             # -#-#- Perform filtering
             if cli.filtering:
@@ -104,20 +100,20 @@ def main():
                 rtcore.display_pymol(bookmark_name)
 
     except Exception as e:
-        logger.critical("ERROR: " + str(e))
+        LOGGER.critical("ERROR: " + str(e))
         sys.exit(1)
 
     # print performance times
     time2 = time.perf_counter()
-    logger.info(
+    LOGGER.info(
         "Time to initialize/write database: "
         + str(round(time1 - time0, 2))
         + " seconds"
     )
-    logger.info(
+    LOGGER.info(
         "Time to perform filtering: " + str(round(time2 - time1, 2)) + " seconds "
     )
-    if logger.level() in ["DEBUG", "INFO"]:
+    if LOGGER.level() in ["DEBUG", "INFO"]:
         print(cli.parser.epilog)
     return
 

@@ -4,13 +4,11 @@
 # Ringtail output manager
 #
 
-from .receptormanager import ReceptorManager
 from .exceptions import OutputError
 from .ringtailoptions import Filters
 import os
 import json
 import numpy as np
-import time
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib import colors
@@ -275,7 +273,7 @@ class OutputManager:
         except Exception as e:
             raise OutputError("Error occurred while writing SDF from RDKit Mol") from e
 
-    def write_receptor_pdbqt(self, recname: str, receptor_compbytes):
+    def write_receptor_pdbqt(self, recname: str, receptor_str: str):
         """
         Writes a pdbqt file from receptor "blob"
 
@@ -286,7 +284,6 @@ class OutputManager:
 
         if not recname.endswith(".pdbqt"):
             recname = recname + ".pdbqt"
-        receptor_str = ReceptorManager.blob2str(receptor_compbytes)
         with open(recname, "w") as f:
             f.write(receptor_str)
 

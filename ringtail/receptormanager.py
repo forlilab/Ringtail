@@ -5,7 +5,7 @@
 #
 
 import gzip
-from .logutils import LOGGER as logger
+from .logutils import LOGGER
 
 
 class ReceptorManager:
@@ -33,7 +33,7 @@ class ReceptorManager:
             else:
                 with open(rec_file, "r") as r:
                     receptors.append((gzip.compress(r.read().encode()), rec_name))
-        logger.debug("Receptor blob parepared successfully.")
+        LOGGER.debug("Receptor blob parepared successfully.")
         return receptors
 
     @staticmethod

@@ -9,7 +9,7 @@ import gzip
 import bz2
 import numpy as np
 from .exceptions import FileParsingError
-from .logutils import LOGGER as logger
+from .logutils import LOGGER
 
 
 def parse_single_dlg(fname):
@@ -634,7 +634,7 @@ def parse_vina_result(data_pointer) -> dict:
         else:
             open_fn = open
         ligname = data_pointer.split(".pdbqt")[0].split("/")[-1]
-        logger.debug("Parsing vina docking file")
+        LOGGER.debug("Parsing vina docking file")
         with open_fn(data_pointer, "rb") as fp:
             # this should decode lines into iterable object
             data_object = [line.decode("utf-8") for line in fp]
@@ -643,7 +643,7 @@ def parse_vina_result(data_pointer) -> dict:
         data_object = list(data_pointer.values())[0].splitlines()
         # get the first (and only, probably not optimal) key which should be the ligand name
         ligname = list(data_pointer.keys())[0]
-        logger.debug("Parsing vina docking string")
+        LOGGER.debug("Parsing vina docking string")
 
     return _read_vina_results_lines(data_object, ligname)
 

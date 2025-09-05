@@ -6,7 +6,6 @@
 
 import numpy as np
 import tempfile
-import meeko
 from meeko import PDBQTReceptor
 
 

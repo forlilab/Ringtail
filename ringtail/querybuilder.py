@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail query builder
+#
+
+
 class QueryBuilder:
     """
     Currently only configured to work with sqlite, will have to subclass once we add more database types

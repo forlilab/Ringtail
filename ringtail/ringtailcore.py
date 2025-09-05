@@ -929,12 +929,12 @@ class RingtailCore:
         """
         Export receptor in database to pdbqt
         """
-        recname, recblob = self.get_receptor_object()
-        if recblob is None:
+        recname, recstr = self.get_receptor_object()
+        if recstr is None:
             LOGGER.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
             return
         output_manager = OutputManager()
-        output_manager.write_receptor_pdbqt(recname, recblob)
+        output_manager.write_receptor_pdbqt(recname, recstr)
 
     def get_previous_filter_data(
         self,
@@ -998,15 +998,16 @@ class RingtailCore:
 
         return all_data, passing_data
 
-    def get_receptor_object(self) -> tuple:
+    def get_receptor_object(self) -> tuple[str, str]:
         """
         Gets the receptor object from the database
 
         Returns:
-            tuple: receptor name and receptor blob
+            tuple[str,str]: receptor name and receptor blob converted to string
         """
         with self.storageman as sm:
-            return sm.fetch_receptor_object()
+            name, blob = sm.fetch_receptor_object()
+        return name, ReceptorManager.blob2str(blob)
 
     # endregion
 
@@ -1182,7 +1183,7 @@ class RingtailCore:
 
                 # load receptor if it exist in database
                 rec_name = receptor[0]
-                rec_string = ReceptorManager.blob2str(receptor[1])
+                rec_string = receptor[1]
 
                 rec_string_list = rec_string.split("\n")
                 # print(f"receptor type: {type(rec_string_list)}")
@@ -1921,11 +1922,9 @@ class RingtailCore:
         # need receptor file contents if adding interaction
         if add_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
-            receptor_blob = self.get_receptor_object()[1]
-            try:
-                from .receptormanager import ReceptorManager as rm
 
-                results.receptor_string = rm.blob2str(receptor_blob)
+            try:
+                results.receptor_string = self.get_receptor_object()[1]
             except:
                 raise ResultsProcessingError(
                     "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."

@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail clustering manager
+#
+
 import numpy as np
 from rdkit import DataStructs
 from rdkit import Chem

@@ -15,7 +15,6 @@ from .exceptions import (
     StorageError,
     DatabaseInsertionError,
     DatabaseConnectionError,
-    DatabaseTableCreationError,
     DatabaseQueryError,
     OptionError,
     MergeError,

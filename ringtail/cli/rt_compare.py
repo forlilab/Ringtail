@@ -8,11 +8,11 @@ import argparse
 import json
 import sys
 import os
-from ringtail import OutputManager, OptionError
+from ringtail import OutputManager
 from ringtail import OptionError
-from ringtail import logutils
+from ringtail import LOGGER
 from ringtail import QueryBuilder
-from ringtail import get_valid_storageclass, RingtailDefaults
+from ringtail import get_valid_storageclass, RingtailDefaults, StorageManager
 import traceback
 
 
@@ -44,7 +44,7 @@ def cmdline_parser(defaults={}):
     )  # using dict -> str -> dict as a safe copy method
 
     if confargs.config is not None:
-        logutils.LOGGER.info("Reading options from config file")
+        LOGGER.info("Reading options from config file")
         with open(confargs.config) as f:
             c = json.load(f)
             config.update(c)
@@ -144,8 +144,7 @@ def cmdline_parser(defaults={}):
 
 def main():
     time0 = time.perf_counter()
-    logger = logutils.LOGGER
-    logger.info("Starting a ringtail database compare process")
+    LOGGER.info("Starting a ringtail database compare process")
     try:
         args = cmdline_parser()
 
@@ -163,16 +162,16 @@ def main():
 
         # set logging level
         if args.verbose:
-            level = logger.set_level("DEBUG")
-            logger.add_filehandler("ringtail", level)
+            level = LOGGER.set_level("DEBUG")
+            LOGGER.add_filehandler("ringtail", level)
         else:
-            level = logger.set_level("WARNING")
+            level = LOGGER.set_level("WARNING")
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
 
         # check that ref database exists
         if not os.path.exists(wanted_dbs[0]):
-            logger.critical("Wanted database {0} not found!".format(wanted_dbs[0]))
+            LOGGER.critical("Wanted database {0} not found!".format(wanted_dbs[0]))
 
         ref_db = wanted_dbs[0]
         wanted_dbs = wanted_dbs[1:]
@@ -197,7 +196,7 @@ def main():
                 for db in unwanted_dbs:
                     bookmark_list.append(original_bookmark_name)
 
-        logger.info("Starting cross-reference process")
+        LOGGER.info("Starting cross-reference process")
 
         # set database type to default if not specified in cmdline args
         if args.database_type is None:
@@ -205,7 +204,7 @@ def main():
         # ensure the specified database types are supported
         storagemanager = get_valid_storageclass(args.database_type)
 
-        dbman = storagemanager(ref_db)
+        dbman: StorageManager = storagemanager(ref_db)
 
         last_db = None
         num_wanted_dbs = len(wanted_dbs)
@@ -213,9 +212,9 @@ def main():
         # storageman is a context manager, and keeps connection to the database open within the `with` statement
         with dbman:
             for idx, db in enumerate(wanted_dbs):
-                logger.info(f"cross-referencing {db}")
+                LOGGER.info(f"cross-referencing {db}")
                 if not os.path.exists(db):
-                    logger.critical("Wanted database {0} not found!".format(db))
+                    LOGGER.critical("Wanted database {0} not found!".format(db))
                 previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
                     db,
                     previous_bookmarkname,
@@ -229,9 +228,9 @@ def main():
 
             if unwanted_dbs is not None:
                 for idx, db in enumerate(unwanted_dbs):
-                    logger.info(f"cross-referencing {db}")
+                    LOGGER.info(f"cross-referencing {db}")
                     if not os.path.exists(db):
-                        logger.critical("Unwanted database {0} not found!".format(db))
+                        LOGGER.critical("Unwanted database {0} not found!".format(db))
                     previous_bookmarkname, number_passing_ligands = (
                         dbman.crossref_filter(
                             db,
@@ -245,7 +244,7 @@ def main():
                     last_db = db
                 temp_table_count += 1
 
-            logger.info("Writing log for comparing filtered databases")
+            LOGGER.info("Writing log for comparing filtered databases")
 
             with OutputManager(log_file=args.log) as opm:
                 if args.save_bookmark is not None:
@@ -276,20 +275,20 @@ def main():
                     csv_name = "crossref.csv"
                 dataframe = dbman.to_dataframe(previous_bookmarkname, table=True)
                 dataframe.to_csv(csv_name)
-                logger.info("Exported bookmark to csv")
+                LOGGER.info("Exported bookmark to csv")
 
-        logger.info(
+        LOGGER.info(
             "Time to cross-reference: {0:.0f} seconds".format(
                 time.perf_counter() - time0
             )
         )
-        logger.info("Database comparison process complete.")
+        LOGGER.info("Database comparison process complete.")
 
     except Exception as e:
         tb = traceback.format_exc()
-        logger.debug(tb)
-        logger.critical(str(e))
-        logger.error(
+        LOGGER.debug(tb)
+        LOGGER.critical(str(e))
+        LOGGER.error(
             "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
         )
         sys.exit(1)
