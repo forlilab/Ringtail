@@ -49,7 +49,7 @@ class QueryBuilder:
             WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
             WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
             WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
-            ELSE 'not evaluated'
+            ELSE ''
         END AS status"""
         self.selects.append(status_case)
         return self
