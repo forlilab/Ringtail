@@ -1262,7 +1262,7 @@ class StorageManager:
                 "rec_atom",
             ],
         )
-        print("interaction dataframe: \n\n", interactions_df)
+
         return interactions_df
 
     def accept_pose(self, pose_id: int):
