@@ -1520,6 +1520,20 @@ class RingtailCore:
         with self.storageman:
             return self.storageman.get_all_bookmark_names()
 
+    def get_bookmark_interactions(self, bookmark_name: str):
+        """
+        Get all interactions represented by the poses in a bookmark
+        (could also be status table)
+
+        Args:
+            bookmark_name (str): _description_
+
+        Returns:
+            dict: key is column name,
+        """
+        with self.storageman as sm:
+            return sm.fetch_bookmark_interactions(bookmark_name)
+
     def create_rdkit_mol(
         self,
         ligname: str,

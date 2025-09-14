@@ -1234,6 +1234,37 @@ class StorageManager:
             return
         return [row[0] for row in self.db_query(*query.build()).fetchall()]
 
+    def fetch_bookmark_interactions(self, bookmark_name: str) -> pd.DataFrame:
+        query = f"""
+        SELECT DISTINCT 
+            II.interaction_type,
+            II.rec_chain,
+            II.rec_resname,
+            II.rec_resid,
+            II.rec_atom
+        FROM Interaction_indices AS II
+        JOIN Interactions AS I ON I.interaction_id=II.interaction_id
+        WHERE I.pose_id IN (
+            SELECT Pose_id FROM filtered_poses 
+                WHERE filter_id = 
+                    (SELECT filter_id FROM Filters 
+                    WHERE name = '{bookmark_name}')
+                    );"""
+        # iterable of tuples
+        interactions = self.db_query(query).fetchall()
+        interactions_df = pd.DataFrame(
+            interactions,
+            columns=[
+                "interaction_type",
+                "rec_chain",
+                "rec_resname",
+                "rec_resid",
+                "rec_atom",
+            ],
+        )
+        print("interaction dataframe: \n\n", interactions_df)
+        return interactions_df
+
     def accept_pose(self, pose_id: int):
         """
         Will add pose_id to accepted, and delete from maybe and rejected if needed
