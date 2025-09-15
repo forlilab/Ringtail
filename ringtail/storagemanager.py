@@ -2528,6 +2528,12 @@ class StorageManager:
 
         return num_passing_poses
 
+    def get_useful_columns(self):
+        return {
+            "Results": ["ligname", "pose_id", "docking_score", "pose_rank"],
+            "Ligands": ["smiles"],
+        }
+
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
         """
         Gets all column names from given tables

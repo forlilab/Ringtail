@@ -893,6 +893,7 @@ class RingtailCore:
         return number_similar
 
     def export_csv(self, requested_data: str, csv_name: str, table=False):
+        # TODO might be time to update this method
         """Get requested data from database, export as CSV
 
         Args:
@@ -1347,6 +1348,10 @@ class RingtailCore:
         """
         with self.storageman as sm:
             return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
+
+    def get_columns_in_table(self) -> dict[(str, list)]:
+        with self.storageman as sm:
+            return sm.get_useful_columns()
 
     def get_row_from_pose(self, table: str, pose_id: int) -> int:
         """
