@@ -1322,6 +1322,26 @@ class StorageManager:
             """DELETE FROM Maybe WHERE Pose_id = ?;""", [pose_id], commit=True
         )
 
+    def prepare_column_export_query(self, columns: dict, bookmark: str) -> str:
+        query = self.QueryBuilder()
+        for _, column in columns.items():
+            if column[0]:
+                if column[1]:
+                    # alias
+                    query.SELECT(f"{column[0]} AS {column[1]}")
+                else:
+                    query.SELECT(column[0])
+        # not the most flexible way to allow column selection
+        query.FROM("Results")
+        query.JOIN("Ligands", "Ligands", on="ligand_id", to="Results")
+
+        if self.is_bookmark(bookmark):
+            query.IN_BOOKMARK(bookmark)
+        elif self._is_statustable(bookmark):
+            query.JOIN(bookmark, bookmark, "pose_id")
+
+        return query.build()[0]
+
     # endregion
 
     # region virtual public api
@@ -2530,8 +2550,11 @@ class StorageManager:
 
     def get_useful_columns(self):
         return {
-            "Results": ["ligname", "pose_id", "docking_score", "pose_rank"],
-            "Ligands": ["smiles"],
+            "Results": [
+                "docking_score",
+                "pose_rank",
+            ],
+            "Ligands": ["ligname", "smiles"],
         }
 
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):

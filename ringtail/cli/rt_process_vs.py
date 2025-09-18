@@ -73,15 +73,16 @@ def main():
 
             # write out requested CSVs
             if cli.output_options.export_bookmark_csv:
-                rtcore.export_csv(
+                rtcore.export_table_as_csv(
                     cli.output_options.export_bookmark_csv,
                     cli.output_options.export_bookmark_csv + ".csv",
-                    table=True,
                 )
 
             # export query as csv
             if cli.output_options.export_query_csv:
-                rtcore.export_csv(cli.output_options.export_query_csv, "query.csv")
+                rtcore.export_sql_as_csv(
+                    cli.output_options.export_query_csv, "query.csv"
+                )
 
             # export bookmark as database
             if cli.output_options.export_bookmark_db:

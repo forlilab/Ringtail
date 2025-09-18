@@ -892,7 +892,7 @@ class RingtailCore:
             )
         return number_similar
 
-    def export_csv(self, requested_data: str, csv_name: str, table=False):
+    def _export_csv(self, requested_data: str, csv_name: str, table=False):
         # TODO might be time to update this method
         """Get requested data from database, export as CSV
 
@@ -904,6 +904,23 @@ class RingtailCore:
         with self.storageman:
             df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
+
+    def export_columns_as_csv(
+        self,
+        columns: list[str],
+        bookmark_name: str,
+        csv_name: str = "columns_output.csv",
+    ):
+        with self.storageman as sm:
+            sql = sm.prepare_column_export_query(columns, bookmark_name)
+
+        self._export_csv(sql, csv_name, False)
+
+    def export_table_as_csv(self, table: str, csv_name: str = "table_output.csv"):
+        self._export_csv(table, csv_name, True)
+
+    def export_sql_as_csv(self, sql: str, csv_name: str = "sql_output.csv"):
+        self._export_csv(sql, csv_name, False)
 
     def export_bookmark_db(self, bookmark_name: str) -> str:
         """Export database containing data from bookmark
