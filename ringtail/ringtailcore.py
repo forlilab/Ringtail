@@ -922,7 +922,7 @@ class RingtailCore:
     def export_sql_as_csv(self, sql: str, csv_name: str = "sql_output.csv"):
         self._export_csv(sql, csv_name, False)
 
-    def export_bookmark_db(self, bookmark_name: str) -> str:
+    def export_bookmark_db(self, bookmark_name: str, db_filepath: str = None) -> str:
         """Export database containing data from bookmark
 
         Args:
@@ -931,17 +931,19 @@ class RingtailCore:
         Returns:
             str: name of the new, exported database
         """
-        bookmark_db_name = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+        if db_filepath is None:
+            db_filepath = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+
         LOGGER.info("Exporting bookmark database")
-        if os.path.exists(bookmark_db_name):
+        if os.path.exists(db_filepath):
             LOGGER.warning(
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
         with self.storageman:
-            self.storageman.create_subset_database(bookmark_name, bookmark_db_name)
+            self.storageman.create_subset_database(bookmark_name, db_filepath)
 
-        return bookmark_db_name
+        return db_filepath
 
     def export_receptor(self):
         """
