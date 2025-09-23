@@ -1384,7 +1384,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def update_database_version(self, new_version, consent=False):
+    def update_database_version(self, new_version, consent=False, backup=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
         #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as

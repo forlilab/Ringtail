@@ -1666,7 +1666,9 @@ class RingtailCore:
         with self.storageman as sm:
             sm.merge_databases(**{"merging_db": merging_db, "backup": backup})
 
-    def update_database_version(self, consent=False, new_version="3.0.0"):
+    def update_database_version(
+        self, consent: bool = False, new_version: str = "3.0.0", backup: bool = False
+    ):
         """
         Updates/upgrades sqlite database schema 1.0.0 through 3.0.0. The upgrade may take a while to
         complete, as it has to upgrade via each major upgrade, e.g., it will not upgrade straight
@@ -1684,7 +1686,7 @@ class RingtailCore:
             bool: consent/success
         """
 
-        return self.storageman.update_database_version(new_version, consent)
+        return self.storageman.update_database_version(new_version, consent, backup)
 
     @staticmethod
     def defaults(mode: str = None) -> dict:

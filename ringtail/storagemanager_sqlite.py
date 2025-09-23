@@ -1912,7 +1912,7 @@ class StorageManagerSQLite(StorageManager):
 
         return True
 
-    def update_database_version(self, new_version, consent=False):
+    def update_database_version(self, new_version, consent=False, backup=False):
         """method that updates sqlite database schema 1.0.0 through 3.0.0.
         The way it currently works, it has to upgrade via each major upgrade, e.g., it will not upgrade straight
         from 1.0.0 to 3.0.0, but rather 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0
@@ -1924,6 +1924,8 @@ class StorageManagerSQLite(StorageManager):
             bool: final consent
         """
         self.conn = self._create_connection()
+        if backup:
+            self.clone()
         # get consent, same for both
         if not consent:
             logger.warning(
