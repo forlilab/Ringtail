@@ -280,11 +280,11 @@ class TestRingtailCore:
     def test_export_csv(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7, log_file="different_log.txt", bookmark_name="export_csv")
-        rtc.export_csv("Ligands", "Ligands.csv", True)
+        rtc.export_table_as_csv("Ligands", "Ligands.csv")
 
         assert os.path.exists("Ligands.csv")
         os.system("rm Ligands.csv")
-        rtc.export_csv("export_csv", "export_csv.csv", True)
+        rtc.export_table_as_csv("export_csv", "export_csv.csv")
         assert os.path.exists("export_csv.csv")
         os.system("rm export_csv.csv")
 
