@@ -2240,7 +2240,7 @@ class StorageManagerDuckDB(StorageManager):
             return None
         return self.db_query(*query.build()).fetchone()[0]
 
-    def create_status_tables(self) -> None:
+    def _create_status_tables(self) -> None:
         """
         Creates pose status tables if needed
         """

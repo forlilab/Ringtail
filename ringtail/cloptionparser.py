@@ -735,11 +735,10 @@ class CLOptionParser:
             db_file=db_file,
             logging_level=log_level,
             storage_type=storage_type,
+            access_mode="cli",
         )
         # make sure we log the command line prompt
         LOGGER.info("Command line prompt: " + self.cmd_line_prompt)
-        # specify core run mode as this affects how certain errors are handled
-        self.rtcore._run_mode = "cli"
         self.print_summary = parsed_opts.print_summary
 
         if self.process_mode == "write":

@@ -2063,6 +2063,7 @@ class StorageManagerSQLite(StorageManager):
         self._delete_table("Bookmarks")
         # create Filter and filtered_poses tables
         self._create_filtering_tables()
+        self._create_status_tables()
         # drop indices
         indices = self.db_query(
             "SELECT name FROM sqlite_master WHERE type == 'index'"
@@ -2492,7 +2493,7 @@ class StorageManagerSQLite(StorageManager):
             return None
         return self.db_query(*query.build()).fetchone()[0]
 
-    def create_status_tables(self) -> None:
+    def _create_status_tables(self) -> None:
         """
         Creates pose status tables if needed
         """

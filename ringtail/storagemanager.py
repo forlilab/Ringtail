@@ -16,10 +16,7 @@ from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters, statuses
-from .exceptions import (
-    StorageError,
-    OptionError,
-)
+from .exceptions import StorageError, OptionError, VersionError
 from .clustermanager import *
 from .querybuilder import QueryBuilder
 from collections import defaultdict
@@ -1490,7 +1487,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def create_status_tables(self):
+    def _create_status_tables(self):
         """
         Creates status tables if needed
         """
@@ -1546,6 +1543,7 @@ class StorageManager:
         self._create_interaction_table()
         self._create_db_properties_table()
         self._create_filtering_tables()
+        self._create_status_tables()
 
         self._set_ringtail_db_schema_version(self._db_schema_ver)
         if commit:
@@ -1886,6 +1884,7 @@ class StorageManager:
 
         Raises:
             StorageError
+            VersionError
         """
         try:
             # check to see if file exist, and if it does, check that version is matching
@@ -1893,7 +1892,7 @@ class StorageManager:
                 self.conn = self._create_connection()
                 compatible, db_version = self.check_ringtaildb_version()
                 if not compatible:
-                    raise StorageError(
+                    raise VersionError(
                         f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
                     )
             else:
@@ -1906,6 +1905,8 @@ class StorageManager:
             logger.debug(
                 f"Ringtail connected to database {self.db_file} with connection: {self.conn}"
             )
+        except VersionError as e:
+            raise
         except Exception as e:
             raise StorageError(f"Error while creating or connecting to database: {e}.")
 

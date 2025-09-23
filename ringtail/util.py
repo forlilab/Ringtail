@@ -131,3 +131,33 @@ def ligand_sdf_to_pdb(sdf_file: str):
     else:
         mol = Chem.AddHs(mol, addCoords=True)
     Chem.MolToPDBFile(mol, os.path.join(name + ".pdb"), flavor=0)
+
+
+def detect_db_type(filepath: str) -> str:
+    """
+    Attempts to detect storage type of an existing database file
+
+    Args:
+        filepath (str): _description_
+
+    Raises:
+        TypeError: _description_
+
+    Returns:
+        str: _description_
+    """
+    with open(filepath, "rb") as f:
+        header = f.read(16)
+    if header.startswith(b"SQLite"):
+        return "sqlite"
+    elif header.find(b"DUCK") != -1:
+        return "duckdb"
+    else:
+        try:
+            # check if empty sqlite file
+            import sqlite3
+
+            sqlite3.connect(filepath)
+            return "sqlite"
+        except:
+            raise TypeError(f"Database type not recognized in file {filepath}")

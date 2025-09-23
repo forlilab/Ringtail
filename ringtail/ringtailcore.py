@@ -85,14 +85,17 @@ class RingtailCore:
         db_file: str = RingtailDefaults.output_db,
         storage_type: str = RingtailDefaults.storage_type,
         logging_level: str = "WARNING",
+        access_mode: str = "api",
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
         Can set logger level here, otherwise change it by LOGGER.setLevel("level")
 
         Args:
             db_file (str): Database file to initialize core with. Defaults to "output.db".
-            storage_type (str, optional): Database setup to use for interacting with the database. Defaults to "sqlite".
+            storage_type (str, optional): Database setup to use for interacting with the database.
+                        If db file exist, it will attempt to detect storage type. Defaults to "sqlite".
             logging_level (str, optional): Global logger level. Defaults to "DEBUG".
+            access_mode (str, optional): through what process Ringtail is accessed. Defaults to "api".
         """
 
         # Initiate logging
@@ -101,9 +104,10 @@ class RingtailCore:
         if LOGGER.level() == "DEBUG":
             LOGGER.add_filehandler()
 
-        LOGGER.info(
-            f"[     New RingtailCore object initialized with database file {db_file}    ]"
-        )
+        # try to find existing storage type
+        if Path(db_file).is_file():
+            storage_type = detect_db_type(db_file)
+
         # Check if storage type is implemented
         try:
             storageman = get_valid_storageclass(storage_type)
@@ -115,7 +119,12 @@ class RingtailCore:
         self.storagetype = storage_type
         self.db_file = db_file
         self.storageman: StorageManager = storageman(db_file)
-        self._run_mode = "api"
+
+        LOGGER.info(
+            f"[     New RingtailCore object initialized with database file {db_file}    ]"
+        )
+
+        self._run_mode = access_mode
 
     def get_previous_docking_mode(self) -> Union[None, str]:
         with self.storageman as sm:
@@ -1341,13 +1350,6 @@ class RingtailCore:
                 sm.maybe_pose(pose_id)
             elif status == "rejected":
                 sm.reject_pose(pose_id)
-
-    def enable_status_assignment(self):
-        """
-        Handles preparing the db to enable assigning status to poses
-        """
-        with self.storageman as sm:
-            sm.create_status_tables()
 
     def get_data_table_pointer(
         self, table: str, length: int = 100, starting_pose_id: int = 0
