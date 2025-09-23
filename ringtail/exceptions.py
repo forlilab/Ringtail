@@ -13,6 +13,10 @@ class MergeError(StorageError):
     pass
 
 
+class VersionError(StorageError):
+    pass
+
+
 class DatabaseInsertionError(StorageError):
     pass
 
