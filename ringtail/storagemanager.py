@@ -1937,6 +1937,9 @@ class StorageManager:
         self._delete_table("Filters")
         self._delete_table("Interactions")
         self._delete_table("Interaction_indices")
+        self._delete_table("Accepted")
+        self._delete_table("Maybe")
+        self._delete_table("Rejected")
         self._delete_table("Results")
         # then, fetch remaining tables
         tables = self.tables_in_db()
