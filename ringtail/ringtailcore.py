@@ -104,7 +104,7 @@ class RingtailCore:
         if LOGGER.level() == "DEBUG":
             LOGGER.add_filehandler()
 
-        # try to find existing storage type
+        # try to find existing storage type, will overwrite input
         if Path(db_file).is_file():
             storage_type = detect_db_type(db_file)
 

@@ -248,14 +248,6 @@ def cmdline_parser(defaults: dict = {}):
         metavar="DATABASE",
     )
     read_parser.add_argument(
-        "-st",
-        "--storage_type",
-        help="specify a database file to perform actions with",
-        action="store",
-        type=str,
-        metavar="sqlite",
-    )
-    read_parser.add_argument(
         "-s",
         "--bookmark_name",
         help="Specify name for db view of passing results to create or export from",
