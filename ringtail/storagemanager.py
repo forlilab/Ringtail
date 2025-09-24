@@ -1381,14 +1381,17 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def update_database_version(self, new_version, consent=False, backup=False):
+    def update_database_version(self, new_version: str, consent=False, backup=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
-        #NOTE: If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as
+        #NOTE: If you created the database with the duplicate handling option,
+        # there is a chance of inconsistent behavior of anything involving interactions as
         the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
 
         Args:
+            new_version (str): _description_
             consent (bool, optional): variable to ensure consent to update database is explicit
+            backup (bool, optional): _description_. Defaults to False.
 
         Returns:
             bool: final consent
