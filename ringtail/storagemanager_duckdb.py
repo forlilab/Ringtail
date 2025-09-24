@@ -2024,7 +2024,7 @@ class StorageManagerDuckDB(StorageManager):
 
         return True
 
-    def _create_connection(self) -> duckdb.DuckDBPyConnection:
+    def _create_connection(self):
         """Creates database connection to self.db_file
 
         Returns:
