@@ -5,6 +5,7 @@
 #
 
 from time import sleep
+import sys
 import queue
 import fnmatch
 import os
@@ -20,7 +21,17 @@ import multiprocessing as mp
 from .util import iterate_nested
 from .ringtailoptions import ResultsObject, validate_file_pattern
 
-mp.set_start_method("fork", force=True)
+
+def _set_start_method():
+    preferred = "fork" if sys.platform != "win32" else "spawn"
+    try:
+        mp.set_start_method(preferred, force=True)
+    except RuntimeError:
+        # Already set elsewhere; ignore
+        pass
+
+
+_set_start_method()
 
 
 class MPManager:
