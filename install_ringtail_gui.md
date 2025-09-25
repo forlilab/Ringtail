@@ -9,8 +9,7 @@ micromamba activate ringtail_test_gui
 micromamba install -c conda-forge meeko rdkit scipy pandas matplotlib pyside6
 
 # saltviewer dependencies
-micromamba install -c conda-forge pyopengl pylinalg wgpu-py pygltflib pygfx line_profiler tomli
-pip install prody==2.6.1
+micromamba install -c conda-forge pyopengl prody pylinalg wgpu-py pygltflib pygfx line_profiler tomli
 
 mkdir ringtail_test_gui
 cd ringtail_test_gui
@@ -18,12 +17,13 @@ cd ringtail_test_gui
 # download and install ringtail
 git clone -b performance git@github.com:forlilab/PrivateRingtail.git
 cd PrivateRingtail
-pip install .
 
 # download molviewer
 git clone -b pyside git@github.com:forlilab/salticidae.git
 
 # activate the environment after all installs
+
+pip install .
 micromamba activate ringtail_test_gui
 
 # open the ringtail gui
