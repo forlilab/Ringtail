@@ -992,10 +992,6 @@ class RingtailCore:
             with OutputManager(log_file) as opm:
                 opm.write_filter_results_in_log(new_data)
 
-    def get_previous_filters(self, bookmark_name: str) -> tuple[dict, str]:
-        with self.storageman as sm:
-            return sm.fetch_filters_and_filterwindow(bookmark_name)
-
     def get_plot_data(
         self,
         bookmark_name: str = None,
@@ -1327,21 +1323,52 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.db_query(query, params, commit).fetchall()
 
-    def update_pose_status(self, pose_id: int, status: str):
+    def set_ligand_status(
+        self,
+        status: str,
+        ligands: Union[str, list[str]] = None,
+        pose_ids: Union[int, list[int]] = None,
+        bookmark_name: str = None,
+    ):
+        """
+        Will update the status of specified ligand-pose-bookmark combination. E.g., if only a ligand is provided, all its poses will be given
+        the desired status. If just poses are provided, they will be given chosen status. If only a bookmark is provided, all poses in that
+        bookmark will be given the status. If one or more ligands are given + a bookmark, the poses of those ligands in that bookmark will
+        be given the status. If pose_ids are also specified, they will be given the set status even if not in the bookmark.
+
+        Args:
+            status (str): _description_
+            ligand_name (Union[str, list[str]], optional): _description_. Defaults to None.
+            pose_id (Union[int, list[int]], optional): _description_. Defaults to None.
+            bookmark_name (str, optional): _description_. Defaults to None.
+        """
+        status = status.lower()
+
+        ligands_poses = self._fetch_select_ligands_poses(
+            ligands, pose_ids, bookmark_name
+        )
+        # parse to just poses, I don't need ligand names for this
+        parsed_poses = [
+            pose for pose_list in ligands_poses.values() for pose in pose_list
+        ]
+        self.update_pose_status(pose_id=parsed_poses, status=status)
+
+    def update_pose_status(self, pose_id: Union[int, list[int]], status: str):
         """
         Updates the status of a given pose so that it is only ever in one status table
 
         Args:
-            pose_id (int): pose id for which a status is assigned
+            pose_id (Union[int, list[int]]): pose id for which a status is assigned, can be a single pose or a list
             status (str): new status
 
         Raises:
             OptionError
         """
-        status_options = ["accepted", "maybe", "rejected"]
         status = status.lower()
-        if status not in status_options:
-            raise OptionError(f"Status option {status} not a valid option.")
+        if status not in statuses:
+            raise OptionError(
+                f"""The selected status {status} is not a valid option for Ringtail. Please choose between {','.join(statuses)}"""
+            )
 
         with self.storageman as sm:
             if status == "accepted":
