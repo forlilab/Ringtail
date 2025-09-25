@@ -2,6 +2,73 @@
 
 Changes in Ringtail
 ######################
+Changes in 3.x: New graphical user interface and support for DuckDB
+********************************************************************
+
+Changes in command line tools
+==================================================
+* New filter options for molecular weight `--ligand_min_molweight` and `--ligand_max_molweight`
+* There is now one upgrade script with version as input, where there previously was one db upgrade script per version
+* `--storage_type` can be used to specify database engine, with option to use 'duckdb' (defualts to sqlite)
+* `--docking_mode` now only an option for `write` as it is not relevant for the `read` processes
+* Writing a log file after filtering is now optional, and will only be done if `--log_file` is specified
+* `--outfields` now uses names of columns as they are in the database. The changes:
+    ============ ===============
+      Old          New
+    ============ ===============
+    ligand_name   ligname 
+    e             docking_score
+    le            leff
+    delta         deltas
+    ref_rmsd      reference_rmsd
+    e_inter       energies_inter
+    e_vdw         energies_vdw
+    e_elec        energies_electro
+    e_intra       energies_intra
+    rank          pose_rank
+    run           run_number
+    hb            num_hb
+    ============ ===============
+
+
+Enhancements to the codebase
+==============================
+***** Fully developed API can use python for scripting exclusively (see :ref:`API <api>` page for full description)
+* DuckDB offered as an alternative to SQLite, with overall similar database creating times and significantly enhanced filtering times
+* `storage_type` needs only be specified when a database is first created, storage_type will automatically be detected for an existing database (detected storage_type takes precedence over specified storage_type)
+* New dataclass `RingtailDefaults` which are used to a larger extend in method signatures where appropriate
+* Using toml 
+* Validation of docking mode adds some flexibility in how a docking engine is reference to, eg ADGPU vs GPU
+* Multiprocess now uses 'fork' start method for compatibility with multithreaded processes such as the GUI
+* Ligand efficiency, a calculated value, is rounded to two decimal points reflect the accuracy of the numbers used to calculate it (docking score and number of atoms)
+* Database write is faster by parsing a larger number of docking results to memory before committing to the database (previously 1 at the time, now 10,000)
+* `docking_mode` is no longer a property of the Ringtail object, only an argument for writing to the database (i.e., `add_results_from_files`)
+* `access_mode` is an optional initialization argument which alters the behavior of some API methods (defaults to `api`)
+* Additional filters for minimun and maximum ligand molecular weight, `ligand_min_molweight` and `ligand_max_molweight`
+* Will only write a filter log file (e.g., `output_log.txt`) if specified, which significantly enhances filtering speeds when not used
+* New API method for clustering across a pre-filtered bookmark (can technically also cluster all Results)
+* Bookmarks are no longer saved as views (i.e., unrealized tables), instead the criteria of a bookmark (e.g., a dict of filters) is saved in the new `Filters` table with a unique filter_id, and all passing pose_id`s with associated filter_id`s are stored in `Filtered_poses`
+* The `write_flexres_pdb` method now allows more than one ligand input, for example by providing a bookmark name all ligands in that bookmark will be used to write the same number of PDBs (there will be a warning of attempting to write more than 10 files)
+* The method `export_receptors` has been discontinued, use instead `write_flexres_pdb` as this works without flexible residues as well
+* `write_molecule_sdfs` method argument `write_nonpassing` has been discontinued, and `ligname` (string or list of strings) has been added. It is assumed that if a `bookmark_name` is provided, only passing poses of each ligand will be written to an SD file. If no `bookmark_name` is provided, each pose of each ligand is written to the SDF.  
+* The method `export_csv` has been broken into three distinct methods, `export_columns_as_csv` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, `export_table_as_csv` where an entire table is exported, and `export_sql_as_csv` where the user specifies a properly formatted SQL prompt
+* The method `export_bookmark_db` 
+* Status selection enabled using `set_ligand_status` API, three new tables included: Accepted, Maybe, Rejected
+* The method `get_plot_data` now has more input parameters including specifying x and y axis, and returning the status of a pose/point (see #TODO ref to explaining status)
+* The method `drop_bookmark` is now `delete_bookmark`
+* New method `get_bookmark_interactions` to get interaction data from a bookmark
+* Several new APIs to support the GUI, generally not useful outside the GUI
+* New method `merge_databases` which will safely merge a secondary database with the database currently initialized as a Ringtail object. 
+
+
+Changes to code behavior
+=========================
+***** Interaction tables: one new table has been added (`Interactions`) which references the interaction id from `Interaction_indices`, while the table `Interaction_bitvectors` has been discontinued.
+
+Bug fixes
+===========
+***** The option `duplicate_handling` could previously only be applied during database creation and produced inconsistent table behavior. Option can now be applied at any time results are added to a database, and will create internally consistent tables. **Please note: if you have created tables in the past and invoking the keyword `duplicate_handling` you may have errors in the "Interaction_bitvectors" table (<2.0). These errors cannot be recovered, and we recommend you re-make the database with Ringtail 2.0.**
+
 
 Changes in 2.1.1: bug fixes and result plot enhancements
 ********************************************************
