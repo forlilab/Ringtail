@@ -317,7 +317,6 @@ def cmdline_parser(defaults: dict = {}):
         "--order_results",
         help="Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
         "available fields are:  "
-        '"ligname" , '
         '"docking_score", '
         '"leff"'
         '"deltas" (delta energy from best pose), '
@@ -327,11 +326,9 @@ def cmdline_parser(defaults: dict = {}):
         '"energies_electro" (electrostatic energy), '
         '"energies_intra" (intermolecular energy), '
         '"nr_interactions" (number of interactions), '
-        '"ligand_smile" , '
         '"pose_rank" (rank of ligand pose), '
         '"run_number" (run number for ligand pose), '
-        '"num_hb" (hydrogen bonds), '
-        '"receptor" (receptor name); ',
+        '"num_hb" (hydrogen bonds)',
         action="store",
         type=str,
         metavar="STRING",
