@@ -919,27 +919,6 @@ class StorageManager:
 
         return json.loads(filters[0])
 
-    def fetch_filters_and_filterwindow(self, bookmark_name: str) -> tuple[dict, str]:
-        """Method that will retrieve filter values used to construct bookmark
-        and the filter window used as basis
-
-        Args:
-            bookmark_name (str): bookmark which was the result of the filtering
-
-            Returns:
-                tuple(dict, str): containing the filter data and filter window
-        """
-        if not self.is_bookmark(bookmark_name):
-            return {}, ""
-
-        query = self.QueryBuilder()
-        query.SELECT("filters", "filter_window").FROM("Filters").WHERE(
-            "name = ?", bookmark_name
-        )
-        filters, filter_window = self.db_query(*query.build()).fetchone()
-
-        return json.loads(filters), filter_window
-
     def fetch_receptor_object(self) -> Union[None, tuple]:
         """Returns all Receptor objects from database
 
