@@ -1232,6 +1232,7 @@ class StorageManager:
         return [row[0] for row in self.db_query(*query.build()).fetchall()]
 
     def fetch_bookmark_interactions(self, bookmark_name: str) -> pd.DataFrame:
+        # TODO
         query = f"""
         SELECT DISTINCT 
             II.interaction_type,
@@ -1262,61 +1263,79 @@ class StorageManager:
 
         return interactions_df
 
-    def accept_pose(self, pose_id: int):
+    def accept_pose(self, pose_ids: Union[int, list[int]]):
+        """
+        _summary_
+
+        Args:
+            pose_ids (Union[int, list[int]]): _description_
+        """
         """
         Will add pose_id to accepted, and delete from maybe and rejected if needed
 
         Args:
-            pose_id (int)
+            pose_ids (Union[int, list[int]])
         """
-        self.db_query(
+        if isinstance(pose_ids, int):
+            pose_ids = [pose_ids]
+        pose_ids = [(pose,) for pose in pose_ids]
+
+        self.db_update(
             """INSERT OR IGNORE INTO Accepted (pose_id) VALUES (?);""",
-            [pose_id],
+            pose_ids,
             commit=False,
         )
-        self.db_query(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", [pose_id], commit=False
+        self.db_update(
+            """DELETE FROM Maybe WHERE Pose_id = ?;""", pose_ids, commit=False
         )
-        self.db_query(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", [pose_id], commit=True
+        self.db_update(
+            """DELETE FROM Rejected WHERE Pose_id = ?;""", pose_ids, commit=True
         )
 
-    def maybe_pose(self, pose_id: int):
+    def maybe_pose(self, pose_ids: Union[int, list[int]]):
         """
         Will add pose_id to maybe, and delete from accepted and rejected if needed
 
         Args:
-            pose_id (int)
+            pose_ids (Union[int, list[int]])
         """
-        self.db_query(
+        if isinstance(pose_ids, int):
+            pose_ids = [pose_ids]
+        pose_ids = [(pose,) for pose in pose_ids]
+
+        self.db_update(
             """INSERT OR IGNORE INTO Maybe (pose_id) VALUES (?);""",
-            [pose_id],
+            pose_ids,
             commit=False,
         )
-        self.db_query(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", [pose_id], commit=False
+        self.db_update(
+            """DELETE FROM Accepted WHERE Pose_id = ?;""", pose_ids, commit=False
         )
-        self.db_query(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", [pose_id], commit=True
+        self.db_update(
+            """DELETE FROM Rejected WHERE Pose_id = ?;""", pose_ids, commit=True
         )
 
-    def reject_pose(self, pose_id: int):
+    def reject_pose(self, pose_ids: Union[int, list[int]]):
         """
         Will add pose_id to rejected, and delete from accepted and maybe if needed
 
         Args:
-            pose_id (int)
+            pose_ids (Union[int, list[int]])
         """
-        self.db_query(
+        if isinstance(pose_ids, int):
+            pose_ids = [pose_ids]
+        pose_ids = [(pose,) for pose in pose_ids]
+
+        self.db_update(
             """INSERT OR IGNORE INTO Rejected (pose_id) VALUES (?);""",
-            [pose_id],
+            pose_ids,
             commit=False,
         )
-        self.db_query(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", [pose_id], commit=False
+        self.db_update(
+            """DELETE FROM Accepted WHERE Pose_id = ?;""", pose_ids, commit=False
         )
-        self.db_query(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", [pose_id], commit=True
+        self.db_update(
+            """DELETE FROM Maybe WHERE Pose_id = ?;""", pose_ids, commit=True
         )
 
     def prepare_column_export_query(self, columns: dict, bookmark: str) -> str:
