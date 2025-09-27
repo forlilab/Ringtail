@@ -1112,7 +1112,7 @@ class RingtailCore:
         else:
             plt.show()
 
-    def display_pymol(self, bookmark_name, integrate: bool = False, canvas=None):
+    def display_pymol(self, bookmark_name, viewer_name: str = "pymol"):
         # TODO update to new gui viewer paradigm
         """
         Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
@@ -1120,9 +1120,21 @@ class RingtailCore:
         Args:
             bookmark_name (str): bookmark name to use in pymol. 'None' uses the whole db?
         """
+        available_viewers = {
+            "pymol": self.launch_pymol,
+            "molview": self.launch_molviewer,
+        }
+        if viewer_name.lower() not in available_viewers.keys():
+            raise OptionError(
+                f"Selected viewer type {viewer_name} not in list of available viewers: {available_viewers.keys()}. Please pick a valid molecular viewer."
+            )
 
-        pymol = self.launch_pymol()
-        self.make_clickable_plot(pymol, bookmark_name)
+        viewer = available_viewers[viewer_name]()
+        self.make_clickable_plot(viewer, bookmark_name, viewer_name)
+
+    def launch_molviewer(self):
+        # placeholder for forli lab mol viewer
+        return True
 
     def launch_pymol(self):
         """doc string"""
@@ -1164,12 +1176,10 @@ class RingtailCore:
 
     def make_clickable_plot(
         self,
-        mol_viewer,
-        bookmark_name,
+        viewer,
+        bookmark_name: str,
+        viewer_type: str,
         canvas=None,
-        viewer=None,
-        viewer_mol=None,
-        command=None,
     ):
         """should be handed a molecular viewer, plot requested data, and
         have the plotted data be clickable which click will display them
@@ -1179,131 +1189,112 @@ class RingtailCore:
             # disconnect any old connections
             canvas.mpl_disconnect(self.cid)
 
-        pymol = mol_viewer
-        self.new_mol = None
+        # in case plot exist
         if canvas is None:
             axes = plt.axes()
         else:
             axes = canvas.axes
+
         poseIDs = {}
         with self.storageman:
             # fetch data for passing ligands
             _, passing_data = self.storageman.get_plot_data(
                 bookmark_name, only_passing=True
             )
-            for line in passing_data:
-                axes.plot(line[0], line[1], ".r", mfc="None", picker=5)
-                poseIDs[(line[0], line[1])] = (
-                    line[2],
-                    line[3],
-                )  # line[0] is LE, line[1] is docking score, line[2] is pose_ID, line[3] is LigName
-            axes.set_ylabel("Ligand Efficiency (kcal/mol/heavy atom)")
-            axes.set_xlabel("Docking Score (kcal/mol)")
-            axes.set_title("Passing Docking Poses")
 
-            # check if receptor in db
-            receptor = self.get_receptor_object()
-            if receptor[1]:
-                # print("####### jani debug receptor", receptor[0], len(receptor))
+        for line in passing_data:
+            axes.plot(line[0], line[1], ".r", mfc="None", picker=5)
+            poseIDs[(line[0], line[1])] = (
+                line[2],
+                line[3],
+            )  # line[0] is LE, line[1] is docking score, line[2] is pose_ID, line[3] is LigName
+        axes.set_ylabel("Ligand Efficiency (kcal/mol/heavy atom)")
+        axes.set_xlabel("Docking Score (kcal/mol)")
+        axes.set_title("Passing Docking Poses")
 
-                # load receptor if it exist in database
-                rec_name = receptor[0]
-                rec_string = receptor[1]
+        # check if receptor in db
+        receptor = self.get_receptor_object()
+        if receptor[1]:
 
-                rec_string_list = rec_string.split("\n")
-                # print(f"receptor type: {type(rec_string_list)}")
-                # print(f"receptor contents: {rec_string_list}")
+            # load receptor if it exist in database
+            rec_name = receptor[0]
+            rec_string = receptor[1]
 
+            rec_string_list = rec_string.split("\n")
+            if viewer_type.lower() == "pymol":
+                import tempfile
+
+                rec_string = ReceptorManager.blob2str(receptor[1])
+                # with the rdkit pymol api, easiest to read receptor from file
+                with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
+                    temp_file.write(rec_string.encode("utf-8"))
+                    temp_file.flush()
+                    temp_file_path = temp_file.name
+                    viewer.LoadFile(temp_file_path, rec_name)
+                    # center view on receptor
+                    viewer.server.do("zoom")
+            else:
                 viewer.addpdbqt(
                     rec_string_list,
-                    name="receptor",
+                    name=rec_name,
                     parent=None,
                     metadata=None,
                     assign_radii_and_bonds=True,
                 )
-
-                print("### Viewer.objects.summary")
                 o = viewer.objects
                 o.summary
-                # add transparency
-                print(o[0])
-
                 viewer.showspheres(o[0])
                 viewer.autozoom()
+        else:
+            LOGGER.debug(
+                "No receptor information in the database, receptor will not be displayed."
+            )
 
-                # print("jani debug, rec_string:", rec_string)
+        def _onpick(event):
+            # get info about the point
+            line = event.artist
+            # coordinates is x (leff) and y (e) axis
+            coords = tuple([c[0] for c in line.get_data()])
+            chosen_pose = poseIDs[coords]
+            ligname = chosen_pose[1]
+            pose_id = chosen_pose[0]
+            LOGGER.info(f"LigName: {ligname}; Pose_ID: {pose_id}")
 
-                # m = Chem.Mol(rec_string)
-                # print ("jani debug m object:", m)
-                # pass
-                # import tempfile
+            # make rdkit mol for poseid
+            mol, flexres_mols, _, flexible_residues = self.create_rdkit_mol(
+                ligname, [pose_id]
+            )
 
-                # rec_string = ReceptorManager.blob2str(receptor[1])
-                # # with the rdkit pymol api, easiest to read receptor from file
-                # with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
-                #     temp_file.write(rec_string.encode("utf-8"))
-                #     temp_file.flush()
-                #     temp_file_path = temp_file.name
-                #     pymol.LoadFile(temp_file_path, rec_name)
-                #     # center view on receptor
-                #     pymol.server.do("zoom")
+            # update viewer
+            if viewer_type.lower() == "pymol":
+                viewer.ShowMol(mol, name=ligname, showOnly=False)
+                for idx, resmol in enumerate(flexres_mols):
+                    viewer.ShowMol(
+                        resmol,
+                        name=ligname + "_" + flexible_residues[idx],
+                        showOnly=False,
+                    )
             else:
-                LOGGER.debug(
-                    "No receptor information in the database, receptor will not be displayed."
-                )
+                o = viewer.objects
+                # this prop is required by _load_rdkit
+                mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
+                metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
 
-            def _onpick(event):
-                # get info about the point
-                line = event.artist
-                # coordinates is x (leff) and y (e) axis
-                coords = tuple([c[0] for c in line.get_data()])
-                chosen_pose = poseIDs[coords]
-                ligname = chosen_pose[1]
-                pose_id = chosen_pose[0]
-                LOGGER.info(f"LigName: {ligname}; Pose_ID: {pose_id}")
+                viewer.hidesticks(o[-1])
+                viewer.addrdkit(mol, "ligand smiles:" + Chem.MolToSmiles(mol))
+                viewer.showsticks(o[-1])
+                viewer.autozoom(o[-1])
+                viewer.colorbyelement(o[-1], carbon_color="grey")
 
-                # make rdkit mol for poseid
-                mol, flexres_mols, _, flexible_residues = self.create_rdkit_mol(
-                    ligname, [pose_id]
-                )
-
-                # update custom viewer
-                # also leave the pymol option available
-                if viewer != None:
-                    o = viewer.objects
-
-                    # this prop is required by _load_rdkit
-                    mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
-                    metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
-                    # self.new_mol = command(mol)
-                    viewer.hidesticks(o[-1])
-                    viewer.addrdkit(mol, "ligand smiles:" + Chem.MolToSmiles(mol))
-                    print("### Objects Summary in interactive plot")
-                    o.summary
-
-                    viewer.showsticks(o[-1])
-                    viewer.autozoom(o[-1])
-                    viewer.colorbyelement(o[-1], carbon_color="grey")
-
-                else:
-                    pymol.ShowMol(mol, name=ligname, showOnly=False)
-                    for idx, resmol in enumerate(flexres_mols):
-                        pymol.ShowMol(
-                            resmol,
-                            name=ligname + "_" + flexible_residues[idx],
-                            showOnly=False,
-                        )
-
-            if not canvas:
-                fig = plt.gcf()
-                cid = fig.canvas.mpl_connect("pick_event", _onpick)
-                plt.show()
-
-            else:
-                # the connection ID terminates once a new plot is made, need to keep track of
-                self.cid = canvas.mpl_connect("pick_event", _onpick)
-                # need to return updated mol
-                return canvas
+        if not canvas:
+            fig = plt.gcf()
+            self.cid = fig.canvas.mpl_connect("pick_event", _onpick)
+            plt.show()
+        else:
+            # the connection ID terminates once a new plot is made, need to keep track of
+            self.cid = canvas.mpl_connect("pick_event", _onpick)
+            # need to return updated mol
+            return canvas
 
     # endregion
 
