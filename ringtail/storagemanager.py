@@ -869,8 +869,8 @@ class StorageManager:
         query.GROUP_BY("ligand_id")
         values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
 
-        bins = np.linspace(100, 0, num_bins + 1)
-        bin_edges = np.percentile(values, bins)
+        bins = np.linspace(0, 100, num_bins + 1)
+        bin_edges = np.percentile(values, 100 - bins)
         return bins, bin_edges
 
     def fetch_data_for_passing_results(
