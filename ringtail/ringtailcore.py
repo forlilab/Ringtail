@@ -1590,7 +1590,7 @@ class RingtailCore:
         Args:
             ligname (string): ligand name
             pose_ids (list[int], optional): list of poses to consider for the ligand
-            flexres_data (tuple, optional): #TODO. Defaults to None.
+            flexres_data (tuple, optional): flexible residue data if any. Defaults to None.
 
         Raises:
             OutputError: raises error if there is an issue with determining a flexible residue identity

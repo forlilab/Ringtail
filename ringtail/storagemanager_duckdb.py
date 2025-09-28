@@ -2095,7 +2095,7 @@ class StorageManagerDuckDB(StorageManager):
         return self.db_query(query, params).fetchone()[0]
 
     def _vacuum(self):
-        """#TODO duckdb doesn't really have this, can VACUUM ANALYZE <table>"""
+        """duckdb doesn't really have this, can VACUUM ANALYZE <table>"""
         pass
 
     def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:

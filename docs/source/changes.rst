@@ -59,7 +59,7 @@ Enhancements to the codebase
 * New method `get_bookmark_interactions` to get interaction data from a bookmark
 * Several new APIs to support the GUI, generally not useful outside the GUI
 * New method `merge_databases` which will safely merge a secondary database with the database currently initialized as a Ringtail object. 
-
+* new method to assign status (accepted, rejected, maybe) to one or more ligands, poses, and/or ligand poses in a bookmark
 
 Changes to code behavior
 =========================
