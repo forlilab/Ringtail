@@ -895,7 +895,6 @@ class StorageManagerDuckDB(StorageManager):
     # endregion
 
     # region merge databases
-    # TODO this is a biggie, start with the basic functionality so I can test speed
     def merge_databases(self, merging_db: str, backup: bool = True):
         """
         Method that merges two databases, ensuring integrity of primary and foreign keys.
@@ -2214,7 +2213,6 @@ class StorageManagerDuckDB(StorageManager):
             return None
 
     def get_starting_rowid(self, table: str) -> int:
-        # TODO might have problems with rowid
         """
         Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
         (whose rows are inside Filtered_poses)

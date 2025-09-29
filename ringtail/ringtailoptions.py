@@ -25,7 +25,6 @@ statuses = ["accepted", "maybe", "rejected"]
 
 
 def validate_docking_mode(docking_mode: str):
-    # TODO might want to build the alias to mode in here for memory?
     """Method that validates specified AutoDock program used to generate results.
 
     Args:
@@ -125,9 +124,6 @@ class RingtailDefaults:
     pymol: bool = None
 
 
-# TODO make method to export for command line defaults, then I can use the string fields as list for normal operations
-
-
 def default_dict(dataclass):
     return asdict(dataclass)
 
@@ -136,8 +132,6 @@ class ResultsObject:
     """Class that handles sources of data to be written including ligand data paths and how
     to traverse them, and options to store receptor.
     """
-
-    # TODO if I move docking mode to here, it can check its own internal consistency
 
     def __init__(self):
         self.file = None

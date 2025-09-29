@@ -215,11 +215,11 @@ class RingtailCore:
         save_receptor: bool = RingtailDefaults.save_receptor,
         duplicate_handling: str = RingtailDefaults.duplicate_handling,
         overwrite: bool = RingtailDefaults.overwrite,
-        docking_mode: str = RingtailDefaults.docking_mode,
+        docking_mode: str = "vina",
         store_all_poses: bool = RingtailDefaults.store_all_poses,
         max_poses: int = RingtailDefaults.max_poses,
         add_interactions: bool = RingtailDefaults.add_interactions,
-        interaction_cutoffs: list = [3.7, 4.0],  # TODO default is string
+        interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         max_proc: int = RingtailDefaults.max_proc,
         finalize: bool = True,
     ):
@@ -247,8 +247,7 @@ class RingtailCore:
 
         """
         # Method currently only works with vina output, set automatically
-        # TODO check with docking mode aliases
-        if docking_mode != "vina":
+        if validate_docking_mode(docking_mode) != "vina":
             docking_mode = "vina"
 
         # create results string object
@@ -902,7 +901,6 @@ class RingtailCore:
         return number_similar
 
     def _export_csv(self, requested_data: str, csv_name: str, table=False):
-        # TODO might be time to update this method
         """Get requested data from database, export as CSV
 
         Args:
@@ -1487,7 +1485,16 @@ class RingtailCore:
             return self.storageman.table_length(table)
 
     def get_starting_rowid(self, table: str):
-        # TODO
+        """
+        Returns the starting row id for a table. For a normal table like Results or status table, this will be
+        1, but for a bookmark, this will be the rowid it start with in the Filtered_poses table
+
+        Args:
+            table (str): table or bookmark name
+
+        Returns:
+            int: rowid
+        """
         with self.storageman:
             return self.storageman.get_starting_rowid(table)
 
@@ -1868,8 +1875,18 @@ class RingtailCore:
                 ligand_saved_coords.append(ligand_pose)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
 
-    def make_receptor_flexres_mols(self):
-        # TODO
+    def make_receptor_flexres_mols(
+        self,
+    ) -> tuple[list, list, list, list]:
+        """
+        Makes rdkit.Chem.Mols for the receptor based on flexible residues
+
+        Raises:
+            OutputError: _description_
+
+        Returns:
+            tuple[list, list, list, list]: _description_
+        """
 
         mols = []
         info = []
@@ -1903,6 +1920,7 @@ class RingtailCore:
             frm.SetProp("resinfo", res)
             mols.append(frm)
             info.append((res_smiles, res_index_map, res_h_parents))
+            residues.append(res)
 
             return mols, info, saved_coords, residues
 

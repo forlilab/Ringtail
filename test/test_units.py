@@ -36,7 +36,6 @@ class TestRingtailCore:
         assert count == 138
 
     def test_save_receptor(self):
-        # TODO don't use sql here
         rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
         count0 = rtc.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
