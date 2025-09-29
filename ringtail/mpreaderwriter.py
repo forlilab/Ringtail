@@ -171,7 +171,6 @@ class DockingFileReader(mp.Process):
                     parsed_file_dict["tolerated_interaction_runs"] = []
                 # put the result in the out queue
                 # the result is a dict where the singular key is the ligand name
-                # TODO this is not working right now, the data_packet should be expected format for writer
                 data_packet = self.shared.get("format_method")(parsed_file_dict)
                 self._add_to_queueout(data_packet)
             except Exception:
