@@ -989,6 +989,66 @@ class StorageManager:
         ).FROM("Results").WHERE(f"Pose_ID IN ({placeholders})", *pose_ids)
         return self.db_query(*query.build()).fetchall()
 
+    def get_gui_plot_data(
+        self,
+        bookmark_name: str,
+        include_status: bool = False,
+        x_axis: str = "docking_score",
+        y_axis: str = "leff",
+        limit: int = None,
+    ):
+        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
+        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
+
+        Args:
+            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
+            include_status (bool): look for status tables and include if requested
+            x_axis (str, optional): Defaults to "docking_score".
+            y_axis (str, optional): Defaults to "leff".
+
+        Returns:
+            tuple: cursors as (<all data cursor>, <passing data cursor>)
+        """
+
+        bookmark_query = self.QueryBuilder()
+        bookmark_query.SELECT(
+            "R." + x_axis,
+            "R." + y_axis,
+            "R." + "Pose_ID",
+            "L." + "LigName",
+            "L." + "ligand_smile",
+        )
+        if limit:
+            bookmark_query.LIMIT(limit)
+
+        if self.is_bookmark(bookmark_name):
+            if include_status:
+                bookmark_query.SELECT_STATUS()
+            bookmark_query.FROM("Results", "R").IN_BOOKMARK(bookmark_name).JOIN(
+                "Ligands", "L", "ligand_id"
+            )
+
+            data = self.db_query(bookmark_query.build()[0]).fetchall()
+
+        elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
+            # will assume it is a status table
+            if include_status:
+                bookmark_query.SELECT(f"""'{bookmark_name.lower()}' as status""")
+            bookmark_query.FROM("Results", "R").JOIN(
+                bookmark_name, "T", "pose_id"
+            ).JOIN("Ligands", "L", "ligand_id")
+
+            data = self.db_query(bookmark_query.build()[0]).fetchall()
+
+        else:
+            if include_status:
+                bookmark_query.SELECT_STATUS()
+            bookmark_query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
+
+            data = self.db_query(bookmark_query.build()[0]).fetchall()
+
+        return data
+
     def get_plot_data(
         self,
         bookmark_name: str,

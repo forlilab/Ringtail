@@ -990,6 +990,20 @@ class RingtailCore:
             with OutputManager(log_file) as opm:
                 opm.write_filter_results_in_log(new_data)
 
+    def get_gui_plot_data(
+        self,
+        bookmark_name: str = None,
+        include_status: bool = False,
+        x_axis: str = "docking_score",
+        y_axis: str = "leff",
+        limit: int = None,
+    ):
+
+        with self.storageman:
+            return self.storageman.get_gui_plot_data(
+                bookmark_name, include_status, x_axis, y_axis, limit
+            )
+
     def get_plot_data(
         self,
         bookmark_name: str = None,
