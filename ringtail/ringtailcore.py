@@ -128,7 +128,7 @@ class RingtailCore:
 
     def get_previous_docking_mode(self) -> Union[None, str]:
         with self.storageman as sm:
-            return sm.get_previous_docking_mode()
+            return validate_docking_mode(sm.get_previous_docking_mode())
 
     # region write to database
     def add_results_from_files(
