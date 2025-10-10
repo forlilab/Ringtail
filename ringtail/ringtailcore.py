@@ -2078,13 +2078,17 @@ class RingtailCore:
         # need receptor file contents if adding interaction
         if add_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
-            # TODO also make work for poylmer in the future
             try:
+                # try pdbqt first
                 results.receptor_string = self.get_receptor_object()[1]
             except:
-                raise ResultsProcessingError(
-                    "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
-                )
+                # if fail, try json
+                try:
+                    results.receptor_string = self.get_receptor_object()[2]
+                except:
+                    raise ResultsProcessingError(
+                        "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                    )
 
         LOGGER.info("Adding results...")
         self.resultsman.process_docking_data(results, processing_options)
