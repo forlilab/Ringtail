@@ -225,7 +225,7 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-rf",
         "--receptor_file",
-        help="Use with Vina mode. Give file for receptor PDBQT.",
+        help="Give file for receptor .pdbqt OR .json file for a receptor meeko.Polymer.",
         action="store",
         type=str,
         metavar="STRING",
