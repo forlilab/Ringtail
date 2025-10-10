@@ -1725,6 +1725,25 @@ class StorageManagerDuckDB(StorageManager):
 
     # region data
 
+    def _check_if_column_in_table(self, table_name: str, column_name: str) -> bool:
+        """
+        Checks if a column exist in given table
+
+        Args:
+            table_name (str):
+            column_name (str):
+
+        Returns:
+            bool: True if column there, False if not
+        """
+        column_tuples = self.db_query(
+            f"""SELECT column_name
+                    FROM duckdb_columns()
+                    WHERE table_name = '{table_name}';"""
+        ).fetchall()
+        column_names = [column[0] for column in column_tuples]
+        return bool(column_name in column_names)
+
     def _get_numeric_columns(self, table_name: str) -> list:
         """
         Method to get the names of all numeric columns in a table, for example for
