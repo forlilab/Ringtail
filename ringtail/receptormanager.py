@@ -12,29 +12,27 @@ class ReceptorManager:
     """Class with methods dealing with formatting of receptor information"""
 
     @staticmethod
-    def make_receptor_blobs(file_list):
-        """Creates compressed receptor info
+    def make_receptor_blob(receptor_file: str) -> tuple[str, bytes]:
+        """Creates compressed receptor info (blob)
 
         Args:
             file_list (str): path to receptor file
 
         Returns:
-            blob: compressed receptor
+            dict: rec_name and blob (compressed receptor)
         """
-        receptors = []
-        for rec_file in file_list:
-            # check file extension, compress to bytes if needed
-            rec_name = rec_file.split(".")[0].split("/")[
-                -1
-            ]  # remove file extension and path
-            if rec_file.endswith(".gz"):
-                with open(rec_file, "rb") as r:
-                    receptors.append((r.read(), rec_name))
-            else:
-                with open(rec_file, "r") as r:
-                    receptors.append((gzip.compress(r.read().encode()), rec_name))
-        LOGGER.debug("Receptor blob parepared successfully.")
-        return receptors
+        # check file extension, compress to bytes if needed
+        rec_name = receptor_file.split(".")[0].split("/")[
+            -1
+        ]  # remove file extension and path
+        if receptor_file.endswith(".gz"):
+            with open(receptor_file, "rb") as r:
+                receptor = r.read()
+        else:
+            with open(receptor_file, "r") as r:
+                receptor = gzip.compress(r.read().encode())
+        LOGGER.debug(f"Receptor blob for receptor {rec_name} parepared successfully.")
+        return rec_name, receptor
 
     @staticmethod
     def blob2str(receptor_blob):

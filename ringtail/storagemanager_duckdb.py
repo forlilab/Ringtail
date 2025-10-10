@@ -610,7 +610,8 @@ class StorageManagerDuckDB(StorageManager):
             grid_spacing        FLOAT,
             flexible_residues   VARCHAR,
             flexres_atomnames   VARCHAR,
-            receptor_object     BLOB
+            receptor_object     BLOB,
+            polymer             BLOB
         );"""
         self.db_query(receptors_table)
 
@@ -653,6 +654,27 @@ class StorageManagerDuckDB(StorageManager):
 
         else:
             query = """UPDATE Receptors SET RecName = ?, receptor_object = ? WHERE Receptor_ID == 1"""
+        self.db_query(query, (rec_name, receptor), commit=True)
+
+    def insert_receptor_polymer(self, receptor: str, rec_name: str):
+        """Takes object of Receptor class, updates the column in Receptor table
+
+        Args:
+            receptor (str): json string representation of a receptor meeko.Polymer oobject to be inserted into DB
+            rec_name (str): Name of receptor. Used to insert into correct row of DB
+        """
+        # Check if there is already a row for the receptor
+        count = self.table_length("Receptors")
+
+        if count == 0:
+            # Insert receptor statement
+            query = f"""INSERT INTO Receptors (
+                      RecName,
+                      polymer)
+                      VALUES (?,?);"""
+
+        else:
+            query = """UPDATE Receptors SET RecName = ?, polymer = ? WHERE Receptor_ID == 1;"""
         self.db_query(query, (rec_name, receptor), commit=True)
 
     def _create_db_properties_table(self):

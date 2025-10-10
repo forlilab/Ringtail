@@ -320,7 +320,7 @@ class Writer(mp.Process):
         # insert result, ligand, and receptor data
         with self.storageman as sm:
             if not self.receptor_written_to_db and self.receptor_row:
-                sm.insert_receptor(self.receptor_row)
+                sm.insert_receptor_basic_info(self.receptor_row)
                 self.receptor_written_to_db = True
                 self.receptor_row = None
             if self.docked_ligands["ligands"]:

@@ -284,35 +284,111 @@ class RingtailCore:
         with self.storageman:
             self.storageman.finalize_database_write()
 
-    def save_receptor(self, receptor_file: str):
+    def save_receptor(self, receptor: Union[str, dict]):
         """
-        Add receptor to database.
+        Add receptor to database. Accets .pdbqt file as well as a polymer .json or a polymer object
 
         Args:
             receptor_file (str): path to receptor file
 
         """
-        receptor_list = ReceptorManager.make_receptor_blobs([receptor_file])
+
+        receptor_blob = None
+        receptor_jsons = None
+        if type(receptor) == str:
+            extension = Path(receptor).suffix
+            if "json" in extension:
+                receptor_name, receptor_jsons = self._process_receptor_polymer(receptor)
+            elif "pdbqt" in extension:
+                receptor_name, receptor_blob = self._process_receptor_pdbqt(receptor)
+        else:
+            from meeko import Polymer
+
+            try:
+                receptor_name = receptor_name.keys()[0]
+                receptor_polymer: Polymer = receptor[receptor_name]
+                receptor_jsons = receptor_polymer.to_json()
+            except:
+                raise OptionError(
+                    f"Unable to serialize provided receptor object, cannot proceed to save receptor."
+                )
+
+        # check if db has receptor added
+        db_name, db_blob, db_jsons = self.get_receptor_object()
+        if db_name:
+            # make all checks if it is possible to add the requested receptor data
+            if receptor_name != db_name:
+                raise OptionError(
+                    "You attempted to add a receptor to a database that already has a receptor in it, and they do not appear to be the same receptor."
+                )
+            # if trying to add blob and there is blob, return
+            if receptor_blob and db_blob:
+                LOGGER.warning(
+                    "The Receptors table already has a .pdbqt blob present, will not add another."
+                )
+                return
+            # if trying to add polymer json and there is polymer json, return
+            if receptor_jsons and db_jsons:
+                LOGGER.warning(
+                    "The Receptors table already has a polymer json string present, will not add another."
+                )
+                return
         with self.storageman:
-            for rec, rec_name in receptor_list:
-                # NOTE: in current implementation, only one receptor allowed per database
-                # Check that any receptor row is incomplete (needs receptor blob) before inserting
-                filled_receptor_rows = self.storageman.count_receptors_in_db()
-                if filled_receptor_rows != 0:
-                    # check if you are trying to add the same receptor, or a different receptor
-                    if (
-                        receptor_file.split(os.extsep)[0]
-                        != self.get_receptor_object()[0]
-                    ):
-                        LOGGER.warning(
-                            "You attempted to add a receptor to a database that already has a receptor in it, and they do not appear to be the same receptor."
-                        )
-                    # throw error if receptor is already present
-                    raise RTCoreError(
-                        "Expected Receptors table to have no receptor objects present, already has a receptor present. Cannot add more than 1 receptor to a database."
-                    )
-                self.storageman.insert_receptor_blob(rec, rec_name)
-                LOGGER.info("Receptor data was added to the database.")
+            # if you made it this far, it is OK to add whatever you brought
+            if receptor_blob:
+                self.storageman.insert_receptor_blob(receptor_blob, receptor_name)
+                LOGGER.info("Receptor pdbqt blob data was added to the database.")
+            elif receptor_jsons:
+                self.storageman.insert_receptor_polymer(receptor_jsons, receptor_name)
+                LOGGER.info("Receptor polymer json string was added to the database.")
+
+    def _process_receptor_polymer(self, receptor_file: str) -> tuple[str, str]:
+        """
+        Returns the json string of the contents of a receptor polymer file.
+        Will try even if extension is not .json
+
+        Args:
+            receptor_file (str): (preferably) .json file with a serialized meeko.Polymer object
+
+        Raises:
+            OptionError
+
+        Returns:
+            str: string representation of the meeko.Polymer
+        """
+
+        if ".json" in receptor_file:
+            receptor_name = Path(receptor_file).stem
+            polypath = Path(receptor_file)
+            if polypath.is_file():
+                with open(polypath) as f:
+                    polymer_string = f.read()
+            else:
+                raise OptionError(
+                    "It appears a path to a receptor polymer json file was provided, but the file does not exist: ",
+                    receptor_file,
+                )
+        else:
+            try:
+                polymer_string = json.loads(receptor_file)
+            except json.JSONDecodeError:
+                raise OptionError(
+                    "The provided input for receptor_polymer was provided is not a valid Polymer object, not a valid path or valid json, cannot proceed."
+                )
+        return receptor_name, polymer_string
+
+    def _process_receptor_pdbqt(self, receptor_file: str) -> tuple[str, bytes]:
+        """
+        Makes dict of rec name and receptor blob from pdbqt file (can be zipped)
+
+        Args:
+            receptor_file (str): pdbqt file
+
+        Returns:
+            tuple[str, bytes]: receptor name and bytes/blob object
+        """
+        receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(receptor_file)
+        return receptor_name, receptor_blob
 
     # endregion
 
@@ -733,24 +809,7 @@ class RingtailCore:
         if type(receptor_polymer) == str:
             from meeko import Polymer
 
-            if ".json" in receptor_polymer:
-                polypath = Path(receptor_polymer)
-                if polypath.is_file():
-                    with open(polypath) as f:
-                        polymer_string = f.read()
-                else:
-                    raise OptionError(
-                        "It appears a path to a receptor polymer json file was provided, but the file does not exist: ",
-                        receptor_polymer,
-                    )
-            else:
-                try:
-                    polymer_string = json.loads(receptor_polymer)
-                except json.JSONDecodeError:
-                    raise OptionError(
-                        "The provided input for receptor_polymer was provided is not a valid Polymer object, not a valid path or valid json, cannot proceed."
-                    )
-
+            _, polymer_string = self._process_receptor_polymer(receptor_polymer)
             polymer = Polymer.from_json(polymer_string)
         else:
             polymer = receptor_polymer
@@ -770,7 +829,7 @@ class RingtailCore:
                     ext = ".pdb"
                 path = root + ligand + ext
             else:
-                receptor_name, _ = self.get_receptor_object()
+                receptor_name, _, _ = self.get_receptor_object()
                 path = receptor_name + ligand + ".pdb"
 
             flexmoldict = {}
@@ -956,7 +1015,8 @@ class RingtailCore:
         """
         Export receptor in database to pdbqt
         """
-        recname, recstr = self.get_receptor_object()
+        # TODO export pdbqt, need a differnet method for json
+        recname, recstr, recjson = self.get_receptor_object()
         if recstr is None:
             LOGGER.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
             return
@@ -1035,16 +1095,19 @@ class RingtailCore:
 
         return all_data, passing_data
 
-    def get_receptor_object(self) -> tuple[str, str]:
+    def get_receptor_object(self) -> tuple:
         """
         Gets the receptor object from the database
 
         Returns:
-            tuple[str,str]: receptor name and receptor blob converted to string
+            tuple[str,str, str]: receptor name and receptor blob and receptor serialized polymer as strings
         """
         with self.storageman as sm:
-            name, blob = sm.fetch_receptor_object()
-        return name, ReceptorManager.blob2str(blob)
+            rec_data = sm.fetch_receptor_object()
+            if rec_data is not None:
+                return rec_data[0], ReceptorManager.blob2str(rec_data[1]), rec_data[2]
+            else:
+                return None, None, None
 
     # endregion
 
@@ -1196,6 +1259,7 @@ class RingtailCore:
         """should be handed a molecular viewer, plot requested data, and
         have the plotted data be clickable which click will display them
         in the molecular viewer"""
+        # NOTE not being maintained as of 2025/10
 
         if hasattr(self, "cid"):
             # disconnect any old connections
@@ -2000,7 +2064,6 @@ class RingtailCore:
                 self.storageman.overwrite_storage()
 
             self.storageman.check_storage_ready(self._run_mode, docking_mode, num_poses)
-
         if results.save_receptor:
             self.save_receptor(results.receptor_file_path)
 
@@ -2015,7 +2078,7 @@ class RingtailCore:
         # need receptor file contents if adding interaction
         if add_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
-
+            # TODO also make work for poylmer in the future
             try:
                 results.receptor_string = self.get_receptor_object()[1]
             except:

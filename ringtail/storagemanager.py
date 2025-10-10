@@ -179,7 +179,7 @@ class StorageManager:
         )
         self.conn.commit()
 
-    def insert_receptor(self, receptor_data: list):
+    def insert_receptor_basic_info(self, receptor_data: list):
         """
 
         Method to insert receptor information into the database
@@ -923,10 +923,13 @@ class StorageManager:
         """Returns all Receptor objects from database
 
         Returns:
-            tuple: of receptor name and object
+            tuple: of receptor name and object, and polymer json if column exist
         """
         query = self.QueryBuilder()
         query.SELECT("RecName", "receptor_object").FROM("Receptors")
+        # check if polymer column exist
+        if self._check_if_column_in_table("Receptors", "polymer"):
+            query.SELECT("polymer")
         cursor = self.db_query(query.build()[0]).fetchone()
         if cursor:
             return cursor
@@ -1425,6 +1428,15 @@ class StorageManager:
         Args:
             receptor (bytes): bytes receptor object to be inserted into DB
             rec_name (string): Name of receptor. Used to insert into correct row of DB
+        """
+        raise NotImplementedError
+
+    def insert_receptor_polymer(self, receptor: str, rec_name: str):
+        """Takes object of Receptor class, updates the column in Receptor table
+
+        Args:
+            receptor (str): json string representation of a receptor meeko.Polymer oobject to be inserted into DB
+            rec_name (str): Name of receptor. Used to insert into correct row of DB
         """
         raise NotImplementedError
 
@@ -2938,6 +2950,19 @@ class StorageManager:
 
         Returns:
             list: column names that has a numeric type
+        """
+        raise NotImplementedError
+
+    def _check_if_column_in_table(self, table_name: str, column_name: str) -> bool:
+        """
+        Checks if a column exist in given table
+
+        Args:
+            table_name (str):
+            column_name (str):
+
+        Returns:
+            bool: True if column there, False if not
         """
         raise NotImplementedError
 

@@ -43,7 +43,7 @@ class TestRingtailCore:
 
         assert count0 == 0
 
-        rtc.save_receptor(receptor_file="test_data/adgpu/4j8m.pdbqt")
+        rtc.save_receptor(receptor="test_data/adgpu/4j8m.pdbqt")
         count = rtc.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )[0][0]
