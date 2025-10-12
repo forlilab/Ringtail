@@ -189,7 +189,7 @@ class StorageManager:
         """
         receptors = self.fetch_receptor_object()
         # insert receptor if database does not have already have a receptor entry
-        if not receptors:
+        if not receptors.get("RecName"):
             self._insert_receptors(receptor_data)
 
     def filter_results(
@@ -919,22 +919,26 @@ class StorageManager:
 
         return json.loads(filters[0])
 
-    def fetch_receptor_object(self) -> Union[None, tuple]:
+    def fetch_receptor_object(self) -> Union[None, dict]:
         """Returns all Receptor objects from database
 
         Returns:
-            tuple: of receptor name and object, and polymer json if column exist
+            dict: of receptor name and object and/or polymer json if column exist
         """
-        query = self.QueryBuilder()
-        query.SELECT("RecName", "receptor_object").FROM("Receptors")
-        # check if polymer column exist
+
+        columns = ["RecName", "receptor_object"]
+
         if self._check_if_column_in_table("Receptors", "polymer"):
-            query.SELECT("polymer")
-        cursor = self.db_query(query.build()[0]).fetchone()
-        if cursor:
-            return cursor
+            columns.append("polymer")
+
+        query = self.QueryBuilder()
+        query.SELECT(*columns).FROM("Receptors")
+        # check if polymer column exist
+        row = self.db_query(query.build()[0]).fetchone()
+        if not row:
+            return {}
         else:
-            return None
+            return dict(zip(columns, row))
 
     def fetch_flexres_info(self, receptor: Union[str, int]):
         """fetch flexible residues names and atomname lists

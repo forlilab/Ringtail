@@ -760,7 +760,7 @@ class RingtailCore:
 
     def write_flexres_pdb(
         self,
-        receptor_polymer: Union[object, str],
+        receptor_polymer: Union[object, str] = None,
         ligname: Union[str, list] = None,
         bookmark_name: str = None,
         filename: str = "receptor.pdb",
@@ -781,6 +781,15 @@ class RingtailCore:
             Chem.rdchem.Mol: the Mol object for the given ligand
             dict: dictionary describing the Mols for the flexible residues
         """
+        # check database if polymer not provided, else error
+        if not receptor_polymer:
+            _, _, polymer_string = self.get_receptor_object()
+            if not polymer_string:
+                raise OptionError(
+                    "No receptor polymer provided and no polymer found in the database. Cannot create flexres PDBs."
+                )
+            else:
+                receptor_polymer = polymer_string
 
         from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 
@@ -1105,7 +1114,11 @@ class RingtailCore:
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
             if rec_data is not None:
-                return rec_data[0], ReceptorManager.blob2str(rec_data[1]), rec_data[2]
+                return (
+                    rec_data.get("RecName"),
+                    ReceptorManager.blob2str(rec_data.get("receptor_object")),
+                    rec_data.get("polymer"),
+                )
             else:
                 return None, None, None
 
