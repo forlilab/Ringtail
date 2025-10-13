@@ -404,7 +404,21 @@ class RingtailCore:
         Args:
             receptor (Union[str, object], optional): receptor file or object. Defaults to None.
         """
+        import ast
         from .interactions import InteractionFinder
+
+        if self.get_previous_docking_mode() != "vina":
+            LOGGER.warning(
+                "Adding interactions is not relevant for non-vina databases, interactions should already be present."
+            )
+            return
+        if self.table_length("Interactions") > 0:
+            LOGGER.warning(
+                "There are already interactions recorded in the database, please note all of these will be deleted before adding new interactions."
+            )
+            with self.storageman as sm:
+                sm.clear_table("Interactions", consent=True)
+                sm.clear_table("Interaction_indices", consent=True)
 
         if receptor:
             self.save_receptor(receptor)
@@ -418,8 +432,18 @@ class RingtailCore:
             rec_data,
             [hb_cutoff, vdw_cutoff],
         )
+        # stream query the docking data and add interactions
+        with self.storageman as sm:
+            for row in sm.get_interaction_recalc_info():
+                ligand_coordinates = ast.literal_eval(row[0])
+                ligand_atoms = row[1].split(",")
+
+                interaction_data = self.interaction_finder.find_pose_interactions(
+                    ligand_atoms, ligand_coordinates
+                )
+
         # Into this method I need to pass the coordinates as I find them in results, as well as what atom they each correspond to
-        interaction_data = self.interaction_finder.find_pose_interactions()
+
         """
         Data created by interaction finder
         {

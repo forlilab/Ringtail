@@ -192,6 +192,12 @@ class StorageManager:
         if not receptors.get("RecName"):
             self._insert_receptors(receptor_data)
 
+    def clear_table(self, table_name: str, consent: bool = False):
+        if consent:
+            query = QueryBuilder()
+            query.DELETE_FROM(table_name)
+            self.db_query(query.build()[0])
+
     def filter_results(
         self,
         all_filters: Filters,
@@ -1404,6 +1410,22 @@ class StorageManager:
 
         return query.build()[0]
 
+    def get_interaction_recalc_info(self):
+
+        def _rdbin_to_atoms(rd_bin):
+            mol = Chem.Mol(rd_bin)
+            atoms = [atom.GetSymbol() for atom in mol.GetAtoms()]
+            return ",".join(atoms)
+
+        self.conn.create_function("rdbin_to_atoms", 1, _rdbin_to_atoms)
+
+        query = QueryBuilder()
+        query.SELECT("R.ligand_coordinates", "rdbin_to_atoms(L.rdmol)").FROM(
+            "Results", "R"
+        ).JOIN("Ligands", "L", "ligand_id")
+
+        return self._stream_query(query.build()[0])
+
     # endregion
 
     # region virtual public api
@@ -1501,6 +1523,26 @@ class StorageManager:
             iter: if requesting return value(s)
         """
         raise NotImplementedError
+
+    def _stream_query(self, query: str, batch_size: int = 1000):
+        """
+        cursor stream generator
+
+        Args:
+            query (str): sql query
+            batch_size (int): how many cursor hits to read into memory at once
+
+        Yields:
+            cursor batch: cursor results for the query in batch increments, where row can be read
+        """
+        cursor = self.db_query(query)
+
+        while True:
+            batch = cursor.fetchmany(batch_size)
+            if not batch:
+                break
+            for row in batch:
+                yield row
 
     def merge_databases(self, merging_db: str, backup: bool = True):
         """
@@ -2203,7 +2245,6 @@ class StorageManager:
 
         This method has several internal, private methods including
         _smarts_to_mol: creates mol object of substructure/SMARTS and checks for explicit hydrogens
-        _stream_query: method that "streams" from the database and yields db cursor rows
         _substructure_position_calculation: checks if a substructure is in the right location
         _ligand_indexmap: calculates an index map for the ligand.
 
@@ -2275,26 +2316,6 @@ class StorageManager:
         # build full query
         query = select_statement + partial_query
 
-        def _stream_query(query: str, batch_size: int = 100):
-            """
-            cursor stream generator
-
-            Args:
-                query (str): sql query
-                batch_size (int): how many cursor hits to read into memory at once
-
-            Yields:
-                cursor batch: cursor results for the query in batch increments, where row can be read
-            """
-            cursor = self.db_query(query)
-
-            while True:
-                batch = cursor.fetchmany(batch_size)
-                if not batch:
-                    break
-                for row in batch:
-                    yield row
-
         def _substructure_position_calculation(
             idxmap, ligand_coordinates, smartsmol, filter
         ) -> bool:
@@ -2348,7 +2369,7 @@ class StorageManager:
 
         ligands_checked = 0
         filtered_ligands = {}
-        for ligandrow in _stream_query(query):
+        for ligandrow in self._stream_query(query):
             ligandict = dict(zip(headers, ligandrow))
             # substruct and maxatoms do not discriminate on poses, check if ligand has already been accounted for
             if not position and ligandict["ligand_id"] in filtered_ligands:
