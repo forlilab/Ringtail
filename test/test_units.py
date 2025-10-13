@@ -477,6 +477,23 @@ class TestRingtailCore:
 
         assert count_ligands_passing == 10
 
+    def test_polymer_receptor(self):
+        rtc = RingtailCore(db_file="flexres.db")
+        data_path = "test_data/flexres"
+        rtc.add_results_from_files(
+            file=data_path + "/ligand.pdbqt",
+            docking_mode="vina",
+            receptor_file=data_path + "/receptor.json",
+            save_receptor=True,
+        )
+        receptor_items = rtc.get_receptor_object()
+
+        os.system("rm flexres.db")
+
+        assert receptor_items[0] == "receptor"
+        assert not receptor_items[1]
+        assert receptor_items[2] != None
+
 
 class TestVinaHandling:
 
@@ -525,6 +542,37 @@ class TestVinaHandling:
         os.system("rm output.db*")
 
         assert count == 45
+
+    def test_add_interactions_from_polymer(self):
+        rtc = RingtailCore(db_file="flexres.db")
+        data_path = "test_data/flexres"
+        rtc.add_results_from_files(
+            file=data_path + "/ligand.pdbqt",
+            docking_mode="vina",
+            receptor_file=data_path + "/receptor.json",
+            add_interactions=True,
+            save_receptor=True,
+        )
+
+        ligands_1 = rtc.table_length("Ligands")
+        interactions_1 = rtc.table_length("Interactions")
+
+        rtc = RingtailCore(db_file="flexres2.db")
+        data_path = "test_data/flexres"
+        rtc.add_results_from_files(
+            file=data_path + "/ligand.pdbqt",
+            docking_mode="vina",
+            receptor_file=data_path + "/receptor.pdbqt",
+            add_interactions=True,
+            save_receptor=True,
+        )
+        ligands_2 = rtc.table_length("Ligands")
+        interactions_2 = rtc.table_length("Interactions")
+
+        os.system("rm flexres*.db")
+
+        assert ligands_1 == ligands_2 == 1
+        assert interactions_1 == interactions_2 == 38
 
     def test_db_dockingmode_warning(self):
         from ringtail import RingtailDefaults

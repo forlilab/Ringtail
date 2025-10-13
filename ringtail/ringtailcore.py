@@ -138,7 +138,7 @@ class RingtailCore:
         file_list: str = RingtailDefaults.file_list,
         file_pattern: str = None,
         recursive: bool = RingtailDefaults.recursive,
-        receptor_file: str = RingtailDefaults.save_receptor,
+        receptor_file: str = None,
         save_receptor: bool = RingtailDefaults.save_receptor,
         duplicate_handling: str = RingtailDefaults.duplicate_handling,
         overwrite: bool = RingtailDefaults.overwrite,
@@ -2164,10 +2164,9 @@ class RingtailCore:
         # need receptor file contents if adding interaction
         if add_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
-            try:
-                # try pdbqt first
-                results.receptor_string = self.get_receptor_object()[1]
-            except:
+            # try pdbqt first
+            results.receptor_string = self.get_receptor_object()[1]
+            if not results.receptor_string:
                 # if fail, try json
                 try:
                     results.receptor_string = self.get_receptor_object()[2]

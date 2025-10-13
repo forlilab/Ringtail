@@ -22,18 +22,17 @@ class InteractionFinder:
         try:
             self.pdb = PDBQTReceptor(rec_string)
         except OSError as e:
+            with tempfile.NamedTemporaryFile(mode="wt") as f:
+                f.write(rec_string)
+                self.pdb = PDBQTReceptor(f.name)
+        except:
             try:
-                with tempfile.NamedTemporaryFile(mode="wt") as f:
-                    f.write(rec_string)
-                    self.pdb = PDBQTReceptor(f.name)
+                # assume it is a polymer json string
+                polymer = Polymer.from_json(rec_string)
+                pdbqt_tuple = PDBQTWriterLegacy.write_from_polymer(polymer)
+                self.pdb = PDBQTReceptor(pdbqt_tuple[0])
             except:
-                try:
-                    # assume it is a polymer json string
-                    polymer = Polymer.from_json(rec_string)
-                    pdbqt_tuple = PDBQTWriterLegacy.write_from_polymer(polymer)
-                    self.pdb = pdbqt_tuple[0]
-                except:
-                    raise Exception("No valid receptor option given")
+                raise Exception("No valid receptor option given")
         self.interaction_cutoff_radii = interaction_cutoff_radii
 
     def find_pose_interactions(
