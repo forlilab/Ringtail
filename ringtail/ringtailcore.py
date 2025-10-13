@@ -390,6 +390,79 @@ class RingtailCore:
         receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(receptor_file)
         return receptor_name, receptor_blob
 
+    def add_interactions(
+        self,
+        hb_cutoff: float = RingtailDefaults.interaction_cutoffs[0],
+        vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
+        receptor: Union[str, object] = None,
+    ):
+        """
+        Method to add interactions to vina docking data, after adta has been added to the database.
+        If receptor is not already in the db, add it now. .pdbqt, .json, or polymer object are all
+        permissible inputs.
+
+        Args:
+            receptor (Union[str, object], optional): receptor file or object. Defaults to None.
+        """
+        from .interactions import InteractionFinder
+
+        if receptor:
+            self.save_receptor(receptor)
+
+        _, receptor_object, receptor_polymer = self.get_receptor_object()
+
+        rec_data = receptor_object if receptor_object is not None else receptor_polymer
+
+        # add interactions
+        self.interaction_finder = InteractionFinder(
+            rec_data,
+            [hb_cutoff, vdw_cutoff],
+        )
+        # Into this method I need to pass the coordinates as I find them in results, as well as what atom they each correspond to
+        interaction_data = self.interaction_finder.find_pose_interactions()
+        """
+        Data created by interaction finder
+        {
+            "type": type_list,
+            "recid": recid_list,
+            "recname": recname_list,
+            "residue": residue_list,
+            "resid": resid_list,
+            "chain": chain_list,
+            "count": [str(len(type_list))],
+            "ligid": [],
+            "ligname": [],
+        }
+
+        """
+        # I wonder if I can just stream the data in the database in chunks and do the calculations
+        # "pose_coordinates" = "R.ligand_coordinates" # pretty sure about this one
+        # ligand atom types is a bit harder
+        # pose = pose coordinates
+        #     for pose in parsed_file_dict["pose_coordinates"]:
+        #         parsed_file_dict["interactions"].append(
+        #             self.interaction_finder.find_pose_interactions(
+        #                 parsed_file_dict["ligand_atomtypes"], pose
+        #             )
+        #         )
+        #         parsed_file_dict["num_interactions"].append(
+        #             int(parsed_file_dict["interactions"][-1]["count"][0])
+        #         )
+        #         parsed_file_dict["num_hb"].append(
+        #             len(
+        #                 [
+        #                     1
+        #                     for i in parsed_file_dict["interactions"][-1]["type"]
+        #                     if i == "H"
+        #                 ]
+        #             )
+        #         )
+        # interaction_data = docking_data["interactions"]
+        # # deduplicate by using a set comprehension, then convert to list
+        # just_interactions = list({interaction[3:] for interaction in interaction_data})
+
+        # self._insert_interaction_index_rows(just_interactions)
+
     # endregion
 
     # region filter, export

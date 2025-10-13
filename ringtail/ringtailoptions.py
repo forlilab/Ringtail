@@ -103,7 +103,7 @@ class RingtailDefaults:
     interaction_cutoffs: tuple[float] = (
         3.7,
         4.0,
-    )
+    )  # HB CUTOFF,VDW CUTOFF
     outfields: tuple[str] = (
         "LigName",
         "docking_score",
