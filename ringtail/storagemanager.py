@@ -196,7 +196,7 @@ class StorageManager:
         if consent:
             query = QueryBuilder()
             query.DELETE_FROM(table_name)
-            self.db_query(query.build()[0])
+            self.db_update(*query.build(), commit=True)
 
     def filter_results(
         self,
@@ -1410,8 +1410,16 @@ class StorageManager:
 
         return query.build()[0]
 
-    def get_interaction_recalc_info(self):
+    def recalculate_interactions(self, interaction_finder: object):
+        import ast
 
+        # recreate the interaction tables
+        self._delete_table("Interactions")
+        self._delete_table("Interaction_indices")
+        self._create_interaction_index_table()
+        self._create_interaction_table()
+
+        # build the query, register function on connection for the rd kit bin mol
         def _rdbin_to_atoms(rd_bin):
             mol = Chem.Mol(rd_bin)
             atoms = [atom.GetSymbol() for atom in mol.GetAtoms()]
@@ -1419,12 +1427,76 @@ class StorageManager:
 
         self.conn.create_function("rdbin_to_atoms", 1, _rdbin_to_atoms)
 
-        query = QueryBuilder()
-        query.SELECT("R.ligand_coordinates", "rdbin_to_atoms(L.rdmol)").FROM(
-            "Results", "R"
-        ).JOIN("Ligands", "L", "ligand_id")
+        insert_interactions_query = """
+                INSERT INTO Interactions(pose_id, interaction_id)
+                SELECT ?, II.interaction_id
+                FROM Interaction_indices II
+                WHERE II.interaction_type = ?
+                AND II.rec_chain = ?
+                AND II.rec_resname = ?
+                AND II.rec_resid = ?
+                AND II.rec_atom = ?
+                AND II.rec_atomid = ?;"""
 
-        return self._stream_query(query.build()[0])
+        query = QueryBuilder()
+        starting_id: int = 0  # else grab this value from some table
+        batch_size: int = 1000
+        print(
+            "\n\n interaction rows before running new method: ",
+            self.table_length("Interactions"),
+        )
+        # process for 1000 rows at once
+        while True:
+            query = QueryBuilder()
+            query.SELECT(
+                "R.pose_id", "R.ligand_coordinates", "rdbin_to_atoms(L.rdmol)"
+            ).FROM("Results", "R").JOIN("Ligands", "L", "ligand_id").LIMIT(
+                batch_size
+            ).WHERE(
+                "R.pose_id > ?", starting_id
+            )
+            self._begin_transaction()
+            rows = self.db_query(*query.build()).fetchall()
+
+            if not rows:
+                break
+
+            for row in rows:
+                pose_id = row[0]
+                ligand_coordinates = ast.literal_eval(row[1])
+                ligand_atoms = row[2].split(",")
+                # calculate interactions
+                interaction_data = interaction_finder.find_pose_interactions(
+                    ligand_atoms, ligand_coordinates
+                )
+                # number of hydrogen bonds
+                num_hb = len([1 for i in interaction_data["type"] if i == "H"])
+                # process interaction mess to tuples
+                interactions_tuples = self._generate_interaction_tuples(
+                    [interaction_data], unique_id=False
+                )
+
+                # insert unique interactions in indices table
+                just_interactions = list(
+                    {interaction for interaction in interactions_tuples}
+                )
+                self._insert_interaction_index_rows(just_interactions)
+                # separate insert statement for hydrogen bond count?
+                # TODO interaction tuples is a list pof tuples, each need the pose id in front
+                pose_id_interaction_tuples = [
+                    (pose_id,) + tuple for tuple in interactions_tuples
+                ]
+                self.db_update(
+                    insert_interactions_query, pose_id_interaction_tuples, False
+                )
+            self.conn.commit()
+
+            starting_id = rows[-1][0]
+
+        print(
+            "\n\n interaction rows AFTER running new method: ",
+            self.table_length("Interactions"),
+        )
 
     # endregion
 
@@ -1874,7 +1946,9 @@ class StorageManager:
         ]
 
     @classmethod
-    def _generate_interaction_tuples(cls, interaction_dictionaries: list) -> list:
+    def _generate_interaction_tuples(
+        cls, interaction_dictionaries: list, unique_id=True
+    ) -> list:
         """Takes dictionary of file results, formats as list of tuples for interactions.
         To each interaction description is added business keys/columns that identifies
         which results row/pose each interaction belongs to
@@ -1896,16 +1970,19 @@ class StorageManager:
         ]
         interactions = set()
         for pose_interactions in interaction_dictionaries:
+            if unique_id:
+                id = (
+                    pose_interactions["ligand_name"],
+                    pose_interactions["run_number"],
+                    pose_interactions["pose_rank"],
+                )
+            else:
+                id = tuple()
             count = pose_interactions["count"][0]
             for i in range(int(count)):
                 # include the three values that uniquely identify a pose within a docking run
                 interactions.add(
-                    (
-                        pose_interactions["ligand_name"],
-                        pose_interactions["run_number"],
-                        pose_interactions["pose_rank"],
-                    )
-                    + tuple(pose_interactions[kw][i] for kw in interaction_keywords)
+                    id + tuple(pose_interactions[kw][i] for kw in interaction_keywords)
                 )
 
         return list(interactions)
