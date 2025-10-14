@@ -659,11 +659,14 @@ class StorageManager:
         """
         if table:
             query = self.QueryBuilder()
-            query.SELECT("*").FROM("Results")
             if self.is_bookmark(requested_data):
+                query.SELECT("*").FROM("Results")
                 query.IN_BOOKMARK(requested_data)
             elif self._is_statustable(requested_data):
+                query.SELECT("*").FROM("Results")
                 query.WHERE(f"pose_id in {requested_data}")
+            else:
+                query.SELECT("*").FROM(requested_data)
             return pd.read_sql_query(query.build()[0], self.conn)
         else:
             return pd.read_sql_query(requested_data, self.conn)
@@ -1419,13 +1422,28 @@ class StorageManager:
         self._create_interaction_index_table()
         self._create_interaction_table()
 
-        # build the query, register function on connection for the rd kit bin mol
-        def _rdbin_to_atoms(rd_bin):
-            mol = Chem.Mol(rd_bin)
-            atoms = [atom.GetSymbol() for atom in mol.GetAtoms()]
-            return ",".join(atoms)
+        def mol_to_semi_docking_atoms(mol):
+            """
+            Should deal with RDKit atom types and convert them to interaction-ready
+            AD4 atom types, but not clear that it will currently work for all atom types FYI
 
-        self.conn.create_function("rdbin_to_atoms", 1, _rdbin_to_atoms)
+            Args:
+                mol (_type_): _description_
+
+            Returns:
+                _type_: _description_
+            """
+            atoms = []
+            for atom in mol.GetAtoms():
+                atom_symbol = atom.GetSymbol()
+                if atom_symbol == "C" and atom.GetIsAromatic():
+                    atoms.append("A")
+                elif atom_symbol == "O":
+                    atoms.append("OA")
+                else:
+                    atoms.append(atom_symbol)
+
+            return atoms
 
         insert_interactions_query = """
                 INSERT INTO Interactions(pose_id, interaction_id)
@@ -1440,16 +1458,18 @@ class StorageManager:
 
         query = QueryBuilder()
         starting_id: int = 0  # else grab this value from some table
-        batch_size: int = 1000
-        print(
-            "\n\n interaction rows before running new method: ",
-            self.table_length("Interactions"),
-        )
+        batch_size: int = 1  # keep small for testing purposes
+
         # process for 1000 rows at once
+        num_hb_tuples = []
         while True:
             query = QueryBuilder()
             query.SELECT(
-                "R.pose_id", "R.ligand_coordinates", "rdbin_to_atoms(L.rdmol)"
+                "R.pose_id",
+                "R.ligand_coordinates",
+                "L.rdmol",
+                "L.atom_index_map",
+                "L.hydrogen_parents",
             ).FROM("Results", "R").JOIN("Ligands", "L", "ligand_id").LIMIT(
                 batch_size
             ).WHERE(
@@ -1464,13 +1484,51 @@ class StorageManager:
             for row in rows:
                 pose_id = row[0]
                 ligand_coordinates = ast.literal_eval(row[1])
-                ligand_atoms = row[2].split(",")
+                mol = Chem.Mol(row[2])
+
+                smiles_atoms = mol_to_semi_docking_atoms(mol)
+                # this is technically tuples of 2 items, first item refers to smiles atom
+                # and second index where it falls in the docking coordinates
+                atom_index_map = [int(index) for index in ast.literal_eval(row[3])]
+                hydrogen_parents = [int(index) for index in ast.literal_eval(row[4])]
+                # recreate ligand_atoms with hydrogens and in the correct place
+                # there will be indices that do not represent the smiles, I think I can put
+                # eg a W there or G0 as filler, they should not be counted in meeko I think
+                atom_index_mapping_tuples: list[tuple[int, int]] = list(
+                    zip(atom_index_map[::2], atom_index_map[1::2])
+                )
+                hydrogen_mapping_tuples = list(
+                    zip(hydrogen_parents[::2], hydrogen_parents[1::2])
+                )
+
+                # start with a list of filler atoms, "water type"
+                # whatever isn't filled shouldn't interact but needs to be there for coordinates
+                recreated_docking_ligand_atoms = ["W"] * len(ligand_coordinates)
+                # replace Os oxygens with OAs
+                # smiles_atoms = ["OA" if s == "O" else s for s in smiles_atoms]
+                # TODO what about other atoms, there must be a better way to automatically convert each smile atom
+                # maybe some deep hidden meeko mapping because it happens somewhere! Yes
+                # ok simple for now for testing, then go deeper
+                for smiles_index, docking_index in atom_index_mapping_tuples:
+                    recreated_docking_ligand_atoms[docking_index - 1] = smiles_atoms[
+                        smiles_index - 1
+                    ]
+                # insert hydrogens
+                for _, docking_index in hydrogen_mapping_tuples:
+                    recreated_docking_ligand_atoms[docking_index - 1] = "HD"
+
                 # calculate interactions
                 interaction_data = interaction_finder.find_pose_interactions(
-                    ligand_atoms, ligand_coordinates
+                    recreated_docking_ligand_atoms, ligand_coordinates
                 )
                 # number of hydrogen bonds
                 num_hb = len([1 for i in interaction_data["type"] if i == "H"])
+                num_hb_tuples.append(
+                    (
+                        num_hb,
+                        pose_id,
+                    )
+                )
                 # process interaction mess to tuples
                 interactions_tuples = self._generate_interaction_tuples(
                     [interaction_data], unique_id=False
@@ -1489,14 +1547,16 @@ class StorageManager:
                 self.db_update(
                     insert_interactions_query, pose_id_interaction_tuples, False
                 )
-            self.conn.commit()
-
+            # insert the hydrogen bond count and commit each batch
+            self.db_update(
+                "UPDATE Results " "SET num_hb = ?" "WHERE pose_id = ?",
+                num_hb_tuples,
+                commit=True,
+            )
+            # TODO keep track of last processed pose_id in case of failure,
+            # actually can probably use last pose recorded in interaction table but then must roll back
+            # all of the interactions for that pose just to be safe in case pose split over two batches
             starting_id = rows[-1][0]
-
-        print(
-            "\n\n interaction rows AFTER running new method: ",
-            self.table_length("Interactions"),
-        )
 
     # endregion
 
