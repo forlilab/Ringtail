@@ -390,48 +390,6 @@ class RingtailCore:
         receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(receptor_file)
         return receptor_name, receptor_blob
 
-    def add_interactions(
-        self,
-        hb_cutoff: float = RingtailDefaults.interaction_cutoffs[0],
-        vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
-        receptor: Union[str, object] = None,
-    ):
-        """
-        Method to add interactions to vina docking data, after adta has been added to the database.
-        If receptor is not already in the db, add it now. .pdbqt, .json, or polymer object are all
-        permissible inputs.
-
-        Args:
-            receptor (Union[str, object], optional): receptor file or object. Defaults to None.
-        """
-        from .interactions import InteractionFinder
-
-        if self.get_previous_docking_mode() != "vina":
-            LOGGER.warning(
-                "Adding interactions is not relevant for non-vina databases, interactions should already be present."
-            )
-            return
-        if self.table_length("Interactions") > 0:
-            LOGGER.warning(
-                "There are already interactions recorded in the database, please note all of these will be deleted before adding new interactions."
-            )
-
-        if receptor:
-            self.save_receptor(receptor)
-
-        _, receptor_object, receptor_polymer = self.get_receptor_object()
-
-        rec_data = receptor_object if receptor_object is not None else receptor_polymer
-
-        # add interactions
-        interaction_finder = InteractionFinder(
-            rec_data,
-            [hb_cutoff, vdw_cutoff],
-        )
-        # stream query the docking data and add interactions
-        with self.storageman as sm:
-            sm.recalculate_interactions(interaction_finder)
-
     # endregion
 
     # region filter, export
