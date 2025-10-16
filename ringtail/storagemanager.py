@@ -879,7 +879,7 @@ class StorageManager:
         values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
 
         bins = np.linspace(0, 100, num_bins + 1)
-        bin_edges = np.percentile(values, 100 - bins)
+        bin_edges = np.percentile(values, bins)
         return bins, bin_edges
 
     def fetch_data_for_passing_results(
