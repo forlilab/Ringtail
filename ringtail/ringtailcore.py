@@ -1478,7 +1478,6 @@ class RingtailCore:
             return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
 
     def get_columns_in_table(self) -> dict[(str, list)]:
-        # TODO this needs to be made more useful for the csv exporter, needs a lot of work
         with self.storageman as sm:
             return sm.get_useful_columns()
 

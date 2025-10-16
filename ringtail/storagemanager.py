@@ -2643,11 +2643,8 @@ class StorageManager:
 
     def get_useful_columns(self):
         return {
-            "Results": [
-                "docking_score",
-                "pose_rank",
-            ],
-            "Ligands": ["ligname", "smiles"],
+            "Results": self._fetch_table_column_names("Results"),
+            "Ligands": self._fetch_table_column_names("Ligands"),
         }
 
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
