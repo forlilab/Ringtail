@@ -48,10 +48,13 @@ Example file list:
 Adding a receptor
 -------------------
 The receptor can be added to a database by itself, either to a populated database without a receptor, or to an empty database that you anticipate to fill with docking results later. 
-
+As of version 3.0.0, you can add either a pdbqt file or a receptor meeko.Polymer object as a .json file, or even the Polymer object itself.
 .. code-block:: python
     
-    rtc.save_receptor(receptor_file = "receptor.pdbqt")
+    rtc.save_receptor(receptor = "receptor.pdbqt")
+    rtc.save_receptor(receptor = "receptor_polymer.json")
+    polymer = ~meeko.Polymer()
+    rtc.save_receptor(receptor = polymer)
 
 Printing a database summary
 ---------------------------
