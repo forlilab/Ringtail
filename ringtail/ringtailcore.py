@@ -145,7 +145,7 @@ class RingtailCore:
         docking_mode: str = RingtailDefaults.docking_mode,
         store_all_poses: bool = RingtailDefaults.store_all_poses,
         max_poses: int = RingtailDefaults.max_poses,
-        add_interactions: bool = RingtailDefaults.add_interactions,
+        no_interactions: bool = RingtailDefaults.no_interactions,
         interaction_tolerance: float = RingtailDefaults.interaction_tolerance,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         max_proc: int = RingtailDefaults.max_proc,
@@ -168,7 +168,7 @@ class RingtailCore:
             docking_mode (str): what docking engine was used to perform the docking
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
-            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            no_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
@@ -201,7 +201,7 @@ class RingtailCore:
                 docking_mode,
                 store_all_poses,
                 max_poses,
-                add_interactions,
+                no_interactions,
                 interaction_tolerance,
                 interaction_cutoffs,
                 max_proc,
@@ -218,7 +218,7 @@ class RingtailCore:
         docking_mode: str = "vina",
         store_all_poses: bool = RingtailDefaults.store_all_poses,
         max_poses: int = RingtailDefaults.max_poses,
-        add_interactions: bool = RingtailDefaults.add_interactions,
+        no_interactions: bool = RingtailDefaults.no_interactions,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         max_proc: int = RingtailDefaults.max_proc,
         finalize: bool = True,
@@ -237,7 +237,7 @@ class RingtailCore:
             docking_mode (str): what docking engine was used to perform the docking
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
-            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            no_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
             finalize (bool, optional): whether to finalize database creation and write indices, or wait, for example when you write to the db in batches
@@ -270,7 +270,7 @@ class RingtailCore:
                 docking_mode,
                 store_all_poses,
                 max_poses,
-                add_interactions,
+                no_interactions,
                 None,
                 interaction_cutoffs,
                 max_proc,
@@ -2022,7 +2022,7 @@ class RingtailCore:
         docking_mode: str,
         store_all_poses: bool,
         max_poses: int,
-        add_interactions: bool,
+        no_interactions: bool,
         interaction_tolerance: float,
         interaction_cutoffs: list,
         max_proc: int,
@@ -2037,7 +2037,7 @@ class RingtailCore:
             docking_mode (str): docking engine used for the docking, describes file type/results style
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
-            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
+            no_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
@@ -2054,6 +2054,10 @@ class RingtailCore:
                 "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
             )
             interaction_tolerance = None
+        # make sure we don't try to calculate interactions for adgpu
+        if docking_mode == "adgpu":
+            no_interactions = True
+
         # parse how many poses to store
         # will prioritize all poses if specified
         if store_all_poses:
@@ -2064,7 +2068,7 @@ class RingtailCore:
         processing_options = {
             "max_poses": max_poses,
             "store_all_poses": store_all_poses,
-            "add_interactions": add_interactions,
+            "no_interactions": no_interactions,
             "interaction_tolerance": interaction_tolerance,
             "interaction_cutoffs": interaction_cutoffs,
             "max_proc": max_proc,
@@ -2088,7 +2092,7 @@ class RingtailCore:
         )
 
         # need receptor file contents if adding interaction
-        if add_interactions:
+        if not no_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
             # try pdbqt first
             results.receptor_string = self.get_receptor_object()[1]
@@ -2098,7 +2102,7 @@ class RingtailCore:
                     results.receptor_string = self.get_receptor_object()[2]
                 except:
                     raise ResultsProcessingError(
-                        "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                        "Trying to calculate interactions, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
                     )
 
         LOGGER.info("Adding results...")

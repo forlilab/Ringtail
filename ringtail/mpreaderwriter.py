@@ -31,7 +31,7 @@ class DockingFileReader(mp.Process):
         max_poses (int): max number of poses to store for each ligand
         interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
         store_all_poses (bool): Store all poses from docking results
-        add_interactions (bool): find and save interactions between ligand poses and receptor
+        no_interactions (bool): if not wanting to calculate interactions
         interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
         target (str): receptor name
     """
@@ -135,7 +135,7 @@ class DockingFileReader(mp.Process):
                     parsed_file_dict
                 )
                 # Calculate interactions if requested
-                if self.shared.get("add_interactions"):
+                if self.shared.get("no_interactions") != True:
                     if self.interaction_finder is None:
                         self.interaction_finder = InteractionFinder(
                             self.shared.get("receptor_string"),

@@ -535,7 +535,6 @@ class TestVinaHandling:
             file_path=vina_path,
             receptor_file=vina_path + "/receptor.pdbqt",
             save_receptor=True,
-            add_interactions=True,
             docking_mode="vina",
         )
         count = rtc.table_length("Interaction_indices")
@@ -550,7 +549,6 @@ class TestVinaHandling:
             file=data_path + "/ligand.pdbqt",
             docking_mode="vina",
             receptor_file=data_path + "/receptor.json",
-            add_interactions=True,
             save_receptor=True,
         )
 
@@ -563,7 +561,6 @@ class TestVinaHandling:
             file=data_path + "/ligand.pdbqt",
             docking_mode="vina",
             receptor_file=data_path + "/receptor.pdbqt",
-            add_interactions=True,
             save_receptor=True,
         )
         ligands_2 = rtc.table_length("Ligands")

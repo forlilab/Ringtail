@@ -81,7 +81,7 @@ Enhancements
 
 Bug fixes
 =========
-* There was a bug when using "overwrite" a database with the CLI where Ringtail would overwrite the database at the wrong time, leading to issues with data in the receptor table and functions like "add_interactions". This has now been fixed.
+* There was a bug when using "overwrite" a database with the CLI where Ringtail would overwrite the database at the wrong time, leading to issues with data in the receptor table and functions like "add_interactions" (as of v3 please note add_interactions is no longer an option). This has now been fixed.
 * Multiple bugs related to the ligand filters have been fixed, where the main issue was if the `ligand_operator` was set to "OR", "OR" would be used not only between ligand substructures but also between other parts of the query (leading to more ligands passing filtering). 
 
 

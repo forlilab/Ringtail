@@ -59,7 +59,7 @@ You can also specify what to do if you are adding duplicate results for a ligand
 
 By default (for DLGs), Ringtail will store the best-scored (lowest energy) binding pose from the first 3 pose clusters in the DLG. For Vina, Ringtail will store the 3 best poses. Additional settings for writing to the database include how to handle the number of poses docked (``--max_poses``, or ``--store_all_poses`` which will overwrite the former).
 
-ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it may be added by Ringtail with the ``--add_interactions`` option. **This adds a signifcant increase to the total database write time.** Distance cutoffs for the interactions are specified with the ``--interaction_cutoffs`` option. Adding interactions requires that the receptor PDBQT be provided as an input by the user with the ``--receptor_file`` option.
+ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it will by default be added by Ringtail during data parsing, unless the user specifies not to using ``--no_interactions`` option. **This will signifcantly decrease the total database write time.** By default, the cutoff distance for being considered an interaction is 3.7 å for hydrogen bonds and 4.0å for van der Waals interactions. If the user would like to calculate interactions for vina results with other distance cutoffs, the option ``--interaction_cutoffs`` can be used. To be able to add interactions it is important that the ``--receptor_file`` is provided during database write (or that the receptor has already been saved explicitly in the database). 
 
 The ``--interaction_tolerance`` option also allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. When used as a flag, the ``--interaction_tolerance`` default is 0.8 angstroms. The user may also specify their own cutoff. This option is intended for use with DLGs from AD-GPU, which clusters output poses based on RMSD.
 
@@ -71,7 +71,7 @@ It is further possible to overwrite a database by use of the argument ``--overwr
     $ rt_process_vs write --input_db output.db --file_path test_data/group1 --max_poses 2 --interaction_tolerance 0.8
 
     #vina
-    $ rt_process_vs write --input_db output.db --file_path test_data/vina --overwrite --receptor_file receptor.pdbqt --save_receptor --add_interactions --interaction_cutoffs 3.7,4.0
+    $ rt_process_vs write --input_db output.db --file_path test_data/vina --overwrite --receptor_file receptor.pdbqt --save_receptor --interaction_cutoffs 3.5,4.5
 
 Printing a database summary
 ***************************
@@ -257,13 +257,13 @@ Keywords pertaining to database write and file handling
     "file_list", "File(s) with list of files to read into database", None
     "pattern", "Specify pattern to search for when finding files", "'dlg' or 'pdbqt'"
     "recursive", "Flag to perform recursive subdirectory search on file_path directory(s)", FALSE
-    "receptor_file", "Use with save_receptor and/or add_interactions. Give receptor PDBQT.", None
+    "receptor_file", "Use with save_receptor and/or for vina data if interaction calculations are wanted. Give receptor PDBQT.", None
     "save_receptor", "Flag to specify that receptor file should be imported to database. Receptor file must also be specified with receptor_file", FALSE
     "max_poses", "Number of clusters for which to store top-scoring pose (dlg) or number of poses (vina) to save in database", 3
     "store_all_poses", "Flag to indicate that all poses should be stored in database", FALSE
     "interaction_tolerance", "Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired [note]_ ", "0.8 Å if used"
-    "add_interactions", "Find interactions between ligands and receptor. Requires receptor PDBQT to be written.", FALSE
-    "interaction_cutoffs", "Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0.", "3.7,4.0"
+    "no_interactions", "If interactions for vina results should not be calculated and stored", FALSE
+    "interaction_cutoffs", "Use values other than defaults for distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0.", "3.7,4.0"
     "max_proc", "Maximum number of subprocesses to spawn during database writing.", "number of available CPUs or fewer"
     "append_results", "Add new docking files to existing database given with input_db", FALSE
     "duplicate_handling", "Specify how dulicate results should be handled. May specify 'ignore' or 'replace'. Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*", None

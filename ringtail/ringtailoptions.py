@@ -99,7 +99,7 @@ class RingtailDefaults:
     duplicate_handling: str = None
     overwrite: bool = None
     interaction_tolerance: float = None
-    add_interactions: bool = None
+    no_interactions: bool = None
     interaction_cutoffs: tuple[float] = (
         3.7,
         4.0,

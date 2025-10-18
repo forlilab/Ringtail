@@ -209,15 +209,15 @@ def cmdline_parser(defaults: dict = {}):
         nargs="?",
     )
     write_parser.add_argument(
-        "-ai",
-        "--add_interactions",
-        help="Find interactions between ligand poses and receptor and save to database. Requires receptor PDBQT to be given with input files (all modes) and --receptor_file to be specified with Vina mode. SIGNIFICANTLY INCREASES DATBASE WRITE TIME.",
+        "-ni",
+        "--no_interactions",
+        help="If interactions for vina results should not be calculated and stored",
         action="store_true",
     )
     write_parser.add_argument(
         "-ic",
         "--interaction_cutoffs",
-        help="Use with --add_interactions, specify distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. These are the default cutoffs.",
+        help="Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms if other than default. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. These are the default cutoffs.",
         action="store",
         type=str,
         metavar="[HB CUTOFF],[VDW CUTOFF]",
@@ -763,7 +763,7 @@ class CLOptionParser:
                 overwrite=parsed_opts.overwrite,
                 store_all_poses=parsed_opts.store_all_poses,
                 max_poses=parsed_opts.max_poses,
-                add_interactions=parsed_opts.add_interactions,
+                no_interactions=parsed_opts.no_interactions,
                 interaction_tolerance=parsed_opts.interaction_tolerance,
                 interaction_cutoffs=parsed_opts.interaction_cutoffs,
                 max_proc=parsed_opts.max_proc,
