@@ -39,6 +39,7 @@ rt_compare = "ringtail.cli.rt_compare:main"
 rt_generate_config_file = "ringtail.cli.rt_generate_config_file:main"
 rt_process_vs = "ringtail.cli.rt_process_vs:main"
 rt_upgrade_db = "ringtail.cli.rt_upgrade_db:main"
+rt_merge = "ringtail.cli.rt_merge:main"
 
 [project.urls]
 Homepage = "https://github.com/forlilab/Ringtail"
