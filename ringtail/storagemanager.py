@@ -684,7 +684,9 @@ class StorageManager:
         """
         cur = self.db_query(query)
         rows = cur.fetchall()
-        column_names = [desc[0] for desc in cur.description] if cur.description else []
+        column_names = (
+            [desc[0].lower() for desc in cur.description] if cur.description else []
+        )
         dict_rows = [dict(zip(column_names, row)) for row in rows]
         return column_names, dict_rows
 
