@@ -1396,6 +1396,24 @@ class StorageManager:
         )
 
     def prepare_column_export_query(self, columns: dict, bookmark: str) -> str:
+        """
+        Writes a query based on what columns (and their respective tables) are requested.
+
+
+        Args:
+            columns (dict): _description_
+            bookmark (str): _description_
+
+        Returns:
+            str: _description_
+        """
+        included_tables = [
+            item.split(".", 1)[0].lower()
+            for sublist in columns.values()
+            for item in sublist
+            if item is not None
+        ]
+
         query = self.QueryBuilder()
         for _, column in columns.items():
             if column[0]:
@@ -1404,9 +1422,19 @@ class StorageManager:
                     query.SELECT(f"{column[0]} AS {column[1]}")
                 else:
                     query.SELECT(column[0])
-        # not the most flexible way to allow column selection
         query.FROM("Results")
-        query.JOIN("Ligands", "Ligands", on="ligand_id", to="Results")
+
+        # join to tables that are represented in the columns
+        if "ligands" in included_tables:
+            query.JOIN("Ligands", "Ligands", on="ligand_id", to="Results")
+        if "interaction_indices" in included_tables:
+            query.JOIN("Interactions", "Interactions", "pose_id", "Results")
+            query.JOIN(
+                "Interaction_indices",
+                "Interaction_indices",
+                "interaction_id",
+                "Interactions",
+            )
 
         if self.is_bookmark(bookmark):
             query.IN_BOOKMARK(bookmark)
@@ -2647,6 +2675,9 @@ class StorageManager:
         return {
             "Results": self._fetch_table_column_names("Results"),
             "Ligands": self._fetch_table_column_names("Ligands"),
+            "Interaction_indices": self._fetch_table_column_names(
+                "Interaction_indices"
+            ),
         }
 
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
