@@ -17,6 +17,7 @@ from .util import *
 from .exceptions import RTCoreError, OutputError, StorageError
 from rdkit import Chem
 import itertools
+from typing import Union
 import os
 from .logutils import LOGGER
 
@@ -2036,6 +2037,22 @@ class RingtailCore:
             new_data = self.storageman.fetch_data_for_passing_results()
         with self.outputman:
             self.outputman.write_filter_log(new_data)
+
+    def cross_reference_databases(
+        self,
+        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        bookmark_prefix: str = "crossref",
+    ) -> tuple[int, dict]:
+        """
+        Will attach requested databases and compare specified bookmarks (or entire database if not specified)
+
+        Args:
+            wanted_dbs (list[tuple[str, str]], optional): _description_. Defaults to None.
+            unwanted_dbs (list[tuple[str, str]], optional): _description_. Defaults to None.
+        """
+        with self.storageman as sm:
+            return sm.crossref_databases(wanted_dbs, unwanted_dbs, bookmark_prefix)
 
     def drop_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database

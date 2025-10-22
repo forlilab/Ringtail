@@ -633,12 +633,13 @@ class TestOtherScripts:
         )
         # should produce 25 ligands
         os.system(
-            "python ../ringtail/cli/rt_compare.py --wanted output.db --unwanted output2.db --log compared_ligands.txt"
+            "python ../ringtail/cli/rt_compare.py --wanted output.db passing_results --unwanted output2.db passing_results --log compared_ligands.txt"
         )
-        with open("compared_ligands.txt") as f:
+        with open("output_compared_ligands.txt") as f:
             for pos, line in enumerate(f):
-                if pos + 1 == 4:  # zero based line indexing
+                if pos + 1 == 7:  # zero based line indexing
                     assert line == "Number passing ligands: 25 \n"
                     break
 
-        os.system("rm output.db output2.db compared_ligands.txt output_log.txt")
+        os.system("rm output.db output2.db *_compared_ligands.txt output_log.txt")
+        # TODO add test for the other output options

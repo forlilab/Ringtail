@@ -9,6 +9,7 @@ import time
 import json
 import os.path
 import pandas as pd
+from typing import Union
 from .logutils import LOGGER as logger
 import sys
 from signal import signal, SIGINT
@@ -336,6 +337,118 @@ class StorageManager:
         self.temptable_suffix += 1
 
         return temp_name, num_passing
+
+    def crossref_databases(
+        self,
+        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        bookmark_prefix: str = "crossref",
+    ) -> tuple[int, dict]:
+        processed_wanted = []
+        for index, database in enumerate(wanted_dbs):
+            db_name = f"db_{index + 1}"
+            processed_wanted.append(
+                (
+                    db_name,
+                    database[0],
+                    database[1],
+                )
+            )
+            self._attach_db(database[0], db_name)
+
+        processed_unwanted = []
+        for index, database in enumerate(unwanted_dbs or []):
+            db_name = f"db_{index + 1 + len(processed_wanted)}"
+            processed_unwanted.append(
+                (
+                    db_name,
+                    database[0],
+                    database[1],
+                )
+            )
+            self._attach_db(database[0], db_name)
+
+        # make subqueries/common table expressions for each set of ligands
+        wanted_ctes = []
+        for db_name, _, bookmark in processed_wanted:
+            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN (SELECT Pose_id FROM {db_name}.{bookmark}))"""
+            wanted_ctes.append(query)
+
+        unwanted_ctes = []
+        for db_name, _, bookmark in processed_unwanted:
+            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN (SELECT Pose_id FROM {db_name}.{bookmark}))"""
+            unwanted_ctes.append(query)
+
+        all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
+
+        wanted_joins = " ".join(
+            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.LigName = {db[0]}.LigName"
+            for db in processed_wanted[1:]
+        )
+
+        # build exclusion union
+        exclude_union = " UNION ".join(
+            f"SELECT LigName FROM {db[0]}" for db in processed_unwanted
+        )
+
+        if unwanted_dbs:
+            unwanted_ctes = f""",
+                unwanted AS (
+                    {exclude_union}
+                )"""
+            unwanted_where = """WHERE i.LigName NOT IN (SELECT LigName FROM unwanted)"""
+        else:
+            unwanted_ctes = ""
+            unwanted_where = ""
+
+        query = f"""
+        {all_ctes},
+        wanted AS (
+            SELECT {processed_wanted[0][0]}.LigName
+            FROM {processed_wanted[0][0]} {wanted_joins}
+        ){unwanted_ctes}
+        SELECT DISTINCT i.LigName
+        FROM wanted i
+        {unwanted_where}
+        """
+
+        # the query now works, time to make a bookmark in each database with the results
+        approved_ligand_names = tuple(
+            [lig[0] for lig in self._run_query(query).fetchall()]
+        )
+        ligand_sql_string = ", ".join(f"'{l}'" for l in approved_ligand_names)
+
+        new_bookmark_names = {}
+        for db, file, bookmark in processed_wanted:
+            bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            self._run_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
+            view_creation = f"""
+            CREATE VIEW {db}.{bookmark_name} AS
+            SELECT * FROM Results
+            WHERE LigName
+            IN ({ligand_sql_string});
+            """
+            self._run_query(view_creation)
+            new_bookmark_names.update({file: bookmark_name})
+
+        for db, file, bookmark in processed_unwanted:
+            bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            self._run_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
+            view_creation = f"""
+            CREATE VIEW {db}.{bookmark_name} AS
+            SELECT * FROM Results
+            WHERE LigName
+            IN ({ligand_sql_string});
+            """
+            self._run_query(view_creation)
+            new_bookmark_names.update({file: bookmark_name})
+
+        self.conn.commit()
+
+        for db, _, _ in processed_wanted[1:] + processed_unwanted:
+            self._detach_db(db)
+
+        return len(approved_ligand_names or []), new_bookmark_names
 
     def prune(self):
         """Deletes rows from results, ligands, and interactions in a bookmark
@@ -1803,7 +1916,6 @@ class StorageManagerSQLite(StorageManager):
             "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {1})".format(
                 original_bookmark_name, temp_table_name
             ),
-            add_poseID=False,
         )
         compare_bookmark_str = "Comparison. Wanted: "
         compare_bookmark_str += ", ".join(wanted_list)

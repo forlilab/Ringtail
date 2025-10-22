@@ -8,7 +8,7 @@ import argparse
 import json
 import sys
 import os
-from ringtail import StorageManager, StorageManagerSQLite
+from ringtail import StorageManager, RingtailCore
 from ringtail import OutputManager, OptionError
 from ringtail import OptionError
 from ringtail import logutils
@@ -33,9 +33,10 @@ def cmdline_parser(defaults={}):
         "wanted": None,
         "unwanted": None,
         "bookmark_name": ["passing_results"],
-        "log": "selective_log.txt",
-        "save_bookmark": None,
-        "export_csv": None,
+        "log": None,
+        "save_bookmark": "crossref",
+        "export_sdf": None,
+        "export_db": None,
     }
 
     config = json.loads(
@@ -43,7 +44,7 @@ def cmdline_parser(defaults={}):
     )  # using dict -> str -> dict as a safe copy method
 
     if confargs.config is not None:
-        logger.info("Reading options from config file")
+        logutils.LOGGER.info("Reading options from config file")
         with open(confargs.config) as f:
             c = json.load(f)
             config.update(c)
@@ -74,59 +75,59 @@ def cmdline_parser(defaults={}):
     parser.add_argument(
         "--wanted",
         "-w",
-        help="Database for which ligands MUST be included in bookmark",
-        nargs="+",
+        help="Database and bookmark name for which ligands MUST be included in",
+        nargs=2,
         type=str,
-        metavar="[DATABASE_FILE].db",
+        action="append",
+        metavar="<DATABASE_FILE>.db <bookmark_name>",
     )
     parser.add_argument(
         "--unwanted",
-        "-n",
-        help="Database for which ligands MUST NOT be included in bookmark",
-        nargs="+",
+        "-uw",
+        help="Database and bookmark name for which ligands MUST NOT be included in",
+        nargs=2,
         type=str,
-        metavar="[DATABASE_FILE].db",
-        action="store",
-    )
-    parser.add_argument(
-        "--bookmark_name",
-        "-sn",
-        help="Name of filter bookmark that ligands should be compared accross. Must be present in all databases",
-        type=str,
-        metavar="STRING",
-        action="store",
-        nargs="+",
-    )
-    parser.add_argument(
-        "--log",
-        "-l",
-        help="Name for log file of passing ligands and data",
-        type=str,
-        metavar="[LOG FILE].txt",
-        action="store",
-    )
-    parser.add_argument(
-        "--save_bookmark",
-        "-s",
-        help="Name for bookmark of passing cross-reference ligands to be saved as in first database given with --wanted",
-        type=str,
-        metavar="STRING",
-        action="store",
-    )
-    parser.add_argument(
-        "--export_csv",
-        "-x",
-        help="Save final cross-referenced bookmark as csv. Saved as [save_bookmark].csv or 'crossref.csv' if --save_bookmark not used.",
-        action="store_true",
+        metavar="<DATABASE_FILE>.db <bookmark_name>",
+        action="append",
     )
     parser.add_argument(
         "--verbose", "-v", help="Verbose output while running", action="store_true"
     )
     parser.add_argument(
-        "--database_type",
-        "-dbt",
-        help="Specify what database type was used to construct the databases. NOTE: All databases have to be created with the same type.",
+        "--debug",
+        "-d",
+        help="Debug logging (includes log file) output while running",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--log",
+        "-l",
+        help="Name for crossref log file of passing ligands and data",
+        type=str,
+        metavar="<LOG FILE>.txt",
         action="store",
+    )
+    parser.add_argument(
+        "--save_bookmark",
+        "-s",
+        help="Prefix for bookmark of passing cross-reference ligands to be saved in each database, defaults to crossref_<compared_bookmark>",
+        type=str,
+        metavar="STRING",
+        action="store",
+    )
+    parser.add_argument(
+        "--export_sdf",
+        "-xs",
+        help="Exports all crossreferenced ligands to one SDF per database. File name will be the compared bookmark name prefixed with chosen phrase, defaults to crossref_<bookmark>.sdf",
+        const="crossref",
+        nargs="?",
+        action="store",
+    )
+    parser.add_argument(
+        "--export_db",
+        "-xd",
+        help="Exports all crossreferenced ligands to one new database per database. File name will be the compared bookmark name prefixed with chosen phrase, defaults to crossref_<bookmark>.db",
+        action="store_true",
     )
 
     parser.set_defaults(**config)
@@ -139,6 +140,7 @@ def cmdline_parser(defaults={}):
         )
 
     return args
+
 
 def main():
     time0 = time.perf_counter()
@@ -160,116 +162,80 @@ def main():
                 raise IOError("Must specify at least two databases for comparison.")
 
         # set logging level
-        debug = True
-        if debug:
-            level = logger.set_level("DEBUG")
-        elif args.verbose:
-            level = logger.set_level("INFO")
+        if args.verbose:
+            logger.set_level("INFO")
+        elif args.debug:
+            logger.set_level("DEBUG")
         else:
-            level = logger.set_level("WARNING")
-        logger.add_filehandler("ringtail", level)
+            logger.set_level("WARNING")
+
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
-
-        # check that ref database exists
-        if not os.path.exists(wanted_dbs[0]):
-            logger.critical("Wanted database {0} not found!".format(wanted_dbs[0]))
-
-        ref_db = wanted_dbs[0]
-        wanted_dbs = wanted_dbs[1:]
-
-        previous_bookmarkname = args.bookmark_name[0]
-        original_bookmark_name = args.bookmark_name[0]
-        # make list of bookmark names for compared databases
-        bookmark_list = []
-        if len(args.bookmark_name) > 1:
-            num_dbs = len(args.wanted)
-            if args.unwanted is not None:
-                num_dbs += len(args.unwanted)
-            if len(args.bookmark_name) != num_dbs:
-                raise OptionError(
-                    "Not enough bookmark names given for the number of databases given. If specifying more than one bookmark name, must give bookmark name for every database to be compared."
+        if not unwanted_dbs:
+            unwanted_dbs = []
+        filter_dict = {"wanted": wanted_dbs, "unwanted": unwanted_dbs}
+        ### Ensure we have (enough) valid database files before proceeding
+        # check that each wanted database exists
+        for index, database_bookmark in enumerate(reversed(wanted_dbs)):
+            if not os.path.exists(database_bookmark[0]):
+                logger.warning(
+                    f"Wanted database {database_bookmark[0]} not found, removing from list!"
                 )
-            bookmark_list = args.bookmark_name[1:]
-        else:
-            for db in wanted_dbs:
-                bookmark_list.append(original_bookmark_name)
-            if unwanted_dbs is not None:
-                for db in unwanted_dbs:
-                    bookmark_list.append(original_bookmark_name)
-
-        logger.info("Starting cross-reference process")
-
-        # set database type to default sqlite if not specified in cmdline args
-        if args.database_type is None:
-            args.database_type = "sqlite"
-        # ensure the specified database types are supported
-        storagemanager = StorageManager.check_storage_compatibility(args.database_type)
-
-        dbman = storagemanager(ref_db)
-
-        last_db = None
-        num_wanted_dbs = len(wanted_dbs)
-        # storageman is a context manager, and keeps connection to the database open within the `with` statement
-        with dbman:
-            for idx, db in enumerate(wanted_dbs):
-                logger.info(f"cross-referencing {db}")
-                if not os.path.exists(db):
-                    logger.critical("Wanted database {0} not found!".format(db))
-                print(
-                    f"passing in these parameters: {db}, {previous_bookmarkname}, {bookmark_list[idx]}, {last_db}"
+                del wanted_dbs[index]
+        # needs to be at least one wanted database
+        if not wanted_dbs:
+            logger.critical(
+                "There are no valid databases in the --wanted list, cannot run cross comparison!"
+            )
+        # check that each unwanted database exists
+        for index, database_bookmark in enumerate(reversed(unwanted_dbs)):
+            if not os.path.exists(database_bookmark[0]):
+                logger.warning(
+                    f"Unwanted database {database_bookmark[0]} not found, removing from list!"
                 )
-                previous_bookmarkname, number_passing_ligands = dbman.crossref_filter(
-                    db,
-                    previous_bookmarkname,
-                    bookmark_list[idx],
-                    selection_type="+",
-                    old_db=last_db,
-                )
-                last_db = db
+                del unwanted_dbs[index]
+        # check that we have at least two databases for cross comparison
+        if len(wanted_dbs) + len(unwanted_dbs) < 2:
+            logger.critical(
+                "There are less than two valid databases specified in the script, cannot run cross comparison!"
+            )
+        if len(wanted_dbs) + len(unwanted_dbs) > 10:
+            logger.critical(
+                "There are more than 10 specified databases, please choose 10 or less databases total. Cannot run cross comparison!"
+            )
+        # use first database as main connetion for cross referencing
+        rtc = RingtailCore(wanted_dbs[0][0])
+        num_shared_ligands, db_new_bookmarks = rtc.cross_reference_databases(
+            wanted_dbs=wanted_dbs,
+            unwanted_dbs=unwanted_dbs,
+            bookmark_prefix=args.save_bookmark,
+        )
+        print("Number of ligands passing wanted minus unwanted: ", num_shared_ligands)
+        # output options
+        for db, bookmark in db_new_bookmarks.items():
+            rtc = RingtailCore(db)
+            with rtc.storageman:
+                rtc.storageman._insert_bookmark_info(bookmark, "", filter_dict)
 
-            if unwanted_dbs is not None:
-                for idx, db in enumerate(unwanted_dbs):
-                    logger.info(f"cross-referencing {db}")
-                    if not os.path.exists(db):
-                        logger.critical("Unwanted database {0} not found!".format(db))
-                    previous_bookmarkname, number_passing_ligands = (
-                        dbman.crossref_filter(
-                            db,
-                            previous_bookmarkname,
-                            bookmark_list[idx + num_wanted_dbs],
-                            selection_type="-",
-                            old_db=last_db,
-                        )
-                    )
-                    last_db = db
+            if args.log:
+                log_file = str(db.split(".")[0]) + "_" + args.log
+                logger.info(f"Writing log text file for {db} bookmark {bookmark}")
+                rtc.outputman = OutputManager(log_file)
+                with rtc.outputman:
+                    rtc.outputman.write_results_bookmark_to_log(bookmark)
+                    rtc.outputman.log_num_passing_ligands(num_shared_ligands)
+                    with rtc.storageman as sm:
+                        log_file_lines = sm.fetch_bookmark(bookmark)
+                        rtc.outputman.write_filter_log(log_file_lines)
+                logger.info(f"Wrote {db} bookmark {bookmark} results to log file.")
 
-            logger.info("Writing log")
-            output_manager = OutputManager(log_file=args.log)
-            with output_manager:
-                if args.save_bookmark is not None:
-                    output_manager.write_results_bookmark_to_log(args.save_bookmark)
-                output_manager.log_num_passing_ligands(number_passing_ligands)
-                final_bookmark = dbman.fetch_bookmark(previous_bookmarkname)
-                output_manager.write_filter_log(final_bookmark)
+            if args.export_sdf:
+                rtc.write_molecule_sdfs(bookmark_name=bookmark)
+                logger.info(f"Exported {db} bookmark {bookmark} to SDF.")
 
-            if args.save_bookmark is not None:
-                dbman.create_bookmark_from_temp_table(
-                    previous_bookmarkname,
-                    args.save_bookmark,
-                    original_bookmark_name,
-                    args.wanted,
-                    args.unwanted,
-                )
-
-            if args.export_csv:
-                if args.save_bookmark is not None:
-                    csv_name = args.save_bookmark + ".csv"
-                else:
-                    csv_name = "crossref.csv"
-                dataframe = dbman.to_dataframe(previous_bookmarkname, table=True)
-                dataframe.to_csv(csv_name)
-                logger.info("Exported bookmark to csv")
+            if args.export_db:
+                rtc.export_bookmark_db(bookmark)
+                logger.info(f"Exported {db} bookmark {bookmark} to a new database.")
 
         logger.info(
             "Time to cross-reference: {0:.0f} seconds".format(
@@ -287,6 +253,7 @@ def main():
         )
         sys.exit(1)
     return
+
 
 if __name__ == "__main__":
     sys.exit(main())
