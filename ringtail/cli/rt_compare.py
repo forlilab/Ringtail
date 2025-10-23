@@ -196,6 +196,7 @@ def main():
                 "There are more than 10 specified databases, please choose 10 or less databases total. Cannot run cross comparison!"
             )
         # use first database as main connetion for cross referencing
+        print("requested wanted databases: ", wanted_dbs)
         rtc = RingtailCore(wanted_dbs[0][0])
         num_shared_ligands, db_new_bookmarks = rtc.cross_reference_databases(
             wanted_dbs=wanted_dbs,
@@ -211,16 +212,15 @@ def main():
                 rtc = RingtailCore(db)
 
                 if args.log:
-                    # TODO this might not work as expected
                     log_file = str(db.split(".")[0]) + "_" + args.log
                     logger.info(f"Writing log text file for {db} bookmark {bookmark}")
-                    rtc.outputman = OutputManager(log_file)
-                    with rtc.outputman:
-                        rtc.outputman.write_results_bookmark_to_log(bookmark)
-                        rtc.outputman.log_num_passing_ligands(num_shared_ligands)
-                        with rtc.storageman as sm:
-                            log_file_lines = sm.fetch_bookmark(bookmark)
-                            rtc.outputman.write_filter_log(log_file_lines)
+                    rtc._write_filter_output(
+                        bookmark,
+                        "wanted, unwanted",
+                        num_shared_ligands,
+                        log_file,
+                        output_all_poses=True,
+                    )
                     logger.info(f"Wrote {db} bookmark {bookmark} results to log file.")
 
                 if args.export_sdf:

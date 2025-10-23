@@ -7,6 +7,7 @@
 import os.path
 from .logutils import LOGGER as logger
 import sys
+import json
 from rdkit import Chem
 from typing import Union
 from importlib.metadata import version
@@ -1658,33 +1659,74 @@ class StorageManagerSQLite(StorageManager):
         ligand_sql_string = ", ".join(f"'{l}'" for l in approved_ligand_names)
 
         new_bookmark_names = {}
+        wanted_unwanted_dict = {
+            "wanted": processed_wanted,
+            "unwanted": processed_unwanted,
+        }
         for db, file, bookmark in processed_wanted:
-            # delete bookmark if exists
-
-            delete_query = """"""
-            # maybe format strings
-
             bookmark_name = f"{bookmark_prefix}_{bookmark}"
-            self.db_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
-            view_creation = f"""
-            CREATE VIEW {db}.{bookmark_name} AS
-            SELECT * FROM Results
-            WHERE LigName
-            IN ({ligand_sql_string});
+
+            # delete bookmark if exists
+            cur = self.db_query(f"""SELECT name FROM {db}.Filters;""")
+            if bookmark_name in [row[0].lower() for row in cur.fetchall()]:
+                filter_id = self.db_query(
+                    f"""SELECT filter_id FROM {db}.Filters WHERE name = {bookmark_name};"""
+                ).fetchone()[0]
+                self.db_query(
+                    f"""DELETE FROM {db}.Filtered_poses WHERE filter_id = ?""",
+                    (filter_id,),
+                )
+
+            # form query
+            query = f"""SELECT Pose_id FROM {db}.Results WHERE ligand_id IN (SELECT ligand_id FROM {db}.Ligands WHERE LigName IN ({ligand_sql_string}));"""
+
+            # insert bookmark/filter info
+            insert_Filters = f"""INSERT INTO {db}.Filters(name, query, filters, filter_window) VALUES (?,?,?,?) RETURNING filter_id;"""
+            filter_id = self.db_query(
+                insert_Filters,
+                (bookmark_name, query, json.dumps(wanted_unwanted_dict), bookmark),
+            ).fetchone()[0]
+
+            insert_Filtered_poses = f"""
+            WITH results_poses AS (
+                {query})
+            INSERT INTO {db}.Filtered_poses(filter_id, pose_id)
+            SELECT {filter_id}, pose_id FROM results_poses;
             """
-            self._run_query(view_creation)
+            self.db_query(insert_Filtered_poses)
             new_bookmark_names.update({file: bookmark_name})
 
         for db, file, bookmark in processed_unwanted:
             bookmark_name = f"{bookmark_prefix}_{bookmark}"
-            self.db_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
-            view_creation = f"""
-            CREATE VIEW {db}.{bookmark_name} AS
-            SELECT * FROM Results
-            WHERE LigName
-            IN ({ligand_sql_string});
+
+            # delete bookmark if exists
+            cur = self.db_query(f"""SELECT name FROM {db}.Filters;""")
+            if bookmark_name in [row[0].lower() for row in cur.fetchall()]:
+                filter_id = self.db_query(
+                    f"""SELECT filter_id FROM {db}.Filters WHERE name = {bookmark_name};"""
+                ).fetchone()[0]
+                self.db_query(
+                    f"""DELETE FROM {db}.Filtered_poses WHERE filter_id = ?""",
+                    (filter_id,),
+                )
+
+            # form query
+            query = f"""SELECT Pose_id FROM {db}.Results WHERE ligand_id IN (SELECT ligand_id FROM {db}.Ligands WHERE LigName IN ({ligand_sql_string}));"""
+
+            # insert bookmark/filter info
+            insert_Filters = f"""INSERT INTO {db}.Filters(name, query, filters, filter_window) VALUES (?,?,?,?) RETURNING filter_id;"""
+            filter_id = self.db_query(
+                insert_Filters,
+                (bookmark_name, query, json.dumps(wanted_unwanted_dict), bookmark),
+            ).fetchone()[0]
+
+            insert_Filtered_poses = f"""
+            WITH results_poses AS (
+                {query})
+            INSERT INTO {db}.Filtered_poses(filter_id, pose_id)
+            SELECT {filter_id}, pose_id FROM results_poses;
             """
-            self.db_query(view_creation)
+            self.db_query(insert_Filtered_poses)
             new_bookmark_names.update({file: bookmark_name})
 
         self.conn.commit()
