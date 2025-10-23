@@ -2045,11 +2045,24 @@ class RingtailCore:
         bookmark_prefix: str = "crossref",
     ) -> tuple[int, dict]:
         """
-        Will attach requested databases and compare specified bookmarks (or entire database if not specified)
+        Method to cross reference two or more databases. Will attach all other databases
+        to the "current" database, which is always the first wanted database (will have the
+        active ringtail object).
+
+        Will create an intersect of ligand names in the wanted databases+bookmarks,
+        and delete any ligands found in the union of the unwanted databases+bookmarks.
+
+        A bookmark with specified prefix to the original bookmark name will be stored in each database,
+        making the crossreferencing data easily available for later use.
 
         Args:
-            wanted_dbs (list[tuple[str, str]], optional): _description_. Defaults to None.
-            unwanted_dbs (list[tuple[str, str]], optional): _description_. Defaults to None.
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+
+        Returns:
+            tuple[int, dict]: Number of "passing" ligands and dict of database {database
+            file path: new bookmark name from cross ref}
         """
         with self.storageman as sm:
             return sm.crossref_databases(wanted_dbs, unwanted_dbs, bookmark_prefix)

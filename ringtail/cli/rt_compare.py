@@ -8,9 +8,8 @@ import argparse
 import json
 import sys
 import os
-from ringtail import StorageManager, RingtailCore
-from ringtail import OutputManager, OptionError
-from ringtail import OptionError
+from ringtail import RingtailCore
+from ringtail import OutputManager
 from ringtail import logutils
 import traceback
 
@@ -32,7 +31,6 @@ def cmdline_parser(defaults={}):
     defaults = {
         "wanted": None,
         "unwanted": None,
-        "bookmark_name": ["passing_results"],
         "log": None,
         "save_bookmark": "crossref",
         "export_sdf": None,
@@ -132,12 +130,6 @@ def cmdline_parser(defaults={}):
 
     parser.set_defaults(**config)
     args = parser.parse_args(remaining_argv)
-
-    # check that name was given with save_bookmark
-    if args.save_bookmark == "":
-        raise IOError(
-            "--save_bookmark option used but no bookmark name given. Must specify bookmark name as string."
-        )
 
     return args
 
@@ -248,9 +240,7 @@ def main():
         tb = traceback.format_exc()
         logger.debug(tb)
         logger.critical(str(e))
-        logger.error(
-            "Error encountered while cross-referencing. If error states 'Error while getting number of passing ligands', please confirm that given bookmark names are correct."
-        )
+        logger.error("Error encountered while cross-referencing, please check inputs!")
         sys.exit(1)
     return
 
