@@ -1659,7 +1659,6 @@ class StorageManagerDuckDB(StorageManager):
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
     ) -> str:
-        # TODO
         """Handles string or list input of column names to be outputted, will make sure LigName
         is in the list, and make sure all options are valid
 
@@ -1698,28 +1697,145 @@ class StorageManagerDuckDB(StorageManager):
             outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
             for outfield in table_formatted_outfields
         ]
-        # NOTE Inaccurate patch, need to specify how to aggregate if grouing the results
+        # TODO Inaccurate patch, need to specify how to aggregate if grouing the results
         # this is added here assuming it will be grouped, and is for testing duckdb performance
         # only. Will need to be made more rigorous if including duckdb in prod.
         duck_formatted_outfields = [f"{field}" for field in formatted_outfields]
 
         return duck_formatted_outfields
 
-    # endregion
+    def crossref_databases(
+        self,
+        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        bookmark_prefix: str = "crossref",
+    ) -> tuple[int, dict]:
+        """
+        #TODO not tested in duckdb
+        Method to cross reference two or more databases. Will attach all other databases
+        to the "current" database, which is always the first wanted database (will have the
+        active ringtail object).
 
-    # region crossreferencing filtered databases
+        Will create an intersect of ligand names in the wanted databases+bookmarks,
+        and delete any ligands found in the union of the unwanted databases+bookmarks.
 
-    def _create_crossref_temp_table(self, table_name: str):
-        """create temporary table with given name and with ligand name and pose_id information
+        A bookmark with specified prefix to the original bookmark name will be stored in each database,
+        making the crossreferencing data easily available for later use.
 
         Args:
-            table_name (str): name for temp table
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+
+        Returns:
+            tuple[int, dict]: Number of "passing" ligands and dict of database {database
+            file path: new bookmark name from cross ref}
+        """
+        processed_wanted = []
+        for index, database in enumerate(wanted_dbs):
+            db_name = f"db_{index + 1}"
+            processed_wanted.append(
+                (
+                    db_name,
+                    database[0],
+                    database[1],
+                )
+            )
+            self._attach_db(database[0], db_name)
+
+        processed_unwanted = []
+        for index, database in enumerate(unwanted_dbs or []):
+            db_name = f"db_{index + 1 + len(processed_wanted)}"
+            processed_unwanted.append(
+                (
+                    db_name,
+                    database[0],
+                    database[1],
+                )
+            )
+            self._attach_db(database[0], db_name)
+
+        # make subqueries/common table expressions for each set of ligands
+        wanted_ctes = []
+        for db_name, _, bookmark in processed_wanted:
+            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN (SELECT Pose_id FROM {db_name}.{bookmark}))"""
+            wanted_ctes.append(query)
+
+        unwanted_ctes = []
+        for db_name, _, bookmark in processed_unwanted:
+            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN (SELECT Pose_id FROM {db_name}.{bookmark}))"""
+            unwanted_ctes.append(query)
+
+        all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
+
+        wanted_joins = " ".join(
+            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.LigName = {db[0]}.LigName"
+            for db in processed_wanted[1:]
+        )
+
+        # build exclusion union
+        exclude_union = " UNION ".join(
+            f"SELECT LigName FROM {db[0]}" for db in processed_unwanted
+        )
+
+        if unwanted_dbs:
+            unwanted_ctes = f""",
+                unwanted AS (
+                    {exclude_union}
+                )"""
+            unwanted_where = """WHERE i.LigName NOT IN (SELECT LigName FROM unwanted)"""
+        else:
+            unwanted_ctes = ""
+            unwanted_where = ""
+
+        query = f"""
+        {all_ctes},
+        wanted AS (
+            SELECT {processed_wanted[0][0]}.LigName
+            FROM {processed_wanted[0][0]} {wanted_joins}
+        ){unwanted_ctes}
+        SELECT DISTINCT i.LigName
+        FROM wanted i
+        {unwanted_where}
         """
 
-        create_table_str = (
-            f"CREATE TEMP TABLE {table_name}(Pose_ID INTEGER, ligname VARCHAR);"
+        # the query now works, time to make a bookmark in each database with the results
+        approved_ligand_names = tuple(
+            [lig[0] for lig in self.db_query(query).fetchall()]
         )
-        self.db_query(create_table_str)
+        ligand_sql_string = ", ".join(f"'{l}'" for l in approved_ligand_names)
+
+        new_bookmark_names = {}
+        for db, file, bookmark in processed_wanted:
+            bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            self.db_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
+            view_creation = f"""
+            CREATE VIEW {db}.{bookmark_name} AS
+            SELECT * FROM Results
+            WHERE LigName
+            IN ({ligand_sql_string});
+            """
+            self.db_query(view_creation)
+            new_bookmark_names.update({file: bookmark_name})
+
+        for db, file, bookmark in processed_unwanted:
+            bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            self.db_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
+            view_creation = f"""
+            CREATE VIEW {db}.{bookmark_name} AS
+            SELECT * FROM Results
+            WHERE LigName
+            IN ({ligand_sql_string});
+            """
+            self.db_query(view_creation)
+            new_bookmark_names.update({file: bookmark_name})
+
+        self.conn.commit()
+
+        for db, _, _ in processed_wanted[1:] + processed_unwanted:
+            self._detach_db(db)
+
+        return len(approved_ligand_names or []), new_bookmark_names
 
     # endregion
 
@@ -1983,9 +2099,15 @@ class StorageManagerDuckDB(StorageManager):
     # region general database operations
 
     def _begin_transaction(self):
+        """
+        Begin a transaction
+        """
         self.conn.execute("BEGIN TRANSACTION;")
 
     def _rollback(self):
+        """
+        Roll back transaction
+        """
         self.conn.execute("ROLLBACK;")
 
     def tables_in_db(self) -> list:
@@ -2183,7 +2305,7 @@ class StorageManagerDuckDB(StorageManager):
             ) from e
         return cur
 
-    def db_update(self, query: str, parameters: list[list], commit=True) -> iter:
+    def db_update(self, query: str, parameters: list[list], commit=True):
         """
         A db query that also commits if/when specified
 
@@ -2193,30 +2315,10 @@ class StorageManagerDuckDB(StorageManager):
             commit (bool, optional): whether to commit the transaction in open connection. Defaults to True.
 
         Raises:
-            OptionError
             DatabaseInsertionError
-
-        Returns:
-            iter: if requesting return value(s)
         """
-        # if not parameters:
-        #     return
-        # if type(parameters) != list:
-        #     raise OptionError(
-        #         "Input for duckdb execute many needs to be list[list], wrong type used:",
-        #         parameters,
-        #     )
-        # if type(parameters[0]) != list:
-        #     if type(parameters[0]) == tuple:
-        #         # just convert tuple to list
-        #         parameters = [list(row) for row in parameters]
-        #     else:
-        #         raise OptionError(
-        #             "Input for duckdb execute many needs to be list[list], wrong type used:",
-        #             parameters,
-        #         )
         try:
-            cur = self.conn.executemany(query, parameters)
+            self.conn.executemany(query, parameters)
             if commit:
                 self.conn.commit()
         except duckdb.OperationalError as e:
@@ -2238,7 +2340,6 @@ class StorageManagerDuckDB(StorageManager):
             Union[None, int]: rowid if any
         """
         query = self.QueryBuilder()
-        # TODO this will not work for duckdb
         query.SELECT("rowid")
         if self.is_bookmark(table):
             query.FROM("Filtered_poses").WHERE(

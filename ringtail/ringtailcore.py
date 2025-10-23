@@ -127,6 +127,13 @@ class RingtailCore:
         self._run_mode = access_mode
 
     def get_previous_docking_mode(self) -> Union[None, str]:
+        """
+        Will return the last used docking mode/engine of the database, normalized to the standardized
+        names for docking modes used in ringtail (e.g., see RingtailOptions)
+
+        Returns:
+            Union[None, str]: None or previous docking mode
+        """
         with self.storageman as sm:
             return validate_docking_mode(sm.get_previous_docking_mode())
 
@@ -296,10 +303,12 @@ class RingtailCore:
         receptor_blob = None
         receptor_jsons = None
         if type(receptor) == str:
-            extension = Path(receptor).suffix
-            if "json" in extension:
+            # get all extensions, lower case, account for zipped files
+            extensions = Path(receptor).suffixes
+            extensions = [e.lower() for e in extensions]
+            if ".json" in extensions:
                 receptor_name, receptor_jsons = self._process_receptor_polymer(receptor)
-            elif "pdbqt" in extension:
+            elif ".pdbqt" in extensions:
                 receptor_name, receptor_blob = self._process_receptor_pdbqt(receptor)
         else:
             from meeko import Polymer
@@ -341,54 +350,6 @@ class RingtailCore:
             elif receptor_jsons:
                 self.storageman.insert_receptor_polymer(receptor_jsons, receptor_name)
                 LOGGER.info("Receptor polymer json string was added to the database.")
-
-    def _process_receptor_polymer(self, receptor_file: str) -> tuple[str, str]:
-        """
-        Returns the json string of the contents of a receptor polymer file.
-        Will try even if extension is not .json
-
-        Args:
-            receptor_file (str): (preferably) .json file with a serialized meeko.Polymer object
-
-        Raises:
-            OptionError
-
-        Returns:
-            str: string representation of the meeko.Polymer
-        """
-
-        if ".json" in receptor_file:
-            receptor_name = Path(receptor_file).stem
-            polypath = Path(receptor_file)
-            if polypath.is_file():
-                with open(polypath) as f:
-                    polymer_string = f.read()
-            else:
-                raise OptionError(
-                    "It appears a path to a receptor polymer json file was provided, but the file does not exist: ",
-                    receptor_file,
-                )
-        else:
-            try:
-                polymer_string = json.loads(receptor_file)
-            except json.JSONDecodeError:
-                raise OptionError(
-                    "The provided input for receptor_polymer was provided is not a valid Polymer object, not a valid path or valid json, cannot proceed."
-                )
-        return receptor_name, polymer_string
-
-    def _process_receptor_pdbqt(self, receptor_file: str) -> tuple[str, bytes]:
-        """
-        Makes dict of rec name and receptor blob from pdbqt file (can be zipped)
-
-        Args:
-            receptor_file (str): pdbqt file
-
-        Returns:
-            tuple[str, bytes]: receptor name and bytes/blob object
-        """
-        receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(receptor_file)
-        return receptor_name, receptor_blob
 
     # endregion
 
@@ -823,7 +784,7 @@ class RingtailCore:
         else:
             polymer = receptor_polymer
 
-        flexres_data = self.make_receptor_flexres_mols()
+        flexres_data = self._make_receptor_flexres_mols()
         lig_flex_mol = {}
         for ligand, poses in ligands_poses.items():
             ligand_mol, flexres_mols, _, flexible_residues = self.create_rdkit_mol(
@@ -882,7 +843,7 @@ class RingtailCore:
             ligands_poses = self._fetch_select_ligands_poses(
                 ligand_names=ligname, bookmark_name=bookmark_name
             )
-            flexres_data = self.make_receptor_flexres_mols()
+            flexres_data = self._make_receptor_flexres_mols()
             all_mols = {}
             for ligname, poses in ligands_poses.items():
 
@@ -968,33 +929,43 @@ class RingtailCore:
             )
         return number_similar
 
-    def _export_csv(self, requested_data: str, csv_name: str, table=False):
-        """Get requested data from database, export as CSV
-
-        Args:
-            requested_data (str): Table name or SQL-formatted query
-            csv_name (str): Name for exported CSV file
-            table (bool): flag indicating is requested data is a table name
-        """
-        with self.storageman:
-            df = self.storageman.to_dataframe(requested_data, table=table)
-            df.to_csv(csv_name)
-
     def export_columns_as_csv(
         self,
         columns: list[str],
         bookmark_name: str,
         csv_name: str = "columns_output.csv",
     ):
+        """
+        Exports specified columns from Results or bookmark (or status table) as csv
+
+        Args:
+            columns (list[str]): list of string columns to be exported
+            bookmark_name (str): data limiting table/bookmark to export for
+            csv_name (str, optional): name of csv file. Defaults to "columns_output.csv".
+        """
         with self.storageman as sm:
             sql = sm.prepare_column_export_query(columns, bookmark_name)
 
         self._export_csv(sql, csv_name, False)
 
     def export_table_as_csv(self, table: str, csv_name: str = "table_output.csv"):
+        """
+        Exports specified table (all of it) as a csv file
+
+        Args:
+            table (str): table to be exported
+            csv_name (str, optional): name of csv file. Defaults to "table_output.csv".
+        """
         self._export_csv(table, csv_name, True)
 
     def export_sql_as_csv(self, sql: str, csv_name: str = "sql_output.csv"):
+        """
+        Exports sql-formatted query as csv, assumes user has used appropriate sql terminology for their database engine.
+
+        Args:
+            sql (str): query as a string
+            csv_name (str, optional): name of csv file. Defaults to "sql_output.csv".
+        """
         self._export_csv(sql, csv_name, False)
 
     def export_bookmark_db(self, bookmark_name: str, db_filepath: str = None) -> str:
@@ -1059,6 +1030,35 @@ class RingtailCore:
             with OutputManager(log_file) as opm:
                 opm.write_filter_results_in_log(new_data)
 
+    def cross_reference_databases(
+        self,
+        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        bookmark_prefix: str = "crossref",
+    ) -> tuple[int, dict]:
+        """
+        Method to cross reference two or more databases. Will attach all other databases
+        to the "current" database, which is always the first wanted database (will have the
+        active ringtail object).
+
+        Will create an intersect of ligand names in the wanted databases+bookmarks,
+        and delete any ligands found in the union of the unwanted databases+bookmarks.
+
+        A bookmark with specified prefix to the original bookmark name will be stored in each database,
+        making the crossreferencing data easily available for later use.
+
+        Args:
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+
+        Returns:
+            tuple[int, dict]: Number of "passing" ligands and dict of database {database
+            file path: new bookmark name from cross ref}
+        """
+        with self.storageman as sm:
+            return sm.crossref_databases(wanted_dbs, unwanted_dbs, bookmark_prefix)
+
     def get_gui_plot_data(
         self,
         bookmark_name: str = None,
@@ -1067,6 +1067,20 @@ class RingtailCore:
         y_axis: str = "leff",
         limit: int = None,
     ):
+        """
+        Data from Ringtail formatted to work with the GUI plotting tool. Will most likely depreceate the get_plot_data and functionality
+        outside of GUI, and change name of this method accordingly
+
+        Args:
+            bookmark_name (str, optional): _description_. Defaults to None.
+            include_status (bool, optional): _description_. Defaults to False.
+            x_axis (str, optional): _description_. Defaults to "docking_score".
+            y_axis (str, optional): _description_. Defaults to "leff".
+            limit (int, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
 
         with self.storageman:
             return self.storageman.get_gui_plot_data(
@@ -1477,7 +1491,13 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
 
-    def get_columns_in_table(self) -> dict[(str, list)]:
+    def get_exportable_columns(self) -> dict[(str, list)]:
+        """
+        Creates a dict of useful export columns from Results, Ligands, and Interactions
+
+        Returns:
+            dict: table: [columns]
+        """
         with self.storageman as sm:
             return sm.get_useful_columns()
 
@@ -1965,7 +1985,7 @@ class RingtailCore:
                 ligand_saved_coords.append(ligand_pose)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
 
-    def make_receptor_flexres_mols(
+    def _make_receptor_flexres_mols(
         self,
     ) -> tuple[list, list, list, list]:
         """
@@ -2013,6 +2033,54 @@ class RingtailCore:
             residues.append(res)
 
             return mols, info, saved_coords, residues
+
+    def _process_receptor_polymer(self, receptor_file: str) -> tuple[str, str]:
+        """
+        Returns the json string of the contents of a receptor polymer file.
+        Will try even if extension is not .json
+
+        Args:
+            receptor_file (str): (preferably) .json file with a serialized meeko.Polymer object
+
+        Raises:
+            OptionError
+
+        Returns:
+            str: string representation of the meeko.Polymer
+        """
+
+        if ".json" in receptor_file:
+            receptor_name = Path(receptor_file).stem
+            polypath = Path(receptor_file)
+            if polypath.is_file():
+                with open(polypath) as f:
+                    polymer_string = f.read()
+            else:
+                raise OptionError(
+                    "It appears a path to a receptor polymer json file was provided, but the file does not exist: ",
+                    receptor_file,
+                )
+        else:
+            try:
+                polymer_string = json.loads(receptor_file)
+            except json.JSONDecodeError:
+                raise OptionError(
+                    "The provided input for receptor_polymer was provided is not a valid Polymer object, not a valid path or valid json, cannot proceed."
+                )
+        return receptor_name, polymer_string
+
+    def _process_receptor_pdbqt(self, receptor_file: str) -> tuple[str, bytes]:
+        """
+        Makes dict of rec name and receptor blob from pdbqt file (can be zipped)
+
+        Args:
+            receptor_file (str): pdbqt file
+
+        Returns:
+            tuple[str, bytes]: receptor name and bytes/blob object
+        """
+        receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(receptor_file)
+        return receptor_name, receptor_blob
 
     def _add_results(
         self,
@@ -2324,5 +2392,17 @@ class RingtailCore:
             count_reps,
         )
         return bookmark_name, count_reps
+
+    def _export_csv(self, requested_data: str, csv_name: str, table=False):
+        """Get requested data from database, export as CSV
+
+        Args:
+            requested_data (str): Table name or SQL-formatted query
+            csv_name (str): Name for exported CSV file
+            table (bool): flag indicating is requested data is a table name
+        """
+        with self.storageman:
+            df = self.storageman.to_dataframe(requested_data, table=table)
+            df.to_csv(csv_name)
 
     # endregion

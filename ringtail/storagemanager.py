@@ -192,12 +192,6 @@ class StorageManager:
         if not receptors.get("RecName"):
             self._insert_receptors(receptor_data)
 
-    def clear_table(self, table_name: str, consent: bool = False):
-        if consent:
-            query = QueryBuilder()
-            query.DELETE_FROM(table_name)
-            self.db_update(*query.build(), commit=True)
-
     def filter_results(
         self,
         all_filters: Filters,
@@ -1289,7 +1283,15 @@ class StorageManager:
         return [row[0] for row in self.db_query(*query.build()).fetchall()]
 
     def fetch_bookmark_interactions(self, bookmark_name: str) -> pd.DataFrame:
-        # TODO
+        """
+        Get all interactions represented in a bookmark (as opposed to the whole database)
+
+        Args:
+            bookmark_name (str): from which to get pose interactions from
+
+        Returns:
+            pd.DataFrame: interactions presented as a dataframe
+        """
         query = f"""
         SELECT DISTINCT 
             II.interaction_type,
@@ -1321,12 +1323,6 @@ class StorageManager:
         return interactions_df
 
     def accept_pose(self, pose_ids: Union[int, list[int]]):
-        """
-        _summary_
-
-        Args:
-            pose_ids (Union[int, list[int]]): _description_
-        """
         """
         Will add pose_id to accepted, and delete from maybe and rejected if needed
 
@@ -1443,6 +1439,21 @@ class StorageManager:
 
         return query.build()[0]
 
+    def get_useful_columns(self) -> dict:
+        """
+        Gets list of columns that are approved for use in e.g., exporting csv files
+
+        Returns:
+            dict: dict of tables and their columns
+        """
+        return {
+            "Results": self._fetch_table_column_names("Results"),
+            "Ligands": self._fetch_table_column_names("Ligands"),
+            "Interaction_indices": self._fetch_table_column_names(
+                "Interaction_indices"
+            ),
+        }
+
     # endregion
 
     # region virtual public api
@@ -1541,26 +1552,6 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _stream_query(self, query: str, batch_size: int = 1000):
-        """
-        cursor stream generator
-
-        Args:
-            query (str): sql query
-            batch_size (int): how many cursor hits to read into memory at once
-
-        Yields:
-            cursor batch: cursor results for the query in batch increments, where row can be read
-        """
-        cursor = self.db_query(query)
-
-        while True:
-            batch = cursor.fetchmany(batch_size)
-            if not batch:
-                break
-            for row in batch:
-                yield row
-
     def merge_databases(self, merging_db: str, backup: bool = True):
         """
         Method that merges two databases, ensuring integrity of primary and foreign keys.
@@ -1623,12 +1614,6 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _create_status_tables(self):
-        """
-        Creates status tables if needed
-        """
-        raise NotImplementedError
-
     def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
         """
         Find the row id of a pose in a given table
@@ -1661,6 +1646,34 @@ class StorageManager:
 
         Returns:
             int: first row id belonging to that selection
+        """
+        raise NotImplementedError
+
+    def crossref_databases(
+        self,
+        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        bookmark_prefix: str = "crossref",
+    ) -> tuple[int, dict]:
+        """
+        Method to cross reference two or more databases. Will attach all other databases
+        to the "current" database, which is always the first wanted database (will have the
+        active ringtail object).
+
+        Will create an intersect of ligand names in the wanted databases+bookmarks,
+        and delete any ligands found in the union of the unwanted databases+bookmarks.
+
+        A bookmark with specified prefix to the original bookmark name will be stored in each database,
+        making the crossreferencing data easily available for later use.
+
+        Args:
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+
+        Returns:
+            tuple[int, dict]: Number of "passing" ligands and dict of database {database
+            file path: new bookmark name from cross ref}
         """
         raise NotImplementedError
 
@@ -2480,7 +2493,7 @@ class StorageManager:
 
         return filtered_ligands
 
-    def _get_bookmark_poses_query(self, bookmark_name: str) -> str:
+    def _get_bookmark_poses_query(self, bookmark_name: str, alias: str = None) -> str:
         """
         Creates a query that retrieves all poses from a bookmark, that can be used in other queries
 
@@ -2490,7 +2503,7 @@ class StorageManager:
         Returns:
             str: query representing the poses in a bookmark
         """
-        return self.QueryBuilder.bookmark_query(bookmark_name)
+        return self.QueryBuilder.bookmark_query(bookmark_name, alias)
 
     def _generate_interaction_bitvectors(self, pose_ids: tuple[str]) -> dict:
         """
@@ -2671,15 +2684,6 @@ class StorageManager:
 
         return num_passing_poses
 
-    def get_useful_columns(self):
-        return {
-            "Results": self._fetch_table_column_names("Results"),
-            "Ligands": self._fetch_table_column_names("Ligands"),
-            "Interaction_indices": self._fetch_table_column_names(
-                "Interaction_indices"
-            ),
-        }
-
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
         """
         Gets all column names from given tables
@@ -2705,6 +2709,26 @@ class StorageManager:
 
         return columns, columns_with_tablename
 
+    def _stream_query(self, query: str, batch_size: int = 1000):
+        """
+        cursor stream generator
+
+        Args:
+            query (str): sql query
+            batch_size (int): how many cursor hits to read into memory at once
+
+        Yields:
+            cursor batch: cursor results for the query in batch increments, where row can be read
+        """
+        cursor = self.db_query(query)
+
+        while True:
+            batch = cursor.fetchmany(batch_size)
+            if not batch:
+                break
+            for row in batch:
+                yield row
+
     # endregion
 
     # region virtual private methods
@@ -2720,9 +2744,15 @@ class StorageManager:
         raise NotImplementedError
 
     def _begin_transaction(self):
+        """
+        Begin a transaction
+        """
         raise NotImplementedError
 
     def _rollback(self):
+        """
+        Roll back transaction
+        """
         raise NotImplementedError
 
     def _create_results_table(self, name="Results"):
@@ -2879,6 +2909,12 @@ class StorageManager:
         """
         raise NotImplementedError
 
+    def _create_status_tables(self):
+        """
+        Creates status tables if needed
+        """
+        raise NotImplementedError
+
     def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
         """
         Will check current storage manager db schema version and only set if it
@@ -3013,6 +3049,17 @@ class StorageManager:
         """
         raise NotImplementedError
 
+    def _fetch_table_column_names(self, table: str) -> list:
+        """Fetches list of string for column names in results table
+
+        Returns:
+            list: List of strings of results table column names
+
+        Raises:
+            StorageError
+        """
+        raise NotImplementedError
+
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
     ) -> str:
@@ -3048,158 +3095,5 @@ class StorageManager:
 
         """
         raise NotImplementedError
-
-    def _create_crossref_temp_table(self, table_name: str):
-        """create temporary table with given name and with ligand name and pose_id information
-
-        Args:
-            table_name (str): name for temp table
-        """
-        raise NotImplementedError
-
-    # endregion
-
-    # region cross referencing filtered databases
-
-    def crossref_filter(
-        self,
-        new_db: str,
-        bookmark1_name: str,
-        bookmark2_name: str,
-        temp_table_suffix: int = 0,
-        selection="NOT IN",
-        old_db=None,
-    ) -> tuple:
-        """Selects ligands found or not found in the given bookmark in both current db and new_db.
-        Stores as a temporary table, only accessible within the same database connection.
-
-        Args:
-            new_db (str): file name for database to attach
-            bookmark1_name (str): string for name of first bookmark/temp table to compare
-            bookmark2_name (str): string for name of second bookmark to compare
-            temp_table_suffix (int, optional): if comparing more than set of bookmarks in one database connection, use this to give different temp table names
-            selection (str, optional): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            old_db (str, optional): file name for previous database
-
-        Returns:
-            tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
-        """
-        if old_db is not None:
-            self._detach_db(old_db.split(".")[0])  # remove file extension
-        new_db_name = new_db.split(".")[0]  # remove file extension
-        self._attach_db(new_db, new_db_name)
-
-        selection = selection.upper().strip()
-        if selection not in ["NOT IN", "IN"]:
-            raise StorageError(f"Unrecognized selection type {selection}")
-
-        temp_name = "temp_" + str(temp_table_suffix)
-        self._create_crossref_temp_table(temp_name)
-        temp_insert_query = self._generate_selective_insert_query(
-            bookmark1_name, bookmark2_name, selection, new_db_name, temp_name
-        )
-        self.db_query(temp_insert_query, commit=True)
-
-        num_passing = self._count_ligands_in_temptable(temp_name)
-        print("\n\n Number passing the cross referenced filters: ", num_passing)
-
-        return temp_name, num_passing
-
-    def create_bookmark_from_temp_table(
-        self,
-        temp_table_name,
-        bookmark_name,
-        original_bookmark_name,
-        wanted_list=[],
-        unwanted_list=[],
-    ):
-        """Resaves temp bookmark stored in bookmark_name as new permenant bookmark
-
-        Args:
-            bookmark_name (str): name of bookmark to save last temp bookmark as
-            original_bookmark_name (str): name of original bookmark
-            wanted_list (list): List of wanted database names
-            unwanted_list (list, optional): List of unwanted database names
-            temp_table_name (str): name of temporary table
-        """
-        query = self.QueryBuilder()
-        subq = self.QueryBuilder()
-        subq_string = subq.SELECT("t.pose_id").FROM(temp_table_name, "t").build()[0]
-        query_string = (
-            query.SELECT("bm.pose_id")
-            .FROM_BOOKMARK(original_bookmark_name, "bm")
-            .WHERE(f"bm.pose_id IN ({subq_string})")
-            .build()[0]
-        )
-        filters = {
-            "comparison_wanted": ", ".join(wanted_list),
-            "comparison_unwanted": ", ".join(unwanted_list),
-        }
-
-        self._populate_filter_tables(bookmark_name, query_string, filters)
-
-    def _generate_selective_insert_query(
-        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
-    ):
-        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
-
-        Args:
-            bookmark1_name (str): name of bookmark to cross-reference for main db
-            bookmark2_name (str): name of bookmark to cross-reference for attached db
-            select_str (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            new_db_name (str): name of attached db
-            temp_table (str): name of temporary table to store passing results in
-
-        Returns:
-            str: sqlite formatted query string
-        """
-        query = self.QueryBuilder()
-        subq = self.QueryBuilder()
-        subq_string = (
-            subq.SELECT("l.ligname")
-            .FROM_BOOKMARK(f"{bookmark2_name}", "bm2", new_db_name)
-            .JOIN(
-                f"{new_db_name}.results",
-                "r",
-                "pose_Id",
-                f"bm2",
-            )
-            .JOIN(f"{new_db_name}.ligands", "l", "ligand_id", f"{new_db_name}.results")
-            .build()[0]
-        )
-        query_string = (
-            query.INSERT_INTO(temp_table)
-            .SELECT("bm1.pose_id", "l.ligname")
-            .FROM_BOOKMARK(bookmark1_name, "bm1")
-            .JOIN("results", "r", "pose_id", "bm1")
-            .JOIN("ligands", "l", "ligand_id", "results")
-            .WHERE(f"l.ligname {select_str} ({subq_string})")
-        ).build()[0]
-
-        return query_string
-
-    def _count_ligands_in_temptable(self, temp_name: str) -> int:
-        """
-        Counts ligands represented in the temporary table
-
-        Args:
-            temp_name (str): name of temporary table
-
-        Returns:
-            int: number of poses in temporary table
-        """
-        counting = self.QueryBuilder()
-        count_pool = self.QueryBuilder()
-        count_pool_string = (
-            count_pool.SELECT("tt.pose_id")
-            .FROM(temp_name, "tt")
-            .JOIN("Results", "r", "pose_id")
-            .GROUP_BY("r.ligand_id")
-            .build()[0]
-        )
-        counting.WITH_SUBQUERY("count_pool", count_pool_string).SELECT("COUNT(*)").FROM(
-            "count_pool", "cp"
-        )
-        return self.db_query(counting.build()[0]).fetchone()[0]
 
     # endregion

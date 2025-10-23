@@ -484,7 +484,6 @@ class StorageManagerSQLite(StorageManager):
         WHERE pose_id IN (SELECT pose_id from target_poseid)
         returning pose_id;
         """
-        # TODO this might be a candidate for passing cursor as input
         delete_pose_ids = self.db_query(delete_sql).fetchall()
         delete_pose_ids_list = {row[0] for row in delete_pose_ids}
         placeholders = ",".join("?" for _ in delete_pose_ids_list)
@@ -1552,19 +1551,148 @@ class StorageManagerSQLite(StorageManager):
 
         return formatted_outfields
 
-    # endregion
+    def crossref_databases(
+        self,
+        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        bookmark_prefix: str = "crossref",
+    ) -> tuple[int, dict]:
+        """
+        Method to cross reference two or more databases. Will attach all other databases
+        to the "current" database, which is always the first wanted database (will have the
+        active ringtail object).
 
-    # region crossreferencing filtered databases
+        Will create an intersect of ligand names in the wanted databases+bookmarks,
+        and delete any ligands found in the union of the unwanted databases+bookmarks.
 
-    def _create_crossref_temp_table(self, table_name: str):
-        """create temporary table with given name and with ligand name and pose_id information
+        A bookmark with specified prefix to the original bookmark name will be stored in each database,
+        making the crossreferencing data easily available for later use.
 
         Args:
-            table_name (str): name for temp table
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+
+        Returns:
+            tuple[int, dict]: Number of "passing" ligands and dict of database {database
+            file path: new bookmark name from cross ref}
+        """
+        processed_wanted = []
+        for index, database in enumerate(wanted_dbs):
+            db_name = f"db_{index + 1}"
+            processed_wanted.append(
+                (
+                    db_name,
+                    database[0],
+                    database[1],
+                )
+            )
+            self._attach_db(database[0], db_name)
+
+        processed_unwanted = []
+        for index, database in enumerate(unwanted_dbs or []):
+            db_name = f"db_{index + 1 + len(processed_wanted)}"
+            processed_unwanted.append(
+                (
+                    db_name,
+                    database[0],
+                    database[1],
+                )
+            )
+            self._attach_db(database[0], db_name)
+
+        # make subqueries/common table expressions for each set of ligands
+        wanted_ctes = []
+        self._get_bookmark_poses_query
+        for db_name, _, bookmark in processed_wanted:
+            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN ({self._get_bookmark_poses_query(bookmark, db_name)}))"""
+            wanted_ctes.append(query)
+
+        unwanted_ctes = []
+        for db_name, _, bookmark in processed_unwanted:
+            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN ({self._get_bookmark_poses_query(bookmark, db_name)}))"""
+            unwanted_ctes.append(query)
+
+        all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
+
+        wanted_joins = " ".join(
+            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.LigName = {db[0]}.LigName"
+            for db in processed_wanted[1:]
+        )
+
+        # build exclusion union
+        exclude_union = " UNION ".join(
+            f"SELECT LigName FROM {db[0]}" for db in processed_unwanted
+        )
+
+        if unwanted_dbs:
+            unwanted_ctes = f""",
+                unwanted AS (
+                    {exclude_union}
+                )"""
+            unwanted_where = """WHERE i.LigName NOT IN (SELECT LigName FROM unwanted)"""
+        else:
+            unwanted_ctes = ""
+            unwanted_where = ""
+
+        query = f"""
+        {all_ctes},
+        wanted AS (
+            SELECT {processed_wanted[0][0]}.LigName
+            FROM {processed_wanted[0][0]} {wanted_joins}
+        ){unwanted_ctes}
+        SELECT DISTINCT i.LigName
+        FROM wanted i
+        {unwanted_where}
         """
 
-        create_table_str = f"CREATE TEMP TABLE {table_name}(Pose_ID, ligname)"
-        self.db_query(create_table_str)
+        # the query now works, time to make a bookmark in each database with the results
+        approved_ligand_names = tuple(
+            [lig[0] for lig in self.db_query(query).fetchall()]
+        )
+
+        # don't proceed if no approved ligands
+        if len(approved_ligand_names) < 1:
+            return 0, {}
+
+        ligand_sql_string = ", ".join(f"'{l}'" for l in approved_ligand_names)
+
+        new_bookmark_names = {}
+        for db, file, bookmark in processed_wanted:
+            # delete bookmark if exists
+
+            delete_query = """"""
+            # maybe format strings
+
+            bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            self.db_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
+            view_creation = f"""
+            CREATE VIEW {db}.{bookmark_name} AS
+            SELECT * FROM Results
+            WHERE LigName
+            IN ({ligand_sql_string});
+            """
+            self._run_query(view_creation)
+            new_bookmark_names.update({file: bookmark_name})
+
+        for db, file, bookmark in processed_unwanted:
+            bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            self.db_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
+            view_creation = f"""
+            CREATE VIEW {db}.{bookmark_name} AS
+            SELECT * FROM Results
+            WHERE LigName
+            IN ({ligand_sql_string});
+            """
+            self.db_query(view_creation)
+            new_bookmark_names.update({file: bookmark_name})
+
+        self.conn.commit()
+
+        for db, _, _ in processed_wanted[1:] + processed_unwanted:
+            self._detach_db(db)
+
+        return len(approved_ligand_names or []), new_bookmark_names
 
     # endregion
 
@@ -1810,9 +1938,15 @@ class StorageManagerSQLite(StorageManager):
     # region general database operations
 
     def _begin_transaction(self):
+        """
+        Begin a transaction
+        """
         self.conn.execute("BEGIN TRANSACTION;")
 
     def _rollback(self):
+        """
+        Roll back transaction
+        """
         self.conn.execute("ROLLBACK;")
 
     def tables_in_db(self) -> list:
@@ -2450,7 +2584,7 @@ class StorageManagerSQLite(StorageManager):
             ) from e
         return cur
 
-    def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
+    def db_update(self, query: str, parameters: list[tuple], commit=True):
         """
         A db query that also commits if/when specified
 
@@ -2460,15 +2594,11 @@ class StorageManagerSQLite(StorageManager):
             commit (bool, optional): whether to commit the transaction in open connection. Defaults to True.
 
         Raises:
-            OptionError
             DatabaseInsertionError
 
-        Returns:
-            iter: if requesting return value(s)
         """
         try:
-            cur = self.conn.cursor()
-            cur.executemany(query, parameters)
+            self.conn.executemany(query, parameters)
             if commit:
                 self.conn.commit()
         except sqlite3.OperationalError as e:
