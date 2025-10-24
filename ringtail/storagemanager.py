@@ -1654,6 +1654,7 @@ class StorageManager:
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
+        store_best_pose: bool = False,
     ) -> tuple[int, dict]:
         """
         Method to cross reference two or more databases. Will attach all other databases
@@ -1670,6 +1671,7 @@ class StorageManager:
             wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
             unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
             bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+            store_best_pose (bool, optional): whether or not to store all poses or just the best one. Defaults to False/store all poses
 
         Returns:
             tuple[int, dict]: Number of "passing" ligands and dict of database {database

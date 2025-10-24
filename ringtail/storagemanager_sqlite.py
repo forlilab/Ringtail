@@ -1557,6 +1557,7 @@ class StorageManagerSQLite(StorageManager):
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
+        store_best_pose: bool = False,
     ) -> tuple[int, dict]:
         """
         Method to cross reference two or more databases. Will attach all other databases
@@ -1603,6 +1604,7 @@ class StorageManagerSQLite(StorageManager):
             self._attach_db(database[0], db_name)
 
         # make subqueries/common table expressions for each set of ligands
+        # TODO here problem is ligname is not a column, gotta join on ligand id
         wanted_ctes = []
         self._get_bookmark_poses_query
         for db_name, _, bookmark in processed_wanted:
@@ -1676,7 +1678,7 @@ class StorageManagerSQLite(StorageManager):
                     f"""DELETE FROM {db}.Filtered_poses WHERE filter_id = ?""",
                     (filter_id,),
                 )
-
+            # TODO here need to allow for best pose only
             # form query
             query = f"""SELECT Pose_id FROM {db}.Results WHERE ligand_id IN (SELECT ligand_id FROM {db}.Ligands WHERE LigName IN ({ligand_sql_string}));"""
 

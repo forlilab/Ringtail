@@ -1709,6 +1709,7 @@ class StorageManagerDuckDB(StorageManager):
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
+        store_best_pose: bool = False,
     ) -> tuple[int, dict]:
         """
         #TODO not tested in duckdb
