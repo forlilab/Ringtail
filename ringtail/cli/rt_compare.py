@@ -122,6 +122,12 @@ def cmdline_parser(defaults={}):
         action="store",
     )
     parser.add_argument(
+        "--store_best_pose",
+        "-bp",
+        help="Will only store in bookmark and export the best ranked pose for each ligand.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--export_db",
         "-xd",
         help="Exports all crossreferenced ligands to one new database per database. File name will be the compared bookmark name prefixed with chosen phrase, defaults to crossref_<bookmark>.db",
@@ -201,6 +207,7 @@ def main():
             wanted_dbs=wanted_dbs,
             unwanted_dbs=unwanted_dbs,
             bookmark_prefix=args.save_bookmark,
+            store_best_pose=args.store_best_pose,
         )
         print("Number of ligands passing wanted minus unwanted: ", num_shared_ligands)
         # output options
@@ -210,7 +217,11 @@ def main():
                 rtc.storageman._insert_bookmark_info(bookmark, "", filter_dict)
 
             if args.log:
-                log_file = str(db.split(".")[0]) + "_" + args.log
+                log_file: str = args.log
+                if not log_file.endswith(".txt"):
+                    log_file += ".txt"
+
+                log_file = str(db.split(".")[0]) + "_" + log_file
                 logger.info(f"Writing log text file for {db} bookmark {bookmark}")
                 rtc.outputman = OutputManager(log_file)
                 with rtc.outputman:

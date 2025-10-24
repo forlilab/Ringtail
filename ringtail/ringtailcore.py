@@ -2043,6 +2043,7 @@ class RingtailCore:
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
+        store_best_pose: bool = False,
     ) -> tuple[int, dict]:
         """
         Method to cross reference two or more databases. Will attach all other databases
@@ -2065,7 +2066,9 @@ class RingtailCore:
             file path: new bookmark name from cross ref}
         """
         with self.storageman as sm:
-            return sm.crossref_databases(wanted_dbs, unwanted_dbs, bookmark_prefix)
+            return sm.crossref_databases(
+                wanted_dbs, unwanted_dbs, bookmark_prefix, store_best_pose
+            )
 
     def drop_bookmark(self, bookmark_name: str):
         """Drops specified bookmark from the database

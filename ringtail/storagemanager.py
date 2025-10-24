@@ -343,6 +343,7 @@ class StorageManager:
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
+        store_best_pose: bool = False,
     ) -> tuple[int, dict]:
         """
         Method to cross reference two or more databases. Will attach all other databases
@@ -439,28 +440,47 @@ class StorageManager:
         ligand_sql_string = ", ".join(f"'{l}'" for l in approved_ligand_names)
 
         new_bookmark_names = {}
-        for db, file, bookmark in processed_wanted:
-            bookmark_name = f"{bookmark_prefix}_{bookmark}"
-            self._run_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
-            view_creation = f"""
+        # TODO make adjustments here to store only best ranked pose
+
+        if store_best_pose:
+            view_creation = """
+            CREATE VIEW {db}.{bookmark_name} AS
+            SELECT R.* FROM Results R
+            JOIN (
+                SELECT LigName, MIN(pose_rank) as best_pose
+                FROM Results
+                GROUP BY LigName
+                ) AS sel
+            ON R.LigName = sel.LigName
+            AND R.pose_rank = sel.best_pose
+            WHERE R.LigName
+            IN ({ligands});
+            """
+        else:
+            view_creation = """
             CREATE VIEW {db}.{bookmark_name} AS
             SELECT * FROM Results
             WHERE LigName
-            IN ({ligand_sql_string});
+            IN ({ligands});
             """
-            self._run_query(view_creation)
+        for db, file, bookmark in processed_wanted:
+            bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            self._run_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
+            self._run_query(
+                view_creation.format(
+                    db=db, bookmark_name=bookmark_name, ligands=ligand_sql_string
+                )
+            )
             new_bookmark_names.update({file: bookmark_name})
 
         for db, file, bookmark in processed_unwanted:
             bookmark_name = f"{bookmark_prefix}_{bookmark}"
             self._run_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
-            view_creation = f"""
-            CREATE VIEW {db}.{bookmark_name} AS
-            SELECT * FROM Results
-            WHERE LigName
-            IN ({ligand_sql_string});
-            """
-            self._run_query(view_creation)
+            self._run_query(
+                view_creation.format(
+                    db=db, bookmark_name=bookmark_name, ligands=ligand_sql_string
+                )
+            )
             new_bookmark_names.update({file: bookmark_name})
 
         self.conn.commit()
