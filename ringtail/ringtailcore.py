@@ -137,6 +137,29 @@ class RingtailCore:
         with self.storageman as sm:
             return validate_docking_mode(sm.get_previous_docking_mode())
 
+    def add_pose(
+        self,
+        pose_data: Union[dict, list[dict]],
+        duplicate_handling: str = RingtailDefaults.duplicate_handling,
+        docking_mode: str = RingtailDefaults.docking_mode,
+        store_all_poses: bool = RingtailDefaults.store_all_poses,
+        max_poses: int = RingtailDefaults.max_poses,
+        no_interactions: bool = RingtailDefaults.no_interactions,
+        interaction_tolerance: float = RingtailDefaults.interaction_tolerance,
+        interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
+    ):
+        interaction_vars = {
+            "no_interactions": no_interactions,
+            "interaction_tolerance": interaction_tolerance,
+            "interaction_cutoffs": interaction_cutoffs,
+        }
+        write_options = {
+            "duplicate_handling": duplicate_handling,
+            "docking_mode": docking_mode,
+            "num_poses": self._num_poses_to_store(max_poses, store_all_poses),
+        }
+        pass
+
     # region write to database
     def add_results_from_files(
         self,
@@ -206,8 +229,7 @@ class RingtailCore:
                 duplicate_handling,
                 overwrite,
                 docking_mode,
-                store_all_poses,
-                max_poses,
+                self._num_poses_to_store(max_poses, store_all_poses),
                 no_interactions,
                 interaction_tolerance,
                 interaction_cutoffs,
@@ -275,8 +297,7 @@ class RingtailCore:
                 duplicate_handling,
                 overwrite,
                 docking_mode,
-                store_all_poses,
-                max_poses,
+                self._num_poses_to_store(max_poses, store_all_poses),
                 no_interactions,
                 None,
                 interaction_cutoffs,
@@ -1866,6 +1887,22 @@ class RingtailCore:
 
     # region private methods
 
+    def _num_poses_to_store(self, max_poses: int, store_all_poses: bool) -> int:
+        """
+        Determine number of poses to store based on Ringtail user arguments
+
+        Args:
+            max_poses (int): number of poses given as integer
+            store_all_poses (bool): yes/no to store all poses
+
+        Returns:
+            int: number of poses to store, -1 for all, positive int for anything else
+        """
+        if store_all_poses:
+            return -1
+        else:
+            return max_poses
+
     def _fetch_select_ligands_poses(
         self,
         ligand_names: Union[str, list] = None,
@@ -2092,8 +2129,7 @@ class RingtailCore:
         duplicate_handling: str,
         overwrite: bool,
         docking_mode: str,
-        store_all_poses: bool,
-        max_poses: int,
+        num_poses: int,
         no_interactions: bool,
         interaction_tolerance: float,
         interaction_cutoffs: list,
@@ -2107,8 +2143,7 @@ class RingtailCore:
             duplicate_handling (str): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             overwrite (bool): whether or not to overwrite existing storage
             docking_mode (str): docking engine used for the docking, describes file type/results style
-            store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
-            max_poses (int): how many poses to save (ordered by soem score?)
+            num_poses (int): max how many poses to store for a ligand, -1 is all
             no_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
@@ -2130,16 +2165,8 @@ class RingtailCore:
         if docking_mode == "adgpu":
             no_interactions = True
 
-        # parse how many poses to store
-        # will prioritize all poses if specified
-        if store_all_poses:
-            num_poses = -1
-        elif max_poses:
-            num_poses = max_poses
-        # TODO place to use -1 for all poses
         processing_options = {
-            "max_poses": max_poses,
-            "store_all_poses": store_all_poses,
+            "num_poses": num_poses,
             "no_interactions": no_interactions,
             "interaction_tolerance": interaction_tolerance,
             "interaction_cutoffs": interaction_cutoffs,

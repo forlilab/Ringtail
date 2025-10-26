@@ -68,11 +68,11 @@ class ResultsManager:
             logmsg = f"This is the list of ligands whos strings are being procssed: {str(results.strings.keys())}"
         LOGGER.debug(logmsg)
 
-        if processing_options.get("store_all_poses") and processing_options.get(
+        if processing_options.get("num_poses") == -1 and processing_options.get(
             "interaction_tolerance"
         ):
             LOGGER.warning(
-                "Cannot use 'interaction_tolerance' with 'store_all_poses'. Removing 'interaction_tolerance'."
+                "Cannot use 'interaction_tolerance' and 'store_all_poses'. Removing 'interaction_tolerance'."
             )
             processing_options["interaction_tolerance"] = None
 

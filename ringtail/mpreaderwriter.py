@@ -27,13 +27,7 @@ class DockingFileReader(mp.Process):
         queueIn (multiprocess.Queue): current queue for the processor/file reader
         queueOut (multiprocess.Queue): queue for the processor/file reader after adding or removing an item
         pipe_conn (multiprocess.Pipe): pipe connection to the reader
-        docking_mode (str): describes what docking engine was used to produce the results
-        max_poses (int): max number of poses to store for each ligand
-        interaction_tolerance (float): Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose."
-        store_all_poses (bool): Store all poses from docking results
-        no_interactions (bool): if not wanting to calculate interactions
-        interaction_cutoffs (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
-        target (str): receptor name
+        shared_dict (dict): docking opitions including number of poses, docking mode, duplicate handling, and interaction calculation information
     """
 
     def __init__(
@@ -130,7 +124,6 @@ class DockingFileReader(mp.Process):
                     )
 
                 # find run numbers for poses we want to save
-                # NOTE where num poses plays in
                 parsed_file_dict["poses_to_save"] = self._find_poses_to_save(
                     parsed_file_dict
                 )
@@ -211,19 +204,20 @@ class DockingFileReader(mp.Process):
         Returns:
             list: List of run numbers to save
         """
-        store_all_poses = self.shared.get("store_all_poses")
-        max_poses = self.shared.get("max_poses")
-        if max_poses:
-            if max_poses > len(ligand_dict["sorted_runs"]):
-                store_all_poses = True
-        if store_all_poses:
+        num_poses = self.shared.get("num_poses")
+
+        # independent of docking engine, store all
+        if num_poses == -1:
             poses_to_save = ligand_dict["sorted_runs"]
+
+        # adgpu stores poses under different key name
         elif self.docking_mode == "adgpu":
             # will only select top n clusters.
-            poses_to_save = ligand_dict["cluster_top_poses"][:max_poses]
+            poses_to_save = ligand_dict["cluster_top_poses"][:num_poses]
+
         # if not adgpu, save top n poses
         else:
-            poses_to_save = ligand_dict["sorted_runs"][:max_poses]
+            poses_to_save = ligand_dict["sorted_runs"][:num_poses]
 
         return poses_to_save
 
