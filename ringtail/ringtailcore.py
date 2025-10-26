@@ -650,7 +650,7 @@ class RingtailCore:
                         num_passing_ligands,
                     )
                     if log_file:
-                        self._write_filter_output(
+                        self.write_filter_output(
                             iterated_bookmark_name,
                             temp_filters,
                             num_passing_ligands,
@@ -687,7 +687,7 @@ class RingtailCore:
                 )
             # use original filters for final output log write
             if log_file:
-                self._write_filter_output(
+                self.write_filter_output(
                     bookmark_name,
                     filters.asdict(),
                     num_passing_ligands,
@@ -739,6 +739,61 @@ class RingtailCore:
             f"Number of clusters: {num_clusters}.\nPassing poses saved to {bookmark_name}."
         )
         return bookmark_name
+
+    def write_filter_output(
+        self,
+        bookmark_name: str,
+        filters: dict,
+        num_passing_ligands: int,
+        log_file: str = RingtailDefaults.log_file,
+        output_fields: Union[str, list] = RingtailDefaults.outfields,
+        output_all_poses: bool = RingtailDefaults.output_all_poses,
+        order_results: str = RingtailDefaults.order_results,
+        clustering: dict = {},
+        max_miss_combs: int = None,
+        append_to_log: bool = None,
+    ):
+        """
+        Args:
+            bookmark_name (str): describing the passing poses
+            filters (dict): filters used to pass the poses
+            num_passing_ligands (int): number passing ligands
+            log_file (str): name of file to write to
+            output_fields (Union[str, list]): output columns to include
+            output_all_poses (bool): whether or not to output one or all passing poses
+            order_results (str): if ordering the results by a specific column
+            clustering (dict, optional): dict describing any clustering done. Defaults to {}.
+            max_miss_combs (int, optional): how many max_miss combinations were used. Defaults to None.
+            append_to_log (bool, optional): whether or not to append to existing logfile. Defaults to None.
+
+        Raises:
+            OptionError
+        """
+        if not order_results:
+            order_results = "ligname"
+        with self.storageman:
+            formatted_query = self.storageman.get_bookmark_selection(
+                bookmark_name, output_fields, not output_all_poses, order_results
+            )
+
+        # format output_log string
+        if clustering:
+            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
+        else:
+            cluster_string = "No clustering performed\n."
+        with OutputManager(log_file, append_to_log) as opm:
+            if max_miss_combs:
+                opm.write_maxmiss_union_header()
+                opm.write_bookmarkname_in_log(bookmark_name)
+            else:
+                opm.write_filtervalues_in_log(
+                    filters, [], bookmark_name, cluster_string
+                )
+            with self.storageman:
+                opm.write_filter_results_in_log(
+                    self.storageman.db_query(formatted_query).fetchall()
+                )
+            opm.log_num_passing_ligands(num_passing_ligands)
 
     def write_flexres_pdb(
         self,
@@ -2209,61 +2264,6 @@ class RingtailCore:
         with self.storageman:
             if finalize:
                 self.storageman.finalize_database_write()
-
-    def _write_filter_output(
-        self,
-        bookmark_name: str,
-        filters: dict,
-        num_passing_ligands: int,
-        log_file: str,
-        output_fields: Union[str, list],
-        output_all_poses: bool,
-        order_results: str,
-        clustering: dict = {},
-        max_miss_combs: int = None,
-        append_to_log: bool = None,
-    ):
-        """
-        Args:
-            bookmark_name (str): describing the passing poses
-            filters (dict): filters used to pass the poses
-            num_passing_ligands (int): number passing ligands
-            log_file (str): name of file to write to
-            output_fields (Union[str, list]): output columns to include
-            output_all_poses (bool): whether or not to output one or all passing poses
-            order_results (str): if ordering the results by a specific column
-            clustering (dict, optional): dict describing any clustering done. Defaults to {}.
-            max_miss_combs (int, optional): how many max_miss combinations were used. Defaults to None.
-            append_to_log (bool, optional): whether or not to append to existing logfile. Defaults to None.
-
-        Raises:
-            OptionError
-        """
-        if not order_results:
-            order_results = "ligname"
-        with self.storageman:
-            formatted_query = self.storageman.get_bookmark_selection(
-                bookmark_name, output_fields, not output_all_poses, order_results
-            )
-
-        # format output_log string
-        if clustering:
-            cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
-        else:
-            cluster_string = "No clustering performed\n."
-        with OutputManager(log_file, append_to_log) as opm:
-            if max_miss_combs:
-                opm.write_maxmiss_union_header()
-                opm.write_bookmarkname_in_log(bookmark_name)
-            else:
-                opm.write_filtervalues_in_log(
-                    filters, [], bookmark_name, cluster_string
-                )
-            with self.storageman:
-                opm.write_filter_results_in_log(
-                    self.storageman.db_query(formatted_query).fetchall()
-                )
-            opm.log_num_passing_ligands(num_passing_ligands)
 
     def _generate_interaction_combinations(self, filters: dict, max_miss: int) -> list:
         """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round

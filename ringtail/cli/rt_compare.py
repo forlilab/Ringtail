@@ -220,7 +220,7 @@ def main():
                 if args.log:
                     log_file = str(db.split(".")[0]) + "_" + args.log
                     logger.info(f"Writing log text file for {db} bookmark {bookmark}")
-                    rtc._write_filter_output(
+                    rtc.write_filter_output(
                         bookmark,
                         "wanted, unwanted",
                         num_shared_ligands,
