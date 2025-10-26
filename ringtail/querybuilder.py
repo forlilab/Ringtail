@@ -54,7 +54,6 @@ class QueryBuilder:
         self.selects.append(status_case)
         return self
 
-    # TODO take a look at all from bookmark stuff
     def FROM_BOOKMARK(self, bookmark, alias=None, db_alias=""):
         bookmark_query = f"({self.bookmark_query(bookmark, db_alias)})"
         return self.FROM(bookmark_query, alias)
