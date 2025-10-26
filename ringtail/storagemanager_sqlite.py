@@ -1687,9 +1687,8 @@ class StorageManagerSQLite(StorageManager):
                 )
             """
 
-        self._begin_transaction()
-
         for db, file, bookmark in processed_wanted:
+            self._begin_transaction()
             if db == "db_1":
                 db = "main"
 
@@ -1731,8 +1730,18 @@ class StorageManagerSQLite(StorageManager):
             """
             self.db_query(insert_Filtered_poses)
             new_bookmark_names.update({file: bookmark_name})
+            try:
+                sqlite3.enable_callback_tracebacks(True)
+                self.conn.commit()
+            except sqlite3.OperationalError as e:
+                self._rollback()
+                logger.error(
+                    f"Exception while creating bookmarks for cross referenced ligands!",
+                    str(e),
+                )
 
         for db, file, bookmark in processed_unwanted:
+            self._begin_transaction()
             bookmark_name = f"{bookmark_prefix}_{bookmark}"
             filter_query = filter_query.format(db=db, ligands=ligand_sql_string)
 
@@ -1771,15 +1780,15 @@ class StorageManagerSQLite(StorageManager):
             """
             self.db_query(insert_Filtered_poses)
             new_bookmark_names.update({file: bookmark_name})
-        try:
-            sqlite3.enable_callback_tracebacks(True)
-            self.conn.commit()
-        except sqlite3.OperationalError as e:
-            self._rollback()
-            logger.error(
-                f"Exception while creating bookmarks for cross referenced ligands!",
-                str(e),
-            )
+            try:
+                sqlite3.enable_callback_tracebacks(True)
+                self.conn.commit()
+            except sqlite3.OperationalError as e:
+                self._rollback()
+                logger.error(
+                    f"Exception while creating bookmarks for cross referenced ligands!",
+                    str(e),
+                )
 
         for db, _, _ in processed_wanted[1:] + processed_unwanted:
             self._detach_db(db)
