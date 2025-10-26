@@ -1604,16 +1604,14 @@ class StorageManagerSQLite(StorageManager):
             self._attach_db(database[0], db_name)
 
         # make subqueries/common table expressions for each set of ligands
-        # TODO here problem is ligname is not a column, gotta join on ligand id
         wanted_ctes = []
-        self._get_bookmark_poses_query
         for db_name, _, bookmark in processed_wanted:
-            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN ({self._get_bookmark_poses_query(bookmark, db_name)}))"""
+            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE Pose_id IN ({self._get_bookmark_poses_query(bookmark, db_name)}))"""
             wanted_ctes.append(query)
 
         unwanted_ctes = []
         for db_name, _, bookmark in processed_unwanted:
-            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN ({self._get_bookmark_poses_query(bookmark, db_name)}))"""
+            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE Pose_id IN ({self._get_bookmark_poses_query(bookmark, db_name)}))"""
             unwanted_ctes.append(query)
 
         all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
@@ -1665,33 +1663,69 @@ class StorageManagerSQLite(StorageManager):
             "wanted": processed_wanted,
             "unwanted": processed_unwanted,
         }
+        if store_best_pose:
+            filter_query = """
+            SELECT R.pose_id FROM {db}.Results AS R
+            JOIN (
+                SELECT ligand_id, MIN(pose_rank) as best_pose
+                FROM Results
+                GROUP BY ligand_id
+                ) AS sel
+            ON R.ligand_id = sel.ligand_id
+            AND R.pose_rank = sel.best_pose
+            JOIN {db}.Ligands AS L
+            ON R.ligand_id = L.ligand_id
+            WHERE L.LigName
+            IN ({ligands})
+            """
+        else:
+            filter_query = """
+            SELECT pose_id FROM {db}.Results
+            WHERE ligand_id IN (
+                SELECT ligand_id FROM {db}.Ligands 
+                WHERE LigName IN ({ligands})
+                )
+            """
+
+        self._begin_transaction()
+
         for db, file, bookmark in processed_wanted:
+            if db == "db_1":
+                db = "main"
+
             bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            filter_query = filter_query.format(db=db, ligands=ligand_sql_string)
 
             # delete bookmark if exists
             cur = self.db_query(f"""SELECT name FROM {db}.Filters;""")
             if bookmark_name in [row[0].lower() for row in cur.fetchall()]:
                 filter_id = self.db_query(
-                    f"""SELECT filter_id FROM {db}.Filters WHERE name = {bookmark_name};"""
+                    f"""SELECT filter_id FROM {db}.Filters WHERE name = '{bookmark_name}';"""
                 ).fetchone()[0]
                 self.db_query(
                     f"""DELETE FROM {db}.Filtered_poses WHERE filter_id = ?""",
                     (filter_id,),
                 )
-            # TODO here need to allow for best pose only
-            # form query
-            query = f"""SELECT Pose_id FROM {db}.Results WHERE ligand_id IN (SELECT ligand_id FROM {db}.Ligands WHERE LigName IN ({ligand_sql_string}));"""
+                self.db_query(
+                    f"""DELETE FROM {db}.Filters WHERE filter_id = ?""",
+                    (filter_id,),
+                )
 
             # insert bookmark/filter info
             insert_Filters = f"""INSERT INTO {db}.Filters(name, query, filters, filter_window) VALUES (?,?,?,?) RETURNING filter_id;"""
             filter_id = self.db_query(
                 insert_Filters,
-                (bookmark_name, query, json.dumps(wanted_unwanted_dict), bookmark),
+                (
+                    bookmark_name,
+                    filter_query,
+                    json.dumps(wanted_unwanted_dict),
+                    bookmark,
+                ),
             ).fetchone()[0]
 
             insert_Filtered_poses = f"""
             WITH results_poses AS (
-                {query})
+                {filter_query})
             INSERT INTO {db}.Filtered_poses(filter_id, pose_id)
             SELECT {filter_id}, pose_id FROM results_poses;
             """
@@ -1700,38 +1734,52 @@ class StorageManagerSQLite(StorageManager):
 
         for db, file, bookmark in processed_unwanted:
             bookmark_name = f"{bookmark_prefix}_{bookmark}"
+            filter_query = filter_query.format(db=db, ligands=ligand_sql_string)
 
             # delete bookmark if exists
             cur = self.db_query(f"""SELECT name FROM {db}.Filters;""")
             if bookmark_name in [row[0].lower() for row in cur.fetchall()]:
                 filter_id = self.db_query(
-                    f"""SELECT filter_id FROM {db}.Filters WHERE name = {bookmark_name};"""
+                    f"""SELECT filter_id FROM {db}.Filters WHERE name = '{bookmark_name}';"""
                 ).fetchone()[0]
                 self.db_query(
                     f"""DELETE FROM {db}.Filtered_poses WHERE filter_id = ?""",
                     (filter_id,),
                 )
-
-            # form query
-            query = f"""SELECT Pose_id FROM {db}.Results WHERE ligand_id IN (SELECT ligand_id FROM {db}.Ligands WHERE LigName IN ({ligand_sql_string}));"""
+                self.db_query(
+                    f"""DELETE FROM {db}.Filters WHERE filter_id = ?""",
+                    (filter_id,),
+                )
 
             # insert bookmark/filter info
             insert_Filters = f"""INSERT INTO {db}.Filters(name, query, filters, filter_window) VALUES (?,?,?,?) RETURNING filter_id;"""
             filter_id = self.db_query(
                 insert_Filters,
-                (bookmark_name, query, json.dumps(wanted_unwanted_dict), bookmark),
+                (
+                    bookmark_name,
+                    filter_query,
+                    json.dumps(wanted_unwanted_dict),
+                    bookmark,
+                ),
             ).fetchone()[0]
 
             insert_Filtered_poses = f"""
             WITH results_poses AS (
-                {query})
+                {filter_query})
             INSERT INTO {db}.Filtered_poses(filter_id, pose_id)
             SELECT {filter_id}, pose_id FROM results_poses;
             """
             self.db_query(insert_Filtered_poses)
             new_bookmark_names.update({file: bookmark_name})
-
-        self.conn.commit()
+        try:
+            sqlite3.enable_callback_tracebacks(True)
+            self.conn.commit()
+        except sqlite3.OperationalError as e:
+            self._rollback()
+            logger.error(
+                f"Exception while creating bookmarks for cross referenced ligands!",
+                str(e),
+            )
 
         for db, _, _ in processed_wanted[1:] + processed_unwanted:
             self._detach_db(db)

@@ -202,7 +202,6 @@ def main():
                 "There are more than 10 specified databases, please choose 10 or less databases total. Cannot run cross comparison!"
             )
         # use first database as main connetion for cross referencing
-        print("requested wanted databases: ", wanted_dbs)
         rtc = RingtailCore(wanted_dbs[0][0])
         num_shared_ligands, db_new_bookmarks = rtc.cross_reference_databases(
             wanted_dbs=wanted_dbs,
