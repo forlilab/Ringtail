@@ -2495,7 +2495,7 @@ class StorageManager:
 
         return filtered_ligands
 
-    def _get_bookmark_poses_query(self, bookmark_name: str, alias: str = None) -> str:
+    def _get_bookmark_poses_query(self, bookmark_name: str, alias: str = "") -> str:
         """
         Creates a query that retrieves all poses from a bookmark, that can be used in other queries
 
