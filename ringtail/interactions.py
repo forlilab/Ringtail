@@ -6,7 +6,8 @@
 
 import numpy as np
 import tempfile
-from meeko import PDBQTReceptor, PDBQTWriterLegacy, Polymer
+from meeko import PDBQTReceptor
+from .receptormanager import ReceptorManager
 
 
 class InteractionFinder:
@@ -28,9 +29,8 @@ class InteractionFinder:
         except:
             try:
                 # assume it is a polymer json string
-                polymer = Polymer.from_json(rec_string)
-                pdbqt_tuple = PDBQTWriterLegacy.write_from_polymer(polymer)
-                self.pdb = PDBQTReceptor(pdbqt_tuple[0])
+                pdbqt_str = ReceptorManager.polymer_json2pdbqt_str(rec_string)
+                self.pdb = PDBQTReceptor(pdbqt_str)
             except:
                 raise Exception("No valid receptor option given")
         self.interaction_cutoff_radii = interaction_cutoff_radii

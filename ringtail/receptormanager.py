@@ -6,6 +6,7 @@
 
 import gzip
 from .logutils import LOGGER
+from meeko import PDBQTWriterLegacy, Polymer
 
 
 class ReceptorManager:
@@ -45,3 +46,45 @@ class ReceptorManager:
             str: receptor string
         """
         return gzip.decompress(receptor_blob).decode()
+
+    @staticmethod
+    def _parse_polymer_json(polymer_json) -> tuple[str, dict]:
+        """
+        Makes a polymer object from a receptor polymer json, and uses
+        meeko method PDBQTWriterLegacy to create a string and dict representation
+        of the receptor in the pdbqt format
+
+        Args:
+            polymer_json (_type_): _description_
+
+        Returns:
+            tuple[str, dict]: _description_
+        """
+        polymer = Polymer.from_json(polymer_json)
+        return PDBQTWriterLegacy.write_from_polymer(polymer)
+
+    @staticmethod
+    def polymer_json2pdbqt_str(polymer_json) -> str:
+        """
+        Returns pdbqt string representation of a polymer json
+
+        Args:
+            polymer_json (_type_): _description_
+
+        Returns:
+            str: _description_
+        """
+        return ReceptorManager._parse_polymer_json(polymer_json)[0]
+
+    @staticmethod
+    def polymer_json2pdbqt_dict(polymer_json) -> dict:
+        """
+        Returns pdbqt dict representation of a polymer json
+
+        Args:
+            polymer_json (_type_): _description_
+
+        Returns:
+            dict: _description_
+        """
+        return ReceptorManager._parse_polymer_json(polymer_json)[1]
