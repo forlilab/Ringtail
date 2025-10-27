@@ -103,6 +103,8 @@ def cmdline_parser(defaults={}):
         help="Name for crossref log file of passing ligands and data",
         type=str,
         metavar="<LOG FILE>.txt",
+        const="crossref_log.txt",
+        nargs="?",
         action="store",
     )
     parser.add_argument(
@@ -162,10 +164,13 @@ def main():
         # set logging level
         if args.verbose:
             logger.set_level("INFO")
+            loglvl = "INFO"
         elif args.debug:
             logger.set_level("DEBUG")
+            loglvl = "DEBUG"
         else:
             logger.set_level("WARNING")
+            loglvl = "WARNING"
 
         wanted_dbs = args.wanted
         unwanted_dbs = args.unwanted
@@ -203,26 +208,56 @@ def main():
             )
         # use first database as main connetion for cross referencing
         rtc = RingtailCore(wanted_dbs[0][0])
-        num_shared_ligands, db_new_bookmarks = rtc.cross_reference_databases(
-            wanted_dbs=wanted_dbs,
-            unwanted_dbs=unwanted_dbs,
-            bookmark_prefix=args.save_bookmark,
-            store_best_pose=args.store_best_pose,
+        num_shared_ligands, db_new_bookmarks, ligand_list, filter_dict = (
+            rtc.cross_reference_databases(
+                wanted_dbs=wanted_dbs,
+                unwanted_dbs=unwanted_dbs,
+                bookmark_prefix=args.save_bookmark,
+            )
         )
         print("Number of ligands passing wanted minus unwanted: ", num_shared_ligands)
         if num_shared_ligands == 0:
             logger.warning("No ligands found passing cross comparison.")
         else:
             # output options
+            ligand_sql_string = ", ".join(f"'{l}'" for l in ligand_list)
+            # construct the query
+            if args.store_best_pose:
+                filter_query = f"""
+                SELECT R.pose_id FROM Results AS R
+                JOIN (
+                    SELECT ligand_id, MIN(pose_rank) as best_pose
+                    FROM Results
+                    GROUP BY ligand_id
+                    ) AS sel
+                ON R.ligand_id = sel.ligand_id
+                AND R.pose_rank = sel.best_pose
+                JOIN Ligands AS L
+                ON R.ligand_id = L.ligand_id
+                WHERE L.LigName
+                IN ({ligand_sql_string})
+                """
+            else:
+                filter_query = f"""
+                SELECT pose_id FROM Results
+                WHERE ligand_id IN (
+                    SELECT ligand_id FROM Ligands 
+                    WHERE LigName IN ({ligand_sql_string})
+                    )
+                """
             for db, bookmark in db_new_bookmarks.items():
-                rtc = RingtailCore(db)
+                rtc = RingtailCore(db, logging_level=loglvl)
+
+                # create the bookmark
+                with rtc.storageman as sm:
+                    sm._populate_filter_tables(bookmark, filter_query, filter_dict, "")
 
                 if args.log:
                     log_file = str(db.split(".")[0]) + "_" + args.log
                     logger.info(f"Writing log text file for {db} bookmark {bookmark}")
                     rtc.write_filter_output(
                         bookmark,
-                        "wanted, unwanted",
+                        filter_dict,
                         num_shared_ligands,
                         log_file,
                         output_all_poses=True,

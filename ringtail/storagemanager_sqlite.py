@@ -1524,7 +1524,7 @@ class StorageManagerSQLite(StorageManager):
         if type(outfields) == str:
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
-        elif type(outfields) == list:
+        elif isinstance(outfields, Union[list, tuple]):
             outfields_list = outfields
         else:
             logger.warning(
@@ -1557,8 +1557,7 @@ class StorageManagerSQLite(StorageManager):
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
-        store_best_pose: bool = False,
-    ) -> tuple[int, dict]:
+    ) -> tuple[int, dict, list, dict]:
         """
         Method to cross reference two or more databases. Will attach all other databases
         to the "current" database, which is always the first wanted database (will have the
@@ -1576,12 +1575,15 @@ class StorageManagerSQLite(StorageManager):
             bookmark_prefix (str, optional): _description_. Defaults to "crossref".
 
         Returns:
-            tuple[int, dict]: Number of "passing" ligands and dict of database {database
-            file path: new bookmark name from cross ref}
+            tuple[int, dict, list, dict]: Number of "passing" ligands, dict of database {database
+            file path: new bookmark name from cross ref}, list of passing ligand names, dict of dbs and how they were compared
         """
         processed_wanted = []
         for index, database in enumerate(wanted_dbs):
-            db_name = f"db_{index + 1}"
+            if index == 0:
+                db_name = "main"
+            else:
+                db_name = f"db_{index + 1}"
             processed_wanted.append(
                 (
                     db_name,
@@ -1589,7 +1591,8 @@ class StorageManagerSQLite(StorageManager):
                     database[1],
                 )
             )
-            self._attach_db(database[0], db_name)
+            if index > 0:
+                self._attach_db(database[0], db_name)
 
         processed_unwanted = []
         for index, database in enumerate(unwanted_dbs or []):
@@ -1604,15 +1607,24 @@ class StorageManagerSQLite(StorageManager):
             self._attach_db(database[0], db_name)
 
         # make subqueries/common table expressions for each set of ligands
+        selection_query = """{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE Pose_id IN ({bookmark_poses}))"""
         wanted_ctes = []
         for db_name, _, bookmark in processed_wanted:
-            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE Pose_id IN ({self._get_bookmark_poses_query(bookmark, db_name)}))"""
-            wanted_ctes.append(query)
+            wanted_ctes.append(
+                selection_query.format(
+                    db_name=db_name,
+                    bookmark_poses=self._get_bookmark_poses_query(bookmark, db_name),
+                )
+            )
 
         unwanted_ctes = []
         for db_name, _, bookmark in processed_unwanted:
-            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE Pose_id IN ({self._get_bookmark_poses_query(bookmark, db_name)}))"""
-            unwanted_ctes.append(query)
+            unwanted_ctes.append(
+                selection_query.format(
+                    db_name=db_name,
+                    bookmark_poses=self._get_bookmark_poses_query(bookmark, db_name),
+                )
+            )
 
         all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
 
@@ -1648,152 +1660,24 @@ class StorageManagerSQLite(StorageManager):
         """
 
         # the query now works, time to make a bookmark in each database with the results
-        approved_ligand_names = tuple(
-            [lig[0] for lig in self.db_query(query).fetchall()]
-        )
+        approved_ligand_names = [lig[0] for lig in self.db_query(query).fetchall()]
+        dbs_new_bookmark_names = {}
 
         # don't proceed if no approved ligands
         if len(approved_ligand_names) < 1:
-            return 0, {}
-
-        ligand_sql_string = ", ".join(f"'{l}'" for l in approved_ligand_names)
-
-        new_bookmark_names = {}
-        wanted_unwanted_dict = {
-            "wanted": processed_wanted,
-            "unwanted": processed_unwanted,
-        }
-        if store_best_pose:
-            filter_query = """
-            SELECT R.pose_id FROM {db}.Results AS R
-            JOIN (
-                SELECT ligand_id, MIN(pose_rank) as best_pose
-                FROM Results
-                GROUP BY ligand_id
-                ) AS sel
-            ON R.ligand_id = sel.ligand_id
-            AND R.pose_rank = sel.best_pose
-            JOIN {db}.Ligands AS L
-            ON R.ligand_id = L.ligand_id
-            WHERE L.LigName
-            IN ({ligands})
-            """
+            return 0, {}, [], {}
         else:
-            filter_query = """
-            SELECT pose_id FROM {db}.Results
-            WHERE ligand_id IN (
-                SELECT ligand_id FROM {db}.Ligands 
-                WHERE LigName IN ({ligands})
-                )
-            """
-
-        for db, file, bookmark in processed_wanted:
-            self._begin_transaction()
-            if db == "db_1":
-                db = "main"
-
-            bookmark_name = f"{bookmark_prefix}_{bookmark}"
-            filter_query = filter_query.format(db=db, ligands=ligand_sql_string)
-
-            # delete bookmark if exists
-            cur = self.db_query(f"""SELECT name FROM {db}.Filters;""")
-            if bookmark_name in [row[0].lower() for row in cur.fetchall()]:
-                filter_id = self.db_query(
-                    f"""SELECT filter_id FROM {db}.Filters WHERE name = '{bookmark_name}';"""
-                ).fetchone()[0]
-                self.db_query(
-                    f"""DELETE FROM {db}.Filtered_poses WHERE filter_id = ?""",
-                    (filter_id,),
-                )
-                self.db_query(
-                    f"""DELETE FROM {db}.Filters WHERE filter_id = ?""",
-                    (filter_id,),
-                )
-
-            # insert bookmark/filter info
-            insert_Filters = f"""INSERT INTO {db}.Filters(name, query, filters, filter_window) VALUES (?,?,?,?) RETURNING filter_id;"""
-            filter_id = self.db_query(
-                insert_Filters,
-                (
-                    bookmark_name,
-                    filter_query,
-                    json.dumps(wanted_unwanted_dict),
-                    bookmark,
-                ),
-            ).fetchone()[0]
-
-            insert_Filtered_poses = f"""
-            WITH results_poses AS (
-                {filter_query})
-            INSERT INTO {db}.Filtered_poses(filter_id, pose_id)
-            SELECT {filter_id}, pose_id FROM results_poses;
-            """
-            self.db_query(insert_Filtered_poses)
-            new_bookmark_names.update({file: bookmark_name})
-            try:
-                sqlite3.enable_callback_tracebacks(True)
-                self.conn.commit()
-            except sqlite3.OperationalError as e:
-                self._rollback()
-                logger.error(
-                    f"Exception while creating bookmarks for cross referenced ligands!",
-                    str(e),
-                )
-
-        for db, file, bookmark in processed_unwanted:
-            self._begin_transaction()
-            bookmark_name = f"{bookmark_prefix}_{bookmark}"
-            filter_query = filter_query.format(db=db, ligands=ligand_sql_string)
-
-            # delete bookmark if exists
-            cur = self.db_query(f"""SELECT name FROM {db}.Filters;""")
-            if bookmark_name in [row[0].lower() for row in cur.fetchall()]:
-                filter_id = self.db_query(
-                    f"""SELECT filter_id FROM {db}.Filters WHERE name = '{bookmark_name}';"""
-                ).fetchone()[0]
-                self.db_query(
-                    f"""DELETE FROM {db}.Filtered_poses WHERE filter_id = ?""",
-                    (filter_id,),
-                )
-                self.db_query(
-                    f"""DELETE FROM {db}.Filters WHERE filter_id = ?""",
-                    (filter_id,),
-                )
-
-            # insert bookmark/filter info
-            insert_Filters = f"""INSERT INTO {db}.Filters(name, query, filters, filter_window) VALUES (?,?,?,?) RETURNING filter_id;"""
-            filter_id = self.db_query(
-                insert_Filters,
-                (
-                    bookmark_name,
-                    filter_query,
-                    json.dumps(wanted_unwanted_dict),
-                    bookmark,
-                ),
-            ).fetchone()[0]
-
-            insert_Filtered_poses = f"""
-            WITH results_poses AS (
-                {filter_query})
-            INSERT INTO {db}.Filtered_poses(filter_id, pose_id)
-            SELECT {filter_id}, pose_id FROM results_poses;
-            """
-            self.db_query(insert_Filtered_poses)
-            new_bookmark_names.update({file: bookmark_name})
-            try:
-                sqlite3.enable_callback_tracebacks(True)
-                self.conn.commit()
-            except sqlite3.OperationalError as e:
-                self._rollback()
-                logger.error(
-                    f"Exception while creating bookmarks for cross referenced ligands!",
-                    str(e),
-                )
-
-        for db, _, _ in processed_wanted[1:] + processed_unwanted:
-            self._detach_db(db)
-
-        return len(approved_ligand_names or []), new_bookmark_names
+            for _, file, bookmark in processed_wanted + processed_unwanted:
+                dbs_new_bookmark_names.update({file: f"{bookmark_prefix}_{bookmark}"})
+            return (
+                len(approved_ligand_names),
+                dbs_new_bookmark_names,
+                approved_ligand_names,
+                {
+                    "wanted": processed_wanted,
+                    "unwanted": processed_unwanted,
+                },
+            )
 
     # endregion
 

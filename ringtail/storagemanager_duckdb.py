@@ -5,6 +5,7 @@
 #
 
 import os.path
+import json
 import pandas as pd
 from .logutils import LOGGER as logger
 from typing import Union
@@ -1672,7 +1673,7 @@ class StorageManagerDuckDB(StorageManager):
         if type(outfields) == str:
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
-        elif type(outfields) == list:
+        elif isinstance(outfields, Union[list, tuple]):
             outfields_list = outfields
         else:
             logger.warning(
@@ -1709,10 +1710,8 @@ class StorageManagerDuckDB(StorageManager):
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
-        store_best_pose: bool = False,
-    ) -> tuple[int, dict]:
+    ) -> tuple[int, dict, list, dict]:
         """
-        #TODO not tested in duckdb
         Method to cross reference two or more databases. Will attach all other databases
         to the "current" database, which is always the first wanted database (will have the
         active ringtail object).
@@ -1729,12 +1728,15 @@ class StorageManagerDuckDB(StorageManager):
             bookmark_prefix (str, optional): _description_. Defaults to "crossref".
 
         Returns:
-            tuple[int, dict]: Number of "passing" ligands and dict of database {database
-            file path: new bookmark name from cross ref}
+            tuple[int, dict, list, dict]: Number of "passing" ligands, dict of database {database
+            file path: new bookmark name from cross ref}, list of passing ligand names, dict of dbs and how they were compared
         """
         processed_wanted = []
         for index, database in enumerate(wanted_dbs):
-            db_name = f"db_{index + 1}"
+            if index == 0:
+                db_name = "main"
+            else:
+                db_name = f"db_{index + 1}"
             processed_wanted.append(
                 (
                     db_name,
@@ -1742,7 +1744,8 @@ class StorageManagerDuckDB(StorageManager):
                     database[1],
                 )
             )
-            self._attach_db(database[0], db_name)
+            if index > 0:
+                self._attach_db(database[0], db_name)
 
         processed_unwanted = []
         for index, database in enumerate(unwanted_dbs or []):
@@ -1757,15 +1760,24 @@ class StorageManagerDuckDB(StorageManager):
             self._attach_db(database[0], db_name)
 
         # make subqueries/common table expressions for each set of ligands
+        selection_query = """{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE Pose_id IN ({bookmark_poses}))"""
         wanted_ctes = []
         for db_name, _, bookmark in processed_wanted:
-            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN (SELECT Pose_id FROM {db_name}.{bookmark}))"""
-            wanted_ctes.append(query)
+            wanted_ctes.append(
+                selection_query.format(
+                    db_name=db_name,
+                    bookmark_poses=self._get_bookmark_poses_query(bookmark, db_name),
+                )
+            )
 
         unwanted_ctes = []
         for db_name, _, bookmark in processed_unwanted:
-            query = f"""{db_name} AS (SELECT LigName FROM {db_name}.Results WHERE Pose_id IN (SELECT Pose_id FROM {db_name}.{bookmark}))"""
-            unwanted_ctes.append(query)
+            unwanted_ctes.append(
+                selection_query.format(
+                    db_name=db_name,
+                    bookmark_poses=self._get_bookmark_poses_query(bookmark, db_name),
+                )
+            )
 
         all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
 
@@ -1801,42 +1813,24 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         # the query now works, time to make a bookmark in each database with the results
-        approved_ligand_names = tuple(
-            [lig[0] for lig in self.db_query(query).fetchall()]
-        )
-        ligand_sql_string = ", ".join(f"'{l}'" for l in approved_ligand_names)
+        approved_ligand_names = [lig[0] for lig in self.db_query(query).fetchall()]
+        dbs_new_bookmark_names = {}
 
-        new_bookmark_names = {}
-        for db, file, bookmark in processed_wanted:
-            bookmark_name = f"{bookmark_prefix}_{bookmark}"
-            self.db_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
-            view_creation = f"""
-            CREATE VIEW {db}.{bookmark_name} AS
-            SELECT * FROM Results
-            WHERE LigName
-            IN ({ligand_sql_string});
-            """
-            self.db_query(view_creation)
-            new_bookmark_names.update({file: bookmark_name})
-
-        for db, file, bookmark in processed_unwanted:
-            bookmark_name = f"{bookmark_prefix}_{bookmark}"
-            self.db_query(f"DROP VIEW IF EXISTS {db}.{bookmark_name};")
-            view_creation = f"""
-            CREATE VIEW {db}.{bookmark_name} AS
-            SELECT * FROM Results
-            WHERE LigName
-            IN ({ligand_sql_string});
-            """
-            self.db_query(view_creation)
-            new_bookmark_names.update({file: bookmark_name})
-
-        self.conn.commit()
-
-        for db, _, _ in processed_wanted[1:] + processed_unwanted:
-            self._detach_db(db)
-
-        return len(approved_ligand_names or []), new_bookmark_names
+        # don't proceed if no approved ligands
+        if len(approved_ligand_names) < 1:
+            return 0, {}, [], {}
+        else:
+            for _, file, bookmark in processed_wanted + processed_unwanted:
+                dbs_new_bookmark_names.update({file: f"{bookmark_prefix}_{bookmark}"})
+            return (
+                len(approved_ligand_names),
+                dbs_new_bookmark_names,
+                approved_ligand_names,
+                {
+                    "wanted": processed_wanted,
+                    "unwanted": processed_unwanted,
+                },
+            )
 
     # endregion
 

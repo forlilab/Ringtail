@@ -634,7 +634,7 @@ class StorageManager:
             "Ligands", "L", "ligand_id"
         ).WHERE(f"R.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
         if group_by:
-            query.GROUP_BY("l.ligname")
+            query.GROUP_BY("L.ligname")
         if order_results:
             order_by = self._format_orderby(order_results)
             if order_by:
