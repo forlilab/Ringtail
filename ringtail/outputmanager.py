@@ -152,7 +152,11 @@ class OutputManager:
             raise OutputError("Error writing bookmark name to log") from e
 
     def write_filtervalues_in_log(
-        self, filters_dict, included_interactions, bookmark_name, additional_info=""
+        self,
+        filters_dict: dict,
+        included_interactions: list,
+        bookmark_name: str,
+        additional_info="",
     ):
         """Takes dictionary of filters, formats as string and writes to log file
 
@@ -167,7 +171,7 @@ class OutputManager:
         try:
             buff = [additional_info, "##### PROPERTIES"]
             for k in Filters.get_filter_keys("property"):
-                v = filters_dict.pop(k)
+                v = filters_dict.pop(k, None)
                 if v is not None:
                     v = "%2.3f" % v
                 else:
@@ -175,7 +179,7 @@ class OutputManager:
                 buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### LIGAND FILTERS")
             for k in Filters.get_filter_keys("ligand"):
-                v = filters_dict.pop(k)
+                v = filters_dict.pop(k, None)
                 if v is not None:
                     if isinstance(v, list):
                         v = ", ".join([str(f) for f in v if f != ""])
@@ -185,9 +189,9 @@ class OutputManager:
             buff.append("#### INTERACTIONS")
             labels = ["~", ""]
             for _type in Filters.get_filter_keys("interaction"):
-                info = filters_dict.pop(_type)
+                info = filters_dict.pop(_type, None)
                 kept_interactions = []
-                if len(info) == 0:
+                if len(info or []) == 0:
                     buff.append("#  % 7s :  [ none ]" % (_type))
                     continue
                 for interact in info:
