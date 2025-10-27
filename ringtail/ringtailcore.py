@@ -860,7 +860,7 @@ class RingtailCore:
         else:
             polymer = receptor_polymer
 
-        flexres_data = self._make_receptor_flexres_mols()
+        flexres_data = self.make_receptor_flexres_mols()
         lig_flex_mol = {}
         for ligand, poses in ligands_poses.items():
             ligand_mol, flexres_mols, _, flexible_residues = self.create_rdkit_mol(
@@ -919,7 +919,7 @@ class RingtailCore:
             ligands_poses = self._fetch_select_ligands_poses(
                 ligand_names=ligname, bookmark_name=bookmark_name
             )
-            flexres_data = self._make_receptor_flexres_mols()
+            flexres_data = self.make_receptor_flexres_mols()
             all_mols = {}
             for ligname, poses in ligands_poses.items():
 
@@ -1869,6 +1869,55 @@ class RingtailCore:
 
         return mol, flexres_mols, properties, flexres_residues
 
+    def make_receptor_flexres_mols(
+        self,
+    ) -> tuple[list, list, list, list]:
+        """
+        Makes rdkit.Chem.Mols for the receptor based on flexible residues
+
+        Raises:
+            OutputError: _description_
+
+        Returns:
+            tuple[list, list, list, list]: _description_
+        """
+
+        mols = []
+        info = []
+        saved_coords = []
+        residues = []
+
+        with self.storageman as sm:
+            flexible_residues, flexres_atomnames = sm.fetch_flexres_info(1)
+        if flexible_residues is None:
+            flexible_residues, flexres_atomnames = [], []
+        elif flexible_residues != []:  # converts string to list
+            flexible_residues = json.loads(flexible_residues)
+            flexres_atomnames = json.loads(flexres_atomnames)
+        # make flexible residue molecules
+        for res, res_ats in zip(flexible_residues, flexres_atomnames):
+            saved_coords.append([])
+            resname = res[:3]
+            res_ats = [
+                at.strip() for at in res_ats
+            ]  # strip out whitespace around atom names
+            (
+                res_smiles,
+                res_index_map,
+                res_h_parents,
+            ) = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
+            if res_smiles is None:  # catch error in guessing smiles
+                raise OutputError(
+                    f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes"
+                )
+            frm = Chem.MolFromSmiles(res_smiles)
+            frm.SetProp("resinfo", res)
+            mols.append(frm)
+            info.append((res_smiles, res_index_map, res_h_parents))
+            residues.append(res)
+
+            return mols, info, saved_coords, residues
+
     def merge_databases(self, merging_db: str, backup: bool = True):
         """
         Method that merges two databases, ensuring integrity of primary and foreign keys.
@@ -2087,55 +2136,6 @@ class RingtailCore:
                     flexres_saved_coords[fr_idx].append(flexres_pose[fr_idx])
                 ligand_saved_coords.append(ligand_pose)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
-
-    def _make_receptor_flexres_mols(
-        self,
-    ) -> tuple[list, list, list, list]:
-        """
-        Makes rdkit.Chem.Mols for the receptor based on flexible residues
-
-        Raises:
-            OutputError: _description_
-
-        Returns:
-            tuple[list, list, list, list]: _description_
-        """
-
-        mols = []
-        info = []
-        saved_coords = []
-        residues = []
-
-        with self.storageman as sm:
-            flexible_residues, flexres_atomnames = sm.fetch_flexres_info(1)
-        if flexible_residues is None:
-            flexible_residues, flexres_atomnames = [], []
-        elif flexible_residues != []:  # converts string to list
-            flexible_residues = json.loads(flexible_residues)
-            flexres_atomnames = json.loads(flexres_atomnames)
-        # make flexible residue molecules
-        for res, res_ats in zip(flexible_residues, flexres_atomnames):
-            saved_coords.append([])
-            resname = res[:3]
-            res_ats = [
-                at.strip() for at in res_ats
-            ]  # strip out whitespace around atom names
-            (
-                res_smiles,
-                res_index_map,
-                res_h_parents,
-            ) = RDKitMolCreate.guess_flexres_smiles(resname, res_ats)
-            if res_smiles is None:  # catch error in guessing smiles
-                raise OutputError(
-                    f"Error while creating Mol for flexible residue {res}: unrecognized residue or incorrect atomtypes"
-                )
-            frm = Chem.MolFromSmiles(res_smiles)
-            frm.SetProp("resinfo", res)
-            mols.append(frm)
-            info.append((res_smiles, res_index_map, res_h_parents))
-            residues.append(res)
-
-            return mols, info, saved_coords, residues
 
     def _process_receptor_polymer(self, receptor_file: str) -> tuple[str, str]:
         """
