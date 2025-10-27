@@ -1198,20 +1198,27 @@ class RingtailCore:
 
         return all_data, passing_data
 
-    def get_receptor_object(self) -> tuple:
+    def get_receptor_object(self, pdbqt_str_only: bool = False) -> tuple:
         """
         Gets the receptor object from the database
+
+        Args:
+            pdbqt_str_only (bool, optional): if json is in db, return it as pdbqt str instead of json string. Defaults to False.
 
         Returns:
             tuple[str,str, str]: receptor name and receptor blob and receptor serialized polymer as strings
         """
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
+            if pdbqt_str_only and (polymer_json := rec_data.get("polymer")):
+                polymer = ReceptorManager.polymer_json2pdbqt_str(polymer_json)
+            else:
+                polymer = rec_data.get("polymer")
             if rec_data is not None:
                 return (
                     rec_data.get("RecName"),
                     ReceptorManager.blob2str(rec_data.get("receptor_object")),
-                    rec_data.get("polymer"),
+                    polymer,
                 )
             else:
                 return None, None, None
