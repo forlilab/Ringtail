@@ -8,7 +8,7 @@ import os
 from .exceptions import OptionError
 from .logutils import LOGGER
 from .util import iterate_nested
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 import copy
 
 
@@ -126,6 +126,10 @@ class RingtailDefaults:
     find_similar_ligands: bool = None
     plot: bool = None
     pymol: bool = None
+
+    @classmethod
+    def all_fields(cls):
+        return [f.name for f in fields(cls)]
 
 
 def default_dict(dataclass):
