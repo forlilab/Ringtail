@@ -10,6 +10,7 @@ import bz2
 import numpy as np
 from .exceptions import FileParsingError
 from .logutils import LOGGER
+from rdkit import Chem
 
 
 def parse_single_dlg(fname):
@@ -682,3 +683,12 @@ def receptor_pdbqt_parser(fname):
         lines.append(line_dict)
 
     return lines
+
+
+def parse_sdf_file(fname: str) -> dict:
+    mols = []
+    suppl = Chem.SDMolSupplier(fname)
+    for mol in suppl:
+        mols.append(mol)
+
+    return {"mols": mols}

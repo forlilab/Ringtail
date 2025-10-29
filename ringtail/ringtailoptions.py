@@ -12,9 +12,13 @@ from dataclasses import dataclass, asdict
 import copy
 
 
-docking_modes = {"adgpu": {"adgpu", "dlg", "gpu"}, "vina": {"vina", "pdbqt"}}
+docking_modes = {
+    "adgpu": {"adgpu", "dlg", "gpu"},
+    "vina": {"vina", "pdbqt"},
+    "adng": {"adng", "ng", "adsandbox"},
+}
 
-docking_mode_file_ext = {"adgpu": "dlg", "vina": "pdbqt"}
+docking_mode_file_ext = {"adgpu": "dlg", "vina": "pdbqt", "adng": "sdf"}
 
 docking_alias_to_mode = {}
 for canonical, aliases in docking_modes.items():
