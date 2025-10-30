@@ -118,7 +118,7 @@ class RingtailDefaults:
     export_bookmark_csv: str = None
     export_query_csv: str = None
     export_bookmark_db: str = None
-    export_receptor: bool = None
+    export_receptor_pdbqt: bool = None
     export_sdf_path: str = None
     individual_sdf_files: bool = None
     data_from_bookmark: bool = None

@@ -49,7 +49,7 @@ Enhancements to the codebase
 * New API method for clustering across a pre-filtered bookmark (can technically also cluster all Results)
 * Bookmarks are no longer saved as views (i.e., unrealized tables), instead the criteria of a bookmark (e.g., a dict of filters) is saved in the new `Filters` table with a unique filter_id, and all passing pose_id`s with associated filter_id`s are stored in `Filtered_poses`
 * The `write_flexres_pdb` method now allows more than one ligand input, for example by providing a bookmark name all ligands in that bookmark will be used to write the same number of PDBs (there will be a warning of attempting to write more than 10 files)
-* The method `export_receptors` has been discontinued, use instead `write_flexres_pdb` as this works without flexible residues as well
+* The method `export_receptor` is now `export_receptor_pdbqt`, and a modernized version to `write_flexres_pdb` has been added which is compatible with the new receptor Polymer object (this new method works without flexible residues as well)
 * `write_molecule_sdfs` method argument `write_nonpassing` has been discontinued, and `ligname` (string or list of strings) has been added. It is assumed that if a `bookmark_name` is provided, only passing poses of each ligand will be written to an SD file. If no `bookmark_name` is provided, each pose of each ligand is written to the SDF.  
 * The method `export_csv` has been broken into three distinct methods, `export_columns_as_csv` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, `export_table_as_csv` where an entire table is exported, and `export_sql_as_csv` where the user specifies a properly formatted SQL prompt
 * The method `export_bookmark_db` 

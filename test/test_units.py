@@ -287,9 +287,9 @@ class TestRingtailCore:
         assert os.path.exists("export_csv.csv")
         os.system("rm export_csv.csv")
 
-    def test_export_receptor(self):
+    def export_receptor_pdbqt(self):
         rtc = RingtailCore(db_file="output.db")
-        rtc.export_receptor()
+        rtc.export_receptor_pdbqt()
         receptor_name = rtc.db_query("SELECT RecName FROM Receptors;")[0][0]
         receptor_file = receptor_name + ".pdbqt"
 

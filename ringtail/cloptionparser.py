@@ -396,7 +396,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     output_group.add_argument(
         "-xr",
-        "--export_receptor",
+        "--export_receptor_pdbqt",
         help="Export stored receptor pdbqt. Will write to current directory.",
         action="store_true",
     )
@@ -943,7 +943,7 @@ class CLOptionParser:
             self.output_options = SimpleNamespace(
                 plot=parsed_opts.plot,
                 export_bookmark_db=parsed_opts.export_bookmark_db,
-                export_receptor=parsed_opts.export_receptor,
+                export_receptor_pdbqt=parsed_opts.export_receptor_pdbqt,
                 pymol=parsed_opts.pymol,
                 data_from_bookmark=parsed_opts.data_from_bookmark,
                 individual_sdf_files=parsed_opts.individual_sdf_files,

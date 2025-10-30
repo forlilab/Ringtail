@@ -137,9 +137,9 @@ class RingtailCore:
         with self.storageman as sm:
             return validate_docking_mode(sm.get_previous_docking_mode())
 
-    def add_pose(
+    def add_poses(
         self,
-        pose_data: Union[dict, list[dict]],
+        pose_data: Union[object, list[object]],
         duplicate_handling: str = RingtailDefaults.duplicate_handling,
         docking_mode: str = RingtailDefaults.docking_mode,
         store_all_poses: bool = RingtailDefaults.store_all_poses,
@@ -1067,15 +1067,17 @@ class RingtailCore:
 
         return db_filepath
 
-    def export_receptor(self):
+    def export_receptor_pdbqt(self):
         """
         Export receptor in database to pdbqt
         """
-        # TODO export pdbqt, need a differnet method for json
         recname, recstr, recjson = self.get_receptor_object()
         if recstr is None:
-            LOGGER.warning(f"No receptor pdbqt stored for {recname}. Export failed.")
-            return
+            if recjson:
+                recstr = ReceptorManager.polymer_json2pdbqt_str(recjson)
+            else:
+                LOGGER.warning(f"No receptor data stored for {recname}. Export failed.")
+                return
         output_manager = OutputManager()
         output_manager.write_receptor_pdbqt(recname, recstr)
 

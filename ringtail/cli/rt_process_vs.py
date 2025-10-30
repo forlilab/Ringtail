@@ -89,8 +89,8 @@ def main():
                 rtcore.export_bookmark_db(bookmark_name)
 
             # export receptor as .pdbqt
-            if cli.output_options.export_receptor:
-                rtcore.export_receptor()
+            if cli.output_options.export_receptor_pdbqt:
+                rtcore.export_receptor_pdbqt()
 
             # plot if requested
             if cli.output_options.plot:

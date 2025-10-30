@@ -256,7 +256,7 @@ A bookmark may also be exported as a separate SQLite dabase with the ``export_bo
 
     #results in creation of output_eworst6.db
 
-Finally, a receptor stored in the database may be re-exported as a PDBQT with the ``export_receptor`` method. This will save the receptor PDBQT in the current working directory. 
+Finally, a receptor stored in the database may be re-exported as a PDBQT with the ``export_receptor_pdbqt`` method. This will save the receptor PDBQT in the current working directory. 
 
 .. code-block:: python 
 

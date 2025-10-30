@@ -169,7 +169,7 @@ The second option is ``--export_query_csv``. This takes a string of a properly-f
 
 As noted above, a bookmark may also be exported as a separate SQLite dabase with the ``--export_bookmark_db`` flag.
 
-Finally, a receptor stored in the database may be re-exported as a PDBQT with the ``--export_receptor`` option.
+Finally, a receptor stored in the database may be re-exported as a PDBQT with the ``--export_receptor_pdbqt`` option.
 
 Export results from a previous filtering as a CSV
 ==================================================
@@ -326,7 +326,7 @@ Keywords pertaining to output methods
     "export_csv", "Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv.", "requested_data= bookmark_name OR csv_name, table (bool)"
     "export_csv", "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]", "requested_data (str), csv_name (str), table (bool)"
     "export_bookmark_db", "Export a database containing only the results found in the specified bookmark name. Will save as <core_db_file>_<bookmark_name>.db", "bookmark_name (str)"
-    "export_receptor", "Export receptor to pdbqt", None
+    "export_receptor_pdbqt", "Export receptor to pdbqt", None
     "write_molecule_sdfs", "Write molecule sdfs from a given bookmark to specified path", "sdf_path (str), bookmark_name (str)"
     "find_similar_ligands", "Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest.", "query_ligname (str)"
     "get_previous_filter_data", "Get data requested in `outfields` from the bookmark of a previous filtering", "outfields (str), bookmark_name (str)"
