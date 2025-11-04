@@ -79,8 +79,6 @@ class MPManager:
         self.shared = {}
         # populate read only dict
         self.shared["docking_mode"] = self.writer_options.pop("docking_mode")
-        storageman = self.writer_options.get("storageman_class")
-        self.shared["format_method"] = storageman.format_for_storage
         self.shared["receptor_string"] = results.receptor_string
         self.shared["target"] = results.target_name
 
