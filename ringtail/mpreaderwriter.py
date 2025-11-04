@@ -9,13 +9,12 @@ import sys
 from .logutils import LOGGER
 import traceback
 import queue
-from .parsers import parse_single_dlg, parse_vina_result
+from .parsers import docking_file_parsers
 from .exceptions import (
     FileParsingError,
     WriteToStorageError,
     MultiprocessingError,
 )
-from .interactions import InteractionFinder
 import multiprocessing as mp
 
 
@@ -50,24 +49,6 @@ class DockingFileReader(mp.Process):
         self.exception = None
         self.docking_mode = self.shared.get("docking_mode")
 
-    def _find_best_cluster_poses(self, ligand_dict):
-        """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run"
-        entry with the top scoring run for each cluster
-
-        Args:
-            ligand_dict (dict): dictionary of ligands
-
-        Returns:
-            dict: top poses in cluster for each ligand
-        """
-
-        top_poses = []
-        cluster_dict = ligand_dict["clusters"]
-        for cluster in cluster_dict:
-            top_poses.append(cluster_dict[cluster][0])
-        ligand_dict["cluster_top_poses"] = top_poses
-        return ligand_dict
-
     def run(self):
         """Method overload from parent class .This is where the task of this class is performed.
         Each multiprocess.Process class must have a "run" method which is called by the
@@ -95,76 +76,41 @@ class DockingFileReader(mp.Process):
 
                 # generate CPU LOAD
                 # parser depends on requested docking_mode
-                if self.docking_mode == "adgpu":
-                    parsed_file_dict = parse_single_dlg(next_task)
-                    # find the run number for the best pose in each cluster for adgpu
-                    parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
-                elif self.docking_mode == "vina":
-                    parsed_file_dict = parse_vina_result(next_task)
+                data_packet = docking_file_parsers.get(
+                    self.docking_mode, "missing_parser"
+                )(
+                    next_task,
+                    self.shared.get("num_poses"),
+                    **{
+                        "interaction_tolerance": self.shared.get(
+                            "interaction_tolerance", None
+                        ),
+                        "calculate_interactions": not self.shared.get(
+                            "no_interactions", True
+                        ),
+                    },
+                )
 
-                # Example code for calling user-implemented docking_mode
-                # elif self.docking_mode == "my_docking_mode":
-                #     parsed_file_dict = myparser(next_task)
-                else:
+                if data_packet == "missing_parser":
                     raise NotImplementedError(
                         f"Parser for input file docking_mode {self.docking_mode} not implemented!"
                     )
-                # check receptor name from file against that which we expect
+                # for adgpu only: check receptor name from file against that which we expect
                 if (
-                    parsed_file_dict["receptor"] != self.shared["target"]
-                    and self.shared.get("target") is not None
+                    rec_name := data_packet.get("receptor_row")[0]
+                    != (target := self.shared.get("target", None))
+                    and target is not None
                     and self.docking_mode == "adgpu"
                 ):
                     raise FileParsingError(
                         "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
-                            parsed_file_dict["receptor"],
+                            rec_name,
                             next_task,
-                            self.shared.get("target"),
+                            target,
                         )
                     )
 
-                # find run numbers for poses we want to save
-                parsed_file_dict["poses_to_save"] = self._find_poses_to_save(
-                    parsed_file_dict
-                )
-                # Calculate interactions if requested
-                if self.shared.get("no_interactions") != True:
-                    if self.interaction_finder is None:
-                        self.interaction_finder = InteractionFinder(
-                            self.shared.get("receptor_string"),
-                            self.shared.get("interaction_cutoffs"),
-                        )
-                    if parsed_file_dict["interactions"] == []:
-                        for pose in parsed_file_dict["pose_coordinates"]:
-                            parsed_file_dict["interactions"].append(
-                                self.interaction_finder.find_pose_interactions(
-                                    parsed_file_dict["ligand_atomtypes"], pose
-                                )
-                            )
-                            parsed_file_dict["num_interactions"].append(
-                                int(parsed_file_dict["interactions"][-1]["count"][0])
-                            )
-                            parsed_file_dict["num_hb"].append(
-                                len(
-                                    [
-                                        1
-                                        for i in parsed_file_dict["interactions"][-1][
-                                            "type"
-                                        ]
-                                        if i == "H"
-                                    ]
-                                )
-                            )
-                # find poses we want to save tolerated interactions for
-                if self.shared.get("interaction_tolerance") is not None:
-                    parsed_file_dict["tolerated_interaction_runs"] = (
-                        self._find_tolerated_interactions(parsed_file_dict)
-                    )
-                else:
-                    parsed_file_dict["tolerated_interaction_runs"] = []
-                # put the result in the out queue
-                # the result is a dict where the singular key is the ligand name
-                data_packet = self.shared.get("format_method")(parsed_file_dict)
+                # put the result in the out queue (will be sent to Writer)
                 self._add_to_queueout(data_packet)
             except Exception:
                 tb = traceback.format_exc()
@@ -177,6 +123,15 @@ class DockingFileReader(mp.Process):
                 )
 
     def _add_to_queueout(self, obj):
+        """
+        Adds processed object (string, dict, etc) to the output queue which will shuttle it to the Writer
+
+        Args:
+            obj (_type_): _description_
+
+        Raises:
+            MultiprocessingError: _description_
+        """
         max_attempts = 750
         timeout = 0.5  # seconds
         attempts = 0
@@ -193,54 +148,6 @@ class DockingFileReader(mp.Process):
                     f"Queue full: queueOut.put attempt {attempts} timed out. {max_attempts - attempts} put attempts remaining."
                 )
                 attempts += 1
-
-    def _find_poses_to_save(self, ligand_dict: dict) -> list:
-        """Returns list of the run numbers for the top run in the
-        top self.max_pose clusters (ADGPU) or just the top poses overall
-
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
-
-        Returns:
-            list: List of run numbers to save
-        """
-        num_poses = self.shared.get("num_poses")
-
-        # independent of docking engine, store all
-        if num_poses == -1:
-            poses_to_save = ligand_dict["sorted_runs"]
-
-        # adgpu stores poses under different key name
-        elif self.docking_mode == "adgpu":
-            # will only select top n clusters.
-            poses_to_save = ligand_dict["cluster_top_poses"][:num_poses]
-
-        # if not adgpu, save top n poses
-        else:
-            poses_to_save = ligand_dict["sorted_runs"][:num_poses]
-
-        return poses_to_save
-
-    def _find_tolerated_interactions(self, ligand_dict):
-        """Take ligand dict and finds which poses we should save the
-        interactions for as tolerated interactions for the top pose
-        of the cluster. These runs are within the
-        <self.interaction_tolerance> angstroms RMSD of the top pose
-        for a given cluster. All data for the cluster's top pose is saved.
-
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
-
-        Returns:
-            list: run numbers of tolerated runs
-        """
-        tolerated_runs = []
-        for idx, run in enumerate(ligand_dict["sorted_runs"]):
-            if float(ligand_dict["cluster_rmsds"][idx]) <= self.shared.get(
-                "interaction_tolerance"
-            ):
-                tolerated_runs.append(run)
-        return tolerated_runs
 
 
 class Writer(mp.Process):
@@ -290,9 +197,11 @@ class Writer(mp.Process):
                 if self.receptor_row is None and not self.receptor_written_to_db:
                     self.receptor_row = list(next_task.get("receptor_row"))
 
-                self.docked_ligands["ligands"].append(next_task["ligand"])
-                self.docked_ligands["poses"].extend(next_task["poses"])
-                self.docked_ligands["interactions"].extend(next_task["interactions"])
+                self.docked_ligands["ligands"].append(next_task["ligand_row"])
+                self.docked_ligands["poses"].extend(next_task["results_rows"])
+                self.docked_ligands["interactions"].extend(
+                    next_task["interaction_rows"]
+                )
                 self.counter += 1
 
                 # After every n (chunk size) files, write to storage
