@@ -18,7 +18,12 @@ from .storagemanager_duckdb import StorageManagerDuckDB
 from .querybuilder import QueryBuilder
 from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
-from .parsers import parse_single_dlg, parse_vina_result
+from .parsers import (
+    parse_adgpu_results,
+    parse_vina_results,
+    parse_docking_file_sdf,
+    calculate_interactions,
+)
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .outputmanager import OutputManager
@@ -50,8 +55,9 @@ __all__ = [
     "MPManager",
     "DockingFileReader",
     "Writer",
-    "parse_single_dlg",
-    "parse_vina_result",
+    "parse_adgpu_results",
+    "parse_vina_results",
+    "parse_docking_file_sdf",
     "ReceptorManager",
     "ResultsManager",
     "OutputManager",
