@@ -11,11 +11,15 @@ import traceback
 import queue
 from .parsers import docking_file_parsers
 from .exceptions import (
+    FileParsingErrorAdgpu,
+    FileParsingErrorPdbqt,
+    FileParsingErrorSdf,
     FileParsingError,
     WriteToStorageError,
     MultiprocessingError,
 )
 import multiprocessing as mp
+from .ringtailoptions import RingtailDefaults
 
 
 class DockingFileReader(mp.Process):
@@ -76,38 +80,42 @@ class DockingFileReader(mp.Process):
 
                 # generate CPU LOAD
                 # parser depends on requested docking_mode
-                data_packet = docking_file_parsers.get(
-                    self.docking_mode, "missing_parser"
-                )(
-                    next_task,
-                    self.shared.get("num_poses"),
-                    **{
-                        "interaction_tolerance": self.shared.get(
-                            "interaction_tolerance", None
-                        ),
-                        "calculate_interactions": not self.shared.get(
-                            "no_interactions", True
-                        ),
-                    },
-                )
-
-                if data_packet == "missing_parser":
-                    raise NotImplementedError(
-                        f"Parser for input file docking_mode {self.docking_mode} not implemented!"
+                try:
+                    data_packet = docking_file_parsers.get(
+                        self.docking_mode, "missing_parser"
+                    )(
+                        next_task,
+                        self.shared.get("num_poses"),
+                        **{
+                            "interaction_tolerance": self.shared.get(
+                                "interaction_tolerance", None
+                            ),
+                            "calculate_interactions": not self.shared.get(
+                                "no_interactions", True
+                            ),
+                            "receptor_string": self.shared.get("receptor_string", None),
+                            "interaction_cutoffs": self.shared.get(
+                                "interaction_cutoffs",
+                                RingtailDefaults.interaction_cutoffs,
+                            ),
+                            "target": self.shared.get("target", None),
+                        },
                     )
-                # for adgpu only: check receptor name from file against that which we expect
-                if (
-                    rec_name := data_packet.get("receptor_row")[0]
-                    != (target := self.shared.get("target", None))
-                    and target is not None
-                    and self.docking_mode == "adgpu"
-                ):
-                    raise FileParsingError(
-                        "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
-                            rec_name,
-                            next_task,
-                            target,
+                    if data_packet == "missing_parser":
+                        raise NotImplementedError(
+                            f"Parser for input file docking_mode {self.docking_mode} not implemented!"
                         )
+                except FileParsingErrorAdgpu as e:
+                    raise FileParsingError(
+                        f"Problems when parsing the ADGPU docking log file: {str(e)}"
+                    )
+                except FileParsingErrorPdbqt as e:
+                    raise FileParsingError(
+                        f"Problems when parsing the vina docking file: {str(e)}"
+                    )
+                except FileParsingErrorSdf as e:
+                    raise FileParsingError(
+                        f"Problems when parsing the SDF docking file: {str(e)}"
                     )
 
                 # put the result in the out queue (will be sent to Writer)
