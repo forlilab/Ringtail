@@ -58,6 +58,7 @@ __all__ = [
     "parse_adgpu_results",
     "parse_vina_results",
     "parse_docking_file_sdf",
+    "calculate_interactions",
     "ReceptorManager",
     "ResultsManager",
     "OutputManager",
