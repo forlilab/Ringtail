@@ -49,6 +49,18 @@ class FileParsingError(Exception):
     pass
 
 
+class FileParsingErrorAdgpu(FileParsingError):
+    pass
+
+
+class FileParsingErrorPdbqt(FileParsingError):
+    pass
+
+
+class FileParsingErrorSdf(FileParsingError):
+    pass
+
+
 class WriteToStorageError(Exception):
     pass
 
