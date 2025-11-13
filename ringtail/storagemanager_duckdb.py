@@ -145,7 +145,7 @@ class StorageManagerDuckDB(StorageManager):
             energies_intra      FLOAT,
             energies_torsional  FLOAT,
             unbound_energy      FLOAT,
-            nr_interactions     INTEGER,
+            num_interactions     INTEGER,
             num_hb              INTEGER,
             about_x             FLOAT,
             about_y             FLOAT,
@@ -158,7 +158,7 @@ class StorageManagerDuckDB(StorageManager):
             axisangle_z         FLOAT,
             axisangle_w         FLOAT,
             dihedrals           VARCHAR,
-            ligand_coordinates         VARCHAR,
+            pose_coordinates         VARCHAR,
             flexible_res_coordinates   VARCHAR,
             ); """
 
@@ -189,7 +189,7 @@ class StorageManagerDuckDB(StorageManager):
             energies_intra      FLOAT,
             energies_torsional  FLOAT,
             unbound_energy      FLOAT,
-            nr_interactions     INTEGER,
+            num_interactions     INTEGER,
             num_hb              INTEGER,
             about_x             FLOAT,
             about_y             FLOAT,
@@ -202,7 +202,7 @@ class StorageManagerDuckDB(StorageManager):
             axisangle_z         FLOAT,
             axisangle_w         FLOAT,
             dihedrals           VARCHAR,
-            ligand_coordinates         VARCHAR,
+            pose_coordinates         VARCHAR,
             flexible_res_coordinates   VARCHAR,
             ligname             VARCHAR);
             """
@@ -253,7 +253,7 @@ class StorageManagerDuckDB(StorageManager):
                 "energies_intra",
                 "energies_torsional",
                 "unbound_energy",
-                "nr_interactions",
+                "num_interactions",
                 "num_hb",
                 "cluster_size",
                 "about_x",
@@ -267,7 +267,7 @@ class StorageManagerDuckDB(StorageManager):
                 "axisangle_z",
                 "axisangle_w",
                 "dihedrals",
-                "ligand_coordinates",
+                "pose_coordinates",
                 "flexible_res_coordinates",
                 "ligname",
             ],
@@ -291,7 +291,7 @@ class StorageManagerDuckDB(StorageManager):
                     energies_intra,
                     energies_torsional,
                     unbound_energy,
-                    nr_interactions,
+                    num_interactions,
                     num_hb,
                     cluster_size,
                     about_x,
@@ -305,7 +305,7 @@ class StorageManagerDuckDB(StorageManager):
                     axisangle_z,
                     axisangle_w,
                     dihedrals,
-                    ligand_coordinates,
+                    pose_coordinates,
                     flexible_res_coordinates,
                     ligname) 
                 SELECT * FROM incoming_poses;"""
@@ -357,7 +357,7 @@ class StorageManagerDuckDB(StorageManager):
                 energies_intra,
                 energies_torsional,
                 unbound_energy,
-                nr_interactions,
+                num_interactions,
                 num_hb,
                 cluster_size,
                 about_x,
@@ -371,7 +371,7 @@ class StorageManagerDuckDB(StorageManager):
                 axisangle_z,
                 axisangle_w,
                 dihedrals,
-                ligand_coordinates,
+                pose_coordinates,
                 flexible_res_coordinates
                 ) 
             SELECT 
@@ -392,7 +392,7 @@ class StorageManagerDuckDB(StorageManager):
                 T.energies_intra,
                 T.energies_torsional,
                 T.unbound_energy,
-                T.nr_interactions,
+                T.num_interactions,
                 T.num_hb,
                 T.cluster_size,
                 T.about_x,
@@ -406,7 +406,7 @@ class StorageManagerDuckDB(StorageManager):
                 T.axisangle_z,
                 T.axisangle_w,
                 T.dihedrals,
-                T.ligand_coordinates,
+                T.pose_coordinates,
                 T.flexible_res_coordinates
             FROM Results_temp AS T
             JOIN Ligands AS L ON L.LigName = T.LigName
@@ -1184,7 +1184,7 @@ class StorageManagerDuckDB(StorageManager):
             energies_intra,
             energies_torsional,
             unbound_energy,
-            nr_interactions,
+            num_interactions,
             num_hb,
             about_x,
             about_y,
@@ -1197,7 +1197,7 @@ class StorageManagerDuckDB(StorageManager):
             axisangle_z,
             axisangle_w,
             dihedrals,
-            ligand_coordinates,
+            pose_coordinates,
             flexible_res_coordinates) 
         SELECT 
             pose.merged_PK as pose_id,
@@ -1219,7 +1219,7 @@ class StorageManagerDuckDB(StorageManager):
             mr.energies_intra,
             mr.energies_torsional,
             mr.unbound_energy,
-            mr.nr_interactions,
+            mr.num_interactions,
             mr.num_hb,
             mr.about_x,
             mr.about_y,
@@ -1232,7 +1232,7 @@ class StorageManagerDuckDB(StorageManager):
             mr.axisangle_z,
             mr.axisangle_w,
             mr.dihedrals,
-            mr.ligand_coordinates,
+            mr.pose_coordinates,
             mr.flexible_res_coordinates
         FROM merging.Results mr
         LEFT JOIN (

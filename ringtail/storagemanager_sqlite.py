@@ -64,11 +64,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-            ligand_smile        VARCHAR,
-            rdmol               BLOB,
-            atom_index_map      VARCHAR,
-            hydrogen_parents    VARCHAR,
-            input_model         VARCHAR)"""
+            rdmol               BLOB)"""
 
         self.db_query(ligand_table)
 
@@ -85,13 +81,9 @@ class StorageManagerSQLite(StorageManager):
 
         sql_insert = """INSERT INTO Ligands (
         LigName,
-        ligand_smile,
-        rdmol,
-        atom_index_map,
-        hydrogen_parents,
-        input_model
+        rdmol
         ) VALUES
-        (?,?,?,?,?,?)
+        (?,?)
         ON CONFLICT(LigName) DO NOTHING"""
 
         self.db_update(sql_insert, ligands, commit=False)
@@ -119,20 +111,9 @@ class StorageManagerSQLite(StorageManager):
             energies_intra      FLOAT,
             energies_torsional  FLOAT,
             unbound_energy      FLOAT,
-            nr_interactions     INTEGER,
+            num_interactions     INTEGER,
             num_hb              INTEGER,
-            about_x             FLOAT,
-            about_y             FLOAT,
-            about_z             FLOAT,
-            trans_x             FLOAT,
-            trans_y             FLOAT,
-            trans_z             FLOAT,
-            axisangle_x         FLOAT,
-            axisangle_y         FLOAT,
-            axisangle_z         FLOAT,
-            axisangle_w         FLOAT,
-            dihedrals           VARCHAR,
-            ligand_coordinates         VARCHAR,
+            pose_coordinates         VARCHAR,
             flexible_res_coordinates   VARCHAR,
             FOREIGN KEY (ligand_id) REFERENCES Ligands(ligand_id)
             ); """
@@ -165,20 +146,9 @@ class StorageManagerSQLite(StorageManager):
             energies_intra      FLOAT,
             energies_torsional  FLOAT,
             unbound_energy      FLOAT,
-            nr_interactions     INTEGER,
+            num_interactions     INTEGER,
             num_hb              INTEGER,
-            about_x             FLOAT,
-            about_y             FLOAT,
-            about_z             FLOAT,
-            trans_x             FLOAT,
-            trans_y             FLOAT,
-            trans_z             FLOAT,
-            axisangle_x         FLOAT,
-            axisangle_y         FLOAT,
-            axisangle_z         FLOAT,
-            axisangle_w         FLOAT,
-            dihedrals           VARCHAR,
-            ligand_coordinates  VARCHAR,
+            pose_coordinates  VARCHAR,
             flexible_res_coordinates   VARCHAR,
             ligname             VARCHAR);
             """
@@ -206,7 +176,9 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(create_temp_interactions)
         self.db_query(create_temp_mapping_table)
 
-    def _insert_results_in_temp_tables(self, results_array, interactions_array):
+    def _insert_results_in_temp_tables(
+        self, results_array: list[dict], interactions_array
+    ):
         """
         Inserts docking results and interactions into their respective
         temporary tables
@@ -234,29 +206,41 @@ class StorageManagerSQLite(StorageManager):
                 energies_intra,
                 energies_torsional,
                 unbound_energy,
-                nr_interactions,
+                num_interactions,
                 num_hb,
                 cluster_size,
-                about_x,
-                about_y,
-                about_z,
-                trans_x,
-                trans_y,
-                trans_z,
-                axisangle_x,
-                axisangle_y,
-                axisangle_z,
-                axisangle_w,
-                dihedrals,
-                ligand_coordinates,
+                pose_coordinates,
                 flexible_res_coordinates,
                 ligname)
             VALUES (
-                {",".join(["?"]*len(results_array[0]))}
+                :receptor,
+                :pose_rank,
+                :run_number,
+                :cluster_rmsd,
+                :reference_rmsd,
+                :docking_score,
+                :leff,
+                :deltas,
+                :energies_inter,
+                :energies_vdw,
+                :energies_electro,
+                :energies_flexLig,
+                :energies_flexLR,
+                :energies_intra,
+                :energies_torsional,
+                :unbound_energy,
+                :num_interactions,
+                :num_hb,
+                :cluster_size,
+                :pose_coordinates,
+                :flexible_res_coordinates,
+                :ligname
             )
             """
         self.db_update(temp_results_insert, results_array, commit=False)
-
+        """            VALUES (
+                {",".join(["?"]*len(results_array[0]))}
+        )"""
         temp_int_insert = f"""
             INSERT INTO Interactions_temp (
                 ligname, 
@@ -295,21 +279,10 @@ class StorageManagerSQLite(StorageManager):
                 energies_intra,
                 energies_torsional,
                 unbound_energy,
-                nr_interactions,
+                num_interactions,
                 num_hb,
                 cluster_size,
-                about_x,
-                about_y,
-                about_z,
-                trans_x,
-                trans_y,
-                trans_z,
-                axisangle_x,
-                axisangle_y,
-                axisangle_z,
-                axisangle_w,
-                dihedrals,
-                ligand_coordinates,
+                pose_coordinates,
                 flexible_res_coordinates
                 ) 
             SELECT 
@@ -330,21 +303,10 @@ class StorageManagerSQLite(StorageManager):
                 T.energies_intra,
                 T.energies_torsional,
                 T.unbound_energy,
-                T.nr_interactions,
+                T.num_interactions,
                 T.num_hb,
                 T.cluster_size,
-                T.about_x,
-                T.about_y,
-                T.about_z,
-                T.trans_x,
-                T.trans_y,
-                T.trans_z,
-                T.axisangle_x,
-                T.axisangle_y,
-                T.axisangle_z,
-                T.axisangle_w,
-                T.dihedrals,
-                T.ligand_coordinates,
+                T.pose_coordinates,
                 T.flexible_res_coordinates
             FROM Results_temp AS T
             JOIN Ligands AS L ON L.LigName = T.LigName
@@ -380,17 +342,8 @@ class StorageManagerSQLite(StorageManager):
         Based on the following columns:
         ligname,
         receptor,
-        about_x,
-        about_y,
-        about_z,
-        trans_x,
-        trans_y,
-        trans_z,
-        axisangle_x,
-        axisangle_y,
-        axisangle_z,
-        axisangle_w,
-        dihedrals
+        pose_coordinates,
+        flexible_res_coordinates
         """
         delete_int_sql = """
         DELETE FROM Interactions_temp
@@ -399,17 +352,8 @@ class StorageManagerSQLite(StorageManager):
             FROM Results_temp AS RT
             JOIN Results AS R
                 ON RT.receptor    = R.receptor
-                AND RT.about_x     = R.about_x
-                AND RT.about_y     = R.about_y
-                AND RT.about_z     = R.about_z
-                AND RT.trans_x     = R.trans_x
-                AND RT.trans_y     = R.trans_y
-                AND RT.trans_z     = R.trans_z
-                AND RT.axisangle_x = R.axisangle_x
-                AND RT.axisangle_y = R.axisangle_y
-                AND RT.axisangle_z = R.axisangle_z
-                AND RT.axisangle_w = R.axisangle_w
-                AND RT.dihedrals   = R.dihedrals
+                AND RT.pose_coordinates     = R.pose_coordinates
+                AND RT.flexible_res_coordinates     = R.flexible_res_coordinates
             JOIN Ligands AS L
                 ON RT.ligname = L.ligname
             WHERE 
@@ -427,17 +371,8 @@ class StorageManagerSQLite(StorageManager):
                 ON RT.ligname = L.ligname
             WHERE 
                 RT.receptor  = R.receptor
-                AND RT.about_x     = R.about_x
-                AND RT.about_y     = R.about_y
-                AND RT.about_z     = R.about_z
-                AND RT.trans_x     = R.trans_x
-                AND RT.trans_y     = R.trans_y
-                AND RT.trans_z     = R.trans_z
-                AND RT.axisangle_x = R.axisangle_x
-                AND RT.axisangle_y = R.axisangle_y
-                AND RT.axisangle_z = R.axisangle_z
-                AND RT.axisangle_w = R.axisangle_w
-                AND RT.dihedrals   = R.dihedrals
+                AND RT.pose_coordinates     = R.pose_coordinates
+                AND RT.flexible_res_coordinates     = R.flexible_res_coordinates
                 AND L.ligand_id    = R.ligand_id);
         """
         self.db_query(delete_int_sql)
@@ -449,17 +384,8 @@ class StorageManagerSQLite(StorageManager):
         Based on the following columns:
         ligname,
         receptor,
-        about_x,
-        about_y,
-        about_z,
-        trans_x,
-        trans_y,
-        trans_z,
-        axisangle_x,
-        axisangle_y,
-        axisangle_z,
-        axisangle_w,
-        dihedrals
+        pose_coordinates,
+        flexible_res_coordinates
         """
         delete_sql = """
         WITH target_poseid AS (
@@ -467,17 +393,8 @@ class StorageManagerSQLite(StorageManager):
             FROM Results AS R
             JOIN Results_temp AS RT
                 ON RT.receptor = R.receptor
-                AND RT.about_x = R.about_x
-                AND RT.about_y = R.about_y
-                AND RT.about_z = R.about_z
-                AND RT.trans_x = R.trans_x
-                AND RT.trans_y = R.trans_y
-                AND RT.trans_z = R.trans_z
-                AND RT.axisangle_x = R.axisangle_x
-                AND RT.axisangle_y = R.axisangle_y
-                AND RT.axisangle_z = R.axisangle_z
-                AND RT.axisangle_w = R.axisangle_w
-                AND RT.dihedrals = R.dihedrals
+                AND RT.pose_coordinates = R.pose_coordinates
+                AND RT.flexible_res_coordinates = R.flexible_res_coordinates
             JOIN Ligands AS L
                 ON RT.ligname = L.ligname
             )
@@ -1128,7 +1045,7 @@ class StorageManagerSQLite(StorageManager):
             energies_intra,
             energies_torsional,
             unbound_energy,
-            nr_interactions,
+            num_interactions,
             num_hb,
             about_x,
             about_y,
@@ -1141,7 +1058,7 @@ class StorageManagerSQLite(StorageManager):
             axisangle_z,
             axisangle_w,
             dihedrals,
-            ligand_coordinates,
+            pose_coordinates,
             flexible_res_coordinates) 
         SELECT 
             pose.merged_PK as pose_id,
@@ -1163,7 +1080,7 @@ class StorageManagerSQLite(StorageManager):
             mr.energies_intra,
             mr.energies_torsional,
             mr.unbound_energy,
-            mr.nr_interactions,
+            mr.num_interactions,
             mr.num_hb,
             mr.about_x,
             mr.about_y,
@@ -1176,7 +1093,7 @@ class StorageManagerSQLite(StorageManager):
             mr.axisangle_z,
             mr.axisangle_w,
             mr.dihedrals,
-            mr.ligand_coordinates,
+            mr.pose_coordinates,
             mr.flexible_res_coordinates
         FROM merging.Results mr
         LEFT JOIN (
@@ -2135,7 +2052,7 @@ class StorageManagerSQLite(StorageManager):
         )
         cur.execute("ALTER TABLE Bookmarks ADD COLUMN filters")
         cur.execute(
-            "CREATE INDEX IF NOT EXISTS ak_results ON Results(ligand_id, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
+            "CREATE INDEX IF NOT EXISTS ak_results ON Results(ligand_id, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, num_interactions, run_number, pose_rank, num_hb)"
         )
         cur.execute(
             "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
@@ -2319,7 +2236,7 @@ class StorageManagerSQLite(StorageManager):
                         energies_intra,
                         energies_torsional,
                         unbound_energy,
-                        nr_interactions,
+                        num_interactions,
                         num_hb,
                         cluster_size,
                         about_x,
@@ -2333,7 +2250,7 @@ class StorageManagerSQLite(StorageManager):
                         axisangle_z,
                         axisangle_w,
                         dihedrals,
-                        ligand_coordinates,
+                        pose_coordinates,
                         flexible_res_coordinates)
                     SELECT
                         pose_id,
@@ -2354,7 +2271,7 @@ class StorageManagerSQLite(StorageManager):
                         energies_intra,
                         energies_torsional,
                         unbound_energy,
-                        nr_interactions,
+                        num_interactions,
                         num_hb,
                         cluster_size,
                         about_x,
@@ -2368,7 +2285,7 @@ class StorageManagerSQLite(StorageManager):
                         axisangle_z,
                         axisangle_w,
                         dihedrals,
-                        ligand_coordinates,
+                        pose_coordinates,
                         flexible_res_coordinates
                       FROM Results""",
             commit=True,

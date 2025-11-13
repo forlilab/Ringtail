@@ -88,74 +88,6 @@ class StorageManager:
 
     # region public api
 
-    @classmethod
-    def format_for_storage(cls, ligand_dict: dict) -> dict:
-        """Takes file dictionary from the file parser, formats required storage format. Only handles docking data for one ligand at the time.
-        For each run we save, we add its interaction dict to the interaction_dictionaries list and save its other data
-        We also save a mapping of the its cluster number to the index in interaction_dictionaries
-        Then, when we find a pose to tolerate interactions for, we lookup the index to append the interactions to from cluster_map_to_run_pose
-        Finally, we calculate the interaction tuple lists for each pose
-
-        Args:
-            ligand_dict (dict): Dictionary containing data from the fileparser
-
-        Returns:
-            dict: with storage formatted rows, including: results rows per pose, interactions per pose, one ligand row, and one receptor row
-
-        """
-        result_rows = []
-        interaction_dictionaries = []
-        cluster_map_to_run_pose = {}
-        ligand_row = cls._generate_ligand_row(ligand_dict)
-
-        # iterates and essentially creates pose rows
-        for idx, run_number in enumerate(ligand_dict["sorted_runs"]):
-            cluster = ligand_dict["cluster_list"][idx]
-            pose_rank = idx + 1
-            # save everything if this is a cluster top pose
-            current_interactions = {
-                "ligand_name": ligand_row[0],
-            }
-            if run_number in ligand_dict["poses_to_save"]:
-                cluster_map_to_run_pose[cluster] = {
-                    "run_number": run_number,
-                    "pose_rank": pose_rank,
-                }
-                current_interactions.update(cluster_map_to_run_pose[cluster])
-                # Check how things are parsed here, might not be most efficient
-                result_rows.append(
-                    cls._generate_results_row(ligand_dict, idx, run_number)
-                )
-                if ligand_dict["interactions"] != []:
-                    # here is where I have to add run number ligname and rank
-                    current_interactions.update(ligand_dict["interactions"][idx])
-                    interaction_dictionaries.append(current_interactions)
-            elif run_number in ligand_dict["tolerated_interaction_runs"]:
-                # adds to list started by best-scoring pose in cluster
-                if cluster not in cluster_map_to_run_pose.keys():
-                    continue
-                else:
-                    current_interactions.update(
-                        {
-                            "run_number": cluster_map_to_run_pose[cluster][
-                                "run_number"
-                            ],
-                            "pose_rank": cluster_map_to_run_pose[cluster]["pose_rank"],
-                        }
-                    )
-                current_interactions.update(ligand_dict["interactions"][idx])
-                interaction_dictionaries.append(current_interactions)
-
-        interactions_tuples = cls._generate_interaction_tuples(interaction_dictionaries)
-
-        data_dict = {
-            "ligand": ligand_row,
-            "poses": result_rows,
-            "interactions": interactions_tuples,
-            "receptor_row": cls._generate_receptor_row(ligand_dict),
-        }
-        return data_dict
-
     def insert_data(
         self,
         docking_data: dict,
@@ -171,9 +103,9 @@ class StorageManager:
         interaction_data = docking_data["interactions"]
         # deduplicate by using a set comprehension, then convert to list
         just_interactions = list({interaction[3:] for interaction in interaction_data})
-
+        # last results item is ligname
         self._insert_interaction_index_rows(just_interactions)
-
+        # interactions has ligname and pose rank
         self._insert_docking_data(
             docking_data["poses"], interaction_data, write_options
         )
@@ -987,7 +919,7 @@ class StorageManager:
             pose_ids (list): pose ids for which to collect molecular data
 
         Returns:
-            iter: of the following columns pose_id, docking_score, leff, ligand_coordinates, flexible_res_coordinates
+            iter: of the following columns pose_id, docking_score, leff, pose_coordinates, flexible_res_coordinates
         """
         placeholders = ",".join(["?"] * len(pose_ids))
 
@@ -996,7 +928,7 @@ class StorageManager:
             "pose_id",
             "docking_score",
             "leff",
-            "ligand_coordinates",
+            "pose_coordinates",
             "flexible_res_coordinates",
         ).FROM("Results").WHERE(f"Pose_ID IN ({placeholders})", *pose_ids)
         return self.db_query(*query.build()).fetchall()
@@ -1201,7 +1133,7 @@ class StorageManager:
         R.Pose_ID, L.LigName, R.docking_score, 
         R.leff, R.cluster_size, R.cluster_rmsd, 
         R.pose_rank, R.num_hb, R.receptor, R.run_number, 
-        R.deltas, R.nr_interactions, R.unbound_energy, 
+        R.deltas, R.num_interactions, R.unbound_energy, 
         R.reference_RMSD, R.energies_inter, R.energies_vdw, 
         R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
         R.energies_intra, R.energies_torsional, R.about_x, R.about_y, 
@@ -1700,253 +1632,6 @@ class StorageManager:
         if commit:
             self.conn.commit()
 
-    @classmethod
-    def _generate_results_row(cls, ligand_dict, pose_rank, run_number) -> list:
-        """generate list of lists of ligand values to be
-            inserted into duckdb database for a given pose
-
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
-            pose_rank (int): Rank of pose to generate row for
-                all runs for the given ligand
-            run_number (int): Run number of pose to generate row for
-                all runs for the given ligand
-
-        Returns:
-            List: List of pose data to be inserted into Results table.
-            In same order as expected in insert_results:
-            receptor, [2]
-            pose_rank, [3]
-            run_number, [4]
-            cluster_rmsd, [5]
-            reference_rmsd, [6]
-            docking_score, [7]
-            leff, [8]
-            deltas, [9]
-            energies_inter, [10]
-            energies_vdw, [11]
-            energies_electro, [12]
-            energies_flexLig, [13]
-            energies_flexLR, [14]
-            energies_intra, [15]
-            energies_torsional, [16]
-            unbound_energy, [17]
-            nr_interactions, [18]
-            num_hb, [19]
-            cluster_size, [20]
-            about_x, [21]
-            about_y, [22]
-            about_z, [23]
-            trans_x, [24]
-            trans_y, [25]
-            trans_z, [26]
-            axisangle_x, [27]
-            axisangle_y, [28]
-            axisangle_z, [29]
-            axisangle_w, [30]
-            dihedrals, [31]
-            ligand_coordinates, [32]
-            flexible_res_coordinates [33]
-            ligname [business key]
-        """
-        ligand_data_keys = [
-            "cluster_rmsds",
-            "ref_rmsds",
-            "scores",
-            "leff",
-            "delta",
-            "intermolecular_energy",
-            "vdw_hb_desolv",
-            "electrostatics",
-            "flex_ligand",
-            "flexLigand_flexReceptor",
-            "internal_energy",
-            "torsional_energy",
-            "unbound_energy",
-        ]
-        # # # # # # get pose-specific data
-
-        # check if run is best for a cluster.
-        # We are only saving the top pose for each cluster
-        ligand_data_list = [
-            ligand_dict["receptor"],
-            pose_rank + 1,
-            int(run_number),
-        ]
-        # get energy data
-        for key in ligand_data_keys:
-            if ligand_dict[key] == []:  # guard against incomplete data
-                ligand_data_list.append(None)
-            else:
-                ligand_data_list.append(ligand_dict[key][pose_rank])
-        if ligand_dict["interactions"] != [] and any(
-            ligand_dict["interactions"][pose_rank]
-        ):  # catch lack of interaction data
-            # add interaction count
-            ligand_data_list.append(ligand_dict["interactions"][pose_rank]["count"][0])
-            if int(ligand_dict["interactions"][pose_rank]["count"][0]) != 0:
-                # count number H bonds, add to ligand data list
-                ligand_data_list.append(
-                    ligand_dict["interactions"][pose_rank]["type"].count("H")
-                )
-            else:
-                ligand_data_list.append(0)
-        else:
-            ligand_data_list.extend(
-                [
-                    None,
-                    None,
-                ]
-            )
-        # Add the cluster size for the cluster this pose belongs to
-        ligand_data_list.append(
-            ligand_dict["cluster_sizes"][ligand_dict["cluster_list"][pose_rank]]
-        )
-        state_var_keys = ["pose_about", "pose_translations", "pose_quarternions"]
-        # add statevars
-        for key in state_var_keys:
-            if ligand_dict[key] == []:
-                if key == "pose_about" or key == "pose_translations":
-                    ligand_data_list.extend(
-                        [
-                            None,
-                            None,
-                            None,
-                        ]
-                    )
-                if key == "pose_quarternions":
-                    ligand_data_list.extend(
-                        [
-                            None,
-                            None,
-                            None,
-                            None,
-                        ]
-                    )
-                continue
-            stateVar_data = ligand_dict[key][pose_rank]
-            if stateVar_data != []:
-                for dim in stateVar_data:
-                    ligand_data_list.append(dim)
-        dihedral_string = ""
-        if ligand_dict["pose_dihedrals"] != []:
-            pose_dihedrals = ligand_dict["pose_dihedrals"][pose_rank]
-            for dihedral in pose_dihedrals:
-                dihedral_string = dihedral_string + json.dumps(dihedral) + ", "
-        ligand_data_list.append(dihedral_string)
-
-        # add coordinates
-        # convert to string for storage as VARCHAR
-        ligand_data_list.append(json.dumps(ligand_dict["pose_coordinates"][pose_rank]))
-        ligand_data_list.append(
-            json.dumps(ligand_dict["flexible_res_coordinates"][pose_rank])
-        )
-        # append ligand name as business key to Ligands table
-        ligand_data_list.append(ligand_dict["ligname"])
-
-        return ligand_data_list
-
-    @classmethod
-    def _generate_ligand_row(cls, ligand_dict: dict) -> list:
-        """writes row to be inserted into ligand table
-
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
-
-        Returns:
-            list: List of data to be written as row in ligand table. Format:
-                [ligand_name, ligand_smile, ligand_rdbin, ligand_index_map,
-                ligand_h_parents, input_model]
-        """
-        ligand_name = ligand_dict["ligname"]
-        ligand_smile = ligand_dict["ligand_smile_string"]
-        ligand_mol = Chem.MolFromSmiles(ligand_smile)
-        # sanitize the ligand
-        Chem.SanitizeMol(ligand_mol)
-        ligand_rdbin = ligand_mol.ToBinary()
-        ligand_index_map = json.dumps(ligand_dict["ligand_index_map"])
-        ligand_h_parents = json.dumps(ligand_dict["ligand_h_parents"])
-        input_model = json.dumps(ligand_dict["ligand_input_model"])
-
-        return [
-            ligand_name,
-            ligand_smile,
-            ligand_rdbin,
-            ligand_index_map,
-            ligand_h_parents,
-            input_model,
-        ]
-
-    @classmethod
-    def _generate_receptor_row(cls, ligand_dict: dict) -> list:
-        """Writes row to be inserted into receptor table
-
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
-
-        Returns:
-            list: receptor row columns
-        """
-        rec_name = ligand_dict["receptor"]
-        box_dim = json.dumps(ligand_dict["grid_dim"])
-        box_center = json.dumps(ligand_dict["grid_center"])
-        grid_spacing = ligand_dict["grid_spacing"]
-        if grid_spacing != "":
-            grid_spacing = float(grid_spacing)
-        flexible_residues = json.dumps(ligand_dict["flexible_residues"])
-        flexres_atomnames = json.dumps(ligand_dict["flexres_atomnames"])
-
-        return [
-            rec_name,
-            box_dim,
-            box_center,
-            grid_spacing,
-            flexible_residues,
-            flexres_atomnames,
-        ]
-
-    @classmethod
-    def _generate_interaction_tuples(
-        cls, interaction_dictionaries: list, unique_id=True
-    ) -> list:
-        """Takes dictionary of file results, formats as list of tuples for interactions.
-        To each interaction description is added business keys/columns that identifies
-        which results row/pose each interaction belongs to
-
-        Args:
-            interaction_dictionaries (list): List of pose interaction
-                dictionaries from parser
-
-        Returns:
-            list: of tuples of interaction data
-        """
-        interaction_keywords = [
-            "type",
-            "chain",
-            "residue",
-            "resid",
-            "recname",
-            "recid",
-        ]
-        interactions = set()
-        for pose_interactions in interaction_dictionaries:
-            if unique_id:
-                id = (
-                    pose_interactions["ligand_name"],
-                    pose_interactions["run_number"],
-                    pose_interactions["pose_rank"],
-                )
-            else:
-                id = tuple()
-            count = pose_interactions["count"][0]
-            for i in range(int(count)):
-                # include the three values that uniquely identify a pose within a docking run
-                interactions.add(
-                    id + tuple(pose_interactions[kw][i] for kw in interaction_keywords)
-                )
-
-        return list(interactions)
-
     def _insert_docking_data(
         self, results: list[list], interactions: list[list], options: dict
     ):
@@ -2348,13 +2033,13 @@ class StorageManager:
             substruct_pos = ligand_filters["ligand_substruct_pos"]
             position = True
             # we need additional info if doing position search
-            select_statement += ", Ligands.atom_index_map, R.ligand_coordinates "
-            headers.extend(["atom_index_map", "ligand_coordinates"])
+            select_statement += ", Ligands.atom_index_map, R.pose_coordinates "
+            headers.extend(["atom_index_map", "pose_coordinates"])
         # build full query
         query = select_statement + partial_query
 
         def _substructure_position_calculation(
-            idxmap, ligand_coordinates, smartsmol, filter
+            idxmap, pose_coordinates, smartsmol, filter
         ) -> bool:
             """
             Method that checks whether or not a substructure specified by smarts
@@ -2362,7 +2047,7 @@ class StorageManager:
 
             Args:
                 idxmap (dict): index map of the ligand
-                ligand_coordinates (json): ligand coordinates
+                pose_coordinates (json): ligand coordinates
                 smartsmol (mol): mol object of the smarts pattern
                 filter (list[str]): filter values from user
 
@@ -2379,7 +2064,7 @@ class StorageManager:
             # calculate xyz space coordinates
             xyz = [
                 float(value)
-                for value in json.loads(ligand_coordinates)[idxmap[smartsmol[index]]]
+                for value in json.loads(pose_coordinates)[idxmap[smartsmol[index]]]
             ]
             # calculate the sum of squares distances
             d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
@@ -2458,13 +2143,13 @@ class StorageManager:
                         # filterrow[0] should be the smarts pattern
                         smarts_mol = _smarts_to_mol(filterrow[0])
                         ligand_index_map = _ligand_indexmap(ligandict["atom_index_map"])
-                        ligand_coordinates = ligandict["ligand_coordinates"]
+                        pose_coordinates = ligandict["pose_coordinates"]
                         # filterrow [1:] should be indices, distance allowance, and coordinates for smarts match
                         substruct_pos_filter = filterrow[1:]
                         for hit in ligand_mol.GetSubstructMatches(smarts_mol):
                             filter_match = _substructure_position_calculation(
                                 ligand_index_map,
-                                ligand_coordinates,
+                                pose_coordinates,
                                 hit,
                                 substruct_pos_filter,
                             )
@@ -2778,7 +2463,7 @@ class StorageManager:
         energies_intra      FLOAT,
         energies_torsional  FLOAT,
         unbound_energy      FLOAT,
-        nr_interactions     INTEGER,
+        num_interactions     INTEGER,
         num_hb              INTEGER,
         about_x             FLOAT,
         about_y             FLOAT,
@@ -2791,7 +2476,7 @@ class StorageManager:
         axisangle_z         FLOAT,
         axisangle_w         FLOAT,
         dihedrals           VARCHAR,
-        ligand_coordinates         VARCHAR,
+        pose_coordinates         VARCHAR,
         flexible_res_coordinates   VARCHAR
 
         """
