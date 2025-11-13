@@ -692,7 +692,9 @@ def parse_vina_results(data_pointer, num_poses: int, **kwargs) -> dict:
                     res_string = "%s:%s%s" % (res, chain, resnum)
                     flexible_residues.append(res_string)
             except ValueError:
-                raise ValueError("ERROR! Cannot parse {0} in {1}".format(line, name))
+                raise FileParsingErrorPdbqt(
+                    "ERROR! Cannot parse {0} in {1}".format(line, name)
+                )
 
         # calculate ligand efficiency and deltas from the best pose
         leff = [round(x / num_heavy_atoms, 2) for x in scores]
