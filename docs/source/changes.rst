@@ -59,15 +59,19 @@ Enhancements to the codebase
 * New method `get_bookmark_interactions` to get interaction data from a bookmark
 * Several new APIs to support the GUI, generally not useful outside the GUI
 * New method `merge_databases` which will safely merge a secondary database with the database currently initialized as a Ringtail object. 
-* new method to assign status (accepted, rejected, maybe) to one or more ligands, poses, and/or ligand poses in a bookmark
+* New method to assign status (accepted, rejected, maybe) to one or more ligands, poses, and/or ligand poses in a bookmark
+* New method to (re-)calculate interactions for vina and ng results. This will delete all interactions present and calculate them all anew based on current receptor data in the database and given vdw and hb cutoffs.
 
 Changes to code behavior
 =========================
-***** Interaction tables: one new table has been added (`Interactions`) which references the interaction id from `Interaction_indices`, while the table `Interaction_bitvectors` has been discontinued.
+* The column `nr_interactions` in the Results table is now called `num_interactions`
+* The column `ligand_coordinates` in the Results table is now called `pose_coordinates`
+* Ringtail bookmarks from e.g., filtering clustering were previously created as database views, which appear as tables that are unrealized until viewing them. This has been replaced by a `Filters` table which holds filter information (previous equivalent was `Bookmarks` table) and the poses passing a given filter are stored in a tall-skinny table `Filtered_poses`. A significant speed increase was enabled by this move, and any other behavior related to bookmarks is the same. 
+* The following columns have been removed from the Ligands table (information now stored in the binary rdkit Mol): `ligand_smile`, `atom_index_map`, `hydrogen_parents`, and `input_model`.
 
 Bug fixes
 ===========
-***** The option `duplicate_handling` could previously only be applied during database creation and produced inconsistent table behavior. Option can now be applied at any time results are added to a database, and will create internally consistent tables. **Please note: if you have created tables in the past and invoking the keyword `duplicate_handling` you may have errors in the "Interaction_bitvectors" table (<2.0). These errors cannot be recovered, and we recommend you re-make the database with Ringtail 2.0.**
+* For vina results, special docking atoms (for macrocycles and waters) may have been contributing to calculated van der Waals interactions in the database. This is no longer the case, so if e.g., a database is recreated in v3.0.0 from the original docking .PDBQTs the new database may have fewer interactions. 
 
 
 Changes in 2.1.1: bug fixes and result plot enhancements
