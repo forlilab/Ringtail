@@ -15,10 +15,11 @@ class InteractionFinder:
 
     Attributes:
         rec_string (str): string describing the receptor
-        interaction_cutoff_radii (list(float)): cutoff for interactions of hydrogen bonds and VDW interactions, in ångströms
+        hb_cutoff (float) cutoff for interactions of hydrogen bonds ain ångströms
+        vdw_cutoff (float) cutoff for interactions of van der Waals interactions in ångströms
     """
 
-    def __init__(self, rec_string, interaction_cutoff_radii):
+    def __init__(self, rec_string: str, hb_cutoff: float, vdw_cutoff: float):
         self.rec_string = rec_string
         try:
             self.pdb = PDBQTReceptor(rec_string)
@@ -33,7 +34,8 @@ class InteractionFinder:
                 self.pdb = PDBQTReceptor(pdbqt_str)
             except:
                 raise Exception("No valid receptor option given")
-        self.interaction_cutoff_radii = interaction_cutoff_radii
+        self.hb_cutoff = hb_cutoff
+        self.vdw_cutoff = vdw_cutoff
 
     def find_pose_interactions(
         self, lig_atomtype_list: list, lig_coordinates: list
@@ -67,7 +69,7 @@ class InteractionFinder:
             coords = np.array([float(coord) for coord in lig_coordinates[idx]])
 
             hbd_neighbors = self.pdb.closest_atoms_from_positions(
-                coords, self.interaction_cutoff_radii[0], atom_properties="hb_don"
+                coords, self.hb_cutoff, atom_properties="hb_don"
             )
             for rec_at in hbd_neighbors:
                 # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
@@ -77,7 +79,7 @@ class InteractionFinder:
                 type_list.append("H")
 
             hba_neighbors = self.pdb.closest_atoms_from_positions(
-                coords, self.interaction_cutoff_radii[0], atom_properties="hb_acc"
+                coords, self.hb_cutoff, atom_properties="hb_acc"
             )
             for rec_at in hba_neighbors:
                 # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
@@ -87,7 +89,7 @@ class InteractionFinder:
                 type_list.append("H")
 
             vdw_neighbors = self.pdb.closest_atoms_from_positions(
-                coords, self.interaction_cutoff_radii[1], atom_properties="vdw"
+                coords, self.vdw_cutoff, atom_properties="vdw"
             )
             for rec_at in vdw_neighbors:
                 # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
@@ -101,7 +103,6 @@ class InteractionFinder:
             "residue": residue_list,
             "resid": resid_list,
             "chain": chain_list,
-            "count": [str(len(type_list))],
-            "ligid": [],
-            "ligname": [],
+            "count": len(type_list),
+            "hb_count": type_list.count("H"),
         }
