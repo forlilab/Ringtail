@@ -9,6 +9,7 @@ import gzip
 import bz2
 import json
 from typing import Union
+from collections import defaultdict
 import numpy as np
 from .exceptions import (
     FileParsingErrorAdgpu,
@@ -63,24 +64,7 @@ def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
                 when it comes to e.g., inserting data in the database)
     """
 
-    def _find_best_cluster_poses(clusters):
-        """Takes input ligand dictionary, reads run pose clusters, adds "cluster_best_run"
-        entry with the top scoring run for each cluster
-
-        Args:
-            ligand_dict (dict): dictionary of ligands
-
-        Returns:
-            dict: top poses in cluster for each ligand
-        """
-        # this can take just clusters and return top poses
-        top_poses = []
-
-        for cluster in clusters:
-            top_poses.append(clusters[cluster][0])
-        return top_poses
-
-    def _parse_docking_file_dlg(fname: str, num_poses: int):
+    def _parse_docking_file_dlg(fname: str) -> tuple[dict, dict, dict]:
         """Parse an ADGPU DLG file uncompressed or gzipped
 
         Args:
@@ -123,9 +107,7 @@ def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
         internal_energy = []
         torsion = []
         unbound_energy = []
-        clusters = {}
-        cluster_sizes = {}
-        cluster_list = []  # list indicating cluster each run belongs to
+        clusters = defaultdict(list)
         pose_interact_count = []
         pose_hb_counts = []
         flexible_residues = []
@@ -190,7 +172,6 @@ def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
                     # store number of runs
                     elif "Number of runs:" in line:
                         nruns = int(line.split()[3])
-                        cluster_list = list(range(nruns))
                         cluster_rmsds = list(range(nruns))
                         ref_rmsds = list(range(nruns))
                     # store input pdbqt lines
@@ -396,15 +377,9 @@ def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
 
                 # store poses in each cluster in dictionary as list of ordered runs
                 elif "RANKING" in line:
-                    cluster_num = line.split()[0]
+                    cluster_num = int(line.split()[0]) - 1  # make it zero based integer
                     run = line.split()[2]
-                    cluster_list[int(run) - 1] = cluster_num
-                    if cluster_num in clusters:
-                        clusters[cluster_num].append(int(run))
-                        cluster_sizes[cluster_num] += 1
-                    else:
-                        clusters[cluster_num] = [int(run)]
-                        cluster_sizes[cluster_num] = 1
+                    clusters[cluster_num].append(int(run))
 
                     cluster_rmsds[int(run) - 1] = float(
                         line.split()[4]
@@ -423,13 +398,7 @@ def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
         ):
             raise FileParsingErrorAdgpu("Incomplete data in " + fname)
 
-        # sort runs based on docking score
-        sorted_idx = np.argsort(scores)
-
         results = {
-            # results columns
-            "cluster_rmsds": cluster_rmsds,
-            "ref_rmsds": ref_rmsds,
             "scores": scores,
             "leff": [round(x / heavy_at_count, 2) for x in scores],
             "delta": [round(x - scores[0], 2) for x in scores],
@@ -443,27 +412,12 @@ def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
             "unbound_energy": unbound_energy,
             "num_interactions": pose_interact_count,
             "num_hb": pose_hb_counts,
-            "cluster_sizes": cluster_sizes,
             "flexible_res_coordinates": flexible_res_coords,
-            # interactions
+            "cluster_rmsds": cluster_rmsds,
+            "ref_rmsds": ref_rmsds,
             "interactions": interactions,
-            # for parsing only
-            "sorted_runs": [int(x + 1) for x in sorted_idx],
             "clusters": clusters,
-            "cluster_list": cluster_list,
         }
-
-        # sort all lists by ranked index
-        sorted_results = {
-            key: (
-                sort_list_by_sorted_idx(value, sorted_idx)
-                if isinstance(value, list)
-                else value
-            )
-            for key, value in results.items()
-        }
-        top_cluster_poses = _find_best_cluster_poses(sorted_results["clusters"])
-        sorted_results["poses_to_save"] = pick_best_poses(top_cluster_poses, num_poses)
 
         receptor_dict = {
             "receptor": receptor,
@@ -476,140 +430,127 @@ def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
 
         ligand_dict = {"name": ligname, "file_str": file_as_string}
 
-        return ligand_dict, receptor_dict, sorted_results
+        return ligand_dict, receptor_dict, results
 
-    def _find_tolerated_interactions(
-        sorted_runs: list, clusters: dict, cluster_rmsds: list, int_tol
-    ) -> list[int]:
-        """Take ligand dict and finds which poses we should save the
-        interactions for as tolerated interactions for the top pose
-        of the cluster. These runs are within the
-        <self.interaction_tolerance> angstroms RMSD of the top pose
-        for a given cluster. All data for the cluster's top pose is saved.
+    ligand_dict, receptor_dict, results_dict = _parse_docking_file_dlg(fname=filename)
 
-        Args:
-            ligand_dict (dict): Dictionary of ligand data from parser
+    # make sure receptor is correct
+    receptor_row = generate_receptor_row(receptor_dict)
+    receptor_name = receptor_row[0]
+    if target := kwargs.get("target"):
+        if receptor_name != target:
+            raise FileParsingErrorAdgpu(
+                f"Receptor name {receptor_name} in {filename} does not match given target name {target}. Please ensure that this file belongs to the current virtual screening."
+            )
 
-        Returns:
-            list: run numbers of tolerated runs
-        """
-        tolerated_interaction_cluster_runs = {}
-        tolerated_runs = []
-        for idx, run in enumerate(sorted_runs):
-            if float(cluster_rmsds[idx]) <= int_tol:
-                tolerated_runs.append(run)
-                for key, value in clusters.items():
-                    if run in value:
-                        tolerated_interaction_cluster_runs.setdefault(key, []).append(
-                            run
-                        )
-
-        return tolerated_interaction_cluster_runs
-
-    ligand_dict, receptor_dict, data_dict = _parse_docking_file_dlg(
-        fname=filename, num_poses=num_poses
-    )
+    # create rdkit mol from file, get coordinates for each pose
     ligand_row, poses_coordinates, _ = generate_ligand_data_list_from_pdbqt_dlg(
         ligand_dict["name"], ligand_dict["file_str"], is_dlg=True
     )
-
-    data_dict.update(
+    ligname = ligand_row[0]
+    results_dict.update(
         {
             "pose_coordinates": [
                 json.dumps(coordinate.tolist()) for coordinate in poses_coordinates
             ]
         }
     )
-    ligname = ligand_row[0]
 
-    # make sure receptor is correct
-    receptor_row = generate_receptor_row(receptor_dict)
-    receptor = receptor_row[0]
-    if target := kwargs.get("target"):
-        if receptor != target:
-            raise FileParsingErrorAdgpu(
-                f"Receptor name {receptor} in {filename} does not match given target name {target}. Please ensure that this file belongs to the current virtual screening."
-            )
+    # sort clusters and select based on number of poses to store
+    clusters: dict = results_dict.get("clusters")
+    top_cluster_runs = [cluster[0] for cluster in clusters.values()]
+    sorted_selected_pose_clusters = pick_best_poses(
+        np.argsort([results_dict.get("scores")[run - 1] for run in top_cluster_runs]),
+        num_poses,
+    )
+    # make a sorted list of the the clustered runs, where each value in the list is the
+    # 1-based index of the run data
+    # sorted_clusters = [
+    #     clusters[sorted_cluster] for sorted_cluster in sorted_selected_pose_clusters
+    # ]
+
+    # delete clusters not considered after filtering for num_poses
+    clusters = {k: v for k, v in clusters.items() if k in sorted_selected_pose_clusters}
+
+    cluster_sizes = {k: len(v) for k, v in clusters.items()}
+    # remove runs/clustered poses that we are not storing
+    cluster_representatives = {k: v[0] for k, v in clusters.items()}
 
     # deal with request to include more interactions for poses that are clustered with "main" poses
     if isinstance(kwargs["interaction_tolerance"], float):
-        tolerated_interaction_clusters = _find_tolerated_interactions(
-            data_dict["sorted_runs"],
-            data_dict["clusters"],
-            data_dict["cluster_rmsds"],
-            kwargs["interaction_tolerance"],
-        )
+        int_tol = kwargs["interaction_tolerance"]
+        rmsds = results_dict["cluster_rmsds"]
+        cluster_rmsd_dict = {
+            k: [rmsds[run - 1] for run in v] for k, v in clusters.items()
+        }
+        tolerated_cluster_run_numbers = defaultdict(list)
+        # go through the cluster rmsd dict and determine which indices pass muster
+        for cluster, rmsds in cluster_rmsd_dict.items():
+            for index, rmsd in enumerate(rmsds):
+                if rmsd <= int_tol:
+                    tolerated_cluster_run_numbers[cluster].append(
+                        clusters[cluster][index]
+                    )
+    else:
+        tolerated_cluster_run_numbers = {
+            k: [v] for k, v in cluster_representatives.items()
+        }
 
-    passing_interaction_dicts = []
+    interaction_dicts = []
     results_rows = []
-    interactions = data_dict.get("interactions", [])
-    for index, run_number in enumerate(data_dict["poses_to_save"]):
-        # TODO check these indices, I might have mixede something up
-        # TODO !!!!!
-        pose_rank = index + 1
-        data_idx = run_number - 1
+    interactions = results_dict.get("interactions", [])
 
-        if interactions[data_idx] not in [[], {}, None]:
-            # make shallow copy
-            current_interactions: dict = interactions[data_idx].copy()
-            # add identifiers
-            unique_pose_id = {
-                "ligand_name": ligname,
-                "run_number": run_number,
-                "pose_rank": pose_rank,
-            }
-            current_interactions.update(unique_pose_id)
-            passing_interaction_dicts.append(current_interactions)
-
-        if isinstance(kwargs["interaction_tolerance"], float):
-            # check if there are runs tolerated for only interactions in this cluster
-            current_cluster_id = data_dict["cluster_list"][data_idx]
-            if tol_int_runs := tolerated_interaction_clusters[current_cluster_id] != []:
-                # these interactions are technically a different run/pose, but have been clustered with
-                # ligname, run number, and pose rank used above (best ranked pose in the cluster)
-                for tol_int_run_number in tol_int_runs:
-                    tolerated_interactions: dict = interactions[
-                        tol_int_run_number - 1
-                    ].copy()
-                    tolerated_interactions.update(unique_pose_id)
-                    passing_interaction_dicts.append(current_interactions)
-
-        cluster_size = data_dict["cluster_sizes"][data_dict["cluster_list"][pose_rank]]
+    for pose_rank, cluster_number in enumerate(sorted_selected_pose_clusters):
+        run_number = cluster_representatives[cluster_number]
+        data_index = run_number - 1
+        # parse Results data
         results_rows.append(
             {
-                "receptor": receptor,
+                "receptor": receptor_name,
                 "pose_rank": pose_rank,
                 "run_number": run_number,
-                "cluster_rmsd": data_dict["cluster_rmsds"][data_idx],
-                "reference_rmsd": data_dict["ref_rmsds"][data_idx],
-                "docking_score": data_dict["scores"][data_idx],
-                "leff": data_dict["leff"][data_idx],
-                "deltas": data_dict["delta"][data_idx],
-                "energies_inter": data_dict["intermolecular_energy"][data_idx],
-                "energies_vdw": data_dict["vdw_hb_desolv"][data_idx],
-                "energies_electro": data_dict["electrostatics"][data_idx],
-                "energies_flexLig": data_dict["flex_ligand"][data_idx],
-                "energies_flexLR": data_dict["flexLigand_flexReceptor"][data_idx],
-                "energies_intra": data_dict["internal_energy"][data_idx],
-                "energies_torsional": data_dict["torsional_energy"][data_idx],
-                "unbound_energy": data_dict["unbound_energy"][data_idx],
-                "num_interactions": data_dict["num_interactions"][data_idx],
-                "num_hb": data_dict["num_hb"][data_idx],
-                "cluster_size": cluster_size,
-                "pose_coordinates": data_dict["pose_coordinates"][data_idx],
+                "cluster_rmsd": results_dict["cluster_rmsds"][data_index],
+                "reference_rmsd": results_dict["ref_rmsds"][data_index],
+                "docking_score": results_dict["scores"][data_index],
+                "leff": results_dict["leff"][data_index],
+                "deltas": results_dict["delta"][data_index],
+                "energies_inter": results_dict["intermolecular_energy"][data_index],
+                "energies_vdw": results_dict["vdw_hb_desolv"][data_index],
+                "energies_electro": results_dict["electrostatics"][data_index],
+                "energies_flexLig": results_dict["flex_ligand"][data_index],
+                "energies_flexLR": results_dict["flexLigand_flexReceptor"][data_index],
+                "energies_intra": results_dict["internal_energy"][data_index],
+                "energies_torsional": results_dict["torsional_energy"][data_index],
+                "unbound_energy": results_dict["unbound_energy"][data_index],
+                "num_interactions": results_dict["num_interactions"][data_index],
+                "num_hb": results_dict["num_hb"][data_index],
+                "cluster_size": cluster_sizes[cluster_number],
+                "pose_coordinates": results_dict["pose_coordinates"][data_index],
                 "flexible_res_coordinates": json.dumps(
-                    data_dict["flexible_res_coordinates"][data_idx]
+                    results_dict["flexible_res_coordinates"][data_index]
                 ),
                 "ligname": ligname,
             }
         )
+
+        # parse interactions
+        # define unique id for interaction rows
+        unique_pose_id = {
+            "ligand_name": ligname,
+            "run_number": run_number,
+            "pose_rank": pose_rank,
+        }
+        for interaction_run_number in tolerated_cluster_run_numbers[cluster_number]:
+            current_interactions: dict = interactions[interaction_run_number - 1].copy()
+            current_interactions.update(unique_pose_id)
+            interaction_dicts.append(current_interactions)
 
     # prepare data in ringtail recognizable format
     return make_ringtail_data_dict(
         ligand_row,
         receptor_row,
         results_rows,
-        generate_interaction_tuples(passing_interaction_dicts),
+        generate_interaction_tuples(interaction_dicts),
     )
 
 
