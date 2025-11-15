@@ -1853,10 +1853,8 @@ class RingtailCore:
         # add ligand name to properties
         properties["_Name"] = ligname
         # add hydrogens to mols
-        # TODO what replace this with?
-        # wasn't there something in meeko?
-
-        # mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
+        # may need to add hydrogens if storing without them
+        mol = Chem.AddHs(mol)
         flexres_hparents = []
         for idx, res in enumerate(flexres_mols):
             flexres_hparents = flexres_info[idx][2]
