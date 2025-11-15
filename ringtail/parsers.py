@@ -22,6 +22,42 @@ from meeko import PDBQTMolecule, RDKitMolCreate, MoleculePreparation
 from .interactions import InteractionFinder
 
 
+def results_row() -> dict:
+    """
+    Returns a dict with expected keys and None values for inserting into ringtail
+
+    Returns:
+        dict:
+    """
+    return {
+        "receptor": None,
+        "pose_rank": None,
+        "run_number": None,
+        "cluster_rmsd": 0,
+        "reference_rmsd": 0,
+        "docking_score": 0,
+        "leff": 0,
+        "deltas": 0,
+        "energies_inter": 0,
+        "energies_vdw": 0,
+        "energies_electro": 0,
+        "energies_flexLig": 0,
+        "energies_flexLR": 0,
+        "energies_intra": 0,
+        "energies_torsional": 0,
+        "unbound_energy": 0,
+        "num_interactions": 0,
+        "num_hb": 0,
+        "cluster_size": 1,
+        "pose_coordinates": None,
+        "flexible_res_coordinates": None,
+        "ligname": None,
+    }
+
+
+RESULTS_TEMPLATE = results_row()
+
+
 def make_ringtail_data_dict(
     ligand_row: list, receptor_row: list, data_rows: list, interaction_rows: list
 ) -> dict:
@@ -738,7 +774,7 @@ def parse_vina_results(data_pointer, num_poses: int, **kwargs) -> dict:
             LOGGER.error(
                 "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
             )
-            interaction_dict = {
+            interaction_info = {
                 "nr_interactions": [0] * data_length,
                 "num_hb": [0] * data_length,
             }
@@ -766,18 +802,18 @@ def parse_vina_results(data_pointer, num_poses: int, **kwargs) -> dict:
         )
         interaction_rows = generate_interaction_tuples(interactions)
         # use interaction stuff here
-        interaction_dict = {
+        interaction_info = {
             "num_interactions": num_interactions,
             "num_hb": num_hb,
         }
     else:
-        interaction_dict = {
+        interaction_info = {
             "num_interactions": [0] * data_length,
             "num_hb": [0] * data_length,
         }
         interaction_rows = []
 
-    results_dict.update(interaction_dict)
+    results_dict.update(interaction_info)
     results_dict.update(
         {
             "pose_coordinates": [
@@ -795,18 +831,85 @@ def parse_vina_results(data_pointer, num_poses: int, **kwargs) -> dict:
     )
 
 
-def parse_docking_file_sdf(fname: str, num_poses: int) -> dict:
-    mols = []
-    suppl = Chem.SDMolSupplier(fname)
-    for mol in suppl:
-        mols.append(mol)
-    scores = [mol.GetProp("docking_score") for mol in mols]
+def parse_docking_file_sdf(
+    fname: str = None, mol: Chem.Mol = None, num_poses: int = None, **kwargs
+) -> dict:
+    # keep track of parsed ligands
+    ligand_names = set()
+    ligand_rows = []
+    results_rows = []
+    receptor_rows = []
+    interaction_rows = []
+    calc_interactions = False
+    if "calculate_interactions" in kwargs and kwargs["calculate_interactions"] == True:
+        try:
+            receptor_string = kwargs["receptor_string"]
+        except:
+            LOGGER.error(
+                "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
+            )
+        else:
+            calc_interactions = True
 
-    # name them sorted_runs and sort based on docking_score
-    sorted_mols = sort_list_by_sorted_idx(mols, np.argsort(scores))
-    # TODO construct the data dict for everything
+    if fname:
+        suppl = Chem.SDMolSupplier(fname)
+        for mol in suppl:
+            results_dict = RESULTS_TEMPLATE.copy()
+            # remove coordinates and docking properties (retains other custom properties)
+            mol, mol_properties = prepare_mol_for_database(
+                mol, store_properties=["docking_score", "pose_rank"]
+            )
+            results_dict.update(mol_properties)
 
-    return {"poses_to_save": pick_best_poses(sorted_mols, num_poses)}
+            # grab ligand info, make new row if needed
+            ligname = mol.GetProp(db_to_adng("ligname"))
+            if ligname not in ligand_names:
+                ligand_names.add(ligname)
+                ligand_rows.append([ligname, mol.ToBinary()])
+            results_dict.update(
+                {
+                    "ligname": ligname,
+                    "run_number": 1,
+                    "leff": results_dict["docking_score"] / mol.GetNumAtoms(),
+                }
+            )
+            # add non-specified fields as list of None
+            results_rows.append(results_dict)
+        # calculate interactions
+        if calc_interactions:
+            interaction_fields = {
+                key: results_dict[key]
+                for key in ["run_number", "pose_rank", "pose_coordinates"]
+            }
+
+            """
+            Each value is a list, and for each value I need to zip item n with other item ns into
+            a dict with key 
+            """
+            interactions, num_hb, num_interactions = calculate_interactions(
+                [interaction_fields],
+                mol,
+                receptor_string,
+                *kwargs["interaction_cutoffs"],
+            )
+            interaction_rows.append(generate_interaction_tuples(interactions))
+            # use interaction stuff here
+            results_dict.update(
+                {
+                    "num_interactions": num_interactions,
+                    "num_hb": num_hb,
+                    "pose_coordinates": json.dumps(results_dict["pose_coordinates"]),
+                }
+            )
+
+    print("The results rows!: ", results_rows[:10])
+
+    return make_ringtail_data_dict(
+        ligand_rows,
+        receptor_rows,
+        results_rows,
+        interaction_rows,
+    )
 
 
 def sort_list_by_sorted_idx(input_list: list, sorted_idx: list[int]) -> list:
@@ -903,24 +1006,60 @@ def generate_ligand_data_list_from_pdbqt_dlg(
 
     Returns:
         list: List of data to be written as row in ligand table. Format:
-            [ligand_name, ligand_smile, ligand_rdbin]
+            [ligand_name, ligand_rdbin]
     """
 
     # use meeko prepare molecule
     pdbqt_mol = PDBQTMolecule(file_str, name=ligname, is_dlg=is_dlg, skip_typing=True)
     # return the whole list with conformers if requested
     rdkit_mol = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol)[0]
-    pose_coordinates = []
-    for conf in rdkit_mol.GetConformers():
-        pose_coordinates.append(conf.GetPositions())
 
-    # remove conformer data and store one binary version of the rdkit
-    rdkit_mol.RemoveAllConformers()
+    rdkit_mol, pose_coordinates = prepare_mol_for_database(rdkit_mol)
     ligand_rdbin = rdkit_mol.ToBinary()
 
     ligand_row = [ligname, ligand_rdbin]
 
     return (ligand_row, pose_coordinates, rdkit_mol)
+
+
+def prepare_mol_for_database(
+    mol: Chem.Mol, store_properties: list = None
+) -> tuple[Chem.Mol, dict]:
+    """
+    In this method right now the pose coordinates assumes one or more conformers,
+    while the property assumes only one mol with non-list property
+    #TODO probably make two different methods
+
+    Args:
+        mol (Chem.Mol): _description_
+        store_properties (dict, optional): _description_. Defaults to None.
+
+    Returns:
+        tuple[Chem.Mol, dict]: _description_
+    """
+    pose_coordinates = []
+    for conf in mol.GetConformers():
+        pose_coordinates.append(conf.GetPositions())
+    # remove conformer data and store one binary version of the rdkit
+    mol.RemoveAllConformers()
+    # Get a list of property names
+    properties = {"pose_coordinates": pose_coordinates}
+    if store_properties:
+        for db_column in store_properties:
+            prop_name = db_to_adng(db_column)
+            properties.update(
+                {db_column: type_casting[db_column](mol.GetProp(prop_name))}
+            )
+            mol.ClearProp(prop_name)
+    return mol, properties
+
+
+def adng_to_db(adng_property: str) -> str:
+    return adng_aliases.get(adng_property, adng_property)
+
+
+def db_to_adng(db_column: str) -> str:
+    return db_alias_to_adng.get(db_column, db_column)
 
 
 def generate_receptor_row(receptor_data: dict) -> list:
@@ -983,3 +1122,12 @@ docking_file_parsers: dict[str, callable] = {
     "vina": parse_vina_results,
     "adng": parse_docking_file_sdf,
 }
+
+
+adng_aliases = {
+    "adng_free_energy": "docking_score",
+    "pose_id": "pose_rank",
+    "_Name": "ligname",
+}
+type_casting = {"docking_score": float, "pose_rank": int, "ligname": str}
+db_alias_to_adng = {v: k for k, v in adng_aliases.items()}
