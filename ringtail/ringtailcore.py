@@ -507,6 +507,7 @@ class RingtailCore:
                 interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
                 log_file (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
                 outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. `--outfields=e,le,hb`; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column. Any column in Results and Ligands tables are available, although one of the following is recommended: \n
+                    #TODO most of these names are not in use the way they are presented anymore
                     "Ligand_name" (Ligand name),
                     "e" (docking_score),
                     "le" (ligand efficiency),
@@ -1805,12 +1806,7 @@ class RingtailCore:
         """
         # get rdkit data
         with self.storageman as sm:
-            rdmol, atom_index_map, hydrogen_parents = (
-                sm.fetch_ligand_rdkit_relevant_info(ligname)
-            )
-
-        mol = Chem.Mol(rdmol)
-        atom_indices = json.loads(atom_index_map)
+            mol = sm.fetch_ligand_mol(ligname)
         ligand_saved_coords = []
 
         if flexres_data:
@@ -1834,6 +1830,8 @@ class RingtailCore:
 
         if type(pose_ids) == int:
             pose_ids = [pose_ids]
+        elif not pose_ids:
+            pose_ids = self._fetch_select_ligands_poses(ligand_names=ligname)[ligname]
 
         # update mols with additional data from select poses
         (
@@ -1844,7 +1842,6 @@ class RingtailCore:
             properties,
         ) = self._update_mols_with_poses(
             pose_ids,
-            atom_indices,
             mol,
             flexres_mols,
             flexres_info,
@@ -1856,8 +1853,10 @@ class RingtailCore:
         # add ligand name to properties
         properties["_Name"] = ligname
         # add hydrogens to mols
-        lig_h_parents = [int(idx) for idx in json.loads(hydrogen_parents)]
-        mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
+        # TODO what replace this with?
+        # wasn't there something in meeko?
+
+        # mol = RDKitMolCreate.add_hydrogens(mol, ligand_saved_coords, lig_h_parents)
         flexres_hparents = []
         for idx, res in enumerate(flexres_mols):
             flexres_hparents = flexres_info[idx][2]
@@ -2073,7 +2072,6 @@ class RingtailCore:
     def _update_mols_with_poses(
         self,
         pose_ids,
-        atom_indices,
         mol,
         flexres_mols,
         flexres_info,
@@ -2085,7 +2083,6 @@ class RingtailCore:
 
         Args:
             pose_ids (list[int]): list of pose ids to be evaluated
-            atom_indices (list): List of ints indicating mapping of coordinate indices to smiles indices
             mol (RDKit.Chem.Mol): RDKit molecule for ligand
             flexres_mols (list): list of rdkit molecules for flexible residues
             flexres_info (list): list of tuples containing info for each flexible residue (res_smiles, res_index_map, res_h_parents)
@@ -2101,9 +2098,9 @@ class RingtailCore:
                 Pose_ID,
                 docking_score,
                 leff,
-                ligand_pose,
-                flexres_pose,
-            ) in sm.fetch_rdkit_relevant_pose_properties(pose_ids):
+                pose_coordinates,
+                flexres_pose_coordinates,
+            ) in sm.fetch_rdkit_pose_properties(pose_ids):
                 # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
                 interactions = self.storageman.fetch_pose_interactions(Pose_ID)
                 # if that pose id has interactions
@@ -2124,16 +2121,42 @@ class RingtailCore:
                 properties["Binding energies"].append(docking_score)
                 properties["Ligand effiencies"].append(leff)
                 # get pose coordinate info
-                ligand_pose = json.loads(ligand_pose)
-                flexres_pose = json.loads(flexres_pose)
-                mol = RDKitMolCreate.add_pose_to_mol(mol, ligand_pose, atom_indices)
+                pose_coordinates = json.loads(pose_coordinates)
+                flexres_pose_coordinates = json.loads(flexres_pose_coordinates)
+                # TODO make a meeko method?
+                mol = self._add_conformer(mol, pose_coordinates)
                 for fr_idx, fr_mol in enumerate(flexres_mols):
                     flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(
-                        fr_mol, flexres_pose[fr_idx], flexres_info[fr_idx][1]
+                        fr_mol,
+                        flexres_pose_coordinates[fr_idx],
+                        flexres_info[fr_idx][1],
                     )
-                    flexres_saved_coords[fr_idx].append(flexres_pose[fr_idx])
-                ligand_saved_coords.append(ligand_pose)
+                    flexres_saved_coords[fr_idx].append(
+                        flexres_pose_coordinates[fr_idx]
+                    )
+                ligand_saved_coords.append(pose_coordinates)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
+
+    def _add_conformer(self, mol: Chem.Mol, coordinates: list[list]) -> Chem.Mol:
+        """
+        Adds a conformer with given coordinates to a mol
+
+        Args:
+            mol (Chem.Mol): _description_
+            coordinates (list[list]): _description_
+
+        Returns:
+            Chem.Mol: _description_
+        """
+        from rdkit import Geometry
+
+        n_atoms = mol.GetNumAtoms()
+        conf = Chem.Conformer(n_atoms)
+        print("\n\n the coordinates ", coordinates)
+        for i, (x, y, z) in enumerate(coordinates):
+            conf.SetAtomPosition(i, Geometry.Point3D(x, y, z))
+        mol.AddConformer(conf, assignId=True)
+        return mol
 
     def _process_receptor_polymer(self, receptor_file: str) -> tuple[str, str]:
         """

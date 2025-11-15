@@ -511,7 +511,7 @@ class StorageManager:
             iter: of interaction information for given Pose_ID
         """
         # check if table exist
-        if not "Interactions" in self.tables_in_db():
+        if not "interactions" in self.tables_in_db():
             return
 
         query = self.QueryBuilder()
@@ -899,19 +899,17 @@ class StorageManager:
             info = [], []
         return info
 
-    def fetch_ligand_rdkit_relevant_info(self, ligname: str) -> tuple:
-        """fetch information required by vsmanager for writing out molecules
+    def fetch_ligand_mol(self, ligname: str) -> Chem.Mol:
+        """Gets the binary rdkit mol and returns a regular Mol
 
         Returns:
-            tuple: contains rdmol, atom_index_map, hydrogen_parents
+            Chem.Mol: RDKit mol of the ligand
         """
         query = self.QueryBuilder()
-        query.SELECT("rdmol", "atom_index_map", "hydrogen_parents").FROM(
-            "Ligands"
-        ).WHERE(f"ligname = ?", ligname)
-        return self.db_query(*query.build()).fetchone()
+        query.SELECT("rdmol").FROM("Ligands").WHERE(f"ligname = ?", ligname)
+        return Chem.Mol(self.db_query(*query.build()).fetchone()[0])
 
-    def fetch_rdkit_relevant_pose_properties(self, pose_ids: list) -> iter:
+    def fetch_rdkit_pose_properties(self, pose_ids: list) -> iter:
         """
         Gets molecular data that is needed to create rdkit mols for a given list of poses
 
@@ -960,6 +958,7 @@ class StorageManager:
             "R." + y_axis,
             "R." + "Pose_ID",
             "L." + "LigName",
+            # TODO rdbin
             "L." + "ligand_smile",
         )
         if limit:
@@ -2486,11 +2485,7 @@ class StorageManager:
         """Create table for ligands. Columns are:
         ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-        ligand_smile        VARCHAR,
         rdmol               BLOB,
-        atom_index_map      VARCHAR,
-        hydrogen_parents    VARCHAR,
-        input_model         VARCHAR
         """
         raise NotImplementedError
 
