@@ -15,7 +15,7 @@ import copy
 docking_modes = {
     "adgpu": {"adgpu", "dlg", "gpu"},
     "vina": {"vina", "pdbqt"},
-    "adng": {"adng", "ng", "adsandbox"},
+    "adng": {"adng", "ng", "adsandbox", "zeta"},
 }
 
 docking_mode_file_ext = {"adgpu": "dlg", "vina": "pdbqt", "adng": "sdf"}
