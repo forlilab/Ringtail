@@ -299,8 +299,7 @@ def cmdline_parser(defaults: dict = {}):
             '"energies_vdw" (van der waals energy), '
             '"energies_electro" (electrostatic energy), '
             '"energies_intra" (intermolecular energy), '
-            '"nr_interactions" (number of interactions), '
-            '"ligand_smile" , '
+            '"num_interactions" (number of interactions), '
             '"pose_rank" (rank of ligand pose), '
             '"run_number" (run number for ligand pose), '
             '"num_hb" (hydrogen bonds), '
@@ -325,7 +324,7 @@ def cmdline_parser(defaults: dict = {}):
         '"energies_vdw" (van der waals energy), '
         '"energies_electro" (electrostatic energy), '
         '"energies_intra" (intermolecular energy), '
-        '"nr_interactions" (number of interactions), '
+        '"num_interactions" (number of interactions), '
         '"pose_rank" (rank of ligand pose), '
         '"run_number" (run number for ligand pose), '
         '"num_hb" (hydrogen bonds)',
