@@ -6,7 +6,7 @@
 
 import gzip
 from .logutils import LOGGER
-from meeko import PDBQTWriterLegacy, Polymer
+from meeko import PDBQTWriterLegacy, Polymer, MoleculePreparation
 
 
 class ReceptorManager:
@@ -61,6 +61,8 @@ class ReceptorManager:
             tuple[str, dict]: _description_
         """
         polymer = Polymer.from_json(polymer_json)
+        mk_prep = MoleculePreparation(load_atom_params=["ad4_types"])
+        polymer.parameterize(mk_prep)
         return PDBQTWriterLegacy.write_from_polymer(polymer)
 
     @staticmethod

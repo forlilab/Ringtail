@@ -20,7 +20,6 @@ class InteractionFinder:
     """
 
     def __init__(self, rec_string: str, hb_cutoff: float, vdw_cutoff: float):
-        self.rec_string = rec_string
         try:
             self.pdb = PDBQTReceptor(rec_string)
         except OSError as e:
@@ -64,9 +63,17 @@ class InteractionFinder:
         residue_list = []
         resid_list = []
         chain_list = []
+        # check coordinate type:
+        if not type(lig_coordinates) == np.ndarray:
+            needs_conversion = True
+        else:
+            needs_conversion = False
 
         for idx, atomtype in enumerate(lig_atomtype_list):
-            coords = np.array([float(coord) for coord in lig_coordinates[idx]])
+            if needs_conversion:
+                coords = np.array([float(coord) for coord in lig_coordinates[idx]])
+            else:
+                coords = lig_coordinates[idx]
 
             hbd_neighbors = self.pdb.closest_atoms_from_positions(
                 coords, self.hb_cutoff, atom_properties="hb_don"

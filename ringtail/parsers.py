@@ -852,17 +852,19 @@ def parse_docking_file_sdf(
             calc_interactions = True
 
     if fname:
-        suppl = Chem.SDMolSupplier(fname)
+        suppl = Chem.SDMolSupplier(fname, removeHs=False)
         for mol in suppl:
             results_dict = RESULTS_TEMPLATE.copy()
             # remove coordinates and docking properties (retains other custom properties)
             mol, mol_properties = prepare_mol_for_database(
-                mol, store_properties=["docking_score", "pose_rank"]
+                mol, store_properties=["ligname", "docking_score", "pose_rank"]
             )
             results_dict.update(mol_properties)
 
             # grab ligand info, make new row if needed
-            ligname = mol.GetProp(db_to_adng("ligname"))
+            ligname = mol_properties.get("ligname", None)
+            if not ligname:
+                ligname = f"ligand_{len(ligand_names)}"
             if ligname not in ligand_names:
                 ligand_names.add(ligname)
                 ligand_rows.append([ligname, mol.ToBinary()])
@@ -870,39 +872,47 @@ def parse_docking_file_sdf(
                 {
                     "ligname": ligname,
                     "run_number": 1,
-                    "leff": results_dict["docking_score"] / mol.GetNumAtoms(),
+                    "leff": round(results_dict["docking_score"] / mol.GetNumAtoms(), 2),
                 }
             )
+            single_pose_coordinate = results_dict["pose_coordinates"][0]
+            results_dict.update({"pose_coordinates": single_pose_coordinate})
+            # calculate interactions
+            if calc_interactions:
+                interaction_fields = {
+                    key: results_dict[key]
+                    for key in [
+                        "ligname",
+                        "run_number",
+                        "pose_rank",
+                        "pose_coordinates",
+                    ]
+                }
+
+                """
+                Each value is a list, and for each value I need to zip item n with other item ns into
+                a dict with key 
+                """
+                interactions, num_hb, num_interactions = calculate_interactions(
+                    [interaction_fields],
+                    mol,
+                    receptor_string,
+                    *kwargs["interaction_cutoffs"],
+                )
+                interaction_rows.append(generate_interaction_tuples(interactions))
+                # use interaction stuff here
+                results_dict.update(
+                    {
+                        "num_interactions": num_interactions,
+                        "num_hb": num_hb,
+                        "pose_coordinates": json.dumps(
+                            results_dict["pose_coordinates"].tolist()
+                        ),
+                    }
+                )
+
             # add non-specified fields as list of None
             results_rows.append(results_dict)
-        # calculate interactions
-        if calc_interactions:
-            interaction_fields = {
-                key: results_dict[key]
-                for key in ["run_number", "pose_rank", "pose_coordinates"]
-            }
-
-            """
-            Each value is a list, and for each value I need to zip item n with other item ns into
-            a dict with key 
-            """
-            interactions, num_hb, num_interactions = calculate_interactions(
-                [interaction_fields],
-                mol,
-                receptor_string,
-                *kwargs["interaction_cutoffs"],
-            )
-            interaction_rows.append(generate_interaction_tuples(interactions))
-            # use interaction stuff here
-            results_dict.update(
-                {
-                    "num_interactions": num_interactions,
-                    "num_hb": num_hb,
-                    "pose_coordinates": json.dumps(results_dict["pose_coordinates"]),
-                }
-            )
-
-    print("The results rows!: ", results_rows[:10])
 
     return make_ringtail_data_dict(
         ligand_rows,
@@ -959,11 +969,10 @@ def calculate_interactions(
     num_interactions = []
 
     num_atoms = mol.GetNumAtoms()
-    # add some conformer so meeko is happy
-    placeholder_coord = unique_poses[0]["pose_coordinates"]
     conf = Chem.Conformer(num_atoms)
-    for i, (x, y, z) in enumerate(placeholder_coord):
-        conf.SetAtomPosition(i, Geometry.Point3D(x, y, z))
+    # add some conformer so meeko is happy
+    for i in range(num_atoms):
+        conf.SetAtomPosition(i, Geometry.Point3D(0, 0, 0))
     # Add conformer to molecule
     mol.AddConformer(conf, assignId=True)
     # calculate interactions for each pose
@@ -1014,7 +1023,8 @@ def generate_ligand_data_list_from_pdbqt_dlg(
     # return the whole list with conformers if requested
     rdkit_mol = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol)[0]
 
-    rdkit_mol, pose_coordinates = prepare_mol_for_database(rdkit_mol)
+    rdkit_mol, properties = prepare_mol_for_database(rdkit_mol)
+    pose_coordinates = properties.get("pose_coordinates")
     ligand_rdbin = rdkit_mol.ToBinary()
 
     ligand_row = [ligname, ligand_rdbin]
@@ -1047,10 +1057,14 @@ def prepare_mol_for_database(
     if store_properties:
         for db_column in store_properties:
             prop_name = db_to_adng(db_column)
-            properties.update(
-                {db_column: type_casting[db_column](mol.GetProp(prop_name))}
-            )
-            mol.ClearProp(prop_name)
+            if mol.HasProp(prop_name):
+                properties.update(
+                    {db_column: type_casting[db_column](mol.GetProp(prop_name))}
+                )
+                mol.ClearProp(prop_name)
+            else:
+                # TODO raise error if missing ligand name?
+                properties.update({db_column: None})
     return mol, properties
 
 
