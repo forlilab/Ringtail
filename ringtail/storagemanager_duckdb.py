@@ -69,10 +69,7 @@ class StorageManagerDuckDB(StorageManager):
             ligand_id           INTEGER DEFAULT nextval('seq_ligandid') PRIMARY KEY,
             LigName             VARCHAR NOT NULL UNIQUE,
             ligand_smile        VARCHAR,
-            rdmol               BLOB,
-            atom_index_map      VARCHAR,
-            hydrogen_parents    VARCHAR,
-            input_model         VARCHAR)"""
+            rdmol               BLOB)"""
 
         self.db_query(ligand_table)
 
@@ -93,9 +90,6 @@ class StorageManagerDuckDB(StorageManager):
                 "LigName",
                 "ligand_smile",
                 "rdmol",
-                "atom_index_map",
-                "hydrogen_parents",
-                "input_model",
             ],
         )
         self.conn.register("df_view", df)
@@ -104,10 +98,7 @@ class StorageManagerDuckDB(StorageManager):
         INSERT INTO Ligands (
             LigName,
             ligand_smile,
-            rdmol,
-            atom_index_map,
-            hydrogen_parents,
-            input_model
+            rdmol
             ) 
         SELECT * FROM df_view
         ON CONFLICT(LigName) DO NOTHING;"""
@@ -1084,6 +1075,7 @@ class StorageManagerDuckDB(StorageManager):
             ) from e
 
     def _merge_ligands_and_results_tables(self, merge_id: int):
+        # TODO obsolete columns
         """
         Merges first the Ligands table, then the Results table, maintaining ligand_id and pose_id as primary keys,
         where their relationship to the original PK is kept track of in the mering datble. Duplicate ligands will maintain
@@ -1132,6 +1124,7 @@ class StorageManagerDuckDB(StorageManager):
         FROM merging.Ligands;"""
 
         # then inserting only those that aren't already in the table
+        # TODO obsolete columns
         insert_new_ligands = """INSERT INTO Ligands (
         ligand_id,
         LigName,

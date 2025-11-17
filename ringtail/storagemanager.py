@@ -2485,6 +2485,7 @@ class StorageManager:
         """Create table for ligands. Columns are:
         ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
         LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
+        ligand_smile        VARCHAR,
         rdmol               BLOB,
         """
         raise NotImplementedError

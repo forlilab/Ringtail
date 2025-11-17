@@ -64,6 +64,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
+            ligand_smile        VARCHAR,
             rdmol               BLOB)"""
 
         self.db_query(ligand_table)
@@ -81,9 +82,10 @@ class StorageManagerSQLite(StorageManager):
 
         sql_insert = """INSERT INTO Ligands (
         LigName,
+        ligand_smiles
         rdmol
         ) VALUES
-        (?,?)
+        (?,?,?)
         ON CONFLICT(LigName) DO NOTHING"""
 
         self.db_update(sql_insert, ligands, commit=False)
@@ -957,6 +959,7 @@ class StorageManagerSQLite(StorageManager):
             StorageError
         """
         # convert ligand_ids and log
+        # TODO remove columns
         convert_ligand_ids_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
@@ -2172,7 +2175,7 @@ class StorageManagerSQLite(StorageManager):
                 return None
 
         self.conn.create_function("smile_to_rdbin", 1, _smile_to_rdbin)
-
+        # TODO make mol instead
         # populate with data from original ligands table, will autogenerate ligand_id PK
         self.db_query(
             """INSERT INTO Ligands_new (
