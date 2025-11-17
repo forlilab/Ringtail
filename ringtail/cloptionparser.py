@@ -288,6 +288,7 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-of",
         "--outfields",
+        # TODO If i want to offer smiles output that should be a special case
         help=(
             'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=docking_score,leff,num_hb"; by default, docking_score (energy) and ligname (ligand name) are reported; ligand always reported in first column, suggested fields are:  '
             '"ligname" , '
@@ -300,6 +301,7 @@ def cmdline_parser(defaults: dict = {}):
             '"energies_electro" (electrostatic energy), '
             '"energies_intra" (intermolecular energy), '
             '"num_interactions" (number of interactions), '
+            '"ligand_smile" , '
             '"pose_rank" (rank of ligand pose), '
             '"run_number" (run number for ligand pose), '
             '"num_hb" (hydrogen bonds), '
