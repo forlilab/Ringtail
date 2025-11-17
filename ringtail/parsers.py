@@ -867,7 +867,7 @@ def parse_docking_file_sdf(
                 ligname = f"ligand_{len(ligand_names)}"
             if ligname not in ligand_names:
                 ligand_names.add(ligname)
-                ligand_rows.append([ligname, mol.ToBinary()])
+                ligand_rows.append([ligname, Chem.MolToSmiles(mol), mol.ToBinary()])
             results_dict.update(
                 {
                     "ligname": ligname,
@@ -1025,9 +1025,10 @@ def generate_ligand_data_list_from_pdbqt_dlg(
 
     rdkit_mol, properties = prepare_mol_for_database(rdkit_mol)
     pose_coordinates = properties.get("pose_coordinates")
+    smiles = Chem.MolToSmiles(rdkit_mol)
     ligand_rdbin = rdkit_mol.ToBinary()
 
-    ligand_row = [ligname, ligand_rdbin]
+    ligand_row = [ligname, smiles, ligand_rdbin]
 
     return (ligand_row, pose_coordinates, rdkit_mol)
 

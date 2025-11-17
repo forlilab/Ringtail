@@ -372,6 +372,19 @@ class RingtailCore:
                 self.storageman.insert_receptor_polymer(receptor_jsons, receptor_name)
                 LOGGER.info("Receptor polymer json string was added to the database.")
 
+    def calculate_interactions(
+        self,
+        hb_cutoff: float = RingtailDefaults.interaction_cutoffs[0],
+        vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
+    ):
+        # check if interactions exist
+        # if yes, make warning, if user proceeds ("Y") all interactions will be deleted
+        # and remade
+        # delete tables if yes
+        # load an iterable of the db info and process in batches of maybe 10,000
+
+        pass
+
     # endregion
 
     # region filter, export

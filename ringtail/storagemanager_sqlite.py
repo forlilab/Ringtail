@@ -82,7 +82,7 @@ class StorageManagerSQLite(StorageManager):
 
         sql_insert = """INSERT INTO Ligands (
         LigName,
-        ligand_smiles
+        ligand_smile,
         rdmol
         ) VALUES
         (?,?,?)
