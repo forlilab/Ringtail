@@ -205,7 +205,7 @@ class Writer(mp.Process):
                 if self.receptor_row is None and not self.receptor_written_to_db:
                     self.receptor_row = list(next_task.get("receptor_row"))
 
-                self.docked_ligands["ligands"].append(next_task["ligand_row"])
+                self.docked_ligands["ligands"].extend(next_task["ligand_row"])
                 self.docked_ligands["poses"].extend(next_task["results_rows"])
                 self.docked_ligands["interactions"].extend(
                     next_task["interaction_rows"]

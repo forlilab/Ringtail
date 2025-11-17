@@ -899,12 +899,12 @@ def parse_docking_file_sdf(
                     receptor_string,
                     *kwargs["interaction_cutoffs"],
                 )
-                interaction_rows.append(generate_interaction_tuples(interactions))
+                interaction_rows.extend(generate_interaction_tuples(interactions))
                 # use interaction stuff here
                 results_dict.update(
                     {
-                        "num_interactions": num_interactions,
-                        "num_hb": num_hb,
+                        "num_interactions": num_interactions[0],
+                        "num_hb": num_hb[0],
                         "pose_coordinates": json.dumps(
                             results_dict["pose_coordinates"].tolist()
                         ),
