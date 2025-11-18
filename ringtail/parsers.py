@@ -865,7 +865,11 @@ class ADGPUMoleculeSupplier:
 class SDFMoleculeSupplier:
     def __init__(self, num_poses: int, **kwargs):
         self.kwargs = kwargs
-        self.num_poses = num_poses  # TODO
+        if num_poses == -1:
+            self.num_poses = float("inf")
+        else:
+            self.num_poses = num_poses
+
         if (
             "calculate_interactions" in self.kwargs
             and self.kwargs["calculate_interactions"] == True
@@ -894,17 +898,23 @@ class SDFMoleculeSupplier:
             dict: _description_
         """
         # keep track of parsed ligands
-        lid = set()
-        pose_number = 0
-        """
-        I'm close, but insert_data is set up to always take ligand rows and results rows. But data-wise I separated them,
-        so better to re-write the method to not always expect all rows. That way I don't have to pass empty lists either
-        """
+        processed_ligands = set()
+        last_ligand = None
 
         file_stream = open(fname, "rb")
         suppl = Chem.ForwardSDMolSupplier(file_stream, removeHs=False)
         for mol in suppl:
             if mol is None:
+                continue
+            # NOTE temporary
+            ligname = smiles = Chem.MolToSmiles(mol)
+            # only grab num_poses
+            if ligname != last_ligand:
+                last_ligand = ligname
+                pose_count = 1
+            else:
+                pose_count += 1
+            if pose_count > self.num_poses:
                 continue
 
             results_dict = RESULTS_TEMPLATE.copy()
@@ -912,16 +922,13 @@ class SDFMoleculeSupplier:
             mol, mol_properties = prepare_mol_for_database(
                 mol, store_properties=["ligname", "docking_score", "pose_rank"]
             )
+            # ligname = mol_properties.get("ligname", None)
+
+            if ligname not in processed_ligands:
+                processed_ligands.add(ligname)
+                ligand_row = [ligname, smiles, mol.ToBinary()]
+
             results_dict.update(mol_properties)
-
-            # grab ligand info, make new row if needed
-            ligname = mol_properties.get("ligname", None)
-            if not ligname:
-                ligname = f"ligand_{len(lid)}"
-            if ligname not in lid:
-                lid.add(ligname)
-                ligand_row = [ligname, Chem.MolToSmiles(mol), mol.ToBinary()]
-
             results_dict.update(
                 {
                     "ligname": ligname,
