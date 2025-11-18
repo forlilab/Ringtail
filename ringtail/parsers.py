@@ -19,7 +19,7 @@ from .exceptions import (
 from .logutils import LOGGER
 from rdkit import Chem, Geometry
 from meeko import PDBQTMolecule, RDKitMolCreate, MoleculePreparation
-from .interactions import InteractionFinder
+from .interactions import calculate_interactions
 
 
 def results_row() -> dict:
@@ -59,7 +59,10 @@ RESULTS_TEMPLATE = results_row()
 
 
 def make_ringtail_data_dict(
-    ligand_row: list, receptor_row: list, data_rows: list, interaction_rows: list
+    ligand_row: list,
+    receptor_row: list,
+    data_rows: list,
+    interaction_rows: list,
 ) -> dict:
     """
     Simple wrapper method to unify dict keywords
@@ -81,26 +84,416 @@ def make_ringtail_data_dict(
     }
 
 
-def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
-    """
-    Parses an ADGPU dlg (docking log file) and returns dict of lists of rows ready to be inserted in database
+class VinaMoleculeSupplier:
+    def __init__(self, num_poses: int, **kwargs):
+        self.kwargs = kwargs
+        self.num_poses = num_poses
 
-    Args:
-        filename (str): dlg file name to parse
-        num_poses (int): number of poses to store
-        interaction_tolerance (float, optional): if wanting to include interactions for poses clustered with passing poses. Defaults to None.
+    def __call__(self, data_pointer):
+        yield self.parse_vina_results(data_pointer)
 
-    Returns:
-        dict: containing a
-            ligand row (list of ligand name, smiles, and binary rdkit mol)
-            receptor row (list of receptor data)
-            resulst rows* (list of docking results such as energies, coordinates, and other relevant per pose data)
-            interaction rows (list of interaction tuples that includes ligname, pose rank, run number to uniqueliy identify
-                to which pose an interaction belongs, which makes the interaction list independent of other results
-                when it comes to e.g., inserting data in the database)
-    """
+    def parse_vina_results(self, data_pointer) -> dict:
+        """Parser for vina docking results, supporting either pdbqt or gzipped (.gz) files, or with the
+        docking results provided as a string.
 
-    def _parse_docking_file_dlg(fname: str) -> tuple[dict, dict, dict]:
+        Args:
+            data_pointer (any): either filename or dictionary of string docking results
+
+        Returns:
+            dict: parsed results ready to be inserted in database
+        """
+
+        def _read_vina_results_lines(data_object, name) -> tuple[dict, dict, dict]:
+            """Reads vina docking results line by line
+
+            Args:
+                data_object (any): filename or dict containing docking results
+                name (str): given ligand name/file name
+
+            Raises:
+                ValueError: if a line cannot be parsed
+
+            Returns:
+                dict: parsed results ready to be inserted in database
+            """
+            scores = []
+            run_number = []
+            num_heavy_atoms = 0
+            intermolecular_energy = []
+            internal_energy = []
+            unbound_energy = []
+            num_heavy_atoms = 0
+            flexible_res_coords = []
+            inside_res = False
+            flexible_residues = []
+            flexres_atomnames = []
+            first_model = True
+
+            for line in data_object:
+                try:
+                    if line.startswith("MODEL"):
+                        flexible_res_coords.append([])
+                        run_number.append(line.split()[1])
+                    if line.startswith("REMARK VINA RESULT:"):
+                        scores.append(float(line.split()[3]))
+                    if line.startswith("REMARK INTER:"):
+                        intermolecular_energy.append(float(line.split()[2]))
+                    if line.startswith("REMARK INTRA:"):
+                        internal_energy.append(float(line.split()[2]))
+                    if line.startswith("REMARK UNBOUND:"):
+                        unbound_energy.append(float(line.split()[2]))
+                    if line.startswith("HETATM") or line.startswith("ATOM"):
+                        if inside_res:
+                            flexible_res_coords[-1][-1].append(
+                                [line[30:38], line[38:46], line[46:54]]
+                            )
+                            if first_model:
+                                flexres_atomnames[-1].append(line[12:16].strip())
+                        else:
+                            if first_model:
+                                if line[13] != "H":
+                                    num_heavy_atoms += 1
+                    if line.startswith("ENDMDL") and first_model:
+                        first_model = False
+                    # make new flexible residue list if in the coordinates for a flexible residue
+                    if line.startswith("BEGIN_RES"):
+                        flexible_res_coords[-1].append([])
+                        if first_model:
+                            flexres_atomnames.append([])
+                        inside_res = True
+                    if line.startswith("END_RES"):
+                        inside_res = False
+                    # store flexible residue identities
+                    if line.startswith("BEGIN_RES") and first_model:
+                        res = line[10:13].strip()
+                        chain = line[14].strip()
+                        resnum = line[15:19].strip()
+                        res_string = "%s:%s%s" % (res, chain, resnum)
+                        flexible_residues.append(res_string)
+                except ValueError:
+                    raise FileParsingErrorPdbqt(
+                        "ERROR! Cannot parse {0} in {1}".format(line, name)
+                    )
+
+            # calculate ligand efficiency and deltas from the best pose
+            leff = [round(x / num_heavy_atoms, 2) for x in scores]
+            delta = [round(x - scores[0], 2) for x in scores]
+
+            receptor_dict = {
+                "flexible_residues": flexible_residues,
+                "flexres_atomnames": flexres_atomnames,
+            }
+
+            results = {
+                "pose_rank": [1] * len(scores),  # list
+                "run_number": run_number,  # list
+                "flexible_res_coordinates": [
+                    json.dumps(coordinate) for coordinate in flexible_res_coords
+                ],  # list of lists
+                "docking_score": scores,  # list
+                "leff": leff,  # list
+                "delta": delta,  # list
+                "energies_inter": intermolecular_energy,  # list
+                "energies_intra": internal_energy,  # list
+                "unbound_energy": unbound_energy,  # list
+            }
+
+            # pick desired number of poses
+            selected_results = {
+                key: (
+                    pick_best_poses(value, self.num_poses)
+                    if isinstance(value, list)
+                    else value
+                )
+                for key, value in results.items()
+            }
+            return selected_results, receptor_dict
+
+        # check if input is file or data string
+        try:
+            os.path.splitext(data_pointer)
+            from_file = True
+        except TypeError:
+            from_file = False
+
+        if from_file:
+            # read and decode contents
+            fname_clean = os.path.basename(data_pointer)
+            # split the first name/extension
+            name, ext = os.path.splitext(fname_clean)
+            ext = ext[1:].lower()
+            if ext == "gz":
+                open_fn = gzip.open
+                # split the second name/extension
+                name, ext = os.path.splitext(name)
+                ext = ext[1:].lower()
+            else:
+                open_fn = open
+            ligname = data_pointer.split(".pdbqt")[0].split("/")[-1]
+            LOGGER.debug("Parsing vina docking file")
+            with open_fn(data_pointer, "rb") as fp:
+                # this should decode lines into iterable object
+                data_object = [line.decode("utf-8") for line in fp]
+                pdbqt_str = "".join(data_object)
+        else:
+            # input provided as string and convert from '\n' separated to to iterable lines
+            data_object = list(data_pointer.values())[0].splitlines()
+            pdbqt_str = data_pointer
+            # get the first (and only, probably not optimal) key which should be the ligand name
+            ligname = list(data_pointer.keys())[0]
+            LOGGER.debug("Parsing vina docking string")
+
+        results_dict, receptor_dict = _read_vina_results_lines(data_object, ligname)
+
+        data_length = len(results_dict["docking_score"])
+        # add fields used by other docking engine for db data insert compatibility
+        empty_columns = {
+            "receptor": ["receptor"] * data_length,
+            "cluster_rmsd": [None] * data_length,
+            "deltas": [None] * data_length,
+            "reference_rmsd": [None] * data_length,
+            "energies_inter": [None] * data_length,
+            "energies_vdw": [None] * data_length,
+            "energies_electro": [None] * data_length,
+            "energies_flexLig": [None] * data_length,
+            "energies_flexLR": [None] * data_length,
+            "energies_torsional": [None] * data_length,
+            # these two are calculated with interactions
+            "cluster_size": [1] * data_length,
+            "ligname": [ligname] * data_length,
+        }
+
+        # add empty columns and interaction data
+        results_dict.update(empty_columns)
+        ligand_row, coordinates, mol = generate_ligand_data_list_from_pdbqt_dlg(
+            ligname,
+            pdbqt_str,
+            is_dlg=False,
+        )
+        pose_coordinates = pick_best_poses(coordinates, self.num_poses)
+        if (
+            "calculate_interactions" in self.kwargs
+            and self.kwargs["calculate_interactions"] == True
+        ):
+            try:
+                receptor_string = self.kwargs["receptor_string"]
+            except:
+                LOGGER.error(
+                    "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
+                )
+                interaction_info = {
+                    "nr_interactions": [0] * data_length,
+                    "num_hb": [0] * data_length,
+                }
+                interactions = []
+            interaction_fields = {
+                k: v
+                for k, v in results_dict.items()
+                if k in ["ligname", "run_number", "pose_rank"]
+            }
+            interaction_fields.update({"pose_coordinates": pose_coordinates})
+
+            interactionless_poses = [
+                dict(zip(interaction_fields.keys(), values))
+                for values in zip(*interaction_fields.values())
+            ]
+            """
+            Each value is a list, and for each value I need to zip item n with other item ns into
+            a dict with key 
+            """
+            interactions, num_hb, num_interactions = calculate_interactions(
+                interactionless_poses,
+                mol,
+                receptor_string,
+                *self.kwargs["interaction_cutoffs"],
+            )
+            interaction_rows = generate_interaction_tuples(interactions)
+            # use interaction stuff here
+            interaction_info = {
+                "num_interactions": num_interactions,
+                "num_hb": num_hb,
+            }
+        else:
+            interaction_info = {
+                "num_interactions": [0] * data_length,
+                "num_hb": [0] * data_length,
+            }
+            interaction_rows = []
+
+        results_dict.update(interaction_info)
+        results_dict.update(
+            {
+                "pose_coordinates": [
+                    json.dumps(coordinate.tolist()) for coordinate in pose_coordinates
+                ]
+            }
+        )
+        # zip all the rows together so there is one dict per row/pose
+        results_rows = [
+            dict(zip(results_dict.keys(), values))
+            for values in zip(*results_dict.values())
+        ]
+
+        return {
+            "ligands": [ligand_row],
+            "receptor": generate_receptor_row(receptor_dict),
+            "poses": results_rows,
+            "interactions": interaction_rows,
+        }
+
+
+class ADGPUMoleculeSupplier:
+    def __init__(self, num_poses: int, **kwargs):
+        self.kwargs = kwargs
+        self.num_poses = num_poses
+
+    def __call__(self, filename: str):
+        yield self.parse_adgpu_results(filename)
+
+    def parse_adgpu_results(self, filename: str) -> dict:
+        """
+        Parses an ADGPU dlg (docking log file) and returns dict of lists of rows ready to be inserted in database
+
+        Args:
+            filename (str): dlg file name to parse
+
+        Returns:
+            dict: containing a
+                ligand row (list of ligand name, smiles, and binary rdkit mol)
+                receptor row (list of receptor data)
+                resulst rows* (list of docking results such as energies, coordinates, and other relevant per pose data)
+                interaction rows (list of interaction tuples that includes ligname, pose rank, run number to uniqueliy identify
+                    to which pose an interaction belongs, which makes the interaction list independent of other results
+                    when it comes to e.g., inserting data in the database)
+        """
+
+        ligand_dict, receptor_dict, results_dict = self._parse_docking_file_dlg(
+            fname=filename
+        )
+
+        # make sure receptor is correct
+        receptor_row = generate_receptor_row(receptor_dict)
+        receptor_name = receptor_row[0]
+        if target := self.kwargs.get("target"):
+            if receptor_name != target:
+                raise FileParsingErrorAdgpu(
+                    f"Receptor name {receptor_name} in {filename} does not match given target name {target}. Please ensure that this file belongs to the current virtual screening."
+                )
+
+        # create rdkit mol from file, get coordinates for each pose
+        ligand_row, poses_coordinates, _ = generate_ligand_data_list_from_pdbqt_dlg(
+            ligand_dict["name"], ligand_dict["file_str"], is_dlg=True
+        )
+        ligname = ligand_row[0]
+        results_dict.update(
+            {
+                "pose_coordinates": [
+                    json.dumps(coordinate.tolist()) for coordinate in poses_coordinates
+                ]
+            }
+        )
+
+        # sort clusters and select based on number of poses to store
+        clusters: dict = results_dict.get("clusters")
+        top_cluster_runs = [cluster[0] for cluster in clusters.values()]
+        sorted_selected_pose_clusters = pick_best_poses(
+            np.argsort(
+                [results_dict.get("scores")[run - 1] for run in top_cluster_runs]
+            ),
+            self.num_poses,
+        )
+
+        # delete clusters not considered after filtering for num_poses
+        clusters = {
+            k: v for k, v in clusters.items() if k in sorted_selected_pose_clusters
+        }
+
+        cluster_sizes = {k: len(v) for k, v in clusters.items()}
+        # remove runs/clustered poses that we are not storing
+        cluster_representatives = {k: v[0] for k, v in clusters.items()}
+
+        # deal with request to include more interactions for poses that are clustered with "main" poses
+        if isinstance(self.kwargs["interaction_tolerance"], float):
+            int_tol = self.kwargs["interaction_tolerance"]
+            rmsds = results_dict["cluster_rmsds"]
+            cluster_rmsd_dict = {
+                k: [rmsds[run - 1] for run in v] for k, v in clusters.items()
+            }
+            tolerated_cluster_run_numbers = defaultdict(list)
+            # go through the cluster rmsd dict and determine which indices pass muster
+            for cluster, rmsds in cluster_rmsd_dict.items():
+                for index, rmsd in enumerate(rmsds):
+                    if rmsd <= int_tol:
+                        tolerated_cluster_run_numbers[cluster].append(
+                            clusters[cluster][index]
+                        )
+        else:
+            tolerated_cluster_run_numbers = {
+                k: [v] for k, v in cluster_representatives.items()
+            }
+
+        interaction_dicts = []
+        results_rows = []
+        interactions = results_dict.get("interactions", [])
+
+        for pose_rank, cluster_number in enumerate(sorted_selected_pose_clusters):
+            run_number = cluster_representatives[cluster_number]
+            data_index = run_number - 1
+            # parse Results data
+            results_rows.append(
+                {
+                    "receptor": receptor_name,
+                    "pose_rank": pose_rank,
+                    "run_number": run_number,
+                    "cluster_rmsd": results_dict["cluster_rmsds"][data_index],
+                    "reference_rmsd": results_dict["ref_rmsds"][data_index],
+                    "docking_score": results_dict["scores"][data_index],
+                    "leff": results_dict["leff"][data_index],
+                    "deltas": results_dict["delta"][data_index],
+                    "energies_inter": results_dict["intermolecular_energy"][data_index],
+                    "energies_vdw": results_dict["vdw_hb_desolv"][data_index],
+                    "energies_electro": results_dict["electrostatics"][data_index],
+                    "energies_flexLig": results_dict["flex_ligand"][data_index],
+                    "energies_flexLR": results_dict["flexLigand_flexReceptor"][
+                        data_index
+                    ],
+                    "energies_intra": results_dict["internal_energy"][data_index],
+                    "energies_torsional": results_dict["torsional_energy"][data_index],
+                    "unbound_energy": results_dict["unbound_energy"][data_index],
+                    "num_interactions": results_dict["num_interactions"][data_index],
+                    "num_hb": results_dict["num_hb"][data_index],
+                    "cluster_size": cluster_sizes[cluster_number],
+                    "pose_coordinates": results_dict["pose_coordinates"][data_index],
+                    "flexible_res_coordinates": json.dumps(
+                        results_dict["flexible_res_coordinates"][data_index]
+                    ),
+                    "ligname": ligname,
+                }
+            )
+
+            # parse interactions
+            # define unique id for interaction rows
+            unique_pose_id = {
+                "ligand_name": ligname,
+                "run_number": run_number,
+                "pose_rank": pose_rank,
+            }
+            for interaction_run_number in tolerated_cluster_run_numbers[cluster_number]:
+                current_interactions: dict = interactions[
+                    interaction_run_number - 1
+                ].copy()
+                current_interactions.update(unique_pose_id)
+                interaction_dicts.append(current_interactions)
+
+        # prepare data in ringtail recognizable format
+        return {
+            "ligands": [ligand_row],
+            "poses": results_rows,
+            "receptor": receptor_row,
+            "interactions": generate_interaction_tuples(interaction_dicts),
+        }
+
+    def _parse_docking_file_dlg(self, fname: str) -> tuple[dict, dict, dict]:
         """Parse an ADGPU DLG file uncompressed or gzipped
 
         Args:
@@ -468,392 +861,52 @@ def parse_adgpu_results(filename: str, num_poses: int, **kwargs) -> dict:
 
         return ligand_dict, receptor_dict, results
 
-    ligand_dict, receptor_dict, results_dict = _parse_docking_file_dlg(fname=filename)
 
-    # make sure receptor is correct
-    receptor_row = generate_receptor_row(receptor_dict)
-    receptor_name = receptor_row[0]
-    if target := kwargs.get("target"):
-        if receptor_name != target:
-            raise FileParsingErrorAdgpu(
-                f"Receptor name {receptor_name} in {filename} does not match given target name {target}. Please ensure that this file belongs to the current virtual screening."
-            )
+class SDFMoleculeSupplier:
+    def __init__(self, num_poses: int, **kwargs):
+        self.kwargs = kwargs
+        self.num_poses = num_poses  # TODO
+        if (
+            "calculate_interactions" in self.kwargs
+            and self.kwargs["calculate_interactions"] == True
+        ):
+            try:
+                self.receptor_string = self.kwargs["receptor_string"]
+            except:
+                LOGGER.error(
+                    "Cannot calculate interactions, missing receptor representation. "
+                )
+                self.calc_interactions = False
+            else:
+                self.calc_interactions = True
 
-    # create rdkit mol from file, get coordinates for each pose
-    ligand_row, poses_coordinates, _ = generate_ligand_data_list_from_pdbqt_dlg(
-        ligand_dict["name"], ligand_dict["file_str"], is_dlg=True
-    )
-    ligname = ligand_row[0]
-    results_dict.update(
-        {
-            "pose_coordinates": [
-                json.dumps(coordinate.tolist()) for coordinate in poses_coordinates
-            ]
-        }
-    )
-
-    # sort clusters and select based on number of poses to store
-    clusters: dict = results_dict.get("clusters")
-    top_cluster_runs = [cluster[0] for cluster in clusters.values()]
-    sorted_selected_pose_clusters = pick_best_poses(
-        np.argsort([results_dict.get("scores")[run - 1] for run in top_cluster_runs]),
-        num_poses,
-    )
-    # make a sorted list of the the clustered runs, where each value in the list is the
-    # 1-based index of the run data
-    # sorted_clusters = [
-    #     clusters[sorted_cluster] for sorted_cluster in sorted_selected_pose_clusters
-    # ]
-
-    # delete clusters not considered after filtering for num_poses
-    clusters = {k: v for k, v in clusters.items() if k in sorted_selected_pose_clusters}
-
-    cluster_sizes = {k: len(v) for k, v in clusters.items()}
-    # remove runs/clustered poses that we are not storing
-    cluster_representatives = {k: v[0] for k, v in clusters.items()}
-
-    # deal with request to include more interactions for poses that are clustered with "main" poses
-    if isinstance(kwargs["interaction_tolerance"], float):
-        int_tol = kwargs["interaction_tolerance"]
-        rmsds = results_dict["cluster_rmsds"]
-        cluster_rmsd_dict = {
-            k: [rmsds[run - 1] for run in v] for k, v in clusters.items()
-        }
-        tolerated_cluster_run_numbers = defaultdict(list)
-        # go through the cluster rmsd dict and determine which indices pass muster
-        for cluster, rmsds in cluster_rmsd_dict.items():
-            for index, rmsd in enumerate(rmsds):
-                if rmsd <= int_tol:
-                    tolerated_cluster_run_numbers[cluster].append(
-                        clusters[cluster][index]
-                    )
-    else:
-        tolerated_cluster_run_numbers = {
-            k: [v] for k, v in cluster_representatives.items()
-        }
-
-    interaction_dicts = []
-    results_rows = []
-    interactions = results_dict.get("interactions", [])
-
-    for pose_rank, cluster_number in enumerate(sorted_selected_pose_clusters):
-        run_number = cluster_representatives[cluster_number]
-        data_index = run_number - 1
-        # parse Results data
-        results_rows.append(
-            {
-                "receptor": receptor_name,
-                "pose_rank": pose_rank,
-                "run_number": run_number,
-                "cluster_rmsd": results_dict["cluster_rmsds"][data_index],
-                "reference_rmsd": results_dict["ref_rmsds"][data_index],
-                "docking_score": results_dict["scores"][data_index],
-                "leff": results_dict["leff"][data_index],
-                "deltas": results_dict["delta"][data_index],
-                "energies_inter": results_dict["intermolecular_energy"][data_index],
-                "energies_vdw": results_dict["vdw_hb_desolv"][data_index],
-                "energies_electro": results_dict["electrostatics"][data_index],
-                "energies_flexLig": results_dict["flex_ligand"][data_index],
-                "energies_flexLR": results_dict["flexLigand_flexReceptor"][data_index],
-                "energies_intra": results_dict["internal_energy"][data_index],
-                "energies_torsional": results_dict["torsional_energy"][data_index],
-                "unbound_energy": results_dict["unbound_energy"][data_index],
-                "num_interactions": results_dict["num_interactions"][data_index],
-                "num_hb": results_dict["num_hb"][data_index],
-                "cluster_size": cluster_sizes[cluster_number],
-                "pose_coordinates": results_dict["pose_coordinates"][data_index],
-                "flexible_res_coordinates": json.dumps(
-                    results_dict["flexible_res_coordinates"][data_index]
-                ),
-                "ligname": ligname,
-            }
-        )
-
-        # parse interactions
-        # define unique id for interaction rows
-        unique_pose_id = {
-            "ligand_name": ligname,
-            "run_number": run_number,
-            "pose_rank": pose_rank,
-        }
-        for interaction_run_number in tolerated_cluster_run_numbers[cluster_number]:
-            current_interactions: dict = interactions[interaction_run_number - 1].copy()
-            current_interactions.update(unique_pose_id)
-            interaction_dicts.append(current_interactions)
-
-    # prepare data in ringtail recognizable format
-    return make_ringtail_data_dict(
-        ligand_row,
-        receptor_row,
-        results_rows,
-        generate_interaction_tuples(interaction_dicts),
-    )
-
-
-def parse_vina_results(data_pointer, num_poses: int, **kwargs) -> dict:
-    """Parser for vina docking results, supporting either pdbqt or gzipped (.gz) files, or with the
-    docking results provided as a string.
-
-    Args:
-        data_pointer (any): either filename or dictionary of string docking results
-
-    Returns:
-        dict: parsed results ready to be inserted in database
-    """
-
-    def _read_vina_results_lines(data_object, name) -> tuple[dict, dict, dict]:
-        """Reads vina docking results line by line
+    def __call__(self, fname):
+        """
+        It now parses the file! But I am not done, the file may have millions of ligands in it.
+        I think I shou
 
         Args:
-            data_object (any): filename or dict containing docking results
-            name (str): given ligand name/file name
-
-        Raises:
-            ValueError: if a line cannot be parsed
+            fname (str, optional): _description_. Defaults to None.
+            mol (Chem.Mol, optional): _description_. Defaults to None.
+            num_poses (int, optional): _description_. Defaults to None.
 
         Returns:
-            dict: parsed results ready to be inserted in database
+            dict: _description_
         """
-        scores = []
-        run_number = []
-        num_heavy_atoms = 0
-        intermolecular_energy = []
-        internal_energy = []
-        unbound_energy = []
-        num_heavy_atoms = 0
-        flexible_res_coords = []
-        inside_res = False
-        flexible_residues = []
-        flexres_atomnames = []
-        first_model = True
-
-        for line in data_object:
-            try:
-                if line.startswith("MODEL"):
-                    flexible_res_coords.append([])
-                    run_number.append(line.split()[1])
-                if line.startswith("REMARK VINA RESULT:"):
-                    scores.append(float(line.split()[3]))
-                if line.startswith("REMARK INTER:"):
-                    intermolecular_energy.append(float(line.split()[2]))
-                if line.startswith("REMARK INTRA:"):
-                    internal_energy.append(float(line.split()[2]))
-                if line.startswith("REMARK UNBOUND:"):
-                    unbound_energy.append(float(line.split()[2]))
-                if line.startswith("HETATM") or line.startswith("ATOM"):
-                    if inside_res:
-                        flexible_res_coords[-1][-1].append(
-                            [line[30:38], line[38:46], line[46:54]]
-                        )
-                        if first_model:
-                            flexres_atomnames[-1].append(line[12:16].strip())
-                    else:
-                        if first_model:
-                            if line[13] != "H":
-                                num_heavy_atoms += 1
-                if line.startswith("ENDMDL") and first_model:
-                    first_model = False
-                # make new flexible residue list if in the coordinates for a flexible residue
-                if line.startswith("BEGIN_RES"):
-                    flexible_res_coords[-1].append([])
-                    if first_model:
-                        flexres_atomnames.append([])
-                    inside_res = True
-                if line.startswith("END_RES"):
-                    inside_res = False
-                # store flexible residue identities
-                if line.startswith("BEGIN_RES") and first_model:
-                    res = line[10:13].strip()
-                    chain = line[14].strip()
-                    resnum = line[15:19].strip()
-                    res_string = "%s:%s%s" % (res, chain, resnum)
-                    flexible_residues.append(res_string)
-            except ValueError:
-                raise FileParsingErrorPdbqt(
-                    "ERROR! Cannot parse {0} in {1}".format(line, name)
-                )
-
-        # calculate ligand efficiency and deltas from the best pose
-        leff = [round(x / num_heavy_atoms, 2) for x in scores]
-        delta = [round(x - scores[0], 2) for x in scores]
-
-        receptor_dict = {
-            "flexible_residues": flexible_residues,
-            "flexres_atomnames": flexres_atomnames,
-        }
-
-        results = {
-            "pose_rank": [1] * len(scores),  # list
-            "run_number": run_number,  # list
-            "flexible_res_coordinates": [
-                json.dumps(coordinate) for coordinate in flexible_res_coords
-            ],  # list of lists
-            "docking_score": scores,  # list
-            "leff": leff,  # list
-            "delta": delta,  # list
-            "energies_inter": intermolecular_energy,  # list
-            "energies_intra": internal_energy,  # list
-            "unbound_energy": unbound_energy,  # list
-        }
-
-        # pick desired number of poses
-        selected_results = {
-            key: (
-                pick_best_poses(value, num_poses) if isinstance(value, list) else value
-            )
-            for key, value in results.items()
-        }
-        return selected_results, receptor_dict
-
-    # check if input is file or data string
-    try:
-        os.path.splitext(data_pointer)
-        from_file = True
-    except TypeError:
-        from_file = False
-
-    if from_file:
-        # read and decode contents
-        fname_clean = os.path.basename(data_pointer)
-        # split the first name/extension
-        name, ext = os.path.splitext(fname_clean)
-        ext = ext[1:].lower()
-        if ext == "gz":
-            open_fn = gzip.open
-            # split the second name/extension
-            name, ext = os.path.splitext(name)
-            ext = ext[1:].lower()
-        else:
-            open_fn = open
-        ligname = data_pointer.split(".pdbqt")[0].split("/")[-1]
-        LOGGER.debug("Parsing vina docking file")
-        with open_fn(data_pointer, "rb") as fp:
-            # this should decode lines into iterable object
-            data_object = [line.decode("utf-8") for line in fp]
-            pdbqt_str = "".join(data_object)
-    else:
-        # input provided as string and convert from '\n' separated to to iterable lines
-        data_object = list(data_pointer.values())[0].splitlines()
-        pdbqt_str = data_pointer
-        # get the first (and only, probably not optimal) key which should be the ligand name
-        ligname = list(data_pointer.keys())[0]
-        LOGGER.debug("Parsing vina docking string")
-
-    results_dict, receptor_dict = _read_vina_results_lines(data_object, ligname)
-
-    data_length = len(results_dict["docking_score"])
-    # add fields used by other docking engine for db data insert compatibility
-    empty_columns = {
-        "receptor": ["receptor"] * data_length,
-        "cluster_rmsd": [None] * data_length,
-        "deltas": [None] * data_length,
-        "reference_rmsd": [None] * data_length,
-        "energies_inter": [None] * data_length,
-        "energies_vdw": [None] * data_length,
-        "energies_electro": [None] * data_length,
-        "energies_flexLig": [None] * data_length,
-        "energies_flexLR": [None] * data_length,
-        "energies_torsional": [None] * data_length,
-        # these two are calculated with interactions
-        "cluster_size": [1] * data_length,
-        "ligname": [ligname] * data_length,
-    }
-
-    # add empty columns and interaction data
-    results_dict.update(empty_columns)
-    ligand_row, coordinates, mol = generate_ligand_data_list_from_pdbqt_dlg(
-        ligname,
-        pdbqt_str,
-        is_dlg=False,
-    )
-    pose_coordinates = pick_best_poses(coordinates, num_poses)
-    if "calculate_interactions" in kwargs and kwargs["calculate_interactions"] == True:
-        try:
-            receptor_string = kwargs["receptor_string"]
-        except:
-            LOGGER.error(
-                "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
-            )
-            interaction_info = {
-                "nr_interactions": [0] * data_length,
-                "num_hb": [0] * data_length,
-            }
-            interactions = []
-        interaction_fields = {
-            k: v
-            for k, v in results_dict.items()
-            if k in ["ligname", "run_number", "pose_rank"]
-        }
-        interaction_fields.update({"pose_coordinates": pose_coordinates})
-
-        interactionless_poses = [
-            dict(zip(interaction_fields.keys(), values))
-            for values in zip(*interaction_fields.values())
-        ]
+        # keep track of parsed ligands
+        lid = set()
+        pose_number = 0
         """
-        Each value is a list, and for each value I need to zip item n with other item ns into
-        a dict with key 
+        I'm close, but insert_data is set up to always take ligand rows and results rows. But data-wise I separated them,
+        so better to re-write the method to not always expect all rows. That way I don't have to pass empty lists either
         """
-        interactions, num_hb, num_interactions = calculate_interactions(
-            interactionless_poses,
-            mol,
-            receptor_string,
-            *kwargs["interaction_cutoffs"],
-        )
-        interaction_rows = generate_interaction_tuples(interactions)
-        # use interaction stuff here
-        interaction_info = {
-            "num_interactions": num_interactions,
-            "num_hb": num_hb,
-        }
-    else:
-        interaction_info = {
-            "num_interactions": [0] * data_length,
-            "num_hb": [0] * data_length,
-        }
-        interaction_rows = []
 
-    results_dict.update(interaction_info)
-    results_dict.update(
-        {
-            "pose_coordinates": [
-                json.dumps(coordinate.tolist()) for coordinate in pose_coordinates
-            ]
-        }
-    )
-    # zip all the rows together so there is one dict per row/pose
-    results_rows = [
-        dict(zip(results_dict.keys(), values)) for values in zip(*results_dict.values())
-    ]
-
-    return make_ringtail_data_dict(
-        ligand_row, generate_receptor_row(receptor_dict), results_rows, interaction_rows
-    )
-
-
-def parse_docking_file_sdf(
-    fname: str = None, mol: Chem.Mol = None, num_poses: int = None, **kwargs
-) -> dict:
-    # keep track of parsed ligands
-    ligand_names = set()
-    ligand_rows = []
-    results_rows = []
-    receptor_rows = []
-    interaction_rows = []
-    calc_interactions = False
-    if "calculate_interactions" in kwargs and kwargs["calculate_interactions"] == True:
-        try:
-            receptor_string = kwargs["receptor_string"]
-        except:
-            LOGGER.error(
-                "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
-            )
-        else:
-            calc_interactions = True
-
-    if fname:
-        suppl = Chem.SDMolSupplier(fname, removeHs=False)
+        file_stream = open(fname, "rb")
+        suppl = Chem.ForwardSDMolSupplier(file_stream, removeHs=False)
         for mol in suppl:
+            if mol is None:
+                continue
+
             results_dict = RESULTS_TEMPLATE.copy()
             # remove coordinates and docking properties (retains other custom properties)
             mol, mol_properties = prepare_mol_for_database(
@@ -864,10 +917,11 @@ def parse_docking_file_sdf(
             # grab ligand info, make new row if needed
             ligname = mol_properties.get("ligname", None)
             if not ligname:
-                ligname = f"ligand_{len(ligand_names)}"
-            if ligname not in ligand_names:
-                ligand_names.add(ligname)
-                ligand_rows.append([ligname, Chem.MolToSmiles(mol), mol.ToBinary()])
+                ligname = f"ligand_{len(lid)}"
+            if ligname not in lid:
+                lid.add(ligname)
+                ligand_row = [ligname, Chem.MolToSmiles(mol), mol.ToBinary()]
+
             results_dict.update(
                 {
                     "ligname": ligname,
@@ -878,7 +932,7 @@ def parse_docking_file_sdf(
             single_pose_coordinate = results_dict["pose_coordinates"][0]
             results_dict.update({"pose_coordinates": single_pose_coordinate})
             # calculate interactions
-            if calc_interactions:
+            if self.calc_interactions:
                 interaction_fields = {
                     key: results_dict[key]
                     for key in [
@@ -889,17 +943,13 @@ def parse_docking_file_sdf(
                     ]
                 }
 
-                """
-                Each value is a list, and for each value I need to zip item n with other item ns into
-                a dict with key 
-                """
                 interactions, num_hb, num_interactions = calculate_interactions(
                     [interaction_fields],
                     mol,
-                    receptor_string,
-                    *kwargs["interaction_cutoffs"],
+                    self.receptor_string,
+                    *self.kwargs["interaction_cutoffs"],
                 )
-                interaction_rows.extend(generate_interaction_tuples(interactions))
+                interaction_rows = generate_interaction_tuples(interactions)
                 # use interaction stuff here
                 results_dict.update(
                     {
@@ -912,30 +962,12 @@ def parse_docking_file_sdf(
                 )
 
             # add non-specified fields as list of None
-            results_rows.append(results_dict)
-
-    return make_ringtail_data_dict(
-        ligand_rows,
-        receptor_rows,
-        results_rows,
-        interaction_rows,
-    )
-
-
-def sort_list_by_sorted_idx(input_list: list, sorted_idx: list[int]) -> list:
-    """
-    Sort given input list to match order of sorted indices list
-
-    Args:
-        input_list (list): list to be sorted
-        sorted_idx (list[int]): sorted indices
-
-    Returns:
-        list: sorted list
-    """
-    if input_list == []:
-        return input_list
-    return [input_list[i] for i in sorted_idx]
+            yield {
+                "ligands": [ligand_row],
+                "poses": [results_dict],
+                "interactions": interaction_rows,
+                "receptor": [],
+            }
 
 
 def pick_best_poses(pose_based_list: list, num_poses: int = -1) -> list:
@@ -954,55 +986,6 @@ def pick_best_poses(pose_based_list: list, num_poses: int = -1) -> list:
         return pose_based_list
     else:
         return pose_based_list[:num_poses]
-
-
-def calculate_interactions(
-    unique_poses: list[tuple[str, int, int]],
-    mol: Chem.Mol,
-    receptor_string: str,
-    hb_cutoff: float,
-    vdw_cutoff: float,
-):
-    interaction_finder = InteractionFinder(receptor_string, hb_cutoff, vdw_cutoff)
-    interactions = []
-    num_hb = []
-    num_interactions = []
-
-    num_atoms = mol.GetNumAtoms()
-    conf = Chem.Conformer(num_atoms)
-    # add some conformer so meeko is happy
-    for i in range(num_atoms):
-        conf.SetAtomPosition(i, Geometry.Point3D(0, 0, 0))
-    # Add conformer to molecule
-    mol.AddConformer(conf, assignId=True)
-    # calculate interactions for each pose
-    for pose in unique_poses:
-        coords = pose["pose_coordinates"]
-        # make a molsetup for the Mol which includes atom types needed for interaction calculations
-        mk_prep = MoleculePreparation(rigid_macrocycles=True)
-        molsetup_list = mk_prep(mol)
-        molsetup = molsetup_list[0]
-        atom_types = []
-        for _, atom in enumerate(molsetup.atoms):
-            if atom.is_ignore:
-                continue
-            atom_types.append(atom.atom_type)
-        # engage interaction finder
-        pose_interactions = interaction_finder.find_pose_interactions(
-            atom_types, coords
-        )
-        # add unique
-        pose_interactions.update(
-            {
-                "ligand_name": pose["ligname"],
-                "run_number": pose["run_number"],
-                "pose_rank": pose["pose_rank"],
-            }
-        )
-        num_hb.append(pose_interactions.pop("hb_count"))
-        num_interactions.append(pose_interactions["count"])
-        interactions.append(pose_interactions)
-    return interactions, num_hb, num_interactions
 
 
 def generate_ligand_data_list_from_pdbqt_dlg(
@@ -1133,9 +1116,9 @@ def generate_interaction_tuples(interaction_dictionaries: list, unique_id=True) 
 
 
 docking_file_parsers: dict[str, callable] = {
-    "adgpu": parse_adgpu_results,
-    "vina": parse_vina_results,
-    "adng": parse_docking_file_sdf,
+    "adgpu": ADGPUMoleculeSupplier,
+    "vina": VinaMoleculeSupplier,
+    "adng": SDFMoleculeSupplier,
 }
 
 

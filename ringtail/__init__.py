@@ -19,15 +19,14 @@ from .querybuilder import QueryBuilder
 from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import (
-    parse_adgpu_results,
-    parse_vina_results,
-    parse_docking_file_sdf,
-    calculate_interactions,
+    VinaMoleculeSupplier,
+    ADGPUMoleculeSupplier,
+    SDFMoleculeSupplier,
 )
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .outputmanager import OutputManager
-from .interactions import InteractionFinder
+from .interactions import InteractionFinder, calculate_interactions
 from .clustermanager import (
     MorganFingerprintCluster,
     InteractionBitvectorCluster,
@@ -55,9 +54,9 @@ __all__ = [
     "MPManager",
     "DockingFileReader",
     "Writer",
-    "parse_adgpu_results",
-    "parse_vina_results",
-    "parse_docking_file_sdf",
+    "ADGPUMoleculeSupplier",
+    "VinaMoleculeSupplier",
+    "SDFMoleculeSupplier",
     "calculate_interactions",
     "ReceptorManager",
     "ResultsManager",

@@ -99,16 +99,21 @@ class StorageManager:
             docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
             write_options (dict): options for how to write the data, primarily how to treat duplicates
         """
-        self._insert_ligands(docking_data["ligands"])
-        interaction_data = docking_data["interactions"]
-        # deduplicate by using a set comprehension, then convert to list
-        just_interactions = list({interaction[3:] for interaction in interaction_data})
-        # last results item is ligname
-        self._insert_interaction_index_rows(just_interactions)
-        # interactions has ligname and pose rank
-        self._insert_docking_data(
-            docking_data["poses"], interaction_data, write_options
-        )
+        ligands = docking_data.get("ligands", None)
+        if ligands:
+            self._insert_ligands(ligands)
+        interaction_data = docking_data.get("interactions", None)
+        if interaction_data:
+            # deduplicate by using a set comprehension, then convert to list
+            just_interactions = list(
+                {interaction[3:] for interaction in interaction_data}
+            )
+            # last results item is ligname
+            self._insert_interaction_index_rows(just_interactions)
+        poses = docking_data.get("poses", None)
+        if poses:
+            # interactions has ligname and pose rank
+            self._insert_docking_data(poses, interaction_data, write_options)
         self.conn.commit()
 
     def insert_receptor_basic_info(self, receptor_data: list):

@@ -20,6 +20,7 @@ from .exceptions import (
 )
 import multiprocessing as mp
 from .ringtailoptions import RingtailDefaults
+from .storagemanager import StorageManager
 
 
 class DockingFileReader(mp.Process):
@@ -78,33 +79,33 @@ class DockingFileReader(mp.Process):
                     self.queueOut.put(None)
                     break
 
-                # generate CPU LOAD
-                # parser depends on requested docking_mode
-                try:
-                    data_packet = docking_file_parsers.get(
-                        self.docking_mode, "missing_parser"
-                    )(
-                        next_task,
-                        self.shared.get("num_poses"),
-                        **{
-                            "interaction_tolerance": self.shared.get(
-                                "interaction_tolerance", None
-                            ),
-                            "calculate_interactions": not self.shared.get(
-                                "no_interactions", True
-                            ),
-                            "receptor_string": self.shared.get("receptor_string", None),
-                            "interaction_cutoffs": self.shared.get(
-                                "interaction_cutoffs",
-                                RingtailDefaults.interaction_cutoffs,
-                            ),
-                            "target": self.shared.get("target", None),
-                        },
+                # initialize a parser for each process with kw-args
+                parser = docking_file_parsers.get(self.docking_mode, "missing_parser")(
+                    self.shared.get("num_poses"),
+                    **{
+                        "interaction_tolerance": self.shared.get(
+                            "interaction_tolerance", None
+                        ),
+                        "calculate_interactions": not self.shared.get(
+                            "no_interactions", True
+                        ),
+                        "receptor_string": self.shared.get("receptor_string", None),
+                        "interaction_cutoffs": self.shared.get(
+                            "interaction_cutoffs",
+                            RingtailDefaults.interaction_cutoffs,
+                        ),
+                        "target": self.shared.get("target", None),
+                    },
+                )
+                if parser == "missing_parser":
+                    raise NotImplementedError(
+                        f"Parser for input file docking_mode {self.docking_mode} not implemented!"
                     )
-                    if data_packet == "missing_parser":
-                        raise NotImplementedError(
-                            f"Parser for input file docking_mode {self.docking_mode} not implemented!"
-                        )
+                try:
+                    # generate CPU LOAD
+                    for data_packet in parser(next_task):
+                        self._add_to_queueout(data_packet)
+
                 except FileParsingErrorAdgpu as e:
                     raise FileParsingError(
                         f"Problems when parsing the ADGPU docking log file: {str(e)}"
@@ -118,8 +119,6 @@ class DockingFileReader(mp.Process):
                         f"Problems when parsing the SDF docking file: {str(e)}"
                     )
 
-                # put the result in the out queue (will be sent to Writer)
-                self._add_to_queueout(data_packet)
             except Exception:
                 tb = traceback.format_exc()
                 self.pipe.send(
@@ -169,8 +168,7 @@ class Writer(mp.Process):
         self.num_readers = num_readers
         # assign pointer to storage object, set chunksize
         db_file = options.pop("db_file")
-        storage_class = options.pop("storageman_class")
-        self.storageman = storage_class(db_file)
+        self.storageman: StorageManager = options.pop("storageman_class")(db_file)
         self.chunk_size = options.pop("chunk_size")
         self.options = options
         # initialize data array (stack of dictionaries)
@@ -203,13 +201,10 @@ class Writer(mp.Process):
                     continue
 
                 if self.receptor_row is None and not self.receptor_written_to_db:
-                    self.receptor_row = list(next_task.get("receptor_row"))
-
-                self.docked_ligands["ligands"].extend(next_task["ligand_row"])
-                self.docked_ligands["poses"].extend(next_task["results_rows"])
-                self.docked_ligands["interactions"].extend(
-                    next_task["interaction_rows"]
-                )
+                    self.receptor_row = list(next_task.get("receptor"))
+                self.docked_ligands["ligands"].extend(next_task["ligands"])
+                self.docked_ligands["poses"].extend(next_task["poses"])
+                self.docked_ligands["interactions"].extend(next_task["interactions"])
                 self.counter += 1
 
                 # After every n (chunk size) files, write to storage
@@ -234,11 +229,10 @@ class Writer(mp.Process):
                 sm.insert_receptor_basic_info(self.receptor_row)
                 self.receptor_written_to_db = True
                 self.receptor_row = None
-            if self.docked_ligands["ligands"]:
-                sm.insert_data(
-                    self.docked_ligands,
-                    self.options,
-                )
+            sm.insert_data(
+                self.docked_ligands,
+                self.options,
+            )
 
         # calulate time for processing/writing speed
         self.num_files_written += self.counter

@@ -6,8 +6,9 @@
 
 import numpy as np
 import tempfile
-from meeko import PDBQTReceptor
+from meeko import PDBQTReceptor, MoleculePreparation
 from .receptormanager import ReceptorManager
+from rdkit import Chem, Geometry
 
 
 class InteractionFinder:
@@ -113,3 +114,52 @@ class InteractionFinder:
             "count": len(type_list),
             "hb_count": type_list.count("H"),
         }
+
+
+def calculate_interactions(
+    unique_poses: list[tuple[str, int, int]],
+    mol: Chem.Mol,
+    receptor_string: str,
+    hb_cutoff: float,
+    vdw_cutoff: float,
+):
+    interaction_finder = InteractionFinder(receptor_string, hb_cutoff, vdw_cutoff)
+    interactions = []
+    num_hb = []
+    num_interactions = []
+
+    num_atoms = mol.GetNumAtoms()
+    conf = Chem.Conformer(num_atoms)
+    # add some conformer so meeko is happy
+    for i in range(num_atoms):
+        conf.SetAtomPosition(i, Geometry.Point3D(0, 0, 0))
+    # Add conformer to molecule
+    mol.AddConformer(conf, assignId=True)
+    # calculate interactions for each pose
+    for pose in unique_poses:
+        coords = pose["pose_coordinates"]
+        # make a molsetup for the Mol which includes atom types needed for interaction calculations
+        mk_prep = MoleculePreparation(rigid_macrocycles=True)
+        molsetup_list = mk_prep(mol)
+        molsetup = molsetup_list[0]
+        atom_types = []
+        for _, atom in enumerate(molsetup.atoms):
+            if atom.is_ignore:
+                continue
+            atom_types.append(atom.atom_type)
+        # engage interaction finder
+        pose_interactions = interaction_finder.find_pose_interactions(
+            atom_types, coords
+        )
+        # add unique
+        pose_interactions.update(
+            {
+                "ligand_name": pose["ligname"],
+                "run_number": pose["run_number"],
+                "pose_rank": pose["pose_rank"],
+            }
+        )
+        num_hb.append(pose_interactions.pop("hb_count"))
+        num_interactions.append(pose_interactions["count"])
+        interactions.append(pose_interactions)
+    return interactions, num_hb, num_interactions
