@@ -884,19 +884,7 @@ class SDFMoleculeSupplier:
             else:
                 self.calc_interactions = True
 
-    def __call__(self, fname):
-        """
-        It now parses the file! But I am not done, the file may have millions of ligands in it.
-        I think I shou
-
-        Args:
-            fname (str, optional): _description_. Defaults to None.
-            mol (Chem.Mol, optional): _description_. Defaults to None.
-            num_poses (int, optional): _description_. Defaults to None.
-
-        Returns:
-            dict: _description_
-        """
+    def __call__(self, fname: str):
         # keep track of parsed ligands
         processed_ligands = set()
         last_ligand = None
@@ -906,8 +894,7 @@ class SDFMoleculeSupplier:
         for mol in suppl:
             if mol is None:
                 continue
-            # NOTE temporary
-            ligname = smiles = Chem.MolToSmiles(mol)
+            ligname = mol.GetProp("_Name")
             # only grab num_poses
             if ligname != last_ligand:
                 last_ligand = ligname
@@ -925,6 +912,7 @@ class SDFMoleculeSupplier:
             # ligname = mol_properties.get("ligname", None)
 
             if ligname not in processed_ligands:
+                smiles = Chem.MolToSmiles(mol)
                 processed_ligands.add(ligname)
                 ligand_row = [ligname, smiles, mol.ToBinary()]
 
@@ -975,6 +963,73 @@ class SDFMoleculeSupplier:
                 "interactions": interaction_rows,
                 "receptor": [],
             }
+
+
+def process_docked_mol(mol):
+    """
+    #TODO part of the poin t of this method is that it takes one mol with perhaps multiple
+    conformers, it is not one mol one pose as in the file reading
+    """
+
+    # NOTE temporary
+    ligname = smiles = Chem.MolToSmiles(mol)
+    ligand_row = [ligname, smiles, mol.ToBinary()]
+
+    results_dict = RESULTS_TEMPLATE.copy()
+    # remove coordinates and docking properties (retains other custom properties)
+    # I think conformers are properly parsed but not sure about scores
+    mol, mol_properties = prepare_mol_for_database(
+        mol, store_properties=["ligname", "docking_score", "pose_rank"]
+    )
+    # ligname = mol_properties.get("ligname", None)
+
+    results_dict.update(mol_properties)
+    results_dict.update(
+        {
+            "ligname": ligname,
+            "run_number": 1,
+            "leff": round(results_dict["docking_score"] / mol.GetNumAtoms(), 2),
+        }
+    )
+    single_pose_coordinate = results_dict["pose_coordinates"][0]
+    results_dict.update({"pose_coordinates": single_pose_coordinate})
+    # calculate interactions
+    if self.calc_interactions:
+        interaction_fields = {
+            key: results_dict[key]
+            for key in [
+                "ligname",
+                "run_number",
+                "pose_rank",
+                "pose_coordinates",
+            ]
+        }
+
+        interactions, num_hb, num_interactions = calculate_interactions(
+            [interaction_fields],
+            mol,
+            self.receptor_string,
+            *self.kwargs["interaction_cutoffs"],
+        )
+        interaction_rows = generate_interaction_tuples(interactions)
+        # use interaction stuff here
+        results_dict.update(
+            {
+                "num_interactions": num_interactions[0],
+                "num_hb": num_hb[0],
+                "pose_coordinates": json.dumps(
+                    results_dict["pose_coordinates"].tolist()
+                ),
+            }
+        )
+
+    # add non-specified fields as list of None
+    return {
+        "ligands": [ligand_row],
+        "poses": [results_dict],
+        "interactions": interaction_rows,
+        "receptor": [],
+    }
 
 
 def pick_best_poses(pose_based_list: list, num_poses: int = -1) -> list:
