@@ -965,23 +965,24 @@ class SDFMoleculeSupplier:
             }
 
 
-def process_docked_mol(mol):
+def process_docked_mol(mol, **kwargs):
     """
     #TODO part of the poin t of this method is that it takes one mol with perhaps multiple
     conformers, it is not one mol one pose as in the file reading
+    #TODO maybe make this some sort of streaming service?
     """
 
-    # NOTE temporary
-    ligname = smiles = Chem.MolToSmiles(mol)
+    ligname = mol.GetProp("_Name")
+    smiles = Chem.MolToSmiles(mol)
     ligand_row = [ligname, smiles, mol.ToBinary()]
+    interaction_rows = []
 
     results_dict = RESULTS_TEMPLATE.copy()
     # remove coordinates and docking properties (retains other custom properties)
     # I think conformers are properly parsed but not sure about scores
     mol, mol_properties = prepare_mol_for_database(
-        mol, store_properties=["ligname", "docking_score", "pose_rank"]
+        mol, store_properties=["docking_score", "pose_rank"]
     )
-    # ligname = mol_properties.get("ligname", None)
 
     results_dict.update(mol_properties)
     results_dict.update(
@@ -994,7 +995,7 @@ def process_docked_mol(mol):
     single_pose_coordinate = results_dict["pose_coordinates"][0]
     results_dict.update({"pose_coordinates": single_pose_coordinate})
     # calculate interactions
-    if self.calc_interactions:
+    if "calculate_interactions" in kwargs and kwargs["calculate_interactions"] == True:
         interaction_fields = {
             key: results_dict[key]
             for key in [
@@ -1008,8 +1009,8 @@ def process_docked_mol(mol):
         interactions, num_hb, num_interactions = calculate_interactions(
             [interaction_fields],
             mol,
-            self.receptor_string,
-            *self.kwargs["interaction_cutoffs"],
+            kwargs["receptor_string"],
+            *kwargs["interaction_cutoffs"],
         )
         interaction_rows = generate_interaction_tuples(interactions)
         # use interaction stuff here

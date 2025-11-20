@@ -36,6 +36,7 @@ from .outputmanager import OutputManager
 from .storagemanager import StorageManager
 from .storagemanager_duckdb import StorageManagerDuckDB, HAS_DUCK
 from .storagemanager_sqlite import StorageManagerSQLite, HAS_SQLITE
+from .parsers import process_docked_mol
 
 storage_types = {}
 if HAS_SQLITE:
@@ -136,29 +137,6 @@ class RingtailCore:
         """
         with self.storageman as sm:
             return validate_docking_mode(sm.get_previous_docking_mode())
-
-    def add_poses(
-        self,
-        pose_data: Union[object, list[object]],
-        duplicate_handling: str = RingtailDefaults.duplicate_handling,
-        docking_mode: str = RingtailDefaults.docking_mode,
-        store_all_poses: bool = RingtailDefaults.store_all_poses,
-        max_poses: int = RingtailDefaults.max_poses,
-        no_interactions: bool = RingtailDefaults.no_interactions,
-        interaction_tolerance: float = RingtailDefaults.interaction_tolerance,
-        interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
-    ):
-        interaction_vars = {
-            "no_interactions": no_interactions,
-            "interaction_tolerance": interaction_tolerance,
-            "interaction_cutoffs": interaction_cutoffs,
-        }
-        write_options = {
-            "duplicate_handling": duplicate_handling,
-            "docking_mode": docking_mode,
-            "num_poses": self._num_poses_to_store(max_poses, store_all_poses),
-        }
-        pass
 
     # region write to database
     def add_results_from_files(
@@ -305,6 +283,66 @@ class RingtailCore:
                 finalize,
             )
 
+    # TODO this method might do good as a generator object so that the receptor string stays as one object
+    def add_mol(
+        self,
+        mol: Union[list[Chem.Mol], Chem.Mol],
+        docking_mode: str = "adng",
+        duplicate_handling: str = RingtailDefaults.duplicate_handling,
+        no_interactions: bool = RingtailDefaults.no_interactions,
+        interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
+        receptor_string: str = None,
+    ):
+        """
+        Important: because one or more poses can be added at will with this method, we have chosen
+        not to implement "max number of poses"/"store all poses". The user therefore needs to be aware
+        that any pose added with this method will be written to the database. If the user wishes to
+        institute a max_poses limit, this needs to be implemented prior to invoking this method.
+
+
+        Args:
+            mol (Union[list[Chem.Mol], Chem.Mol]): _description_
+            docking_mode (str, optional): _description_. Defaults to "adng".
+            duplicate_handling (str, optional): _description_. Defaults to RingtailDefaults.duplicate_handling.
+            no_interactions (bool, optional): _description_. Defaults to RingtailDefaults.no_interactions.
+            interaction_cutoffs (list, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs.
+            receptor_string (str, optional): _description_. Defaults to None.
+
+        Raises:
+            OptionError: _description_
+        """
+        docking_mode = validate_docking_mode(docking_mode)
+        if docking_mode != "adng":
+            raise OptionError(
+                f"Docking mode -{docking_mode} is not currently valid for addings Mols directly."
+            )
+        with self.storageman:
+            self.storageman.check_storage_ready(self._run_mode, docking_mode)
+
+        kwargs = {}
+        if not no_interactions:
+            if not receptor_string:
+                receptor_string = self.get_receptor_object()[2]
+            kwargs.update(
+                {
+                    "calculate_interactions": True,
+                    "interaction_cutoffs": interaction_cutoffs,
+                    "receptor_string": receptor_string,
+                }
+            )
+        # I'd like to have it just stream in and accumulate until accumulate many then write
+        if not isinstance(mol, list):
+            mol = [mol]
+        with self.storageman as sm:
+            for m in mol:
+                docking_data = process_docked_mol(m, **kwargs)
+                sm.insert_data(
+                    docking_data,
+                    {
+                        "duplicate_handling": duplicate_handling,
+                    },
+                )
+
     def finalize_write(self):
         """
         Finalize database write by creating indices
@@ -320,6 +358,8 @@ class RingtailCore:
             receptor_file (str): path to receptor file
 
         """
+        with self.storageman:
+            self.storageman.check_storage_ready(self._run_mode)
 
         receptor_blob = None
         receptor_jsons = None

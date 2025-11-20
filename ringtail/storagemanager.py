@@ -645,7 +645,9 @@ class StorageManager:
         docking_mode = self.db_query(query.build()[0]).fetchone()
         return docking_mode[0].lower() if docking_mode else None
 
-    def check_storage_ready(self, run_mode: str, docking_mode: str, num_poses: int):
+    def check_storage_ready(
+        self, run_mode: str, docking_mode: str = None, num_poses: int = None
+    ):
         """
         Check that storage is ready
 
@@ -659,49 +661,50 @@ class StorageManager:
         """
         if self.db_empty():
             self._create_tables()
-        query = self.QueryBuilder()
-        query.SELECT("COUNT(*)").FROM("DB_properties")
-        count = self.db_query(query.build()[0]).fetchone()[0]
+        if docking_mode:
+            query = self.QueryBuilder()
+            query.SELECT("COUNT(*)").FROM("DB_properties")
+            count = self.db_query(query.build()[0]).fetchone()[0]
 
-        compatible = True
-        if count < 1:
-            logger.info(
-                "Adding results to an existing database that is currently empty of docking results."
-            )
-        else:
-            compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
-            try:
-                query = self.QueryBuilder()
-                query.SELECT("*").FROM("DB_properties").ORDER_BY(
-                    "DB_write_session"
-                ).DESC("DB_write_session").LIMIT(1)
-                cur = self.db_query(query.build()[0])
-
-                (_, last_docking_mode, last_num_poses) = cur.fetchone()
-                if docking_mode != last_docking_mode:
-                    compatible = False
-                    compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
-
-                if last_num_poses == -1 != num_poses:
-                    compatible = False
-                    compatibility_string += f"Current number of poses saved is {num_poses} but database was previously set to 'store_all_poses'.\n"
-                elif last_num_poses != num_poses:
-                    compatible = False
-                    compatibility_string += f"Current number of poses saved is {num_poses} but database was previously set to {last_num_poses}."
-            except Exception as e:
-                raise e
-
-        # command line does not allow incompatibility, but API (and I suppose GUI) does
-        if not compatible:
-            if run_mode == "cli":
-                raise OptionError(compatibility_string)
+            compatible = True
+            if count < 1:
+                logger.info(
+                    "Adding results to an existing database that is currently empty of docking results."
+                )
             else:
-                logger.warning(compatibility_string)
+                compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
+                try:
+                    query = self.QueryBuilder()
+                    query.SELECT("*").FROM("DB_properties").ORDER_BY(
+                        "DB_write_session"
+                    ).DESC("DB_write_session").LIMIT(1)
+                    cur = self.db_query(query.build()[0])
 
-        # write current database properties to database
-        self._insert_db_properties(docking_mode, num_poses)
-        logger.debug("Storage compatibility has been checked and is ensured.")
-        # cannot use Signal/keyboard interrupt in the GUI bc it uses threading
+                    (_, last_docking_mode, last_num_poses) = cur.fetchone()
+                    if docking_mode != last_docking_mode:
+                        compatible = False
+                        compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
+
+                    if last_num_poses == -1 != num_poses:
+                        compatible = False
+                        compatibility_string += f"Current number of poses saved is {num_poses} but database was previously set to 'store_all_poses'.\n"
+                    elif last_num_poses != num_poses:
+                        compatible = False
+                        compatibility_string += f"Current number of poses saved is {num_poses} but database was previously set to {last_num_poses}."
+                except Exception as e:
+                    raise e
+
+            # command line does not allow incompatibility, but API (and I suppose GUI) does
+            if not compatible:
+                if run_mode == "cli":
+                    raise OptionError(compatibility_string)
+                else:
+                    logger.warning(compatibility_string)
+
+            # write current database properties to database
+            self._insert_db_properties(docking_mode, num_poses)
+            logger.debug("Storage compatibility has been checked and is ensured.")
+            # cannot use Signal/keyboard interrupt in the GUI bc it uses threading
         if run_mode != "gui":
             self.keyboard_interrupt_allowed = True
 
