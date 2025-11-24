@@ -117,7 +117,7 @@ class InteractionFinder:
 
 
 def calculate_interactions(
-    unique_poses: list[tuple[str, int, int]],
+    poses_coordinates: list[tuple[dict, list]],
     mol: Chem.Mol,
     receptor_string: str,
     hb_cutoff: float,
@@ -136,8 +136,7 @@ def calculate_interactions(
     # Add conformer to molecule
     mol.AddConformer(conf, assignId=True)
     # calculate interactions for each pose
-    for pose in unique_poses:
-        coords = pose["pose_coordinates"]
+    for id, coords in poses_coordinates:
         # make a molsetup for the Mol which includes atom types needed for interaction calculations
         mk_prep = MoleculePreparation(rigid_macrocycles=True)
         molsetup_list = mk_prep(mol)
@@ -152,13 +151,7 @@ def calculate_interactions(
             atom_types, coords
         )
         # add unique
-        pose_interactions.update(
-            {
-                "ligand_name": pose["ligname"],
-                "run_number": pose["run_number"],
-                "pose_rank": pose["pose_rank"],
-            }
-        )
+        pose_interactions.update({"id": id})
         num_hb.append(pose_interactions.pop("hb_count"))
         num_interactions.append(pose_interactions["count"])
         interactions.append(pose_interactions)

@@ -254,7 +254,16 @@ class StorageManagerSQLite(StorageManager):
                 rec_resid, 
                 rec_atom, 
                 rec_atomid)
-            VALUES (?,?,?,?,?,?,?,?,?);
+            VALUES (
+                :ligname, 
+                :run_number,
+                :pose_rank, 
+                :type,
+                :chain,
+                :residue,
+                :resid,
+                :recname,
+                :recid);
             """
         self.db_update(temp_int_insert, interactions_array, commit=False)
 
@@ -554,7 +563,7 @@ class StorageManagerSQLite(StorageManager):
         """
         # to insert interaction if unique
         sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
-                        VALUES (?,?,?,?,?,?);"""
+                        VALUES (:type,:chain,:residue,:resid,:recname,:recid);"""
         self.db_update(sql_insert, interactions, commit=False)
 
     def _create_filtering_tables(self):

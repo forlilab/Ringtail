@@ -286,23 +286,18 @@ class VinaMoleculeSupplier:
                     "num_hb": [0] * data_length,
                 }
                 interactions = []
-            interaction_fields = {
-                k: v
-                for k, v in results_dict.items()
-                if k in ["ligname", "run_number", "pose_rank"]
-            }
-            interaction_fields.update({"pose_coordinates": pose_coordinates})
 
-            interactionless_poses = [
-                dict(zip(interaction_fields.keys(), values))
-                for values in zip(*interaction_fields.values())
+            pose_identifiers = [
+                {"ligname": lig, "run_number": run, "pose_rank": rank}
+                for lig, run, rank in zip(
+                    results_dict["ligname"],
+                    results_dict["run_number"],
+                    results_dict["pose_rank"],
+                )
             ]
-            """
-            Each value is a list, and for each value I need to zip item n with other item ns into
-            a dict with key 
-            """
+            poseids_coordinates = list(zip(pose_identifiers, pose_coordinates))
             interactions, num_hb, num_interactions = calculate_interactions(
-                interactionless_poses,
+                poseids_coordinates,
                 mol,
                 receptor_string,
                 *self.kwargs["interaction_cutoffs"],
@@ -474,7 +469,7 @@ class ADGPUMoleculeSupplier:
             # parse interactions
             # define unique id for interaction rows
             unique_pose_id = {
-                "ligand_name": ligname,
+                "ligname": ligname,
                 "run_number": run_number,
                 "pose_rank": pose_rank,
             }
@@ -482,7 +477,7 @@ class ADGPUMoleculeSupplier:
                 current_interactions: dict = interactions[
                     interaction_run_number - 1
                 ].copy()
-                current_interactions.update(unique_pose_id)
+                current_interactions.update({"id": unique_pose_id})
                 interaction_dicts.append(current_interactions)
 
         # prepare data in ringtail recognizable format
@@ -888,6 +883,7 @@ class SDFMoleculeSupplier:
         # keep track of parsed ligands
         processed_ligands = set()
         last_ligand = None
+        run_number = 1
 
         file_stream = open(fname, "rb")
         suppl = Chem.ForwardSDMolSupplier(file_stream, removeHs=False)
@@ -920,7 +916,7 @@ class SDFMoleculeSupplier:
             results_dict.update(
                 {
                     "ligname": ligname,
-                    "run_number": 1,
+                    "run_number": run_number,
                     "leff": round(results_dict["docking_score"] / mol.GetNumAtoms(), 2),
                 }
             )
@@ -928,18 +924,20 @@ class SDFMoleculeSupplier:
             results_dict.update({"pose_coordinates": single_pose_coordinate})
             # calculate interactions
             if self.calc_interactions:
-                interaction_fields = {
-                    key: results_dict[key]
-                    for key in [
-                        "ligname",
-                        "run_number",
-                        "pose_rank",
-                        "pose_coordinates",
-                    ]
-                }
+
+                poseids_coordinates = [
+                    (
+                        {
+                            "ligname": ligname,
+                            "run_number": run_number,
+                            "pose_rank": mol_properties["pose_rank"],
+                        },
+                        single_pose_coordinate,
+                    )
+                ]
 
                 interactions, num_hb, num_interactions = calculate_interactions(
-                    [interaction_fields],
+                    poseids_coordinates,
                     mol,
                     self.receptor_string,
                     *self.kwargs["interaction_cutoffs"],
@@ -973,6 +971,7 @@ def process_docked_mol(mol, **kwargs):
     """
 
     ligname = mol.GetProp("_Name")
+    run_number = 1
     smiles = Chem.MolToSmiles(mol)
     ligand_row = [ligname, smiles, mol.ToBinary()]
     interaction_rows = []
@@ -988,26 +987,24 @@ def process_docked_mol(mol, **kwargs):
     results_dict.update(
         {
             "ligname": ligname,
-            "run_number": 1,
+            "run_number": run_number,
             "leff": round(results_dict["docking_score"] / mol.GetNumAtoms(), 2),
         }
     )
     single_pose_coordinate = results_dict["pose_coordinates"][0]
     results_dict.update({"pose_coordinates": single_pose_coordinate})
     # calculate interactions
+
     if "calculate_interactions" in kwargs and kwargs["calculate_interactions"] == True:
-        interaction_fields = {
-            key: results_dict[key]
-            for key in [
-                "ligname",
-                "run_number",
-                "pose_rank",
-                "pose_coordinates",
-            ]
-        }
+        poseids_coordinates = list(
+            tuple(
+                {"ligname": ligname, "run_number": run_number, "pose_rank": 1},
+                single_pose_coordinate,
+            )
+        )
 
         interactions, num_hb, num_interactions = calculate_interactions(
-            [interaction_fields],
+            poseids_coordinates,
             mol,
             kwargs["receptor_string"],
             *kwargs["interaction_cutoffs"],
@@ -1164,18 +1161,14 @@ def generate_interaction_tuples(interaction_dictionaries: list, unique_id=True) 
         list: of tuples of interaction data
     """
     interaction_keywords = ["type", "chain", "residue", "resid", "recname", "recid"]
-    interactions = {
-        (
-            ((pose["ligand_name"], pose["run_number"], pose["pose_rank"]))
-            if unique_id
-            else ()
-        )
-        + tuple(pose[kw][i] for kw in interaction_keywords)
+    return [
+        {
+            **(pose["id"] if unique_id else {}),
+            **{kw: pose[kw][i] for kw in interaction_keywords},
+        }
         for pose in interaction_dictionaries
         for i in range(pose["count"])
-    }
-
-    return list(interactions)
+    ]
 
 
 docking_file_parsers: dict[str, callable] = {

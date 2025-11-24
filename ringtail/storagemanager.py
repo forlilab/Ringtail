@@ -104,12 +104,7 @@ class StorageManager:
             self._insert_ligands(ligands)
         interaction_data = docking_data.get("interactions", None)
         if interaction_data:
-            # deduplicate by using a set comprehension, then convert to list
-            just_interactions = list(
-                {interaction[3:] for interaction in interaction_data}
-            )
-            # last results item is ligname
-            self._insert_interaction_index_rows(just_interactions)
+            self._insert_interaction_index_rows(interaction_data)
         poses = docking_data.get("poses", None)
         if poses:
             # interactions has ligname and pose rank
@@ -1392,6 +1387,32 @@ class StorageManager:
                 "Interaction_indices"
             ),
         }
+
+    def clear_interaction_tables(self) -> bool:
+        """
+        Clears (deletes and reuilds) the two interaction tables
+
+        Raises:
+            StorageError: _description_
+
+        Returns:
+            bool: True if clearing was successful
+        """
+        try:
+            self._delete_table("Interaction_indices")
+            self._delete_table("Interactions")
+            self._create_interaction_table()
+            self._create_interaction_index_table()
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError("Error during interaction tables clearing: ", str(e))
+        if (
+            self.table_length("Interactions") > 0
+            or self.table_length("Interaction_indices") > 0
+        ):
+            return False
+        else:
+            return True
 
     # endregion
 
