@@ -412,15 +412,66 @@ class RingtailCore:
                 self.storageman.insert_receptor_polymer(receptor_jsons, receptor_name)
                 LOGGER.info("Receptor polymer json string was added to the database.")
 
-    def calculate_interactions(
+    def add_interactions(
         self,
         hb_cutoff: float = RingtailDefaults.interaction_cutoffs[0],
         vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
+        receptor_string: str = None,
+        get_consent: Callable = None,
+        chunk_size: int = 5000,
     ):
-        # check if interactions exist
-        # if yes, make warning, if user proceeds ("Y") all interactions will be deleted
-        # and remade
-        # delete tables if yes
+        import interactions as IF
+        from parsers import generate_interaction_tuples
+
+        # make sure user knows risk of calculating interaction in db with existing interactions
+        with self.storageman as sm:
+            if sm.table_length("Interactions") > 0:
+
+                def _api_cmd_consent():
+                    consent = input(
+                        "WARNING: Calculating interactions for a database with existing interactions will delete all existing interactions.\n Are you sure you wish to proceed? If so, type 'yes': "
+                    )
+                    return consent.strip().lower() == "yes"
+
+                if get_consent is None:
+                    get_consent = _api_cmd_consent
+
+                if not get_consent():
+                    LOGGER.critical(
+                        "Consent not given for deleting and re-calculating interactions, exiting."
+                    )
+                    return
+
+            success = sm.clear_interaction_tables()
+            if not success:
+                raise RTCoreError("Trouble while clearing interaction tables.")
+
+            # now comes the time, read results maybe 5000 at the time,
+            # select ligname, run number, pose rank, coordinates
+            if not receptor_string:
+                receptor_string = self.get_receptor_object()[2]
+            db_commit_counter = 0
+            interactions = []
+            results_counts = []
+            for pose in sm._stream_query(
+                "SELECT R.pose_id, R.pose_coordinates, L.rdmol FROM Results AS R JOIN Ligands AS L on L.ligand_id=R.ligand_id;",
+                5000,
+            ):
+                pose_id, coordinates, rdbin = pose
+                mol = Chem.Mol(rdbin)
+                interaction_dicts, num_hb, num_int = IF.calculate_interactions(
+                    [tuple({"pose_id": pose_id}, json.loads(coordinates))],
+                    mol,
+                    receptor_string,
+                    hb_cutoff,
+                    vdw_cutoff,
+                )
+                interactions.extend(generate_interaction_tuples(interaction_dicts))
+                results_counts.append({""})
+                if db_commit_counter == chunk_size:
+                    sm.insert_data()
+            # # perform calculations
+            # # insert new interactions
         # load an iterable of the db info and process in batches of maybe 10,000
 
         pass
@@ -887,8 +938,7 @@ class RingtailCore:
         ligands_poses = self._fetch_select_ligands_poses(
             ligand_names=ligname, bookmark_name=bookmark_name
         )
-        if len(ligands_poses) > 10:
-            length = len(ligands_poses)
+        if length := len(ligands_poses) > 10:
 
             def _api_cmd_consent(length: int):
                 consent = input(

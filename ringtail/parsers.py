@@ -996,12 +996,12 @@ def process_docked_mol(mol, **kwargs):
     # calculate interactions
 
     if "calculate_interactions" in kwargs and kwargs["calculate_interactions"] == True:
-        poseids_coordinates = list(
-            tuple(
+        poseids_coordinates = [
+            (
                 {"ligname": ligname, "run_number": run_number, "pose_rank": 1},
                 single_pose_coordinate,
             )
-        )
+        ]
 
         interactions, num_hb, num_interactions = calculate_interactions(
             poseids_coordinates,
