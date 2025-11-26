@@ -21,6 +21,32 @@ from .clustermanager import *
 from .querybuilder import QueryBuilder
 from collections import defaultdict
 
+RESULTS_COLUMNS = [
+    "pose_id",
+    "ligand_id",
+    "receptor",
+    "pose_rank",
+    "run_number",
+    "docking_score",
+    "leff",
+    "deltas",
+    "cluster_rmsd",
+    "cluster_size",
+    "reference_rmsd",
+    "energies_inter",
+    "energies_vdw",
+    "energies_electro",
+    "energies_flexlig",
+    "energies_flexlr",
+    "energies_intra",
+    "energies_torsional",
+    "unbound_energy",
+    "num_interactions",
+    "num_hb",
+    "pose_coordinates",
+    "flexible_res_coordinates",
+]
+
 
 class StorageManager:
     # NOTE gotta be careful with schema
@@ -89,9 +115,7 @@ class StorageManager:
     # region public api
 
     def insert_data(
-        self,
-        docking_data: dict,
-        write_options: dict = {},
+        self, docking_data: dict, write_options: dict = {}, big_data: bool = True
     ):
         """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
 
@@ -107,8 +131,31 @@ class StorageManager:
             self._insert_interaction_index_rows(interaction_data)
         poses = docking_data.get("poses", None)
         if poses:
-            # interactions has ligname and pose rank
-            self._insert_docking_data(poses, interaction_data, write_options)
+            if big_data:
+                # interactions has ligname and pose rank
+                self._insert_docking_data(poses, interaction_data, write_options)
+            else:
+                self._insert_direct_docking(poses, interaction_data, write_options)
+        self.conn.commit()
+
+    def insert_single_mol(
+        self,
+        ligand: list = None,
+        poses: list = None,
+        interactions: list = None,
+    ):
+        """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
+
+        Args:
+            docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
+            write_options (dict): options for how to write the data, primarily how to treat duplicates
+        """
+        if ligand:
+            self._insert_ligands(ligand)
+        if interactions:
+            self._insert_interaction_index_rows(interactions)
+        if poses:
+            self._insert_direct_docking(poses, interactions)
         self.conn.commit()
 
     def insert_receptor_basic_info(self, receptor_data: list):
@@ -1693,6 +1740,32 @@ class StorageManager:
             f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
         )
 
+    def _insert_direct_docking(self, results: dict, interactions: list[list]):
+        """Takes list of database rows to insert, adds data to results table.
+        First stages data in temporary tables, then handles duplicates (if requested),
+        and finally transfers data from temporary tables into permanent storage and
+        commits once at the end.
+
+        Args:
+            results (dict): list of arrays containing formatted result rows
+            interactions (list): list of interactions
+            options (dict): includes options on how to handle duplicates if there are any
+
+        """
+
+        valid_columns = [
+            key for key in results.keys() if key.lower() in RESULTS_COLUMNS
+        ]
+        referenced_cols = [":" + col for col in valid_columns]
+
+        insert_statement = f"""
+        INSERT INTO Results ({",".join(valid_columns)}) VALUES ({",".join(referenced_cols)})"""
+
+        self.db_query(insert_statement, results)
+        logger.info(
+            f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
+        )
+
     def _insert_cluster_data(
         self,
         clusters: list,
@@ -2579,17 +2652,6 @@ class StorageManager:
         Based on the following columns:
         ligname,
         receptor,
-        about_x,
-        about_y,
-        about_z,
-        trans_x,
-        trans_y,
-        trans_z,
-        axisangle_x,
-        axisangle_y,
-        axisangle_z,
-        axisangle_w,
-        dihedrals
         """
         raise NotImplementedError
 
@@ -2599,17 +2661,8 @@ class StorageManager:
         Based on the following columns:
         ligname,
         receptor,
-        about_x,
-        about_y,
-        about_z,
-        trans_x,
-        trans_y,
-        trans_z,
-        axisangle_x,
-        axisangle_y,
-        axisangle_z,
-        axisangle_w,
-        dihedrals
+        pose_coordinates,
+        flexible_res_coordinates
         """
         raise NotImplementedError
 

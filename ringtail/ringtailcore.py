@@ -288,7 +288,6 @@ class RingtailCore:
         self,
         mol: Union[list[Chem.Mol], Chem.Mol],
         docking_mode: str = "adng",
-        duplicate_handling: str = RingtailDefaults.duplicate_handling,
         no_interactions: bool = RingtailDefaults.no_interactions,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         receptor_string: str = None,
@@ -310,6 +309,14 @@ class RingtailCore:
 
         Raises:
             OptionError: _description_
+        """
+        # TODO
+        """
+        What I'd like is:
+        - a method that writes the receptor to db to start (if specified/interactions are requested)
+        - streams mols and writes them in some method that stays open? 
+        - commits every chunk size? 
+
         """
         docking_mode = validate_docking_mode(docking_mode)
         if docking_mode != "adng":
@@ -333,15 +340,14 @@ class RingtailCore:
         # I'd like to have it just stream in and accumulate until accumulate many then write
         if not isinstance(mol, list):
             mol = [mol]
+        # TODO I think I am inserting data wrong
         with self.storageman as sm:
             for m in mol:
                 docking_data = process_docked_mol(m, **kwargs)
-                sm.insert_data(
-                    docking_data,
-                    {
-                        "duplicate_handling": duplicate_handling,
-                    },
-                )
+                ligand = docking_data["ligands"]
+                pose = docking_data["poses"][0]
+                interactions = docking_data["interactions"]
+                sm.insert_single_mol(ligand, pose, interactions)
 
     def finalize_write(self):
         """
@@ -469,7 +475,8 @@ class RingtailCore:
                 interactions.extend(generate_interaction_tuples(interaction_dicts))
                 results_counts.append({""})
                 if db_commit_counter == chunk_size:
-                    sm.insert_data()
+                    # TODO use insert interactions/insert
+                    sm.insert_single_mol()
             # # perform calculations
             # # insert new interactions
         # load an iterable of the db info and process in batches of maybe 10,000

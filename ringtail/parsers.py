@@ -976,7 +976,7 @@ def process_docked_mol(mol, **kwargs):
     ligand_row = [ligname, smiles, mol.ToBinary()]
     interaction_rows = []
 
-    results_dict = RESULTS_TEMPLATE.copy()
+    results_dict = {}
     # remove coordinates and docking properties (retains other custom properties)
     # I think conformers are properly parsed but not sure about scores
     mol, mol_properties = prepare_mol_for_database(
@@ -1021,7 +1021,6 @@ def process_docked_mol(mol, **kwargs):
             }
         )
 
-    # add non-specified fields as list of None
     return {
         "ligands": [ligand_row],
         "poses": [results_dict],
