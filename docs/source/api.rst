@@ -141,14 +141,14 @@ By default, only the information for the top-scoring binding pose will be writte
 
 .. code-block:: python
 
-    rtc.filter(eworst = -6, outfields = "Ligand_Name,e,rank,receptor", order_results = "ref_rmsd", bookmark_name = "eworst6")
+    rtc.filter(eworst = -6, outfields = "Ligname,docking_score,pose_rank,receptor", order_results = "ref_rmsd", bookmark_name = "eworst6")
 
 When filtering, the passing results are also saved as a view (or bookmark) in the database. This view is named ``passing_results`` by default. The user can specify a name for the view with the ``bookmark_name`` keyword. No filtering is performed if no filters are given (see full list of filters #REF). 
 Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database Results rows (i.e. stored poses). Data for poses in a view may be accessed later using the ``get_previous_filter_data`` method.
 
 .. code-block:: python
 
-    rtc.get_previous_filter_data(outfields = "Ligand_Name,e,rank", bookmark_name = "eworst6", log_file = "previously_filtered_results.txt")
+    rtc.get_previous_filter_data(outfields = "Ligname,docking_score,pose_rank", bookmark_name = "eworst6", log_file = "previously_filtered_results.txt")
 
 Interaction filters
 =====================
