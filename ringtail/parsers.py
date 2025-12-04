@@ -19,7 +19,7 @@ from .exceptions import (
 from .logutils import LOGGER
 from rdkit import Chem, Geometry
 from meeko import PDBQTMolecule, RDKitMolCreate, MoleculePreparation
-from .interactions import calculate_interactions
+from .interactions import find_interactions, InteractionFinder
 
 
 def results_row() -> dict:
@@ -90,9 +90,17 @@ class VinaMoleculeSupplier:
         self.num_poses = num_poses
 
     def __call__(self, data_pointer):
-        yield self.parse_vina_results(data_pointer)
+        yield self.parse_vina_results(data_pointer, **self.kwargs)
 
-    def parse_vina_results(self, data_pointer) -> dict:
+    def parse_vina_results(
+        self,
+        data_pointer,
+        is_file=True,
+        calculate_interactions: bool = None,
+        interaction_finder=None,
+        interaction_cutoffs: list[float] = None,
+        receptor_string: str = None,
+    ) -> dict:
         """Parser for vina docking results, supporting either pdbqt or gzipped (.gz) files, or with the
         docking results provided as a string.
 
@@ -209,14 +217,7 @@ class VinaMoleculeSupplier:
             }
             return selected_results, receptor_dict
 
-        # check if input is file or data string
-        try:
-            os.path.splitext(data_pointer)
-            from_file = True
-        except TypeError:
-            from_file = False
-
-        if from_file:
+        if is_file:
             # read and decode contents
             fname_clean = os.path.basename(data_pointer)
             # split the first name/extension
@@ -234,11 +235,11 @@ class VinaMoleculeSupplier:
             with open_fn(data_pointer, "rb") as fp:
                 # this should decode lines into iterable object
                 data_object = [line.decode("utf-8") for line in fp]
-                pdbqt_str = "".join(data_object)
+                pdbqt_str_list = "".join(data_object)
         else:
             # input provided as string and convert from '\n' separated to to iterable lines
-            data_object = list(data_pointer.values())[0].splitlines()
-            pdbqt_str = data_pointer
+            pdbqt_str_list = list(data_pointer.values())[0]
+            data_object = pdbqt_str_list.splitlines()
             # get the first (and only, probably not optimal) key which should be the ligand name
             ligname = list(data_pointer.keys())[0]
             LOGGER.debug("Parsing vina docking string")
@@ -267,25 +268,26 @@ class VinaMoleculeSupplier:
         results_dict.update(empty_columns)
         ligand_row, coordinates, mol = generate_ligand_data_list_from_pdbqt_dlg(
             ligname,
-            pdbqt_str,
+            pdbqt_str_list,
             is_dlg=False,
         )
         pose_coordinates = pick_best_poses(coordinates, self.num_poses)
-        if (
-            "calculate_interactions" in self.kwargs
-            and self.kwargs["calculate_interactions"] == True
-        ):
-            try:
-                receptor_string = self.kwargs["receptor_string"]
-            except:
-                LOGGER.error(
-                    "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
-                )
-                interaction_info = {
-                    "nr_interactions": [0] * data_length,
-                    "num_hb": [0] * data_length,
-                }
-                interactions = []
+
+        if calculate_interactions:
+            if not interaction_finder:
+                try:
+                    interaction_finder = InteractionFinder(
+                        receptor_string, *interaction_cutoffs
+                    )
+                except:
+                    LOGGER.error(
+                        "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
+                    )
+                    interaction_info = {
+                        "nr_interactions": [0] * data_length,
+                        "num_hb": [0] * data_length,
+                    }
+                    interactions = []
 
             pose_identifiers = [
                 {"ligname": lig, "run_number": run, "pose_rank": rank}
@@ -296,11 +298,8 @@ class VinaMoleculeSupplier:
                 )
             ]
             poseids_coordinates = list(zip(pose_identifiers, pose_coordinates))
-            interactions, num_hb, num_interactions = calculate_interactions(
-                poseids_coordinates,
-                mol,
-                receptor_string,
-                *self.kwargs["interaction_cutoffs"],
+            interactions, num_hb, num_interactions = find_interactions(
+                poseids_coordinates, mol, interaction_finder=interaction_finder
             )
             interaction_rows = generate_interaction_tuples(interactions)
             # use interaction stuff here
@@ -865,21 +864,18 @@ class SDFMoleculeSupplier:
         else:
             self.num_poses = num_poses
 
-        if (
-            "calculate_interactions" in self.kwargs
-            and self.kwargs["calculate_interactions"] == True
-        ):
-            try:
-                self.receptor_string = self.kwargs["receptor_string"]
-            except:
-                LOGGER.error(
-                    "Cannot calculate interactions, missing receptor representation. "
-                )
-                self.calc_interactions = False
-            else:
-                self.calc_interactions = True
-
     def __call__(self, fname: str):
+        return self.parse_adng_results(fname, **self.kwargs)
+
+    def parse_adng_results(
+        self,
+        fname: str,
+        calculate_interactions: bool = None,
+        interaction_finder=None,
+        interaction_cutoffs: list[float] = None,
+        receptor_string: str = None,
+    ):
+
         # keep track of parsed ligands
         processed_ligands = set()
         last_ligand = None
@@ -905,7 +901,6 @@ class SDFMoleculeSupplier:
             mol, mol_properties = prepare_mol_for_database(
                 mol, store_properties=["ligname", "docking_score", "pose_rank"]
             )
-            # ligname = mol_properties.get("ligname", None)
 
             if ligname not in processed_ligands:
                 smiles = Chem.MolToSmiles(mol)
@@ -923,7 +918,17 @@ class SDFMoleculeSupplier:
             single_pose_coordinate = results_dict["pose_coordinates"][0]
             results_dict.update({"pose_coordinates": single_pose_coordinate})
             # calculate interactions
-            if self.calc_interactions:
+            if calculate_interactions:
+                if not interaction_finder:
+                    try:
+                        interaction_finder = InteractionFinder(
+                            receptor_string, *interaction_cutoffs
+                        )
+                    except:
+                        LOGGER.error(
+                            "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
+                        )
+                        interactions = []
 
                 poseids_coordinates = [
                     (
@@ -936,11 +941,10 @@ class SDFMoleculeSupplier:
                     )
                 ]
 
-                interactions, num_hb, num_interactions = calculate_interactions(
+                interactions, num_hb, num_interactions = find_interactions(
                     poseids_coordinates,
                     mol,
-                    self.receptor_string,
-                    *self.kwargs["interaction_cutoffs"],
+                    interaction_finder=interaction_finder,
                 )
                 interaction_rows = generate_interaction_tuples(interactions)
                 # use interaction stuff here
@@ -963,12 +967,13 @@ class SDFMoleculeSupplier:
             }
 
 
-def process_docked_mol(mol, **kwargs):
-    """
-    #TODO part of the poin t of this method is that it takes one mol with perhaps multiple
-    conformers, it is not one mol one pose as in the file reading
-    #TODO maybe make this some sort of streaming service?
-    """
+def process_docked_mol(
+    mol,
+    calculate_interactions: bool,
+    interaction_finder=None,
+    receptor_string: str = None,
+    interaction_cutoffs: list[float] = None,
+):
 
     ligname = mol.GetProp("_Name")
     run_number = 1
@@ -995,20 +1000,26 @@ def process_docked_mol(mol, **kwargs):
     results_dict.update({"pose_coordinates": single_pose_coordinate})
     # calculate interactions
 
-    if "calculate_interactions" in kwargs and kwargs["calculate_interactions"] == True:
+    if calculate_interactions:
         poseids_coordinates = [
             (
                 {"ligname": ligname, "run_number": run_number, "pose_rank": 1},
                 single_pose_coordinate,
             )
         ]
-
-        interactions, num_hb, num_interactions = calculate_interactions(
-            poseids_coordinates,
-            mol,
-            kwargs["receptor_string"],
-            *kwargs["interaction_cutoffs"],
-        )
+        if interaction_finder:
+            interactions, num_hb, num_interactions = find_interactions(
+                poseids_coordinates,
+                mol,
+                interaction_finder=interaction_finder,
+            )
+        else:
+            interactions, num_hb, num_interactions = find_interactions(
+                poseids_coordinates,
+                mol,
+                receptor_string,
+                *interaction_cutoffs,
+            )
         interaction_rows = generate_interaction_tuples(interactions)
         # use interaction stuff here
         results_dict.update(

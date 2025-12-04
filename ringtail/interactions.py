@@ -37,6 +37,84 @@ class InteractionFinder:
         self.hb_cutoff = hb_cutoff
         self.vdw_cutoff = vdw_cutoff
 
+        # other interaction pre-calculations
+
+    def __call__(self, lig_atomtype_list: list, lig_coordinates: list) -> dict:
+        """Method that identifies interactions for a pose within th given cutoff distances in the main class.
+
+        Args:
+            lig_atomtype_list (list): list of atoms in the ligand
+            lig_coordinates (list): coordinates for the atoms in the ligand
+
+        Returns:
+            dict: all interaction details for a given ligand pose
+        """
+
+        def append_rec_atom_info(rec_at):
+            # rec_at is array of format (atom_id, ?, atom_name, resid, resname, chain, xyz, q, t)
+            recid_list.append(str(rec_at[0]))
+            recname_list.append(str(rec_at[2]))
+            residue_list.append(rec_at[4])
+            resid_list.append(str(rec_at[3]))
+            chain_list.append(rec_at[5])
+
+        type_list = []
+        recid_list = []
+        recname_list = []
+        residue_list = []
+        resid_list = []
+        chain_list = []
+        # check coordinate type:
+        if not type(lig_coordinates) == np.ndarray:
+            needs_conversion = True
+        else:
+            needs_conversion = False
+
+        for idx, atomtype in enumerate(lig_atomtype_list):
+            if needs_conversion:
+                coords = np.array([float(coord) for coord in lig_coordinates[idx]])
+            else:
+                coords = lig_coordinates[idx]
+
+            hbd_neighbors = self.pdb.closest_atoms_from_positions(
+                coords, self.hb_cutoff, atom_properties="hb_don"
+            )
+            for rec_at in hbd_neighbors:
+                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
+                if not atomtype.endswith("A"):
+                    continue
+                append_rec_atom_info(rec_at)
+                type_list.append("H")
+
+            hba_neighbors = self.pdb.closest_atoms_from_positions(
+                coords, self.hb_cutoff, atom_properties="hb_acc"
+            )
+            for rec_at in hba_neighbors:
+                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
+                if not atomtype.endswith("D"):
+                    continue
+                append_rec_atom_info(rec_at)
+                type_list.append("H")
+
+            vdw_neighbors = self.pdb.closest_atoms_from_positions(
+                coords, self.vdw_cutoff, atom_properties="vdw"
+            )
+            for rec_at in vdw_neighbors:
+                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
+                append_rec_atom_info(rec_at)
+                type_list.append("V")
+
+        return {
+            "type": type_list,
+            "recid": recid_list,
+            "recname": recname_list,
+            "residue": residue_list,
+            "resid": resid_list,
+            "chain": chain_list,
+            "count": len(type_list),
+            "hb_count": type_list.count("H"),
+        }
+
     def find_pose_interactions(
         self, lig_atomtype_list: list, lig_coordinates: list
     ) -> dict:
@@ -116,14 +194,16 @@ class InteractionFinder:
         }
 
 
-def calculate_interactions(
+def find_interactions(
     poses_coordinates: list[tuple[dict, list]],
     mol: Chem.Mol,
-    receptor_string: str,
-    hb_cutoff: float,
-    vdw_cutoff: float,
+    receptor_string: str = None,
+    hb_cutoff: float = None,
+    vdw_cutoff: float = None,
+    interaction_finder: InteractionFinder = None,
 ):
-    interaction_finder = InteractionFinder(receptor_string, hb_cutoff, vdw_cutoff)
+    if not interaction_finder:
+        interaction_finder = InteractionFinder(receptor_string, hb_cutoff, vdw_cutoff)
     interactions = []
     num_hb = []
     num_interactions = []

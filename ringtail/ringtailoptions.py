@@ -103,11 +103,8 @@ class RingtailDefaults:
     duplicate_handling: str = None
     overwrite: bool = None
     interaction_tolerance: float = None
-    no_interactions: bool = None
-    interaction_cutoffs: tuple[float] = (
-        3.7,
-        4.0,
-    )  # HB CUTOFF,VDW CUTOFF
+    calculate_interactions: bool = True
+    interaction_cutoffs: tuple[float] = (3.7, 4.0)  # HB CUTOFF,VDW CUTOFF
     outfields: tuple[str] = (
         "LigName",
         "docking_score",

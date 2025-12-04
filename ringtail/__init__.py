@@ -26,7 +26,7 @@ from .parsers import (
 from .receptormanager import ReceptorManager
 from .resultsmanager import ResultsManager
 from .outputmanager import OutputManager
-from .interactions import InteractionFinder, calculate_interactions
+from .interactions import InteractionFinder, find_interactions
 from .clustermanager import (
     MorganFingerprintCluster,
     InteractionBitvectorCluster,
@@ -57,7 +57,7 @@ __all__ = [
     "ADGPUMoleculeSupplier",
     "VinaMoleculeSupplier",
     "SDFMoleculeSupplier",
-    "calculate_interactions",
+    "find_interactions",
     "ReceptorManager",
     "ResultsManager",
     "OutputManager",

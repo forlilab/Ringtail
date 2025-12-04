@@ -80,7 +80,7 @@ You can specify what to do if you are adding duplicate results for a ligand, by 
 
 Handling interaction parameters
 ----------------------------------
-ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it will by default be added by Ringtail during data parsing, unless the user specifies not to using ``no_interactions`` option. **This will signifcantly decrease the total database write time.** By default, the cutoff distance for being considered an interaction is 3.7 å for hydrogen bonds and 4.0å for van der Waals interactions. If the user would like to calculate interactions for vina results with other distance cutoffs, the option ``interaction_cutoffs`` can be used. To be able to add interactions it is important that the receptor file is provided during database write (or that the receptor has already been saved explicitly in the database). 
+ADGPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including Vina PDBQTs), it will by default be added by Ringtail during data parsing, unless the user specifies ``calculate_interactions=False`` option. **This will signifcantly decrease the total database write time.** By default, the cutoff distance for being considered an interaction is 3.7 å for hydrogen bonds and 4.0å for van der Waals interactions. If the user would like to calculate interactions for vina results with other distance cutoffs, the option ``interaction_cutoffs`` can be used. To be able to add interactions it is important that the receptor file is provided during database write (or that the receptor has already been saved explicitly in the database). 
 
 .. code-block:: python
 
@@ -91,7 +91,7 @@ ADGPU is capable of performing interaction analysis at runtime, with these resul
                                 interaction_cutoffs = [3.7, 4.0])
     # or
     rtc.add_results_from_files( file = "lig1.pdbqt"
-                                no_interactions = True,)
+                                calculate_interactions = False,)
 
 The ``interaction_tolerance`` option also allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. When used as a flag, the ``interaction_tolerance`` default is 0.8 angstroms. The user may also specify their own cutoff. This option is intended for use with DLGs from AD-GPU, which clusters output poses based on RMSD.
 
@@ -298,7 +298,7 @@ Keywords pertaining to database write and file handling
     "max_poses", "Number of clusters for which to store top-scoring pose (dlg) or number of poses (vina) to save in database", 3
     "store_all_poses", "Flag to indicate that all poses should be stored in database", FALSE
     "interaction_tolerance", "Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired [note]_ ", "0.8 Å if used"
-    "no_interactions", "If interactions for vina results should not be calculated and stored", FALSE
+    "calculate_interactions", "Whether or not to calculate interactions for vina and adng docking data", True
     "interaction_cutoffs", "Use values other than defaults for distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0.", "3.7,4.0"
     "max_proc", "Maximum number of subprocesses to spawn during database writing.", "number of available CPUs or fewer"
     "append_results", "Add new docking files to existing database given with input_db", FALSE

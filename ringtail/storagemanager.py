@@ -46,6 +46,14 @@ RESULTS_COLUMNS = [
     "pose_coordinates",
     "flexible_res_coordinates",
 ]
+II_COLUMNS = [
+    "interaction_type",
+    "rec_chain",
+    "rec_resname",
+    "rec_resid",
+    "rec_atom",
+    "rec_atomid",
+]
 
 
 class StorageManager:
@@ -114,9 +122,7 @@ class StorageManager:
 
     # region public api
 
-    def insert_data(
-        self, docking_data: dict, write_options: dict = {}, big_data: bool = True
-    ):
+    def insert_bulk_data(self, docking_data: dict, write_options: dict = {}):
         """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
 
         Args:
@@ -131,14 +137,11 @@ class StorageManager:
             self._insert_interaction_index_rows(interaction_data)
         poses = docking_data.get("poses", None)
         if poses:
-            if big_data:
-                # interactions has ligname and pose rank
-                self._insert_docking_data(poses, interaction_data, write_options)
-            else:
-                self._insert_direct_docking(poses, interaction_data, write_options)
+            # interactions has ligname and pose rank
+            self._insert_bulk_docking_data(poses, interaction_data, write_options)
         self.conn.commit()
 
-    def insert_single_mol(
+    def insert_single_data(
         self,
         ligand: list = None,
         poses: list = None,
@@ -155,7 +158,7 @@ class StorageManager:
         if interactions:
             self._insert_interaction_index_rows(interactions)
         if poses:
-            self._insert_direct_docking(poses, interactions)
+            self._insert_docking_data(poses, interactions)
         self.conn.commit()
 
     def insert_receptor_basic_info(self, receptor_data: list):
@@ -1707,7 +1710,7 @@ class StorageManager:
         if commit:
             self.conn.commit()
 
-    def _insert_docking_data(
+    def _insert_bulk_docking_data(
         self, results: list[list], interactions: list[list], options: dict
     ):
         """Takes list of database rows to insert, adds data to results table.
@@ -1740,7 +1743,7 @@ class StorageManager:
             f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
         )
 
-    def _insert_direct_docking(self, results: dict, interactions: list[list]):
+    def _insert_docking_data(self, results: list[dict], interactions: list[dict] = []):
         """Takes list of database rows to insert, adds data to results table.
         First stages data in temporary tables, then handles duplicates (if requested),
         and finally transfers data from temporary tables into permanent storage and
@@ -1752,16 +1755,42 @@ class StorageManager:
             options (dict): includes options on how to handle duplicates if there are any
 
         """
-
+        # dynamically build insert statement with valid Results columns
+        # TODO most likely sqlite specific
         valid_columns = [
-            key for key in results.keys() if key.lower() in RESULTS_COLUMNS
+            key for key in results[0].keys() if key.lower() in RESULTS_COLUMNS
         ]
         referenced_cols = [":" + col for col in valid_columns]
 
         insert_statement = f"""
-        INSERT INTO Results ({",".join(valid_columns)}) VALUES ({",".join(referenced_cols)})"""
+        INSERT INTO Results (ligand_id, {",".join(valid_columns)}) 
+        SELECT ligand_id, {",".join(referenced_cols)} 
+        FROM Ligands 
+        WHERE Ligands.ligname = :ligname;"""
 
-        self.db_query(insert_statement, results)
+        self.db_update(insert_statement, results)
+        if interactions:
+            # create interaction insert statement
+            insert_interactions_statement = """
+            INSERT INTO Interactions (pose_id, interaction_id) 
+            SELECT R.pose_id, II.interaction_id 
+            FROM Results AS R
+            JOIN Ligands AS L
+                ON L.ligand_id = R.ligand_id
+            JOIN Interaction_indices AS II
+                ON  II.interaction_type = :type
+                AND II.rec_chain = :chain
+                AND II.rec_resname = :residue
+                AND II.rec_resid = :resid
+                AND II.rec_atom = :recname
+                AND II.rec_atomid = :recid
+            WHERE 
+                L.ligname   = :ligname
+                AND R.pose_rank = :pose_rank
+                AND R.run_number = :run_number;
+            """
+
+            self.db_update(insert_interactions_statement, interactions)
         logger.info(
             f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
         )

@@ -518,10 +518,11 @@ class TestVinaHandling:
         with open("test_data/vina/sample-result-2.pdbqt") as f:
             sample2 = f.read()
         rtc = RingtailCore("output.db")
+        rtc.save_receptor(
+            vina_path + "/receptor.pdbqt",
+        )
         rtc.add_results_from_vina_string(
             results={"sample1": sample1, "sample2": sample2},
-            receptor_file=vina_path + "/receptor.pdbqt",
-            save_receptor=True,
         )
         count = rtc.table_length("Results")
         os.system("rm output.db*")

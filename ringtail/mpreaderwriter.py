@@ -21,6 +21,7 @@ from .exceptions import (
 import multiprocessing as mp
 from .ringtailoptions import RingtailDefaults
 from .storagemanager import StorageManager
+from .interactions import InteractionFinder
 
 
 class DockingFileReader(mp.Process):
@@ -41,7 +42,7 @@ class DockingFileReader(mp.Process):
         pipe_conn,
         shared_dict,
     ):
-        self.shared = shared_dict
+        self.shared: dict = shared_dict
         # initialize the parent class to inherit all multiprocess methods
         mp.Process.__init__(self)
         # each worker knows the queue in (where data to process comes from)
@@ -63,6 +64,42 @@ class DockingFileReader(mp.Process):
             NotImplementedError: if parser for specific docking result type is not implemented
             FileParsingError
         """
+        common_processing_vars = {}
+        if self.docking_mode == "adgpu":
+            common_processing_vars.update(
+                {
+                    "target": self.shared.get("target", None),
+                    "interaction_tolerance": self.shared.get(
+                        "interaction_tolerance", None
+                    ),
+                }
+            )
+        # create interaction calculator if requested
+        calculate_interactions = self.shared.get(
+            "calculate_interactions",
+            RingtailDefaults.calculate_interactions,
+        )
+        if calculate_interactions:
+            try:
+                interaction_finder = InteractionFinder(
+                    self.shared.get("receptor_string", None),
+                    *self.shared.get(
+                        "interaction_cutoffs",
+                        RingtailDefaults.interaction_cutoffs,
+                    ),
+                )
+                common_processing_vars.update(
+                    {
+                        "calculate_interactions": True,
+                        "interaction_finder": interaction_finder,
+                    }
+                )
+            except:
+                common_processing_vars.update(
+                    {
+                        "calculate_interactions": False,
+                    }
+                )
 
         while True:
             try:
@@ -81,31 +118,17 @@ class DockingFileReader(mp.Process):
 
                 # initialize a parser for each process with kw-args
                 parser = docking_file_parsers.get(self.docking_mode, "missing_parser")(
-                    self.shared.get("num_poses"),
-                    **{
-                        "interaction_tolerance": self.shared.get(
-                            "interaction_tolerance", None
-                        ),
-                        "calculate_interactions": not self.shared.get(
-                            "no_interactions", True
-                        ),
-                        "receptor_string": self.shared.get("receptor_string", None),
-                        "interaction_cutoffs": self.shared.get(
-                            "interaction_cutoffs",
-                            RingtailDefaults.interaction_cutoffs,
-                        ),
-                        "target": self.shared.get("target", None),
-                    },
+                    self.shared.get("num_poses"), **common_processing_vars
                 )
                 if parser == "missing_parser":
                     raise NotImplementedError(
                         f"Parser for input file docking_mode {self.docking_mode} not implemented!"
                     )
+
                 try:
                     # generate CPU LOAD
                     for data_packet in parser(next_task):
                         self._add_to_queueout(data_packet)
-
                 except FileParsingErrorAdgpu as e:
                     raise FileParsingError(
                         f"Problems when parsing the ADGPU docking log file: {str(e)}"
@@ -229,7 +252,7 @@ class Writer(mp.Process):
                 sm.insert_receptor_basic_info(self.receptor_row)
                 self.receptor_written_to_db = True
                 self.receptor_row = None
-            sm.insert_data(
+            sm.insert_bulk_data(
                 self.docked_ligands,
                 self.options,
             )

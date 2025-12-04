@@ -763,7 +763,7 @@ class CLOptionParser:
                 overwrite=parsed_opts.overwrite,
                 store_all_poses=parsed_opts.store_all_poses,
                 max_poses=parsed_opts.max_poses,
-                no_interactions=parsed_opts.no_interactions,
+                calculate_interactions=not parsed_opts.no_interactions,
                 interaction_tolerance=parsed_opts.interaction_tolerance,
                 interaction_cutoffs=parsed_opts.interaction_cutoffs,
                 max_proc=parsed_opts.max_proc,

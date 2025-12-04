@@ -7,12 +7,15 @@ import itertools
 import os
 from typing import Callable, Union
 from collections import defaultdict
+
+from collections.abc import Iterable
 import json
 from pathlib import Path
 import matplotlib.pyplot as plt
 from meeko import RDKitMolCreate
 from rdkit import Chem
 
+from .interactions import InteractionFinder, find_interactions
 from .util import *
 from .logutils import LOGGER
 from .ringtailoptions import (
@@ -36,7 +39,7 @@ from .outputmanager import OutputManager
 from .storagemanager import StorageManager
 from .storagemanager_duckdb import StorageManagerDuckDB, HAS_DUCK
 from .storagemanager_sqlite import StorageManagerSQLite, HAS_SQLITE
-from .parsers import process_docked_mol
+from .parsers import process_docked_mol, VinaMoleculeSupplier
 
 storage_types = {}
 if HAS_SQLITE:
@@ -153,7 +156,7 @@ class RingtailCore:
         docking_mode: str = RingtailDefaults.docking_mode,
         store_all_poses: bool = RingtailDefaults.store_all_poses,
         max_poses: int = RingtailDefaults.max_poses,
-        no_interactions: bool = RingtailDefaults.no_interactions,
+        calculate_interactions: bool = RingtailDefaults.calculate_interactions,
         interaction_tolerance: float = RingtailDefaults.interaction_tolerance,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         max_proc: int = RingtailDefaults.max_proc,
@@ -176,7 +179,7 @@ class RingtailCore:
             docking_mode (str): what docking engine was used to perform the docking
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
-            no_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
+            calculate_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
@@ -208,7 +211,7 @@ class RingtailCore:
                 overwrite,
                 docking_mode,
                 self._num_poses_to_store(max_poses, store_all_poses),
-                no_interactions,
+                calculate_interactions,
                 interaction_tolerance,
                 interaction_cutoffs,
                 max_proc,
@@ -217,18 +220,15 @@ class RingtailCore:
 
     def add_results_from_vina_string(
         self,
-        results: dict = None,
-        receptor_file: str = RingtailDefaults.save_receptor,
-        save_receptor: bool = RingtailDefaults.save_receptor,
+        results: Union[dict, Iterable[dict]],
         duplicate_handling: str = RingtailDefaults.duplicate_handling,
-        overwrite: bool = RingtailDefaults.overwrite,
-        docking_mode: str = "vina",
         store_all_poses: bool = RingtailDefaults.store_all_poses,
         max_poses: int = RingtailDefaults.max_poses,
-        no_interactions: bool = RingtailDefaults.no_interactions,
+        calculate_interactions: bool = RingtailDefaults.calculate_interactions,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
-        max_proc: int = RingtailDefaults.max_proc,
-        finalize: bool = True,
+        receptor_string: str = None,
+        chunk_size: int = 5000,
+        finalize: bool = False,
     ):
         """
         Call storage manager to process the given vina output string and add to database.
@@ -244,53 +244,65 @@ class RingtailCore:
             docking_mode (str): what docking engine was used to perform the docking
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
-            no_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
+            calculate_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
             finalize (bool, optional): whether to finalize database creation and write indices, or wait, for example when you write to the db in batches
 
         Raises:
             OptionError
-
         """
-        # Method currently only works with vina output, set automatically
-        if validate_docking_mode(docking_mode) != "vina":
-            docking_mode = "vina"
+        # TODO test chain.from_iterable(map_fn(...))
+        docking_mode = "vina"
+        with self.storageman:
+            self.storageman.check_storage_ready(self._run_mode, docking_mode)
 
-        # create results string object
-        results_data = ResultsObject()
-        results_data.strings = results
-        results_data.receptor_file_path = receptor_file
-        results_data.save_receptor = save_receptor
-
-        if not results_data.strings and not results_data.save_receptor:
-            raise OptionError(
-                "At least one input option needs to be used: 'results', or 'save_receptor'"
+        # change to "calculate_interactions"
+        if calculate_interactions:
+            if not receptor_string:
+                # generalize this method, have it pick out json by choice, look for pdbqt second
+                receptor_string = self.get_receptor_representation()
+            interaction_finder = InteractionFinder(
+                receptor_string, *interaction_cutoffs
             )
+        else:
+            interaction_finder = None
 
-        # If there are any docking data strings, process docking results
-        if results_data.strings or results_data.save_receptor:
-            self._add_results(
-                results_data,
-                duplicate_handling,
-                overwrite,
-                docking_mode,
-                self._num_poses_to_store(max_poses, store_all_poses),
-                no_interactions,
-                None,
-                interaction_cutoffs,
-                max_proc,
-                finalize,
-            )
+        if isinstance(results, dict):
+            results = [{key: value} for key, value in results.items()]
 
-    # TODO this method might do good as a generator object so that the receptor string stays as one object
+        if not isinstance(results, Iterable):
+            results = [results]
+
+        # unify one method for non-file based db writing
+        vina_parser = VinaMoleculeSupplier(
+            self._num_poses_to_store(max_poses, store_all_poses)
+        )
+        with self.storageman as sm:
+            for r in results:
+                # vina process method
+                docking_data = vina_parser.parse_vina_results(
+                    r,
+                    interaction_finder=interaction_finder,
+                    calculate_interactions=calculate_interactions,
+                    is_file=False,
+                )
+
+                sm.insert_single_data(
+                    docking_data["ligands"],
+                    docking_data["poses"],
+                    docking_data["interactions"],
+                )
+
     def add_mol(
         self,
-        mol: Union[list[Chem.Mol], Chem.Mol],
+        mols: Union[Iterable[Chem.Mol], Chem.Mol],
         docking_mode: str = "adng",
-        no_interactions: bool = RingtailDefaults.no_interactions,
+        calculate_interactions: bool = RingtailDefaults.calculate_interactions,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         receptor_string: str = None,
+        chunk_size: int = 5000,
+        finalize: bool = False,
     ):
         """
         Important: because one or more poses can be added at will with this method, we have chosen
@@ -299,55 +311,67 @@ class RingtailCore:
         institute a max_poses limit, this needs to be implemented prior to invoking this method.
 
 
-        Args:
-            mol (Union[list[Chem.Mol], Chem.Mol]): _description_
-            docking_mode (str, optional): _description_. Defaults to "adng".
-            duplicate_handling (str, optional): _description_. Defaults to RingtailDefaults.duplicate_handling.
-            no_interactions (bool, optional): _description_. Defaults to RingtailDefaults.no_interactions.
-            interaction_cutoffs (list, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs.
-            receptor_string (str, optional): _description_. Defaults to None.
 
-        Raises:
-            OptionError: _description_
-        """
-        # TODO
-        """
-        What I'd like is:
-        - a method that writes the receptor to db to start (if specified/interactions are requested)
-        - streams mols and writes them in some method that stays open? 
-        - commits every chunk size? 
+        - commits every chunk size?
 
         """
+
         docking_mode = validate_docking_mode(docking_mode)
         if docking_mode != "adng":
             raise OptionError(
                 f"Docking mode -{docking_mode} is not currently valid for addings Mols directly."
             )
+        # this should only be ran once before the method is ran in succession
+        # I think I need a streaming object class something here
         with self.storageman:
             self.storageman.check_storage_ready(self._run_mode, docking_mode)
 
-        kwargs = {}
-        if not no_interactions:
+        if calculate_interactions:
             if not receptor_string:
-                receptor_string = self.get_receptor_object()[2]
-            kwargs.update(
-                {
-                    "calculate_interactions": True,
-                    "interaction_cutoffs": interaction_cutoffs,
-                    "receptor_string": receptor_string,
-                }
+                receptor_string = self.get_receptor_representation()
+            interaction_finder = InteractionFinder(
+                receptor_string, *interaction_cutoffs
             )
-        # I'd like to have it just stream in and accumulate until accumulate many then write
-        if not isinstance(mol, list):
-            mol = [mol]
-        # TODO I think I am inserting data wrong
+        else:
+            interaction_finder = None
+
+        if not isinstance(mols, Iterable):
+            mols = [mols]
+
+        # #TODO unify one method for non-file based db writing
+        def _clear_buffer() -> dict:
+            return {"ligands": [], "poses": [], "interactions": []}
+
+        def _add_to_buffer(data: dict, buffer):
+            for key in buffer.keys():
+                buffer[key].extend(data[key])
+
+        buffer = _clear_buffer()
+
         with self.storageman as sm:
-            for m in mol:
-                docking_data = process_docked_mol(m, **kwargs)
-                ligand = docking_data["ligands"]
-                pose = docking_data["poses"][0]
-                interactions = docking_data["interactions"]
-                sm.insert_single_mol(ligand, pose, interactions)
+            for m in mols:
+                _add_to_buffer(
+                    process_docked_mol(
+                        m,
+                        interaction_finder=interaction_finder,
+                        calculate_interactions=calculate_interactions,
+                    ),
+                    buffer,
+                )
+                if len(buffer["ligands"]) == chunk_size:
+                    # TODO can't i just use bulk data insert then? and keep using duplicate handling
+                    sm.insert_single_data(
+                        buffer["ligands"],
+                        buffer["poses"],
+                        buffer["interactions"],
+                    )
+
+            if buffer["ligands"]:
+                sm.insert_single_data(
+                    buffer["ligands"],
+                    buffer["poses"],
+                    buffer["interactions"],
+                )
 
     def finalize_write(self):
         """
@@ -426,7 +450,6 @@ class RingtailCore:
         get_consent: Callable = None,
         chunk_size: int = 5000,
     ):
-        import interactions as IF
         from parsers import generate_interaction_tuples
 
         # make sure user knows risk of calculating interaction in db with existing interactions
@@ -465,7 +488,7 @@ class RingtailCore:
             ):
                 pose_id, coordinates, rdbin = pose
                 mol = Chem.Mol(rdbin)
-                interaction_dicts, num_hb, num_int = IF.calculate_interactions(
+                interaction_dicts, num_hb, num_int = find_interactions(
                     [tuple({"pose_id": pose_id}, json.loads(coordinates))],
                     mol,
                     receptor_string,
@@ -1307,19 +1330,28 @@ class RingtailCore:
 
         return all_data, passing_data
 
-    def get_receptor_object(self, pdbqt_str_only: bool = False) -> tuple:
+    def get_receptor_representation(self) -> str:
+        with self.storageman as sm:
+            rec_data = sm.fetch_receptor_object()
+            if receptor_blob := rec_data.get("receptor_object"):
+                return ReceptorManager.blob2str(receptor_blob)
+            elif polymer_json := rec_data.get("polymer"):
+                return polymer_json
+
+    def get_receptor_object(self, as_pdbqt_str_only: bool = False) -> tuple:
         """
         Gets the receptor object from the database
 
         Args:
-            pdbqt_str_only (bool, optional): if json is in db, return it as pdbqt str instead of json string. Defaults to False.
+            as_pdbqt_str_only (bool, optional): if json is in db, return it as pdbqt str instead of json string. Defaults to False.
 
         Returns:
             tuple[str,str, str]: receptor name and receptor blob and receptor serialized polymer as strings
         """
+        # TODO redo this method
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
-            if pdbqt_str_only and (polymer_json := rec_data.get("polymer")):
+            if as_pdbqt_str_only and (polymer_json := rec_data.get("polymer")):
                 polymer = ReceptorManager.polymer_json2pdbqt_str(polymer_json)
             else:
                 polymer = rec_data.get("polymer")
@@ -2320,7 +2352,7 @@ class RingtailCore:
         overwrite: bool,
         docking_mode: str,
         num_poses: int,
-        no_interactions: bool,
+        calculate_interactions: bool,
         interaction_tolerance: float,
         interaction_cutoffs: list,
         max_proc: int,
@@ -2334,7 +2366,7 @@ class RingtailCore:
             overwrite (bool): whether or not to overwrite existing storage
             docking_mode (str): docking engine used for the docking, describes file type/results style
             num_poses (int): max how many poses to store for a ligand, -1 is all
-            no_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
+            calculate_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
@@ -2353,11 +2385,11 @@ class RingtailCore:
             interaction_tolerance = None
         # make sure we don't try to calculate interactions for adgpu
         if docking_mode == "adgpu":
-            no_interactions = True
+            calculate_interactions = False
 
         processing_options = {
             "num_poses": num_poses,
-            "no_interactions": no_interactions,
+            "calculate_interactions": calculate_interactions,
             "interaction_tolerance": interaction_tolerance,
             "interaction_cutoffs": interaction_cutoffs,
             "max_proc": max_proc,
@@ -2381,7 +2413,7 @@ class RingtailCore:
         )
 
         # need receptor file contents if adding interaction
-        if not no_interactions:
+        if calculate_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
             # try pdbqt first
             results.receptor_string = self.get_receptor_object()[1]
@@ -2396,9 +2428,8 @@ class RingtailCore:
 
         LOGGER.info("Adding results...")
         self.resultsman.process_docking_data(results, processing_options)
-        with self.storageman:
-            if finalize:
-                self.storageman.finalize_database_write()
+        if finalize:
+            self.finalize_write()
 
     def _generate_interaction_combinations(self, filters: dict, max_miss: int) -> list:
         """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
