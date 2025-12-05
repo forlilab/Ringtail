@@ -9,6 +9,16 @@ import json
 import pytest
 
 
+def _create_test_db(db_name: str = "output.db"):
+    rtc = RingtailCore(db_file=db_name)
+    rtc.add_results_from_files(file_path="test_data/adgpu/group1/")
+    rtc.add_results_from_files(file_path="test_data/adgpu/group2/")
+
+
+def _db_exists(db_name: str = "output.db"):
+    return os.path.exists(db_name)
+
+
 class TestRingtailCore:
     def test_add_file(self):
         os.system("rm output.db*")
@@ -83,6 +93,8 @@ class TestRingtailCore:
         assert count == 217
 
     def test_filter(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         count_ligands_passing = rtc.filter(
             eworst=-6,
@@ -100,12 +112,16 @@ class TestRingtailCore:
         rtc.delete_bookmark("union_bookmark")
 
     def test_return_iter(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         iterable = rtc.filter(eworst=-7, bookmark_name="iterable", return_iter=True)
 
         assert len(iterable) == 8
 
     def test_enumerate_interaction_combinations(self):
+        if not _db_exists():
+            _create_test_db()
         # first, test without enumerate, check number of passing union as well as number of bookmarks
         rtc = RingtailCore(db_file="output.db")
         # get current bookmark count
@@ -132,6 +148,8 @@ class TestRingtailCore:
         assert "enumerated_bookmark_union" in bookmarks
 
     def test_filter_from_bookmark(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         count_passing_ligands1 = rtc.filter(eworst=-6, bookmark_name="filter_window")
         count_passing_ligands2 = rtc.filter(
@@ -140,6 +158,8 @@ class TestRingtailCore:
         assert count_passing_ligands1 > count_passing_ligands2
 
     def test_ligand_filters(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
 
         # tests for partial names
@@ -170,6 +190,8 @@ class TestRingtailCore:
         assert count_ligands_passing == 12
 
     def test_all_filters(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         count_ligands_passing = rtc.filter(
             eworst=-6,
@@ -183,6 +205,8 @@ class TestRingtailCore:
         assert count_ligands_passing == 1
 
     def test_get_filterdata(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7, bookmark_name="has_filterdata")
         log_file_name = "output_log_test.txt"
@@ -229,6 +253,8 @@ class TestRingtailCore:
         assert number_similar == 8
 
     def test_create_rdkitmol(self):
+        if not _db_exists():
+            _create_test_db()
         bookmark_name = "rdkit_test"
         rtc = RingtailCore(db_file="output.db")
         ligname = "14303"
@@ -243,6 +269,8 @@ class TestRingtailCore:
         assert num_of_atoms == 10
 
     def test_write_sdfs(self):
+        if not _db_exists():
+            _create_test_db()
         sdf_path = "sdf_files"
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7, bookmark_name="sdf_bookmark")
@@ -281,6 +309,8 @@ class TestRingtailCore:
         pass
 
     def test_export_csv(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7, log_file="different_log.txt", bookmark_name="export_csv")
         rtc.export_table_as_csv("Ligands", "Ligands.csv")
@@ -292,6 +322,8 @@ class TestRingtailCore:
         os.system("rm export_csv.csv")
 
     def export_receptor_pdbqt(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         rtc.export_receptor_pdbqt()
         receptor_name = rtc.db_query("SELECT RecName FROM Receptors;")[0][0]
@@ -381,6 +413,8 @@ class TestRingtailCore:
         assert line_content == "11128, -7.25\n"
 
     def test_plot(self):
+        if not _db_exists():
+            _create_test_db()
         rtcore = RingtailCore(db_file="output.db")
         rtcore.filter(eworst=-7, bookmark_name="plot_data")
         rtcore.plot("plot_data")
@@ -388,6 +422,8 @@ class TestRingtailCore:
         os.system("rm scatter.png")
 
     def test_export_bookmark_db(self):
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7, bookmark_name="export_db")
         bookmark_db_name = rtc.export_bookmark_db("export_db")
