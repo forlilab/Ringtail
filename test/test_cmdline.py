@@ -598,7 +598,7 @@ class TestOtherScripts:
         )
         with open("output_compared_ligands.txt") as f:
             for pos, line in enumerate(f):
-                if pos + 1 == 7:  # zero based line indexing
+                if pos + 1 == 94:  # zero based line indexing
                     assert line == "Number passing ligands: 24 \n"
                     break
 
