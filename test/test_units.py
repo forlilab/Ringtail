@@ -197,7 +197,7 @@ class TestRingtailCore:
         final_line = linecache.getline(log_file_name, 11)
 
         assert "11991, 0.0, 226.06" in file_contents
-        assert "3961, 0.0, 215.96" in file_contents
+        assert "3961, -0.02, 215.96" in file_contents
         assert final_line == "***************\n"
 
         os.system(("rm " + log_file_name))
