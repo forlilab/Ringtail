@@ -37,7 +37,7 @@ def results_row() -> dict:
         "reference_rmsd": 0,
         "docking_score": 0,
         "leff": 0,
-        "deltas": 0,
+        "delta": 0,
         "energies_inter": 0,
         "energies_vdw": 0,
         "energies_electro": 0,
@@ -251,7 +251,7 @@ class VinaMoleculeSupplier:
         empty_columns = {
             "receptor": ["receptor"] * data_length,
             "cluster_rmsd": [None] * data_length,
-            "deltas": [None] * data_length,
+            "delta": [None] * data_length,
             "reference_rmsd": [None] * data_length,
             "energies_inter": [None] * data_length,
             "energies_vdw": [None] * data_length,
@@ -388,94 +388,168 @@ class ADGPUMoleculeSupplier:
         )
 
         # sort clusters and select based on number of poses to store
-        clusters: dict = results_dict.get("clusters")
-        top_cluster_runs = [cluster[0] for cluster in clusters.values()]
-        sorted_selected_pose_clusters = pick_best_poses(
-            np.argsort(
-                [results_dict.get("scores")[run - 1] for run in top_cluster_runs]
-            ),
-            self.num_poses,
-        )
-
-        # delete clusters not considered after filtering for num_poses
-        clusters = {
-            k: v for k, v in clusters.items() if k in sorted_selected_pose_clusters
-        }
-
-        cluster_sizes = {k: len(v) for k, v in clusters.items()}
-        # remove runs/clustered poses that we are not storing
-        cluster_representatives = {k: v[0] for k, v in clusters.items()}
-
-        # deal with request to include more interactions for poses that are clustered with "main" poses
-        if isinstance(self.kwargs["interaction_tolerance"], float):
-            int_tol = self.kwargs["interaction_tolerance"]
-            rmsds = results_dict["cluster_rmsds"]
-            cluster_rmsd_dict = {
-                k: [rmsds[run - 1] for run in v] for k, v in clusters.items()
-            }
-            tolerated_cluster_run_numbers = defaultdict(list)
-            # go through the cluster rmsd dict and determine which indices pass muster
-            for cluster, rmsds in cluster_rmsd_dict.items():
-                for index, rmsd in enumerate(rmsds):
-                    if rmsd <= int_tol:
-                        tolerated_cluster_run_numbers[cluster].append(
-                            clusters[cluster][index]
-                        )
-        else:
-            tolerated_cluster_run_numbers = {
-                k: [v] for k, v in cluster_representatives.items()
-            }
-
-        interaction_dicts = []
-        results_rows = []
-        interactions = results_dict.get("interactions", [])
-
-        for pose_rank, cluster_number in enumerate(sorted_selected_pose_clusters):
-            run_number = cluster_representatives[cluster_number]
-            data_index = run_number - 1
-            # parse Results data
-            results_rows.append(
-                {
-                    "receptor": receptor_name,
-                    "pose_rank": pose_rank,
-                    "run_number": run_number,
-                    "cluster_rmsd": results_dict["cluster_rmsds"][data_index],
-                    "reference_rmsd": results_dict["ref_rmsds"][data_index],
-                    "docking_score": results_dict["scores"][data_index],
-                    "leff": results_dict["leff"][data_index],
-                    "deltas": results_dict["delta"][data_index],
-                    "energies_inter": results_dict["intermolecular_energy"][data_index],
-                    "energies_vdw": results_dict["vdw_hb_desolv"][data_index],
-                    "energies_electro": results_dict["electrostatics"][data_index],
-                    "energies_flexLig": results_dict["flex_ligand"][data_index],
-                    "energies_flexLR": results_dict["flexLigand_flexReceptor"][
-                        data_index
-                    ],
-                    "energies_intra": results_dict["internal_energy"][data_index],
-                    "energies_torsional": results_dict["torsional_energy"][data_index],
-                    "unbound_energy": results_dict["unbound_energy"][data_index],
-                    "num_interactions": results_dict["num_interactions"][data_index],
-                    "num_hb": results_dict["num_hb"][data_index],
-                    "cluster_size": cluster_sizes[cluster_number],
-                    "pose_coordinates": results_dict["pose_coordinates"][data_index],
-                    "flexible_res_coordinates": json.dumps(
-                        results_dict["flexible_res_coordinates"][data_index]
-                    ),
-                    "ligname": ligname,
-                }
+        if self.num_poses > -1:
+            clusters: dict = results_dict.get("clusters")
+            top_cluster_runs = [cluster[0] for cluster in clusters.values()]
+            sorted_selected_pose_clusters = pick_best_poses(
+                np.argsort(
+                    [
+                        results_dict.get("docking_score")[run - 1]
+                        for run in top_cluster_runs
+                    ]
+                ),
+                self.num_poses,
             )
 
-            # parse interactions
-            # define unique id for interaction rows
-            unique_pose_id = {
-                "ligname": ligname,
-                "run_number": run_number,
-                "pose_rank": pose_rank,
+            # delete clusters not considered after filtering for num_poses
+            clusters = {
+                k: v for k, v in clusters.items() if k in sorted_selected_pose_clusters
             }
-            for interaction_run_number in tolerated_cluster_run_numbers[cluster_number]:
-                current_interactions: dict = interactions[
-                    interaction_run_number - 1
-                ].copy()
+
+            cluster_sizes = {k: len(v) for k, v in clusters.items()}
+            # remove runs/clustered poses that we are not storing
+            cluster_representatives = {k: v[0] for k, v in clusters.items()}
+
+            # deal with request to include more interactions for poses that are clustered with "main" poses
+            if isinstance(self.kwargs["interaction_tolerance"], float):
+                int_tol = self.kwargs["interaction_tolerance"]
+                rmsds = results_dict["cluster_rmsd"]
+                cluster_rmsd_dict = {
+                    k: [rmsds[run - 1] for run in v] for k, v in clusters.items()
+                }
+                tolerated_cluster_run_numbers = defaultdict(list)
+                # go through the cluster rmsd dict and determine which indices pass muster
+                for cluster, rmsds in cluster_rmsd_dict.items():
+                    for index, rmsd in enumerate(rmsds):
+                        if rmsd <= int_tol:
+                            tolerated_cluster_run_numbers[cluster].append(
+                                clusters[cluster][index]
+                            )
+            else:
+                tolerated_cluster_run_numbers = {
+                    k: [v] for k, v in cluster_representatives.items()
+                }
+
+            interaction_dicts = []
+            results_rows = []
+            interactions = results_dict.get("interactions", [])
+
+            for pose_rank, cluster_number in enumerate(sorted_selected_pose_clusters):
+                run_number = cluster_representatives[cluster_number]
+                data_index = run_number - 1
+                # parse Results data
+                results_rows.append(
+                    {
+                        "receptor": receptor_name,
+                        "pose_rank": pose_rank,
+                        "run_number": run_number,
+                        "cluster_rmsd": results_dict["cluster_rmsd"][data_index],
+                        "reference_rmsd": results_dict["ref_rmsd"][data_index],
+                        "docking_score": results_dict["docking_score"][data_index],
+                        "leff": results_dict["leff"][data_index],
+                        "delta": results_dict["delta"][data_index],
+                        "energies_inter": results_dict["energies_inter"][data_index],
+                        "energies_vdw": results_dict["energies_vdw"][data_index],
+                        "energies_electro": results_dict["energies_electro"][
+                            data_index
+                        ],
+                        "energies_flexLig": results_dict["energies_flexLig"][
+                            data_index
+                        ],
+                        "energies_flexLR": results_dict["energies_flexLR"][data_index],
+                        "energies_intra": results_dict["energies_intra"][data_index],
+                        "energies_torsional": results_dict["energies_torsional"][
+                            data_index
+                        ],
+                        "unbound_energy": results_dict["unbound_energy"][data_index],
+                        "num_interactions": results_dict["num_interactions"][
+                            data_index
+                        ],
+                        "num_hb": results_dict["num_hb"][data_index],
+                        "cluster_size": cluster_sizes[cluster_number],
+                        "pose_coordinates": results_dict["pose_coordinates"][
+                            data_index
+                        ],
+                        "flexible_res_coordinates": json.dumps(
+                            results_dict["flexible_res_coordinates"][data_index]
+                        ),
+                        "ligname": ligname,
+                    }
+                )
+
+                # parse interactions
+                # define unique id for interaction rows
+                unique_pose_id = {
+                    "ligname": ligname,
+                    "run_number": run_number,
+                    "pose_rank": pose_rank,
+                }
+                for interaction_run_number in tolerated_cluster_run_numbers[
+                    cluster_number
+                ]:
+                    current_interactions: dict = interactions[
+                        interaction_run_number - 1
+                    ].copy()
+                    current_interactions.update({"id": unique_pose_id})
+                    interaction_dicts.append(current_interactions)
+        elif self.num_poses == -1:
+            interaction_dicts = []
+            results_rows = []
+            interactions = results_dict.get("interactions", [])
+
+            sorted_indices_all = np.argsort(results_dict.get("docking_score"))
+            # results_dict needs to be made into list of dicts for each index
+            for pose_rank, run_number in enumerate(sorted_indices_all):
+                data_index = run_number - 1
+                # parse Results data
+                results_rows.append(
+                    {
+                        "receptor": receptor_name,
+                        "pose_rank": pose_rank,
+                        "run_number": run_number,
+                        "cluster_rmsd": results_dict["cluster_rmsd"][data_index],
+                        "reference_rmsd": results_dict["ref_rmsd"][data_index],
+                        "docking_score": results_dict["docking_score"][data_index],
+                        "leff": results_dict["leff"][data_index],
+                        "delta": results_dict["delta"][data_index],
+                        "energies_inter": results_dict["energies_inter"][data_index],
+                        "energies_vdw": results_dict["energies_vdw"][data_index],
+                        "energies_electro": results_dict["energies_electro"][
+                            data_index
+                        ],
+                        "energies_flexLig": results_dict["energies_flexLig"][
+                            data_index
+                        ],
+                        "energies_flexLR": results_dict["energies_flexLR"][data_index],
+                        "energies_intra": results_dict["energies_intra"][data_index],
+                        "energies_torsional": results_dict["energies_torsional"][
+                            data_index
+                        ],
+                        "unbound_energy": results_dict["unbound_energy"][data_index],
+                        "num_interactions": results_dict["num_interactions"][
+                            data_index
+                        ],
+                        "num_hb": results_dict["num_hb"][data_index],
+                        "cluster_size": 1,
+                        "pose_coordinates": results_dict["pose_coordinates"][
+                            data_index
+                        ],
+                        "flexible_res_coordinates": json.dumps(
+                            results_dict["flexible_res_coordinates"][data_index]
+                        ),
+                        "ligname": ligname,
+                    }
+                )
+
+                # parse interactions
+                # define unique id for interaction rows
+                unique_pose_id = {
+                    "ligname": ligname,
+                    "run_number": run_number,
+                    "pose_rank": pose_rank,
+                }
+
+                current_interactions = interactions[data_index].copy()
                 current_interactions.update({"id": unique_pose_id})
                 interaction_dicts.append(current_interactions)
 
@@ -822,22 +896,22 @@ class ADGPUMoleculeSupplier:
             raise FileParsingErrorAdgpu("Incomplete data in " + fname)
 
         results = {
-            "scores": scores,
+            "docking_score": scores,
             "leff": [round(x / heavy_at_count, 2) for x in scores],
             "delta": [round(x - scores[0], 2) for x in scores],
-            "intermolecular_energy": intermolecular_energy,
-            "vdw_hb_desolv": vdw_hb_desolv,
-            "electrostatics": electrostatic,
-            "flex_ligand": flex_ligand,
-            "flexLigand_flexReceptor": flexLigand_flexReceptor,
-            "internal_energy": internal_energy,
-            "torsional_energy": torsion,
+            "energies_inter": intermolecular_energy,
+            "energies_vdw": vdw_hb_desolv,
+            "energies_electro": electrostatic,
+            "energies_flexLig": flex_ligand,
+            "energies_flexLR": flexLigand_flexReceptor,
+            "energies_intra": internal_energy,
+            "energies_torsional": torsion,
             "unbound_energy": unbound_energy,
             "num_interactions": pose_interact_count,
             "num_hb": pose_hb_counts,
             "flexible_res_coordinates": flexible_res_coords,
-            "cluster_rmsds": cluster_rmsds,
-            "ref_rmsds": ref_rmsds,
+            "cluster_rmsd": cluster_rmsds,
+            "ref_rmsd": ref_rmsds,
             "interactions": interactions,
             "clusters": clusters,
         }
@@ -856,7 +930,7 @@ class ADGPUMoleculeSupplier:
         return ligand_dict, receptor_dict, results
 
 
-class SDFMoleculeSupplier:
+class SDFMoleculeSupplier:  #
     def __init__(self, num_poses: int, **kwargs):
         self.kwargs = kwargs
         if num_poses == -1:

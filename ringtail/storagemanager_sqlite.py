@@ -101,7 +101,7 @@ class StorageManagerSQLite(StorageManager):
             run_number          INTEGER,
             docking_score       FLOAT,
             leff                FLOAT,
-            deltas              FLOAT,
+            delta               FLOAT,
             cluster_rmsd        FLOAT,
             cluster_size        INTEGER,
             reference_rmsd      FLOAT,
@@ -136,7 +136,7 @@ class StorageManagerSQLite(StorageManager):
             run_number          INTEGER,
             docking_score       FLOAT,
             leff                FLOAT,
-            deltas              FLOAT,
+            delta               FLOAT,
             cluster_rmsd        FLOAT,
             cluster_size        INTEGER,
             reference_rmsd      FLOAT,
@@ -199,7 +199,7 @@ class StorageManagerSQLite(StorageManager):
                 reference_rmsd,
                 docking_score,
                 leff,
-                deltas,
+                delta,
                 energies_inter,
                 energies_vdw,
                 energies_electro,
@@ -222,7 +222,7 @@ class StorageManagerSQLite(StorageManager):
                 :reference_rmsd,
                 :docking_score,
                 :leff,
-                :deltas,
+                :delta,
                 :energies_inter,
                 :energies_vdw,
                 :energies_electro,
@@ -281,7 +281,7 @@ class StorageManagerSQLite(StorageManager):
                 reference_rmsd,
                 docking_score,
                 leff,
-                deltas,
+                delta,
                 energies_inter,
                 energies_vdw,
                 energies_electro,
@@ -305,7 +305,7 @@ class StorageManagerSQLite(StorageManager):
                 T.reference_rmsd,
                 T.docking_score,
                 T.leff,
-                T.deltas,
+                T.delta,
                 T.energies_inter,
                 T.energies_vdw,
                 T.energies_electro,
@@ -1045,7 +1045,7 @@ class StorageManagerSQLite(StorageManager):
             run_number,
             docking_score,
             leff,
-            deltas,
+            delta,
             cluster_rmsd,
             cluster_size,
             reference_rmsd,
@@ -1080,7 +1080,7 @@ class StorageManagerSQLite(StorageManager):
             mr.run_number,
             mr.docking_score,
             mr.leff,
-            mr.deltas,
+            mr.delta,
             mr.cluster_rmsd,
             mr.cluster_size,
             mr.reference_rmsd,
@@ -2064,7 +2064,7 @@ class StorageManagerSQLite(StorageManager):
         )
         cur.execute("ALTER TABLE Bookmarks ADD COLUMN filters")
         cur.execute(
-            "CREATE INDEX IF NOT EXISTS ak_results ON Results(ligand_id, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, num_interactions, run_number, pose_rank, num_hb)"
+            "CREATE INDEX IF NOT EXISTS ak_results ON Results(ligand_id, docking_score, leff, delta, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, num_interactions, run_number, pose_rank, num_hb)"
         )
         cur.execute(
             "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
@@ -2239,7 +2239,7 @@ class StorageManagerSQLite(StorageManager):
                         reference_rmsd,
                         docking_score,
                         leff,
-                        deltas,
+                        delta,
                         energies_inter,
                         energies_vdw,
                         energies_electro,
@@ -2274,7 +2274,7 @@ class StorageManagerSQLite(StorageManager):
                         reference_rmsd,
                         docking_score,
                         leff,
-                        deltas,
+                        delta,
                         energies_inter,
                         energies_vdw,
                         energies_electro,

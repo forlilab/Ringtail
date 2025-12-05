@@ -293,7 +293,7 @@ def cmdline_parser(defaults: dict = {}):
             '"ligname" , '
             '"docking_score", '
             '"leff"'
-            '"deltas" (delta energy from best pose), '
+            '"delta" (delta energy from best pose), '
             '"reference_rmsd" (RMSD to reference pose), '
             '"energies_inter" (intermolecular energy), '
             '"energies_vdw" (van der waals energy), '
@@ -319,7 +319,7 @@ def cmdline_parser(defaults: dict = {}):
         "available fields are:  "
         '"docking_score", '
         '"leff"'
-        '"deltas" (delta energy from best pose), '
+        '"delta" (delta energy from best pose), '
         '"reference_rmsd" (RMSD to reference pose), '
         '"energies_inter" (intermolecular energy), '
         '"energies_vdw" (van der waals energy), '

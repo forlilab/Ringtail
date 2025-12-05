@@ -19,7 +19,6 @@ Changes in command line tools
     ligand_name   ligname 
     e             docking_score
     le            leff
-    delta         deltas
     ref_rmsd      reference_rmsd
     e_inter       energies_inter
     e_vdw         energies_vdw
@@ -66,6 +65,7 @@ Changes to code behavior
 =========================
 * The column `nr_interactions` in the Results table is now called `num_interactions`
 * The column `ligand_coordinates` in the Results table is now called `pose_coordinates`
+* The column `deltas` in the Results table is now called `delta`
 * Ringtail bookmarks from e.g., filtering clustering were previously created as database views, which appear as tables that are unrealized until viewing them. This has been replaced by a `Filters` table which holds filter information (previous equivalent was `Bookmarks` table) and the poses passing a given filter are stored in a tall-skinny table `Filtered_poses`. A significant speed increase was enabled by this move, and any other behavior related to bookmarks is the same. 
 * The following columns have been removed from the Ligands table (information now stored in the binary rdkit Mol): `atom_index_map`, `hydrogen_parents`, and `input_model`.
 
