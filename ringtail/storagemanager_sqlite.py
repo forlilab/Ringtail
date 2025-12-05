@@ -985,9 +985,6 @@ class StorageManagerSQLite(StorageManager):
                         merging.Ligands.LigName = Ligands.LigName
                         AND merging.Ligands.ligand_smile = Ligands.ligand_smile
                         AND merging.Ligands.rdmol = Ligands.rdmol
-                        AND merging.Ligands.atom_index_map = Ligands.atom_index_map
-                        AND merging.Ligands.hydrogen_parents = Ligands.hydrogen_parents
-                        AND merging.Ligands.input_model = Ligands.input_model
                     ) 
                 THEN (
                     SELECT main.Ligands.ligand_id
@@ -996,9 +993,6 @@ class StorageManagerSQLite(StorageManager):
                         merging.Ligands.LigName = Ligands.LigName
                         AND merging.Ligands.ligand_smile = Ligands.ligand_smile
                         AND merging.Ligands.rdmol = Ligands.rdmol
-                        AND merging.Ligands.atom_index_map = Ligands.atom_index_map
-                        AND merging.Ligands.hydrogen_parents = Ligands.hydrogen_parents
-                        AND merging.Ligands.input_model = Ligands.input_model
                     )
                 ELSE merging.Ligands.ligand_id + (SELECT MAX(ligand_id) FROM Ligands)
             END AS new_ligand_id
@@ -1009,18 +1003,12 @@ class StorageManagerSQLite(StorageManager):
         ligand_id,
         LigName,
         ligand_smile,
-        rdmol,
-        atom_index_map,
-        hydrogen_parents,
-        input_model)
+        rdmol)
         SELECT 
             (SELECT merged_PK FROM PK_conversions WHERE original_PK = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
             LigName,
             ligand_smile,
-            rdmol,
-            atom_index_map,
-            hydrogen_parents,
-            input_model
+            rdmol
         FROM merging.Ligands WHERE new_id > (SELECT MAX(ligand_id) FROM Ligands);
         """
 
@@ -1059,17 +1047,6 @@ class StorageManagerSQLite(StorageManager):
             unbound_energy,
             num_interactions,
             num_hb,
-            about_x,
-            about_y,
-            about_z,
-            trans_x,
-            trans_y,
-            trans_z,
-            axisangle_x,
-            axisangle_y,
-            axisangle_z,
-            axisangle_w,
-            dihedrals,
             pose_coordinates,
             flexible_res_coordinates) 
         SELECT 
@@ -1094,17 +1071,6 @@ class StorageManagerSQLite(StorageManager):
             mr.unbound_energy,
             mr.num_interactions,
             mr.num_hb,
-            mr.about_x,
-            mr.about_y,
-            mr.about_z,
-            mr.trans_x,
-            mr.trans_y,
-            mr.trans_z,
-            mr.axisangle_x,
-            mr.axisangle_y,
-            mr.axisangle_z,
-            mr.axisangle_w,
-            mr.dihedrals,
             mr.pose_coordinates,
             mr.flexible_res_coordinates
         FROM merging.Results mr
@@ -2190,17 +2156,12 @@ class StorageManagerSQLite(StorageManager):
             """INSERT INTO Ligands_new (
                 LigName,
                 ligand_smile,
-                rdmol,
-                atom_index_map,
-                hydrogen_parents,
-                input_model) 
+                rdmol) 
             SELECT 
                 LigName,
                 ligand_smile,
-                smile_to_rdbin(ligand_smile),
-                atom_index_map,
-                hydrogen_parents,
-                input_model FROM Ligands;""",
+                smile_to_rdbin(ligand_smile) 
+                FROM Ligands;""",
             commit=True,
         )
         # ensure row numbers are the same
@@ -2251,17 +2212,6 @@ class StorageManagerSQLite(StorageManager):
                         num_interactions,
                         num_hb,
                         cluster_size,
-                        about_x,
-                        about_y,
-                        about_z,
-                        trans_x,
-                        trans_y,
-                        trans_z,
-                        axisangle_x,
-                        axisangle_y,
-                        axisangle_z,
-                        axisangle_w,
-                        dihedrals,
                         pose_coordinates,
                         flexible_res_coordinates)
                     SELECT
@@ -2286,17 +2236,6 @@ class StorageManagerSQLite(StorageManager):
                         num_interactions,
                         num_hb,
                         cluster_size,
-                        about_x,
-                        about_y,
-                        about_z,
-                        trans_x,
-                        trans_y,
-                        trans_z,
-                        axisangle_x,
-                        axisangle_y,
-                        axisangle_z,
-                        axisangle_w,
-                        dihedrals,
                         pose_coordinates,
                         flexible_res_coordinates
                       FROM Results""",

@@ -138,17 +138,6 @@ class StorageManagerDuckDB(StorageManager):
             unbound_energy      FLOAT,
             num_interactions     INTEGER,
             num_hb              INTEGER,
-            about_x             FLOAT,
-            about_y             FLOAT,
-            about_z             FLOAT,
-            trans_x             FLOAT,
-            trans_y             FLOAT,
-            trans_z             FLOAT,
-            axisangle_x         FLOAT,
-            axisangle_y         FLOAT,
-            axisangle_z         FLOAT,
-            axisangle_w         FLOAT,
-            dihedrals           VARCHAR,
             pose_coordinates         VARCHAR,
             flexible_res_coordinates   VARCHAR,
             ); """
@@ -182,17 +171,6 @@ class StorageManagerDuckDB(StorageManager):
             unbound_energy      FLOAT,
             num_interactions     INTEGER,
             num_hb              INTEGER,
-            about_x             FLOAT,
-            about_y             FLOAT,
-            about_z             FLOAT,
-            trans_x             FLOAT,
-            trans_y             FLOAT,
-            trans_z             FLOAT,
-            axisangle_x         FLOAT,
-            axisangle_y         FLOAT,
-            axisangle_z         FLOAT,
-            axisangle_w         FLOAT,
-            dihedrals           VARCHAR,
             pose_coordinates         VARCHAR,
             flexible_res_coordinates   VARCHAR,
             ligname             VARCHAR);
@@ -247,17 +225,6 @@ class StorageManagerDuckDB(StorageManager):
                 "num_interactions",
                 "num_hb",
                 "cluster_size",
-                "about_x",
-                "about_y",
-                "about_z",
-                "trans_x",
-                "trans_y",
-                "trans_z",
-                "axisangle_x",
-                "axisangle_y",
-                "axisangle_z",
-                "axisangle_w",
-                "dihedrals",
                 "pose_coordinates",
                 "flexible_res_coordinates",
                 "ligname",
@@ -285,17 +252,6 @@ class StorageManagerDuckDB(StorageManager):
                     num_interactions,
                     num_hb,
                     cluster_size,
-                    about_x,
-                    about_y,
-                    about_z,
-                    trans_x,
-                    trans_y,
-                    trans_z,
-                    axisangle_x,
-                    axisangle_y,
-                    axisangle_z,
-                    axisangle_w,
-                    dihedrals,
                     pose_coordinates,
                     flexible_res_coordinates,
                     ligname) 
@@ -351,17 +307,6 @@ class StorageManagerDuckDB(StorageManager):
                 num_interactions,
                 num_hb,
                 cluster_size,
-                about_x,
-                about_y,
-                about_z,
-                trans_x,
-                trans_y,
-                trans_z,
-                axisangle_x,
-                axisangle_y,
-                axisangle_z,
-                axisangle_w,
-                dihedrals,
                 pose_coordinates,
                 flexible_res_coordinates
                 ) 
@@ -386,54 +331,12 @@ class StorageManagerDuckDB(StorageManager):
                 T.num_interactions,
                 T.num_hb,
                 T.cluster_size,
-                T.about_x,
-                T.about_y,
-                T.about_z,
-                T.trans_x,
-                T.trans_y,
-                T.trans_z,
-                T.axisangle_x,
-                T.axisangle_y,
-                T.axisangle_z,
-                T.axisangle_w,
-                T.dihedrals,
                 T.pose_coordinates,
                 T.flexible_res_coordinates
             FROM Results_temp AS T
             JOIN Ligands AS L ON L.LigName = T.LigName
             RETURNING pose_id, ligand_id, run_number, pose_rank;"""
 
-        # temp_to_interaction = """
-        #     INSERT INTO Interactions(pose_id, interaction_id)
-        #     SELECT R.pose_id, II.interaction_id
-        #     FROM Results AS R
-        #     JOIN Ligands AS L
-        #         ON R.ligand_id    = L.ligand_id
-        #     JOIN Results_temp AS RT
-        #         ON RT.receptor=R.receptor
-        #         AND RT.about_x=R.about_x
-        #         AND RT.about_y=R.about_y
-        #         AND RT.about_z=R.about_z
-        #         AND RT.trans_x=R.trans_x
-        #         AND RT.trans_y=R.trans_y
-        #         AND RT.trans_z=R.trans_z
-        #         AND RT.axisangle_x=R.axisangle_x
-        #         AND RT.axisangle_y=R.axisangle_y
-        #         AND RT.axisangle_z=R.axisangle_z
-        #         AND RT.axisangle_w=R.axisangle_w
-        #         AND RT.dihedrals=R.dihedrals
-        #     JOIN Interactions_temp AS IT
-        #         ON RT.ligname      = IT.ligname
-        #         AND RT.pose_rank   = IT.pose_rank
-        #         AND RT.run_number  = IT.run_number
-        #     JOIN Interaction_indices AS II
-        #         ON II.interaction_type = IT.interaction_type
-        #         AND II.rec_chain        = IT.rec_chain
-        #         AND II.rec_resname      = IT.rec_resname
-        #         AND II.rec_resid        = IT.rec_resid
-        #         AND II.rec_atom         = IT.rec_atom
-        #         AND II.rec_atomid       = IT.rec_atomid;
-        # """
         temp_to_interaction = """
             INSERT INTO Interactions(pose_id, interaction_id)
             SELECT M.pose_id, II.interaction_id
@@ -476,17 +379,8 @@ class StorageManagerDuckDB(StorageManager):
         Based on the following columns:
         ligname,
         receptor,
-        about_x,
-        about_y,
-        about_z,
-        trans_x,
-        trans_y,
-        trans_z,
-        axisangle_x,
-        axisangle_y,
-        axisangle_z,
-        axisangle_w,
-        dihedrals
+        pose_coordinates
+        flexible_res_coordinates
         """
         delete_int_sql = """
         DELETE FROM Interactions_temp
@@ -495,17 +389,8 @@ class StorageManagerDuckDB(StorageManager):
             FROM Results_temp AS RT
             JOIN Results AS R
                 ON RT.receptor    = R.receptor
-                AND RT.about_x     = R.about_x
-                AND RT.about_y     = R.about_y
-                AND RT.about_z     = R.about_z
-                AND RT.trans_x     = R.trans_x
-                AND RT.trans_y     = R.trans_y
-                AND RT.trans_z     = R.trans_z
-                AND RT.axisangle_x = R.axisangle_x
-                AND RT.axisangle_y = R.axisangle_y
-                AND RT.axisangle_z = R.axisangle_z
-                AND RT.axisangle_w = R.axisangle_w
-                AND RT.dihedrals   = R.dihedrals
+                AND RT.pose_coordinates = R.pose_coordinates
+                AND RT.flexible_res_coordinates = R.flexible_res_coordinates
             JOIN Ligands AS L
                 ON RT.ligname = L.ligname
             WHERE 
@@ -523,17 +408,8 @@ class StorageManagerDuckDB(StorageManager):
                 ON RT.ligname = L.ligname
             WHERE 
                 RT.receptor  = R.receptor
-                AND RT.about_x     = R.about_x
-                AND RT.about_y     = R.about_y
-                AND RT.about_z     = R.about_z
-                AND RT.trans_x     = R.trans_x
-                AND RT.trans_y     = R.trans_y
-                AND RT.trans_z     = R.trans_z
-                AND RT.axisangle_x = R.axisangle_x
-                AND RT.axisangle_y = R.axisangle_y
-                AND RT.axisangle_z = R.axisangle_z
-                AND RT.axisangle_w = R.axisangle_w
-                AND RT.dihedrals   = R.dihedrals
+                AND RT.pose_coordinates = R.pose_coordinates
+                AND RT.flexible_res_coordinates = R.flexible_res_coordinates
                 AND L.ligand_id    = R.ligand_id);
         """
         self.db_query(delete_int_sql)
@@ -545,17 +421,8 @@ class StorageManagerDuckDB(StorageManager):
         Based on the following columns:
         ligname,
         receptor,
-        about_x,
-        about_y,
-        about_z,
-        trans_x,
-        trans_y,
-        trans_z,
-        axisangle_x,
-        axisangle_y,
-        axisangle_z,
-        axisangle_w,
-        dihedrals
+        pose_coordinates
+        flexible_res_coordinates
         """
         delete_sql = """
         WITH target_poseid AS (
@@ -563,17 +430,8 @@ class StorageManagerDuckDB(StorageManager):
             FROM Results AS R
             JOIN Results_temp AS RT
                 ON RT.receptor = R.receptor
-                AND RT.about_x = R.about_x
-                AND RT.about_y = R.about_y
-                AND RT.about_z = R.about_z
-                AND RT.trans_x = R.trans_x
-                AND RT.trans_y = R.trans_y
-                AND RT.trans_z = R.trans_z
-                AND RT.axisangle_x = R.axisangle_x
-                AND RT.axisangle_y = R.axisangle_y
-                AND RT.axisangle_z = R.axisangle_z
-                AND RT.axisangle_w = R.axisangle_w
-                AND RT.dihedrals = R.dihedrals
+                AND RT.pose_coordinates = R.pose_coordinates
+                AND RT.flexible_res_coordinates = R.flexible_res_coordinates
             JOIN Ligands AS L
                 ON RT.ligname = L.ligname
             )
@@ -1075,7 +933,6 @@ class StorageManagerDuckDB(StorageManager):
             ) from e
 
     def _merge_ligands_and_results_tables(self, merge_id: int):
-        # TODO obsolete columns
         """
         Merges first the Ligands table, then the Results table, maintaining ligand_id and pose_id as primary keys,
         where their relationship to the original PK is kept track of in the mering datble. Duplicate ligands will maintain
@@ -1104,9 +961,6 @@ class StorageManagerDuckDB(StorageManager):
                         merging.Ligands.LigName = Ligands.LigName
                         AND merging.Ligands.ligand_smile = Ligands.ligand_smile
                         AND merging.Ligands.rdmol = Ligands.rdmol
-                        AND merging.Ligands.atom_index_map = Ligands.atom_index_map
-                        AND merging.Ligands.hydrogen_parents = Ligands.hydrogen_parents
-                        AND merging.Ligands.input_model = Ligands.input_model
                     ) 
                 THEN (
                     SELECT main.Ligands.ligand_id
@@ -1115,32 +969,22 @@ class StorageManagerDuckDB(StorageManager):
                         merging.Ligands.LigName = Ligands.LigName
                         AND merging.Ligands.ligand_smile = Ligands.ligand_smile
                         AND merging.Ligands.rdmol = Ligands.rdmol
-                        AND merging.Ligands.atom_index_map = Ligands.atom_index_map
-                        AND merging.Ligands.hydrogen_parents = Ligands.hydrogen_parents
-                        AND merging.Ligands.input_model = Ligands.input_model
                     )
                 ELSE merging.Ligands.ligand_id + (SELECT MAX(ligand_id) FROM Ligands)
             END AS new_ligand_id
         FROM merging.Ligands;"""
 
         # then inserting only those that aren't already in the table
-        # TODO obsolete columns
         insert_new_ligands = """INSERT INTO Ligands (
         ligand_id,
         LigName,
         ligand_smile,
-        rdmol,
-        atom_index_map,
-        hydrogen_parents,
-        input_model)
+        rdmol)
         SELECT 
             (SELECT merged_PK FROM PK_conversions WHERE original_PK = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
             LigName,
             ligand_smile,
-            rdmol,
-            atom_index_map,
-            hydrogen_parents,
-            input_model
+            rdmol
         FROM merging.Ligands WHERE new_id > (SELECT MAX(ligand_id) FROM Ligands);
         """
 
@@ -1179,17 +1023,6 @@ class StorageManagerDuckDB(StorageManager):
             unbound_energy,
             num_interactions,
             num_hb,
-            about_x,
-            about_y,
-            about_z,
-            trans_x,
-            trans_y,
-            trans_z,
-            axisangle_x,
-            axisangle_y,
-            axisangle_z,
-            axisangle_w,
-            dihedrals,
             pose_coordinates,
             flexible_res_coordinates) 
         SELECT 
@@ -1214,17 +1047,6 @@ class StorageManagerDuckDB(StorageManager):
             mr.unbound_energy,
             mr.num_interactions,
             mr.num_hb,
-            mr.about_x,
-            mr.about_y,
-            mr.about_z,
-            mr.trans_x,
-            mr.trans_y,
-            mr.trans_z,
-            mr.axisangle_x,
-            mr.axisangle_y,
-            mr.axisangle_z,
-            mr.axisangle_w,
-            mr.dihedrals,
             mr.pose_coordinates,
             mr.flexible_res_coordinates
         FROM merging.Results mr

@@ -1188,9 +1188,7 @@ class StorageManager:
         R.delta, R.num_interactions, R.unbound_energy, 
         R.reference_RMSD, R.energies_inter, R.energies_vdw, 
         R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
-        R.energies_intra, R.energies_torsional, R.about_x, R.about_y, 
-        R.about_z, R.trans_x, R.trans_y, R.trans_z, R.axisangle_x, 
-        R.axisangle_y, R.axisangle_z, R.axisangle_w, R.dihedrals, {rowid}"""
+        R.energies_intra, R.energies_torsional, {rowid}"""
 
         query.SELECT(ordered_columns)
 
@@ -2595,17 +2593,6 @@ class StorageManager:
         unbound_energy      FLOAT,
         num_interactions     INTEGER,
         num_hb              INTEGER,
-        about_x             FLOAT,
-        about_y             FLOAT,
-        about_z             FLOAT,
-        trans_x             FLOAT,
-        trans_y             FLOAT,
-        trans_z             FLOAT,
-        axisangle_x         FLOAT,
-        axisangle_y         FLOAT,
-        axisangle_z         FLOAT,
-        axisangle_w         FLOAT,
-        dihedrals           VARCHAR,
         pose_coordinates         VARCHAR,
         flexible_res_coordinates   VARCHAR
 
