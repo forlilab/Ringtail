@@ -122,12 +122,12 @@ class StorageManager:
 
     # region public api
 
-    def insert_bulk_data(self, docking_data: dict, write_options: dict = {}):
+    def insert_bulk_data(self, docking_data: dict, duplicate_handling: str = None):
         """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
 
         Args:
             docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
-            write_options (dict): options for how to write the data, primarily how to treat duplicates
+            duplicate_handling (str, optional): Describes how to handle duplicates, if any. Defaults to None.
         """
         ligands = docking_data.get("ligands", None)
         if ligands:
@@ -138,7 +138,7 @@ class StorageManager:
         poses = docking_data.get("poses", None)
         if poses:
             # interactions has ligname and pose rank
-            self._insert_bulk_docking_data(poses, interaction_data, write_options)
+            self._insert_bulk_docking_data(poses, interaction_data, duplicate_handling)
         self.conn.commit()
 
     def insert_single_data(
@@ -1709,7 +1709,7 @@ class StorageManager:
             self.conn.commit()
 
     def _insert_bulk_docking_data(
-        self, results: list[list], interactions: list[list], options: dict
+        self, results: list[list], interactions: list[list], duplicate_handling: str
     ):
         """Takes list of database rows to insert, adds data to results table.
         First stages data in temporary tables, then handles duplicates (if requested),
@@ -1725,13 +1725,12 @@ class StorageManager:
 
         self._create_temporary_results_tables()
         self._insert_results_in_temp_tables(results, interactions)
-        dupl_handl = options.get("duplicate_handling")
         # handle duplicates if requested
-        if dupl_handl and dupl_handl.lower() == "replace":
+        if duplicate_handling and duplicate_handling.lower() == "replace":
             # first delete duplicate results and interactions
             # then insert all the new ones indiscrimenately
             self._delete_old_duplicate_results()
-        elif dupl_handl and dupl_handl.lower() == "ignore":
+        elif duplicate_handling and duplicate_handling.lower() == "ignore":
             # delete from incoming data any duplicates
             # then insert all new data indiscrimenately
             self._delete_new_duplicate_results()
@@ -2161,11 +2160,12 @@ class StorageManager:
             substruct_pos = ligand_filters["ligand_substruct_pos"]
             position = True
             # we need additional info if doing position search
-            select_statement += ", Ligands.atom_index_map, R.pose_coordinates "
-            headers.extend(["atom_index_map", "pose_coordinates"])
+            select_statement += ", R.pose_coordinates "
+            headers.append("pose_coordinates")
         # build full query
         query = select_statement + partial_query
 
+        # TODO need to use the bin mol
         def _substructure_position_calculation(
             idxmap, pose_coordinates, smartsmol, filter
         ) -> bool:

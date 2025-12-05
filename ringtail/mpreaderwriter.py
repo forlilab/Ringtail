@@ -193,7 +193,7 @@ class Writer(mp.Process):
         db_file = options.pop("db_file")
         self.storageman: StorageManager = options.pop("storageman_class")(db_file)
         self.chunk_size = options.pop("chunk_size")
-        self.options = options
+        self.duplicate_handling = options.get("duplicate_handling", None)
         # initialize data array (stack of dictionaries)
         self.docked_ligands = {"ligands": [], "poses": [], "interactions": []}
         self.receptor_written_to_db = False
@@ -254,7 +254,7 @@ class Writer(mp.Process):
                 self.receptor_row = None
             sm.insert_bulk_data(
                 self.docked_ligands,
-                self.options,
+                self.duplicate_handling,
             )
 
         # calulate time for processing/writing speed

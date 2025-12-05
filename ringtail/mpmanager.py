@@ -102,7 +102,11 @@ class MPManager:
             reader.start()
             self.workers.append(reader)
         # Start writer in a thread (pulls from queueOut)
-        writer = Writer(self.queueOut, self.num_readers, self.writer_options)
+        writer = Writer(
+            self.queueOut,
+            self.num_readers,
+            self.writer_options,
+        )
         writer.start()
         self.workers.append(writer)
         try:
