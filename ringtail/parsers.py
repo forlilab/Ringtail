@@ -434,7 +434,8 @@ class ADGPUMoleculeSupplier:
             results_rows = []
             interactions = results_dict.get("interactions", [])
 
-            for pose_rank, cluster_number in enumerate(sorted_selected_pose_clusters):
+            for sorted_idx, cluster_number in enumerate(sorted_selected_pose_clusters):
+                pose_rank = sorted_idx + 1
                 run_number = cluster_representatives[cluster_number]
                 data_index = run_number - 1
                 # parse Results data
@@ -499,8 +500,9 @@ class ADGPUMoleculeSupplier:
 
             sorted_indices_all = np.argsort(results_dict.get("docking_score"))
             # results_dict needs to be made into list of dicts for each index
-            for pose_rank, run_number in enumerate(sorted_indices_all):
+            for sorted_idx, run_number in enumerate(sorted_indices_all):
                 data_index = run_number - 1
+                pose_rank = sorted_idx + 1
                 # parse Results data
                 results_rows.append(
                     {
