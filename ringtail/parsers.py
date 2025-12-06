@@ -1177,6 +1177,7 @@ def prepare_mol_for_database(
     Returns:
         tuple[Chem.Mol, dict]: _description_
     """
+    # TODO could also be wrong parsing here
     pose_coordinates = []
     for conf in mol.GetConformers():
         pose_coordinates.append(conf.GetPositions())

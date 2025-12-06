@@ -2095,7 +2095,6 @@ class StorageManager:
         This method has several internal, private methods including
         _smarts_to_mol: creates mol object of substructure/SMARTS and checks for explicit hydrogens
         _substructure_position_calculation: checks if a substructure is in the right location
-        _ligand_indexmap: calculates an index map for the ligand.
 
         Args:
             partial_query (str): partial query string for regular filters without a SELECT statement
@@ -2165,34 +2164,33 @@ class StorageManager:
         # build full query
         query = select_statement + partial_query
 
-        # TODO need to use the bin mol
         def _substructure_position_calculation(
-            idxmap, pose_coordinates, smartsmol, filter
+            pose_coordinates, hit_atom_indices, filter
         ) -> bool:
             """
             Method that checks whether or not a substructure specified by smarts
             is present on a ligand in the specified location (by means of the filter values).
 
             Args:
-                idxmap (dict): index map of the ligand
-                pose_coordinates (json): ligand coordinates
-                smartsmol (mol): mol object of the smarts pattern
+                pose_coordinates (json): ligand coordinates matching rdkit smiles indices
+                hit_atom_indices (tuple[int]): indices for each of the atoms in the smarts pattern
                 filter (list[str]): filter values from user
 
             Returns:
                 bool: whether or not the smarts in the pose qualified in the right position
             """
             # unpack filter values
+            # index in the smarts pattern that should be within coordinates
             index = filter[0]
             sqdist = filter[1] ** 2
             x = filter[2]
             y = filter[3]
             z = filter[4]
-
+            # TODO something wrong with my indexing here
             # calculate xyz space coordinates
             xyz = [
                 float(value)
-                for value in json.loads(pose_coordinates)[idxmap[smartsmol[index]]]
+                for value in json.loads(pose_coordinates)[hit_atom_indices[index]]
             ]
             # calculate the sum of squares distances
             d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
@@ -2200,22 +2198,6 @@ class StorageManager:
                 return True
             else:
                 return False
-
-        def _ligand_indexmap(atom_index_map) -> dict:
-            """
-            Method that converts the atom index mapping in the database to one usable by the filter method
-
-            Args:
-                atom_index_map (json): indices of all atoms in the ligand
-
-            Returns:
-                dict: filter ready index map of the ligand
-            """
-            idxmap = [int(value) - 1 for value in json.loads(atom_index_map)]
-
-            return {
-                idxmap[j * 2]: idxmap[j * 2 + 1] for j in range(int(len(idxmap) / 2))
-            }
 
         ligands_checked = 0
         filtered_ligands = {}
@@ -2270,15 +2252,13 @@ class StorageManager:
                     for filterrow in substruct_pos:
                         # filterrow[0] should be the smarts pattern
                         smarts_mol = _smarts_to_mol(filterrow[0])
-                        ligand_index_map = _ligand_indexmap(ligandict["atom_index_map"])
                         pose_coordinates = ligandict["pose_coordinates"]
                         # filterrow [1:] should be indices, distance allowance, and coordinates for smarts match
                         substruct_pos_filter = filterrow[1:]
-                        for hit in ligand_mol.GetSubstructMatches(smarts_mol):
+                        for hit_indices in ligand_mol.GetSubstructMatches(smarts_mol):
                             filter_match = _substructure_position_calculation(
-                                ligand_index_map,
                                 pose_coordinates,
-                                hit,
+                                hit_indices,
                                 substruct_pos_filter,
                             )
                             if filter_match:
