@@ -91,6 +91,19 @@ class TestInputs:
 
         assert count == 75
 
+    def test_adng_input(self, tablecount):
+        os.system(
+            "python ../ringtail/cli/rt_process_vs.py write -m adng --file_path test_data/adng -rf test_data/adng/helix--scofu01.json -sr"
+        )
+
+        poses_count = tablecount("Results")
+        interaction_count = tablecount("Interactions")
+
+        os.system("rm output.db")
+
+        assert poses_count == 9
+        assert interaction_count == 156
+
     def test_vina_input(self, tablecount):
         os.system(
             "python ../ringtail/cli/rt_process_vs.py write -m vina --file_path test_data/vina -rf test_data/vina/receptor.pdbqt -sr"
