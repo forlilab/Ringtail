@@ -554,7 +554,7 @@ class StorageManagerSQLite(StorageManager):
 
         self.db_query(interaction_table)
 
-    def _insert_interaction_index_rows(self, interactions: list[tuple]):
+    def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
         Writes unique interactions to database
 

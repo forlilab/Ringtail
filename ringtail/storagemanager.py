@@ -2713,7 +2713,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _insert_interaction_index_rows(self, interactions: list[tuple]):
+    def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
         Writes unique interactions to database
 

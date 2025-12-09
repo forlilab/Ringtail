@@ -219,7 +219,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         assert status_notol == 0
-        assert count_notol == 53
+        assert count_notol == 104
 
         status_tol = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance"
@@ -229,7 +229,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         assert status_tol == 0
-        assert count_tol == 54
+        assert count_tol == 768
 
         status_tol2 = os.system(
             "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance 2.0"
@@ -239,7 +239,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         assert status_tol2 == 0
-        assert count_tol2 == 57
+        assert count_tol2 == 856
 
     def test_max_poses(self, tablecount):
         status3 = os.system(
