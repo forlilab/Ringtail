@@ -1846,7 +1846,7 @@ class StorageManagerSQLite(StorageManager):
             tables.remove("sqlite_sequence")
         return tables
 
-    def _get_length_of_table(self, table_name: str):
+    def _get_length_of_table(self, table_name: str) -> int:
         """
         Finds the rowcount/length of a table based on the rowid
 

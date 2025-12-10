@@ -2144,12 +2144,10 @@ class StorageManager:
                     )
             return smarts_mol
 
-        select_statement = "SELECT R.pose_id, Ligands.ligand_id, Ligands.rdmol "
-        headers = [
-            "pose_id",
-            "ligand_id",
-            "rdmol",
-        ]
+        select_statement = (
+            "SELECT R.pose_id, Ligands.ligand_id, Ligands.rdmol, Ligands.ligand_smile"
+        )
+        headers = ["pose_id", "ligand_id", "rdmol", "ligand_smile"]
         # handle substruct
         if "ligand_substruct" in ligand_filters:
             for substruct in ligand_filters["ligand_substruct"]:
@@ -2192,6 +2190,7 @@ class StorageManager:
                 float(value)
                 for value in json.loads(pose_coordinates)[hit_atom_indices[index]]
             ]
+            print("\n\n xyz: ", xyz)
             # calculate the sum of squares distances
             d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
             if d2 <= sqdist:
@@ -2210,6 +2209,10 @@ class StorageManager:
             else:
                 # deserialize binary rdmol
                 ligand_mol = Chem.Mol(ligandict["rdmol"])
+                # ligand_mol = Chem.MolFromSmiles(ligandict["ligand_smile"])
+                # TODO when I just use smiles I probably don't match on the correct index, because I gotta re-map with hydrogen parents etc
+                # that's why I can't just use smile and expect it to work...
+                Chem.SanitizeMol(ligand_mol)
                 # check if qualify for maxatoms
                 if maxatoms > 0:
                     if not ligand_mol.GetNumHeavyAtoms() <= maxatoms:
@@ -2255,7 +2258,21 @@ class StorageManager:
                         pose_coordinates = ligandict["pose_coordinates"]
                         # filterrow [1:] should be indices, distance allowance, and coordinates for smarts match
                         substruct_pos_filter = filterrow[1:]
+                        atom_types = [
+                            atom.GetSymbol() for atom in ligand_mol.GetAtoms()
+                        ]
+                        print("all atom types; ", atom_types)
+                        smarts_atom_types = [
+                            atom.GetSymbol() for atom in smarts_mol.GetAtoms()
+                        ]
+                        print("smarts atom types ", smarts_atom_types)
+
                         for hit_indices in ligand_mol.GetSubstructMatches(smarts_mol):
+                            for number, index in enumerate(hit_indices):
+                                print("The atom that has a hit: ", atom_types[index])
+                                print(
+                                    "the smarts equivalent: ", smarts_atom_types[number]
+                                )
                             filter_match = _substructure_position_calculation(
                                 pose_coordinates,
                                 hit_indices,
@@ -2311,24 +2328,34 @@ class StorageManager:
             dict: of "pose_id":"bitvector"
         """
         # create a list of 0 items the length of interaction_indices table
-        ii_length = self._get_length_of_table("Interaction_indices")
-        # for each pose id, get a list of interaction_indices from joining the two tables i and ii
         query = self.QueryBuilder()
         query.SELECT("Pose_ID", "interaction_id").FROM("Interactions").WHERE(
             f"""pose_id IN ({",".join(["?"] * len(pose_ids))})""", *pose_ids
         )
 
-        poseid_intinds = self.db_query(*query.build()).fetchall()
-        # make dict of pose id and bitvector
-        poseid_bvlist = {(pose_id): [0] * ii_length for pose_id in pose_ids}
-        # iterate over the tuple results from the query
-        for poseid_intind in poseid_intinds:
-            poseid_bvlist[(poseid_intind[0])][poseid_intind[1] - 1] = 1
+        iis = [
+            row[0]
+            for row in self.db_query(
+                "SELECT interaction_id FROM Interaction_indices ORDER BY interaction_id;"
+            ).fetchall()
+        ]
+        ii_to_index = {ii: idx for idx, ii in enumerate(iis)}
+        ii_length = len(iis)
 
-        # join list as string without any delimiter
-        poseid_bv = {
-            key: "".join(map(str, value)) for (key, value) in poseid_bvlist.items()
-        }
+        poseid_intinds = self.db_query(*query.build()).fetchall()
+
+        # build bitvectors with NumPy
+        poseid_bv = {}
+        for pose_id in pose_ids:
+            bv = np.zeros(ii_length, dtype=np.uint8)
+            poseid_bv[pose_id] = bv
+
+        for pose_id, interaction_id in poseid_intinds:
+            if interaction_id in ii_to_index:
+                poseid_bv[pose_id][ii_to_index[interaction_id]] = 1
+
+        # convert to string
+        poseid_bv = {key: "".join(map(str, value)) for key, value in poseid_bv.items()}
         # return dict of pose id as string and bitvector
         return poseid_bv
 
@@ -2673,6 +2700,18 @@ class StorageManager:
     def _create_status_tables(self):
         """
         Creates status tables if needed
+        """
+        raise NotImplementedError
+
+    def _get_length_of_table(self, table_name: str) -> int:
+        """
+        Finds the rowcount/length of a table based on the rowid
+
+        Args:
+            table_name (str): name of table to count the length of
+
+        Returns:
+            int: length of the table
         """
         raise NotImplementedError
 
