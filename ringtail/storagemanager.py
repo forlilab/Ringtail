@@ -2336,7 +2336,7 @@ class StorageManager:
         iis = [
             row[0]
             for row in self.db_query(
-                "SELECT interaction_id FROM Interaction_indices ORDER BY interaction_id;"
+                "SELECT interaction_id FROM Interaction_indices;"
             ).fetchall()
         ]
         ii_to_index = {ii: idx for idx, ii in enumerate(iis)}
