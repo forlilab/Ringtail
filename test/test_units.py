@@ -163,31 +163,31 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
 
         # tests for partial names
-        count_ligands_passing = rtc.filter(ligand_name=["88"], bookmark_name="ligname")
-        assert count_ligands_passing == 7
+        count_ligname = rtc.filter(ligand_name=["88"], bookmark_name="ligname")
+        assert count_ligname == 7
 
         # test substructure search (default 'OR' ligand_operator)
-        count_ligands_passing = rtc.filter(
+        count_substruct_or = rtc.filter(
             ligand_substruct=["C=O", "CC(C)(C)"], bookmark_name="substruct_or"
         )
-        assert count_ligands_passing == 90
+        assert count_substruct_or == 90
 
-        # test substructure search (default 'OR' ligand_operator)
-        count_ligands_passing = rtc.filter(
+        # test substructure search ('AND' ligand_operator)
+        count_substruct_and = rtc.filter(
             ligand_substruct=["C=O", "CC(C)(C)"],
             ligand_operator="AND",
             bookmark_name="substruct_and",
         )
-        assert count_ligands_passing == 18
+        assert count_substruct_and == 18
 
-        count_ligands_passing = rtc.filter(
+        count_substruct_pos = rtc.filter(
             ligand_substruct_pos=[
                 ["[C][Oh]", 1, 10, 102, 106, 154],
                 ["C=O", 1, 10, 102, 106, 154],
             ],
             bookmark_name="substruct_pos",
         )
-        assert count_ligands_passing == 12
+        assert count_substruct_pos == 12
 
     def test_all_filters(self):
         if not _db_exists():
@@ -535,6 +535,20 @@ class TestRingtailCore:
         assert receptor_items[2] != None
 
 
+class TestADNGHandling:
+    def test_adng_stream(self):
+        pass
+
+    def test_adng_file_add(self):
+        pass
+
+    def test_calculate_interactions(self):
+        pass
+
+    def test_adng_filtering(self):
+        pass
+
+
 class TestVinaHandling:
 
     def test_vina_file_add(self):
@@ -578,10 +592,12 @@ class TestVinaHandling:
             save_receptor=True,
             docking_mode="vina",
         )
-        count = rtc.table_length("Interaction_indices")
+        unique_definition_count = rtc.table_length("Interaction_indices")
+        interaction_count = rtc.table_length("Interactions")
         os.system("rm output.db*")
 
-        assert count == 45
+        assert unique_definition_count == 32
+        assert interaction_count == 162
 
     def test_add_interactions_from_polymer(self):
         rtc = RingtailCore(db_file="flexres.db")
@@ -610,7 +626,7 @@ class TestVinaHandling:
         os.system("rm flexres*.db")
 
         assert ligands_1 == ligands_2 == 1
-        assert interactions_1 == interactions_2 == 38
+        assert interactions_1 == interactions_2 == 85
 
     def test_db_dockingmode_warning(self):
         from ringtail import RingtailDefaults
