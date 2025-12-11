@@ -2184,7 +2184,6 @@ class StorageManager:
             x = filter[2]
             y = filter[3]
             z = filter[4]
-            # TODO something wrong with my indexing here
             # calculate xyz space coordinates
             xyz = [
                 float(value)
@@ -2208,10 +2207,7 @@ class StorageManager:
             else:
                 # deserialize binary rdmol
                 ligand_mol = Chem.Mol(ligandict["rdmol"])
-                # ligand_mol = Chem.MolFromSmiles(ligandict["ligand_smile"])
-                # TODO when I just use smiles I probably don't match on the correct index, because I gotta re-map with hydrogen parents etc
-                # that's why I can't just use smile and expect it to work...
-                Chem.SanitizeMol(ligand_mol)
+                ligand_mol = Chem.RemoveHs(ligand_mol)
                 # check if qualify for maxatoms
                 if maxatoms > 0:
                     if not ligand_mol.GetNumHeavyAtoms() <= maxatoms:
