@@ -1150,7 +1150,7 @@ def generate_ligand_data_list_from_pdbqt_dlg(
     # use meeko prepare molecule
     pdbqt_mol = PDBQTMolecule(file_str, name=ligname, is_dlg=is_dlg, skip_typing=True)
     # return the whole list with conformers if requested
-    rdkit_mol = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol)[0]
+    rdkit_mol = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol, only_hs_with_coords=True)[0]
 
     rdkit_mol, properties = prepare_mol_for_database(rdkit_mol)
     pose_coordinates = properties.get("pose_coordinates")

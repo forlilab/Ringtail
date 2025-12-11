@@ -2190,7 +2190,6 @@ class StorageManager:
                 float(value)
                 for value in json.loads(pose_coordinates)[hit_atom_indices[index]]
             ]
-            print("\n\n xyz: ", xyz)
             # calculate the sum of squares distances
             d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
             if d2 <= sqdist:
@@ -2258,21 +2257,7 @@ class StorageManager:
                         pose_coordinates = ligandict["pose_coordinates"]
                         # filterrow [1:] should be indices, distance allowance, and coordinates for smarts match
                         substruct_pos_filter = filterrow[1:]
-                        atom_types = [
-                            atom.GetSymbol() for atom in ligand_mol.GetAtoms()
-                        ]
-                        print("all atom types; ", atom_types)
-                        smarts_atom_types = [
-                            atom.GetSymbol() for atom in smarts_mol.GetAtoms()
-                        ]
-                        print("smarts atom types ", smarts_atom_types)
-
                         for hit_indices in ligand_mol.GetSubstructMatches(smarts_mol):
-                            for number, index in enumerate(hit_indices):
-                                print("The atom that has a hit: ", atom_types[index])
-                                print(
-                                    "the smarts equivalent: ", smarts_atom_types[number]
-                                )
                             filter_match = _substructure_position_calculation(
                                 pose_coordinates,
                                 hit_indices,

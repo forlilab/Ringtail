@@ -215,6 +215,7 @@ def find_interactions(
         conf.SetAtomPosition(i, Geometry.Point3D(0, 0, 0))
     # Add conformer to molecule
     mol.AddConformer(conf, assignId=True)
+    mol = Chem.AddHs(mol)
     # calculate interactions for each pose
     for id, coords in poses_coordinates:
         # make a molsetup for the Mol which includes atom types needed for interaction calculations
