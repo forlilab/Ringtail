@@ -537,16 +537,56 @@ class TestRingtailCore:
 
 class TestADNGHandling:
     def test_adng_stream(self):
-        pass
+        try:
+            from rdkit import Chem
+        except:
+            return
+
+        rtc = RingtailCore()
+        rtc.save_receptor("test_data/adng/helix--scofu01.json")
+        suppl = Chem.SDMolSupplier(
+            "test_data/adng/docked_ligands.sdf",
+            removeHs=False,
+        )
+        rtc.add_mol(suppl)
+
+        results_count = rtc.table_length("Results")
+        interaction_count = rtc.table_length("Interactions")
+        os.system("rm output.db")
+
+        assert results_count == 9
+        assert interaction_count == 156
 
     def test_adng_file_add(self):
-        pass
+        adng_path = "test_data/adng"
+        rtc = RingtailCore("output.db")
+        rtc.add_results_from_files(
+            file_path=adng_path,
+            receptor_file=adng_path + "/helix--scofu01.json",
+            save_receptor=True,
+            docking_mode="adng",
+        ),
+        results_count = rtc.table_length("Results")
+        interaction_count = rtc.table_length("Interactions")
+        os.system("rm output.db")
 
-    def test_calculate_interactions(self):
-        pass
+        assert results_count == 9
+        assert interaction_count == 156
 
     def test_adng_filtering(self):
-        pass
+        adng_path = "test_data/adng"
+        rtc = RingtailCore("output.db")
+        rtc.add_results_from_files(
+            file_path=adng_path,
+            receptor_file=adng_path + "/helix--scofu01.json",
+            save_receptor=True,
+            docking_mode="adng",
+        ),
+        count = rtc.filter(
+            eworst=-13, ligand_substruct=["C=O"], vdw_interactions=[(":VAL::", True)]
+        )
+        os.system("rm output.db")
+        assert count == 1
 
 
 class TestVinaHandling:
@@ -650,6 +690,19 @@ class TestVinaHandling:
         os.system("rm output.db*")
 
         assert warning_worked
+
+    def test_various_filters_vina(self):
+        vina_path = "test_data/vina"
+        rtc = RingtailCore("output.db")
+        rtc.add_results_from_files(
+            file_path=vina_path,
+            receptor_file=vina_path + "/receptor.pdbqt",
+            save_receptor=True,
+            docking_mode="vina",
+        ),
+        count = rtc.filter(eworst=-6, ligand_substruct=["[N]"])
+        os.system("rm output.db")
+        assert count == 1
 
 
 class TestStorageMan:
