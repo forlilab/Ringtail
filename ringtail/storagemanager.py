@@ -122,7 +122,7 @@ class StorageManager:
 
     # region public api
 
-    def insert_bulk_data(self, docking_data: dict, duplicate_handling: str = None):
+    def insert_data(self, docking_data: dict, duplicate_handling: str = None):
         """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
 
         Args:
@@ -139,26 +139,6 @@ class StorageManager:
         if poses:
             # interactions has ligname and pose rank
             self._insert_bulk_docking_data(poses, interaction_data, duplicate_handling)
-        self.conn.commit()
-
-    def insert_single_data(
-        self,
-        ligand: list = None,
-        poses: list = None,
-        interactions: list = None,
-    ):
-        """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
-
-        Args:
-            docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
-            write_options (dict): options for how to write the data, primarily how to treat duplicates
-        """
-        if ligand:
-            self._insert_ligands(ligand)
-        if interactions:
-            self._insert_interaction_index_rows(interactions)
-        if poses:
-            self._insert_docking_data(poses, interactions)
         self.conn.commit()
 
     def insert_receptor_basic_info(self, receptor_data: list):
@@ -1736,58 +1716,6 @@ class StorageManager:
             self._delete_new_duplicate_results()
         # then, move results from temp tables to database
         self._move_tempresults_to_database()
-        logger.info(
-            f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
-        )
-
-    def _insert_docking_data(self, results: list[dict], interactions: list[dict] = []):
-        """Takes list of database rows to insert, adds data to results table.
-        First stages data in temporary tables, then handles duplicates (if requested),
-        and finally transfers data from temporary tables into permanent storage and
-        commits once at the end.
-
-        Args:
-            results (dict): list of arrays containing formatted result rows
-            interactions (list): list of interactions
-            options (dict): includes options on how to handle duplicates if there are any
-
-        """
-        # dynamically build insert statement with valid Results columns
-        # TODO most likely sqlite specific
-        valid_columns = [
-            key for key in results[0].keys() if key.lower() in RESULTS_COLUMNS
-        ]
-        referenced_cols = [":" + col for col in valid_columns]
-
-        insert_statement = f"""
-        INSERT INTO Results (ligand_id, {",".join(valid_columns)}) 
-        SELECT ligand_id, {",".join(referenced_cols)} 
-        FROM Ligands 
-        WHERE Ligands.ligname = :ligname;"""
-
-        self.db_update(insert_statement, results)
-        if interactions:
-            # create interaction insert statement
-            insert_interactions_statement = """
-            INSERT INTO Interactions (pose_id, interaction_id) 
-            SELECT R.pose_id, II.interaction_id 
-            FROM Results AS R
-            JOIN Ligands AS L
-                ON L.ligand_id = R.ligand_id
-            JOIN Interaction_indices AS II
-                ON  II.interaction_type = :type
-                AND II.rec_chain = :chain
-                AND II.rec_resname = :residue
-                AND II.rec_resid = :resid
-                AND II.rec_atom = :recname
-                AND II.rec_atomid = :recid
-            WHERE 
-                L.ligname   = :ligname
-                AND R.pose_rank = :pose_rank
-                AND R.run_number = :run_number;
-            """
-
-            self.db_update(insert_interactions_statement, interactions)
         logger.info(
             f"Results ({len(results)} rows) and interactions ({len(interactions)} rows) have been added to the database"
         )

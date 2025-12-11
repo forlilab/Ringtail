@@ -1049,6 +1049,7 @@ def process_docked_mol(
     interaction_finder=None,
     receptor_string: str = None,
     interaction_cutoffs: list[float] = None,
+    add_default_columns: bool = True,
 ):
 
     ligname = mol.GetProp("_Name")
@@ -1056,8 +1057,10 @@ def process_docked_mol(
     smiles = Chem.MolToSmiles(mol)
     ligand_row = [ligname, smiles, mol.ToBinary()]
     interaction_rows = []
-
-    results_dict = {}
+    if add_default_columns:
+        results_dict = results_row()
+    else:
+        results_dict = {}
     # remove coordinates and docking properties (retains other custom properties)
     # I think conformers are properly parsed but not sure about scores
     mol, mol_properties = prepare_mol_for_database(

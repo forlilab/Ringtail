@@ -288,11 +288,7 @@ class RingtailCore:
                     is_file=False,
                 )
 
-                sm.insert_single_data(
-                    docking_data["ligands"],
-                    docking_data["poses"],
-                    docking_data["interactions"],
-                )
+                sm.insert_data(docking_data, duplicate_handling)
 
     def add_mol(
         self,
@@ -302,6 +298,7 @@ class RingtailCore:
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         receptor_string: str = None,
         chunk_size: int = 5000,
+        duplicate_handling: str = RingtailDefaults.duplicate_handling,
         finalize: bool = False,
     ):
         """
@@ -309,11 +306,6 @@ class RingtailCore:
         not to implement "max number of poses"/"store all poses". The user therefore needs to be aware
         that any pose added with this method will be written to the database. If the user wishes to
         institute a max_poses limit, this needs to be implemented prior to invoking this method.
-
-
-
-        - commits every chunk size?
-
         """
 
         docking_mode = validate_docking_mode(docking_mode)
@@ -359,19 +351,10 @@ class RingtailCore:
                     buffer,
                 )
                 if len(buffer["ligands"]) == chunk_size:
-                    # TODO can't i just use bulk data insert then? and keep using duplicate handling
-                    sm.insert_single_data(
-                        buffer["ligands"],
-                        buffer["poses"],
-                        buffer["interactions"],
-                    )
+                    sm.insert_data(buffer, duplicate_handling)
 
             if buffer["ligands"]:
-                sm.insert_single_data(
-                    buffer["ligands"],
-                    buffer["poses"],
-                    buffer["interactions"],
-                )
+                sm.insert_data(buffer, duplicate_handling)
 
     def finalize_write(self):
         """

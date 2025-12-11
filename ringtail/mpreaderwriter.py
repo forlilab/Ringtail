@@ -252,7 +252,7 @@ class Writer(mp.Process):
                 sm.insert_receptor_basic_info(self.receptor_row)
                 self.receptor_written_to_db = True
                 self.receptor_row = None
-            sm.insert_bulk_data(
+            sm.insert_data(
                 self.docked_ligands,
                 self.duplicate_handling,
             )

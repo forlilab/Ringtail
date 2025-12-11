@@ -59,8 +59,12 @@ class StorageManagerSQLite(StorageManager):
 
     # region Methods for creating and inserting into tables the database
 
-    def _create_ligands_table(self, name="Ligands") -> None:
-        """Create table for ligands"""
+    def _create_ligands_table(self, name="Ligands"):
+        """Create table for ligands
+
+        Args:
+            name (str, optional): _description_. Defaults to "Ligands".
+        """
         ligand_table = f"""CREATE TABLE IF NOT EXISTS {name} (
             ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
             LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
@@ -129,7 +133,7 @@ class StorageManagerSQLite(StorageManager):
         """
 
         create_temp_results = """
-        CREATE TEMP TABLE 
+        CREATE TEMP TABLE IF NOT EXISTS
         Results_temp(
             receptor            VARCHAR,
             pose_rank           INTEGER,
@@ -155,7 +159,7 @@ class StorageManagerSQLite(StorageManager):
             ligname             VARCHAR);
             """
         create_temp_interactions = """
-        CREATE TEMP TABLE Interactions_temp(
+        CREATE TEMP TABLE IF NOT EXISTS Interactions_temp(
             ligname             VARCHAR,
             run_number          INTEGER,
             pose_rank           INTEGER,
@@ -167,7 +171,7 @@ class StorageManagerSQLite(StorageManager):
             rec_atomid          VARCHAR);
         """
         create_temp_mapping_table = """
-        CREATE TEMP TABLE pose_map(
+        CREATE TEMP TABLE IF NOT EXISTS pose_map(
             pose_id             INTEGER,
             ligand_id           INTEGER,
             run_number          INTEGER,
@@ -189,7 +193,6 @@ class StorageManagerSQLite(StorageManager):
             results_array (list): list of result rows
             interactions_array (list): list of interaction rows
         """
-        # insert temp results
         temp_results_insert = f"""
             INSERT INTO Results_temp(
                 receptor,
@@ -347,6 +350,11 @@ class StorageManagerSQLite(StorageManager):
         )
         self.db_query(temp_to_interaction)
 
+        # clear temp tables
+        self.db_query("DELETE FROM pose_map")
+        self.db_query("DELETE FROM Interactions_temp")
+        self.db_query("DELETE FROM Results_temp")
+
     def _delete_new_duplicate_results(self):
         """Checks if a pose is uniquely represented in the Results table,
         and deletes it from the staged incoming data if duplicated.
@@ -457,7 +465,7 @@ class StorageManagerSQLite(StorageManager):
         flexres_atomnames
         ) VALUES
         (?,?,?,?,?,?)"""
-        self.db_update(sql_insert, [receptor_array])
+        self.db_query(sql_insert, receptor_array, commit=True)
 
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
@@ -559,7 +567,7 @@ class StorageManagerSQLite(StorageManager):
         Writes unique interactions to database
 
         Args:
-            interaction_tuple (list[tuple]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
+            interactions (list[dict]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         # to insert interaction if unique
         sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
@@ -702,26 +710,6 @@ class StorageManagerSQLite(StorageManager):
             commit=False,
         )
 
-    def _create_indices(self):
-        """Create index for specified tables and columns. 'ak' stands for 'alternate key'
-        and is prepended to index name to avoid naming conflicts
-        """
-        logger.debug("Creating columns indices...")
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
-        )
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
-        )
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
-        )
-        self.db_query("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
-        self.conn.commit()
-        logger.info(
-            "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
-        )
-
     # endregion
 
     # region merge databases
@@ -853,106 +841,47 @@ class StorageManagerSQLite(StorageManager):
         except Exception as e:
             raise StorageError(e) from e
 
-    def _merge_interaction_tables(self, merge_id: int):
+    def _merge_db_properties_table(self, merge_id: int):
         """
-        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
-        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
+        Merges database properties table, but importantly will not check for property compatibility
 
         Args:
             merge_id (int): merge session id
 
         Raises:
-            Exception
+            StorageError
         """
-        convert_ii_sql = """INSERT INTO PK_conversions (
-        merge_id,
-        table_name,
-        original_PK,
-        merged_PK) SELECT 
-        ?,
-        'Interaction_indices', 
-        interaction_id,
-            CASE 
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM Interaction_indices
-                    WHERE 
-                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
-                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
-                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
-                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
-                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
-                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
-                    ) 
-                THEN (
-                    SELECT main.Interaction_indices.interaction_id
-                    FROM main.Interaction_indices
-                    WHERE 
-                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
-                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
-                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
-                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
-                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
-                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
-                    )
-                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
-            END AS new_interaction_id
-        FROM merging.Interaction_indices;"""
-
-        # then inserting only those that aren't already in the table
-        insert_interaction_indices = """INSERT INTO Interaction_indices (
-        interaction_id,
-        interaction_type,
-        rec_chain,
-        rec_resname,
-        rec_resid,
-        rec_atom,
-        rec_atomid)
-        SELECT 
-            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
-            interaction_type,
-            rec_chain,
-            rec_resname,
-            rec_resid,
-            rec_atom,
-            rec_atomid
-        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
-        """
-
-        # Adding new data to Interactions table with (updated) pose_id and interaction_id
-        insert_interactions = """
-        INSERT INTO Interactions (
-        Pose_ID,
-        interaction_id
-        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
-                FROM merging.Interactions I
-                LEFT JOIN (SELECT original_PK, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
-            LEFT JOIN (SELECT original_PK, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Interaction_indices' 
-                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
-
         try:
             cur = self.conn.cursor()
+            convert_dbprop_sql = """INSERT INTO PK_conversions (
+                merge_id,
+                table_name,
+                original_PK,
+                merged_PK) SELECT 
+                ?,
+                'db_properties', 
+                DB_write_session,
+                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
+                FROM merging.db_properties;"""
             cur.execute(
-                convert_ii_sql,
+                convert_dbprop_sql,
                 (merge_id,),
             )
-            cur.execute(insert_interaction_indices, (merge_id,))
-            cur.execute(
-                insert_interactions,
-                (
-                    merge_id,
-                    merge_id,
-                ),
-            )
+
+            insert_dbprops_sql = """INSERT INTO DB_properties (
+                DB_write_session,
+                docking_mode,
+                number_of_poses)
+                SELECT 
+                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
+                    docking_mode,
+                    number_of_poses
+                FROM merging.DB_properties;"""
+            cur.execute(insert_dbprops_sql, (merge_id,))
             self.conn.commit()
         except Exception as e:
-            raise Exception(
-                f"Error during update and insertion of interactions: {e}"
+            raise StorageError(
+                "Error encountered while merging db_properties table"
             ) from e
 
     def _merge_ligands_and_results_tables(self, merge_id: int):
@@ -1117,47 +1046,106 @@ class StorageManagerSQLite(StorageManager):
                 f"Error encountered while merging Ligands and Results tables: \n{str(e)}"
             ) from e
 
-    def _merge_db_properties_table(self, merge_id: int):
+    def _merge_interaction_tables(self, merge_id: int):
         """
-        Merges database properties table, but importantly will not check for property compatibility
+        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
+        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
 
         Args:
             merge_id (int): merge session id
 
         Raises:
-            StorageError
+            Exception
         """
+        convert_ii_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        'Interaction_indices', 
+        interaction_id,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    ) 
+                THEN (
+                    SELECT main.Interaction_indices.interaction_id
+                    FROM main.Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    )
+                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
+            END AS new_interaction_id
+        FROM merging.Interaction_indices;"""
+
+        # then inserting only those that aren't already in the table
+        insert_interaction_indices = """INSERT INTO Interaction_indices (
+        interaction_id,
+        interaction_type,
+        rec_chain,
+        rec_resname,
+        rec_resid,
+        rec_atom,
+        rec_atomid)
+        SELECT 
+            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
+            interaction_type,
+            rec_chain,
+            rec_resname,
+            rec_resid,
+            rec_atom,
+            rec_atomid
+        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
+        """
+
+        # Adding new data to Interactions table with (updated) pose_id and interaction_id
+        insert_interactions = """
+        INSERT INTO Interactions (
+        Pose_ID,
+        interaction_id
+        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
+                FROM merging.Interactions I
+                LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
+            LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Interaction_indices' 
+                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
+
         try:
             cur = self.conn.cursor()
-            convert_dbprop_sql = """INSERT INTO PK_conversions (
-                merge_id,
-                table_name,
-                original_PK,
-                merged_PK) SELECT 
-                ?,
-                'db_properties', 
-                DB_write_session,
-                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
-                FROM merging.db_properties;"""
             cur.execute(
-                convert_dbprop_sql,
+                convert_ii_sql,
                 (merge_id,),
             )
-
-            insert_dbprops_sql = """INSERT INTO DB_properties (
-                DB_write_session,
-                docking_mode,
-                number_of_poses)
-                SELECT 
-                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
-                    docking_mode,
-                    number_of_poses
-                FROM merging.DB_properties;"""
-            cur.execute(insert_dbprops_sql, (merge_id,))
+            cur.execute(insert_interaction_indices, (merge_id,))
+            cur.execute(
+                insert_interactions,
+                (
+                    merge_id,
+                    merge_id,
+                ),
+            )
             self.conn.commit()
         except Exception as e:
-            raise StorageError(
-                "Error encountered while merging db_properties table"
+            raise Exception(
+                f"Error during update and insertion of interactions: {e}"
             ) from e
 
     # endregion
@@ -1846,6 +1834,26 @@ class StorageManagerSQLite(StorageManager):
             tables.remove("sqlite_sequence")
         return tables
 
+    def _create_indices(self):
+        """Create index for specified tables and columns. 'ak' stands for 'alternate key'
+        and is prepended to index name to avoid naming conflicts
+        """
+        logger.debug("Creating columns indices...")
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
+        )
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
+        )
+        self.db_query(
+            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
+        )
+        self.db_query("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
+        self.conn.commit()
+        logger.info(
+            "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
+        )
+
     def _get_length_of_table(self, table_name: str) -> int:
         """
         Finds the rowcount/length of a table based on the rowid
@@ -2150,7 +2158,6 @@ class StorageManagerSQLite(StorageManager):
                 return None
 
         self.conn.create_function("smile_to_rdbin", 1, _smile_to_rdbin)
-        # TODO make mol instead
         # populate with data from original ligands table, will autogenerate ligand_id PK
         self.db_query(
             """INSERT INTO Ligands_new (

@@ -205,30 +205,6 @@ class StorageManagerDuckDB(StorageManager):
         # insert results rows
         res_df = pd.DataFrame(
             results_array,
-            columns=[
-                "receptor",
-                "pose_rank",
-                "run_number",
-                "cluster_rmsd",
-                "reference_rmsd",
-                "docking_score",
-                "leff",
-                "delta",
-                "energies_inter",
-                "energies_vdw",
-                "energies_electro",
-                "energies_flexLig",
-                "energies_flexLR",
-                "energies_intra",
-                "energies_torsional",
-                "unbound_energy",
-                "num_interactions",
-                "num_hb",
-                "cluster_size",
-                "pose_coordinates",
-                "flexible_res_coordinates",
-                "ligname",
-            ],
         )
         self.conn.register("incoming_poses", res_df)
         temp_insert = f"""
@@ -261,17 +237,6 @@ class StorageManagerDuckDB(StorageManager):
 
         int_df = pd.DataFrame(
             interactions_array,
-            columns=[
-                "ligname",
-                "run_number",
-                "pose_rank",
-                "interaction_type",
-                "rec_chain",
-                "rec_resname",
-                "rec_resid",
-                "rec_atom",
-                "rec_atomid",
-            ],
         )
         self.conn.register("incoming_interaction", int_df)
         temp_interaction_insert = """
@@ -482,7 +447,7 @@ class StorageManagerDuckDB(StorageManager):
         ) VALUES
         (?,?,?,?,?,?)"""
 
-        self.db_query(sql_insert, receptor_array)
+        self.db_query(sql_insert, receptor_array, commit=True)
 
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
@@ -584,23 +549,15 @@ class StorageManagerDuckDB(StorageManager):
 
         self.db_query(interaction_table)
 
-    def _insert_interaction_index_rows(self, interactions: list[tuple]):
+    def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
         Writes unique interactions to database via a pandas dataframe
 
         Args:
-            interaction_tuple (list[tuple]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
+            interactions (list[dict]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         df = pd.DataFrame(
             interactions,
-            columns=[
-                "interaction_type",
-                "rec_chain",
-                "rec_resname",
-                "rec_resid",
-                "rec_atom",
-                "rec_atomid",
-            ],
         )
         self.conn.register("df_view", df)
         # to insert interaction if unique
@@ -639,15 +596,6 @@ class StorageManagerDuckDB(StorageManager):
         Duckdb does not use indexing like other databases
         """
         pass
-
-    def _delete_nontables(self):
-        """
-        Deletes objects in the database that are not tables (handled separately)
-        """
-        sequences = self.db_query("""SELECT sequence_name FROM duckdb_sequences();""")
-        if sequences:
-            for sequence in sequences.fetchall():
-                self.db_query(f"DROP SEQUENCE {sequence[0]};")
 
     def _create_cluster_tables(self):
         """
@@ -1231,7 +1179,6 @@ class StorageManagerDuckDB(StorageManager):
     def _generate_result_filtering_query(
         self, filters_dict: dict, bookmark_name: str, filter_bookmark: str = None
     ) -> str:
-        # TODO will only work for some filters
         """
         Takes dict of filters, writes sql filtering string
 
@@ -1362,7 +1309,6 @@ class StorageManagerDuckDB(StorageManager):
     def _prepare_interaction_filtering_query(
         self, include_interactions: list, exclude_interactions: list, max_miss: int
     ) -> str:
-        # TODO this method is huge, great potential for query builder
         """
         Method that prepares a partial query for interactions
 
@@ -1928,6 +1874,15 @@ class StorageManagerDuckDB(StorageManager):
             list: list of table names
         """
         return [row[0].lower() for row in self.db_query("SHOW TABLES").fetchall()]
+
+    def _delete_nontables(self):
+        """
+        Deletes objects in the database that are not tables (handled separately)
+        """
+        sequences = self.db_query("""SELECT sequence_name FROM duckdb_sequences();""")
+        if sequences:
+            for sequence in sequences.fetchall():
+                self.db_query(f"DROP SEQUENCE {sequence[0]};")
 
     def _get_length_of_table(self, table_name: str):
         """
