@@ -1334,10 +1334,11 @@ class RingtailCore:
         # TODO redo this method
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
-            if as_pdbqt_str_only and (polymer_json := rec_data.get("polymer")):
+            polymer_json = rec_data.get("polymer")
+            if as_pdbqt_str_only and polymer_json:
                 polymer = ReceptorManager.polymer_json2pdbqt_str(polymer_json)
             else:
-                polymer = rec_data.get("polymer")
+                polymer = polymer_json
             if rec_data is not None:
                 return (
                     rec_data.get("RecName"),

@@ -441,7 +441,7 @@ class StorageManagerSQLite(StorageManager):
             flexible_residues   VARCHAR,
             flexres_atomnames   VARCHAR,
             receptor_object     BLOB,
-            polymer             BLOB
+            polymer             VARCHAR
         );"""
 
         self.db_query(receptors_table)

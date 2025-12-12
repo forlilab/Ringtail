@@ -64,7 +64,7 @@ class StorageManagerDuckDB(StorageManager):
             name (str, optional): Defaults to "Ligands".
         """
         ligand_table = f"""
-            CREATE SEQUENCE seq_ligandid START 1;
+            CREATE SEQUENCE IF NOT EXISTS seq_ligandid START 1;
             CREATE TABLE IF NOT EXISTS {name} (
             ligand_id           INTEGER DEFAULT nextval('seq_ligandid') PRIMARY KEY,
             LigName             VARCHAR NOT NULL UNIQUE,
@@ -115,7 +115,7 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         sql_results_table = f"""
-            CREATE SEQUENCE seq_poseid START 1;
+            CREATE SEQUENCE IF NOT EXISTS seq_poseid START 1;
             CREATE TABLE IF NOT EXISTS {name} (
             Pose_ID             INTEGER DEFAULT nextval('seq_poseid') PRIMARY KEY,
             ligand_id           INTEGER REFERENCES Ligands(ligand_id),
@@ -150,7 +150,7 @@ class StorageManagerDuckDB(StorageManager):
         used for staging incoming data.
         """
         create_temp_results = """
-        CREATE TEMP TABLE 
+        CREATE TEMP TABLE IF NOT EXISTS 
         Results_temp(
             receptor            VARCHAR,
             pose_rank           INTEGER,
@@ -176,7 +176,7 @@ class StorageManagerDuckDB(StorageManager):
             ligname             VARCHAR);
             """
         create_temp_interactions = """
-        CREATE TEMP TABLE Interactions_temp(
+        CREATE TEMP TABLE IF NOT EXISTS Interactions_temp(
             ligname             VARCHAR,
             run_number          INTEGER,
             pose_rank           INTEGER,
@@ -231,17 +231,49 @@ class StorageManagerDuckDB(StorageManager):
                     pose_coordinates,
                     flexible_res_coordinates,
                     ligname) 
-                SELECT * FROM incoming_poses;"""
+                SELECT receptor,
+                    pose_rank,
+                    run_number,
+                    cluster_rmsd,
+                    reference_rmsd,
+                    docking_score,
+                    leff,
+                    delta,
+                    energies_inter,
+                    energies_vdw,
+                    energies_electro,
+                    energies_flexLig,
+                    energies_flexLR,
+                    energies_intra,
+                    energies_torsional,
+                    unbound_energy,
+                    num_interactions,
+                    num_hb,
+                    cluster_size,
+                    pose_coordinates,
+                    flexible_res_coordinates,
+                    ligname FROM incoming_poses;"""
 
         self.db_query(temp_insert)
 
         int_df = pd.DataFrame(
             interactions_array,
+            columns=[
+                "ligname",
+                "run_number",
+                "pose_rank",
+                "type",
+                "chain",
+                "residue",
+                "resid",
+                "recname",
+                "recid",
+            ],
         )
         self.conn.register("incoming_interaction", int_df)
         temp_interaction_insert = """
             INSERT INTO Interactions_temp (ligname, run_number, pose_rank, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
-            SELECT df.ligname, df.run_number, df.pose_rank, df.interaction_type, df.rec_chain, df.rec_resname, df.rec_resid, df.rec_atom, df.rec_atomid
+            SELECT df.ligname, df.run_number, df.pose_rank, df.type, df.chain, df.residue, df.resid, df.recname, df.recid
             FROM incoming_interaction AS df;"""
         self.db_query(temp_interaction_insert)
 
@@ -323,7 +355,7 @@ class StorageManagerDuckDB(StorageManager):
         mapping = self.db_query(temp_to_results).fetchall()
 
         create_temp_mapping_table = """
-        CREATE TEMP TABLE pose_map(
+        CREATE TEMP TABLE IF NOT EXISTS pose_map(
             pose_id             INTEGER,
             ligand_id           INTEGER,
             run_number          INTEGER,
@@ -337,6 +369,11 @@ class StorageManagerDuckDB(StorageManager):
             commit=False,
         )
         self.db_query(temp_to_interaction)
+
+        # clear temp tables
+        self.db_query("DELETE FROM pose_map")
+        self.db_query("DELETE FROM Interactions_temp")
+        self.db_query("DELETE FROM Results_temp")
 
     def _delete_new_duplicate_results(self):
         """Checks if a pose is uniquely represented in the Results table,
@@ -416,7 +453,7 @@ class StorageManagerDuckDB(StorageManager):
     def _create_receptors_table(self):
         """Create table for receptors. Has primary key although only one receptor allowed"""
         receptors_table = """
-            CREATE SEQUENCE seq_receptorid START 1;
+            CREATE SEQUENCE IF NOT EXISTS seq_receptorid START 1;
             CREATE TABLE IF NOT EXISTS Receptors (
             Receptor_ID         INTEGER DEFAULT nextval('seq_receptorid') PRIMARY KEY,
             RecName             VARCHAR,
@@ -426,7 +463,7 @@ class StorageManagerDuckDB(StorageManager):
             flexible_residues   VARCHAR,
             flexres_atomnames   VARCHAR,
             receptor_object     BLOB,
-            polymer             BLOB
+            polymer             JSON
         );"""
         self.db_query(receptors_table)
 
@@ -500,7 +537,7 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         sql_str = """
-        CREATE SEQUENCE seq_dbwriteid START 1;
+        CREATE SEQUENCE IF NOT EXISTS seq_dbwriteid START 1;
         CREATE TABLE IF NOT EXISTS DB_properties (
         DB_write_session    INTEGER DEFAULT nextval('seq_dbwriteid') PRIMARY KEY,
         docking_mode        VARCHAR,
@@ -524,8 +561,8 @@ class StorageManagerDuckDB(StorageManager):
     def _create_interaction_index_table(self):
         """Creates a table describing unique interactions in the database"""
         interaction_index_table = """
-        CREATE SEQUENCE seq_interactionid START 1;
-        CREATE TABLE Interaction_indices (
+        CREATE SEQUENCE IF NOT EXISTS seq_interactionid START 1;
+        CREATE TABLE IF NOT EXISTS Interaction_indices (
         interaction_id      INTEGER DEFAULT nextval('seq_interactionid') PRIMARY KEY,
         interaction_type    VARCHAR,
         rec_chain           VARCHAR,
@@ -541,7 +578,7 @@ class StorageManagerDuckDB(StorageManager):
         """Creates a table of each pose-interaction combination."""
 
         interaction_table = """
-        CREATE SEQUENCE seq_interactionposeid START 1;
+        CREATE SEQUENCE IF NOT EXISTS seq_interactionposeid START 1;
         CREATE TABLE IF NOT EXISTS Interactions (
         interaction_pose_ID INTEGER DEFAULT nextval('seq_interactionposeid') PRIMARY KEY,
         Pose_ID   INTEGER REFERENCES Results(pose_id),
@@ -558,6 +595,7 @@ class StorageManagerDuckDB(StorageManager):
         """
         df = pd.DataFrame(
             interactions,
+            columns=["type", "chain", "residue", "resid", "recname", "recid"],
         )
         self.conn.register("df_view", df)
         # to insert interaction if unique
