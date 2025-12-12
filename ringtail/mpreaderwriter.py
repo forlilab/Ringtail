@@ -79,27 +79,6 @@ class DockingFileReader(mp.Process):
             "calculate_interactions",
             RingtailDefaults.calculate_interactions,
         )
-        if calculate_interactions:
-            try:
-                interaction_finder = InteractionFinder(
-                    self.shared.get("receptor_string", None),
-                    *self.shared.get(
-                        "interaction_cutoffs",
-                        RingtailDefaults.interaction_cutoffs,
-                    ),
-                )
-                common_processing_vars.update(
-                    {
-                        "calculate_interactions": True,
-                        "interaction_finder": interaction_finder,
-                    }
-                )
-            except:
-                common_processing_vars.update(
-                    {
-                        "calculate_interactions": False,
-                    }
-                )
 
         while True:
             try:
@@ -115,7 +94,27 @@ class DockingFileReader(mp.Process):
                     # before leaving, pass the poison pill back in the queue
                     self.queueOut.put(None)
                     break
-
+                if calculate_interactions:
+                    try:
+                        interaction_finder = InteractionFinder(
+                            self.shared.get("receptor_string", None),
+                            *self.shared.get(
+                                "interaction_cutoffs",
+                                RingtailDefaults.interaction_cutoffs,
+                            ),
+                        )
+                        common_processing_vars.update(
+                            {
+                                "calculate_interactions": True,
+                                "interaction_finder": interaction_finder,
+                            }
+                        )
+                    except:
+                        common_processing_vars.update(
+                            {
+                                "calculate_interactions": False,
+                            }
+                        )
                 # initialize a parser for each process with kw-args
                 parser = docking_file_parsers.get(self.docking_mode, "missing_parser")(
                     self.shared.get("num_poses"), **common_processing_vars
