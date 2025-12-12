@@ -1250,15 +1250,35 @@ def generate_interaction_tuples(interaction_dictionaries: list, unique_id=True) 
     Returns:
         list: of tuples of interaction data
     """
+    # interaction_keywords = ["type", "chain", "residue", "resid", "recname", "recid"]
+
+    # return [
+    #     {
+    #         **(pose["id"] if unique_id else {}),
+    #         **{kw: pose[kw][i] for kw in interaction_keywords},
+    #     }
+    #     for pose in interaction_dictionaries
+    #     for i in range(pose["count"])
+    # ]
     interaction_keywords = ["type", "chain", "residue", "resid", "recname", "recid"]
-    return [
-        {
-            **(pose["id"] if unique_id else {}),
-            **{kw: pose[kw][i] for kw in interaction_keywords},
-        }
+
+    # Extract ID keys if needed (check first pose for structure)
+    id_keys = (
+        list(interaction_dictionaries[0]["id"].keys())
+        if unique_id and interaction_dictionaries
+        else []
+    )
+    all_keys = id_keys + interaction_keywords if unique_id else interaction_keywords
+
+    # Generate tuples and deduplicate
+    tuples = set(
+        tuple(pose["id"][k] if k in id_keys else pose[k][i] for k in all_keys)
         for pose in interaction_dictionaries
         for i in range(pose["count"])
-    ]
+    )
+
+    # Convert back to dicts with proper keys
+    return [dict(zip(all_keys, t)) for t in tuples]
 
 
 docking_file_parsers: dict[str, callable] = {

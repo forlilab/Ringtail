@@ -555,7 +555,7 @@ class TestADNGHandling:
         os.system("rm output.db")
 
         assert results_count == 9
-        assert interaction_count == 156
+        assert interaction_count == 60
 
     def test_adng_file_add(self):
         adng_path = "test_data/adng"
@@ -571,7 +571,7 @@ class TestADNGHandling:
         os.system("rm output.db")
 
         assert results_count == 9
-        assert interaction_count == 156
+        assert interaction_count == 60
 
     def test_adng_filtering(self):
         adng_path = "test_data/adng"
@@ -637,7 +637,7 @@ class TestVinaHandling:
         os.system("rm output.db*")
 
         assert unique_definition_count == 32
-        assert interaction_count == 162
+        assert interaction_count == 77
 
     def test_add_interactions_from_polymer(self):
         rtc = RingtailCore(db_file="flexres.db")
@@ -666,7 +666,7 @@ class TestVinaHandling:
         os.system("rm flexres*.db")
 
         assert ligands_1 == ligands_2 == 1
-        assert interactions_1 == interactions_2 == 85
+        assert interactions_1 == interactions_2 == 38
 
     def test_db_dockingmode_warning(self):
         from ringtail import RingtailDefaults
