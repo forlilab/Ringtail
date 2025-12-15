@@ -1843,6 +1843,19 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.get_range_of_e_le(table)
 
+    def get_pose_interactions(self, pose_id: int) -> list[tuple]:
+        """
+        Gets all interactions for a given pose as a list of tuples with the interaction specification
+
+        Args:
+            pose_id (int): _description_
+
+        Returns:
+            list'tuple: interaction specifications as interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid
+        """
+        with self.storageman as sm:
+            return sm.fetch_pose_interactions(pose_id)
+
     def get_percentiles(
         self, column: str, num_bins: int = 20, table: str = "Results"
     ) -> tuple[list[int], list[float]]:
