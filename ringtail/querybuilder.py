@@ -80,6 +80,8 @@ class QueryBuilder:
     def FROM(self, table, alias=None):
         if alias:
             alias = self._add_alias(table, alias)
+        else:
+            alias = self._add_alias(table, table)
         self.from_table = (table, alias)
         return self
 
