@@ -1033,6 +1033,8 @@ class SDFMoleculeSupplier:  #
                         ),
                     }
                 )
+            else:
+                interaction_rows = []
 
             # add non-specified fields as list of None
             yield {
@@ -1180,7 +1182,6 @@ def prepare_mol_for_database(
     Returns:
         tuple[Chem.Mol, dict]: _description_
     """
-    # TODO could also be wrong parsing here
     pose_coordinates = []
     for conf in mol.GetConformers():
         pose_coordinates.append(conf.GetPositions())
@@ -1250,16 +1251,7 @@ def generate_interaction_tuples(interaction_dictionaries: list, unique_id=True) 
     Returns:
         list: of tuples of interaction data
     """
-    # interaction_keywords = ["type", "chain", "residue", "resid", "recname", "recid"]
 
-    # return [
-    #     {
-    #         **(pose["id"] if unique_id else {}),
-    #         **{kw: pose[kw][i] for kw in interaction_keywords},
-    #     }
-    #     for pose in interaction_dictionaries
-    #     for i in range(pose["count"])
-    # ]
     interaction_keywords = ["type", "chain", "residue", "resid", "recname", "recid"]
 
     # Extract ID keys if needed (check first pose for structure)
