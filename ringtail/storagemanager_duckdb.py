@@ -206,6 +206,14 @@ class StorageManagerDuckDB(StorageManager):
         res_df = pd.DataFrame(
             results_array,
         )
+        # force json.dumps because pd.DataFrame may undo it from the parser
+        res_df["pose_coordinates"] = res_df["pose_coordinates"].apply(
+            lambda x: json.dumps(x.tolist()) if isinstance(x, np.ndarray) else x
+        )
+        res_df["flexible_res_coordinates"] = res_df["flexible_res_coordinates"].apply(
+            lambda x: json.dumps(x.tolist()) if isinstance(x, np.ndarray) else x
+        )
+
         self.conn.register("incoming_poses", res_df)
         temp_insert = f"""
                 INSERT INTO Results_temp(
