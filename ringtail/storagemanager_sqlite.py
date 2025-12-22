@@ -98,7 +98,7 @@ class StorageManagerSQLite(StorageManager):
         """Creates table for results."""
 
         sql_results_table = f"""CREATE TABLE IF NOT EXISTS {name} (
-            Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
+            pose_id             INTEGER PRIMARY KEY AUTOINCREMENT,
             ligand_id           INT,
             receptor            VARCHAR,
             pose_rank           INTEGER,
@@ -430,6 +430,64 @@ class StorageManagerSQLite(StorageManager):
                 tuple(delete_pose_ids_list),
             )
 
+    def _insert_interactions(self, interactions: list[tuple]):
+        """
+        Inserts interaction tuples with pose_id s (IMPORTANT) into the interaction table.
+
+        Args:
+            interactions (list[tuple]): _description_
+        """
+        insert_sql = """
+            INSERT INTO Interactions (
+                ligname, 
+                run_number,
+                pose_rank, 
+                interaction_type, 
+                rec_chain, 
+                rec_resname, 
+                rec_resid, 
+                rec_atom, 
+                rec_atomid)
+            VALUES (
+                :pose_id
+                :type,
+                :chain,
+                :residue,
+                :resid,
+                :recname,
+                :recid);
+            """
+        self.db_update(insert_sql, interactions, commit=False)
+
+    def _update_interaction_counts(self, data: list[dict]):
+        """
+        Data is a dict that is expected to contain pose_id, num_int, and num_hb as keys.
+
+        Args:
+            data (list[dict]): _description_
+        """
+        insert_sql = """
+        UPDATE RESULTS SET 
+        num_interactions = :num_int,
+        num_hb = :num_hb
+        WHERE
+        pose_id = :pose_id;
+        """
+        self.db_update(insert_sql, data, commit=False)
+
+    def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
+        """
+        Inserts processed poses into process tracking table
+
+        Args:
+            pose_ids (list[int]): _description_
+        """
+        query = f"""
+        INSERT INTO {tracking_table} (
+        pose_id) VALUES (?);
+        """
+        self.db_query(query, pose_ids, commit=False)
+
     def _create_receptors_table(self):
         """Create table for receptors."""
         receptors_table = """CREATE TABLE IF NOT EXISTS Receptors (
@@ -554,10 +612,10 @@ class StorageManagerSQLite(StorageManager):
         """Creates a table of each pose-interaction combination."""
 
         interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        Pose_ID   INTEGER,
+        interaction_pose_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pose_id   INTEGER,
         interaction_id INTEGER,
-        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID),
+        FOREIGN KEY (pose_id) REFERENCES Results(pose_id),
         FOREIGN KEY (interaction_id) REFERENCES Interaction_indices(interaction_id))"""
 
         self.db_query(interaction_table)
@@ -573,6 +631,31 @@ class StorageManagerSQLite(StorageManager):
         sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
                         VALUES (:type,:chain,:residue,:resid,:recname,:recid);"""
         self.db_update(sql_insert, interactions, commit=False)
+
+    def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
+        """
+        Creates a table to track pose ids to which are part of a multiple transaction
+        database operation, which may occur over multiple commits and database connections.
+
+        Args:
+            table_name (str, optional): Name of the table. Defaults to "tracking_table".
+        """
+        # check if table exist, and log if it does, suggesting this is the continuation of
+        # a long transaction
+        exists = bool(
+            len(
+                self.db_query(
+                    f"""SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"""
+                ).fetchone()
+            )
+        )
+        print("This table exists: ", exists)
+
+        table_sql = f"""CREATE TABLE IF NOT EXISTS {table_name} (
+        pose_id INTEGER,
+        FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
+        );"""
+        self.db_query(table_sql, commit=True)
 
     def _create_filtering_tables(self):
         """
@@ -949,13 +1032,13 @@ class StorageManagerSQLite(StorageManager):
         merged_PK) SELECT 
         ?,
         'Results', 
-        Pose_ID,
-        Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
+        pose_id,
+        pose_id + (SELECT MAX(pose_id) FROM Results) 
         FROM merging.Results;"""
 
         # insert results with updated pose_ids
         insert_Results = """INSERT INTO Results (
-            Pose_ID,
+            pose_id,
             ligand_id,
             receptor,
             pose_rank,
@@ -1009,7 +1092,7 @@ class StorageManagerSQLite(StorageManager):
             WHERE table_name = 'Results' 
             AND merge_id = ?
             ) pose 
-        ON pose.original_PK = mr.Pose_ID
+        ON pose.original_PK = mr.pose_id
         LEFT JOIN (
             SELECT original_PK, merged_PK 
             FROM PK_conversions 
@@ -1115,14 +1198,14 @@ class StorageManagerSQLite(StorageManager):
         # Adding new data to Interactions table with (updated) pose_id and interaction_id
         insert_interactions = """
         INSERT INTO Interactions (
-        Pose_ID,
+        pose_id,
         interaction_id
         )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
                 FROM merging.Interactions I
                 LEFT JOIN (SELECT original_PK, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
+                AND merge_id = ?) P ON (I.pose_id = P.original_PK)
             LEFT JOIN (SELECT original_PK, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Interaction_indices' 
@@ -1191,9 +1274,9 @@ class StorageManagerSQLite(StorageManager):
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
             if self.is_bookmark(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
             elif self._is_statustable(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN (SELECT Pose_ID FROM {filter_bookmark}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {filter_bookmark}))"""
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
@@ -1241,7 +1324,7 @@ class StorageManagerSQLite(StorageManager):
         # if filter queries exist for each group, string them together appropriately
         if int_query:
             # add with a join statement
-            partial_filter_query += f"JOIN ({int_query}) I ON R.Pose_ID = I.Pose_ID "
+            partial_filter_query += f"JOIN ({int_query}) I ON R.pose_id = I.pose_id "
         if ligname_query:
             # add with a join statement
             partial_filter_query += (
@@ -1269,7 +1352,7 @@ class StorageManagerSQLite(StorageManager):
                 passing_pose_ids.extend(poseids)
 
             # create new partial_filter_query with passing pose ids from the ligand queries
-            partial_filter_query = " R.Pose_ID IN ({0})".format(
+            partial_filter_query = " R.pose_id IN ({0})".format(
                 ",".join(map(str, passing_pose_ids))
             )
 
@@ -1343,7 +1426,7 @@ class StorageManagerSQLite(StorageManager):
 
         # building the query
         # 1. select pose id, call CASE, in paranthesis because grouping with different query
-        query = "SELECT Pose_ID FROM (SELECT Pose_ID "
+        query = "SELECT pose_id FROM (SELECT pose_id "
         if or_include_interactions or or_exclude_interactions:
             # add the case statements
             query += ", CASE "
@@ -1387,7 +1470,7 @@ class StorageManagerSQLite(StorageManager):
                 + ") "
             )
         # 4. add grouping and wildcard for total interactions minus max_miss, essentially
-        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
+        query += f") GROUP BY pose_id HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
 
@@ -1490,7 +1573,7 @@ class StorageManagerSQLite(StorageManager):
             self._attach_db(database[0], db_name)
 
         # make subqueries/common table expressions for each set of ligands
-        selection_query = """{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE Pose_id IN ({bookmark_poses}))"""
+        selection_query = """{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE pose_id IN ({bookmark_poses}))"""
         wanted_ctes = []
         for db_name, _, bookmark in processed_wanted:
             wanted_ctes.append(
@@ -1649,7 +1732,7 @@ class StorageManagerSQLite(StorageManager):
         query = """
         SELECT 
             (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
-            (SELECT COUNT(Pose_id) FROM Results) AS num_poses,
+            (SELECT COUNT(pose_id) FROM Results) AS num_poses,
             (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
             (SELECT COUNT(*) 
             FROM (SELECT interaction_id
@@ -1843,10 +1926,10 @@ class StorageManagerSQLite(StorageManager):
             "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
         )
         self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
+            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(pose_id, ligand_id)"
         )
         self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
+            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(pose_id, interaction_id)"
         )
         self.db_query("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
         self.conn.commit()
@@ -2003,7 +2086,7 @@ class StorageManagerSQLite(StorageManager):
         # upgrade to 1.1.0
         if original_version in ["1.0.0", "1.1.0"]:
             logger.warning(
-                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
+                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the pose_id was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
             )
             if original_version == "1.0.0":
                 self._update_db_100_to_110()
@@ -2055,7 +2138,7 @@ class StorageManagerSQLite(StorageManager):
     def _update_db_110_to_200(self):
         """
         Method to update from database v 1.1.0 to 2.0.0,mainly removes the bitvetor table and creates Interactions table
-        where interaction just lists Pose_id and interaction_id in a long-skinny table
+        where interaction just lists pose_id and interaction_id in a long-skinny table
 
         Raises:
             DatabaseConnectionError
@@ -2086,7 +2169,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             # just populate the Interaction table straight
             cur.executemany(
-                """INSERT INTO Interactions (Pose_id, Interaction_id) VALUES (?,?)""",
+                """INSERT INTO Interactions (pose_id, Interaction_id) VALUES (?,?)""",
                 pose_indices,
             )
             # drop old bitvector table
@@ -2527,8 +2610,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Accepted 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
         )
 
@@ -2536,8 +2619,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Maybe 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
         )
 
@@ -2545,8 +2628,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Rejected 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
             commit=True,
         )

@@ -65,7 +65,7 @@ def get_valid_storageclass(storage_type) -> StorageManager:
         return storage_types[storage_type]
     else:
         raise NotImplementedError(
-            f"Given storage type {storage_type} is not implemented."
+            f"Given storage type {storage_type} is not implemented. If you believe '{storage_type}' should be supported, it may be a missing installation."
         )
 
 
@@ -456,15 +456,21 @@ class RingtailCore:
 
             success = sm.clear_interaction_tables()
             if not success:
-                raise RTCoreError("Trouble while clearing interaction tables.")
+                raise RTCoreError("Trouble while clearing existing interaction tables.")
 
             # now comes the time, read results maybe 5000 at the time,
             # select ligname, run number, pose rank, coordinates
             if not receptor_string:
-                receptor_string = self.get_receptor_object()[2]
+                receptor_string = self.get_receptor_representation()
             db_commit_counter = 0
             interactions = []
+            processed_poseids = []
             results_counts = []
+            # create a "temporary" table that stores what pose has been processed
+            track_table_name = "recomputed_interactions"
+            sm.create_transaction_tracking_table(track_table_name)
+            # can i do this rowid basis maybe instead of pose id? although pose id is the row id
+            # make sure interactions are submitted on a per pose basis? or just delete the last one to be safe and start on that one always
             for pose in sm._stream_query(
                 "SELECT R.pose_id, R.pose_coordinates, L.rdmol FROM Results AS R JOIN Ligands AS L on L.ligand_id=R.ligand_id;",
                 5000,
@@ -479,15 +485,20 @@ class RingtailCore:
                     vdw_cutoff,
                 )
                 interactions.extend(generate_interaction_tuples(interaction_dicts))
-                results_counts.append({""})
+                results_counts.append(
+                    {"pose_id": pose_id, "num_hb": num_hb, "num_int": num_int}
+                )
+                processed_poseids.append((pose_id,))
                 if db_commit_counter == chunk_size:
-                    # TODO use insert interactions/insert
-                    sm.insert_single_mol()
-            # # perform calculations
-            # # insert new interactions
-        # load an iterable of the db info and process in batches of maybe 10,000
-
-        pass
+                    sm.post_insert_interactions(
+                        interactions,
+                        results_counts,
+                        processed_poseids,
+                        track_table_name,
+                    )
+                    interactions = []
+                    processed_poseids = []
+                    results_counts = []
 
     # endregion
 

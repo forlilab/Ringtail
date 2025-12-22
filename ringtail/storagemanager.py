@@ -129,6 +129,7 @@ class StorageManager:
             docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
             duplicate_handling (str, optional): Describes how to handle duplicates, if any. Defaults to None.
         """
+        self._begin_transaction()
         ligands = docking_data.get("ligands", None)
         if ligands:
             self._insert_ligands(ligands)
@@ -139,6 +140,22 @@ class StorageManager:
         if poses:
             # interactions has ligname and pose rank
             self._insert_bulk_docking_data(poses, interaction_data, duplicate_handling)
+        self.conn.commit()
+
+    def post_insert_interactions(
+        self,
+        interactions: list[tuple],
+        interaction_counts: list[dict],
+        processed_pose_ids: list[tuple],
+        tracking_table_name: str,
+    ):
+        self._begin_transaction()
+
+        self._insert_interaction_index_rows(interactions)
+        self._insert_interactions(interactions)
+        self._update_interaction_counts(interaction_counts)
+        self._insert_completed_poses(processed_pose_ids, tracking_table_name)
+
         self.conn.commit()
 
     def insert_receptor_basic_info(self, receptor_data: list):
@@ -1493,6 +1510,16 @@ class StorageManager:
         """
         raise NotImplementedError
 
+    def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
+        """
+        Creates a table to track pose ids to which are part of a multiple transaction
+        database operation, which may occur over multiple commits and database connections.
+
+        Args:
+            table_name (str, optional): Name of the table. Defaults to "tracking_table".
+        """
+        raise NotImplementedError
+
     def update_database_version(self, new_version: str, consent=False, backup=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
@@ -2597,6 +2624,23 @@ class StorageManager:
         flexible_res_coordinates
         """
         raise NotImplementedError
+
+    def _insert_interactions(self, interactions: list[tuple]):
+        """
+        Inserts interaction tuples with pose_id s (IMPORTANT) into the interaction table.
+
+        Args:
+            interactions (list[tuple]): _description_
+        """
+        raise NotImplementedError
+
+    def _update_interaction_counts(self, data: list[dict]):
+        """
+        Data is a dict that is expected to contain pose_id, num_int, and num_hb as keys.
+
+        Args:
+            data (list[dict]): _description_
+        """
 
     def _create_filtering_tables(self):
         """
