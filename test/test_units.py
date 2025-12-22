@@ -573,6 +573,21 @@ class TestADNGHandling:
         assert results_count == 9
         assert interaction_count == 60
 
+    def test_adng_file_add_no_int(self):
+        adng_path = "test_data/adng"
+        rtc = RingtailCore("output.db")
+        rtc.add_results_from_files(
+            file_path=adng_path,
+            calculate_interactions=False,
+            docking_mode="adng",
+        ),
+        results_count = rtc.table_length("Results")
+        interaction_count = rtc.table_length("Interactions")
+        os.system("rm output.db")
+
+        assert results_count == 9
+        assert interaction_count == 0
+
     def test_adng_filtering(self):
         adng_path = "test_data/adng"
         rtc = RingtailCore("output.db")
