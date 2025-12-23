@@ -412,6 +412,50 @@ class TestRingtailCore:
 
         assert line_content == "11128, -7.25\n"
 
+    def test_write_flexres_pdb(self):
+        import meeko
+
+        os.system("rm flexres.db")
+
+        flexres_path = "test_data/flexres/"
+        export_file = "exported_flex_rec.pdb"
+        receptor_file = flexres_path + "receptor.pdbqt"
+        rtc = RingtailCore(db_file="flexres.db")
+        rtc.add_results_from_files(
+            file=flexres_path + "ligand.pdbqt",
+            receptor_file=receptor_file,
+            recursive=True,
+            docking_mode="vina",
+        )
+        rtc.filter(eworst=-1, bookmark_name="flexres")
+        polymer_file = flexres_path + "receptor.json"
+        with open(polymer_file) as f:
+            json_string = f.read()
+        polymer = meeko.Polymer.from_json(json_string)
+        rtc.write_flexres_pdb(
+            polymer,
+            "ligand",
+            "flexres",
+            export_file,
+        )
+
+        assert os.path.exists(export_file)
+
+        with open(export_file) as f:
+            file_contents = f.read()
+
+        assert (
+            "ATOM     11  C   HIS A   2       2.368   0.239  -0.349                       C"
+            in file_contents
+        )
+        assert (
+            "ATOM     44 HD2  HIS A   3      -0.400  -5.308  -1.507                       H"
+            in file_contents
+        )
+
+        os.system(("rm " + export_file))
+        os.system("rm flexres.db output_log.txt")
+
     def test_plot(self):
         if not _db_exists():
             _create_test_db()
