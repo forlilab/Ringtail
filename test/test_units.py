@@ -46,7 +46,7 @@ class TestRingtailCore:
         assert count == 138
 
     def test_save_receptor(self):
-        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
+        rtc = RingtailCore(db_file="output.db")
         count0 = rtc.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )[0][0]
@@ -640,7 +640,7 @@ class TestVinaHandling:
 
     def test_add_interactions(self):
         vina_path = "test_data/vina"
-        rtc = RingtailCore("output.db", logging_level="DEBUG")
+        rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
             file_path=vina_path,
             receptor_file=vina_path + "/receptor.pdbqt",
