@@ -1041,9 +1041,6 @@ class SDFMoleculeSupplier:  #
                             if isinstance(results_dict["pose_coordinates"], np.ndarray)
                             else results_dict["pose_coordinates"]
                         ),
-                        # json.dumps(
-                        #     results_dict["pose_coordinates"].tolist()
-                        # ),
                     }
                 )
             else:
@@ -1133,9 +1130,6 @@ def process_docked_mol(
                     if isinstance(results_dict["pose_coordinates"], np.ndarray)
                     else results_dict["pose_coordinates"]
                 ),
-                # json.dumps(
-                #     results_dict["pose_coordinates"].tolist()
-                # ),
             }
         )
 
