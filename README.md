@@ -30,6 +30,7 @@ at [Scripps Research](https://www.scripps.edu/).
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
 ### Version 3: GUI and database schema overhaul
+#TODO!!! 
 
 ### Version 2.1.1 bug fixes
 - bugs related to ligand filtering and certain uses of the `overwrite` option in the command line have been fixed
@@ -78,7 +79,7 @@ Make sure your Ringtail environment is active, then install via pip
 $ pip install ringtail
 ```
 
-You may need to install one or more of the listed dependencies, including matplotlib, rdkit, scipy, pandas, and meeko (a Forli lab tool). 
+You may need to install one or more of the listed dependencies, including matplotlib, rdkit, scipy, pandas, and meeko (a Forli lab tool). If you wish to use the supported duckdb database engine, this also needs installation (sqlite is usually already installed). 
 
 ```bash
 $ pip install <dependency>
