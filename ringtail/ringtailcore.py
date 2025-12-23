@@ -1050,16 +1050,20 @@ class RingtailCore:
                 root, ext = os.path.splitext(filename)
                 if not ext:
                     ext = ".pdb"
-                path = root + ligand + ext
+                path = root + "_" + ligand + ext
             else:
                 receptor_name, _, _ = self.get_receptor_object()
-                path = receptor_name + ligand + ".pdb"
+                path = receptor_name + "_" + ligand + ".pdb"
 
             flexmoldict = {}
             # string in list of strings
             for index, flexres in enumerate(flexible_residues):
                 # res id is chain:resnum
-                flexmoldict[f"{flexres[4]}:{flexres[-3:]}"] = flexres_mols[index]
+                residue = flexres.split(":")[1]
+                chain = residue[0]
+                resnum = residue[1:]
+                # res id is chain:resnum
+                flexmoldict[f"{chain}:{resnum}"] = flexres_mols[index]
 
             pdb_str = pdb_updated_flexres_from_rdkit(polymer, flexmoldict)
             # write pdb string to file
@@ -2058,7 +2062,7 @@ class RingtailCore:
         for idx, res in enumerate(flexres_mols):
             flexres_hparents = flexres_info[idx][2]
             flexres_mols[idx] = RDKitMolCreate.add_hydrogens(
-                res, flexres_saved_coords[idx], flexres_hparents
+                res, flexres_saved_coords[idx], flexres_hparents, True
             )
 
         return mol, flexres_mols, properties, flexres_residues

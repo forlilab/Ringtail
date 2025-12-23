@@ -418,7 +418,7 @@ class TestRingtailCore:
         os.system("rm flexres.db")
 
         flexres_path = "test_data/flexres/"
-        export_file = "exported_flex_rec.pdb"
+        export_file = "exported_flex_rec"
         receptor_file = flexres_path + "receptor.pdbqt"
         rtc = RingtailCore(db_file="flexres.db")
         rtc.add_results_from_files(
@@ -438,10 +438,10 @@ class TestRingtailCore:
             "flexres",
             export_file,
         )
+        expected_full_path = f"{export_file}_ligand.pdb"
+        assert os.path.exists(expected_full_path)
 
-        assert os.path.exists(export_file)
-
-        with open(export_file) as f:
+        with open(expected_full_path) as f:
             file_contents = f.read()
 
         assert (
@@ -453,7 +453,7 @@ class TestRingtailCore:
             in file_contents
         )
 
-        os.system(("rm " + export_file))
+        os.system(("rm " + expected_full_path))
         os.system("rm flexres.db output_log.txt")
 
     def test_plot(self):
