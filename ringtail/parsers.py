@@ -992,7 +992,15 @@ class SDFMoleculeSupplier:  #
                 }
             )
             single_pose_coordinate = results_dict["pose_coordinates"][0]
-            results_dict.update({"pose_coordinates": single_pose_coordinate})
+            results_dict.update(
+                {
+                    "pose_coordinates": (
+                        json.dumps(single_pose_coordinate.tolist())
+                        if isinstance(single_pose_coordinate, np.ndarray)
+                        else single_pose_coordinate
+                    ),
+                }
+            )
             # calculate interactions
             if calculate_interactions:
                 if not interaction_finder:
@@ -1028,9 +1036,14 @@ class SDFMoleculeSupplier:  #
                     {
                         "num_interactions": num_interactions[0],
                         "num_hb": num_hb[0],
-                        "pose_coordinates": json.dumps(
-                            results_dict["pose_coordinates"].tolist()
+                        "pose_coordinates": (
+                            json.dumps(results_dict["pose_coordinates"].tolist())
+                            if isinstance(results_dict["pose_coordinates"], np.ndarray)
+                            else results_dict["pose_coordinates"]
                         ),
+                        # json.dumps(
+                        #     results_dict["pose_coordinates"].tolist()
+                        # ),
                     }
                 )
             else:
@@ -1078,7 +1091,15 @@ def process_docked_mol(
         }
     )
     single_pose_coordinate = results_dict["pose_coordinates"][0]
-    results_dict.update({"pose_coordinates": single_pose_coordinate})
+    results_dict.update(
+        {
+            "pose_coordinates": (
+                json.dumps(single_pose_coordinate.tolist())
+                if isinstance(single_pose_coordinate, np.ndarray)
+                else single_pose_coordinate
+            ),
+        }
+    )
     # calculate interactions
 
     if calculate_interactions:
@@ -1107,9 +1128,14 @@ def process_docked_mol(
             {
                 "num_interactions": num_interactions[0],
                 "num_hb": num_hb[0],
-                "pose_coordinates": json.dumps(
-                    results_dict["pose_coordinates"].tolist()
+                "pose_coordinates": (
+                    json.dumps(results_dict["pose_coordinates"].tolist())
+                    if isinstance(results_dict["pose_coordinates"], np.ndarray)
+                    else results_dict["pose_coordinates"]
                 ),
+                # json.dumps(
+                #     results_dict["pose_coordinates"].tolist()
+                # ),
             }
         )
 
