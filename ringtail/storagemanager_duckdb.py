@@ -206,13 +206,6 @@ class StorageManagerDuckDB(StorageManager):
         res_df = pd.DataFrame(
             results_array,
         )
-        # force json.dumps because pd.DataFrame may undo it from the parser
-        res_df["pose_coordinates"] = res_df["pose_coordinates"].apply(
-            lambda x: json.dumps(x.tolist()) if isinstance(x, np.ndarray) else x
-        )
-        res_df["flexible_res_coordinates"] = res_df["flexible_res_coordinates"].apply(
-            lambda x: json.dumps(x.tolist()) if isinstance(x, np.ndarray) else x
-        )
 
         self.conn.register("incoming_poses", res_df)
         temp_insert = f"""
@@ -458,6 +451,97 @@ class StorageManagerDuckDB(StorageManager):
                 delete_pose_ids_list,
             )
 
+    def _insert_interactions(self, interactions: list[tuple]):
+        """
+        Inserts interaction tuples with pose_id s (IMPORTANT) into the interaction table.
+
+        Args:
+            interactions (list[tuple]): _description_
+        """
+        # create staging table
+        create_temp_interactions = """
+        CREATE TEMP TABLE IF NOT EXISTS Interactions_temp(
+            pose_id             INTEGER,
+            interaction_type    VARCHAR,
+            rec_chain           VARCHAR,
+            rec_resname         VARCHAR,
+            rec_resid           VARCHAR,
+            rec_atom            VARCHAR,
+            rec_atomid          VARCHAR);
+        """
+        self.db_query(create_temp_interactions)
+
+        # insert into staging table
+        int_df = pd.DataFrame(
+            interactions,
+            columns=[
+                "pose_id",
+                "type",
+                "chain",
+                "residue",
+                "resid",
+                "recname",
+                "recid",
+            ],
+        )
+        self.conn.register("incoming_interaction", int_df)
+        temp_interaction_insert = """
+            INSERT INTO Interactions_temp (pose_id, interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
+            SELECT df.pose_id, df.type, df.chain, df.residue, df.resid, df.recname, df.recid
+            FROM incoming_interaction AS df;"""
+
+        self.db_query(temp_interaction_insert)
+
+        # move to permanent table
+        temp_to_interaction = """
+            INSERT INTO Interactions(pose_id, interaction_id)
+            SELECT IT.pose_id, II.interaction_id
+            FROM Interactions_temp IT
+            JOIN Interaction_indices II
+                ON II.interaction_type = IT.interaction_type
+                AND II.rec_chain = IT.rec_chain
+                AND II.rec_resname = IT.rec_resname
+                AND II.rec_resid = IT.rec_resid
+                AND II.rec_atom = IT.rec_atom
+                AND II.rec_atomid = IT.rec_atomid;"""
+        self.db_query(temp_to_interaction)
+
+        # delete staging table
+        self._delete_table("Interactions_temp")
+
+    def _update_interaction_counts(self, data: list[dict]):
+        """
+        Data is a dict that is expected to contain pose_id, num_int, and num_hb as keys.
+
+        Args:
+            data (list[dict]): _description_
+        """
+        updates_df = pd.DataFrame(data, columns=["pose_id", "num_int", "num_hb"])
+        self.conn.register("updates", updates_df)
+
+        self.db_query(
+            """
+            UPDATE Results
+            SET num_interactions = u.num_int,
+                num_hb = u.num_hb
+            FROM updates u
+            WHERE Results.pose_id = u.pose_id;
+        """
+        )
+
+    def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
+        """
+        Inserts processed poses into process tracking table
+
+        Args:
+            pose_ids (list[int]): _description_
+        """
+        query = f"""
+        INSERT INTO {tracking_table} (
+        pose_id) VALUES (?);
+        """
+        self.db_update(query, pose_ids, commit=False)
+
     def _create_receptors_table(self):
         """Create table for receptors. Has primary key although only one receptor allowed"""
         receptors_table = """
@@ -613,6 +697,31 @@ class StorageManagerDuckDB(StorageManager):
                     ON CONFLICT DO NOTHING;
                     """
         self.db_query(alt_sql_insert)
+
+    def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
+        """
+        Creates a table to track pose ids to which are part of a multiple transaction
+        database operation, which may occur over multiple commits and database connections.
+
+        Args:
+            table_name (str, optional): Name of the table. Defaults to "tracking_table".
+        """
+        # check if interaction calcs have been started (and not completed)
+        exists = bool(
+            self.db_query(
+                f"""SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"""
+            ).fetchone()
+        )
+        if exists:
+            logger.info(
+                "Interaction calculations have been started in a previous database connection, and not yet finished."
+            )
+
+        table_sql = f"""CREATE TABLE IF NOT EXISTS {table_name} (
+        pose_id INTEGER,
+        FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
+        );"""
+        self.db_query(table_sql, commit=True)
 
     def _create_filtering_tables(self):
         """
@@ -806,14 +915,15 @@ class StorageManagerDuckDB(StorageManager):
         END AS comparison_result 
         FROM Receptors 
         JOIN merging.Receptors AS merging_receptors 
-            ON Receptors.receptor_id = merging_receptors.receptor_id"""
-
-        try:
-            assert self.db_query(receptorcheck_sql).fetchone()[0] == "True"
-        except AssertionError:
-            raise StorageError(
-                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
-            )
+            ON Receptors.receptor_id = merging_receptors.receptor_id;"""
+        receptor_comp = self.db_query(receptorcheck_sql).fetchone()
+        if receptor_comp:
+            try:
+                assert receptor_comp[0] == "True"
+            except AssertionError:
+                raise StorageError(
+                    f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
+                )
         else:
             logger.info(
                 "The two databases are of compatible version and receptors. Merging will proceed."
@@ -833,25 +943,40 @@ class StorageManagerDuckDB(StorageManager):
 
         # merge tables
         try:
+            self._begin_transaction()
             self._merge_db_properties_table(merge_id)
+        except Exception as e:
+            self._rollback()
+            raise MergeError(f"Error during database merging: {e}") from e
+        else:
+            self.conn.commit()
             logger.info("The 'db_properties' table has been merged.")
-
+        try:
             self._merge_ligands_and_results_tables(merge_id)
+            self.conn.commit()
             logger.info("The 'Ligands' and 'Results' tables have been merged.")
-
+        except Exception as e:
+            self._rollback()
+            raise MergeError(f"Error during database merging: {e}") from e
+        else:
+            self.conn.commit()
+            logger.info("The 'db_properties' table has been merged.")
             self._merge_interaction_tables(merge_id)
+        try:
+            self.conn.commit()
             logger.info(
                 "The 'Interaction_indices' and 'Interactions' tables have been merged."
             )
-            self.conn.commit()
         except Exception as e:
+            self._rollback()
             raise MergeError(f"Error during database merging: {e}") from e
         else:
-            logger.info(
-                f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
-            )
-            self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
-            logger.info("The final database has neem cleaned up, and indices rebuilt.")
+            self.conn.commit()
+        logger.info(
+            f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
+        )
+        self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
+        logger.info("The final database has been cleaned up, and indices rebuilt.")
 
     def _create_merge_tables(self):
         """
@@ -1109,6 +1234,8 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             Exception
         """
+        if not self.table_length("Interactions") > 0:
+            return
         convert_ii_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,

@@ -65,7 +65,7 @@ def get_valid_storageclass(storage_type) -> StorageManager:
         return storage_types[storage_type]
     else:
         raise NotImplementedError(
-            f"Given storage type {storage_type} is not implemented."
+            f"Given storage type {storage_type} is not implemented. If you believe '{storage_type}' should be supported, it may be a missing installation."
         )
 
 
@@ -431,63 +431,123 @@ class RingtailCore:
         vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
         receptor_string: str = None,
         get_consent: Callable = None,
-        chunk_size: int = 5000,
+        chunk_size: int = 500,
     ):
-        from parsers import generate_interaction_tuples
+        """
+        ###NOTE SLOOOOOOW
+
+        Args:
+            hb_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[0].
+            vdw_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[1].
+            receptor_string (str, optional): _description_. Defaults to None.
+            get_consent (Callable, optional): _description_. Defaults to None.
+            chunk_size (int, optional): _description_. Defaults to 10.
+
+        Raises:
+            RTCoreError: _description_
+
+        Returns:
+            _type_: _description_
+        """
+        from .parsers import generate_interaction_tuples
 
         # make sure user knows risk of calculating interaction in db with existing interactions
+        track_table_name = "recomputed_interactions"
+        if self.table_length("Interactions") > 0:
+
+            def _api_cmd_consent():
+                consent = input(
+                    "WARNING: Calculating interactions for a database with existing interactions will delete all existing interactions.\n Are you sure you wish to proceed? If so, type 'yes': "
+                )
+                return consent.strip().lower() == "yes"
+
+            if get_consent is None:
+                get_consent = _api_cmd_consent
+
+            if not get_consent():
+                LOGGER.critical(
+                    "Consent not given for deleting and re-calculating interactions, exiting."
+                )
+                return
+            else:
+                with self.storageman as sm:
+                    # Check if track table name exist, then do not clear but use
+                    if not track_table_name in sm.tables_in_db():
+                        success = sm.clear_interaction_tables()
+                        if not success:
+                            raise RTCoreError(
+                                "Trouble while clearing existing interaction tables."
+                            )
+                    else:
+                        LOGGER.info(
+                            "A table tracking processed pose interaction exists.\nWill continue processing poses and not recompute those that have already been processed."
+                        )
+
+        # get receptor representation
+        if not receptor_string:
+            receptor_string = self.get_receptor_representation()
+
+        # accounting
+        db_commit_counter = 0
+        interactions = []
+        processed_poseids = []
+        results_counts = []
+
         with self.storageman as sm:
-            if sm.table_length("Interactions") > 0:
+            # create a "temporary" table that keeps track of what pose_ids have been processed
 
-                def _api_cmd_consent():
-                    consent = input(
-                        "WARNING: Calculating interactions for a database with existing interactions will delete all existing interactions.\n Are you sure you wish to proceed? If so, type 'yes': "
-                    )
-                    return consent.strip().lower() == "yes"
+            sm.create_transaction_tracking_table(track_table_name)
 
-                if get_consent is None:
-                    get_consent = _api_cmd_consent
-
-                if not get_consent():
-                    LOGGER.critical(
-                        "Consent not given for deleting and re-calculating interactions, exiting."
-                    )
-                    return
-
-            success = sm.clear_interaction_tables()
-            if not success:
-                raise RTCoreError("Trouble while clearing interaction tables.")
-
-            # now comes the time, read results maybe 5000 at the time,
-            # select ligname, run number, pose rank, coordinates
-            if not receptor_string:
-                receptor_string = self.get_receptor_object()[2]
-            db_commit_counter = 0
-            interactions = []
-            results_counts = []
+            # process in batches
             for pose in sm._stream_query(
-                "SELECT R.pose_id, R.pose_coordinates, L.rdmol FROM Results AS R JOIN Ligands AS L on L.ligand_id=R.ligand_id;",
-                5000,
+                f"""SELECT R.pose_id, R.pose_coordinates, L.rdmol 
+                FROM Results AS R 
+                JOIN Ligands AS L ON L.ligand_id=R.ligand_id 
+                LEFT JOIN {track_table_name} tt ON R.pose_id = tt.pose_id
+                    WHERE tt.pose_id IS NULL;""",
             ):
                 pose_id, coordinates, rdbin = pose
                 mol = Chem.Mol(rdbin)
                 interaction_dicts, num_hb, num_int = find_interactions(
-                    [tuple({"pose_id": pose_id}, json.loads(coordinates))],
+                    [
+                        (
+                            {"pose_id": pose_id},
+                            json.loads(coordinates),
+                        )
+                    ],
                     mol,
                     receptor_string,
                     hb_cutoff,
                     vdw_cutoff,
                 )
                 interactions.extend(generate_interaction_tuples(interaction_dicts))
-                results_counts.append({""})
-                if db_commit_counter == chunk_size:
-                    # TODO use insert interactions/insert
-                    sm.insert_single_mol()
-            # # perform calculations
-            # # insert new interactions
-        # load an iterable of the db info and process in batches of maybe 10,000
+                results_counts.append(
+                    {"pose_id": pose_id, "num_hb": num_hb[0], "num_int": num_int[0]}
+                )
+                processed_poseids.append((pose_id,))
+                db_commit_counter += 1
 
-        pass
+                if db_commit_counter > chunk_size - 1:
+                    sm.post_insert_interactions(
+                        interactions,
+                        results_counts,
+                        processed_poseids,
+                        track_table_name,
+                    )
+                    interactions = []
+                    processed_poseids = []
+                    results_counts = []
+                    db_commit_counter = 0
+
+            #  insert remaining data after for loop
+            if interactions:
+                sm.post_insert_interactions(
+                    interactions,
+                    results_counts,
+                    processed_poseids,
+                    track_table_name,
+                )
+            sm._delete_table(track_table_name)
 
     # endregion
 

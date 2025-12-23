@@ -112,7 +112,7 @@ def main():
             if index == 0 and not args.dont_backup_db1:
                 rtc.merge_databases(db, backup=True)
             else:
-                rtc.merge_databases(db)
+                rtc.merge_databases(db, backup=False)
         except Exception as e:
             logger.error(f"Database {db} failed to merge: {str(e)}.")
             with open("failed_databases.txt", "a") as f:

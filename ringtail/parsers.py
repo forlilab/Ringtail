@@ -992,7 +992,15 @@ class SDFMoleculeSupplier:  #
                 }
             )
             single_pose_coordinate = results_dict["pose_coordinates"][0]
-            results_dict.update({"pose_coordinates": single_pose_coordinate})
+            results_dict.update(
+                {
+                    "pose_coordinates": (
+                        json.dumps(single_pose_coordinate.tolist())
+                        if isinstance(single_pose_coordinate, np.ndarray)
+                        else single_pose_coordinate
+                    ),
+                }
+            )
             # calculate interactions
             if calculate_interactions:
                 if not interaction_finder:
@@ -1028,8 +1036,10 @@ class SDFMoleculeSupplier:  #
                     {
                         "num_interactions": num_interactions[0],
                         "num_hb": num_hb[0],
-                        "pose_coordinates": json.dumps(
-                            results_dict["pose_coordinates"].tolist()
+                        "pose_coordinates": (
+                            json.dumps(results_dict["pose_coordinates"].tolist())
+                            if isinstance(results_dict["pose_coordinates"], np.ndarray)
+                            else results_dict["pose_coordinates"]
                         ),
                     }
                 )
@@ -1078,7 +1088,15 @@ def process_docked_mol(
         }
     )
     single_pose_coordinate = results_dict["pose_coordinates"][0]
-    results_dict.update({"pose_coordinates": single_pose_coordinate})
+    results_dict.update(
+        {
+            "pose_coordinates": (
+                json.dumps(single_pose_coordinate.tolist())
+                if isinstance(single_pose_coordinate, np.ndarray)
+                else single_pose_coordinate
+            ),
+        }
+    )
     # calculate interactions
 
     if calculate_interactions:
@@ -1107,8 +1125,10 @@ def process_docked_mol(
             {
                 "num_interactions": num_interactions[0],
                 "num_hb": num_hb[0],
-                "pose_coordinates": json.dumps(
-                    results_dict["pose_coordinates"].tolist()
+                "pose_coordinates": (
+                    json.dumps(results_dict["pose_coordinates"].tolist())
+                    if isinstance(results_dict["pose_coordinates"], np.ndarray)
+                    else results_dict["pose_coordinates"]
                 ),
             }
         )
@@ -1226,6 +1246,8 @@ def generate_receptor_row(receptor_data: dict) -> list:
     grid_spacing = receptor_data.get("grid_spacing", "")
     if grid_spacing != "":
         grid_spacing = float(grid_spacing)
+    else:
+        grid_spacing = None
     flexible_residues = json.dumps(receptor_data.get("flexible_residues", None))
     flexres_atomnames = json.dumps(receptor_data.get("flexres_atomnames", None))
 
