@@ -1444,10 +1444,11 @@ class StorageManager:
             bool: True if clearing was successful
         """
         try:
-            self._delete_table("Interaction_indices")
+            self._begin_transaction()
             self._delete_table("Interactions")
-            self._create_interaction_table()
+            self._delete_table("Interaction_indices")
             self._create_interaction_index_table()
+            self._create_interaction_table()
             self.conn.commit()
         except Exception as e:
             raise StorageError("Error during interaction tables clearing: ", str(e))
@@ -2641,6 +2642,15 @@ class StorageManager:
         Args:
             data (list[dict]): _description_
         """
+
+    def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
+        """
+        Inserts processed poses into process tracking table
+
+        Args:
+            pose_ids (list[int]): _description_
+        """
+        raise NotImplementedError
 
     def _create_filtering_tables(self):
         """

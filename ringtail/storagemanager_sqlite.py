@@ -437,11 +437,23 @@ class StorageManagerSQLite(StorageManager):
         Args:
             interactions (list[tuple]): _description_
         """
+        # create staging table
+        create_temp_interactions = """
+        CREATE TEMP TABLE IF NOT EXISTS Interactions_temp(
+            pose_id             INTEGER,
+            interaction_type    VARCHAR,
+            rec_chain           VARCHAR,
+            rec_resname         VARCHAR,
+            rec_resid           VARCHAR,
+            rec_atom            VARCHAR,
+            rec_atomid          VARCHAR);
+        """
+        self.db_query(create_temp_interactions)
+
+        # insert into staging table
         insert_sql = """
-            INSERT INTO Interactions (
-                ligname, 
-                run_number,
-                pose_rank, 
+            INSERT INTO Interactions_temp (
+                pose_id, 
                 interaction_type, 
                 rec_chain, 
                 rec_resname, 
@@ -449,7 +461,7 @@ class StorageManagerSQLite(StorageManager):
                 rec_atom, 
                 rec_atomid)
             VALUES (
-                :pose_id
+                :pose_id,
                 :type,
                 :chain,
                 :residue,
@@ -458,6 +470,23 @@ class StorageManagerSQLite(StorageManager):
                 :recid);
             """
         self.db_update(insert_sql, interactions, commit=False)
+
+        # move to permanent table
+        temp_to_interaction = """
+            INSERT INTO Interactions(pose_id, interaction_id)
+            SELECT IT.pose_id, II.interaction_id
+            FROM Interactions_temp IT
+            JOIN Interaction_indices II
+                ON II.interaction_type = IT.interaction_type
+                AND II.rec_chain = IT.rec_chain
+                AND II.rec_resname = IT.rec_resname
+                AND II.rec_resid = IT.rec_resid
+                AND II.rec_atom = IT.rec_atom
+                AND II.rec_atomid = IT.rec_atomid;"""
+        self.db_query(temp_to_interaction)
+
+        # delete staging table
+        self._delete_table("Interactions_temp")
 
     def _update_interaction_counts(self, data: list[dict]):
         """
@@ -486,7 +515,7 @@ class StorageManagerSQLite(StorageManager):
         INSERT INTO {tracking_table} (
         pose_id) VALUES (?);
         """
-        self.db_query(query, pose_ids, commit=False)
+        self.db_update(query, pose_ids, commit=False)
 
     def _create_receptors_table(self):
         """Create table for receptors."""
@@ -640,16 +669,16 @@ class StorageManagerSQLite(StorageManager):
         Args:
             table_name (str, optional): Name of the table. Defaults to "tracking_table".
         """
-        # check if table exist, and log if it does, suggesting this is the continuation of
-        # a long transaction
+        # check if interaction calcs have been started (and not completed)
         exists = bool(
-            len(
-                self.db_query(
-                    f"""SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"""
-                ).fetchone()
-            )
+            self.db_query(
+                f"""SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"""
+            ).fetchone()
         )
-        print("This table exists: ", exists)
+        if exists:
+            logger.info(
+                "Interaction calculations have been started in a previous database connection, and not yet finished."
+            )
 
         table_sql = f"""CREATE TABLE IF NOT EXISTS {table_name} (
         pose_id INTEGER,

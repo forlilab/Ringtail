@@ -1226,6 +1226,8 @@ def generate_receptor_row(receptor_data: dict) -> list:
     grid_spacing = receptor_data.get("grid_spacing", "")
     if grid_spacing != "":
         grid_spacing = float(grid_spacing)
+    else:
+        grid_spacing = None
     flexible_residues = json.dumps(receptor_data.get("flexible_residues", None))
     flexres_atomnames = json.dumps(receptor_data.get("flexres_atomnames", None))
 
