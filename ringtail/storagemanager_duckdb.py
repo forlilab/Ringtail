@@ -206,13 +206,6 @@ class StorageManagerDuckDB(StorageManager):
         res_df = pd.DataFrame(
             results_array,
         )
-        # force json.dumps because pd.DataFrame may undo it from the parser
-        res_df["pose_coordinates"] = res_df["pose_coordinates"].apply(
-            lambda x: json.dumps(x.tolist()) if isinstance(x, np.ndarray) else x
-        )
-        res_df["flexible_res_coordinates"] = res_df["flexible_res_coordinates"].apply(
-            lambda x: json.dumps(x.tolist()) if isinstance(x, np.ndarray) else x
-        )
 
         self.conn.register("incoming_poses", res_df)
         temp_insert = f"""
@@ -922,14 +915,15 @@ class StorageManagerDuckDB(StorageManager):
         END AS comparison_result 
         FROM Receptors 
         JOIN merging.Receptors AS merging_receptors 
-            ON Receptors.receptor_id = merging_receptors.receptor_id"""
-
-        try:
-            assert self.db_query(receptorcheck_sql).fetchone()[0] == "True"
-        except AssertionError:
-            raise StorageError(
-                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
-            )
+            ON Receptors.receptor_id = merging_receptors.receptor_id;"""
+        receptor_comp = self.db_query(receptorcheck_sql).fetchone()
+        if receptor_comp:
+            try:
+                assert receptor_comp[0] == "True"
+            except AssertionError:
+                raise StorageError(
+                    f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
+                )
         else:
             logger.info(
                 "The two databases are of compatible version and receptors. Merging will proceed."
@@ -949,25 +943,40 @@ class StorageManagerDuckDB(StorageManager):
 
         # merge tables
         try:
+            self._begin_transaction()
             self._merge_db_properties_table(merge_id)
+        except Exception as e:
+            self._rollback()
+            raise MergeError(f"Error during database merging: {e}") from e
+        else:
+            self.conn.commit()
             logger.info("The 'db_properties' table has been merged.")
-
+        try:
             self._merge_ligands_and_results_tables(merge_id)
+            self.conn.commit()
             logger.info("The 'Ligands' and 'Results' tables have been merged.")
-
+        except Exception as e:
+            self._rollback()
+            raise MergeError(f"Error during database merging: {e}") from e
+        else:
+            self.conn.commit()
+            logger.info("The 'db_properties' table has been merged.")
             self._merge_interaction_tables(merge_id)
+        try:
+            self.conn.commit()
             logger.info(
                 "The 'Interaction_indices' and 'Interactions' tables have been merged."
             )
-            self.conn.commit()
         except Exception as e:
+            self._rollback()
             raise MergeError(f"Error during database merging: {e}") from e
         else:
-            logger.info(
-                f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
-            )
-            self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
-            logger.info("The final database has neem cleaned up, and indices rebuilt.")
+            self.conn.commit()
+        logger.info(
+            f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
+        )
+        self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
+        logger.info("The final database has been cleaned up, and indices rebuilt.")
 
     def _create_merge_tables(self):
         """
@@ -1225,6 +1234,8 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             Exception
         """
+        if not self.table_length("Interactions") > 0:
+            return
         convert_ii_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,

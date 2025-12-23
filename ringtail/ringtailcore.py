@@ -431,12 +431,28 @@ class RingtailCore:
         vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
         receptor_string: str = None,
         get_consent: Callable = None,
-        chunk_size: int = 5000,
+        chunk_size: int = 500,
     ):
+        """
+        ###NOTE SLOOOOOOW
+
+        Args:
+            hb_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[0].
+            vdw_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[1].
+            receptor_string (str, optional): _description_. Defaults to None.
+            get_consent (Callable, optional): _description_. Defaults to None.
+            chunk_size (int, optional): _description_. Defaults to 10.
+
+        Raises:
+            RTCoreError: _description_
+
+        Returns:
+            _type_: _description_
+        """
         from .parsers import generate_interaction_tuples
 
         # make sure user knows risk of calculating interaction in db with existing interactions
-
+        track_table_name = "recomputed_interactions"
         if self.table_length("Interactions") > 0:
 
             def _api_cmd_consent():
@@ -455,10 +471,16 @@ class RingtailCore:
                 return
             else:
                 with self.storageman as sm:
-                    success = sm.clear_interaction_tables()
-                    if not success:
-                        raise RTCoreError(
-                            "Trouble while clearing existing interaction tables."
+                    # Check if track table name exist, then do not clear but use
+                    if not track_table_name in sm.tables_in_db():
+                        success = sm.clear_interaction_tables()
+                        if not success:
+                            raise RTCoreError(
+                                "Trouble while clearing existing interaction tables."
+                            )
+                    else:
+                        LOGGER.info(
+                            "A table tracking processed pose interaction exists.\nWill continue processing poses and not recompute those that have already been processed."
                         )
 
         # get receptor representation
@@ -473,7 +495,7 @@ class RingtailCore:
 
         with self.storageman as sm:
             # create a "temporary" table that keeps track of what pose_ids have been processed
-            track_table_name = "recomputed_interactions"
+
             sm.create_transaction_tracking_table(track_table_name)
 
             # process in batches
@@ -483,7 +505,6 @@ class RingtailCore:
                 JOIN Ligands AS L ON L.ligand_id=R.ligand_id 
                 LEFT JOIN {track_table_name} tt ON R.pose_id = tt.pose_id
                     WHERE tt.pose_id IS NULL;""",
-                5000,
             ):
                 pose_id, coordinates, rdbin = pose
                 mol = Chem.Mol(rdbin)
@@ -504,8 +525,9 @@ class RingtailCore:
                     {"pose_id": pose_id, "num_hb": num_hb[0], "num_int": num_int[0]}
                 )
                 processed_poseids.append((pose_id,))
+                db_commit_counter += 1
 
-                if db_commit_counter == chunk_size:
+                if db_commit_counter > chunk_size - 1:
                     sm.post_insert_interactions(
                         interactions,
                         results_counts,
@@ -515,8 +537,7 @@ class RingtailCore:
                     interactions = []
                     processed_poseids = []
                     results_counts = []
-
-                db_commit_counter += 1
+                    db_commit_counter = 0
 
             #  insert remaining data after for loop
             if interactions:
