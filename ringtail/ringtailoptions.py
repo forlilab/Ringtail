@@ -80,7 +80,7 @@ class RingtailDefaults:
     # maybe reconsider
     docking_mode: str = "adgpu"
     output_db: str = "output.db"
-    storage_type: str = "sqlite"
+    storage_type: str = "duckdb"
     max_proc: int = None
     max_poses: int = 3
     store_all_poses: bool = False
