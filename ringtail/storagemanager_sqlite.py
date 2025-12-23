@@ -873,12 +873,14 @@ class StorageManagerSQLite(StorageManager):
         JOIN merging.Receptors AS merging_receptors 
             ON Receptors.receptor_id = merging_receptors.receptor_id"""
 
-        try:
-            assert self.db_query(receptorcheck_sql).fetchone()[0] == "True"
-        except AssertionError:
-            raise StorageError(
-                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
-            )
+        receptor_comp = self.db_query(receptorcheck_sql).fetchone()
+        if receptor_comp:
+            try:
+                assert receptor_comp[0] == "True"
+            except AssertionError:
+                raise StorageError(
+                    f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
+                )
         else:
             logger.info(
                 "The two databases are of compatible version and receptors. Merging will proceed."
@@ -902,25 +904,38 @@ class StorageManagerSQLite(StorageManager):
         # merge tables
         try:
             self._merge_db_properties_table(merge_id)
+        except Exception as e:
+            self._rollback()
+            raise MergeError(f"Error during database merging: {e}") from e
+        else:
+            self.conn.commit()
             logger.info("The 'db_properties' table has been merged.")
-
+        try:
             self._merge_ligands_and_results_tables(merge_id)
+            self.conn.commit()
             logger.info("The 'Ligands' and 'Results' tables have been merged.")
-
+        except Exception as e:
+            self._rollback()
+            raise MergeError(f"Error during database merging: {e}") from e
+        else:
+            self.conn.commit()
+            logger.info("The 'db_properties' table has been merged.")
             self._merge_interaction_tables(merge_id)
+        try:
+            self.conn.commit()
             logger.info(
                 "The 'Interaction_indices' and 'Interactions' tables have been merged."
             )
         except Exception as e:
+            self._rollback()
             raise MergeError(f"Error during database merging: {e}") from e
         else:
-            logger.info(
-                f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
-            )
-            self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
-            logger.info("The final database has neem cleaned up, and indices rebuilt.")
-        finally:
-            cur.close()
+            self.conn.commit()
+        logger.info(
+            f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
+        )
+        self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
+        logger.info("The final database has been cleaned up, and indices rebuilt.")
 
     def _create_merge_tables(self):
         """
@@ -949,7 +964,6 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS ak_merge ON PK_conversions(merge_id, original_PK)"
             )
-            self.conn.commit()
         except Exception as e:
             raise StorageError(e) from e
 
@@ -990,7 +1004,6 @@ class StorageManagerSQLite(StorageManager):
                     number_of_poses
                 FROM merging.DB_properties;"""
             cur.execute(insert_dbprops_sql, (merge_id,))
-            self.conn.commit()
         except Exception as e:
             raise StorageError(
                 "Error encountered while merging db_properties table"
@@ -1009,7 +1022,6 @@ class StorageManagerSQLite(StorageManager):
             StorageError
         """
         # convert ligand_ids and log
-        # TODO remove columns
         convert_ligand_ids_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
@@ -1151,8 +1163,6 @@ class StorageManagerSQLite(StorageManager):
                     merge_id,
                 ),
             )
-
-            self.conn.commit()
         except Exception as e:
             raise StorageError(
                 f"Error encountered while merging Ligands and Results tables: \n{str(e)}"
@@ -1169,6 +1179,8 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             Exception
         """
+        if not self.table_length("Interactions") > 0:
+            return
         convert_ii_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
@@ -1254,7 +1266,6 @@ class StorageManagerSQLite(StorageManager):
                     merge_id,
                 ),
             )
-            self.conn.commit()
         except Exception as e:
             raise Exception(
                 f"Error during update and insertion of interactions: {e}"
