@@ -149,6 +149,8 @@ class InteractionFinder:
             needs_conversion = False
 
         for idx, atomtype in enumerate(lig_atomtype_list):
+            if atomtype == None:
+                continue
             if needs_conversion:
                 coords = np.array([float(coord) for coord in lig_coordinates[idx]])
             else:
