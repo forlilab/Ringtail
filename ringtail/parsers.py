@@ -50,7 +50,7 @@ def results_row() -> dict:
         "num_hb": 0,
         "cluster_size": 1,
         "pose_coordinates": None,
-        "flexible_res_coordinates": None,
+        "flexible_res_coordinates": [],
         "ligname": None,
     }
 
