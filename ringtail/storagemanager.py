@@ -1784,9 +1784,7 @@ class StorageManager:
         cluster_id = self._insert_new_cluster_info(
             cluster_name, "", bookmark_name, len(clusters)
         )
-        print(
-            f"Length of clusters coming in: {len(clusters)}, and length of representative\n poses: {len(poseid_list)}"
-        )
+
         cluster_groups = []
         pose_rows = []
         for group_index, cluster in enumerate(clusters):
