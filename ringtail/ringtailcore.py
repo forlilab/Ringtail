@@ -2476,16 +2476,32 @@ class RingtailCore:
         # need receptor file contents if adding interaction
         if calculate_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
-            # try pdbqt first
-            results.receptor_string = self.get_receptor_object()[1]
-            if not results.receptor_string:
-                # if fail, try json
-                try:
-                    results.receptor_string = self.get_receptor_object()[2]
-                except:
-                    raise ResultsProcessingError(
-                        "Trying to calculate interactions, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+            if results.receptor_file_path:
+                import pathlib
+
+                # parse the receptor string for interaction calculation
+                # make receptor string
+                if ".pdbqt" in pathlib.Path(results.receptor_file_path).suffixes:
+                    results.receptor_string = ReceptorManager.receptor_str_from_file(
+                        results.receptor_file_path
                     )
+                elif ".json" in pathlib.Path(results.receptor_file_path).suffixes:
+                    with open(results.receptor_file_path, "r") as f:
+                        polymer_json = f.read()
+                    results.receptor_string = ReceptorManager.polymer_json2pdbqt_str(
+                        polymer_json
+                    )
+            else:
+                # try pdbqt first
+                results.receptor_string = self.get_receptor_object()[1]
+                if not results.receptor_string:
+                    # if fail, try json
+                    try:
+                        results.receptor_string = self.get_receptor_object()[2]
+                    except:
+                        raise ResultsProcessingError(
+                            "Trying to calculate interactions, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                        )
 
         LOGGER.info("Adding results...")
         self.resultsman.process_docking_data(results, processing_options)

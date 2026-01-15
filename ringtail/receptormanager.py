@@ -48,6 +48,17 @@ class ReceptorManager:
         return gzip.decompress(receptor_blob).decode()
 
     @staticmethod
+    def receptor_str_from_file(receptor_file: str) -> str:
+        if receptor_file.endswith(".gz"):
+            with gzip.open(receptor_file, "rt") as r:
+                print("do i find gz")
+                return r.read()
+        else:
+            with open(receptor_file, "r") as r:
+                print("or just normal")
+                return r.read()
+
+    @staticmethod
     def _parse_polymer_json(polymer_json) -> tuple[str, dict]:
         """
         Makes a polymer object from a receptor polymer json, and uses
