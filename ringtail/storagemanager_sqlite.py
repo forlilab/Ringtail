@@ -2307,7 +2307,10 @@ class StorageManagerSQLite(StorageManager):
         self.db_query("ALTER TABLE Ligands_new RENAME TO Ligands;", commit=True)
 
         # update results table to use ligand_id from Ligands
-        self.db_query("ALTER TABLE Results ADD COLUMN ligand_id INTEGER;")
+        try:
+            self.db_query("ALTER TABLE Results ADD COLUMN ligand_id INTEGER;")
+        except DatabaseQueryError:
+            pass
         # populate ligand_id in Results
         self.db_query(
             """UPDATE Results
@@ -2354,7 +2357,7 @@ class StorageManagerSQLite(StorageManager):
                         reference_rmsd,
                         docking_score,
                         leff,
-                        delta,
+                        deltas,
                         energies_inter,
                         energies_vdw,
                         energies_electro,
@@ -2363,10 +2366,10 @@ class StorageManagerSQLite(StorageManager):
                         energies_intra,
                         energies_torsional,
                         unbound_energy,
-                        num_interactions,
+                        nr_interactions,
                         num_hb,
                         cluster_size,
-                        pose_coordinates,
+                        ligand_coordinates,
                         flexible_res_coordinates
                       FROM Results""",
             commit=True,
@@ -2396,6 +2399,8 @@ class StorageManagerSQLite(StorageManager):
         Args:
             db_alias (str, optional): if needing to drop views from a connected, aliased database. Defaults to None.
         """
+        if "Bookmarks" not in self.tables_in_db():
+            return
         if db_alias:
             alias_string = db_alias + "."
         else:
