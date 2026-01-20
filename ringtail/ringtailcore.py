@@ -2354,7 +2354,7 @@ class RingtailCore:
         n_atoms = mol.GetNumAtoms()
         conf = Chem.Conformer(n_atoms)
         for i, (x, y, z) in enumerate(coordinates):
-            conf.SetAtomPosition(i, Geometry.Point3D(x, y, z))
+            conf.SetAtomPosition(i, Geometry.Point3D(float(x), float(y), float(z)))
         mol.AddConformer(conf, assignId=True)
         return mol
 
