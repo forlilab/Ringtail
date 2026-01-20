@@ -2276,6 +2276,7 @@ class StorageManagerSQLite(StorageManager):
                 if mol is None:
                     return None
                 Chem.SanitizeMol(mol)
+                mol = Chem.AddHs(mol)
                 return mol.ToBinary()
             except Exception:
                 return None
