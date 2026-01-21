@@ -2055,9 +2055,7 @@ class RingtailCore:
 
         # add ligand name to properties
         properties["_Name"] = ligname
-        # add hydrogens to mols
-        # may need to add hydrogens if storing without them
-        mol = Chem.AddHs(mol)
+        # prepare flexres
         flexres_hparents = []
         for idx, res in enumerate(flexres_mols):
             flexres_hparents = flexres_info[idx][2]
