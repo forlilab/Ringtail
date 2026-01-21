@@ -1036,16 +1036,12 @@ class StorageManagerSQLite(StorageManager):
                     FROM Ligands
                     WHERE 
                         merging.Ligands.LigName = Ligands.LigName
-                        AND merging.Ligands.ligand_smile = Ligands.ligand_smile
-                        AND merging.Ligands.rdmol = Ligands.rdmol
                     ) 
                 THEN (
                     SELECT main.Ligands.ligand_id
                     FROM main.Ligands
                     WHERE 
                         merging.Ligands.LigName = Ligands.LigName
-                        AND merging.Ligands.ligand_smile = Ligands.ligand_smile
-                        AND merging.Ligands.rdmol = Ligands.rdmol
                     )
                 ELSE merging.Ligands.ligand_id + (SELECT MAX(ligand_id) FROM Ligands)
             END AS new_ligand_id
