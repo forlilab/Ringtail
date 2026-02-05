@@ -2027,7 +2027,9 @@ class StorageManagerDuckDB(StorageManager):
         """
         Begin a transaction
         """
-        self.conn.execute("BEGIN TRANSACTION;")
+        pass
+        # begin transaction can block with big chunks during results insert
+        # self.conn.execute("BEGIN TRANSACTION;")
 
     def _rollback(self):
         """
