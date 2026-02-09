@@ -1968,7 +1968,7 @@ class RingtailCore:
             df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
 
-    def export_bookmark_db(self, bookmark_name: str = None) -> str:
+    def export_bookmark_db(self, bookmark_name: str, db_filepath: str = None) -> str:
         """Export database containing data from bookmark
 
         Args:
@@ -1977,28 +1977,19 @@ class RingtailCore:
         Returns:
             str: name of the new, exported database
         """
-        if bookmark_name is not None:
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
-        bookmark_db_name = (
-            self.db_file.rstrip(".db") + "_" + self.storageman.bookmark_name + ".db"
-        )
+        if db_filepath is None:
+            db_filepath = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+
         self.logger.info("Exporting bookmark database")
-        if os.path.exists(bookmark_db_name):
+        if os.path.exists(db_filepath):
             self.logger.warning(
                 "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
             )
             return
         with self.storageman:
-            self.storageman.clone(bookmark_db_name)
-        # connect to cloned database
-        dictionary = self.storageopts.todict()
-        dictionary["db_file"] = bookmark_db_name
-        temp_storageman = StorageManager.check_storage_compatibility(self.storagetype)
-        with temp_storageman(**dictionary) as db_clone:
-            db_clone.prune()
-            db_clone.close_storage(vacuum=True)
+            self.storageman.create_subset_database(bookmark_name, db_filepath)
 
-        return bookmark_db_name
+        return db_filepath
 
     def export_receptors(self):
         """

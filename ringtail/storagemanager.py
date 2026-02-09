@@ -2145,6 +2145,84 @@ class StorageManagerSQLite(StorageManager):
         )
         return self._run_query(query).fetchone()[1:]  # cut off interaction index
 
+    def create_subset_database(self, bookmark_name: str, database_name: str):
+        """
+        Creates an empty database with all tables, attaches to main database,
+        and populates tables based on the poses present in bookmark
+
+        Args:
+            bookmark_name (str): filter used to determine poses
+            database_name (str): name of new database
+
+        Raises:
+            StorageError:
+        """
+        # create the database
+        new_db = self.__class__(database_name)
+        # make tables
+        with new_db:
+            new_db._create_tables()
+        logger.debug(f"Created a new database with empty tables: {database_name}.")
+        # attach the incoming database
+        alias = "subset"
+        self._attach_db(database_name, alias)
+        logger.debug(
+            f"Database {database_name} attached to main database {self.db_file}."
+        )
+        # ligands
+        ligands = f"""
+        INSERT INTO {alias}.Ligands
+        SELECT * FROM main.Ligands
+        WHERE main.Ligands.ligname IN (
+            SELECT ligname from main.Results
+            WHERE pose_id IN (
+                SELECT pose_id FROM main."{bookmark_name}"
+                    ));"""
+        self._run_query(ligands)
+        logger.debug("Ligands have been copied into the new subset database.")
+        # receptor
+        receptor = f"""
+        INSERT INTO {alias}.Receptors
+        SELECT * FROM main.Receptors;
+        """
+        self._run_query(receptor)
+        logger.debug("The receptor have been copied into the new subset database.")
+        # results
+        poses = f"""
+        INSERT INTO {alias}.Results
+        SELECT * FROM main.Results
+        WHERE main.Results.pose_id IN (
+            SELECT pose_id FROM main."{bookmark_name}"
+                );"""
+        self._run_query(poses)
+        logger.debug("Results have been copied into the new subset database.")
+        # interaction_indices
+        interaction_indices = f"""
+        INSERT INTO {alias}.Interaction_indices
+        SELECT * FROM main.Interaction_indices
+        WHERE main.Interaction_indices.interaction_id IN (
+            SELECT interaction_id FROM main.Interactions
+            WHERE pose_id IN (
+                SELECT pose_id FROM main."{bookmark_name}"
+            ));"""
+        self._run_query(interaction_indices)
+        # interactions
+        interactions = f"""
+        INSERT INTO {alias}.Interactions
+        SELECT * FROM main.Interactions
+        WHERE main.Interactions.pose_id IN (
+            SELECT pose_id FROM main."{bookmark_name}"
+                );"""
+        self._run_query(interactions)
+        logger.debug("Interactions have been copied into the new subset database.")
+        try:
+            self.conn.commit()
+        except Exception as e:
+            raise StorageError("Problems while creating a subset database: ", str(e))
+
+        self._detach_db(alias)
+        logger.info(f"Subset database {database_name} has been successfully created.")
+
     def fetch_pose_interactions(self, Pose_ID) -> iter:
         """
         Fetch all interactions parameters belonging to a Pose_ID
