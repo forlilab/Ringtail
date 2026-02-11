@@ -37,7 +37,9 @@ def main():
 
             # -#-#- Perform filtering
             if cli.filtering:
-                rtcore.filter(**cli.filters, **vars(cli.filter_options))
+                _, bookmark_name = rtcore.filter(
+                    **cli.filters, **vars(cli.filter_options)
+                )
 
             if cli.clustering_only:
                 cluster_data = {

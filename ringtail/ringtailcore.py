@@ -651,7 +651,7 @@ class RingtailCore:
         bookmark_name: str = RingtailDefaults.bookmark_name,
         filter_bookmark: str = None,
         return_iter: bool = False,
-    ) -> Union[int, iter]:
+    ) -> Union[tuple[int, str], iter]:
         """Prepare list of filters, then filters and writes all passing pose_ids to a bookmark of given name. Creates an output log text file of all ligand (or all poses, if requested) docking results that passes.
         If clustering is requested, it will first perform the filtering, then cluster, and create a new bookmark of name <bookmark_<cluster_type>_cluster> for each requested cluster type.
         In the case of clustering, the representative ligands will be the ones written to the output log.
@@ -718,7 +718,7 @@ class RingtailCore:
                 return_iter (bool): return an iterable of all of the filtering results
 
         Returns:
-            int: number of ligands passing filter
+            tuple[int, str]: number of ligands passing filter and final bookmark name (may change if eg filtering and clustering)
             iter (optional): an iterable of all of the filtering results
 
         """
@@ -891,7 +891,7 @@ class RingtailCore:
                 ]
             return iter
         else:
-            return num_passing_ligands
+            return num_passing_ligands, bookmark_name
 
     def cluster(
         self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5
