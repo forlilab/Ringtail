@@ -2170,7 +2170,8 @@ class StorageManagerDuckDB(StorageManager):
             reindex (bool, optional): deletes and reruns all indixes. Defaults to False.
 
         """
-        pass
+        if attached_db_alias is not None:
+            self._detach_db(attached_db_alias)
 
     def table_length(self, table: str) -> int:
         """
