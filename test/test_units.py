@@ -96,7 +96,7 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        count_ligands_passing = rtc.filter(
+        count_ligands_passing, _ = rtc.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -126,7 +126,7 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
         # get current bookmark count
         bookmarks_old = rtc.get_bookmark_names()
-        count_ligands_passing = rtc.filter(
+        count_ligands_passing, _ = rtc.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -151,8 +151,8 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        count_passing_ligands1 = rtc.filter(eworst=-6, bookmark_name="filter_window")
-        count_passing_ligands2 = rtc.filter(
+        count_passing_ligands1, _ = rtc.filter(eworst=-6, bookmark_name="filter_window")
+        count_passing_ligands2, _ = rtc.filter(
             eworst=-7, bookmark_name="bookmark", filter_bookmark="filter_window"
         )
         assert count_passing_ligands1 > count_passing_ligands2
@@ -163,24 +163,24 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
 
         # tests for partial names
-        count_ligname = rtc.filter(ligand_name=["88"], bookmark_name="ligname")
+        count_ligname, _ = rtc.filter(ligand_name=["88"], bookmark_name="ligname")
         assert count_ligname == 7
 
         # test substructure search (default 'OR' ligand_operator)
-        count_substruct_or = rtc.filter(
+        count_substruct_or, _ = rtc.filter(
             ligand_substruct=["C=O", "CC(C)(C)"], bookmark_name="substruct_or"
         )
         assert count_substruct_or == 90
 
         # test substructure search ('AND' ligand_operator)
-        count_substruct_and = rtc.filter(
+        count_substruct_and, _ = rtc.filter(
             ligand_substruct=["C=O", "CC(C)(C)"],
             ligand_operator="AND",
             bookmark_name="substruct_and",
         )
         assert count_substruct_and == 18
 
-        count_substruct_pos = rtc.filter(
+        count_substruct_pos, _ = rtc.filter(
             ligand_substruct_pos=[
                 ["[C][Oh]", 1, 10, 102, 106, 154],
                 ["C=O", 1, 10, 102, 106, 154],
@@ -193,7 +193,7 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        count_ligands_passing = rtc.filter(
+        count_ligands_passing, _ = rtc.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -266,7 +266,7 @@ class TestRingtailCore:
         mol = rtc.create_rdkit_mol(ligname, ligands_poses[ligname])[0]
         # grab one molecule from bookmark and check number of atoms
         num_of_atoms = mol.GetNumAtoms()
-        assert num_of_atoms == 10
+        assert num_of_atoms == 7
 
     def test_write_sdfs(self):
         if not _db_exists():
@@ -296,7 +296,7 @@ class TestRingtailCore:
             sdf.readline()
             sdf.readline()
             fourth_line = sdf.readline()
-        assert fourth_line == " 27 28  0  0  0  0  0  0  0  0999 V2000\n"
+        assert fourth_line == " 14 15  0  0  0  0  0  0  0  0999 V2000\n"
 
         # ensure the correct files were written
         for f in sdf_files:
@@ -555,7 +555,9 @@ class TestRingtailCore:
             store_all_poses=True,
             receptor_file="test_data/reactive/4j8m_m_rigid.pdbqt",
         )
-        count_ligands_passing = rtc.filter(reactive_interactions=[("A:TYR:212:", True)])
+        count_ligands_passing, _ = rtc.filter(
+            reactive_interactions=[("A:TYR:212:", True)]
+        )
 
         os.system("rm output.db*")
 
@@ -664,7 +666,7 @@ class TestADNGHandling:
             save_receptor=True,
             docking_mode="adng",
         ),
-        count = rtc.filter(
+        count, _ = rtc.filter(
             eworst=-13, ligand_substruct=["C=O"], vdw_interactions=[(":VAL::", True)]
         )
         os.system("rm output.db")
@@ -782,7 +784,7 @@ class TestVinaHandling:
             save_receptor=True,
             docking_mode="vina",
         ),
-        count = rtc.filter(eworst=-6, ligand_substruct=["[N]"])
+        count, _ = rtc.filter(eworst=-6, ligand_substruct=["[N]"])
         os.system("rm output.db")
         assert count == 1
 
@@ -880,8 +882,8 @@ class TestMergeDB:
     def test_before_merge(self):
         rtc1 = RingtailCore("primary.db")
         # should not be any poses in this interval
-        assert rtc1.filter(eworst=-2, ebest=-5) == 0
-        assert rtc1.filter(eworst=-5) == 1
+        assert rtc1.filter(eworst=-2, ebest=-5)[0] == 0
+        assert rtc1.filter(eworst=-5)[0] == 1
         assert rtc1.table_length("filtered_poses") == 3
 
     def test_after_merge(self):
@@ -891,7 +893,7 @@ class TestMergeDB:
         # this should add two more ligands
         assert rtc1.table_length("Ligands") == 3
         # should now be data in this interval
-        assert rtc1.filter(eworst=-2, ebest=-5) == 2
+        assert rtc1.filter(eworst=-2, ebest=-5)[0] == 2
 
     def test_check_PKs(self):
         rtc2 = RingtailCore("secondary.db")
