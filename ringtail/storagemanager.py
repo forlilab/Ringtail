@@ -16,7 +16,7 @@ from typing import Union
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters, statuses
-from .exceptions import StorageError, OptionError, VersionError
+from .exceptions import StorageError, OptionError, VersionError, MergeError
 from .clustermanager import *
 from .querybuilder import QueryBuilder
 from collections import defaultdict
@@ -456,6 +456,81 @@ class StorageManager:
         # index certain tables
         self._create_indices()
         logger.info("Database write session completed successfully.")
+
+    def merge_database(self, merging_db: str):
+        """
+        Method that merges two databases, ensuring integrity of primary and foreign keys.
+        The merging will create a new table if needed, that keeps track of the primary key
+        in the original and the merged database on a per-table basis. Another table will also
+        keep track of how many databases has been merged into the primary database.
+        The merging will ensure the two databases are -compatible based on the receptor only-.
+        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
+            these will be allowed to merge.
+
+        Args:
+            merging_db (str): path to database being merged into current
+
+        Raises:
+            MergeError
+        """
+        # attach incoming database and check compatibility
+        merging_db_alias = self._attach_db(merging_db, "merging")
+        if not self._db_compatible_for_merge(merging_db_alias):
+            raise MergeError(
+                "Trying to merge two databases of incompatible or too old versions, cannot proceed."
+            )
+
+        # add to merging table the absolute path
+        mergedb_abspath = str(os.path.abspath(merging_db))
+        merge_id = self._get_merge_id(mergedb_abspath)
+
+        # receptor compatibility check
+        if self._merging_receptors_compatible():
+            logger.info(
+                "The two databases have compatible receptors. Merging will proceed."
+            )
+        else:
+            raise MergeError(
+                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
+            )
+
+        # merge tables
+        try:
+            # merge DB_properties table
+            self._merge_db_properties_table(merge_id)
+            self.conn.commit()
+            logger.info("The 'DB_properties' table has been merged.")
+
+            # merge Ligands and Results tables
+            self._merge_ligands_and_results_tables(merge_id)
+            self.conn.commit()
+            logger.info("The 'Ligands' and 'Results' tables have been merged.")
+
+            # merge Interactions and Interaction_indices tables
+            self._merge_interaction_tables(merge_id)
+            self.conn.commit()
+            logger.info(
+                "The 'Interaction_indices' and 'Interactions' tables have been merged."
+            )
+        except Exception as e:
+            self._rollback_merge(merge_id)
+            raise MergeError(f"Merging failed and was rolled back: {e}") from e
+        else:
+            self._sync_auto_increment_state()
+            logger.info(
+                f"The database {merging_db} has been successfully merged into {self.db_file}."
+            )
+        finally:
+            self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
+            logger.info("The final database has been cleaned up, and indices rebuilt.")
+
+    def complete_merging(self):
+        """
+        Completes the merging process by creating empty filter tables, as well
+        as resetting any auto incremented values for safety
+        """
+        self._create_filtering_tables()
+        self._sync_auto_increment_state()
 
     def create_subset_database(self, bookmark_name: str, database_name: str):
         """
@@ -1575,23 +1650,9 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def merge_databases(self, merging_db: str, backup: bool = True):
+    def prepare_for_merging(self):
         """
-        Method that merges two databases, ensuring integrity of primary and foreign keys.
-        The merging will create a new table if needed, that keeps track of the primary key
-        in the original and the merged database on a per-table basis. Another table will also
-        keep track of how many databases has been merged into the primary database.
-        The merging will ensure the two databases are -compatible based on the receptor only-.
-        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
-            these will be allowed to merge.
-
-        Args:
-            merging_db (str): path to database being merged into current
-            backup (bool, optional): whether or not to back up current database before
-                merging another database into it. Defaults to True.
-
-        Raises:
-            MergeError
+        Prepares the database for merging
         """
         raise NotImplementedError
 
@@ -2860,6 +2921,110 @@ class StorageManager:
         Args:
             new_db (str): file name for database to attach
             new_db_name (str): name of new database
+
+        """
+        raise NotImplementedError
+
+    def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
+        """
+        Method that checks if the database merging into main is compatible with main,
+        and checks if both databases are of appropriately high version where merge has
+        been implemented
+        #NOTE the ringtail duckdb currently does not track schema version
+
+        Args:
+            merging_db_alias (str): alias for the database being merged into main
+
+        Returns:
+            bool: if the two databases are compatible
+        """
+        raise NotImplementedError
+
+    def _get_merge_id(self, mergingdb_path: str) -> int:
+        """
+        Gets the merge id for the databse in given path
+
+        Args:
+            mergingdb_path (str): path to merging (secondary) database
+
+        Returns:
+            int: merge id returend by database
+        """
+        raise NotImplementedError
+
+    def _merging_receptors_compatible(self) -> str:
+        """
+        Checks if the receptor names in the two databases are a mathc
+
+        Returns:
+            str: returns True or False string
+        """
+        raise NotImplementedError
+
+    def _merge_db_properties_table(self, merge_id: int):
+        """
+        Merges database properties table, but importantly will not check for property compatibility
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            MergeError
+        """
+        raise NotImplementedError
+
+    def _merge_ligands_and_results_tables(self, merge_id: int):
+        """
+        Merges first the Ligands table, then the Results table, maintaining ligand_id and pose_id as primary keys,
+        where their relationship to the original PK is kept track of in the mering datble. Duplicate ligands will maintain
+        the ligand_id from the main database.
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            MergeError
+        """
+        raise NotImplementedError
+
+    def _merge_interaction_tables(self, merge_id: int):
+        """
+        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
+        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            MergeError
+        """
+        raise NotImplementedError
+
+    def _sync_auto_increment_state(self):
+        """Reset any auto incremented sequences or counts according to last successful merge"""
+        raise NotImplementedError
+
+    def _rollback_merge(self, merge_id: int):
+        """
+        Remove all data inserted by a specific merge session
+
+        Args:
+            merge_id (int): Merge session for which to delete associated data
+        """
+        raise NotImplementedError
+
+    def _cleanup_storage(
+        self, attached_db_alias: str = None, vacuum: bool = None, reindex=False
+    ):
+        """
+        Cleans up storage, especially useful for situations where two databases
+        hvae been connected/attached. Will detach the database, reindex main database,
+        and vacuum the file if requested.
+
+        Args:
+            attached_db (str, optional): Name of attached database, if any. Defaults to None.
+            vacuum (bool, optional): rebuilds db file to minimize space. Defaults to None.
+            reindex (bool, optional): deletes and reruns all indixes. Defaults to False.
 
         """
         raise NotImplementedError

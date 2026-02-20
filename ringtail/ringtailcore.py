@@ -3,6 +3,7 @@
 #
 # Ringtail virtual screening manager
 #
+import glob
 import itertools
 import os
 from typing import Callable, Union
@@ -32,6 +33,7 @@ from .exceptions import (
     StorageError,
     ResultsProcessingError,
     OptionError,
+    MergeError,
 )
 from .resultsmanager import ResultsManager
 from .receptormanager import ReceptorManager
@@ -2114,27 +2116,64 @@ class RingtailCore:
 
             return mols, info, saved_coords, residues
 
-    def merge_databases(self, merging_db: str, backup: bool = True):
+    def merge_databases(self, merging_dbs: list[str], backup: bool = True):
         """
-        Method that merges two databases, ensuring integrity of primary and foreign keys.
-        The merging will create a new table if needed, that keeps track of the primary key
-        in the original and the merged database on a per-table basis. Another table will also
-        keep track of how many databases has been merged into the primary database.
-        The merging will ensure the two databases are -compatible based on the receptor only-.
-        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
-            these will be allowed to merge.
+        Merges one or more databases into the primary database. Accepts a list
+        of explicit paths, glob patterns (e.g. "path/to/*.db"), or a mix of both.
+        Duplicate paths and the primary database itself are automatically excluded.
 
         Args:
-            merging_db (str): path to database being merged into current db
-            backup (bool, optional): whether or not to back up the current db before merging. Defaults to True.
+            merging_dbs (list[str]): paths or glob patterns for databases to merge
+            backup (bool, optional): back up current db before merging. Defaults to True.
+
+        Returns:
+            list[tuple[str, str]]: list of (db_path, error_message) for failed merges
         """
+        if isinstance(merging_dbs, str):
+            merging_dbs = [merging_dbs]
+
+        # Expand glob patterns and collect unique paths
+        primary_abspath = os.path.abspath(self.db_file)
+        seen = set()
+        expanded_dbs = []
+        for pattern in merging_dbs:
+            matches = glob.glob(pattern)
+            if not matches:
+                LOGGER.warning(f"No files matched pattern: {pattern}")
+            for db in matches:
+                abspath = os.path.abspath(db)
+                if abspath == primary_abspath:
+                    LOGGER.info(f"Skipping {db} (same as primary database)")
+                    continue
+                if abspath not in seen:
+                    seen.add(abspath)
+                    expanded_dbs.append(db)
+
+        if not expanded_dbs:
+            LOGGER.error("No valid databases to merge after filtering.")
+            return []
 
         LOGGER.warning(
-            "If you have performed clustering, this data will be lost in the new, merged database. "
+            "If you have performed filtering or clustering, this data will be lost in the new, merged database."
         )
-        # create merge tables
+        LOGGER.info(f"Merging {len(expanded_dbs)} databases into {self.db_file}")
+
         with self.storageman as sm:
-            sm.merge_databases(**{"merging_db": merging_db, "backup": backup})
+            if backup:
+                sm.clone()
+            sm.prepare_for_merging()
+            failed = []
+            for merging_db in expanded_dbs:
+                try:
+                    sm.merge_database(merging_db=merging_db)
+                    LOGGER.info(f"Successfully merged {merging_db}.")
+                except MergeError as e:
+                    LOGGER.error(f"Database {merging_db} failed to merge: {e}")
+                    failed.append((merging_db, str(e)))
+
+            sm.complete_merging()
+
+        return failed
 
     def update_database_version(
         self, consent: bool = False, new_version: str = "3.0.0", backup: bool = False

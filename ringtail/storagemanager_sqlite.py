@@ -825,45 +825,26 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region merge databases
-
-    def merge_databases(self, merging_db: str, backup: bool = True):
+    def prepare_for_merging(self):
         """
-        Method that merges two databases, ensuring integrity of primary and foreign keys.
-        The merging will create a new table if needed, that keeps track of the primary key
-        in the original and the merged database on a per-table basis. Another table will also
-        keep track of how many databases has been merged into the primary database.
-        Each merge session is given a merge_id.
-        The merging will ensure the two databases are -compatible based on the receptor only-.
-        PLEASE NOTE: If two databases have been docked with dlg and vina respectively,
-            these will be allowed to merge.
-
-        Args:
-            merging_db (str): path to database being merged into current
-            backup (bool, optional): whether or not to back up current database before
-                merging another database into it. Defaults to True.
-
-        Raises:
-            MergeError
+        Prepares for merging by dropping tables incompatible with merging
         """
-        # back up main database
-        if backup:
-            self.clone()
-        # attach incoming database and check compatibility
-        merging_db_alias = self._attach_db(merging_db, "merging")
-        if not self._check_if_db_compatible_for_merge(merging_db_alias):
-            raise StorageError(
-                "Trying to merge two databases of incompatible or too old versions, cannot proceed."
-            )
         # create new tables to keep track of merger
         self._create_merge_tables()
-        # add to merging table the absolute path
-        mergedb_abspath = str(os.path.abspath(merging_db))
-        # insert merging db name first
-        cur = self.conn.execute(
-            """INSERT INTO merged_tables(dbfile) VALUES (?)""",
-            (mergedb_abspath,),
-        )
-        # receptor compatibility check
+        # delete incompatible tables and sequences for main db
+        self._delete_table("Pose_clusters")
+        self._delete_table("Cluster_groups")
+        self._delete_table("Clusters")
+        self._delete_table("Filtered_poses")
+        self._delete_table("Filters")
+
+    def _merging_receptors_compatible(self) -> bool:
+        """
+        Checks if the receptor names in the two databases are a mathc
+
+        Returns:
+            bool: True if receptor allows merging
+        """
         receptorcheck_sql = """
         SELECT CASE 
             WHEN Receptors.RecName = merging_receptors.RecName THEN 'True'
@@ -871,71 +852,26 @@ class StorageManagerSQLite(StorageManager):
         END AS comparison_result 
         FROM Receptors 
         JOIN merging.Receptors AS merging_receptors 
-            ON Receptors.receptor_id = merging_receptors.receptor_id"""
-
+            ON Receptors.receptor_id = merging_receptors.receptor_id;"""
         receptor_comp = self.db_query(receptorcheck_sql).fetchone()
         if receptor_comp:
-            try:
-                assert receptor_comp[0] == "True"
-            except AssertionError:
-                raise StorageError(
-                    f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
-                )
-        else:
-            logger.info(
-                "The two databases are of compatible version and receptors. Merging will proceed."
-            )
+            if receptor_comp[0] == "True":
+                return True
+        return False
 
-        # get the active merge_id to ensure we use the correct merge data moving forward
-        merge_id = self.db_query(
+    def _get_merge_id(self, mergingdb_path: str) -> int:
+        """
+        Gets the merge id for the databse in given path
+
+        Args:
+            mergingdb_path (str): path to merging (secondary) database
+
+        Returns:
+            int: merge id returend by database
+        """
+        return self.db_query(
             "SELECT last_insert_rowid() FROM merged_tables"
         ).fetchone()[0]
-
-        # delete incompatible tables
-        # for main db
-        self._delete_table("Pose_clusters")
-        self._delete_table("Cluster_groups")
-        self._delete_table("Clusters")
-        self._delete_table("Filtered_poses")
-        self._delete_table("Filters")
-        # recreate filter tables
-        self._create_filtering_tables()
-
-        # merge tables
-        try:
-            self._merge_db_properties_table(merge_id)
-        except Exception as e:
-            self._rollback()
-            raise MergeError(f"Error during database merging: {e}") from e
-        else:
-            self.conn.commit()
-            logger.info("The 'db_properties' table has been merged.")
-        try:
-            self._merge_ligands_and_results_tables(merge_id)
-            self.conn.commit()
-            logger.info("The 'Ligands' and 'Results' tables have been merged.")
-        except Exception as e:
-            self._rollback()
-            raise MergeError(f"Error during database merging: {e}") from e
-        else:
-            self.conn.commit()
-            logger.info("The 'db_properties' table has been merged.")
-            self._merge_interaction_tables(merge_id)
-        try:
-            self.conn.commit()
-            logger.info(
-                "The 'Interaction_indices' and 'Interactions' tables have been merged."
-            )
-        except Exception as e:
-            self._rollback()
-            raise MergeError(f"Error during database merging: {e}") from e
-        else:
-            self.conn.commit()
-        logger.info(
-            f"The database {merging_db} has been successfully merged into {self.db_file}.\n Rebuilding indices."
-        )
-        self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
-        logger.info("The final database has been cleaned up, and indices rebuilt.")
 
     def _create_merge_tables(self):
         """
@@ -1266,6 +1202,75 @@ class StorageManagerSQLite(StorageManager):
             raise Exception(
                 f"Error during update and insertion of interactions: {e}"
             ) from e
+
+    def _sync_auto_increment_state(self):
+        """Reset all sequences to current MAX values in their tables"""
+        pass
+
+    def _rollback_merge(self, merge_id: int):
+        """
+        Remove all data inserted by a specific merge session
+
+        Args:
+            merge_id (int): Merge session for which to delete associated data
+        """
+
+        # delete from Interactions where pose_id was added by this merge
+        self.conn.execute(
+            """
+            DELETE FROM Interactions WHERE Pose_ID IN (
+                SELECT merged_PK FROM PK_conversions 
+                WHERE merge_id = ? AND table_name = 'Results')""",
+            (merge_id,),
+        )
+
+        # delete from Interaction_indices
+        self.conn.execute(
+            """
+            DELETE FROM Interaction_indices WHERE interaction_id IN (
+                SELECT merged_PK FROM PK_conversions 
+                WHERE merge_id = ? AND table_name = 'Interaction_indices'
+                AND merged_PK != original_PK)""",
+            (merge_id,),
+        )
+
+        # delete from Results
+        self.conn.execute(
+            """
+            DELETE FROM Results WHERE Pose_ID IN (
+                SELECT merged_PK FROM PK_conversions 
+                WHERE merge_id = ? AND table_name = 'Results')""",
+            (merge_id,),
+        )
+
+        # delete from Ligands (only newly added, not deduplicated ones)
+        self.conn.execute(
+            """
+            DELETE FROM Ligands WHERE ligand_id IN (
+                SELECT merged_PK FROM PK_conversions 
+                WHERE merge_id = ? AND table_name = 'Ligands'
+                AND merged_PK != original_PK)""",
+            (merge_id,),
+        )
+
+        # delete from DB_properties
+        self.conn.execute(
+            """
+            DELETE FROM DB_properties WHERE DB_write_session IN (
+                SELECT merged_PK FROM PK_conversions 
+                WHERE merge_id = ? AND table_name = 'DB_properties')""",
+            (merge_id,),
+        )
+
+        # clean up tracking
+        self.conn.execute("DELETE FROM PK_conversions WHERE merge_id = ?", (merge_id,))
+        self.conn.execute("DELETE FROM merged_tables WHERE merge_id = ?", (merge_id,))
+
+        # commit
+        self.conn.commit()
+
+        # reset sequences to current max values
+        self._sync_auto_increment_state()
 
     # endregion
 
@@ -2062,7 +2067,7 @@ class StorageManagerSQLite(StorageManager):
         cur.close()
         return is_compatible, db_schema_ver
 
-    def _check_if_db_compatible_for_merge(self, merging_db_alias: str) -> bool:
+    def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
         """
         Method that checks if the database merging into main is compatible with main,
         and checks if both databases are of appropriately high version where merge has

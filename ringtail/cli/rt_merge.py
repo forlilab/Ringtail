@@ -57,6 +57,7 @@ def main():
         "--secondary_db",
         help="full path to secondary database that will be merged into the primary database",
         default=argparse.SUPPRESS,
+        nargs="+",
     )
     parser.add_argument(
         "--dont_backup_db1",
@@ -64,61 +65,44 @@ def main():
         action="store_true",
     )
     parser.add_argument(
-        "-l",
-        "--log_filename",
-        help="filename to write log",
-        default="dbmerge.log",
+        "--debug",
+        help="if logging at debug level",
+        action="store_true",
     )
 
     args = parser.parse_args()
-    if args.log_filename:
-        log_level = "DEBUG"
+    if args.debug:
+        logging_level = "DEBUG"
     else:
-        "INFO"
-    rtc = RingtailCore(args.primary_db, logging_level=log_level)
+        logging_level = "INFO"
+    rtc = RingtailCore(args.primary_db, logging_level=logging_level)
     logger = logging.getLogger("RingtailLogger")
-    if args.log_filename:
-        file_handler = logging.FileHandler(args.log_filename)
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
 
     logger.debug(str(args))
-    db1 = args.primary_db
-    logger.info(f"Database {db1} ready to merge. ")
-    db2 = args.secondary_db
-    # determine if single or multiple merging databases
-    if "*" in db2:
-        import glob
+    logger.info(f"Database {args.primary_db} ready to merge.")
 
-        merging_db = glob.glob(db2)
-        # remove primary db
-        if db1 in merging_db:
-            merging_db.remove(db1)
-            logger.info(
-                "Removed the primary database from the list of merging databases."
-            )
-        logger.info(f"Multifile merging: {merging_db}")
-    else:
-        if db1 == db2:
-            logger.error("Cannot merge a database with itself.")
-            sys.exit(1)
-        merging_db = [db2]
-        logger.info(f"Single file merging: {db2}")
+    # pass raw patterns — ringtailcore handles glob expansion and self-filtering
+    merging_dbs = (
+        args.secondary_db
+        if isinstance(args.secondary_db, list)
+        else [args.secondary_db]
+    )
 
-    # merge each database
-    for index, db in enumerate(merging_db):
-        try:
-            if index == 0 and not args.dont_backup_db1:
-                rtc.merge_databases(db, backup=True)
-            else:
-                rtc.merge_databases(db, backup=False)
-        except Exception as e:
-            logger.error(f"Database {db} failed to merge: {str(e)}.")
-            with open("failed_databases.txt", "a") as f:
-                f.write(f"{db}\n")
-        else:
-            logger.info(f"merging of {db} complete.")
+    failed = rtc.merge_databases(
+        merging_dbs=merging_dbs, backup=not args.dont_backup_db1
+    )
+    for db, error in failed:
+        print(f"FAILED TO MERGE: {db}: {error}")
+        with open("failed_databases.txt", "a") as f:
+            f.write(f"{db}\n")
+
+    num_total = len(merging_dbs)
+    unsuccessful = len(failed)
+    num_successful = num_total - unsuccessful
+    if num_successful:
+        print(f"Merging of {num_successful} out of {num_total} databases complete.")
+    if unsuccessful:
+        print(f"{unsuccessful} databases failed to merge.")
 
 
 if __name__ == "__main__":
