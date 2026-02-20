@@ -1288,6 +1288,7 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         # Adding new data to Interactions table with (updated) pose_id and interaction_id
+        # TODO #BUG I think the issue is here, because it has interacton_pose_id
         insert_interactions = """
         INSERT INTO Interactions (
         Pose_ID,
@@ -1310,6 +1311,16 @@ class StorageManagerDuckDB(StorageManager):
                 (merge_id,),
             )
             cur.execute(insert_interaction_indices, (merge_id,))
+
+            interaction_pose_id = self.conn.execute(
+                "SELECT MAX(interaction_pose_id) FROM Interactions;"
+            ).fetchone()[0]
+            # update the db write session sequence
+            self.conn.execute("DROP SEQUENCE IF EXISTS seq_interactionposeid;")
+            self.conn.execute(
+                f"CREATE SEQUENCE seq_interactionposeid START {interaction_pose_id+1};"
+            )
+
             cur.execute(
                 insert_interactions,
                 (
@@ -1325,15 +1336,6 @@ class StorageManagerDuckDB(StorageManager):
             self.conn.execute("DROP SEQUENCE IF EXISTS seq_interactionid;")
             self.conn.execute(
                 f"CREATE SEQUENCE seq_interactionid START {interaction_id+1};"
-            )
-
-            interaction_pose_id = self.conn.execute(
-                "SELECT MAX(interaction_pose_id) FROM Interactions;"
-            ).fetchone()[0]
-            # update the db write session sequence
-            self.conn.execute("DROP SEQUENCE IF EXISTS seq_interactionposeid;")
-            self.conn.execute(
-                f"CREATE SEQUENCE seq_interactionposeid START {interaction_pose_id+1};"
             )
 
         except Exception as e:
