@@ -1235,7 +1235,7 @@ class RingtailCore:
             str: name of the new, exported database
         """
         if db_filepath is None:
-            db_filepath = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+            db_filepath = self.db_file.removesuffix(".db") + "_" + bookmark_name + ".db"
 
         LOGGER.info("Exporting bookmark database")
         if os.path.exists(db_filepath):
