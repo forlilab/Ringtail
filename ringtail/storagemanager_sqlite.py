@@ -869,9 +869,12 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             int: merge id returend by database
         """
-        return self.db_query(
-            "SELECT last_insert_rowid() FROM merged_tables"
-        ).fetchone()[0]
+        cur = self.conn.cursor()
+        cur.execute(
+            "INSERT INTO merged_tables(dbfile) VALUES (?)",
+            [mergingdb_path],
+        )
+        return cur.lastrowid
 
     def _create_merge_tables(self):
         """
