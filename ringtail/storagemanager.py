@@ -539,6 +539,13 @@ class StorageManager:
                 );"""
         self.db_query(interactions)
         logger.debug("Interactions have been copied into the new subset database.")
+        # receptor
+        dbprop = f"""
+        INSERT INTO {alias}.DB_properties
+        SELECT * FROM main.DB_properties;
+        """
+        self.db_query(dbprop)
+        logger.debug("The DB_properties have been copied into the new subset database.")
         try:
             self.conn.commit()
         except Exception as e:
