@@ -103,6 +103,8 @@ def main():
         print(f"Merging of {num_successful} out of {num_total} databases complete.")
     if unsuccessful:
         print(f"{unsuccessful} databases failed to merge.")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

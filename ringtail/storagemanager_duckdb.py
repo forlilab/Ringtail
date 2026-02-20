@@ -884,6 +884,10 @@ class StorageManagerDuckDB(StorageManager):
         self._delete_table("Filtered_poses")
         self._delete_table("Filters")
         self.db_query("DROP SEQUENCE IF EXISTS seq_filterid;")
+        # sync sequences to current max values, critical for databases
+        # created via export_bookmark_db where data was inserted with
+        # explicit IDs but sequences were initialized starting at 1
+        self._sync_auto_increment_state()
 
     def _get_merge_id(self, mergingdb_path: str) -> int:
         """
