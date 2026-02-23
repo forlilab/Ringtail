@@ -12,8 +12,8 @@ import pytest
 
 @pytest.fixture
 def countrows():
-    def __dbconnect(query):
-        conn = sqlite3.connect("output.db")
+    def __dbconnect(query, db_name="output.db"):
+        conn = sqlite3.connect(db_name)
         curs = conn.cursor()
         curs.execute(query)
         count = curs.fetchone()[0]
@@ -768,3 +768,57 @@ class TestOptions:
     def test_remove_test_log_files(self):
         # Alter this method if you wish to not delete all log files after testing automatically
         os.system("rm *_ringtail.log")
+
+
+class TestMergeDB:
+
+    def test_db_write(self, countrows):
+        rtc1 = RingtailCore("primary.db")
+        rtc1.add_results_from_files("test_data/adgpu/group1/1451.dlg.gz")
+
+        rtc2 = RingtailCore("secondary.db")
+        rtc2.add_results_from_files("test_data/adgpu/group1/1620.dlg.gz")
+
+        rtc3 = RingtailCore("tertiary.db")
+        rtc3.add_results_from_files("test_data/adgpu/group1/1751.dlg.gz")
+
+        # they should all have one ligand each
+        assert (
+            countrows("SELECT COUNT(*) FROM Ligands", "primary.db")
+            == countrows("SELECT COUNT(*) FROM Ligands", "secondary.db")
+            == countrows("SELECT COUNT(*) FROM Ligands", "tertiary.db")
+            == 1
+        )
+
+    def test_before_merge(self, countrows):
+        rtc1 = RingtailCore("primary.db")
+        # should not be any poses in this interval
+        assert rtc1.filter(eworst=-2, ebest=-5, output_all_poses=True) == 0
+        assert rtc1.filter(eworst=-5, output_all_poses=True) == 3
+        assert countrows("SELECT COUNT(*) FROM passing_results", "primary.db") == 3
+
+    def test_after_merge(self, countrows):
+        rtc1 = RingtailCore("primary.db")
+        rtc1.merge_databases("secondary.db", False)
+        rtc1.merge_databases("tertiary.db", False)
+        # this should add two more ligands
+        assert countrows("SELECT COUNT(*) FROM Ligands", "primary.db") == 3
+        # should now be data in this interval
+        assert rtc1.filter(eworst=-2, ebest=-5) == 2
+
+    def test_check_PKs(self, countrows):
+        # get best ranked pose id in secondary database for ligand 1620
+        secondary_db_pose_as_main = countrows(
+            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND LigName = '1620'",
+            "secondary.db",
+        )
+        assert secondary_db_pose_as_main == 1
+
+        # compare to pose id for best ranked pose for same ligand in the merged database
+        secondary_db_pose_as_merged = countrows(
+            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND LigName = '1620'",
+            "primary.db",
+        )
+        assert secondary_db_pose_as_merged != secondary_db_pose_as_main
+
+        os.system("rm primary.db secondary.db tertiary.db")

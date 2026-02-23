@@ -14,7 +14,7 @@ from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
 from .ringtailoptions import *
 from .util import *
-from .exceptions import RTCoreError, OutputError, StorageError
+from .exceptions import RTCoreError, OutputError, StorageError, MergeError
 from rdkit import Chem
 import itertools
 from typing import Union
@@ -1733,6 +1733,67 @@ class RingtailCore:
                     self.outputman.log_num_passing_ligands(number_similar)
                     print("Number similar ligands:", number_similar)
         return number_similar
+
+    def merge_databases(self, merging_dbs: list[str], backup: bool = True):
+        """
+        Merges one or more databases into the primary database. Accepts a list
+        of explicit paths, glob patterns (e.g. "path/to/*.db"), or a mix of both.
+        Duplicate paths and the primary database itself are automatically excluded.
+
+        Args:
+            merging_dbs (list[str]): paths or glob patterns for databases to merge
+            backup (bool, optional): back up current db before merging. Defaults to True.
+
+        Returns:
+            list[tuple[str, str]]: list of (db_path, error_message) for failed merges
+        """
+        import glob
+
+        if isinstance(merging_dbs, str):
+            merging_dbs = [merging_dbs]
+
+        # Expand glob patterns and collect unique paths
+        primary_abspath = os.path.abspath(self.db_file)
+        seen = set()
+        expanded_dbs = []
+        for pattern in merging_dbs:
+            matches = glob.glob(pattern)
+            if not matches:
+                LOGGER.warning(f"No files matched pattern: {pattern}")
+            for db in matches:
+                abspath = os.path.abspath(db)
+                if abspath == primary_abspath:
+                    LOGGER.info(f"Skipping {db} (same as primary database)")
+                    continue
+                if abspath not in seen:
+                    seen.add(abspath)
+                    expanded_dbs.append(db)
+
+        if not expanded_dbs:
+            LOGGER.error("No valid databases to merge after filtering.")
+            return []
+
+        LOGGER.warning(
+            "If you have performed filtering or clustering, this data will be lost in the new, merged database."
+        )
+        LOGGER.info(f"Merging {len(expanded_dbs)} databases into {self.db_file}")
+
+        with self.storageman as sm:
+            if backup:
+                sm.clone()
+            sm.prepare_for_merging()
+            failed = []
+            for merging_db in expanded_dbs:
+                try:
+                    sm.merge_database(merging_db=merging_db)
+                    LOGGER.info(f"Successfully merged {merging_db}.")
+                except MergeError as e:
+                    LOGGER.error(f"Database {merging_db} failed to merge: {e}")
+                    failed.append((merging_db, str(e)))
+
+            sm.complete_merging()
+
+        return failed
 
     def plot(
         self, save=True, bookmark_name: str = None, return_fig_handle: bool = False

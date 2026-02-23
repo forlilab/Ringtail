@@ -26,6 +26,7 @@ from .exceptions import (
     DatabaseInsertionError,
     DatabaseConnectionError,
     DatabaseTableCreationError,
+    MergeError,
 )
 from .exceptions import DatabaseQueryError, DatabaseViewCreationError, OptionError
 
@@ -3411,6 +3412,471 @@ class StorageManagerSQLite(StorageManager):
         if not self._db_empty() and self.overwrite:
             self._drop_existing_tables()
             logger.info("Tables in existing database were dropped.")
+
+    def prepare_for_merging(self):
+        """
+        Prepares for merging by dropping tables incompatible with merging
+        """
+        # create new tables to keep track of merger
+        self._create_merge_tables()
+        # delete views and cluster data
+        try:
+            cur = self.conn.cursor()
+            # delete from main db
+            views = cur.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'view'"
+            ).fetchall()
+            for v in views:
+                cur.execute(f"DROP VIEW IF EXISTS {v[0]};")
+            cur.execute("DELETE FROM Bookmarks;")
+            cur.execute("DROP TABLE IF EXISTS Ligand_clusters;")
+        except Exception as e:
+            raise MergeError(
+                f"Error during deletion of incompatible tables: {e}"
+            ) from e
+        else:
+            self.logger.info(
+                "Bookmarks and cluster tables have been dropped from the databases, as these may be inaccurate after the database merge."
+            )
+
+    def merge_database(self, merging_db: str):
+        """
+        Method that merges two databases, ensuring integrity of primary and foreign keys.
+        The merging will create a new table if needed, that keeps track of the primary key
+        in the original and the merged database on a per-table basis. Another table will also
+        keep track of how many databases has been merged into the primary database.
+        The merging will ensure the two databases are -compatible based on the receptor only-.
+        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
+            these will be allowed to merge.
+
+        Args:
+            merging_db (str): path to database being merged into current
+
+        Raises:
+            MergeError
+        """
+        # attach incoming database and check compatibility
+        merging_db_alias = "merging"
+        self._attach_db(merging_db, merging_db_alias)
+        if not self._db_compatible_for_merge(merging_db_alias):
+            raise MergeError(
+                "Trying to merge two databases of incompatible or too old versions, cannot proceed."
+            )
+
+        # add to merging table the absolute path
+        mergedb_abspath = str(os.path.abspath(merging_db))
+        cur = self.conn.cursor()
+        cur.execute(
+            "INSERT INTO merged_tables(dbfile) VALUES (?)",
+            [mergedb_abspath],
+        )
+        merge_id = cur.lastrowid
+
+        # receptor compatibility check
+        if self._merging_receptors_compatible():
+            logger.info(
+                "The two databases have compatible receptors. Merging will proceed."
+            )
+        else:
+            raise MergeError(
+                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
+            )
+
+        # merge tables
+        try:
+            # merge DB_properties table
+            self._merge_db_properties_table(merge_id)
+            self.conn.commit()
+            logger.info("The 'DB_properties' table has been merged.")
+
+            # merge Ligands and Results tables
+            self._merge_ligands_and_results_tables(merge_id)
+            self.conn.commit()
+            logger.info("The 'Ligands' and 'Results' tables have been merged.")
+
+            # merge Interactions and Interaction_indices tables
+            self._merge_interaction_tables(merge_id)
+            self.conn.commit()
+            logger.info(
+                "The 'Interaction_indices' and 'Interactions' tables have been merged."
+            )
+        except Exception as e:
+            self._rollback_merge(merge_id)
+            raise MergeError(f"Merging failed and was rolled back: {e}") from e
+        else:
+            logger.info(
+                f"The database {merging_db} has been successfully merged into {self.db_file}."
+            )
+        finally:
+            self._detach_db(merging_db_alias)
+            logger.info("The final database has been cleaned up, and indices rebuilt.")
+
+    def _merge_db_properties_table(self, merge_id: int):
+        convert_dbprop_sql = """INSERT INTO PK_conversions (
+            merge_id,
+            table_name,
+            original_PK,
+            merged_PK) SELECT 
+            ?,
+            "db_properties", 
+            DB_write_session,
+            DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
+            FROM merging.db_properties;"""
+        insert_dbprops_sql = """INSERT INTO DB_properties (
+            DB_write_session,
+            docking_mode,
+            number_of_poses)
+            SELECT 
+                (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
+                docking_mode,
+                number_of_poses
+            FROM merging.DB_properties;"""
+        self.conn.execute(
+            convert_dbprop_sql,
+            (merge_id,),
+        )
+        self.conn.execute(insert_dbprops_sql, (merge_id,))
+
+    def _merge_ligands_and_results_tables(self, merge_id: int):
+        # Ligand table has unique constraints and primary key is LigName so no checks needed
+        merge_ligands = """INSERT INTO Ligands 
+            SELECT * FROM merging.Ligands"""
+        convert_poseid_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        "Results", 
+        Pose_ID,
+        Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
+        FROM merging.Results;"""
+
+        # insert results with updated pose_ids
+        insert_Results = """INSERT INTO Results (
+            Pose_ID,
+            LigName,
+            receptor,
+            pose_rank,
+            run_number,
+            docking_score,
+            leff,
+            deltas,
+            cluster_rmsd,
+            cluster_size,
+            reference_rmsd,
+            energies_inter,
+            energies_vdw,
+            energies_electro,
+            energies_flexLig,
+            energies_flexLR,
+            energies_intra,
+            energies_torsional,
+            unbound_energy,
+            nr_interactions,
+            num_hb,
+            about_x,
+            about_y,
+            about_z,
+            trans_x,
+            trans_y,
+            trans_z,
+            axisangle_x,
+            axisangle_y,
+            axisangle_z,
+            axisangle_w,
+            dihedrals,
+            ligand_coordinates,
+            flexible_res_coordinates) 
+        SELECT 
+            II.merged_PK as pose_id,
+            I.LigName,
+            I.receptor,
+            I.pose_rank,
+            I.run_number,
+            I.docking_score,
+            I.leff,
+            I.deltas,
+            I.cluster_rmsd,
+            I.cluster_size,
+            I.reference_rmsd,
+            I.energies_inter,
+            I.energies_vdw,
+            I.energies_electro,
+            I.energies_flexLig,
+            I.energies_flexLR,
+            I.energies_intra,
+            I.energies_torsional,
+            I.unbound_energy,
+            I.nr_interactions,
+            I.num_hb,
+            I.about_x,
+            I.about_y,
+            I.about_z,
+            I.trans_x,
+            I.trans_y,
+            I.trans_z,
+            I.axisangle_x,
+            I.axisangle_y,
+            I.axisangle_z,
+            I.axisangle_w,
+            I.dihedrals,
+            I.ligand_coordinates,
+            I.flexible_res_coordinates
+        FROM merging.Results I
+                LEFT JOIN (SELECT original_PK, merged_PK 
+                FROM PK_conversions 
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) II ON II.original_PK = I.Pose_ID;"""
+
+        self.conn.execute(merge_ligands)
+        self.conn.execute(
+            convert_poseid_sql,
+            (merge_id,),
+        )
+        self.conn.execute(insert_Results, (merge_id,))
+
+    def _merge_interaction_tables(self, merge_id: int):
+        convert_ii_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_PK,
+        merged_PK) SELECT 
+        ?,
+        "Interaction_indices", 
+        interaction_id,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    ) 
+                THEN (
+                    SELECT main.Interaction_indices.interaction_id
+                    FROM main.Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    )
+                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
+            END AS new_interaction_id
+        FROM merging.Interaction_indices;"""
+
+        # then inserting only those that aren't already in the table
+        insert_interaction_indices = """INSERT INTO Interaction_indices (
+        interaction_id,
+        interaction_type,
+        rec_chain,
+        rec_resname,
+        rec_resid,
+        rec_atom,
+        rec_atomid)
+        SELECT 
+            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
+            interaction_type,
+            rec_chain,
+            rec_resname,
+            rec_resid,
+            rec_atom,
+            rec_atomid
+        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
+        """
+
+        # Adding new data to Interactions table with (updated) pose_id and interaction_id
+        insert_interactions = """
+        INSERT INTO Interactions (
+        Pose_ID,
+        interaction_id
+        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
+                FROM merging.Interactions I
+                LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
+            LEFT JOIN (SELECT original_PK, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Interaction_indices' 
+                AND merge_id = ?)  II ON (I.Interaction_ID = II.original_PK);"""
+
+        self.conn.execute(
+            convert_ii_sql,
+            (merge_id,),
+        )
+        self.conn.execute(insert_interaction_indices, (merge_id,))
+        self.conn.execute(
+            insert_interactions,
+            (
+                merge_id,
+                merge_id,
+            ),
+        )
+
+    def _create_merge_tables(self):
+        """
+        Creates tables necessary when merging two or more databases
+
+        Raises:
+            StorageError
+        """
+        try:
+            cur = self.conn.cursor()
+            # create mergedata table: merge_id (PK), dbfile, timestamp, numofrows table
+            mergetbl_sql = """CREATE TABLE IF NOT EXISTS merged_tables (
+            merge_id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            dbfile                  VARCHAR,
+            merge_start             DATETIME DEFAULT CURRENT_TIMESTAMP);"""
+            cur.execute(mergetbl_sql)
+
+            # create PK table: merge_id(FK), table, original_val, merge_val
+            pktable_sql = """CREATE TABLE IF NOT EXISTS PK_conversions (
+            merge_id        INTEGER,
+            table_name      VARCHAR,
+            original_PK     INTEGER,
+            merged_PK       INTEGER,
+            FOREIGN KEY(merge_id) REFERENCES merged_tables(merge_id));"""
+            cur.execute(pktable_sql)
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS ak_merge ON PK_conversions(merge_id, original_PK)"
+            )
+        except Exception as e:
+            raise MergeError(e) from e
+
+    def _merging_receptors_compatible(self) -> bool:
+        """
+        Checks if the receptor names in the two databases are a mathc
+
+        Returns:
+            bool: True if receptor allows merging
+        """
+        receptorcheck_sql = """
+        SELECT CASE 
+            WHEN Receptors.RecName = merging_receptors.RecName THEN 'True'
+            ELSE 'False'
+        END AS comparison_result 
+        FROM Receptors 
+        JOIN merging.Receptors AS merging_receptors 
+            ON Receptors.receptor_id = merging_receptors.receptor_id;"""
+        receptor_comp = self._run_query(receptorcheck_sql).fetchone()
+        if receptor_comp:
+            if receptor_comp[0] == "True":
+                return True
+        return False
+
+    def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
+        """
+        Method that checks if the database merging into main is compatible with main,
+        and checks if both databases are of appropriately high version where merge has
+        been implemented
+
+        Args:
+            merging_db_alias (str): alias for the database being merged into main
+
+        Returns:
+            bool: if the two databases are compatible
+        """
+        main_version = self._run_query("PRAGMA main.user_version").fetchone()[0]
+        merging_version = self._run_query(
+            f"PRAGMA {merging_db_alias}.user_version"
+        ).fetchone()[0]
+
+        if main_version != merging_version:
+            return False
+        if main_version < 200:
+            logger.error(
+                "This database is too old for use with the merge tool. Only databases created with Ringtail 2.x and above are enabled for merging."
+            )
+            return False
+
+        return True
+
+    def complete_merging(self):
+        """
+        Completes the merging process by creating empty filter tables, as well
+        as resetting any auto incremented values for safety
+        """
+        self._vacuum()
+        # rebuild indices in main table
+        self.conn.execute("REINDEX;")
+
+    def _rollback_merge(self, merge_id):
+        """Roll back a failed merge by removing all data inserted during the merge.
+
+        Uses the PK_conversions table to identify which rows were added for the
+        given merge_id, and removes them in reverse dependency order.
+
+        Args:
+            merge_id (int): the merge_id identifying the failed merge operation
+        """
+        logger.warning(f"Rolling back merge (merge_id={merge_id})...")
+
+        try:
+            cur = self.conn.cursor()
+
+            # 1. Delete Interactions referencing merged Results
+            cur.execute(
+                """DELETE FROM Interactions WHERE Pose_ID IN (
+                    SELECT merged_PK FROM PK_conversions
+                    WHERE merge_id = ? AND table_name = 'Results'
+                )""",
+                (merge_id,),
+            )
+
+            # 2. Delete orphaned Interaction_indices (no longer referenced by any Interaction)
+            cur.execute(
+                """DELETE FROM Interaction_indices WHERE interaction_id NOT IN (
+                    SELECT DISTINCT interaction_id FROM Interactions
+                )"""
+            )
+
+            # 3. Delete merged Results
+            cur.execute(
+                """DELETE FROM Results WHERE Pose_ID IN (
+                    SELECT merged_PK FROM PK_conversions
+                    WHERE merge_id = ? AND table_name = 'Results'
+                )""",
+                (merge_id,),
+            )
+
+            # 4. Delete orphaned Ligands (no longer referenced by any Results)
+            cur.execute(
+                """DELETE FROM Ligands WHERE LigName NOT IN (
+                    SELECT DISTINCT LigName FROM Results
+                )"""
+            )
+
+            # 5. Delete merged DB_properties
+            cur.execute(
+                """DELETE FROM DB_properties WHERE DB_write_session IN (
+                    SELECT merged_PK FROM PK_conversions
+                    WHERE merge_id = ? AND table_name = 'db_properties'
+                )""",
+                (merge_id,),
+            )
+
+            # 6. Delete PK_conversions for this merge
+            cur.execute("DELETE FROM PK_conversions WHERE merge_id = ?", (merge_id,))
+
+            # 7. Delete the merged_tables entry
+            cur.execute("DELETE FROM merged_tables WHERE merge_id = ?", (merge_id,))
+
+            self.conn.commit()
+            logger.info(
+                f"Merge (merge_id={merge_id}) has been successfully rolled back."
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to roll back merge (merge_id={merge_id}): {e}")
+            raise MergeError(f"Rollback of merge failed: {e}") from e
 
     def _open_storage(self):
         """Create connection to db. Then, check if db needs to be created.
