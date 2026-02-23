@@ -3858,7 +3858,7 @@ class StorageManagerSQLite(StorageManager):
             cur.execute(
                 """DELETE FROM DB_properties WHERE DB_write_session IN (
                     SELECT merged_PK FROM PK_conversions
-                    WHERE merge_id = ? AND table_name = 'db_properties'
+                    WHERE merge_id = ? AND table_name = 'DB_properties'
                 )""",
                 (merge_id,),
             )
