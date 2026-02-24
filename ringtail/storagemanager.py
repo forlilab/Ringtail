@@ -2801,6 +2801,18 @@ class StorageManager:
     ):
         raise NotImplementedError
 
+    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
+        """Make query for percentile by calculating energy or leff cutoff
+
+        Args:
+            percentile (float): cutoff percentile
+            column (str, optional): string indicating column for percentile to be calculated over
+
+        Returns:
+            float: effective cutoff value of results based on percentile
+        """
+        raise NotImplementedError
+
     def _create_cluster_tables(self):
         """
         Creates cluster tables if they don't already exist
