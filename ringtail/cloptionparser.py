@@ -937,6 +937,7 @@ class CLOptionParser:
                 filter_bookmark=parsed_opts.filter_bookmark,
                 enumerate_interaction_combs=parsed_opts.enumerate_interaction_combs,
                 mfpt_cluster=parsed_opts.mfpt_cluster,
+                log_file=parsed_opts.log_file,
                 interaction_cluster=parsed_opts.interaction_cluster,
             )
 
@@ -947,7 +948,6 @@ class CLOptionParser:
                 pymol=parsed_opts.pymol,
                 data_from_bookmark=parsed_opts.data_from_bookmark,
                 individual_sdf_files=parsed_opts.individual_sdf_files,
-                log_file=parsed_opts.log_file,
                 export_sdf_path=parsed_opts.export_sdf_path,
                 export_query_csv=parsed_opts.export_query_csv,
                 find_similar_ligands=parsed_opts.find_similar_ligands,
