@@ -810,7 +810,7 @@ class StorageManagerDuckDB(StorageManager):
             int: number of clusters in that cluster if any, else None
         """
         return self.db_query(
-            "SELECT num_clusters FROM Clusters WHERE name=? and cluster_window=?",
+            "SELECT cluster_id FROM Clusters WHERE name=? and cluster_window=?",
             (
                 cluster_name,
                 cluster_window,
@@ -851,7 +851,7 @@ class StorageManagerDuckDB(StorageManager):
 
         Args:
             cluster_groups (list): each cluster from the clustering exercise
-            pose_rows (list): pose and cluster id and group id
+            pose_rows (list): cluster_id, group_id, pose_od
         """
         self.db_update(
             """INSERT INTO Cluster_groups VALUES (?,?,?);""",
@@ -865,6 +865,26 @@ class StorageManagerDuckDB(StorageManager):
                 """,
             pose_rows,
             commit=False,
+        )
+
+    def _delete_cluster(self, cluster_id):
+        # delete all poses and cluster groups associated with cluster id
+        self.conn.execute(
+            """
+            DELETE FROM Pose_clusters WHERE cluster_id = ?;""",
+            (cluster_id,),
+        )
+        # delete representative pose id for each cluster group
+        self.conn.execute(
+            """
+            DELETE FROM Cluster_groups WHERE cluster_id = ?;""",
+            (cluster_id,),
+        )
+        # delete the cluster information
+        self.conn.execute(
+            """
+            DELETE FROM Clusters WHERE cluster_id = ?;""",
+            (cluster_id,),
         )
 
     # endregion

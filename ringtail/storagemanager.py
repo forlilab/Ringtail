@@ -1842,12 +1842,14 @@ class StorageManager:
 
         cluster_bookmark = f"{bookmark_name}_{cluster_name}"
         # check if clusters already exist
-        clusters_exist = self._cluster_exists(cluster_name, bookmark_name)
-        if clusters_exist:
+        # TODO maybe just if it has been ran before, state that it will be deleted?
+        existing_cluster_id_tuple = self._cluster_exists(cluster_name, bookmark_name)
+        if existing_cluster_id_tuple:
             logger.warning(
-                f"This cluster has been ran before, will reuse bookmark {cluster_bookmark}."
+                f"A previous cluster bookmark under the same name exists ({cluster_bookmark}), and will be deleted ."
             )
-            return (cluster_bookmark, clusters_exist[0])
+            existing_cluster_id = existing_cluster_id_tuple[0]
+            self._delete_cluster(existing_cluster_id)
 
         cluster_id = self._insert_new_cluster_info(
             cluster_name, "", bookmark_name, len(clusters)
@@ -2861,6 +2863,16 @@ class StorageManager:
         Args:
             cluster_groups (list): each cluster from the clustering exercise
             pose_rows (list): pose and cluster id and group id
+        """
+        raise NotImplementedError
+
+    def _delete_cluster(self, cluster_id: int):
+        """
+        Deletes all data associated with a cluster: Pose_clusters,
+        Cluster_groups, and Clusters rows for the given cluster_id.
+
+        Args:
+            cluster_id (int): cluster id to delete
         """
         raise NotImplementedError
 
