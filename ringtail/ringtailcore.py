@@ -1112,7 +1112,7 @@ class RingtailCore:
                     flexres_data,
                 )
                 if mol is None:
-                    LOGGER.error("skipping {ligname=}")
+                    LOGGER.error(f"skipping {ligname=}")
                 all_mols[ligname] = {
                     "ligand": mol,
                     "flex_residues": flexres_mols,
