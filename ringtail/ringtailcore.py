@@ -1111,6 +1111,8 @@ class RingtailCore:
                     poses,
                     flexres_data,
                 )
+                if mol is None:
+                    LOGGER.error("skipping {ligname=}")
                 all_mols[ligname] = {
                     "ligand": mol,
                     "flex_residues": flexres_mols,
@@ -2055,6 +2057,9 @@ class RingtailCore:
             properties,
         )
 
+        if mol is None:
+            return None, None, None, None
+
         # add ligand name to properties
         properties["_Name"] = ligname
         # prepare flexres
@@ -2362,6 +2367,9 @@ class RingtailCore:
                 pose_coordinates = json.loads(pose_coordinates)
                 flexres_pose_coordinates = json.loads(flexres_pose_coordinates)
                 # TODO make a meeko method?
+                if mol.GetNumAtoms() != len(pose_coordinates):
+                    LOGGER.error(f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}")
+                    return None, None, None, None, None
                 mol = self._add_conformer(mol, pose_coordinates)
                 for fr_idx, fr_mol in enumerate(flexres_mols):
                     flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(
