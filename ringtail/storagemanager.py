@@ -3807,6 +3807,7 @@ class StorageManagerSQLite(StorageManager):
         self._vacuum()
         # rebuild indices in main table
         self.conn.execute("REINDEX;")
+        self.conn.commit()
 
     def _rollback_merge(self, merge_id):
         """Roll back a failed merge by removing all data inserted during the merge.
@@ -4215,6 +4216,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
         try:
+            self.conn.commit()
             cur = self.conn.cursor()
             cur.execute("VACUUM")
             self.conn.commit()
