@@ -1734,7 +1734,9 @@ class RingtailCore:
                     print("Number similar ligands:", number_similar)
         return number_similar
 
-    def merge_databases(self, merging_dbs: list[str], backup: bool = True):
+    def merge_databases(
+        self, merging_dbs: list[str], backup: bool = True, finalize: bool = True
+    ):
         """
         Merges one or more databases into the primary database. Accepts a list
         of explicit paths, glob patterns (e.g. "path/to/*.db"), or a mix of both.
@@ -1790,10 +1792,17 @@ class RingtailCore:
                 except MergeError as e:
                     LOGGER.error(f"Database {merging_db} failed to merge: {e}")
                     failed.append((merging_db, str(e)))
-
-            sm.complete_merging()
+            if finalize:
+                sm.complete_merging()
 
         return failed
+
+    def complete_merging(self):
+        """
+        Method for running vacuuming and reindexing
+        """
+        with self.storageman as sm:
+            sm.complete_merging()
 
     def plot(
         self, save=True, bookmark_name: str = None, return_fig_handle: bool = False

@@ -69,6 +69,11 @@ def main():
         help="if logging at debug level",
         action="store_true",
     )
+    parser.add_argument(
+        "--dont_finalize",
+        help="option to wait to recalculate indices after merging",
+        action="store_true",
+    )
 
     args = parser.parse_args()
     if args.debug:
@@ -89,7 +94,9 @@ def main():
     )
 
     failed = rtc.merge_databases(
-        merging_dbs=merging_dbs, backup=not args.dont_backup_db1
+        merging_dbs=merging_dbs,
+        backup=not args.dont_backup_db1,
+        finalize=not args.dont_finalize,
     )
     for db, error in failed:
         print(f"FAILED TO MERGE: {db}: {error}")
