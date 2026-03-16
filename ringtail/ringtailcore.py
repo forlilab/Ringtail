@@ -2059,6 +2059,12 @@ class RingtailCore:
         with self.storageman:
             self.storageman.create_subset_database(bookmark_name, db_filepath)
 
+        if not os.path.exists(db_filepath):
+            self.logger.warning(
+                "No poses found in bookmark. Subset database was not created."
+            )
+            return None
+
         return db_filepath
 
     def export_receptors(self):
