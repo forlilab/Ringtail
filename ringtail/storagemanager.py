@@ -2158,6 +2158,16 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             StorageError:
         """
+        # check if bookmark has any results before creating database
+        count_query = f'SELECT COUNT(*) FROM main."{bookmark_name}"'
+        result = self._run_query(count_query)
+        count = result.fetchone()[0]
+        if count == 0:
+            logger.warning(
+                f"No poses found in bookmark '{bookmark_name}'. Subset database not created."
+            )
+            return
+
         # create the database
         new_db = self.__class__(database_name)
         # make tables
@@ -3758,18 +3768,12 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             bool: True if receptor allows merging
         """
-        receptorcheck_sql = """
-        SELECT CASE 
-            WHEN Receptors.RecName = merging_receptors.RecName THEN 'True'
-            ELSE 'False'
-        END AS comparison_result 
-        FROM Receptors 
-        JOIN merging.Receptors AS merging_receptors 
-            ON Receptors.receptor_id = merging_receptors.receptor_id;"""
-        receptor_comp = self._run_query(receptorcheck_sql).fetchone()
-        if receptor_comp:
-            if receptor_comp[0] == "True":
-                return True
+        main_rec = self._run_query("SELECT RecName FROM Receptors").fetchone()
+        merging_rec = self._run_query(
+            "SELECT RecName FROM merging.Receptors"
+        ).fetchone()
+        if main_rec == merging_rec:
+            return True
         return False
 
     def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
