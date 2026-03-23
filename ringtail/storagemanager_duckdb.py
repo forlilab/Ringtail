@@ -688,7 +688,7 @@ class StorageManagerDuckDB(StorageManager):
         df = pd.DataFrame(
             interactions,
             columns=["type", "chain", "residue", "resid", "recname", "recid"],
-        )
+        ).drop_duplicates()
         self.conn.register("df_view", df)
         # to insert interaction if unique
         alt_sql_insert = """
