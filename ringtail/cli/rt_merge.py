@@ -88,9 +88,14 @@ def main():
         else [args.secondary_db]
     )
 
-    failed = rtc.merge_databases(
-        merging_dbs=merging_dbs, backup=not args.dont_backup_db1
-    )
+    try:
+        failed = rtc.merge_databases(
+            merging_dbs=merging_dbs, backup=not args.dont_backup_db1
+        )
+    except Exception as e:
+        logger.error(f"Merge process encountered a fatal error: {e}")
+        return 1
+
     for db, error in failed:
         print(f"FAILED TO MERGE: {db}: {error}")
         with open("failed_databases.txt", "a") as f:
