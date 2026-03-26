@@ -58,7 +58,7 @@ def main():
                     bookmark_name,
                     cli.output_options.outfields,
                     cli.output_options.order_results,
-                    cli.output_options.log_file,
+                    cli.filter_options.log_file,
                 )
 
             # find similar ligands to that specified, if specified (i.e., not None)
