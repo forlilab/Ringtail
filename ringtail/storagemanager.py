@@ -6,6 +6,7 @@
 
 import time
 import json
+from pathlib import Path
 import os.path
 import pandas as pd
 from .logutils import LOGGER as logger
@@ -2083,11 +2084,23 @@ class StorageManager:
                         # cast last four items to float
                         for index in range(2, 6):
                             filter[index] = float(filter[index])
-
+                if filter_key == "ligand_name":
+                    if len(filter_value) > 50:
+                        raise OptionError(
+                            "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
+                        )
                 ligand_filters[filter_key] = filter_value
 
             if filter_key == "max_miss":
                 max_miss = filter_value
+            # parse ligand name file if present
+            if filter_key == "ligand_name_file":
+                if not Path(filter_value).suffix.lower() == ".csv":
+                    raise OptionError(
+                        f"The file of ligand names needs to be a csv file, cannot proceed with {Path(filter_value).suffix.lower()}."
+                    )
+                else:
+                    ligand_filters[filter_key] = filter_value
         # put all processed filter in a dict
         processed_filters = {}
         if len(numerical_filters) > 0:

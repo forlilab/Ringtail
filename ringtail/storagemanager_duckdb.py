@@ -1471,6 +1471,10 @@ class StorageManagerDuckDB(StorageManager):
                     [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
+            elif "ligand_name_file" in lig_filters:
+                csv_path = lig_filters.pop("ligand_name_file")
+                self._create_ligname_temp_table(csv_path)
+                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON LigName = tmp_lignames.ligandname"
             # rdkit queries need to be handled in memory separate from the main query
             if lig_filters:
                 rdkit_query = True
@@ -1628,6 +1632,14 @@ class StorageManagerDuckDB(StorageManager):
         query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
+
+    def _create_ligname_temp_table(self, csv_path: str):
+        """Loads ligand names from CSV into a temporary table using DuckDB's native CSV reader."""
+        self.conn.execute("DROP TABLE IF EXISTS tmp_lignames")
+        self.conn.execute(
+            f"CREATE TEMP TABLE tmp_lignames AS "
+            f"SELECT CAST(column0 AS VARCHAR) AS ligandname FROM read_csv('{csv_path}', header=false)"
+        )
 
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"

@@ -189,6 +189,14 @@ class TestRingtailCore:
         )
         assert count_substruct_pos == 12
 
+        # test ligand_name_file
+
+        count_ligands, _ = rtc.filter(
+            ligand_name_file="test_data/adgpu/ligand_names.csv",
+        )
+
+        assert count_ligands == 16
+
     def test_all_filters(self):
         if not _db_exists():
             _create_test_db()
@@ -793,7 +801,7 @@ class TestStorageMan:
     def test_fetch_summary_data(self):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
-            file_list="test_data/filelist1.txt",
+            file_list="test_data/adgpu/filelist1.txt",
             receptor_file="test_data/adgpu/4j8m.pdbqt",
             save_receptor=True,
         )
@@ -931,7 +939,7 @@ class TestOptions:
         from ringtail.ringtailoptions import Filters
 
         rtc = RingtailCore()
-        rtc.add_results_from_files(file_list="test_data/filelist1.txt")
+        rtc.add_results_from_files(file_list="test_data/adgpu/filelist1.txt")
         rtc.filters = Filters({"score_percentile": 20})
         assert rtc.filters.eworst == None
         assert rtc.filters.score_percentile == 20
@@ -945,10 +953,12 @@ class TestOptions:
 
     def test_overwrite_db(self):
         rtc = RingtailCore()
-        rtc.add_results_from_files(file_list="test_data/filelist1.txt")
+        rtc.add_results_from_files(file_list="test_data/adgpu/filelist1.txt")
         count_old_db = rtc.table_length("Ligands")
 
-        rtc.add_results_from_files(file_list="test_data/filelist2.txt", overwrite=True)
+        rtc.add_results_from_files(
+            file_list="test_data/adgpu/filelist2.txt", overwrite=True
+        )
         count_new_db = rtc.table_length("Ligands")
 
         assert count_old_db == 3

@@ -195,6 +195,7 @@ class Filters:
         self.max_miss: int = 0
 
         self.ligand_name: str = None
+        self.ligand_name_file: str = None
         self.ligand_operator: str = None
         self.ligand_substruct: str = None
         self.ligand_substruct_pos: list = None

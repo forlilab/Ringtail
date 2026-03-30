@@ -491,11 +491,18 @@ def cmdline_parser(defaults: dict = {}):
     ligand_group.add_argument(
         "-n",
         "--ligand_name",
-        help="specify ligand name(s). Will combine name filters with OR",
+        help="specify ligand name(s). Will combine name filters with OR. For more than 50 ligand names, please use the ligand_name_file option instead.",
         action="append",
         type=str,
         metavar="STRING",
         nargs="+",
+    )
+    ligand_group.add_argument(
+        "--ligand_name_file",
+        help=".csv file containing list of ligand names to be used as a filter",
+        action="store",
+        type=str,
+        metavar="STRING",
     )
     ligand_group.add_argument(
         "-mna",
@@ -865,6 +872,14 @@ class CLOptionParser:
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")
                 ligand_filters = {}
+                # can only use one type of ligand name specification
+                if (
+                    parsed_opts.ligand_name is not None
+                    and parsed_opts.ligand_name_file is not None
+                ):
+                    raise OptionError(
+                        "Cannot use --ligand_name and --ligand_name_file together, please choose one."
+                    )
                 # parse the ligand filters, depending on how the keywords are used they will be a list of list or list of lists
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
@@ -939,6 +954,7 @@ class CLOptionParser:
                 mfpt_cluster=parsed_opts.mfpt_cluster,
                 log_file=parsed_opts.log_file,
                 interaction_cluster=parsed_opts.interaction_cluster,
+                ligand_name_file=parsed_opts.ligand_name_file,
             )
 
             self.output_options = SimpleNamespace(

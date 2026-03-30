@@ -4,10 +4,9 @@
 # Ringtail storage adaptors
 #
 
-import os.path
 from .logutils import LOGGER as logger
 import sys
-import json
+from pathlib import Path
 from rdkit import Chem
 from typing import Union
 from importlib.metadata import version
@@ -18,7 +17,6 @@ from .exceptions import (
     DatabaseConnectionError,
     DatabaseQueryError,
     OptionError,
-    MergeError,
 )
 from .clustermanager import *
 from .storagemanager import StorageManager
@@ -1380,6 +1378,10 @@ class StorageManagerSQLite(StorageManager):
                     [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
+            elif "ligand_name_file" in lig_filters:
+                csv_path = lig_filters.pop("ligand_name_file")
+                self._create_ligname_temp_table(csv_path)
+                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON LigName = tmp_lignames.ligandname"
             # rdkit queries need to be handled in memory separate from the main query
             if lig_filters:
                 rdkit_query = True
@@ -1537,6 +1539,16 @@ class StorageManagerSQLite(StorageManager):
         query += f") GROUP BY pose_id HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
+
+    def _create_ligname_temp_table(self, csv_path: str):
+        """Reads ligand names from a CSV and loads them into a temporary table for joining."""
+        import csv
+
+        with open(csv_path, newline="") as f:
+            names = [row[0].strip() for row in csv.reader(f) if row]
+            self.db_query("DROP TABLE IF EXISTS tmp_lignames")
+            self.db_query("CREATE TEMP TABLE tmp_lignames (ligandname TEXT)")
+            self.db_update("INSERT INTO tmp_lignames VALUES (?)", [(n,) for n in names])
 
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"

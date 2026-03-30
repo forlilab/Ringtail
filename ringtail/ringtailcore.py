@@ -653,6 +653,7 @@ class RingtailCore:
         bookmark_name: str = RingtailDefaults.bookmark_name,
         filter_bookmark: str = None,
         return_iter: bool = False,
+        ligand_name_file=None,
     ) -> Union[tuple[int, str], iter]:
         """Prepare list of filters, then filters and writes all passing pose_ids to a bookmark of given name. Creates an output log text file of all ligand (or all poses, if requested) docking results that passes.
         If clustering is requested, it will first perform the filtering, then cluster, and create a new bookmark of name <bookmark_<cluster_type>_cluster> for each requested cluster type.
@@ -679,6 +680,7 @@ class RingtailCore:
                 ligand_min_molweight (float): min molweight (inclusive, g/mol) for the ligand
                 ligand_max_molweight (float): max molweight (inclusive, g/mol) for the ligand
                 ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
+                ligand_name_file (str); csv file containing a list of ligand names to be filtered for
             Ligand results options:
                 enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
                 output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
@@ -746,6 +748,7 @@ class RingtailCore:
                 "ligand_max_atoms": ligand_max_atoms,
                 "ligand_min_molweight": ligand_min_molweight,
                 "ligand_max_molweight": ligand_max_molweight,
+                "ligand_name_file": ligand_name_file,
             }
         )
 
@@ -2368,7 +2371,9 @@ class RingtailCore:
                 flexres_pose_coordinates = json.loads(flexres_pose_coordinates)
                 # TODO make a meeko method?
                 if mol.GetNumAtoms() != len(pose_coordinates):
-                    LOGGER.error(f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}")
+                    LOGGER.error(
+                        f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}"
+                    )
                     return None, None, None, None, None
                 mol = self._add_conformer(mol, pose_coordinates)
                 for fr_idx, fr_mol in enumerate(flexres_mols):
