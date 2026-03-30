@@ -1453,33 +1453,37 @@ class StorageManager:
             """DELETE FROM Maybe WHERE Pose_id = ?;""", pose_ids, commit=True
         )
 
-    def prepare_column_export_query(self, columns: dict, bookmark: str) -> str:
+    def prepare_column_export_query(self, columns: list, bookmark: str) -> str:
         """
-        Writes a query based on what columns (and their respective tables) are requested.
-
+        Writes a query based on what columns are requested. Resolves each column
+        to its source table automatically.
 
         Args:
-            columns (dict): _description_
-            bookmark (str): _description_
+            columns (list): list of column name strings to export
+            bookmark (str): bookmark or status table to filter results by
 
         Returns:
-            str: _description_
+            str: SQL query string
         """
-        included_tables = [
-            item.split(".", 1)[0].lower()
-            for sublist in columns.values()
-            for item in sublist
-            if item is not None
-        ]
+        # Build a flat map of column_name -> table from all queryable tables
+        column_to_table = {
+            col: table
+            for table, cols in self.get_useful_columns().items()
+            for col in cols
+        }
+
+        columns_by_table = {}
+        for col in columns:
+            table = column_to_table.get(col)
+            if table is None:
+                raise OptionError(f"Column '{col}' not found in any queryable table.")
+            columns_by_table.setdefault(table, []).append(col)
+
+        included_tables = [t.lower() for t in columns_by_table]
 
         query = self.QueryBuilder()
-        for _, column in columns.items():
-            if column[0]:
-                if column[1]:
-                    # alias
-                    query.SELECT(f"{column[0]} AS {column[1]}")
-                else:
-                    query.SELECT(column[0])
+        for col in columns:
+            query.SELECT(col)
         query.FROM("Results")
 
         # join to tables that are represented in the columns
