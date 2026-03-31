@@ -191,7 +191,7 @@ class StorageManagerSQLite(StorageManager):
             results_array (list): list of result rows
             interactions_array (list): list of interaction rows
         """
-        temp_results_insert = f"""
+        temp_results_insert = """
             INSERT INTO Results_temp(
                 receptor,
                 pose_rank,
@@ -215,56 +215,22 @@ class StorageManagerSQLite(StorageManager):
                 pose_coordinates,
                 flexible_res_coordinates,
                 ligname)
-            VALUES (
-                :receptor,
-                :pose_rank,
-                :run_number,
-                :cluster_rmsd,
-                :reference_rmsd,
-                :docking_score,
-                :leff,
-                :delta,
-                :energies_inter,
-                :energies_vdw,
-                :energies_electro,
-                :energies_flexLig,
-                :energies_flexLR,
-                :energies_intra,
-                :energies_torsional,
-                :unbound_energy,
-                :num_interactions,
-                :num_hb,
-                :cluster_size,
-                :pose_coordinates,
-                :flexible_res_coordinates,
-                :ligname
-            )
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """
         self.db_update(temp_results_insert, results_array, commit=False)
-        """            VALUES (
-                {",".join(["?"]*len(results_array[0]))}
-        )"""
-        temp_int_insert = f"""
+
+        temp_int_insert = """
             INSERT INTO Interactions_temp (
-                ligname, 
+                ligname,
                 run_number,
-                pose_rank, 
-                interaction_type, 
-                rec_chain, 
-                rec_resname, 
-                rec_resid, 
-                rec_atom, 
+                pose_rank,
+                interaction_type,
+                rec_chain,
+                rec_resname,
+                rec_resid,
+                rec_atom,
                 rec_atomid)
-            VALUES (
-                :ligname, 
-                :run_number,
-                :pose_rank, 
-                :type,
-                :chain,
-                :residue,
-                :resid,
-                :recname,
-                :recid);
+            VALUES (?,?,?,?,?,?,?,?,?)
             """
         self.db_update(temp_int_insert, interactions_array, commit=False)
 
@@ -655,9 +621,13 @@ class StorageManagerSQLite(StorageManager):
             interactions (list[dict]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         # to insert interaction if unique
-        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
-                        VALUES (:type,:chain,:residue,:resid,:recname,:recid);"""
-        self.db_update(sql_insert, interactions, commit=False)
+        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid)
+                        VALUES (?,?,?,?,?,?);"""
+        self.db_update(
+            sql_insert,
+            [self._interaction_index_fields(r) for r in interactions],
+            commit=False,
+        )
 
     def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
         """

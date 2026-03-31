@@ -2800,12 +2800,19 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _insert_interaction_index_rows(self, interactions: list[dict]):
+    @staticmethod
+    def _interaction_index_fields(r) -> tuple:
+        """Extract the 6 interaction-description fields from either a dict or an InteractionRecord."""
+        if isinstance(r, dict):
+            return (r["type"], r["chain"], r["residue"], r["resid"], r["recname"], r["recid"])
+        return (r.type, r.chain, r.residue, r.resid, r.recname, r.recid)
+
+    def _insert_interaction_index_rows(self, interactions: list):
         """
         Writes unique interactions to database
 
         Args:
-            interaction_tuple (list[tuple]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
+            interactions (list): list of InteractionRecord or dicts with interaction description fields
         """
         raise NotImplementedError
 

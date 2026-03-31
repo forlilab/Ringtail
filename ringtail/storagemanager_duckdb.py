@@ -686,7 +686,7 @@ class StorageManagerDuckDB(StorageManager):
             interactions (list[dict]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         df = pd.DataFrame(
-            interactions,
+            [self._interaction_index_fields(r) for r in interactions],
             columns=["type", "chain", "residue", "resid", "recname", "recid"],
         ).drop_duplicates()
         self.conn.register("df_view", df)
