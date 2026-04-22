@@ -750,7 +750,7 @@ class StorageManager:
         """
         Will drop all tables in the database.
         """
-        if not self.db_empty():
+        if self.tables_in_db():
             self._drop_existing_tables()
             logger.info("Tables in existing database were dropped.")
 
