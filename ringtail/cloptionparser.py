@@ -739,10 +739,17 @@ class CLOptionParser:
 
         if self.process_mode == "write":
             # Check if writing to an existing database
+            only_adding_receptor = (
+                parsed_opts.receptor_file
+                and not parsed_opts.file
+                and not parsed_opts.file_path
+                and not parsed_opts.file_list
+            )
             if (
                 os.path.exists(db_file)
                 and not parsed_opts.append_results
                 and not parsed_opts.overwrite
+                and not only_adding_receptor
             ):
                 raise OptionError(
                     f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
