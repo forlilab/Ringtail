@@ -388,6 +388,10 @@ class RingtailCore:
             elif ".pdbqt" in extensions:
                 receptor_name, receptor_blob = self._process_receptor_pdbqt(receptor)
                 LOGGER.debug(f"Receptor data processed from pdbqt file {receptor}")
+            else:
+                raise OptionError(
+                    f"Receptor file '{receptor}' has an unrecognized file type. Only .pdbqt and .json files are supported."
+                )
         else:
             from meeko import Polymer
 
