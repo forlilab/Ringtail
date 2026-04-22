@@ -8,6 +8,7 @@ import numpy as np
 import tempfile
 from meeko import PDBQTReceptor, MoleculePreparation
 from .receptormanager import ReceptorManager
+from .logutils import LOGGER
 from rdkit import Chem, Geometry
 
 
@@ -223,15 +224,39 @@ def find_interactions(
         # make a molsetup for the Mol which includes atom types needed for interaction calculations
         mk_prep = MoleculePreparation(rigid_macrocycles=True)
         molsetup_list = mk_prep(mol)
+        if not molsetup_list:
+            LOGGER.warning(
+                f"MoleculePreparation returned no setups for ligand {id.get('ligname', '?')} — skipping interaction calculation for this pose"
+            )
+            interactions.append(
+                {
+                    "type": [],
+                    "recid": [],
+                    "recname": [],
+                    "residue": [],
+                    "resid": [],
+                    "chain": [],
+                    "count": 0,
+                    "hb_count": 0,
+                    "id": id,
+                }
+            )
+            num_hb.append(0)
+            num_interactions.append(0)
+            continue
         molsetup = molsetup_list[0]
         atom_types = []
         for _, atom in enumerate(molsetup.atoms):
             if atom.is_ignore:
                 continue
             atom_types.append(atom.atom_type)
+
         # engage interaction finder
         pose_interactions = interaction_finder.find_pose_interactions(
             atom_types, coords
+        )
+        LOGGER.debug(
+            f"Ligand {id.get('ligname', '?')} pose {id.get('pose_rank', '?')}: {pose_interactions.get('count', 0)} interactions found"
         )
         # add unique
         pose_interactions.update({"id": id})

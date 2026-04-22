@@ -8,6 +8,7 @@ import os
 import gzip
 import bz2
 import json
+import traceback
 from typing import Union, NamedTuple
 from collections import defaultdict
 import numpy as np
@@ -1051,13 +1052,14 @@ class SDFMoleculeSupplier:  #
             # calculate interactions
             if calculate_interactions:
                 if not interaction_finder:
+                    LOGGER.debug(f"No interaction_finder passed to parser, attempting to create from receptor_string (is None: {receptor_string is None})")
                     try:
                         interaction_finder = InteractionFinder(
                             receptor_string, *interaction_cutoffs
                         )
-                    except:
+                    except Exception as e:
                         LOGGER.error(
-                            "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
+                            f"Cannot calculate interactions — InteractionFinder creation failed: {e}\n{traceback.format_exc()}"
                         )
                         interactions = []
 

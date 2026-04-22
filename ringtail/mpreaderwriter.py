@@ -109,7 +109,10 @@ class DockingFileReader(mp.Process):
                                 "interaction_finder": interaction_finder,
                             }
                         )
-                    except:
+                    except Exception as e:
+                        LOGGER.warning(
+                            f"InteractionFinder initialization failed, interactions will not be calculated: {e}\n{traceback.format_exc()}"
+                        )
                         common_processing_vars.update(
                             {
                                 "calculate_interactions": False,

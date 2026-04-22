@@ -384,8 +384,10 @@ class RingtailCore:
             extensions = [e.lower() for e in extensions]
             if ".json" in extensions:
                 receptor_name, receptor_jsons = self._process_receptor_polymer(receptor)
+                LOGGER.debug(f"Receptor data processed from json file {receptor}")
             elif ".pdbqt" in extensions:
                 receptor_name, receptor_blob = self._process_receptor_pdbqt(receptor)
+                LOGGER.debug(f"Receptor data processed from pdbqt file {receptor}")
         else:
             from meeko import Polymer
 
@@ -393,6 +395,7 @@ class RingtailCore:
                 receptor_name = receptor_name.keys()[0]
                 receptor_polymer: Polymer = receptor[receptor_name]
                 receptor_jsons = receptor_polymer.to_json()
+                LOGGER.debug("Receptor data processed from dict")
             except:
                 raise OptionError(
                     f"Unable to serialize provided receptor object, cannot proceed to save receptor."
@@ -2532,16 +2535,37 @@ class RingtailCore:
                 # parse the receptor string for interaction calculation
                 # make receptor string
                 if ".pdbqt" in pathlib.Path(results.receptor_file_path).suffixes:
+                    LOGGER.debug(
+                        "Building receptor string from .pdbqt file for interaction calculation"
+                    )
                     results.receptor_string = ReceptorManager.receptor_str_from_file(
                         results.receptor_file_path
                     )
                 elif ".json" in pathlib.Path(results.receptor_file_path).suffixes:
+                    LOGGER.debug(
+                        "Building receptor string from polymer .json file for interaction calculation"
+                    )
                     with open(results.receptor_file_path, "r") as f:
                         polymer_json = f.read()
                     results.receptor_string = ReceptorManager.polymer_json2pdbqt_str(
                         polymer_json
                     )
+                else:
+                    LOGGER.warning(
+                        f"Receptor file {results.receptor_file_path} has unrecognized extension — receptor string not set, interactions will not be calculated."
+                    )
+                if results.receptor_string:
+                    LOGGER.debug(
+                        f"Receptor string set successfully (length={len(results.receptor_string)})"
+                    )
+                else:
+                    LOGGER.warning(
+                        "Receptor string is empty after parsing receptor file — interactions will not be calculated."
+                    )
             else:
+                LOGGER.debug(
+                    "No receptor file path provided, attempting to load receptor string from database"
+                )
                 # try pdbqt first
                 results.receptor_string = self.get_receptor_object()[1]
                 if not results.receptor_string:
@@ -2552,9 +2576,18 @@ class RingtailCore:
                         raise ResultsProcessingError(
                             "Trying to calculate interactions, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
                         )
+                if results.receptor_string:
+                    LOGGER.debug(
+                        f"Receptor string loaded from database (length={len(results.receptor_string)})"
+                    )
+                else:
+                    LOGGER.warning(
+                        "Could not load receptor string from database — interactions will not be calculated."
+                    )
 
-        LOGGER.info("Adding results...")
-        self.resultsman.process_docking_data(results, processing_options)
+        if results.has_results:
+            LOGGER.info("Adding results...")
+            self.resultsman.process_docking_data(results, processing_options)
         if finalize:
             self.finalize_write()
 
