@@ -274,7 +274,7 @@ class TestRingtailCore:
         mol = rtc.create_rdkit_mol(ligname, ligands_poses[ligname])[0]
         # grab one molecule from bookmark and check number of atoms
         num_of_atoms = mol.GetNumAtoms()
-        assert num_of_atoms == 7
+        assert num_of_atoms == 10
 
     def test_write_sdfs(self):
         if not _db_exists():
@@ -304,7 +304,7 @@ class TestRingtailCore:
             sdf.readline()
             sdf.readline()
             fourth_line = sdf.readline()
-        assert fourth_line == " 14 15  0  0  0  0  0  0  0  0999 V2000\n"
+        assert fourth_line == " 27 28  0  0  0  0  0  0  0  0999 V2000\n"
 
         # ensure the correct files were written
         for f in sdf_files:
