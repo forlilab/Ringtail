@@ -1,4 +1,7 @@
-# Script to merge two databases
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+#
 
 """
 This script merges two (or more) ringtail databases of db schema version 2.1 or newer, and it aims to maintain all relationships, primary keys, foreign keys, etc.
@@ -37,13 +40,18 @@ python rt_merge.py -db1 db1.db -db2 db*.db
 """
 import argparse
 import sys
-import logging
-from ringtail import RingtailCore
+import traceback
+import time
+from ringtail import RingtailCore, setup_logging, get_logger
+
+logger = get_logger(__name__)
 
 
-def main():
+def cmdline_parser():
+
     parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="Script to merge two or more Ringtail databases.",
     )
     parser.add_argument(
         "-db1",
@@ -69,47 +77,65 @@ def main():
         help="if logging at debug level",
         action="store_true",
     )
-
-    args = parser.parse_args()
-    if args.debug:
-        logging_level = "DEBUG"
-    else:
-        logging_level = "INFO"
-    rtc = RingtailCore(args.primary_db, logging_level=logging_level)
-    logger = logging.getLogger("RingtailLogger")
-
-    logger.debug(str(args))
-    logger.info(f"Database {args.primary_db} ready to merge.")
-
-    # pass raw patterns — ringtailcore handles glob expansion and self-filtering
-    merging_dbs = (
-        args.secondary_db
-        if isinstance(args.secondary_db, list)
-        else [args.secondary_db]
+    parser.add_argument(
+        "--logfile",
+        help="Write log output to this file (useful with --debug).",
+        type=str,
+        metavar="FILE.log",
+        default=None,
     )
 
+    args = parser.parse_args()
+
+    return args
+
+
+def main():
+    time0 = time.perf_counter()
     try:
+        args = cmdline_parser()
+        setup_logging(level="DEBUG" if args.debug else "INFO", logfile=args.logfile)
+        if not hasattr(args, "secondary_db"):
+            raise ValueError("Must provide at least one secondary database (-db2).")
+
+        rtc = RingtailCore(args.primary_db)
+
+        logger.debug(str(args))
+        logger.info(f"Database {args.primary_db} ready to merge.")
+        # pass raw patterns — ringtailcore handles glob expansion and self-filtering
+        merging_dbs = (
+            args.secondary_db
+            if isinstance(args.secondary_db, list)
+            else [args.secondary_db]
+        )
+
         failed = rtc.merge_databases(
             merging_dbs=merging_dbs, backup=not args.dont_backup_db1
         )
+        for db, error in failed:
+            print(f"FAILED TO MERGE: {db}: {error}")
+            with open("failed_databases.txt", "a") as f:
+                f.write(f"{db}\n")
+
+        num_total = len(merging_dbs)
+        unsuccessful = len(failed)
+        num_successful = num_total - unsuccessful
+        if num_successful:
+            print(f"Merging of {num_successful} out of {num_total} databases complete.")
+        if unsuccessful:
+            print(f"{unsuccessful} databases failed to merge.")
+            return 1
+        logger.info(
+            "Time to merge: {0:.0f} seconds".format(time.perf_counter() - time0)
+        )
+        logger.info("Database merging process complete.")
+        return 0
+
     except Exception as e:
-        logger.error(f"Merge process encountered a fatal error: {e}")
+        tb = traceback.format_exc()
+        logger.debug(tb)
+        logger.critical(str(e))
         return 1
-
-    for db, error in failed:
-        print(f"FAILED TO MERGE: {db}: {error}")
-        with open("failed_databases.txt", "a") as f:
-            f.write(f"{db}\n")
-
-    num_total = len(merging_dbs)
-    unsuccessful = len(failed)
-    num_successful = num_total - unsuccessful
-    if num_successful:
-        print(f"Merging of {num_successful} out of {num_total} databases complete.")
-    if unsuccessful:
-        print(f"{unsuccessful} databases failed to merge.")
-        return 1
-    return 0
 
 
 if __name__ == "__main__":

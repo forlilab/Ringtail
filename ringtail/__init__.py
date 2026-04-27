@@ -10,8 +10,13 @@ from .ringtailcore import (
     get_valid_storageclass,
 )
 from .cloptionparser import CLOptionParser
-from .logutils import LOGGER, RaccoonLogger
-from .ringtailoptions import RingtailDefaults, Filters, validate_file_pattern
+from .logutils import LOGGER, get_logger, setup_logging
+from .ringtailoptions import (
+    RingtailDefaults,
+    Filters,
+    validate_file_pattern,
+    ringtail_defaults,
+)
 from .storagemanager import StorageManager
 from .storagemanager_sqlite import StorageManagerSQLite
 from .storagemanager_duckdb import StorageManagerDuckDB
@@ -33,7 +38,7 @@ from .clustermanager import (
     top_score_per_cluster,
     butina_cluster_fingerprints,
 )
-from .exceptions import OptionError
+from .exceptions import OptionError, RingtailError
 from ._version import __version__
 
 __all__ = [
@@ -45,7 +50,8 @@ __all__ = [
     "get_valid_storageclass",
     "Filters",
     "LOGGER",
-    "RaccoonLogger",
+    "get_logger",
+    "setup_logging",
     "CLOptionParser",
     "StorageManager",
     "StorageManagerSQLite",
@@ -67,4 +73,6 @@ __all__ = [
     "top_score_per_cluster",
     "butina_cluster_fingerprints",
     "OptionError",
+    "RingtailError",
+    "ringtail_defaults",
 ]

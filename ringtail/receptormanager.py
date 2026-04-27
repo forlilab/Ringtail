@@ -5,7 +5,8 @@
 #
 
 import gzip
-from .logutils import LOGGER
+from .logutils import get_logger
+logger = get_logger(__name__)
 from meeko import PDBQTWriterLegacy, Polymer, MoleculePreparation
 
 
@@ -32,7 +33,7 @@ class ReceptorManager:
         else:
             with open(receptor_file, "r") as r:
                 receptor = gzip.compress(r.read().encode())
-        LOGGER.debug(f"Receptor blob for receptor {rec_name} parepared successfully.")
+        logger.debug(f"Receptor blob for receptor {rec_name} parepared successfully.")
         return rec_name, receptor
 
     @staticmethod
@@ -43,8 +44,10 @@ class ReceptorManager:
             receptor_blob (blob): zipped receptor blob
 
         Returns:
-            str: receptor string
+            str: receptor string, or None if receptor_blob is None
         """
+        if receptor_blob is None:
+            return None
         return gzip.decompress(receptor_blob).decode()
 
     @staticmethod

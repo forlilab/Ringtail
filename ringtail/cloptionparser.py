@@ -9,8 +9,15 @@ import argparse
 import os
 from .exceptions import OptionError
 import __main__
-from .ringtailcore import RingtailCore, LOGGER
-from .ringtailoptions import Filters, validate_docking_mode
+from .logutils import get_logger, setup_logging
+
+logger = get_logger(__name__)
+from .ringtailoptions import (
+    Filters,
+    validate_docking_mode,
+    ringtail_defaults,
+    RingtailDefaults,
+)
 from types import SimpleNamespace
 
 
@@ -107,6 +114,13 @@ def cmdline_parser(defaults: dict = {}):
         "--debug",
         help="Print additional error information to STDOUT.",
         action="store_true",
+    )
+    write_parser.add_argument(
+        "--logfile",
+        help="Write log output to this file (useful with --debug).",
+        type=str,
+        metavar="FILE.log",
+        default=None,
     )
     write_parser.add_argument(
         "-f",
@@ -250,7 +264,7 @@ def cmdline_parser(defaults: dict = {}):
     read_parser.add_argument(
         "-s",
         "--bookmark_name",
-        help="Specify name for db view of passing results to create or export from",
+        help="Specify name for db view of passing results to create or export from. Can only contain lower case letters, numbers, and underscore (_)",
         action="store",
         type=str,
         metavar="STRING",
@@ -273,11 +287,18 @@ def cmdline_parser(defaults: dict = {}):
         help="Print additional error information to STDOUT.",
         action="store_true",
     )
+    read_parser.add_argument(
+        "--logfile",
+        help="Write log output to this file (useful with --debug).",
+        type=str,
+        metavar="FILE.log",
+        default=None,
+    )
 
     output_group = read_parser.add_argument_group("Output options")
     output_group.add_argument(
         "-l",
-        "--log_file",
+        "--output_log",
         help="if this option is used, ligands and requested info passing the filters will be written to specified file. Can be used as a flag, which will write to output_log.txt.",
         action="store",
         type=str,
@@ -491,18 +512,11 @@ def cmdline_parser(defaults: dict = {}):
     ligand_group.add_argument(
         "-n",
         "--ligand_name",
-        help="specify ligand name(s). Will combine name filters with OR. For more than 50 ligand names, please use the ligand_name_file option instead.",
+        help="specify ligand name(s). Will combine name filters with OR",
         action="append",
         type=str,
         metavar="STRING",
         nargs="+",
-    )
-    ligand_group.add_argument(
-        "--ligand_name_file",
-        help=".csv file containing list of ligand names to be used as a filter",
-        action="store",
-        type=str,
-        metavar="STRING",
     )
     ligand_group.add_argument(
         "-mna",
@@ -643,7 +657,9 @@ class CLOptionParser:
 
     Attributes:
         process_mode (str): operating in 'write' or 'read' mode
-        rtcore (RingtailCore): ringtail core object initialized with the provided db_file
+        db_file
+        logging_level
+        storage_type
         file_sources (dict): paths to docking results and receptor files
         print_summary (bool): switch to print database summary
         filtering (bool): switch to run filtering method
@@ -660,9 +676,10 @@ class CLOptionParser:
 
     def __init__(self):
         # create parser
+        parsed_opts = None
         try:
             # add default values from ringtailoptions
-            defaults_dict = RingtailCore.defaults("cli")
+            defaults_dict = ringtail_defaults()
 
             (
                 parsed_opts,
@@ -680,9 +697,9 @@ class CLOptionParser:
             ) from e
         except Exception as e:
             try:
-                if parsed_opts.process_mode == "write":
+                if parsed_opts is not None and parsed_opts.process_mode == "write":
                     self.write_parser.print_help()
-                elif parsed_opts.process_mode == "read":
+                elif parsed_opts is not None and parsed_opts.process_mode == "read":
                     self.read_parser.print_help()
             finally:
                 raise e
@@ -701,6 +718,10 @@ class CLOptionParser:
             log_level = "INFO"
         else:
             log_level = "WARNING"
+        setup_logging(level=log_level, logfile=getattr(parsed_opts, "logfile", None))
+
+        # make sure we log the command line prompt
+        logger.info("Command line prompt: " + self.cmd_line_prompt)
 
         if parsed_opts.process_mode is None:
             raise OptionError(
@@ -725,31 +746,25 @@ class CLOptionParser:
             db_file = parsed_opts.output_db
 
         docking_mode = validate_docking_mode(parsed_opts.docking_mode)
-        if parsed_opts.storage_type:
-            storage_type = parsed_opts.storage_type.lower()
-        self.rtcore = RingtailCore(
-            db_file=db_file,
-            logging_level=log_level,
-            storage_type=storage_type,
-            access_mode="cli",
+
+        # Ringtail Core attributes
+        self.db_file = db_file
+        self.storage_type = (
+            parsed_opts.storage_type.lower()
+            if parsed_opts.storage_type
+            else RingtailDefaults.storage_type
         )
-        # make sure we log the command line prompt
-        LOGGER.info("Command line prompt: " + self.cmd_line_prompt)
+
+        self.logging_level = log_level
+
         self.print_summary = parsed_opts.print_summary
 
         if self.process_mode == "write":
             # Check if writing to an existing database
-            only_adding_receptor = (
-                parsed_opts.receptor_file
-                and not parsed_opts.file
-                and not parsed_opts.file_path
-                and not parsed_opts.file_list
-            )
             if (
                 os.path.exists(db_file)
                 and not parsed_opts.append_results
                 and not parsed_opts.overwrite
-                and not only_adding_receptor
             ):
                 raise OptionError(
                     f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
@@ -827,7 +842,7 @@ class CLOptionParser:
                             found_res.append(res)
                     for res in found_res:
                         if type(res) == str:
-                            LOGGER.debug(
+                            logger.debug(
                                 "cloptionparser: interaction filters provided as string"
                             )
                             wanted = True
@@ -846,7 +861,7 @@ class CLOptionParser:
                                 wanted = False
                             interactions[_type].append((res, wanted))
                         else:
-                            LOGGER.debug(
+                            logger.debug(
                                 "cloptionparser: interaction filters provided as list"
                             )
                             if (
@@ -879,14 +894,6 @@ class CLOptionParser:
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")
                 ligand_filters = {}
-                # can only use one type of ligand name specification
-                if (
-                    parsed_opts.ligand_name is not None
-                    and parsed_opts.ligand_name_file is not None
-                ):
-                    raise OptionError(
-                        "Cannot use --ligand_name and --ligand_name_file together, please choose one."
-                    )
                 # parse the ligand filters, depending on how the keywords are used they will be a list of list or list of lists
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
@@ -959,9 +966,7 @@ class CLOptionParser:
                 filter_bookmark=parsed_opts.filter_bookmark,
                 enumerate_interaction_combs=parsed_opts.enumerate_interaction_combs,
                 mfpt_cluster=parsed_opts.mfpt_cluster,
-                log_file=parsed_opts.log_file,
                 interaction_cluster=parsed_opts.interaction_cluster,
-                ligand_name_file=parsed_opts.ligand_name_file,
             )
 
             self.output_options = SimpleNamespace(
@@ -971,6 +976,7 @@ class CLOptionParser:
                 pymol=parsed_opts.pymol,
                 data_from_bookmark=parsed_opts.data_from_bookmark,
                 individual_sdf_files=parsed_opts.individual_sdf_files,
+                output_log=parsed_opts.output_log,
                 export_sdf_path=parsed_opts.export_sdf_path,
                 export_query_csv=parsed_opts.export_query_csv,
                 find_similar_ligands=parsed_opts.find_similar_ligands,

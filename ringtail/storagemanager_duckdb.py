@@ -5,12 +5,12 @@
 #
 
 import os.path
-import json
 import pandas as pd
-from .logutils import LOGGER as logger
+from .logutils import get_logger
+logger = get_logger(__name__)
 from typing import Union
 from importlib.metadata import version
-from .util import numlist2str
+from .util import numlist2str, db_alias_from_path
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -27,7 +27,7 @@ try:
     import duckdb
 
     HAS_DUCK = True
-except:
+except ImportError:
     HAS_DUCK = False
 
 
@@ -206,7 +206,6 @@ class StorageManagerDuckDB(StorageManager):
         res_df = pd.DataFrame(
             results_array,
         )
-
         self.conn.register("incoming_poses", res_df)
         temp_insert = f"""
                 INSERT INTO Results_temp(
@@ -686,7 +685,7 @@ class StorageManagerDuckDB(StorageManager):
             interactions (list[dict]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         df = pd.DataFrame(
-            [self._interaction_index_fields(r) for r in interactions],
+            interactions,
             columns=["type", "chain", "residue", "resid", "recname", "recid"],
         ).drop_duplicates()
         self.conn.register("df_view", df)
@@ -810,7 +809,7 @@ class StorageManagerDuckDB(StorageManager):
             int: number of clusters in that cluster if any, else None
         """
         return self.db_query(
-            "SELECT cluster_id FROM Clusters WHERE name=? and cluster_window=?",
+            "SELECT num_clusters FROM Clusters WHERE name=? and cluster_window=?",
             (
                 cluster_name,
                 cluster_window,
@@ -851,7 +850,7 @@ class StorageManagerDuckDB(StorageManager):
 
         Args:
             cluster_groups (list): each cluster from the clustering exercise
-            pose_rows (list): cluster_id, group_id, pose_od
+            pose_rows (list): pose and cluster id and group id
         """
         self.db_update(
             """INSERT INTO Cluster_groups VALUES (?,?,?);""",
@@ -1049,7 +1048,7 @@ class StorageManagerDuckDB(StorageManager):
                     FROM Ligands
                     WHERE
                         merging.Ligands.LigName = Ligands.LigName
-                    )
+                    ) 
                 THEN (
                     SELECT main.Ligands.ligand_id
                     FROM main.Ligands
@@ -1471,10 +1470,6 @@ class StorageManagerDuckDB(StorageManager):
                     [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
-            elif "ligand_name_file" in lig_filters:
-                csv_path = lig_filters.pop("ligand_name_file")
-                self._create_ligname_temp_table(csv_path)
-                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON LigName = tmp_lignames.ligandname"
             # rdkit queries need to be handled in memory separate from the main query
             if lig_filters:
                 rdkit_query = True
@@ -1633,14 +1628,6 @@ class StorageManagerDuckDB(StorageManager):
 
         return query
 
-    def _create_ligname_temp_table(self, csv_path: str):
-        """Loads ligand names from CSV into a temporary table using DuckDB's native CSV reader."""
-        self.conn.execute("DROP TABLE IF EXISTS tmp_lignames")
-        self.conn.execute(
-            f"CREATE TEMP TABLE tmp_lignames AS "
-            f"SELECT CAST(column0 AS VARCHAR) AS ligandname FROM read_csv('{csv_path}', header=false)"
-        )
-
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
     ) -> str:
@@ -1689,132 +1676,45 @@ class StorageManagerDuckDB(StorageManager):
 
         return duck_formatted_outfields
 
-    def crossref_databases(
-        self,
-        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
-        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
-        bookmark_prefix: str = "crossref",
-    ) -> tuple[int, dict, list, dict]:
+    def _crossref_bookmark_builder(
+        self, ligand_list: list[str], store_best_pose: bool
+    ) -> str:
         """
-        Method to cross reference two or more databases. Will attach all other databases
-        to the "current" database, which is always the first wanted database (will have the
-        active ringtail object).
-
-        Will create an intersect of ligand names in the wanted databases+bookmarks,
-        and delete any ligands found in the union of the unwanted databases+bookmarks.
-
-        A bookmark with specified prefix to the original bookmark name will be stored in each database,
-        making the crossreferencing data easily available for later use.
+        creates formatted sql for building the crossreferencing bookmark
 
         Args:
-            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
-            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
-            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+            ligand_list (list[str]): list of ligand names to be considered
+            store_best_pose (bool): whether to get best pose or all poses
 
         Returns:
-            tuple[int, dict, list, dict]: Number of "passing" ligands, dict of database {database
-            file path: new bookmark name from cross ref}, list of passing ligand names, dict of dbs and how they were compared
-        """
-        processed_wanted = []
-        for index, database in enumerate(wanted_dbs):
-            if index == 0:
-                db_name = "main"
-            else:
-                db_name = f"db_{index + 1}"
-            processed_wanted.append(
-                (
-                    db_name,
-                    database[0],
-                    database[1],
-                )
-            )
-            if index > 0:
-                self._attach_db(database[0], db_name)
-
-        processed_unwanted = []
-        for index, database in enumerate(unwanted_dbs or []):
-            db_name = f"db_{index + 1 + len(processed_wanted)}"
-            processed_unwanted.append(
-                (
-                    db_name,
-                    database[0],
-                    database[1],
-                )
-            )
-            self._attach_db(database[0], db_name)
-
-        # make subqueries/common table expressions for each set of ligands
-        selection_query = """{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE Pose_id IN ({bookmark_poses}))"""
-        wanted_ctes = []
-        for db_name, _, bookmark in processed_wanted:
-            wanted_ctes.append(
-                selection_query.format(
-                    db_name=db_name,
-                    bookmark_poses=self._get_bookmark_poses_query(bookmark, db_name),
-                )
-            )
-
-        unwanted_ctes = []
-        for db_name, _, bookmark in processed_unwanted:
-            unwanted_ctes.append(
-                selection_query.format(
-                    db_name=db_name,
-                    bookmark_poses=self._get_bookmark_poses_query(bookmark, db_name),
-                )
-            )
-
-        all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
-
-        wanted_joins = " ".join(
-            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.LigName = {db[0]}.LigName"
-            for db in processed_wanted[1:]
-        )
-
-        # build exclusion union
-        exclude_union = " UNION ".join(
-            f"SELECT LigName FROM {db[0]}" for db in processed_unwanted
-        )
-
-        if unwanted_dbs:
-            unwanted_ctes = f""",
-                unwanted AS (
-                    {exclude_union}
-                )"""
-            unwanted_where = """WHERE i.LigName NOT IN (SELECT LigName FROM unwanted)"""
-        else:
-            unwanted_ctes = ""
-            unwanted_where = ""
-
-        query = f"""
-        {all_ctes},
-        wanted AS (
-            SELECT {processed_wanted[0][0]}.LigName
-            FROM {processed_wanted[0][0]} {wanted_joins}
-        ){unwanted_ctes}
-        SELECT DISTINCT i.LigName
-        FROM wanted i
-        {unwanted_where}
+            str: formatted sql
         """
 
-        # the query now works, time to make a bookmark in each database with the results
-        approved_ligand_names = [lig[0] for lig in self.db_query(query).fetchall()]
-        dbs_new_bookmark_names = {}
-
-        # don't proceed if no approved ligands
-        if len(approved_ligand_names) < 1:
-            return 0, {}, [], {}
+        ligand_sql_string = ", ".join(f"'{l}'" for l in ligand_list)
+        # construct the query
+        if store_best_pose:
+            return f"""
+            SELECT R.pose_id FROM Results AS R
+            JOIN (
+                SELECT ligand_id, MIN(pose_rank) as best_pose
+                FROM Results
+                GROUP BY ligand_id
+                ) AS sel
+            ON R.ligand_id = sel.ligand_id
+            AND R.pose_rank = sel.best_pose
+            JOIN Ligands AS L
+            ON R.ligand_id = L.ligand_id
+            WHERE L.LigName
+            IN ({ligand_sql_string})
+            """
         else:
-            for _, file, bookmark in processed_wanted + processed_unwanted:
-                dbs_new_bookmark_names.update({file: f"{bookmark_prefix}_{bookmark}"})
-            return (
-                len(approved_ligand_names),
-                dbs_new_bookmark_names,
-                approved_ligand_names,
-                {
-                    "wanted": processed_wanted,
-                    "unwanted": processed_unwanted,
-                },
-            )
+            return f"""
+            SELECT pose_id FROM Results
+            WHERE ligand_id IN (
+                SELECT ligand_id FROM Ligands 
+                WHERE LigName IN ({ligand_sql_string})
+                )
+                """
 
     # endregion
 
@@ -2160,6 +2060,22 @@ class StorageManagerDuckDB(StorageManager):
             )
         return is_compatible, db_schema_ver
 
+    def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
+        """
+        Method that checks if the database merging into main is compatible with main,
+        and checks if both databases are of appropriately high version where merge has
+        been implemented
+        #NOTE the ringtail duckdb currently does not track schema version
+
+        Args:
+            merging_db_alias (str): alias for the database being merged into main
+
+        Returns:
+            bool: if the two databases are compatible
+        """
+
+        return True
+
     def _create_connection(self):
         """Creates database connection to self.db_file
 
@@ -2206,7 +2122,7 @@ class StorageManagerDuckDB(StorageManager):
             reindex (bool, optional): not used for duckdb, present for signature compatibility
         """
         if attached_db_alias is not None:
-            self._detach_db(attached_db_alias)
+            self.detach_db(attached_db_alias)
 
     def table_length(self, table: str) -> int:
         """
@@ -2247,7 +2163,10 @@ class StorageManagerDuckDB(StorageManager):
         attach = f"""ATTACH '{new_db}' AS {new_db_alias};"""
         self.db_query(attach)
 
-    def _detach_db(self, new_db_alias):
+    def _check_attached(self):
+        return self.db_query("SHOW DATABASES;").fetchall()
+
+    def detach_db(self, new_db_alias):
         """Detaches new database file from current database
 
         Args:

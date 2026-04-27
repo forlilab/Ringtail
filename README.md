@@ -30,7 +30,6 @@ at [Scripps Research](https://www.scripps.edu/).
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
 ### Version 3: GUI and database schema overhaul
-#TODO!!! 
 
 ### Version 2.1.1 bug fixes
 - bugs related to ligand filtering and certain uses of the `overwrite` option in the command line have been fixed
@@ -79,7 +78,7 @@ Make sure your Ringtail environment is active, then install via pip
 $ pip install ringtail
 ```
 
-You may need to install one or more of the listed dependencies, including matplotlib, rdkit, scipy, pandas, and meeko (a Forli lab tool). If you wish to use the supported duckdb database engine, this also needs installation (sqlite is usually already installed). 
+You may need to install one or more of the listed dependencies, including matplotlib, rdkit, scipy, pandas, and meeko (a Forli lab tool). 
 
 ```bash
 $ pip install <dependency>
@@ -177,12 +176,6 @@ rtc.add_results_from_files( file_path = "test_data/",
                             max_poses = 3)
 ```
 
-If at any point you wish to print a summary of the database, the method can be called directly:
-
-```python
-rtc.produce_summary()
-```
-
 #### Filtering and visualizing the data in the database
 
 To filter, simply access the API method `filter` and provide desired filter values. Names of bookmark and output log for containing filtered results can be specified in the method.
@@ -191,7 +184,7 @@ To filter, simply access the API method `filter` and provide desired filter valu
 rtc.filter(eworst=-6, 
            vdw_interactions=[('A:VAL:279:', True)]
            bookmark_name = "passing_results",
-           log_file = "filtered_results.txt")
+           output_log = "filtered_results.txt")
 ```
 
 To export filtered molecules in a specific bookmark to SDF files use the following method, where the `sdf_path` directory will be created if it does not already exist. Visualizing molecules in pymol is similarly accomplished by calling the `pymol` method.

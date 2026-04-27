@@ -20,12 +20,12 @@ class OutputManager:
     """Class for creating outputs, can be a context manager to handle log files
 
     Attributes:
-        log_file (str): name for log file
+        output_log (str): name for log file
         _log_open (bool): if log file is open or not
     """
 
-    def __init__(self, log_file: str = "output_log.txt", append_to_file: bool = True):
-        self.log_file = log_file
+    def __init__(self, output_log: str = "output_log.txt", append_to_file: bool = True):
+        self.output_log = output_log
         self._log_open = False
         self.append = append_to_file
 
@@ -37,7 +37,7 @@ class OutputManager:
     def __exit__(self, exc_type, exc_value, traceback):
         """Closing outputmanager as a context manager"""
         self.close_logfile()
-        return self
+        return False
 
     # -#-#- Log file methods -#-#-#
     def open_logfile(self, write_filters_header=True):
@@ -54,24 +54,24 @@ class OutputManager:
             open_mode = "a"
         else:
             open_mode = "w"
-        self.log_file = open(
-            self.log_file, open_mode
-        )  # makes log_file attribute a file pointer from the string path name
-        self._log_open = True
         try:
+            self.output_log = open(
+                self.output_log, open_mode
+            )  # makes output_log attribute a file pointer from the string path name
+            self._log_open = True
             if write_filters_header:
-                self.log_file.write("Filters:\n")
-                self.log_file.write("***************\n")
+                self.output_log.write("Filters:\n")
+                self.output_log.write("***************\n")
         except Exception as e:
             raise OutputError("Error while creating log file") from e
 
     def close_logfile(self):
         """Closes the log file properly and reset file pointer to filename"""
         if self._log_open:
-            self.log_file.close()
-            self.log_file = os.path.basename(
-                self.log_file.name
-            )  # returns log_file attribute from file pointer to string path name
+            self.output_log.close()
+            self.output_log = os.path.basename(
+                self.output_log.name
+            )  # returns output_log attribute from file pointer to string path name
             self._log_open = False
 
     def write_filter_results_in_log(self, lines):
@@ -111,8 +111,8 @@ class OutputManager:
             OutputError
         """
         try:
-            self.log_file.write(line)
-            self.log_file.write("\n")
+            self.output_log.write(line)
+            self.output_log.write("\n")
         except Exception as e:
             raise OutputError(f"Error writing line {line} to log") from e
 
@@ -127,11 +127,11 @@ class OutputManager:
             OutputError
         """
         try:
-            self.log_file.write("\n")
-            self.log_file.write(
+            self.output_log.write("\n")
+            self.output_log.write(
                 f"Number passing ligands: {str(number_passing_ligands)} \n"
             )
-            self.log_file.write("---------------\n")
+            self.output_log.write("---------------\n")
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
 
@@ -145,9 +145,9 @@ class OutputManager:
             OutputError
         """
         try:
-            self.log_file.write("\n")
-            self.log_file.write(f"Result bookmark name: {bookmark_name}\n")
-            self.log_file.write("***************\n")
+            self.output_log.write("\n")
+            self.output_log.write(f"Result bookmark name: {bookmark_name}\n")
+            self.output_log.write("***************\n")
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
@@ -223,8 +223,8 @@ class OutputManager:
         """
         Properly formats header for the log file if using max_miss and enumerate_interaction_combs
         """
-        self.log_file.write("\n---------------\n")
-        self.log_file.write("Max Miss Union:\n")
+        self.output_log.write("\n---------------\n")
+        self.output_log.write("Max Miss Union:\n")
 
     def write_find_similar_header(self, query_ligname, cluster_name):
         """
@@ -232,8 +232,8 @@ class OutputManager:
         """
         if not self._log_open:
             self.open_logfile(write_filters_header=False)
-        self.log_file.write("\n---------------\n")
-        self.log_file.write(
+        self.output_log.write("\n---------------\n")
+        self.output_log.write(
             f"Found ligands similar to {query_ligname} in clustering {cluster_name}:\n"
         )
 
@@ -286,10 +286,13 @@ class OutputManager:
             receptor_compbytes (blob): receptor blob
         """
 
-        if not recname.endswith(".pdbqt"):
-            recname = recname + ".pdbqt"
-        with open(recname, "w") as f:
-            f.write(receptor_str)
+        try:
+            if not recname.endswith(".pdbqt"):
+                recname = recname + ".pdbqt"
+            with open(recname, "w") as f:
+                f.write(receptor_str)
+        except Exception as e:
+            raise OutputError(f"Error writing receptor pdbqt to {recname}") from e
 
     def scatter_hist(self, x, y, z, ax_histx, ax_histy):
         """
@@ -345,17 +348,17 @@ class OutputManager:
         Raises:
             OutputError
         """
-        # calculate axis ranges
-        data_xy_range = [[min(xdata), 0], [min(ydata), 0]]
-        # bin data using numpy
-        hist, xbins, ybins = np.histogram2d(
-            xdata,
-            ydata,
-            bins=num_of_bins,
-            range=data_xy_range,
-            density=False,
-        )
         try:
+            # calculate axis ranges
+            data_xy_range = [[min(xdata), 0], [min(ydata), 0]]
+            # bin data using numpy
+            hist, xbins, ybins = np.histogram2d(
+                xdata,
+                ydata,
+                bins=num_of_bins,
+                range=data_xy_range,
+                density=False,
+            )
             # start with a square Figure
             fig = plt.figure()
 

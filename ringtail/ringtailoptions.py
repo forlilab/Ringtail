@@ -5,8 +5,10 @@
 #
 
 import os
-from .exceptions import OptionError
-from .logutils import LOGGER
+from .exceptions import OptionError, RTCoreError
+from .logutils import get_logger
+
+logger = get_logger(__name__)
 from .util import iterate_nested
 from dataclasses import dataclass, asdict, fields
 import copy
@@ -38,16 +40,16 @@ def validate_docking_mode(docking_mode: str):
         RTCoreError: if docking_mode is not supported
     """
     if type(docking_mode) is not str:
-        LOGGER.warning(
+        logger.warning(
             f'The given docking mode was not given as a string, it will be set to default value "{RingtailDefaults.docking_mode}".'
         )
         return RingtailDefaults.docking_mode
     elif docking_mode.lower() not in docking_alias_to_mode:
-        raise NotImplementedError(
+        raise RTCoreError(
             f"Docking mode {docking_mode} is not supported. Please choose between {docking_modes}."
         )
     else:
-        LOGGER.debug(
+        logger.debug(
             f"Docking mode {docking_mode} is valid, will be used for results parsing."
         )
         # return canonical docking mode
@@ -86,7 +88,7 @@ class RingtailDefaults:
     store_all_poses: bool = False
     bookmark_name: str = "passing_results"
     enumerate_interaction_combs: bool = False
-    log_file: str = None
+    output_log: str = None
     output_all_poses: bool = False
     input_db: str = None
     print_summary: bool = None
@@ -131,6 +133,13 @@ class RingtailDefaults:
 
 def default_dict(dataclass):
     return asdict(dataclass)
+
+
+def ringtail_defaults() -> dict:
+    defaults = {}
+    defaults.update(default_dict(RingtailDefaults()))
+    defaults.update(Filters().asdict())
+    return defaults
 
 
 class ResultsObject:
@@ -195,7 +204,6 @@ class Filters:
         self.max_miss: int = 0
 
         self.ligand_name: str = None
-        self.ligand_name_file: str = None
         self.ligand_operator: str = None
         self.ligand_substruct: str = None
         self.ligand_substruct_pos: list = None
@@ -217,13 +225,13 @@ class Filters:
         """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
         then every time a value is changed."""
         if self.eworst is not None and self.score_percentile is not None:
-            LOGGER.warning(
+            logger.warning(
                 "Cannot use 'eworst' cutoff with 'score_percentile'. Overiding 'score_percentile' with 'eworst'."
             )
             self.score_percentile = None
 
         if self.leworst is not None and self.le_percentile is not None:
-            LOGGER.warning(
+            logger.warning(
                 "Cannot use 'eworst' cutoff with 'le_percentile'. Overiding 'le_percentile' with 'leworst'."
             )
             self.le_percentile = None
@@ -245,7 +253,7 @@ class Filters:
         if self.ligand_operator not in ["OR", "AND"] and (
             self.ligand_substruct or self.ligand_substruct_pos
         ):
-            LOGGER.debug(f"'ligand_operator' set to default 'OR'.")
+            logger.debug(f"'ligand_operator' set to default 'OR'.")
             self.ligand_operator = "OR"
 
         if self.max_miss < 0:

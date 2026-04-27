@@ -77,11 +77,15 @@ class QueryBuilder:
         query = f"""{self.aliased("Results")}.pose_id IN ({self.bookmark_query(bookmark)})"""
         return self.WHERE(query)
 
-    def FROM(self, table, alias=None):
+    def FROM(self, table, alias=None, db_name=None):
+        if db_name and alias:
+            alias = db_name + "_" + alias
         if alias:
             alias = self._add_alias(table, alias)
         else:
             alias = self._add_alias(table, table)
+        if db_name:
+            table = db_name + "." + table
         self.from_table = (table, alias)
         return self
 

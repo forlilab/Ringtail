@@ -8,9 +8,9 @@ import argparse
 import json
 import sys
 import os
-from ringtail import RingtailCore
-from ringtail import OutputManager
-from ringtail import logutils
+from ringtail import RingtailCore, setup_logging, get_logger
+
+logger = get_logger(__name__)
 import traceback
 
 
@@ -42,7 +42,6 @@ def cmdline_parser(defaults={}):
     )  # using dict -> str -> dict as a safe copy method
 
     if confargs.config is not None:
-        logutils.LOGGER.info("Reading options from config file")
         with open(confargs.config) as f:
             c = json.load(f)
             config.update(c)
@@ -56,7 +55,7 @@ def cmdline_parser(defaults={}):
                 Requires RDkit, SciPy, Meeko.\n
 
         AUTHOR
-                Written by Althea Hansel-Harris. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n
+                Written by Althea Hansel-Harris and May-Linn Paulsen. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n
 
         REPORTING BUGS
                 Please report bugs to:
@@ -98,12 +97,19 @@ def cmdline_parser(defaults={}):
         action="store_true",
     )
     parser.add_argument(
-        "--log",
-        "-l",
-        help="Name for crossref log file of passing ligands and data",
+        "--logfile",
+        help="Write log output to this file (useful with --debug).",
         type=str,
-        metavar="<LOG FILE>.txt",
-        const="crossref_log.txt",
+        metavar="FILE.log",
+        default=None,
+    )
+    parser.add_argument(
+        "--output_log",
+        "-l",
+        help="Name for crossref results file of passing ligands and data",
+        type=str,
+        metavar="<RESULTS FILE>.txt",
+        const="crossref_results.txt",
         nargs="?",
         action="store",
     )
@@ -144,133 +150,94 @@ def cmdline_parser(defaults={}):
 
 def main():
     time0 = time.perf_counter()
-    logger = logutils.LOGGER
-    logger.info("Starting a ringtail database compare process")
     try:
         args = cmdline_parser()
+
+        # set logging level
+        loglvl = "DEBUG" if args.debug else "INFO" if args.verbose else "WARNING"
+        setup_logging(level=loglvl, logfile=args.logfile)
+        logger.info("Starting a ringtail database compare process")
 
         # make sure we have a positive db and at least one other database
         if args.wanted is None:
             raise IOError(
                 "No wanted database found. Must specify an included database."
             )
-        else:
-            db_count = len(args.wanted)
-            if args.unwanted is not None:
-                db_count += len(args.unwanted)
-            if db_count < 2:
-                raise IOError("Must specify at least two databases for comparison.")
 
-        # set logging level
-        if args.verbose:
-            logger.set_level("INFO")
-            loglvl = "INFO"
-        elif args.debug:
-            logger.set_level("DEBUG")
-            loglvl = "DEBUG"
-        else:
-            logger.set_level("WARNING")
-            loglvl = "WARNING"
+        db_count = len(args.wanted) + (len(args.unwanted) if args.unwanted else 0)
+        if db_count < 2:
+            raise IOError("Must specify at least two databases for comparison.")
 
-        wanted_dbs = args.wanted
-        unwanted_dbs = args.unwanted
-        if not unwanted_dbs:
-            unwanted_dbs = []
-        filter_dict = {"wanted": wanted_dbs, "unwanted": unwanted_dbs}
-        ### Ensure we have (enough) valid database files before proceeding
-        # check that each wanted database exists
-        for index, database_bookmark in enumerate(reversed(wanted_dbs)):
-            if not os.path.exists(database_bookmark[0]):
+        wanted_dbs = []
+        for db in args.wanted:
+            if os.path.exists(db[0]):
+                wanted_dbs.append(db)
+            else:
                 logger.warning(
-                    f"Wanted database {database_bookmark[0]} not found, removing from list!"
+                    f"Wanted database {db[0]} not found, removing from list."
                 )
-                del wanted_dbs[index]
+
+        unwanted_dbs = []
+        for db in args.unwanted or []:
+            if os.path.exists(db[0]):
+                unwanted_dbs.append(db)
+            else:
+                logger.warning(
+                    f"Unwanted database {db[0]} not found, removing from list."
+                )
+
         # needs to be at least one wanted database
         if not wanted_dbs:
-            logger.critical(
+            raise IOError(
                 "There are no valid databases in the --wanted list, cannot run cross comparison!"
             )
-        # check that each unwanted database exists
-        for index, database_bookmark in enumerate(reversed(unwanted_dbs)):
-            if not os.path.exists(database_bookmark[0]):
-                logger.warning(
-                    f"Unwanted database {database_bookmark[0]} not found, removing from list!"
-                )
-                del unwanted_dbs[index]
         # check that we have at least two databases for cross comparison
         if len(wanted_dbs) + len(unwanted_dbs) < 2:
-            logger.critical(
+            raise IOError(
                 "There are less than two valid databases specified in the script, cannot run cross comparison!"
             )
         if len(wanted_dbs) + len(unwanted_dbs) > 10:
-            logger.critical(
+            raise IOError(
                 "There are more than 10 specified databases, please choose 10 or less databases total. Cannot run cross comparison!"
             )
         # use first database as main connetion for cross referencing
         rtc = RingtailCore(wanted_dbs[0][0])
-        num_shared_ligands, db_new_bookmarks, ligand_list, filter_dict = (
+        num_shared_ligands, db_new_bookmarks, filter_dict = (
             rtc.cross_reference_databases(
                 wanted_dbs=wanted_dbs,
                 unwanted_dbs=unwanted_dbs,
                 bookmark_prefix=args.save_bookmark,
             )
         )
-        print("Number of ligands passing wanted minus unwanted: ", num_shared_ligands)
+
         if num_shared_ligands == 0:
-            logger.warning("No ligands found passing cross comparison.")
-        else:
-            # output options
-            ligand_sql_string = ", ".join(f"'{l}'" for l in ligand_list)
-            # construct the query
-            if args.store_best_pose:
-                filter_query = f"""
-                SELECT R.pose_id FROM Results AS R
-                JOIN (
-                    SELECT ligand_id, MIN(pose_rank) as best_pose
-                    FROM Results
-                    GROUP BY ligand_id
-                    ) AS sel
-                ON R.ligand_id = sel.ligand_id
-                AND R.pose_rank = sel.best_pose
-                JOIN Ligands AS L
-                ON R.ligand_id = L.ligand_id
-                WHERE L.LigName
-                IN ({ligand_sql_string})
-                """
-            else:
-                filter_query = f"""
-                SELECT pose_id FROM Results
-                WHERE ligand_id IN (
-                    SELECT ligand_id FROM Ligands 
-                    WHERE LigName IN ({ligand_sql_string})
-                    )
-                """
-            for db, bookmark in db_new_bookmarks.items():
-                rtc = RingtailCore(db, logging_level=loglvl)
+            print("No ligands found passing cross comparison.")
+            return 0
 
-                # create the bookmark
-                with rtc.storageman as sm:
-                    sm._populate_filter_tables(bookmark, filter_query, filter_dict, "")
+        print("Number of ligands passing wanted minus unwanted: ", num_shared_ligands)
 
-                if args.log:
-                    log_file = str(db.split(".")[0]) + "_" + args.log
-                    logger.info(f"Writing log text file for {db} bookmark {bookmark}")
-                    rtc.write_filter_output(
-                        bookmark,
-                        filter_dict,
-                        num_shared_ligands,
-                        log_file,
-                        output_all_poses=True,
-                    )
-                    logger.info(f"Wrote {db} bookmark {bookmark} results to log file.")
+        for db, bookmark in db_new_bookmarks.items():
+            rtc = RingtailCore(db)
 
-                if args.export_sdf:
-                    rtc.write_molecule_sdfs(bookmark_name=bookmark)
-                    logger.info(f"Exported {db} bookmark {bookmark} to SDF.")
+            if args.output_log:
+                output_log = str(db.split(".")[0]) + "_" + args.output_log
+                logger.info(f"Writing log text file for {db} bookmark {bookmark}")
+                rtc.write_filter_output(
+                    bookmark,
+                    filter_dict,
+                    num_shared_ligands,
+                    output_log,
+                    output_all_poses=not args.store_best_pose,
+                )
+                logger.info(f"Wrote {db} bookmark {bookmark} results to log file.")
 
-                if args.export_db:
-                    rtc.export_bookmark_db(bookmark)
-                    logger.info(f"Exported {db} bookmark {bookmark} to a new database.")
+            if args.export_sdf:
+                rtc.write_molecule_sdfs(bookmark_name=bookmark)
+                logger.info(f"Exported {db} bookmark {bookmark} to SDF.")
+
+            if args.export_db:
+                rtc.export_bookmark_db(bookmark)
+                logger.info(f"Exported {db} bookmark {bookmark} to a new database.")
 
         logger.info(
             "Time to cross-reference: {0:.0f} seconds".format(
@@ -278,14 +245,13 @@ def main():
             )
         )
         logger.info("Database comparison process complete.")
+        return 0
 
     except Exception as e:
         tb = traceback.format_exc()
         logger.debug(tb)
         logger.critical(str(e))
-        logger.error("Error encountered while cross-referencing, please check inputs!")
         sys.exit(1)
-    return
 
 
 if __name__ == "__main__":

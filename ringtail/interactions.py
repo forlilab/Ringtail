@@ -8,7 +8,7 @@ import numpy as np
 import tempfile
 from meeko import PDBQTReceptor, MoleculePreparation
 from .receptormanager import ReceptorManager
-from .logutils import LOGGER
+from .exceptions import InteractionError
 from rdkit import Chem, Geometry
 
 
@@ -24,17 +24,17 @@ class InteractionFinder:
     def __init__(self, rec_string: str, hb_cutoff: float, vdw_cutoff: float):
         try:
             self.pdb = PDBQTReceptor(rec_string)
-        except OSError as e:
+        except OSError:
             with tempfile.NamedTemporaryFile(mode="wt") as f:
                 f.write(rec_string)
                 self.pdb = PDBQTReceptor(f.name)
-        except:
+        except Exception:
             try:
                 # assume it is a polymer json string
                 pdbqt_str = ReceptorManager.polymer_json2pdbqt_str(rec_string)
                 self.pdb = PDBQTReceptor(pdbqt_str)
-            except:
-                raise Exception("No valid receptor option given")
+            except Exception as e:
+                raise InteractionError("No valid receptor option given") from e
         self.hb_cutoff = hb_cutoff
         self.vdw_cutoff = vdw_cutoff
 
@@ -72,6 +72,8 @@ class InteractionFinder:
             needs_conversion = False
 
         for idx, atomtype in enumerate(lig_atomtype_list):
+            if atomtype == None:
+                continue
             if needs_conversion:
                 coords = np.array([float(coord) for coord in lig_coordinates[idx]])
             else:
@@ -150,8 +152,6 @@ class InteractionFinder:
             needs_conversion = False
 
         for idx, atomtype in enumerate(lig_atomtype_list):
-            if atomtype == None:
-                continue
             if needs_conversion:
                 coords = np.array([float(coord) for coord in lig_coordinates[idx]])
             else:
@@ -218,45 +218,21 @@ def find_interactions(
         conf.SetAtomPosition(i, Geometry.Point3D(0, 0, 0))
     # Add conformer to molecule
     mol.AddConformer(conf, assignId=True)
-    mol = Chem.AddHs(mol)
+    mol = Chem.AddHs(mol, addCoords=True)
     # calculate interactions for each pose
     for id, coords in poses_coordinates:
         # make a molsetup for the Mol which includes atom types needed for interaction calculations
         mk_prep = MoleculePreparation(rigid_macrocycles=True)
         molsetup_list = mk_prep(mol)
-        if not molsetup_list:
-            LOGGER.warning(
-                f"MoleculePreparation returned no setups for ligand {id.get('ligname', '?')} — skipping interaction calculation for this pose"
-            )
-            interactions.append(
-                {
-                    "type": [],
-                    "recid": [],
-                    "recname": [],
-                    "residue": [],
-                    "resid": [],
-                    "chain": [],
-                    "count": 0,
-                    "hb_count": 0,
-                    "id": id,
-                }
-            )
-            num_hb.append(0)
-            num_interactions.append(0)
-            continue
         molsetup = molsetup_list[0]
         atom_types = []
         for _, atom in enumerate(molsetup.atoms):
             if atom.is_ignore:
                 continue
             atom_types.append(atom.atom_type)
-
         # engage interaction finder
         pose_interactions = interaction_finder.find_pose_interactions(
             atom_types, coords
-        )
-        LOGGER.debug(
-            f"Ligand {id.get('ligname', '?')} pose {id.get('pose_rank', '?')}: {pose_interactions.get('count', 0)} interactions found"
         )
         # add unique
         pose_interactions.update({"id": id})

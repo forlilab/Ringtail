@@ -1,25 +1,24 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail script for updating v1.0.0 databases to v1.1.0
+# Ringtail script for updating older databases to v3.0.0
 #
 
 import argparse
-from ringtail import RingtailCore
-import logging
+from ringtail import RingtailCore, setup_logging, get_logger
+
+logger = get_logger(__name__)
 import sys
+import traceback
+import time
 
 
-def main():
-    logging.basicConfig(
-        level=logging.INFO, stream=sys.stdout, filemode="w", format="%(message)s"
-    )
-    # get name(s) of dbs to update from command line
+def cmdline_parser():
+
     parser = argparse.ArgumentParser(
         prog="rt_upgrade_db",
         description="Given one or multiple Ringtail databases made with older versions (e.g., 1.1.0, 2.0.0), will upgrade them to the latest version 3.0.0, unless given a specific version (e.g., intermediate 2.0.0). Can only upgrade, not downgrade.",
     )
-
     parser.add_argument(
         "-d",
         "--database",
@@ -27,29 +26,62 @@ def main():
         nargs="+",
         type=str,
         action="store",
+        required=True,
     )
     parser.add_argument(
-        "-v",
         "--version",
-        help="Version to upgrade to, either 1.1.0 or 2.0.0",
+        help="Version to upgrade to, eg 3.0.0 (default)",
         default="3.0.0",
         type=str,
         action="store",
     )
+    parser.add_argument(
+        "--debug",
+        help="if logging at debug level",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--logfile",
+        help="Write log output to this file (useful with --debug).",
+        type=str,
+        metavar="FILE.log",
+        default=None,
+    )
+
     args = parser.parse_args()
 
-    consent = False
-    version = args.version
-    # validate version
-    if version not in ["1.1.0", "2.0.0", "3.0.0"]:
-        print(
-            f"Requested upgrade version (-{version}-) not recognized. Please choose either -1.1.0-, -2.0.0-, or the default -3.0.0-."
+    return args
+
+
+def main():
+    time0 = time.perf_counter()
+    try:
+        args = cmdline_parser()
+        setup_logging(level="DEBUG" if args.debug else "INFO", logfile=args.logfile)
+
+        consent = False
+        version = args.version
+        # validate version
+        if version not in ["1.1.0", "2.0.0", "3.0.0"]:
+            raise ValueError(
+                f"Requested upgrade version {version} not recognized. Please choose 1.1.0, 2.0.0, or 3.0.0."
+            )
+
+        for db in args.database:
+            rtcore = RingtailCore(db)
+            consent = rtcore.update_database_version(consent, version)
+
+        logger.info(
+            "Time to upgrade: {0:.0f} seconds".format(time.perf_counter() - time0)
         )
 
-    for db in args.database:
-        rtcore = RingtailCore(db)
-        consent = rtcore.update_database_version(consent, version)
-    return
+        return 0
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        logger.debug(tb)
+        logger.critical(str(e))
+        return 1
 
 
 if __name__ == "__main__":

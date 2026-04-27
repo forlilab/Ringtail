@@ -4,6 +4,11 @@
 # Ringtail static utility methods
 #
 
+from typing import Union
+from .logutils import get_logger
+
+logger = get_logger(__name__)
+
 
 def caller_info(skip=2):
     import inspect
@@ -40,7 +45,7 @@ def caller_info(skip=2):
         package = mod[0]
         try:
             module = mod[1]
-        except:
+        except IndexError:
             module = ""
 
     # class name.
@@ -99,7 +104,7 @@ def iterate_nested(obj):
         yield obj
 
 
-def valid_bookmark_name(name) -> bool:
+def valid_bookmark_name(name: str) -> Union[str, None]:
     """Checks that bookmark name adheres to sqlite naming conventions of alphanumerical and limited symbols.
 
     Args:
@@ -111,8 +116,13 @@ def valid_bookmark_name(name) -> bool:
     """
     import re
 
-    regex = "^[A-Za-z0-9_]*$"
-    return re.match(regex, name)
+    if any(c.isupper() for c in name):
+        logger.warning(
+            f"Bookmark name '{name}' contains uppercase letters, converting to lowercase."
+        )
+        name = name.lower()
+
+    return name if re.match(r"^[a-z0-9_]*$", name) else None
 
 
 def ligand_sdf_to_pdb(sdf_file: str):
@@ -126,7 +136,7 @@ def ligand_sdf_to_pdb(sdf_file: str):
         name = mol.GetProp("_Name")
 
     if mol.GetNumConformers() == 0 or not mol.GetConformer(0).Is3D():
-        mol = Chem.AddHs(mol)
+        mol = Chem.AddHs(mol, addCoords=True)
         AllChem.EmbedMolecule(mol)
     else:
         mol = Chem.AddHs(mol, addCoords=True)
@@ -159,5 +169,19 @@ def detect_db_type(filepath: str) -> str:
 
             sqlite3.connect(filepath)
             return "sqlite"
-        except:
+        except Exception:
             raise TypeError(f"Database type not recognized in file {filepath}")
+
+
+def db_alias_from_path(db_path: str) -> str:
+    import re
+    import pathlib
+
+    db_name = pathlib.Path(db_path).name.split(".")[0]
+    # can only have underscpres
+    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", db_name)
+    # cannot start with a number
+    if sanitized[0].isdigit():
+        sanitized = "_" + sanitized
+
+    return sanitized

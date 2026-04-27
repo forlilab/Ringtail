@@ -8,8 +8,7 @@ import os
 import gzip
 import bz2
 import json
-import traceback
-from typing import Union, NamedTuple
+from typing import Union
 from collections import defaultdict
 import numpy as np
 from .exceptions import (
@@ -17,57 +16,11 @@ from .exceptions import (
     FileParsingErrorPdbqt,
     FileParsingErrorSdf,
 )
-from .logutils import LOGGER
-from rdkit import Chem, Geometry
-from meeko import PDBQTMolecule, RDKitMolCreate, MoleculePreparation
+from .logutils import get_logger
+logger = get_logger(__name__)
+from rdkit import Chem
+from meeko import PDBQTMolecule, RDKitMolCreate
 from .interactions import find_interactions, InteractionFinder
-
-
-class PoseRecord(NamedTuple):
-    receptor: object
-    pose_rank: object
-    run_number: object
-    cluster_rmsd: object
-    reference_rmsd: object
-    docking_score: object
-    leff: object
-    delta: object
-    energies_inter: object
-    energies_vdw: object
-    energies_electro: object
-    energies_flexLig: object
-    energies_flexLR: object
-    energies_intra: object
-    energies_torsional: object
-    unbound_energy: object
-    num_interactions: object
-    num_hb: object
-    cluster_size: object
-    pose_coordinates: object
-    flexible_res_coordinates: object
-    ligname: object
-
-
-class InteractionRecord(NamedTuple):
-    ligname: object
-    run_number: object
-    pose_rank: object
-    type: object
-    chain: object
-    residue: object
-    resid: object
-    recname: object
-    recid: object
-
-
-def _dicts_to_interaction_records(interactions: list) -> list:
-    """Convert deduplicated interaction dicts to InteractionRecords."""
-    return [InteractionRecord(**d) for d in interactions]
-
-
-def _dict_to_pose_record(d: dict) -> PoseRecord:
-    """Convert a pose dict to a PoseRecord, ignoring any extra keys."""
-    return PoseRecord(*(d[f] for f in PoseRecord._fields))
 
 
 def results_row() -> dict:
@@ -279,7 +232,7 @@ class VinaMoleculeSupplier:
             else:
                 open_fn = open
             ligname = data_pointer.split(".pdbqt")[0].split("/")[-1]
-            LOGGER.debug("Parsing vina docking file")
+            logger.debug("Parsing vina docking file")
             with open_fn(data_pointer, "rb") as fp:
                 # this should decode lines into iterable object
                 data_object = [line.decode("utf-8") for line in fp]
@@ -290,7 +243,7 @@ class VinaMoleculeSupplier:
             data_object = pdbqt_str_list.splitlines()
             # get the first (and only, probably not optimal) key which should be the ligand name
             ligname = list(data_pointer.keys())[0]
-            LOGGER.debug("Parsing vina docking string")
+            logger.debug("Parsing vina docking string")
 
         results_dict, receptor_dict = _read_vina_results_lines(data_object, ligname)
 
@@ -327,8 +280,8 @@ class VinaMoleculeSupplier:
                     interaction_finder = InteractionFinder(
                         receptor_string, *interaction_cutoffs
                     )
-                except:
-                    LOGGER.error(
+                except Exception:
+                    logger.error(
                         "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
                     )
                     interaction_info = {
@@ -370,9 +323,9 @@ class VinaMoleculeSupplier:
                 ]
             }
         )
-        # zip all the rows together so there is one record per row/pose
+        # zip all the rows together so there is one dict per row/pose
         results_rows = [
-            PoseRecord(**dict(zip(results_dict.keys(), values)))
+            dict(zip(results_dict.keys(), values))
             for values in zip(*results_dict.values())
         ]
 
@@ -380,7 +333,7 @@ class VinaMoleculeSupplier:
             "ligands": [ligand_row],
             "receptor": generate_receptor_row(receptor_dict),
             "poses": results_rows,
-            "interactions": _dicts_to_interaction_records(interaction_rows),
+            "interactions": interaction_rows,
         }
 
 
@@ -606,9 +559,9 @@ class ADGPUMoleculeSupplier:
         # prepare data in ringtail recognizable format
         return {
             "ligands": [ligand_row],
-            "poses": [_dict_to_pose_record(d) for d in results_rows],
+            "poses": results_rows,
             "receptor": receptor_row,
-            "interactions": _dicts_to_interaction_records(generate_interaction_tuples(interaction_dicts)),
+            "interactions": generate_interaction_tuples(interaction_dicts),
         }
 
     def _parse_docking_file_dlg(self, fname: str) -> tuple[dict, dict, dict]:
@@ -801,11 +754,10 @@ class ADGPUMoleculeSupplier:
                                 raise ValueError(
                                     "ERROR! Cannot parse {0} in {1}".format(line, fname)
                                 )
-                        finally:
-                            if np.isnan(e):
-                                raise ValueError(
-                                    "Error! File contains NaN value for energy."
-                                )
+                        if np.isnan(e):
+                            raise ValueError(
+                                "Error! File contains NaN value for energy."
+                            )
                         scores.append(e)
                     elif "Final Intermolecular Energy" in line:
                         try:
@@ -1005,102 +957,106 @@ class SDFMoleculeSupplier:  #
         last_ligand = None
         run_number = 1
 
-        file_stream = open(fname, "rb")
-        suppl = Chem.ForwardSDMolSupplier(file_stream, removeHs=False)
-        for mol in suppl:
-            if mol is None:
-                continue
-            ligname = mol.GetProp("_Name")
-            # only grab num_poses
-            if ligname != last_ligand:
-                last_ligand = ligname
-                pose_count = 1
-            else:
-                pose_count += 1
-            if pose_count > self.num_poses:
-                continue
+        with open(fname, "rb") as file_stream:
+            suppl = Chem.ForwardSDMolSupplier(file_stream, removeHs=False)
+            for mol in suppl:
+                if mol is None:
+                    continue
+                ligname = mol.GetProp("_Name")
+                # only grab num_poses
+                if ligname != last_ligand:
+                    last_ligand = ligname
+                    pose_count = 1
+                else:
+                    pose_count += 1
+                if pose_count > self.num_poses:
+                    continue
 
-            results_dict = RESULTS_TEMPLATE.copy()
-            # remove coordinates and docking properties (retains other custom properties)
-            mol, mol_properties = prepare_mol_for_database(
-                mol, store_properties=["ligname", "docking_score", "pose_rank"]
-            )
-
-            if ligname not in processed_ligands:
-                smiles = Chem.MolToSmiles(mol)
-                processed_ligands.add(ligname)
-                ligand_row = [ligname, smiles, mol.ToBinary()]
-
-            results_dict.update(mol_properties)
-            results_dict.update(
-                {
-                    "ligname": ligname,
-                    "run_number": run_number,
-                    "leff": round(results_dict["docking_score"] / mol.GetNumAtoms(), 2),
-                }
-            )
-            single_pose_coordinate = results_dict["pose_coordinates"][0]
-            results_dict.update(
-                {
-                    "pose_coordinates": (
-                        json.dumps(single_pose_coordinate.tolist())
-                        if isinstance(single_pose_coordinate, np.ndarray)
-                        else single_pose_coordinate
-                    ),
-                }
-            )
-            # calculate interactions
-            if calculate_interactions:
-                if not interaction_finder:
-                    LOGGER.debug(f"No interaction_finder passed to parser, attempting to create from receptor_string (is None: {receptor_string is None})")
-                    try:
-                        interaction_finder = InteractionFinder(
-                            receptor_string, *interaction_cutoffs
-                        )
-                    except Exception as e:
-                        LOGGER.error(
-                            f"Cannot calculate interactions — InteractionFinder creation failed: {e}\n{traceback.format_exc()}"
-                        )
-                        interactions = []
-
-                poseids_coordinates = [
-                    (
-                        {
-                            "ligname": ligname,
-                            "run_number": run_number,
-                            "pose_rank": mol_properties["pose_rank"],
-                        },
-                        single_pose_coordinate,
-                    )
-                ]
-
-                interactions, num_hb, num_interactions = find_interactions(
-                    poseids_coordinates,
-                    mol,
-                    interaction_finder=interaction_finder,
+                results_dict = RESULTS_TEMPLATE.copy()
+                # remove coordinates and docking properties (retains other custom properties)
+                mol, mol_properties = prepare_mol_for_database(
+                    mol, store_properties=["ligname", "docking_score", "pose_rank"]
                 )
-                interaction_rows = generate_interaction_tuples(interactions)
-                # use interaction stuff here
+
+                if ligname not in processed_ligands:
+                    smiles = Chem.MolToSmiles(mol)
+                    processed_ligands.add(ligname)
+                    ligand_row = [
+                        ligname,
+                        smiles,
+                        mol.ToBinary(Chem.PropertyPickleOptions.AllProps),
+                    ]
+
+                results_dict.update(mol_properties)
                 results_dict.update(
                     {
-                        "num_interactions": num_interactions[0],
-                        "num_hb": num_hb[0],
+                        "ligname": ligname,
+                        "run_number": run_number,
+                        "leff": round(results_dict["docking_score"] / mol.GetNumAtoms(), 2),
+                    }
+                )
+                single_pose_coordinate = results_dict["pose_coordinates"][0]
+                results_dict.update(
+                    {
                         "pose_coordinates": (
-                            json.dumps(results_dict["pose_coordinates"].tolist())
-                            if isinstance(results_dict["pose_coordinates"], np.ndarray)
-                            else results_dict["pose_coordinates"]
+                            json.dumps(single_pose_coordinate.tolist())
+                            if isinstance(single_pose_coordinate, np.ndarray)
+                            else single_pose_coordinate
                         ),
                     }
                 )
-            else:
-                interaction_rows = []
+                # calculate interactions
+                if calculate_interactions:
+                    if not interaction_finder:
+                        try:
+                            interaction_finder = InteractionFinder(
+                                receptor_string, *interaction_cutoffs
+                            )
+                        except Exception:
+                            logger.error(
+                                "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
+                            )
+                            interactions = []
 
-            yield {
-                "ligands": [ligand_row],
-                "poses": [_dict_to_pose_record(results_dict)],
-                "interactions": _dicts_to_interaction_records(interaction_rows),
-                "receptor": [],
-            }
+                    poseids_coordinates = [
+                        (
+                            {
+                                "ligname": ligname,
+                                "run_number": run_number,
+                                "pose_rank": mol_properties["pose_rank"],
+                            },
+                            single_pose_coordinate,
+                        )
+                    ]
+
+                    interactions, num_hb, num_interactions = find_interactions(
+                        poseids_coordinates,
+                        mol,
+                        interaction_finder=interaction_finder,
+                    )
+                    interaction_rows = generate_interaction_tuples(interactions)
+                    # use interaction stuff here
+                    results_dict.update(
+                        {
+                            "num_interactions": num_interactions[0],
+                            "num_hb": num_hb[0],
+                            "pose_coordinates": (
+                                json.dumps(results_dict["pose_coordinates"].tolist())
+                                if isinstance(results_dict["pose_coordinates"], np.ndarray)
+                                else results_dict["pose_coordinates"]
+                            ),
+                        }
+                    )
+                else:
+                    interaction_rows = []
+
+                # add non-specified fields as list of None
+                yield {
+                    "ligands": [ligand_row],
+                    "poses": [results_dict],
+                    "interactions": interaction_rows,
+                    "receptor": [],
+                }
 
 
 def process_docked_mol(
@@ -1115,7 +1071,7 @@ def process_docked_mol(
     ligname = mol.GetProp("_Name")
     run_number = 1
     smiles = Chem.MolToSmiles(mol)
-    ligand_row = [ligname, smiles, mol.ToBinary()]
+    ligand_row = [ligname, smiles, mol.ToBinary(Chem.PropertyPickleOptions.AllProps)]
     interaction_rows = []
     if add_default_columns:
         results_dict = results_row()
@@ -1183,8 +1139,8 @@ def process_docked_mol(
 
     return {
         "ligands": [ligand_row],
-        "poses": [_dict_to_pose_record(results_dict)],
-        "interactions": _dicts_to_interaction_records(interaction_rows),
+        "poses": [results_dict],
+        "interactions": interaction_rows,
         "receptor": [],
     }
 
@@ -1228,7 +1184,7 @@ def generate_ligand_data_list_from_pdbqt_dlg(
     rdkit_mol, properties = prepare_mol_for_database(rdkit_mol)
     pose_coordinates = properties.get("pose_coordinates")
     smiles = Chem.MolToSmiles(rdkit_mol)
-    ligand_rdbin = rdkit_mol.ToBinary()
+    ligand_rdbin = rdkit_mol.ToBinary(Chem.PropertyPickleOptions.AllProps)
 
     ligand_row = [ligname, smiles, ligand_rdbin]
 
@@ -1339,6 +1295,7 @@ def generate_interaction_tuples(interaction_dictionaries: list, unique_id=True) 
         for i in range(pose["count"])
     )
 
+    # Convert back to dicts with proper keys
     return [dict(zip(all_keys, t)) for t in tuples]
 
 

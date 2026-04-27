@@ -5,9 +5,10 @@
 #
 
 from .mpmanager import MPManager
-from .exceptions import ResultsProcessingError
+from .exceptions import ResultsProcessingError, FileParsingError
 from .storagemanager import StorageManager
-from .logutils import LOGGER
+from .logutils import get_logger
+logger = get_logger(__name__)
 from .ringtailoptions import ResultsObject
 
 
@@ -28,7 +29,7 @@ class ResultsManager:
         docking_mode: str,
         storageman_class: StorageManager,
         duplicate_handling: str,
-        chunk_size: int = 3000,
+        chunk_size: int = 10000,
     ):
 
         self.writer_options = {
@@ -66,12 +67,12 @@ class ResultsManager:
             logmsg = f"These are the provided files: {results.file}, directories: {results.file_path}, and file lists: {results.file_list} provided for database storage."
         else:
             logmsg = f"This is the list of ligands whos strings are being procssed: {str(results.strings.keys())}"
-        LOGGER.debug(logmsg)
+        logger.debug(logmsg)
 
         if processing_options.get("num_poses") == -1 and processing_options.get(
             "interaction_tolerance"
         ):
-            LOGGER.warning(
+            logger.warning(
                 "Cannot use 'interaction_tolerance' and 'store_all_poses'. Removing 'interaction_tolerance'."
             )
             processing_options["interaction_tolerance"] = None
@@ -80,8 +81,19 @@ class ResultsManager:
         implemented_parser_managers = {
             "multiprocessing": MPManager,
         }
+        if parser_manager not in implemented_parser_managers:
+            raise ResultsProcessingError(
+                f"Parser manager '{parser_manager}' is not implemented. Choose from: {list(implemented_parser_managers)}"
+            )
         self.parser: MPManager = implemented_parser_managers[parser_manager](
             results, self.writer_options, processing_options.pop("max_proc")
         )
         # start MP process
-        self.parser.process_results(processing_options)
+        try:
+            self.parser.process_results(processing_options)
+        except FileParsingError:
+            raise
+        except Exception as e:
+            raise ResultsProcessingError(
+                f"Unexpected error during results processing: {e}"
+            ) from e

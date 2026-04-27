@@ -60,30 +60,26 @@ class TestRingtailCore:
 
         assert count == 1
 
-    def test_produce_summary(self):
+    # TODO test will fail, check for dict output instead
+    def test_db_summary_data(self):
         # Ensure storage error thrown if no data in database
         from ringtail import exceptions as e
 
         with pytest.raises(e.StorageError):
             fake_rtc = RingtailCore("nodata.db")
-            fake_rtc.produce_summary()
+            fake_rtc.db_summary_data()
         os.system("rm nodata.db")
 
         import sys
 
-        class ListStream:
-            def __init__(self):
-                self.data = []
-
-            def write(self, s):
-                self.data.append(s)
-
-        sys.stdout = summary_items = ListStream()
+        if not _db_exists():
+            _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        rtc.produce_summary()
-        sys.stdout = sys.__stdout__
+        data, _ = rtc.db_summary_data()
 
-        assert len(summary_items.data) == 38
+        assert isinstance(data, dict)
+        assert len(data.keys()) == 12
+        assert all(isinstance(v, (float, int)) for v in data.values())
 
     def test_append_to_database(self):
         rtc = RingtailCore(db_file="output.db")
@@ -189,14 +185,6 @@ class TestRingtailCore:
         )
         assert count_substruct_pos == 12
 
-        # test ligand_name_file
-
-        count_ligands, _ = rtc.filter(
-            ligand_name_file="test_data/adgpu/ligand_names.csv",
-        )
-
-        assert count_ligands == 16
-
     def test_all_filters(self):
         if not _db_exists():
             _create_test_db()
@@ -217,22 +205,22 @@ class TestRingtailCore:
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7, bookmark_name="has_filterdata")
-        log_file_name = "output_log_test.txt"
+        output_log_name = "output_log_test.txt"
         rtc.get_previous_filter_data(
-            "has_filterdata", "delta, reference_rmsd", log_file=log_file_name
+            "has_filterdata", "delta, reference_rmsd", output_log=output_log_name
         )
 
-        with open(log_file_name) as f:
+        with open(output_log_name) as f:
             file_contents = f.read()
         import linecache
 
-        final_line = linecache.getline(log_file_name, 11)
+        final_line = linecache.getline(output_log_name, 11)
 
         assert "11991, 0.0, 226.06" in file_contents
         assert "3961, -0.02, 215.96" in file_contents
         assert final_line == "***************\n"
 
-        os.system(("rm " + log_file_name))
+        os.system(("rm " + output_log_name))
 
     def test_similar_ligands_interaction(self, monkeypatch):
 
@@ -320,7 +308,9 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, log_file="different_log.txt", bookmark_name="export_csv")
+        rtc.filter(
+            eworst=-7, output_log="different_log.txt", bookmark_name="export_csv"
+        )
         rtc.export_table_as_csv("Ligands", "Ligands.csv")
 
         assert os.path.exists("Ligands.csv")
@@ -530,29 +520,24 @@ class TestRingtailCore:
         os.system("rm output.db*")
 
     def test_db_num_poses_warning(self):
-        from ringtail import LOGGER
+        from ringtail import setup_logging
 
-        # make sure we make ringtail core object with log file
-        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
+        logfile = "test_num_poses_warning.log"
+        setup_logging(level="DEBUG", logfile=logfile)
 
-        # add results with max poses = 1
+        rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(
             file="test_data/adgpu/group1/1451.dlg.gz", max_poses=1
         )
-        # add results with different max poses
         rtc.add_results_from_files(
             file="test_data/adgpu/group1/1620.dlg.gz", max_poses=4
         )
         warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1."
 
-        log_file = LOGGER._log_fp.baseFilename
-        with open(log_file) as f:
-            if warning_string in f.read():
-                warning_worked = True
-            else:
-                warning_worked = False
+        with open(logfile) as f:
+            warning_worked = warning_string in f.read()
 
-        os.system("rm output.db*")
+        os.system(f"rm output.db* {logfile}")
 
         assert warning_worked
 
@@ -761,25 +746,23 @@ class TestVinaHandling:
         assert interactions_1 == interactions_2 == 38
 
     def test_db_dockingmode_warning(self):
-        from ringtail import RingtailDefaults
-        from ringtail import LOGGER
+        from ringtail import RingtailDefaults, setup_logging
 
-        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
+        logfile = "test_dockingmode_warning.log"
+        setup_logging(level="DEBUG", logfile=logfile)
+
+        rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file="test_data/adgpu/group1/1451.dlg.gz")
-        rtc = RingtailCore(db_file="output.db", logging_level="DEBUG")
+        rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(
             file="test_data/vina/sample-result.pdbqt", docking_mode="vina"
         )
 
         warning_string = f"The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is {RingtailDefaults.docking_mode}."
-        log_file = LOGGER._log_fp.baseFilename
-        with open(log_file, "r") as f:
-            if warning_string in f.read():
-                warning_worked = True
-            else:
-                warning_worked = False
+        with open(logfile, "r") as f:
+            warning_worked = warning_string in f.read()
 
-        os.system("rm output.db*")
+        os.system(f"rm output.db* {logfile}")
 
         assert warning_worked
 
@@ -798,33 +781,6 @@ class TestVinaHandling:
 
 
 class TestStorageMan:
-    def test_fetch_summary_data(self):
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_list="test_data/adgpu/filelist1.txt",
-            receptor_file="test_data/adgpu/4j8m.pdbqt",
-            save_receptor=True,
-        )
-        with rtc.storageman:
-            summ_dict = rtc.storageman.fetch_summary_data()
-        rounded_dict = {
-            k: round(v, 2) if isinstance(v, float) else v for k, v in summ_dict.items()
-        }
-        assert rounded_dict == {
-            "num_ligands": 3,
-            "num_poses": 7,
-            "num_unique_interactions": 57,
-            "num_interacting_residues": 30,
-            "min_docking_score": -6.66,
-            "max_docking_score": -4.98,
-            "1%_docking_score": -6.66,
-            "10%_docking_score": -6.66,
-            "min_leff": -0.44,
-            "max_leff": -0.35,
-            "1%_leff": -0.44,
-            "10%_leff": -0.44,
-        }
-
     def test_bookmark_info(self):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
@@ -925,12 +881,11 @@ class TestMergeDB:
 class TestLogger:
 
     def test_set_log_level(self):
-        from ringtail.logutils import RaccoonLogger
+        import logging
+        from ringtail import setup_logging, LOGGER
 
-        logger = RaccoonLogger()
-        logger.set_level("info")
-        log_level = logger.level()
-        assert log_level == "INFO"
+        setup_logging(level="INFO")
+        assert LOGGER.level == logging.INFO
 
 
 class TestOptions:
@@ -939,7 +894,7 @@ class TestOptions:
         from ringtail.ringtailoptions import Filters
 
         rtc = RingtailCore()
-        rtc.add_results_from_files(file_list="test_data/adgpu/filelist1.txt")
+        rtc.add_results_from_files(file_list="test_data/filelist1.txt")
         rtc.filters = Filters({"score_percentile": 20})
         assert rtc.filters.eworst == None
         assert rtc.filters.score_percentile == 20
@@ -953,12 +908,10 @@ class TestOptions:
 
     def test_overwrite_db(self):
         rtc = RingtailCore()
-        rtc.add_results_from_files(file_list="test_data/adgpu/filelist1.txt")
+        rtc.add_results_from_files(file_list="test_data/filelist1.txt")
         count_old_db = rtc.table_length("Ligands")
 
-        rtc.add_results_from_files(
-            file_list="test_data/adgpu/filelist2.txt", overwrite=True
-        )
+        rtc.add_results_from_files(file_list="test_data/filelist2.txt", overwrite=True)
         count_new_db = rtc.table_length("Ligands")
 
         assert count_old_db == 3

@@ -6,10 +6,11 @@
 
 import time
 import json
-from pathlib import Path
 import os.path
 import pandas as pd
-from .logutils import LOGGER as logger
+from .logutils import get_logger
+logger = get_logger(__name__)
+from .util import db_alias_from_path
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
@@ -91,7 +92,7 @@ class StorageManager:
             self._open_storage()
         except StorageError as e:
             logger.error(str(e))
-            raise e from None
+            raise
         else:
             return self
 
@@ -110,7 +111,7 @@ class StorageManager:
         self.close_storage()
         if exc_type:
             logger.error(str(exc_value))
-            raise exc_value from None
+            raise exc_value
         return self
 
     def _sigint_handler(self, signal_received, frame):
@@ -130,7 +131,6 @@ class StorageManager:
             docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
             duplicate_handling (str, optional): Describes how to handle duplicates, if any. Defaults to None.
         """
-        self._begin_transaction()
         ligands = docking_data.get("ligands", None)
         if ligands:
             self._insert_ligands(ligands)
@@ -222,16 +222,27 @@ class StorageManager:
 
         return count
 
-    def get_all_bookmark_names(self) -> list[str]:
+    def get_all_bookmark_names(
+        self, db_name: str = None, db_path: str = None
+    ) -> list[str]:
         """Get all bookmarks in sql database as a list of names.
+
+        Args:
+            db_name (str, optional): if attaching a database. Defaults to None.
+            db_path (str, optional): path to attached database. Defaults to None.
 
         Returns:
             list: of bookmark names
         """
+        if db_path:
+            self._attach_db(db_path, db_name)
         query = self.QueryBuilder()
-        query.SELECT("name").FROM("Filters")
+        query.SELECT("name").FROM("Filters", db_name=db_name)
         cur = self.db_query(query.build()[0])
         bookmark_names = [row[0].lower() for row in cur.fetchall()]
+
+        if db_path:
+            self.detach_db(db_name)
 
         return bookmark_names
 
@@ -356,6 +367,174 @@ class StorageManager:
         if not count:
             bookmark_name = None
         return count, bookmark_name
+
+    def crossref_databases(
+        self,
+        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        bookmark_prefix: str = "crossref",
+        store_best_pose: bool = False,
+        alternative_database_names: dict = {},
+    ) -> tuple[int, dict, dict]:
+        """
+        Method to cross reference two or more databases. Will attach all other databases
+        to the "current" database, which is always the first wanted database (will have the
+        active ringtail object).
+
+        Will create an intersect of ligand names in the wanted databases+bookmarks,
+        and delete any ligands found in the union of the unwanted databases+bookmarks.
+
+        A bookmark with specified prefix to the original bookmark name will be stored in each database,
+        making the crossreferencing data easily available for later use.
+
+        Args:
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+            store_best_pose (bool, optional): To store just the best pose for a ligand vs all poses in the database. Defaults to False/storing all poses.
+            alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
+
+        Returns:
+            tuple[int, dict, dict]: Number of "passing" ligands, dict of database {database
+            file path: new bookmark name from cross ref},  dict of dbs and how they were compared
+        """
+        processed_wanted = []
+        for index, database in enumerate(wanted_dbs):
+            if index == 0:
+                db_name = "main"
+                alternative_database_names[database[0]] = db_name
+            else:
+                if database[0] in alternative_database_names.keys():
+                    db_name = alternative_database_names[database[0]]
+                else:
+                    db_name = db_alias_from_path(database[0])
+                    alternative_database_names[database[0]] = db_name
+            processed_wanted.append(
+                (
+                    db_name,
+                    database[0],
+                    database[1],
+                )
+            )
+            if index > 0:
+                self._attach_db(database[0], db_name)
+
+        processed_unwanted = []
+        for index, database in enumerate(unwanted_dbs or []):
+            if database[0] in alternative_database_names.keys():
+                db_name = alternative_database_names[database[0]]
+            else:
+                db_name = db_alias_from_path(database[0])
+                alternative_database_names[database[0]] = db_name
+            processed_unwanted.append(
+                (
+                    db_name,
+                    database[0],
+                    database[1],
+                )
+            )
+            self._attach_db(database[0], db_name)
+        # make subqueries/common table expressions for each set of ligands
+        selection_query = """
+        {db_name} AS 
+            (SELECT LigName FROM {db_name}.Ligands 
+            INNER JOIN {db_name}.Results ON 
+                {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id 
+                WHERE Pose_id IN ({bookmark_poses}))"""
+        wanted_ctes = []
+        for db_name, _, bookmark in processed_wanted:
+            wanted_ctes.append(
+                selection_query.format(
+                    db_name=db_name,
+                    bookmark_poses=self._get_bookmark_poses_query(
+                        bookmark.lower(), db_name
+                    ),
+                )
+            )
+
+        unwanted_ctes = []
+        for db_name, _, bookmark in processed_unwanted:
+            unwanted_ctes.append(
+                selection_query.format(
+                    db_name=db_name,
+                    bookmark_poses=self._get_bookmark_poses_query(
+                        bookmark.lower(), db_name
+                    ),
+                )
+            )
+
+        all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
+
+        wanted_joins = " ".join(
+            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.LigName = {db[0]}.LigName"
+            for db in processed_wanted[1:]
+        )
+
+        # build exclusion union
+        exclude_union = " UNION ".join(
+            f"SELECT LigName FROM {db[0]}" for db in processed_unwanted
+        )
+
+        if unwanted_dbs:
+            unwanted_ctes = f""",
+                unwanted AS (
+                    {exclude_union}
+                )"""
+            unwanted_where = """WHERE i.LigName NOT IN (SELECT LigName FROM unwanted)"""
+        else:
+            unwanted_ctes = ""
+            unwanted_where = ""
+
+        query = f"""
+        {all_ctes},
+        wanted AS (
+            SELECT {processed_wanted[0][0]}.LigName
+            FROM {processed_wanted[0][0]} {wanted_joins}
+        ){unwanted_ctes}
+        SELECT DISTINCT i.LigName
+        FROM wanted i
+        {unwanted_where}
+        """
+
+        # make a bookmark in each database with the results
+        approved_ligand_names = [lig[0] for lig in self.db_query(query).fetchall()]
+        dbs_new_bookmark_names = {}
+
+        # don't proceed if no approved ligands
+        if len(approved_ligand_names) < 1:
+            return 0, {}, {}
+
+        # write bookmarks in each of the databases
+        filter_dict = {"wanted": wanted_dbs, "unwanted": unwanted_dbs}
+
+        for db_alias, path, bookmark in processed_wanted + processed_unwanted:
+            if alternative_database_names[path].lower() in ["", "main"]:
+                self._populate_filter_tables(
+                    name=f"{bookmark_prefix}_{bookmark}",
+                    query=self._crossref_bookmark_builder(
+                        approved_ligand_names, store_best_pose
+                    ),
+                    filters=filter_dict,
+                    filtering_bookmark=bookmark,
+                )
+            else:
+                # detach
+                self.detach_db(db_alias)
+                # make storageman object
+                with type(self)(path) as db:
+                    db._populate_filter_tables(
+                        name=f"{bookmark_prefix}_{bookmark}",
+                        query=self._crossref_bookmark_builder(
+                            approved_ligand_names, store_best_pose
+                        ),
+                        filters=filter_dict,
+                        filtering_bookmark=bookmark,
+                    )
+
+        for _, file, bookmark in processed_wanted + processed_unwanted:
+            dbs_new_bookmark_names.update({file: f"{bookmark_prefix}_{bookmark}"})
+
+            return (len(approved_ligand_names), dbs_new_bookmark_names, filter_dict)
 
     def cluster_data(
         self,
@@ -625,9 +804,9 @@ class StorageManager:
         try:
             self.conn.commit()
         except Exception as e:
-            raise StorageError("Problems while creating a subset database: ", str(e))
+            raise StorageError(f"Problems while creating a subset database: {e}") from e
 
-        self._detach_db(alias)
+        self.detach_db(alias)
         logger.info(f"Subset database {database_name} has been successfully created.")
 
     def fetch_pose_interactions(self, Pose_ID) -> iter:
@@ -750,7 +929,7 @@ class StorageManager:
         """
         Will drop all tables in the database.
         """
-        if self.tables_in_db():
+        if not self.db_empty():
             self._drop_existing_tables()
             logger.info("Tables in existing database were dropped.")
 
@@ -798,26 +977,23 @@ class StorageManager:
                 )
             else:
                 compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
-                try:
-                    query = self.QueryBuilder()
-                    query.SELECT("*").FROM("DB_properties").ORDER_BY(
-                        "DB_write_session"
-                    ).DESC("DB_write_session").LIMIT(1)
-                    cur = self.db_query(query.build()[0])
+                query = self.QueryBuilder()
+                query.SELECT("*").FROM("DB_properties").ORDER_BY(
+                    "DB_write_session"
+                ).DESC("DB_write_session").LIMIT(1)
+                cur = self.db_query(query.build()[0])
 
-                    (_, last_docking_mode, last_num_poses) = cur.fetchone()
-                    if docking_mode != last_docking_mode:
-                        compatible = False
-                        compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
+                (_, last_docking_mode, last_num_poses) = cur.fetchone()
+                if docking_mode != last_docking_mode:
+                    compatible = False
+                    compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
 
-                    if last_num_poses == -1 != num_poses:
-                        compatible = False
-                        compatibility_string += f"Current number of poses saved is {num_poses} but database was previously set to 'store_all_poses'.\n"
-                    elif last_num_poses != num_poses:
-                        compatible = False
-                        compatibility_string += f"Current number of poses saved is {num_poses} but database was previously set to {last_num_poses}."
-                except Exception as e:
-                    raise e
+                if last_num_poses == -1 != num_poses:
+                    compatible = False
+                    compatibility_string += f"Current number of poses saved is {num_poses} but database was previously set to 'store_all_poses'.\n"
+                elif last_num_poses != num_poses:
+                    compatible = False
+                    compatibility_string += f"Current number of poses saved is {num_poses} but database was previously set to {last_num_poses}."
 
             # command line does not allow incompatibility, but API (and I suppose GUI) does
             if not compatible:
@@ -943,6 +1119,69 @@ class StorageManager:
         bin_edges = np.percentile(values, bins)
         return bins, bin_edges
 
+    def fetch_histogram_counts(
+        self, column: str, num_bins: int, bookmark_name: str
+    ) -> tuple[list[float], list[int]]:
+        """SQL-side histogram aggregation. Returns (bin_edges, counts) where
+        len(bin_edges) == num_bins + 1 and len(counts) == num_bins.
+
+        Raw SQL is used intentionally to avoid QueryBuilderDuck.GROUP_BY() wrapping
+        all SELECT items in ANY_VALUE(), which breaks computed-column aggregates.
+
+        Args:
+            column (str): numeric Results column (e.g. "docking_score", "leff")
+            num_bins (int): number of histogram bins
+            bookmark_name (str): bookmark, status table, or "Results"
+
+        Returns:
+            tuple[list[float], list[int]]: bin_edges and per-bin counts
+        """
+        if column not in self._get_numeric_columns("Results"):
+            raise OptionError(f"Column {column} is not numeric")
+
+        # Build portable filter fragments for raw SQL
+        if self.is_bookmark(bookmark_name):
+            bm_subq = self.QueryBuilder.bookmark_query(bookmark_name)
+            join_sql = ""
+            where_sql = f"Results.pose_id IN ({bm_subq}) AND {column} IS NOT NULL"
+        elif self._is_statustable(bookmark_name):
+            join_sql = f"INNER JOIN {bookmark_name} AS T ON Results.pose_id = T.pose_id"
+            where_sql = f"{column} IS NOT NULL"
+        else:
+            join_sql = ""
+            where_sql = f"{column} IS NOT NULL"
+
+        range_sql = f"SELECT MIN({column}), MAX({column}) FROM Results {join_sql} WHERE {where_sql}"
+        row = self.db_query(range_sql).fetchone()
+        if not row or row[0] is None:
+            return [], []
+        min_val, max_val = float(row[0]), float(row[1])
+        if max_val == min_val:
+            total = self.db_query(
+                f"SELECT COUNT(*) FROM Results {join_sql} WHERE {where_sql}"
+            ).fetchone()[0]
+            return [min_val - 0.5, min_val + 0.5], [total]
+        bin_width = (max_val - min_val) / num_bins
+
+        bin_sql = f"""
+            SELECT
+                CAST(({column} - {min_val}) / {bin_width} AS INTEGER) AS bin_idx,
+                COUNT(*) AS cnt
+            FROM Results {join_sql}
+            WHERE {where_sql}
+            GROUP BY bin_idx
+            ORDER BY bin_idx
+        """
+        rows = self.db_query(bin_sql).fetchall()
+
+        counts = [0] * num_bins
+        for bin_idx, cnt in rows:
+            idx = min(int(bin_idx), num_bins - 1)
+            if 0 <= idx < num_bins:
+                counts[idx] = cnt
+        bin_edges = [min_val + i * bin_width for i in range(num_bins + 1)]
+        return bin_edges, counts
+
     def fetch_data_for_passing_results(
         self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
     ) -> iter:
@@ -1032,14 +1271,21 @@ class StorageManager:
             info = [], []
         return info
 
-    def fetch_ligand_mol(self, ligname: str) -> Chem.Mol:
+    def fetch_ligand_mol(self, ligname: str = None, pose_id: int = None) -> Chem.Mol:
         """Gets the binary rdkit mol and returns a regular Mol
 
         Returns:
             Chem.Mol: RDKit mol of the ligand
         """
         query = self.QueryBuilder()
-        query.SELECT("rdmol").FROM("Ligands").WHERE(f"ligname = ?", ligname)
+        query.SELECT("rdmol").FROM("Ligands")
+        if ligname:
+            query.WHERE(f"ligname = ?", ligname)
+        elif pose_id:
+            query.WHERE(
+                f"ligand_id=(SELECT ligand_id FROM Results WHERE pose_id=? LIMIT 1)",
+                pose_id,
+            )
         return Chem.Mol(self.db_query(*query.build()).fetchone()[0])
 
     def fetch_rdkit_pose_properties(self, pose_ids: list) -> iter:
@@ -1260,6 +1506,9 @@ class StorageManager:
             ).WHERE("f.name = ?", table)
             rowid = "fp.rowid"
 
+        else:
+            raise ValueError(f"Table '{table}' is not a results table, status table, or bookmark.")
+
         ordered_columns = f"""
         {status_assignement}
         R.Pose_ID, L.LigName, R.docking_score, 
@@ -1453,37 +1702,33 @@ class StorageManager:
             """DELETE FROM Maybe WHERE Pose_id = ?;""", pose_ids, commit=True
         )
 
-    def prepare_column_export_query(self, columns: list, bookmark: str) -> str:
+    def prepare_column_export_query(self, columns: dict, bookmark: str) -> str:
         """
-        Writes a query based on what columns are requested. Resolves each column
-        to its source table automatically.
+        Writes a query based on what columns (and their respective tables) are requested.
+
 
         Args:
-            columns (list): list of column name strings to export
-            bookmark (str): bookmark or status table to filter results by
+            columns (dict): _description_
+            bookmark (str): _description_
 
         Returns:
-            str: SQL query string
+            str: _description_
         """
-        # Build a flat map of column_name -> table from all queryable tables
-        column_to_table = {
-            col: table
-            for table, cols in self.get_useful_columns().items()
-            for col in cols
-        }
-
-        columns_by_table = {}
-        for col in columns:
-            table = column_to_table.get(col)
-            if table is None:
-                raise OptionError(f"Column '{col}' not found in any queryable table.")
-            columns_by_table.setdefault(table, []).append(col)
-
-        included_tables = [t.lower() for t in columns_by_table]
+        included_tables = [
+            item.split(".", 1)[0].lower()
+            for sublist in columns.values()
+            for item in sublist
+            if item is not None
+        ]
 
         query = self.QueryBuilder()
-        for col in columns:
-            query.SELECT(col)
+        for _, column in columns.items():
+            if column[0]:
+                if column[1]:
+                    # alias
+                    query.SELECT(f"{column[0]} AS {column[1]}")
+                else:
+                    query.SELECT(column[0])
         query.FROM("Results")
 
         # join to tables that are represented in the columns
@@ -1531,14 +1776,13 @@ class StorageManager:
             bool: True if clearing was successful
         """
         try:
-            self._begin_transaction()
-            self._delete_table("Interactions")
             self._delete_table("Interaction_indices")
-            self._create_interaction_index_table()
+            self._delete_table("Interactions")
             self._create_interaction_table()
+            self._create_interaction_index_table()
             self.conn.commit()
         except Exception as e:
-            raise StorageError("Error during interaction tables clearing: ", str(e))
+            raise StorageError(f"Error during interaction tables clearing: {e}") from e
         if (
             self.table_length("Interactions") > 0
             or self.table_length("Interaction_indices") > 0
@@ -1738,36 +1982,6 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def crossref_databases(
-        self,
-        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
-        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
-        bookmark_prefix: str = "crossref",
-        store_best_pose: bool = False,
-    ) -> tuple[int, dict]:
-        """
-        Method to cross reference two or more databases. Will attach all other databases
-        to the "current" database, which is always the first wanted database (will have the
-        active ringtail object).
-
-        Will create an intersect of ligand names in the wanted databases+bookmarks,
-        and delete any ligands found in the union of the unwanted databases+bookmarks.
-
-        A bookmark with specified prefix to the original bookmark name will be stored in each database,
-        making the crossreferencing data easily available for later use.
-
-        Args:
-            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
-            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
-            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
-            store_best_pose (bool, optional): whether or not to store all poses or just the best one. Defaults to False/store all poses
-
-        Returns:
-            tuple[int, dict]: Number of "passing" ligands and dict of database {database
-            file path: new bookmark name from cross ref}
-        """
-        raise NotImplementedError
-
     # endregion
 
     # region private api
@@ -1847,19 +2061,19 @@ class StorageManager:
 
         cluster_bookmark = f"{bookmark_name}_{cluster_name}"
         # check if clusters already exist
-        # TODO maybe just if it has been ran before, state that it will be deleted?
-        existing_cluster_id_tuple = self._cluster_exists(cluster_name, bookmark_name)
-        if existing_cluster_id_tuple:
+        clusters_exist = self._cluster_exists(cluster_name, bookmark_name)
+        if clusters_exist:
             logger.warning(
-                f"A previous cluster bookmark under the same name exists ({cluster_bookmark}), and will be deleted ."
+                f"This cluster has been ran before, will reuse bookmark {cluster_bookmark}."
             )
-            existing_cluster_id = existing_cluster_id_tuple[0]
-            self._delete_cluster(existing_cluster_id)
+            return (cluster_bookmark, clusters_exist[0])
 
         cluster_id = self._insert_new_cluster_info(
             cluster_name, "", bookmark_name, len(clusters)
         )
-
+        logger.debug(
+            f"Length of clusters coming in: {len(clusters)}, and length of representative\n poses: {len(poseid_list)}"
+        )
         cluster_groups = []
         pose_rows = []
         for group_index, cluster in enumerate(clusters):
@@ -2088,23 +2302,11 @@ class StorageManager:
                         # cast last four items to float
                         for index in range(2, 6):
                             filter[index] = float(filter[index])
-                if filter_key == "ligand_name":
-                    if len(filter_value) > 50:
-                        raise OptionError(
-                            "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
-                        )
+
                 ligand_filters[filter_key] = filter_value
 
             if filter_key == "max_miss":
                 max_miss = filter_value
-            # parse ligand name file if present
-            if filter_key == "ligand_name_file":
-                if not Path(filter_value).suffix.lower() == ".csv":
-                    raise OptionError(
-                        f"The file of ligand names needs to be a csv file, cannot proceed with {Path(filter_value).suffix.lower()}."
-                    )
-                else:
-                    ligand_filters[filter_key] = filter_value
         # put all processed filter in a dict
         processed_filters = {}
         if len(numerical_filters) > 0:
@@ -2800,19 +3002,12 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    @staticmethod
-    def _interaction_index_fields(r) -> tuple:
-        """Extract the 6 interaction-description fields from either a dict or an InteractionRecord."""
-        if isinstance(r, dict):
-            return (r["type"], r["chain"], r["residue"], r["resid"], r["recname"], r["recid"])
-        return (r.type, r.chain, r.residue, r.resid, r.recname, r.recid)
-
-    def _insert_interaction_index_rows(self, interactions: list):
+    def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
         Writes unique interactions to database
 
         Args:
-            interactions (list): list of InteractionRecord or dicts with interaction description fields
+            interaction_tuple (list[tuple]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         raise NotImplementedError
 
@@ -2952,7 +3147,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _detach_db(self, new_db_alias):
+    def detach_db(self, new_db_alias):
         """Detaches new database file from current database
 
         Args:
@@ -3074,6 +3269,21 @@ class StorageManager:
             vacuum (bool, optional): rebuilds db file to minimize space. Defaults to None.
             reindex (bool, optional): deletes and reruns all indixes. Defaults to False.
 
+        """
+        raise NotImplementedError
+
+    def _crossref_bookmark_builder(
+        self, ligand_list: list[str], store_best_pose: bool
+    ) -> str:
+        """
+        creates formatted sql for building the crossreferencing bookmark
+
+        Args:
+            ligand_list (list[str]): list of ligand names to be considered
+            store_best_pose (bool): whether to get best pose or all poses
+
+        Returns:
+            str: formatted sql
         """
         raise NotImplementedError
 

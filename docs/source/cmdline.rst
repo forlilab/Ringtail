@@ -98,14 +98,14 @@ Filtering
 *********
 In ``read`` mode, an existing database is used to filter or export results.
 
-When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name and docking score of every pose passing filtering criteria. The log name may be changed with the ``--log_file`` option. There are six scoring filters that include best and worst docking score/energy, best and worst ligand efficieny, and results above worst docking score or ligand efficiency percentile. Some of these are internally inconsistent: if both ``--eworst`` and ``--score_percentile`` are used together, the ``--eworst`` cutoff alone is used. The same is true of ``--leworst`` and ``--le_percentile``.
+When filtering, a text results log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name and docking score of every pose passing filtering criteria. The log name may be changed with the ``--output_log`` option. There are six scoring filters that include best and worst docking score/energy, best and worst ligand efficieny, and results above worst docking score or ligand efficiency percentile. Some of these are internally inconsistent: if both ``--eworst`` and ``--score_percentile`` are used together, the ``--eworst`` cutoff alone is used. The same is true of ``--leworst`` and ``--le_percentile``.
 
 Scoring filters
 =================
 
 .. code-block:: bash
 
-    $ rt_process_vs read --input_db output.db --score_percentile 0.1 --log_file output_log_01percent.txt
+    $ rt_process_vs read --input_db output.db --score_percentile 0.1 --output_log output_log_01percent.txt
 
 The information written to the log can be specified with ``--outfields``. The full list of available output fields may be seen by using the ``--help`` option with ``read`` mode.
 By default, only the information for the top-scoring binding pose will be written to the log. If desired, each individual passing pose can be written by using the ``--output_all_poses`` flag. The passing results may also be ordered in the log file using the ``--order_results`` option.
@@ -305,7 +305,7 @@ Keywords pertaining to output of data
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
 
-    "log_file","Name for log of filtered results","output_log.txt"
+    "output_log","Name for log of filtered results","output_log.txt"
     "overwrite","Flag to overwrite existing logfile of same name",FALSE
     "bookmark_name","Name for bookmark view in database","passing_results"
     "outfields","Data fields to be written in output (log file and STDOUT). Ligand name always included.","e"

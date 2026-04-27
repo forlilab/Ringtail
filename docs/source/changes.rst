@@ -11,7 +11,8 @@ Changes in command line tools
 * There is now one upgrade script with version as input, where there previously was one db upgrade script per version
 * `--storage_type` can be used to specify database engine, with option to use 'duckdb' (defualts to sqlite)
 * `--docking_mode` now only an option for `write` as it is not relevant for the `read` processes
-* Writing a log file after filtering is now optional, and will only be done if `--log_file` is specified
+* Writing a filter results "log" file has a new command line keyword `--output_log` (still uses shorthand `-l`), is now optional, and will only be done if `--output_log` is specified
+* The command `--logfile` will write logging output to a file
 * `--outfields` now uses names of columns as they are in the database. The changes:
     ============ ===============
       Old          New

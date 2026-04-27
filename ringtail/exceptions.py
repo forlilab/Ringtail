@@ -5,7 +5,11 @@
 #
 
 
-class StorageError(Exception):
+class RingtailError(Exception):
+    """Base class for ringtail exceptions"""
+
+
+class StorageError(RingtailError):
     pass
 
 
@@ -25,27 +29,19 @@ class DatabaseConnectionError(StorageError):
     pass
 
 
-class DatabaseTableCreationError(StorageError):
-    pass
-
-
 class DatabaseQueryError(StorageError):
     pass
 
 
-class DatabaseViewCreationError(StorageError):
+class RTCoreError(RingtailError):
     pass
 
 
-class RTCoreError(Exception):
+class OptionError(RingtailError):
     pass
 
 
-class OptionError(Exception):
-    pass
-
-
-class FileParsingError(Exception):
+class FileParsingError(RingtailError):
     pass
 
 
@@ -61,17 +57,21 @@ class FileParsingErrorSdf(FileParsingError):
     pass
 
 
-class WriteToStorageError(Exception):
+class WriteToStorageError(RingtailError):
     pass
 
 
-class MultiprocessingError(Exception):
+class MultiprocessingError(RingtailError):
     pass
 
 
-class ResultsProcessingError(Exception):
+class ResultsProcessingError(RingtailError):
     pass
 
 
-class OutputError(Exception):
+class OutputError(RingtailError):
+    pass
+
+
+class InteractionError(RingtailError):
     pass

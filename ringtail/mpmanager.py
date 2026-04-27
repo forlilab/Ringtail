@@ -12,8 +12,9 @@ import os
 import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
-from .logutils import LOGGER as logger
-from .exceptions import MultiprocessingError, RTCoreError
+from .logutils import get_logger
+logger = get_logger(__name__)
+from .exceptions import MultiprocessingError, FileParsingError
 import traceback
 from datetime import datetime
 import multiprocessing as mp
@@ -23,7 +24,7 @@ from .ringtailoptions import ResultsObject, validate_file_pattern
 
 
 def _set_start_method():
-    preferred = "fork" if sys.platform != "win32" else "spawn"
+    preferred = "fork" if sys.platform == "linux" else "spawn"
     try:
         mp.set_start_method(preferred, force=True)
     except RuntimeError:
@@ -163,17 +164,12 @@ class MPManager:
 
         # add docking data from input strings
         if self.results.strings:
-            try:
-                for (
-                    ligand_name,
-                    docking_result,
-                ) in self.results.strings.items():
-                    string_data = {ligand_name: docking_result}
-                    self._add_to_queue(string_data)
-            except:
-                raise RTCoreError(
-                    "There was an error while reading the results string input."
-                )
+            for (
+                ligand_name,
+                docking_result,
+            ) in self.results.strings.items():
+                string_data = {ligand_name: docking_result}
+                self._add_to_queue(string_data)
 
     def _add_to_queue(self, results_data):
         """_summary_

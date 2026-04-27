@@ -58,11 +58,11 @@ As of version 3.0.0, you can add either a pdbqt file or a receptor meeko.Polymer
 
 Printing a database summary
 ---------------------------
-If at any point you wish to print a summary of the contents of the database, the method can be called directly. 
+If at any point you wish to receive summary data from the database (eg, number of ligands, docking top percentiles) a dictionary of summary data is produced by the method db_summary_data. 
 
 .. code-block:: python
 
-    rtc.produce_summary()
+    summary_data, requested_fields = rtc.db_summary_data()
 
 Input options
 ==============
@@ -126,7 +126,7 @@ When results are added to the database, there is a final step where some tables 
 Filtering
 **********
 
-Docking results stored in the Ringtail database can be filtered using the ``filter`` method. When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name (``Ligand_Name``) and docking score (``e``) of every pose passing filtering criteria. The name of the filter log name may be changed using the ``log_file`` keyword. 
+Docking results stored in the Ringtail database can be filtered using the ``filter`` method. When filtering, a text log file will be created containing the results passing the given filter(s). The default log name is ``output_log.txt`` and by default will include the ligand name (``Ligand_Name``) and docking score (``e``) of every pose passing filtering criteria. The name of the filter log name may be changed using the ``output_log`` keyword. 
 
 Scoring filters
 =================
@@ -134,7 +134,7 @@ There are six scoring filters that include best (``ebest``) and worst docking sc
 
 .. code-block:: python
 
-    rtc.filter(score_percentile = 0.1, log_file = "output_log_01percent.txt")
+    rtc.filter(score_percentile = 0.1, output_log = "output_log_01percent.txt")
 
 The information written to the log file can be specified with ``outfields``. The full list of available output fields may be seen in the documentation/"hover-over" over the method.
 By default, only the information for the top-scoring binding pose will be written to the log. If desired, each individual passing pose can be written by using ``output_all_poses = True``. The passing results may also be ordered in the log file using the ``order_results`` option.
@@ -148,7 +148,7 @@ Filtering may take from seconds to minutes, depending on the size of the databas
 
 .. code-block:: python
 
-    rtc.get_previous_filter_data(outfields = "Ligname,docking_score,pose_rank", bookmark_name = "eworst6", log_file = "previously_filtered_results.txt")
+    rtc.get_previous_filter_data(outfields = "Ligname,docking_score,pose_rank", bookmark_name = "eworst6", output_log = "previously_filtered_results.txt")
 
 Interaction filters
 =====================
@@ -339,7 +339,7 @@ Keywords pertaining to output of data
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
 
-    "log_file","Name for log of filtered results","output_log.txt"
+    "output_log","Name for log of filtered results","output_log.txt"
     "overwrite","Flag to overwrite existing logfile of same name",FALSE
     "bookmark_name","Name for bookmark view in database","passing_results"
     "outfields","Data fields to be written in output (log file and STDOUT). Ligand name always included.","e"

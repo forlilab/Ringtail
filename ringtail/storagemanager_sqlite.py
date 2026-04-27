@@ -4,19 +4,21 @@
 # Ringtail storage adaptors
 #
 
-from .logutils import LOGGER as logger
+import os.path
+from .logutils import get_logger
+logger = get_logger(__name__)
 import sys
-from pathlib import Path
 from rdkit import Chem
 from typing import Union
 from importlib.metadata import version
-from .util import numlist2str
+from .util import numlist2str, db_alias_from_path
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
     DatabaseConnectionError,
     DatabaseQueryError,
     OptionError,
+    MergeError,
 )
 from .clustermanager import *
 from .storagemanager import StorageManager
@@ -96,7 +98,7 @@ class StorageManagerSQLite(StorageManager):
         """Creates table for results."""
 
         sql_results_table = f"""CREATE TABLE IF NOT EXISTS {name} (
-            pose_id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
             ligand_id           INT,
             receptor            VARCHAR,
             pose_rank           INTEGER,
@@ -191,7 +193,7 @@ class StorageManagerSQLite(StorageManager):
             results_array (list): list of result rows
             interactions_array (list): list of interaction rows
         """
-        temp_results_insert = """
+        temp_results_insert = f"""
             INSERT INTO Results_temp(
                 receptor,
                 pose_rank,
@@ -215,22 +217,56 @@ class StorageManagerSQLite(StorageManager):
                 pose_coordinates,
                 flexible_res_coordinates,
                 ligname)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (
+                :receptor,
+                :pose_rank,
+                :run_number,
+                :cluster_rmsd,
+                :reference_rmsd,
+                :docking_score,
+                :leff,
+                :delta,
+                :energies_inter,
+                :energies_vdw,
+                :energies_electro,
+                :energies_flexLig,
+                :energies_flexLR,
+                :energies_intra,
+                :energies_torsional,
+                :unbound_energy,
+                :num_interactions,
+                :num_hb,
+                :cluster_size,
+                :pose_coordinates,
+                :flexible_res_coordinates,
+                :ligname
+            )
             """
         self.db_update(temp_results_insert, results_array, commit=False)
-
-        temp_int_insert = """
+        """            VALUES (
+                {",".join(["?"]*len(results_array[0]))}
+        )"""
+        temp_int_insert = f"""
             INSERT INTO Interactions_temp (
-                ligname,
+                ligname, 
                 run_number,
-                pose_rank,
-                interaction_type,
-                rec_chain,
-                rec_resname,
-                rec_resid,
-                rec_atom,
+                pose_rank, 
+                interaction_type, 
+                rec_chain, 
+                rec_resname, 
+                rec_resid, 
+                rec_atom, 
                 rec_atomid)
-            VALUES (?,?,?,?,?,?,?,?,?)
+            VALUES (
+                :ligname, 
+                :run_number,
+                :pose_rank, 
+                :type,
+                :chain,
+                :residue,
+                :resid,
+                :recname,
+                :recid);
             """
         self.db_update(temp_int_insert, interactions_array, commit=False)
 
@@ -605,10 +641,10 @@ class StorageManagerSQLite(StorageManager):
         """Creates a table of each pose-interaction combination."""
 
         interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_pose_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        pose_id   INTEGER,
+        interaction_pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Pose_ID   INTEGER,
         interaction_id INTEGER,
-        FOREIGN KEY (pose_id) REFERENCES Results(pose_id),
+        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID),
         FOREIGN KEY (interaction_id) REFERENCES Interaction_indices(interaction_id))"""
 
         self.db_query(interaction_table)
@@ -621,13 +657,9 @@ class StorageManagerSQLite(StorageManager):
             interactions (list[dict]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         # to insert interaction if unique
-        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid)
-                        VALUES (?,?,?,?,?,?);"""
-        self.db_update(
-            sql_insert,
-            [self._interaction_index_fields(r) for r in interactions],
-            commit=False,
-        )
+        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
+                        VALUES (:type,:chain,:residue,:resid,:recname,:recid);"""
+        self.db_update(sql_insert, interactions, commit=False)
 
     def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
         """
@@ -1190,7 +1222,7 @@ class StorageManagerSQLite(StorageManager):
                 ),
             )
         except Exception as e:
-            raise Exception(
+            raise MergeError(
                 f"Error during update and insertion of interactions: {e}"
             ) from e
 
@@ -1306,9 +1338,9 @@ class StorageManagerSQLite(StorageManager):
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
             if self.is_bookmark(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
             elif self._is_statustable(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {filter_bookmark}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN (SELECT Pose_ID FROM {filter_bookmark}))"""
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
@@ -1348,10 +1380,6 @@ class StorageManagerSQLite(StorageManager):
                     [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
-            elif "ligand_name_file" in lig_filters:
-                csv_path = lig_filters.pop("ligand_name_file")
-                self._create_ligname_temp_table(csv_path)
-                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON LigName = tmp_lignames.ligandname"
             # rdkit queries need to be handled in memory separate from the main query
             if lig_filters:
                 rdkit_query = True
@@ -1360,7 +1388,7 @@ class StorageManagerSQLite(StorageManager):
         # if filter queries exist for each group, string them together appropriately
         if int_query:
             # add with a join statement
-            partial_filter_query += f"JOIN ({int_query}) I ON R.pose_id = I.pose_id "
+            partial_filter_query += f"JOIN ({int_query}) I ON R.Pose_ID = I.Pose_ID "
         if ligname_query:
             # add with a join statement
             partial_filter_query += (
@@ -1388,7 +1416,7 @@ class StorageManagerSQLite(StorageManager):
                 passing_pose_ids.extend(poseids)
 
             # create new partial_filter_query with passing pose ids from the ligand queries
-            partial_filter_query = " R.pose_id IN ({0})".format(
+            partial_filter_query = " R.Pose_ID IN ({0})".format(
                 ",".join(map(str, passing_pose_ids))
             )
 
@@ -1462,7 +1490,7 @@ class StorageManagerSQLite(StorageManager):
 
         # building the query
         # 1. select pose id, call CASE, in paranthesis because grouping with different query
-        query = "SELECT pose_id FROM (SELECT pose_id "
+        query = "SELECT Pose_ID FROM (SELECT Pose_ID "
         if or_include_interactions or or_exclude_interactions:
             # add the case statements
             query += ", CASE "
@@ -1506,19 +1534,9 @@ class StorageManagerSQLite(StorageManager):
                 + ") "
             )
         # 4. add grouping and wildcard for total interactions minus max_miss, essentially
-        query += f") GROUP BY pose_id HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
+        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
-
-    def _create_ligname_temp_table(self, csv_path: str):
-        """Reads ligand names from a CSV and loads them into a temporary table for joining."""
-        import csv
-
-        with open(csv_path, newline="") as f:
-            names = [row[0].strip() for row in csv.reader(f) if row]
-            self.db_query("DROP TABLE IF EXISTS tmp_lignames")
-            self.db_query("CREATE TEMP TABLE tmp_lignames (ligandname TEXT)")
-            self.db_update("INSERT INTO tmp_lignames VALUES (?)", [(n,) for n in names])
 
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
@@ -1564,132 +1582,44 @@ class StorageManagerSQLite(StorageManager):
 
         return formatted_outfields
 
-    def crossref_databases(
-        self,
-        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
-        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
-        bookmark_prefix: str = "crossref",
-    ) -> tuple[int, dict, list, dict]:
+    def _crossref_bookmark_builder(
+        self, ligand_list: list[str], store_best_pose: bool
+    ) -> str:
         """
-        Method to cross reference two or more databases. Will attach all other databases
-        to the "current" database, which is always the first wanted database (will have the
-        active ringtail object).
-
-        Will create an intersect of ligand names in the wanted databases+bookmarks,
-        and delete any ligands found in the union of the unwanted databases+bookmarks.
-
-        A bookmark with specified prefix to the original bookmark name will be stored in each database,
-        making the crossreferencing data easily available for later use.
+        creates formatted sql for building the crossreferencing bookmark
 
         Args:
-            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
-            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
-            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+            ligand_list (list[str]): list of ligand names to be considered
+            store_best_pose (bool): whether to get best pose or all poses
 
         Returns:
-            tuple[int, dict, list, dict]: Number of "passing" ligands, dict of database {database
-            file path: new bookmark name from cross ref}, list of passing ligand names, dict of dbs and how they were compared
+            str: formatted sql
         """
-        processed_wanted = []
-        for index, database in enumerate(wanted_dbs):
-            if index == 0:
-                db_name = "main"
-            else:
-                db_name = f"db_{index + 1}"
-            processed_wanted.append(
-                (
-                    db_name,
-                    database[0],
-                    database[1],
-                )
-            )
-            if index > 0:
-                self._attach_db(database[0], db_name)
-
-        processed_unwanted = []
-        for index, database in enumerate(unwanted_dbs or []):
-            db_name = f"db_{index + 1 + len(processed_wanted)}"
-            processed_unwanted.append(
-                (
-                    db_name,
-                    database[0],
-                    database[1],
-                )
-            )
-            self._attach_db(database[0], db_name)
-
-        # make subqueries/common table expressions for each set of ligands
-        selection_query = """{db_name} AS (SELECT LigName FROM {db_name}.Ligands INNER JOIN {db_name}.Results on {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id WHERE pose_id IN ({bookmark_poses}))"""
-        wanted_ctes = []
-        for db_name, _, bookmark in processed_wanted:
-            wanted_ctes.append(
-                selection_query.format(
-                    db_name=db_name,
-                    bookmark_poses=self._get_bookmark_poses_query(bookmark, db_name),
-                )
-            )
-
-        unwanted_ctes = []
-        for db_name, _, bookmark in processed_unwanted:
-            unwanted_ctes.append(
-                selection_query.format(
-                    db_name=db_name,
-                    bookmark_poses=self._get_bookmark_poses_query(bookmark, db_name),
-                )
-            )
-
-        all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
-
-        wanted_joins = " ".join(
-            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.LigName = {db[0]}.LigName"
-            for db in processed_wanted[1:]
-        )
-
-        # build exclusion union
-        exclude_union = " UNION ".join(
-            f"SELECT LigName FROM {db[0]}" for db in processed_unwanted
-        )
-
-        if unwanted_dbs:
-            unwanted_ctes = f""",
-                unwanted AS (
-                    {exclude_union}
-                )"""
-            unwanted_where = """WHERE i.LigName NOT IN (SELECT LigName FROM unwanted)"""
+        ligand_sql_string = ", ".join(f"'{l}'" for l in ligand_list)
+        # construct the query
+        if store_best_pose:
+            return f"""
+            SELECT R.pose_id FROM Results AS R
+            JOIN (
+                SELECT ligand_id, MIN(pose_rank) as best_pose
+                FROM Results
+                GROUP BY ligand_id
+                ) AS sel
+            ON R.ligand_id = sel.ligand_id
+            AND R.pose_rank = sel.best_pose
+            JOIN Ligands AS L
+            ON R.ligand_id = L.ligand_id
+            WHERE L.LigName
+            IN ({ligand_sql_string})
+            """
         else:
-            unwanted_ctes = ""
-            unwanted_where = ""
-
-        query = f"""
-        {all_ctes},
-        wanted AS (
-            SELECT {processed_wanted[0][0]}.LigName
-            FROM {processed_wanted[0][0]} {wanted_joins}
-        ){unwanted_ctes}
-        SELECT DISTINCT i.LigName
-        FROM wanted i
-        {unwanted_where}
-        """
-
-        # the query now works, time to make a bookmark in each database with the results
-        approved_ligand_names = [lig[0] for lig in self.db_query(query).fetchall()]
-        dbs_new_bookmark_names = {}
-
-        # don't proceed if no approved ligands
-        if len(approved_ligand_names) < 1:
-            return 0, {}, [], {}
-        else:
-            for _, file, bookmark in processed_wanted + processed_unwanted:
-                dbs_new_bookmark_names.update({file: f"{bookmark_prefix}_{bookmark}"})
-            return (
-                len(approved_ligand_names),
-                dbs_new_bookmark_names,
-                approved_ligand_names,
-                {
-                    "wanted": processed_wanted,
-                    "unwanted": processed_unwanted,
-                },
-            )
+            return f"""
+            SELECT pose_id FROM Results
+            WHERE ligand_id IN (
+                SELECT ligand_id FROM Ligands 
+                WHERE LigName IN ({ligand_sql_string})
+                )
+                """
 
     # endregion
 
@@ -1778,7 +1708,7 @@ class StorageManagerSQLite(StorageManager):
         query = """
         SELECT 
             (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
-            (SELECT COUNT(pose_id) FROM Results) AS num_poses,
+            (SELECT COUNT(Pose_id) FROM Results) AS num_poses,
             (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
             (SELECT COUNT(*) 
             FROM (SELECT interaction_id
@@ -1972,10 +1902,10 @@ class StorageManagerSQLite(StorageManager):
             "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
         )
         self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(pose_id, ligand_id)"
+            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
         )
         self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(pose_id, interaction_id)"
+            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
         )
         self.db_query("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
         self.conn.commit()
@@ -2125,28 +2055,28 @@ class StorageManagerSQLite(StorageManager):
             sys.exit(1)
 
         original_version = self.check_ringtaildb_version()[1]
-        print(
+        logger.info(
             f"Upgrading {self.db_file} of version {original_version} to version {new_version}:"
         )
 
         # upgrade to 1.1.0
         if original_version in ["1.0.0", "1.1.0"]:
             logger.warning(
-                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the pose_id was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
+                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
             )
             if original_version == "1.0.0":
                 self._update_db_100_to_110()
-                print("\n\nSuccessfully upgraded to 1.1.0!\n\n")
+                logger.info("\n\nSuccessfully upgraded to 1.1.0!\n\n")
 
             # upgrade to 2.0.0
             if new_version in ["2.0.0", "3.0.0"]:
                 self._update_db_110_to_200()
-                print("\n\nSuccessfully upgraded to 2.0.0!\n\n")
+                logger.info("\n\nSuccessfully upgraded to 2.0.0!\n\n")
 
         # upgrade to 3.0.0
         if new_version == "3.0.0" and original_version == "2.0.0":
             self._update_db_200_to_300()
-            print("\n\nSuccessfully upgraded to 3.0.0!\n\n")
+            logger.info("\n\nSuccessfully upgraded to 3.0.0!\n\n")
 
         return consent
 
@@ -2184,7 +2114,7 @@ class StorageManagerSQLite(StorageManager):
     def _update_db_110_to_200(self):
         """
         Method to update from database v 1.1.0 to 2.0.0,mainly removes the bitvetor table and creates Interactions table
-        where interaction just lists pose_id and interaction_id in a long-skinny table
+        where interaction just lists Pose_id and interaction_id in a long-skinny table
 
         Raises:
             DatabaseConnectionError
@@ -2215,7 +2145,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             # just populate the Interaction table straight
             cur.executemany(
-                """INSERT INTO Interactions (pose_id, Interaction_id) VALUES (?,?)""",
+                """INSERT INTO Interactions (Pose_id, Interaction_id) VALUES (?,?)""",
                 pose_indices,
             )
             # drop old bitvector table
@@ -2260,34 +2190,123 @@ class StorageManagerSQLite(StorageManager):
             index_name = index[0]
             try:
                 self.db_query(f"DROP INDEX {index_name}")
-            except:
+            except Exception:
                 pass
         # create new, empty ligands table
         self._create_ligands_table("Ligands_new")
 
         # create a temp connection function
-        def _smile_to_rdbin(smile):
+        def _smiles_to_rdbin(
+            smiles: str,
+            h_parents: list[Union[str, int]],
+            coordinates: list,
+            index_map: list[str],
+            ligname: str,
+        ):
             """
             Temporary db connection method that will use rdkit to convert smiles to Mol
-            inline in the sql query
+            inline in the sql query. Produces a mol with atoms ordered to match the
+            PDBQT coordinate list, so that sequential coordinate assignment works.
 
             Args:
-                smile (str): smiles describing ligand
+                smiles (str): smiles describing ligand
+                h_parents: JSON list of 1-indexed pairs [parent_mol_idx, h_pdbqt_idx, ...]
+                coordinates: JSON list of [x, y, z] coordinate lists (one per PDBQT atom)
+                index_map: JSON list of 1-indexed pairs [mol_idx, pdbqt_idx, ...]
+                ligname: ligand name for error reporting
 
             Returns:
                 blob: binary Chem.rdchem.Mol ready to insert in db
             """
             try:
-                mol = Chem.MolFromSmiles(smile)
-                if mol is None:
-                    return None
-                Chem.SanitizeMol(mol)
-                mol = Chem.AddHs(mol)
-                return mol.ToBinary()
-            except Exception:
-                return None
+                import json
+                import traceback
 
-        self.conn.create_function("smile_to_rdbin", 1, _smile_to_rdbin)
+                h_parents_typed = [int(hp) for hp in json.loads(h_parents)]
+                coordinates = [
+                    [float(pt) for pt in coord] for coord in json.loads(coordinates)
+                ]
+                original_mol = Chem.MolFromSmiles(smiles)
+                if original_mol is None:
+                    return None
+
+                index_map = [int(idx) for idx in json.loads(index_map)]
+                n_heavy = original_mol.GetNumAtoms()
+                n_coords = len(coordinates)
+
+                # Build heavy atom mapping: smiles_mol_idx (0-indexed) -> pdbqt_pos (0-indexed)
+                heavy_mol_to_pdbqt = {}
+                for i in range(0, len(index_map), 2):
+                    mol_idx = index_map[i] - 1
+                    pdbqt_idx = index_map[i + 1] - 1
+                    heavy_mol_to_pdbqt[mol_idx] = pdbqt_idx
+
+                if n_coords <= n_heavy or not h_parents_typed:
+                    # No H in coordinates, just reorder heavy atoms by PDBQT position
+                    mapped = sorted(heavy_mol_to_pdbqt.items(), key=lambda x: x[1])
+                    newOrder = [mol_idx for mol_idx, _ in mapped]
+                    mol = Chem.RenumberAtoms(original_mol, newOrder)
+                    mol.RemoveAllConformers()
+                    return mol.ToBinary(Chem.PropertyPickleOptions.AllProps)
+
+                # H atoms present in coordinates — need to include them in PDBQT order
+                # Step 1: Add ALL H to the SMILES mol (preserves heavy atom indices)
+                mol_with_h = Chem.AddHs(original_mol)
+
+                # Step 2: Find which mol indices the polar H got, using same
+                # logic as meeko's add_hydrogens (iterate parent's H neighbors,
+                # pick first unused)
+                used_h = set()
+                h_mol_to_pdbqt = {}
+                num_hydrogens = len(h_parents_typed) // 2
+                for i in range(num_hydrogens):
+                    parent_mol_idx = h_parents_typed[2 * i] - 1  # 0-indexed
+                    h_pdbqt_idx = h_parents_typed[2 * i + 1] - 1  # 0-indexed
+                    parent_atom = mol_with_h.GetAtomWithIdx(parent_mol_idx)
+                    candidate_hydrogens = [
+                        atom.GetIdx()
+                        for atom in parent_atom.GetNeighbors()
+                        if atom.GetAtomicNum() == 1
+                    ]
+                    for h_idx in candidate_hydrogens:
+                        if h_idx not in used_h:
+                            used_h.add(h_idx)
+                            h_mol_to_pdbqt[h_idx] = h_pdbqt_idx
+                            break
+
+                # Step 3: Combine mappings and renumber so ALL atoms are in PDBQT order
+                all_mol_to_pdbqt = {**heavy_mol_to_pdbqt, **h_mol_to_pdbqt}
+                # Mapped atoms sorted by PDBQT position (these go first)
+                mapped_atoms = sorted(all_mol_to_pdbqt.items(), key=lambda x: x[1])
+                # Unmapped atoms (non-polar H without PDBQT coords) go last
+                unmapped_atoms = [
+                    i
+                    for i in range(mol_with_h.GetNumAtoms())
+                    if i not in all_mol_to_pdbqt
+                ]
+                newOrder = [mol_idx for mol_idx, _ in mapped_atoms] + unmapped_atoms
+                mol_reordered = Chem.RenumberAtoms(mol_with_h, newOrder)
+
+                # Step 4: Remove unmapped H (no PDBQT coordinates) from the end
+                n_mapped = len(mapped_atoms)
+                n_total = mol_reordered.GetNumAtoms()
+                if n_total > n_mapped:
+                    rwmol = Chem.RWMol(mol_reordered)
+                    for idx in range(n_total - 1, n_mapped - 1, -1):
+                        rwmol.RemoveAtom(idx)
+                    Chem.SanitizeMol(rwmol)
+                    mol_final = rwmol.GetMol()
+                else:
+                    mol_final = mol_reordered
+
+                mol_final.RemoveAllConformers()
+                mol_final.SetProp("_Name", ligname)
+                return mol_final.ToBinary(Chem.PropertyPickleOptions.AllProps)
+            except Exception as e:
+                traceback.print_exc()
+                raise
+
+        self.conn.create_function("smile_to_rdbin", 5, _smiles_to_rdbin)
         # populate with data from original ligands table, will autogenerate ligand_id PK
         self.db_query(
             """INSERT INTO Ligands_new (
@@ -2297,7 +2316,14 @@ class StorageManagerSQLite(StorageManager):
             SELECT 
                 LigName,
                 ligand_smile,
-                smile_to_rdbin(ligand_smile) 
+                smile_to_rdbin(
+                    ligand_smile,
+                    hydrogen_parents,
+                    (SELECT ligand_coordinates FROM Results 
+                        WHERE Results.ligname = Ligands.LigName LIMIT 1),
+                    atom_index_map,
+                    LigName
+                    )
                 FROM Ligands;""",
             commit=True,
         )
@@ -2313,6 +2339,7 @@ class StorageManagerSQLite(StorageManager):
         # rename new table
         self.db_query("ALTER TABLE Ligands_new RENAME TO Ligands;", commit=True)
 
+        # update results table to use ligand_id from Ligands
         # update results table to use ligand_id from Ligands
         try:
             self.db_query("ALTER TABLE Results ADD COLUMN ligand_id INTEGER;")
@@ -2453,7 +2480,7 @@ class StorageManagerSQLite(StorageManager):
             self._cleanup_storage(attached_db, vacuum)
 
         # close db itself
-        logger.debug("Closing database")
+        logger.debug(f"Closing database connection {self.conn}")
         self.conn.close()
 
     def _cleanup_storage(
@@ -2471,7 +2498,7 @@ class StorageManagerSQLite(StorageManager):
 
         """
         if attached_db_alias is not None:
-            self._detach_db(attached_db_alias)
+            self.detach_db(attached_db_alias)
         if reindex:
             self.db_query("REINDEX", commit=True)
         # vacuum database
@@ -2537,7 +2564,10 @@ class StorageManagerSQLite(StorageManager):
             logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
             return new_db_alias
 
-    def _detach_db(self, new_db_alias):
+    def _check_attached(self):
+        return self.db_query("PRAGMA database_list;").fetchall()
+
+    def detach_db(self, new_db_alias):
         """Detaches new database file from current database
 
         Args:
@@ -2662,8 +2692,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Accepted 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
         )
 
@@ -2671,8 +2701,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Maybe 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
         )
 
@@ -2680,8 +2710,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Rejected 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
+                (Pose_ID INTEGER UNIQUE,
+                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
                 );""",
             commit=True,
         )

@@ -180,4 +180,5 @@ test/.DS_Store
 *output*.db*
 *_log.txt
 
+**/config.toml
 **/config.json
