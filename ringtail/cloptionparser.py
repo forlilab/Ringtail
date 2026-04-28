@@ -519,6 +519,13 @@ def cmdline_parser(defaults: dict = {}):
         nargs="+",
     )
     ligand_group.add_argument(
+        "--ligand_name_file",
+        help=".csv file containing list of ligand names to be used as a filter",
+        action="store",
+        type=str,
+        metavar="STRING",
+    )
+    ligand_group.add_argument(
         "-mna",
         "--ligand_max_atoms",
         help="Maximum number of heavy atoms (non-hydrogens) a ligand may have",
@@ -761,10 +768,17 @@ class CLOptionParser:
 
         if self.process_mode == "write":
             # Check if writing to an existing database
+            only_adding_receptor = (
+                parsed_opts.receptor_file
+                and not parsed_opts.file
+                and not parsed_opts.file_path
+                and not parsed_opts.file_list
+            )
             if (
                 os.path.exists(db_file)
                 and not parsed_opts.append_results
                 and not parsed_opts.overwrite
+                and not only_adding_receptor
             ):
                 raise OptionError(
                     f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
@@ -894,6 +908,14 @@ class CLOptionParser:
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")
                 ligand_filters = {}
+                # can only use one type of ligand name specification
+                if (
+                    parsed_opts.ligand_name is not None
+                    and parsed_opts.ligand_name_file is not None
+                ):
+                    raise OptionError(
+                        "Cannot use --ligand_name and --ligand_name_file together, please choose one."
+                    )
                 # parse the ligand filters, depending on how the keywords are used they will be a list of list or list of lists
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
@@ -967,6 +989,7 @@ class CLOptionParser:
                 enumerate_interaction_combs=parsed_opts.enumerate_interaction_combs,
                 mfpt_cluster=parsed_opts.mfpt_cluster,
                 interaction_cluster=parsed_opts.interaction_cluster,
+                ligand_name_file=parsed_opts.ligand_name_file,
             )
 
             self.output_options = SimpleNamespace(

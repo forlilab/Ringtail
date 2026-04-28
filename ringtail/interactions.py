@@ -10,6 +10,9 @@ from meeko import PDBQTReceptor, MoleculePreparation
 from .receptormanager import ReceptorManager
 from .exceptions import InteractionError
 from rdkit import Chem, Geometry
+from .logutils import get_logger
+
+logger = get_logger(__name__)
 
 
 class InteractionFinder:
@@ -152,6 +155,8 @@ class InteractionFinder:
             needs_conversion = False
 
         for idx, atomtype in enumerate(lig_atomtype_list):
+            if atomtype == None:
+                continue
             if needs_conversion:
                 coords = np.array([float(coord) for coord in lig_coordinates[idx]])
             else:
@@ -224,6 +229,26 @@ def find_interactions(
         # make a molsetup for the Mol which includes atom types needed for interaction calculations
         mk_prep = MoleculePreparation(rigid_macrocycles=True)
         molsetup_list = mk_prep(mol)
+        if not molsetup_list:
+            logger.warning(
+                f"MoleculePreparation returned no setups for ligand {id.get('ligname', '?')} — skipping interaction calculation for this pose"
+            )
+            interactions.append(
+                {
+                    "type": [],
+                    "recid": [],
+                    "recname": [],
+                    "residue": [],
+                    "resid": [],
+                    "chain": [],
+                    "count": 0,
+                    "hb_count": 0,
+                    "id": id,
+                }
+            )
+            num_hb.append(0)
+            num_interactions.append(0)
+            continue
         molsetup = molsetup_list[0]
         atom_types = []
         for _, atom in enumerate(molsetup.atoms):
@@ -233,6 +258,9 @@ def find_interactions(
         # engage interaction finder
         pose_interactions = interaction_finder.find_pose_interactions(
             atom_types, coords
+        )
+        logger.debug(
+            f"Ligand {id.get('ligname', '?')} pose {id.get('pose_rank', '?')}: {pose_interactions.get('count', 0)} interactions found"
         )
         # add unique
         pose_interactions.update({"id": id})

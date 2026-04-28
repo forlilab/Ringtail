@@ -7,8 +7,10 @@
 import time
 import json
 import os.path
+from pathlib import Path
 import pandas as pd
 from .logutils import get_logger
+
 logger = get_logger(__name__)
 from .util import db_alias_from_path
 import sys
@@ -1507,7 +1509,9 @@ class StorageManager:
             rowid = "fp.rowid"
 
         else:
-            raise ValueError(f"Table '{table}' is not a results table, status table, or bookmark.")
+            raise ValueError(
+                f"Table '{table}' is not a results table, status table, or bookmark."
+            )
 
         ordered_columns = f"""
         {status_assignement}
@@ -1704,31 +1708,35 @@ class StorageManager:
 
     def prepare_column_export_query(self, columns: dict, bookmark: str) -> str:
         """
-        Writes a query based on what columns (and their respective tables) are requested.
-
+        Writes a query based on what columns are requested. Resolves each column
+        to its source table automatically.
 
         Args:
-            columns (dict): _description_
-            bookmark (str): _description_
+            columns (list): list of column name strings to export
+            bookmark (str): bookmark or status table to filter results by
 
         Returns:
-            str: _description_
+            str: SQL query string
         """
-        included_tables = [
-            item.split(".", 1)[0].lower()
-            for sublist in columns.values()
-            for item in sublist
-            if item is not None
-        ]
+        # Build a flat map of column_name -> table from all queryable tables
+        column_to_table = {
+            col: table
+            for table, cols in self.get_useful_columns().items()
+            for col in cols
+        }
+
+        columns_by_table = {}
+        for col in columns:
+            table = column_to_table.get(col)
+            if table is None:
+                raise OptionError(f"Column '{col}' not found in any queryable table.")
+            columns_by_table.setdefault(table, []).append(col)
+
+        included_tables = [t.lower() for t in columns_by_table]
 
         query = self.QueryBuilder()
-        for _, column in columns.items():
-            if column[0]:
-                if column[1]:
-                    # alias
-                    query.SELECT(f"{column[0]} AS {column[1]}")
-                else:
-                    query.SELECT(column[0])
+        for col in columns:
+            query.SELECT(col)
         query.FROM("Results")
 
         # join to tables that are represented in the columns
@@ -2061,12 +2069,13 @@ class StorageManager:
 
         cluster_bookmark = f"{bookmark_name}_{cluster_name}"
         # check if clusters already exist
-        clusters_exist = self._cluster_exists(cluster_name, bookmark_name)
-        if clusters_exist:
+        existing_cluster_id_tuple = self._cluster_exists(cluster_name, bookmark_name)
+        if existing_cluster_id_tuple:
             logger.warning(
-                f"This cluster has been ran before, will reuse bookmark {cluster_bookmark}."
+                f"A previous cluster bookmark under the same name exists ({cluster_bookmark}), and will be deleted ."
             )
-            return (cluster_bookmark, clusters_exist[0])
+            existing_cluster_id = existing_cluster_id_tuple[0]
+            self._delete_cluster(existing_cluster_id)
 
         cluster_id = self._insert_new_cluster_info(
             cluster_name, "", bookmark_name, len(clusters)
@@ -2307,6 +2316,23 @@ class StorageManager:
 
             if filter_key == "max_miss":
                 max_miss = filter_value
+                if filter_key == "ligand_name":
+                    if len(filter_value) > 50:
+                        raise OptionError(
+                            "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
+                        )
+                ligand_filters[filter_key] = filter_value
+
+            if filter_key == "max_miss":
+                max_miss = filter_value
+            # parse ligand name file if present
+            if filter_key == "ligand_name_file":
+                if not Path(filter_value).suffix.lower() == ".csv":
+                    raise OptionError(
+                        f"The file of ligand names needs to be a csv file, cannot proceed with {Path(filter_value).suffix.lower()}."
+                    )
+                else:
+                    ligand_filters[filter_key] = filter_value
         # put all processed filter in a dict
         processed_filters = {}
         if len(numerical_filters) > 0:
@@ -3002,12 +3028,26 @@ class StorageManager:
         """
         raise NotImplementedError
 
-    def _insert_interaction_index_rows(self, interactions: list[dict]):
+    @staticmethod
+    def _interaction_index_fields(r) -> tuple:
+        """Extract the 6 interaction-description fields from either a dict or an InteractionRecord."""
+        if isinstance(r, dict):
+            return (
+                r["type"],
+                r["chain"],
+                r["residue"],
+                r["resid"],
+                r["recname"],
+                r["recid"],
+            )
+        return (r.type, r.chain, r.residue, r.resid, r.recname, r.recid)
+
+    def _insert_interaction_index_rows(self, interactions: list):
         """
         Writes unique interactions to database
 
         Args:
-            interaction_tuple (list[tuple]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
+            interactions (list): list of InteractionRecord or dicts with interaction description fields
         """
         raise NotImplementedError
 

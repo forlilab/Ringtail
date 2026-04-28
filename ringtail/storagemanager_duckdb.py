@@ -7,6 +7,7 @@
 import os.path
 import pandas as pd
 from .logutils import get_logger
+
 logger = get_logger(__name__)
 from typing import Union
 from importlib.metadata import version
@@ -117,7 +118,7 @@ class StorageManagerDuckDB(StorageManager):
         sql_results_table = f"""
             CREATE SEQUENCE IF NOT EXISTS seq_poseid START 1;
             CREATE TABLE IF NOT EXISTS {name} (
-            Pose_ID             INTEGER DEFAULT nextval('seq_poseid') PRIMARY KEY,
+            pose_id             INTEGER DEFAULT nextval('seq_poseid') PRIMARY KEY,
             ligand_id           INTEGER REFERENCES Ligands(ligand_id),
             receptor            VARCHAR,
             pose_rank           INTEGER,
@@ -671,8 +672,8 @@ class StorageManagerDuckDB(StorageManager):
         interaction_table = """
         CREATE SEQUENCE IF NOT EXISTS seq_interactionposeid START 1;
         CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_pose_ID INTEGER DEFAULT nextval('seq_interactionposeid') PRIMARY KEY,
-        Pose_ID   INTEGER REFERENCES Results(pose_id),
+        interaction_pose_id INTEGER DEFAULT nextval('seq_interactionposeid') PRIMARY KEY,
+        pose_id  INTEGER REFERENCES Results(pose_id),
         interaction_id INTEGER REFERENCES Interaction_indices(interaction_id))"""
 
         self.db_query(interaction_table)
@@ -685,7 +686,7 @@ class StorageManagerDuckDB(StorageManager):
             interactions (list[dict]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         df = pd.DataFrame(
-            interactions,
+            [self._interaction_index_fields(r) for r in interactions],
             columns=["type", "chain", "residue", "resid", "recname", "recid"],
         ).drop_duplicates()
         self.conn.register("df_view", df)
@@ -809,7 +810,7 @@ class StorageManagerDuckDB(StorageManager):
             int: number of clusters in that cluster if any, else None
         """
         return self.db_query(
-            "SELECT num_clusters FROM Clusters WHERE name=? and cluster_window=?",
+            "SELECT cluster_id FROM Clusters WHERE name=? and cluster_window=?",
             (
                 cluster_name,
                 cluster_window,
@@ -1470,6 +1471,10 @@ class StorageManagerDuckDB(StorageManager):
                     [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
+            elif "ligand_name_file" in lig_filters:
+                csv_path = lig_filters.pop("ligand_name_file")
+                self._create_ligname_temp_table(csv_path)
+                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON LigName = tmp_lignames.ligandname"
             # rdkit queries need to be handled in memory separate from the main query
             if lig_filters:
                 rdkit_query = True
@@ -1627,6 +1632,14 @@ class StorageManagerDuckDB(StorageManager):
         query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
+
+    def _create_ligname_temp_table(self, csv_path: str):
+        """Loads ligand names from CSV into a temporary table using DuckDB's native CSV reader."""
+        self.conn.execute("DROP TABLE IF EXISTS tmp_lignames")
+        self.conn.execute(
+            f"CREATE TEMP TABLE tmp_lignames AS "
+            f"SELECT CAST(column0 AS VARCHAR) AS ligandname FROM read_csv('{csv_path}', header=false)"
+        )
 
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"

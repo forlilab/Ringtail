@@ -66,14 +66,14 @@ class TestInputs:
 
     def test_file_list(self, tablecount):
         os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --file_list test_data/filelist2.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --file_list test_data/adgpu/filelist2.txt"
         )
         count1 = tablecount("Ligands")
 
         os.system("rm output.db")
 
         os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt test_data/filelist2.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt test_data/adgpu/filelist2.txt"
         )
         count2 = tablecount("Ligands")
 
@@ -83,7 +83,7 @@ class TestInputs:
 
     def test_all_file_inputs(self, tablecount):
         os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --file test_data/adgpu/group2/361056.dlg.gz test_data/adgpu/group2/53506.dlg.gz --file_path test_data/adgpu/group3"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --file test_data/adgpu/group2/361056.dlg.gz test_data/adgpu/group2/53506.dlg.gz --file_path test_data/adgpu/group3"
         )
         count = tablecount("Ligands")
 
@@ -117,7 +117,7 @@ class TestInputs:
 
         count_old_db = tablecount("Ligands")
         os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --overwrite"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --overwrite"
         )
         count_new_db = tablecount("Ligands")
         assert count_old_db == 2
@@ -130,7 +130,7 @@ class TestInputs:
         assert count_old_db == 3
 
         code = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt"
         )
         assert (
             code == 256
@@ -145,7 +145,7 @@ class TestInputs:
         with open(filepath, "r") as f:
             data = json.load(f)
         # all fields to be changed
-        data["file_list"] = [["test_data/filelist1.txt"]]
+        data["file_list"] = [["test_data/adgpu/filelist1.txt"]]
 
         with open(filepath, "w") as f:
             f.write(json.dumps(data, indent=4))
@@ -189,7 +189,7 @@ class TestInputs:
 
     def test_save_rec_file_gz(self, tablecount):
         os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --receptor_file test_data/adgpu/4j8m.pdbqt.gz --save_receptor"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --receptor_file test_data/adgpu/4j8m.pdbqt.gz --save_receptor"
         )
         count = tablecount("Receptors")
 
@@ -201,7 +201,7 @@ class TestInputs:
 class TestOutputs:
     def test_export_bookmark_csv(self):
         status1 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt"
         )
         status2 = os.system(
             "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --export_bookmark_csv Ligands"
@@ -256,13 +256,13 @@ class TestOutputs:
 
     def test_max_poses(self, tablecount):
         status3 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt"
         )
         count3 = tablecount("Results")
         os.system("rm output.db")
 
         status1 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --max_poses 1"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --max_poses 1"
         )
         count1 = tablecount("Results")
 
@@ -270,7 +270,7 @@ class TestOutputs:
         os.system("rm output.db")
 
         status5 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --max_poses 5"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --max_poses 5"
         )
         count5 = tablecount("Results")
         os.system("rm output.db")
@@ -283,7 +283,7 @@ class TestOutputs:
 
     def test_store_all(self):
         status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt --store_all_poses"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --store_all_poses"
         )
         rtc = RingtailCore("output.db")
         count = rtc.table_length("Results")
@@ -298,7 +298,7 @@ class TestFilters:
 
     def test_eworst(self):
         status1 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/filelist1.txt"
+            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt"
         )
         status2 = os.system(
             "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -15"

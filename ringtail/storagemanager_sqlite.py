@@ -6,6 +6,7 @@
 
 import os.path
 from .logutils import get_logger
+
 logger = get_logger(__name__)
 import sys
 from rdkit import Chem
@@ -98,7 +99,7 @@ class StorageManagerSQLite(StorageManager):
         """Creates table for results."""
 
         sql_results_table = f"""CREATE TABLE IF NOT EXISTS {name} (
-            Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
+            pose_id             INTEGER PRIMARY KEY AUTOINCREMENT,
             ligand_id           INT,
             receptor            VARCHAR,
             pose_rank           INTEGER,
@@ -193,7 +194,7 @@ class StorageManagerSQLite(StorageManager):
             results_array (list): list of result rows
             interactions_array (list): list of interaction rows
         """
-        temp_results_insert = f"""
+        temp_results_insert = """
             INSERT INTO Results_temp(
                 receptor,
                 pose_rank,
@@ -217,57 +218,24 @@ class StorageManagerSQLite(StorageManager):
                 pose_coordinates,
                 flexible_res_coordinates,
                 ligname)
-            VALUES (
-                :receptor,
-                :pose_rank,
-                :run_number,
-                :cluster_rmsd,
-                :reference_rmsd,
-                :docking_score,
-                :leff,
-                :delta,
-                :energies_inter,
-                :energies_vdw,
-                :energies_electro,
-                :energies_flexLig,
-                :energies_flexLR,
-                :energies_intra,
-                :energies_torsional,
-                :unbound_energy,
-                :num_interactions,
-                :num_hb,
-                :cluster_size,
-                :pose_coordinates,
-                :flexible_res_coordinates,
-                :ligname
-            )
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """
         self.db_update(temp_results_insert, results_array, commit=False)
-        """            VALUES (
-                {",".join(["?"]*len(results_array[0]))}
-        )"""
-        temp_int_insert = f"""
+
+        temp_int_insert = """
             INSERT INTO Interactions_temp (
-                ligname, 
+                ligname,
                 run_number,
-                pose_rank, 
-                interaction_type, 
-                rec_chain, 
-                rec_resname, 
-                rec_resid, 
-                rec_atom, 
+                pose_rank,
+                interaction_type,
+                rec_chain,
+                rec_resname,
+                rec_resid,
+                rec_atom,
                 rec_atomid)
-            VALUES (
-                :ligname, 
-                :run_number,
-                :pose_rank, 
-                :type,
-                :chain,
-                :residue,
-                :resid,
-                :recname,
-                :recid);
+            VALUES (?,?,?,?,?,?,?,?,?)
             """
+
         self.db_update(temp_int_insert, interactions_array, commit=False)
 
     def _move_tempresults_to_database(self):
@@ -641,10 +609,10 @@ class StorageManagerSQLite(StorageManager):
         """Creates a table of each pose-interaction combination."""
 
         interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_pose_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        Pose_ID   INTEGER,
+        interaction_pose_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pose_id   INTEGER,
         interaction_id INTEGER,
-        FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID),
+        FOREIGN KEY (pose_id) REFERENCES Results(pose_id),
         FOREIGN KEY (interaction_id) REFERENCES Interaction_indices(interaction_id))"""
 
         self.db_query(interaction_table)
@@ -657,9 +625,13 @@ class StorageManagerSQLite(StorageManager):
             interactions (list[dict]): [(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)]
         """
         # to insert interaction if unique
-        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid) 
-                        VALUES (:type,:chain,:residue,:resid,:recname,:recid);"""
-        self.db_update(sql_insert, interactions, commit=False)
+        sql_insert = """INSERT OR IGNORE INTO Interaction_indices (interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid)
+                        VALUES (?,?,?,?,?,?);"""
+        self.db_update(
+            sql_insert,
+            [self._interaction_index_fields(r) for r in interactions],
+            commit=False,
+        )
 
     def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
         """
@@ -1380,6 +1352,10 @@ class StorageManagerSQLite(StorageManager):
                     [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
+            elif "ligand_name_file" in lig_filters:
+                csv_path = lig_filters.pop("ligand_name_file")
+                self._create_ligname_temp_table(csv_path)
+                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON LigName = tmp_lignames.ligandname"
             # rdkit queries need to be handled in memory separate from the main query
             if lig_filters:
                 rdkit_query = True
@@ -1537,6 +1513,16 @@ class StorageManagerSQLite(StorageManager):
         query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
+
+    def _create_ligname_temp_table(self, csv_path: str):
+        """Reads ligand names from a CSV and loads them into a temporary table for joining."""
+        import csv
+
+        with open(csv_path, newline="") as f:
+            names = [row[0].strip() for row in csv.reader(f) if row]
+            self.db_query("DROP TABLE IF EXISTS tmp_lignames")
+            self.db_query("CREATE TEMP TABLE tmp_lignames (ligandname TEXT)")
+            self.db_update("INSERT INTO tmp_lignames VALUES (?)", [(n,) for n in names])
 
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
@@ -2339,7 +2325,6 @@ class StorageManagerSQLite(StorageManager):
         # rename new table
         self.db_query("ALTER TABLE Ligands_new RENAME TO Ligands;", commit=True)
 
-        # update results table to use ligand_id from Ligands
         # update results table to use ligand_id from Ligands
         try:
             self.db_query("ALTER TABLE Results ADD COLUMN ligand_id INTEGER;")

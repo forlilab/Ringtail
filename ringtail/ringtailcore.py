@@ -616,6 +616,7 @@ class RingtailCore:
         bookmark_name: str = RingtailDefaults.bookmark_name,
         filter_bookmark: str = None,
         return_iter: bool = False,
+        ligand_name_file=None,
     ) -> Union[tuple[int, str], iter]:
         """Prepare list of filters, then filters and writes all passing pose_ids to a bookmark of given name. Creates an output log text file of all ligand (or all poses, if requested) docking results that passes.
         If clustering is requested, it will first perform the filtering, then cluster, and create a new bookmark of name <bookmark_<cluster_type>_cluster> for each requested cluster type.
@@ -642,6 +643,7 @@ class RingtailCore:
                 ligand_min_molweight (float): min molweight (inclusive, g/mol) for the ligand
                 ligand_max_molweight (float): max molweight (inclusive, g/mol) for the ligand
                 ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
+                ligand_name_file (str); csv file containing a list of ligand names to be filtered for
             Ligand results options:
                 enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
                 output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
@@ -709,6 +711,7 @@ class RingtailCore:
                 "ligand_max_atoms": ligand_max_atoms,
                 "ligand_min_molweight": ligand_min_molweight,
                 "ligand_max_molweight": ligand_max_molweight,
+                "ligand_name_file": ligand_name_file,
             }
         )
 
@@ -2458,6 +2461,11 @@ class RingtailCore:
                     flexres_pose_coordinates = "[]"
                 flexres_pose_coordinates = json.loads(flexres_pose_coordinates)
                 # TODO make a meeko method?
+                if mol.GetNumAtoms() != len(pose_coordinates):
+                    logger.error(
+                        f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}"
+                    )
+                    return None, None, None, None, None
                 mol = self._add_conformer(mol, pose_coordinates)
                 for fr_idx, fr_mol in enumerate(flexres_mols):
                     flexres_mols[fr_idx] = RDKitMolCreate.add_pose_to_mol(
@@ -2609,20 +2617,65 @@ class RingtailCore:
         # need receptor file contents if adding interaction
         if calculate_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
-            # try pdbqt first
-            receptor_data = self.get_receptor_object()
-            results.receptor_string = receptor_data[1]
-            if not results.receptor_string:
-                # if fail, try json
-                try:
-                    results.receptor_string = receptor_data[2]
-                except IndexError:
-                    raise ResultsProcessingError(
-                        "Trying to calculate interactions, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
-                    )
+            if results.receptor_file_path:
+                import pathlib
 
-        logger.info("Adding results...")
-        resultsman.process_docking_data(results, processing_options)
+                # parse the receptor string for interaction calculation
+                # make receptor string
+                if ".pdbqt" in pathlib.Path(results.receptor_file_path).suffixes:
+                    logger.debug(
+                        "Building receptor string from .pdbqt file for interaction calculation"
+                    )
+                    results.receptor_string = ReceptorManager.receptor_str_from_file(
+                        results.receptor_file_path
+                    )
+                elif ".json" in pathlib.Path(results.receptor_file_path).suffixes:
+                    logger.debug(
+                        "Building receptor string from polymer .json file for interaction calculation"
+                    )
+                    with open(results.receptor_file_path, "r") as f:
+                        polymer_json = f.read()
+                    results.receptor_string = ReceptorManager.polymer_json2pdbqt_str(
+                        polymer_json
+                    )
+                else:
+                    logger.warning(
+                        f"Receptor file {results.receptor_file_path} has unrecognized extension — receptor string not set, interactions will not be calculated."
+                    )
+                if results.receptor_string:
+                    logger.debug(
+                        f"Receptor string set successfully (length={len(results.receptor_string)})"
+                    )
+                else:
+                    logger.warning(
+                        "Receptor string is empty after parsing receptor file — interactions will not be calculated."
+                    )
+            else:
+                logger.debug(
+                    "No receptor file path provided, attempting to load receptor string from database"
+                )
+                # try pdbqt first
+                receptor_data = self.get_receptor_object()
+                results.receptor_string = receptor_data[1]
+                if not results.receptor_string:
+                    # if fail, try json
+                    try:
+                        results.receptor_string = receptor_data[2]
+                    except IndexError:
+                        raise ResultsProcessingError(
+                            "Trying to calculate interactions, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                        )
+                if results.receptor_string:
+                    logger.debug(
+                        f"Receptor string loaded from database (length={len(results.receptor_string)})"
+                    )
+                else:
+                    logger.warning(
+                        "Could not load receptor string from database — interactions will not be calculated."
+                    )
+        if results.has_results:
+            logger.info("Adding results...")
+            resultsman.process_docking_data(results, processing_options)
         if finalize:
             self.finalize_write()
 

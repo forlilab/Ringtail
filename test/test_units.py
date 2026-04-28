@@ -185,6 +185,14 @@ class TestRingtailCore:
         )
         assert count_substruct_pos == 12
 
+        # test ligand_name_file
+
+        count_ligands, _ = rtc.filter(
+            ligand_name_file="test_data/adgpu/ligand_names.csv",
+        )
+
+        assert count_ligands == 16
+
     def test_all_filters(self):
         if not _db_exists():
             _create_test_db()

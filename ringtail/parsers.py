@@ -8,7 +8,8 @@ import os
 import gzip
 import bz2
 import json
-from typing import Union
+import traceback
+from typing import Union, NamedTuple
 from collections import defaultdict
 import numpy as np
 from .exceptions import (
@@ -17,10 +18,58 @@ from .exceptions import (
     FileParsingErrorSdf,
 )
 from .logutils import get_logger
+
 logger = get_logger(__name__)
 from rdkit import Chem
 from meeko import PDBQTMolecule, RDKitMolCreate
 from .interactions import find_interactions, InteractionFinder
+
+
+class PoseRecord(NamedTuple):
+    receptor: object
+    pose_rank: object
+    run_number: object
+    cluster_rmsd: object
+    reference_rmsd: object
+    docking_score: object
+    leff: object
+    delta: object
+    energies_inter: object
+    energies_vdw: object
+    energies_electro: object
+    energies_flexLig: object
+    energies_flexLR: object
+    energies_intra: object
+    energies_torsional: object
+    unbound_energy: object
+    num_interactions: object
+    num_hb: object
+    cluster_size: object
+    pose_coordinates: object
+    flexible_res_coordinates: object
+    ligname: object
+
+
+class InteractionRecord(NamedTuple):
+    ligname: object
+    run_number: object
+    pose_rank: object
+    type: object
+    chain: object
+    residue: object
+    resid: object
+    recname: object
+    recid: object
+
+
+def _dicts_to_interaction_records(interactions: list) -> list:
+    """Convert deduplicated interaction dicts to InteractionRecords."""
+    return [InteractionRecord(**d) for d in interactions]
+
+
+def _dict_to_pose_record(d: dict) -> PoseRecord:
+    """Convert a pose dict to a PoseRecord, ignoring any extra keys."""
+    return PoseRecord(*(d[f] for f in PoseRecord._fields))
 
 
 def results_row() -> dict:
@@ -323,9 +372,9 @@ class VinaMoleculeSupplier:
                 ]
             }
         )
-        # zip all the rows together so there is one dict per row/pose
+        # zip all the rows together so there is one record per row/pose
         results_rows = [
-            dict(zip(results_dict.keys(), values))
+            PoseRecord(**dict(zip(results_dict.keys(), values)))
             for values in zip(*results_dict.values())
         ]
 
@@ -333,7 +382,7 @@ class VinaMoleculeSupplier:
             "ligands": [ligand_row],
             "receptor": generate_receptor_row(receptor_dict),
             "poses": results_rows,
-            "interactions": interaction_rows,
+            "interactions": _dicts_to_interaction_records(interaction_rows),
         }
 
 
@@ -559,9 +608,11 @@ class ADGPUMoleculeSupplier:
         # prepare data in ringtail recognizable format
         return {
             "ligands": [ligand_row],
-            "poses": results_rows,
+            "poses": [_dict_to_pose_record(d) for d in results_rows],
             "receptor": receptor_row,
-            "interactions": generate_interaction_tuples(interaction_dicts),
+            "interactions": _dicts_to_interaction_records(
+                generate_interaction_tuples(interaction_dicts)
+            ),
         }
 
     def _parse_docking_file_dlg(self, fname: str) -> tuple[dict, dict, dict]:
@@ -992,7 +1043,9 @@ class SDFMoleculeSupplier:  #
                     {
                         "ligname": ligname,
                         "run_number": run_number,
-                        "leff": round(results_dict["docking_score"] / mol.GetNumAtoms(), 2),
+                        "leff": round(
+                            results_dict["docking_score"] / mol.GetNumAtoms(), 2
+                        ),
                     }
                 )
                 single_pose_coordinate = results_dict["pose_coordinates"][0]
@@ -1042,7 +1095,9 @@ class SDFMoleculeSupplier:  #
                             "num_hb": num_hb[0],
                             "pose_coordinates": (
                                 json.dumps(results_dict["pose_coordinates"].tolist())
-                                if isinstance(results_dict["pose_coordinates"], np.ndarray)
+                                if isinstance(
+                                    results_dict["pose_coordinates"], np.ndarray
+                                )
                                 else results_dict["pose_coordinates"]
                             ),
                         }
@@ -1139,8 +1194,8 @@ def process_docked_mol(
 
     return {
         "ligands": [ligand_row],
-        "poses": [results_dict],
-        "interactions": interaction_rows,
+        "poses": [_dict_to_pose_record(results_dict)],
+        "interactions": _dicts_to_interaction_records(interaction_rows),
         "receptor": [],
     }
 
