@@ -2311,16 +2311,10 @@ class StorageManager:
                         # cast last four items to float
                         for index in range(2, 6):
                             filter[index] = float(filter[index])
-
-                ligand_filters[filter_key] = filter_value
-
-            if filter_key == "max_miss":
-                max_miss = filter_value
-                if filter_key == "ligand_name":
-                    if len(filter_value) > 50:
-                        raise OptionError(
-                            "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
-                        )
+                if filter_key == "ligand_name" and len(filter_value) > 50:
+                    raise OptionError(
+                        "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
+                    )
                 ligand_filters[filter_key] = filter_value
 
             if filter_key == "max_miss":
