@@ -1100,6 +1100,7 @@ class RingtailCore:
             )
             return
 
+        opm = OutputManager()
         for ligname, info in all_mols.items():
             # determine filename
             if all_in_one:
@@ -1121,14 +1122,13 @@ class RingtailCore:
                 logger.info(
                     "Specified directory for SDF files was created in current working directory."
                 )
-            with OutputManager() as opm:
-                opm.write_out_mol(
-                    sdf_file_name,
-                    info["ligand"],
-                    info["flex_residues"],
-                    info["properties"],
-                    sdf_path,
-                )
+            opm.write_out_mol(
+                sdf_file_name,
+                info["ligand"],
+                info["flex_residues"],
+                info["properties"],
+                sdf_path,
+            )
 
     @_wrap_exceptions
     def find_similar_ligands(
