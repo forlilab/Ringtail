@@ -3,6 +3,10 @@
 #
 # Ringtail
 #
+import warnings
+
+warnings.filterwarnings("ignore", "pkg_resources is deprecated", UserWarning, "prody")
+
 
 from .ringtailcore import (
     RingtailCore,
