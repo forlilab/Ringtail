@@ -276,6 +276,12 @@ def cmdline_parser(defaults: dict = {}):
         action="store_true",
     )
     read_parser.add_argument(
+        "-pb",
+        "--print_bookmarks",
+        help="Prints all bookmark names stored in the database to STDOUT.",
+        action="store_true",
+    )
+    read_parser.add_argument(
         "-v",
         "--verbose",
         help="Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.",
@@ -765,6 +771,7 @@ class CLOptionParser:
         self.logging_level = log_level
 
         self.print_summary = parsed_opts.print_summary
+        self.print_bookmarks = parsed_opts.print_bookmarks if self.process_mode == "read" else False
 
         if self.process_mode == "write":
             # Check if writing to an existing database

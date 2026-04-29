@@ -105,6 +105,13 @@ def main():
             summary_data, requested_data = rtcore.db_summary_data()
             print_db_summary(summary_data, requested_data)
 
+        # -#-#- Print bookmark names
+        if cli.print_bookmarks:
+            bookmark_names = rtcore.get_bookmark_names()
+            print("\nBookmarks in database:")
+            for name in bookmark_names:
+                print(f"  {name}")
+
         if cli.process_mode == "read":
             bookmark_name = cli.filter_options.bookmark_name
             logger.debug("Starting read process")
