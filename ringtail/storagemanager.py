@@ -316,6 +316,20 @@ class StorageManager:
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
         )
 
+    def rename_bookmark(self, old_name: str, new_name: str) -> None:
+        """Rename a bookmark. Clusters.cluster_window references remain valid because
+        intermediate bookmarks are never renamed — only the final cluster output is.
+
+        Args:
+            old_name (str): current bookmark name
+            new_name (str): desired bookmark name
+        """
+        self.conn.execute(
+            "UPDATE Filters SET name = ? WHERE name = ?", (new_name, old_name)
+        )
+        self.conn.commit()
+        logger.info(f"Bookmark '{old_name}' renamed to '{new_name}'.")
+
     def get_ligname_from_pose(self, pose_id: int) -> str:
         """
         Get ligand name given a pose_id

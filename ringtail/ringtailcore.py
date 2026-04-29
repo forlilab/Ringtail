@@ -766,11 +766,16 @@ class RingtailCore:
             if interaction_cluster:
                 clustering["ifp"] = interaction_cluster
 
+        # save the user-provided name; when clustering, the filter result is stored under
+        # {name}_unclust so the final cluster representatives can take the user-provided name
+        user_bookmark_name = bookmark_name
+        effective_bookmark = f"{bookmark_name}_unclust" if clustering else bookmark_name
+
         if write_one_bookmark:
             with self.storageman:
                 num_passing_ligands = self.storageman.filter_results(
                     all_filters=filter_dict,
-                    bookmark_name=bookmark_name,
+                    bookmark_name=effective_bookmark,
                     filtering_bookmark=filter_bookmark,
                 )
             print_string = ""
@@ -817,6 +822,8 @@ class RingtailCore:
                 num_passing_ligands, bookmark_name = self.storageman.get_maxmiss_union(
                     len(interaction_combs), bookmark_name, filters_copy
                 )
+            # union result is the pre-cluster input for the max_miss path
+            effective_bookmark = bookmark_name
             # rename so can be reused in common method below
             filter_dict = filters_copy
             print_string = " in max_miss union"
@@ -826,9 +833,12 @@ class RingtailCore:
                 f"\nNumber passing ligands{print_string}: {num_passing_ligands}"
             )
             if clustering:
-                bookmark_name, num_passing_ligands = self._parse_clustering(
-                    clustering, bookmark_name
+                final_name, num_passing_ligands = self._parse_clustering(
+                    clustering, effective_bookmark
                 )
+                with self.storageman:
+                    self.storageman.rename_bookmark(final_name, user_bookmark_name)
+                bookmark_name = user_bookmark_name
             # use original filters for final output log write
             if output_log:
                 self.write_filter_output(
@@ -2817,17 +2827,17 @@ class RingtailCore:
             logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
             )
-        if cluster_data.get("ifp"):
-            bookmark_name = self.cluster(
-                bookmark_name,
-                "ifp",
-                cluster_data.get("ifp"),
-            )
         if cluster_data.get("mfp"):
             bookmark_name = self.cluster(
                 bookmark_name,
                 "mfp",
                 cluster_data.get("mfp"),
+            )
+        if cluster_data.get("ifp"):
+            bookmark_name = self.cluster(
+                bookmark_name,
+                "ifp",
+                cluster_data.get("ifp"),
             )
         with self.storageman:
             count_reps = self.storageman.get_passing_poses_count(bookmark_name, True)
