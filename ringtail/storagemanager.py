@@ -324,6 +324,11 @@ class StorageManager:
             old_name (str): current bookmark name
             new_name (str): desired bookmark name
         """
+        if self.is_bookmark(new_name):
+            logger.warning(
+                f"The bookmark {new_name} already exists, and will be overwritten."
+            )
+            self.delete_bookmark(new_name)
         self.conn.execute(
             "UPDATE Filters SET name = ? WHERE name = ?", (new_name, old_name)
         )

@@ -128,9 +128,17 @@ def main():
                     "ifp": cli.filter_options.interaction_cluster,
                     "mfp": cli.filter_options.mfpt_cluster,
                 }
-                bookmark_name, _ = rtcore._parse_clustering(
-                    cluster_data, cli.filter_options.bookmark_name
-                )
+                filter_bm = cli.filter_options.filter_bookmark
+                user_bm = cli.filter_options.bookmark_name
+                source_bookmark = filter_bm if filter_bm else user_bm
+                final_name, count_reps = rtcore._parse_clustering(cluster_data, source_bookmark)
+                if filter_bm and final_name != user_bm:
+                    with rtcore.storageman:
+                        rtcore.storageman.rename_bookmark(final_name, user_bm)
+                    bookmark_name = user_bm
+                else:
+                    bookmark_name = final_name
+                print(f"\nNumber of cluster representative ligands: {count_reps}")
 
             # Write log with new data for previous filtering results
             if (

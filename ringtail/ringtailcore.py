@@ -871,7 +871,7 @@ class RingtailCore:
     @_wrap_exceptions
     def cluster(
         self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5
-    ) -> str:
+    ) -> tuple[str, int]:
         """
         Clusters data in a bookmark using given cluster algorithm and with given cutoff distance.
 
@@ -881,7 +881,7 @@ class RingtailCore:
             cutoff (float, optional): cutoff distance for each cluster. Defaults to 0.5.
 
         Returns:
-            str: bookmark name describing the representative poses for the clustered data
+            tuple[str, int]: bookmark name of representative poses, number of cluster representatives
         """
         with self.storageman as sm:
             bookmark_name, num_clusters = sm.cluster_data(
@@ -892,7 +892,7 @@ class RingtailCore:
         logger.info(
             f"Number of clusters: {num_clusters}.\nPassing poses saved to {bookmark_name}."
         )
-        return bookmark_name
+        return bookmark_name, num_clusters
 
     @_wrap_exceptions
     def write_filter_output(
@@ -1271,7 +1271,7 @@ class RingtailCore:
         """
         bookmark_name = self._normalize_bookmark_name(bookmark_name)
         if output_log is None:
-            output_log = "output_log.txt"
+            return
         if bookmark_name is None:
             raise OptionError("A bookmark name has to be provided")
         with self.storageman:
@@ -2827,20 +2827,19 @@ class RingtailCore:
             logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
             )
+        count_reps = 0
         if cluster_data.get("mfp"):
-            bookmark_name = self.cluster(
+            bookmark_name, count_reps = self.cluster(
                 bookmark_name,
                 "mfp",
                 cluster_data.get("mfp"),
             )
         if cluster_data.get("ifp"):
-            bookmark_name = self.cluster(
+            bookmark_name, count_reps = self.cluster(
                 bookmark_name,
                 "ifp",
                 cluster_data.get("ifp"),
             )
-        with self.storageman:
-            count_reps = self.storageman.get_passing_poses_count(bookmark_name, True)
         logger.info(f"\nNumber of cluster representative ligands: {count_reps}")
         return bookmark_name, count_reps
 
