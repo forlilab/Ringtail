@@ -2091,10 +2091,11 @@ class StorageManager:
         existing_cluster_id_tuple = self._cluster_exists(cluster_name, bookmark_name)
         if existing_cluster_id_tuple:
             logger.warning(
-                f"A previous cluster bookmark under the same name exists ({cluster_bookmark}), and will be deleted ."
+                f"A previous cluster bookmark under the same name exists ({cluster_bookmark}), and will be deleted."
             )
             existing_cluster_id = existing_cluster_id_tuple[0]
             self._delete_cluster(existing_cluster_id)
+            self.delete_bookmark(cluster_bookmark)
 
         cluster_id = self._insert_new_cluster_info(
             cluster_name, "", bookmark_name, len(clusters)

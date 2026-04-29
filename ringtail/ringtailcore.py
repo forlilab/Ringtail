@@ -2823,7 +2823,7 @@ class RingtailCore:
             count_poses = self.storageman.get_passing_poses_count(bookmark_name, False)
 
         logger.info(f"Preparing to cluster {count_poses} passing poses.")
-        if len(cluster_data) > 1:
+        if sum(1 for v in cluster_data.values() if v) > 1:
             logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
             )

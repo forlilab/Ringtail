@@ -124,10 +124,11 @@ def main():
                 print(f"\nNumber of passing ligands: {num_passing}")
 
             if cli.clustering_only:
-                cluster_data = {
-                    "ifp": cli.filter_options.interaction_cluster,
-                    "mfp": cli.filter_options.mfpt_cluster,
-                }
+                cluster_data = {}
+                if cli.filter_options.mfpt_cluster:
+                    cluster_data["mfp"] = cli.filter_options.mfpt_cluster
+                if cli.filter_options.interaction_cluster:
+                    cluster_data["ifp"] = cli.filter_options.interaction_cluster
                 filter_bm = cli.filter_options.filter_bookmark
                 user_bm = cli.filter_options.bookmark_name
                 source_bookmark = filter_bm if filter_bm else user_bm
