@@ -13,7 +13,6 @@ from .util import iterate_nested
 from dataclasses import dataclass, asdict, fields
 import copy
 
-
 docking_modes = {
     "adgpu": {"adgpu", "dlg", "gpu"},
     "vina": {"vina", "pdbqt"},
@@ -121,7 +120,7 @@ class RingtailDefaults:
     export_sdf_path: str = None
     individual_sdf_files: bool = None
     data_from_bookmark: bool = None
-    filter_bookmark: str = None
+    input_bookmark: str = None
     find_similar_ligands: bool = None
     plot: bool = None
     pymol: bool = None

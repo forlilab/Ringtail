@@ -613,8 +613,8 @@ class RingtailCore:
         output_log: str = None,
         outfields: str = list(RingtailDefaults.outfields),
         order_results: str = None,
-        bookmark_name: str = RingtailDefaults.bookmark_name,
-        filter_bookmark: str = None,
+        output_bookmark: str = RingtailDefaults.bookmark_name,
+        input_bookmark: str = None,
         return_iter: bool = False,
         ligand_name_file=None,
     ) -> Union[tuple[int, str], iter]:
@@ -680,8 +680,8 @@ class RingtailCore:
                     "rank" (rank of ligand pose),
                     "run" (run number for ligand pose),
                     "hb" (hydrogen bonds);
-                bookmark_name (str): name for resulting book mark file. Default value is 'passing_results', can only contain lower case letters, numbers, and underscore (_)
-                filter_bookmark (str): name of bookmark to perform filtering over
+                output_bookmark (str): name for resulting book mark file. Default value is 'passing_results', can only contain lower case letters, numbers, and underscore (_)
+                input_bookmark (str): name of bookmark to perform filtering over
                 return_iter (bool): return an iterable of all of the filtering results
 
         Returns:
@@ -723,8 +723,8 @@ class RingtailCore:
                         "Cannot use reaction filters with Vina mode. Removing react_any filter."
                     )
                 react_any = False
-        bookmark_name = valid_bookmark_name(bookmark_name)
-        if bookmark_name is None:
+        output_bookmark = valid_bookmark_name(output_bookmark)
+        if output_bookmark is None:
             raise OptionError(
                 "Bookmark name contains illegal symbols, please only use letters, numbers, and underscore."
             )
@@ -767,15 +767,17 @@ class RingtailCore:
                 clustering["ifp"] = interaction_cluster
 
         # when clustering, filter writes to {name}_preclust to avoid collision with the final
-        # cluster output, which takes the user-provided bookmark_name
-        effective_bookmark = f"{bookmark_name}_preclust" if clustering else bookmark_name
+        # cluster output, which takes the user-provided output_bookmark
+        effective_bookmark = (
+            f"{output_bookmark}_preclust" if clustering else output_bookmark
+        )
 
         if write_one_bookmark:
             with self.storageman:
                 num_passing_ligands = self.storageman.filter_results(
                     all_filters=filter_dict,
-                    bookmark_name=effective_bookmark,
-                    filtering_bookmark=filter_bookmark,
+                    output_bookmark=effective_bookmark,
+                    input_bookmark=input_bookmark,
                 )
             print_string = ""
         # else produce a bookmark for each interaction combination
@@ -787,13 +789,13 @@ class RingtailCore:
                 temp_filters = self._prepare_interaction_combo_filters(
                     filters_copy, combination
                 )
-                iterated_bookmark_name = bookmark_name + "_" + str(ic_idx)
+                iterated_bookmark_name = output_bookmark + "_" + str(ic_idx)
                 # process each interaction combination filter
                 with self.storageman:
                     num_passing_ligands = self.storageman.filter_results(
                         temp_filters,
                         iterated_bookmark_name,
-                        filter_bookmark,
+                        input_bookmark,
                     )
                 if num_passing_ligands:
                     logger.info(
@@ -818,11 +820,13 @@ class RingtailCore:
 
             # Process the union of the max miss combinations of interactions
             with self.storageman:
-                num_passing_ligands, bookmark_name = self.storageman.get_maxmiss_union(
-                    len(interaction_combs), bookmark_name, filters_copy
+                num_passing_ligands, output_bookmark = (
+                    self.storageman.get_maxmiss_union(
+                        len(interaction_combs), output_bookmark, filters_copy
+                    )
                 )
             # union result is the pre-cluster input for the max_miss path
-            effective_bookmark = bookmark_name
+            effective_bookmark = output_bookmark
             # rename so can be reused in common method below
             filter_dict = filters_copy
             print_string = " in max_miss union"
@@ -833,12 +837,12 @@ class RingtailCore:
             )
             if clustering:
                 _, num_passing_ligands = self._parse_clustering(
-                    clustering, bookmark_name, effective_bookmark
+                    clustering, output_bookmark, effective_bookmark
                 )
             # use original filters for final output log write
             if output_log:
                 self.write_filter_output(
-                    bookmark_name,
+                    output_bookmark,
                     filters.asdict(),
                     num_passing_ligands,
                     output_log,
@@ -853,7 +857,7 @@ class RingtailCore:
         if return_iter:
             with self.storageman:
                 formatted_query = self.storageman.get_bookmark_selection(
-                    bookmark_name, outfields, not output_all_poses, order_results
+                    output_bookmark, outfields, not output_all_poses, order_results
                 )
                 # have to make it into list of tuples since storageman uses row factory
                 iter = [
@@ -862,7 +866,7 @@ class RingtailCore:
                 ]
             return iter
         else:
-            return num_passing_ligands, bookmark_name
+            return num_passing_ligands, output_bookmark
 
     @_wrap_exceptions
     def cluster(
@@ -2827,7 +2831,9 @@ class RingtailCore:
         """
         if input_bookmark is not None:
             with self.storageman:
-                count_poses = self.storageman.get_passing_poses_count(input_bookmark, False)
+                count_poses = self.storageman.get_passing_poses_count(
+                    input_bookmark, False
+                )
             logger.info(f"Preparing to cluster {count_poses} passing poses.")
         else:
             logger.info("Preparing to cluster all results.")

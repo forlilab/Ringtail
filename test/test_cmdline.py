@@ -357,14 +357,14 @@ class TestFilters:
 
     def test_name(self):
         status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input output.db --ligand_name 127458"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --ligand_name 127458"
         )
 
         assert status == 0
 
     def test_ligand_filters(self):
         status = os.system(
-            """python ../ringtail/cli/rt_process_vs.py read --input output.db --ligand_substruct "NC" --ligand_operator AND"""
+            """python ../ringtail/cli/rt_process_vs.py read --input_db output.db --ligand_substruct "NC" --ligand_operator AND"""
         )
 
         assert status == 0
@@ -507,7 +507,7 @@ class TestFilters:
         )
         count1 = tablecount("filtered_poses")
         status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --filter_bookmark passing_results --bookmark_name clustered_results -mfpc 0.9"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --input_bookmark passing_results --bookmark_name clustered_results -mfpc 0.9"
         )
         count2 = tablecount("filtered_poses")
 

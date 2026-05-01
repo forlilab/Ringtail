@@ -66,7 +66,7 @@ Let's then further refine the set of molecules by applying an interaction filter
 
 .. code-block:: bash
 
-    $ rt_process_vs read --input_db output.db --filter_bookmark ep5 --vdw_interactions A:VAL:279: --log ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
+    $ rt_process_vs read --input_db output.db --input_bookmark ep5 --vdw_interactions A:VAL:279: --log ep5_vdwV279_log.txt --bookmark_name ep5_vdwV279
 
 The filtered molecules can then be exported as an e.g., SDF file which can be used for visual inspection in molecular graphics programs. At the same time, if pymol is installed, we can kick off a pymol session of the ligands
 

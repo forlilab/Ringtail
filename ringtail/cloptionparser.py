@@ -435,7 +435,7 @@ def cmdline_parser(defaults: dict = {}):
     )
     output_group.add_argument(
         "-fb",
-        "--filter_bookmark",
+        "--input_bookmark",
         help="Perform filtering over specified bookmark.",
         action="store",
         type=str,
@@ -771,7 +771,9 @@ class CLOptionParser:
         self.logging_level = log_level
 
         self.print_summary = parsed_opts.print_summary
-        self.print_bookmarks = parsed_opts.print_bookmarks if self.process_mode == "read" else False
+        self.print_bookmarks = (
+            parsed_opts.print_bookmarks if self.process_mode == "read" else False
+        )
 
         if self.process_mode == "write":
             # Check if writing to an existing database
@@ -991,8 +993,8 @@ class CLOptionParser:
                 self.clustering_only = True
 
             self.filter_options = SimpleNamespace(
-                bookmark_name=parsed_opts.bookmark_name,
-                filter_bookmark=parsed_opts.filter_bookmark,
+                output_bookmark=parsed_opts.bookmark_name,
+                input_bookmark=parsed_opts.input_bookmark,
                 enumerate_interaction_combs=parsed_opts.enumerate_interaction_combs,
                 mfpt_cluster=parsed_opts.mfpt_cluster,
                 interaction_cluster=parsed_opts.interaction_cluster,

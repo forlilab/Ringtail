@@ -8,7 +8,6 @@ This script will allow either a write or a read session at the time.
 Available database operations are described in the readme.md document of this codebase.
 """
 
-
 import sys
 import time
 from ringtail import CLOptionParser, RingtailCore, setup_logging, get_logger
@@ -113,7 +112,7 @@ def main():
                 print(f"  {name}")
 
         if cli.process_mode == "read":
-            bookmark_name = cli.filter_options.bookmark_name
+            bookmark_name = cli.filter_options.output_bookmark
             logger.debug("Starting read process")
 
             # -#-#- Perform filtering
@@ -121,7 +120,10 @@ def main():
                 num_passing, bookmark_name = rtcore.filter(
                     **cli.filters, **vars(cli.filter_options)
                 )
-                if cli.filter_options.mfpt_cluster or cli.filter_options.interaction_cluster:
+                if (
+                    cli.filter_options.mfpt_cluster
+                    or cli.filter_options.interaction_cluster
+                ):
                     print(f"\nNumber of cluster representatives: {num_passing}")
                 else:
                     print(f"\nNumber of passing ligands: {num_passing}")
@@ -132,9 +134,11 @@ def main():
                     cluster_data["mfp"] = cli.filter_options.mfpt_cluster
                 if cli.filter_options.interaction_cluster:
                     cluster_data["ifp"] = cli.filter_options.interaction_cluster
-                filter_bm = cli.filter_options.filter_bookmark
-                user_bm = cli.filter_options.bookmark_name
-                _, count_reps = rtcore._parse_clustering(cluster_data, user_bm, filter_bm)
+                filter_bm = cli.filter_options.input_bookmark
+                user_bm = cli.filter_options.output_bookmark
+                _, count_reps = rtcore._parse_clustering(
+                    cluster_data, user_bm, filter_bm
+                )
                 bookmark_name = user_bm
                 print(f"\nNumber of cluster representative ligands: {count_reps}")
 

@@ -97,7 +97,7 @@ class TestRingtailCore:
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             max_miss=1,
-            bookmark_name="union_bookmark",
+            output_bookmark="union_bookmark",
         )
         # make sure correct number of ligands passing
         assert count_ligands_passing == 33
@@ -111,7 +111,7 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        iterable = rtc.filter(eworst=-7, bookmark_name="iterable", return_iter=True)
+        iterable = rtc.filter(eworst=-7, output_bookmark="iterable", return_iter=True)
 
         assert len(iterable) == 8
 
@@ -128,7 +128,7 @@ class TestRingtailCore:
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             max_miss=1,
             enumerate_interaction_combs=True,
-            bookmark_name="enumerated_bookmark",
+            output_bookmark="enumerated_bookmark",
         )
         # make sure correct number of ligands passing
         assert count_ligands_passing == 33
@@ -147,9 +147,11 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        count_passing_ligands1, _ = rtc.filter(eworst=-6, bookmark_name="filter_window")
+        count_passing_ligands1, _ = rtc.filter(
+            eworst=-6, output_bookmark="filter_window"
+        )
         count_passing_ligands2, _ = rtc.filter(
-            eworst=-7, bookmark_name="bookmark", filter_bookmark="filter_window"
+            eworst=-7, output_bookmark="bookmark", input_bookmark="filter_window"
         )
         assert count_passing_ligands1 > count_passing_ligands2
 
@@ -159,12 +161,12 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
 
         # tests for partial names
-        count_ligname, _ = rtc.filter(ligand_name=["88"], bookmark_name="ligname")
+        count_ligname, _ = rtc.filter(ligand_name=["88"], output_bookmark="ligname")
         assert count_ligname == 7
 
         # test substructure search (default 'OR' ligand_operator)
         count_substruct_or, _ = rtc.filter(
-            ligand_substruct=["C=O", "CC(C)(C)"], bookmark_name="substruct_or"
+            ligand_substruct=["C=O", "CC(C)(C)"], output_bookmark="substruct_or"
         )
         assert count_substruct_or == 90
 
@@ -172,7 +174,7 @@ class TestRingtailCore:
         count_substruct_and, _ = rtc.filter(
             ligand_substruct=["C=O", "CC(C)(C)"],
             ligand_operator="AND",
-            bookmark_name="substruct_and",
+            output_bookmark="substruct_and",
         )
         assert count_substruct_and == 18
 
@@ -181,7 +183,7 @@ class TestRingtailCore:
                 ["[C][Oh]", 1, 10, 102, 106, 154],
                 ["C=O", 1, 10, 102, 106, 154],
             ],
-            bookmark_name="substruct_pos",
+            output_bookmark="substruct_pos",
         )
         assert count_substruct_pos == 12
 
@@ -202,7 +204,7 @@ class TestRingtailCore:
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             max_miss=1,
-            bookmark_name="big_query",
+            output_bookmark="big_query",
             ligand_name=["88"],
         )
 
@@ -212,7 +214,7 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, bookmark_name="has_filterdata")
+        rtc.filter(eworst=-7, output_bookmark="has_filterdata")
         output_log_name = "output_log_test.txt"
         rtc.get_previous_filter_data(
             "has_filterdata", "delta, reference_rmsd", output_log=output_log_name
@@ -262,7 +264,7 @@ class TestRingtailCore:
         bookmark_name = "rdkit_test"
         rtc = RingtailCore(db_file="output.db")
         ligname = "14303"
-        rtc.filter(ebest=-3, bookmark_name=bookmark_name)
+        rtc.filter(ebest=-3, output_bookmark=bookmark_name)
         ligands_poses = rtc._fetch_select_ligands_poses(
             ligand_names=[ligname], bookmark_name=bookmark_name
         )
@@ -277,7 +279,7 @@ class TestRingtailCore:
             _create_test_db()
         sdf_path = "sdf_files"
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, bookmark_name="sdf_bookmark")
+        rtc.filter(eworst=-7, output_bookmark="sdf_bookmark")
         rtc.write_molecule_sdfs("sdf_bookmark", sdf_path, all_in_one=False)
 
         # ensure correct number of files written
@@ -317,7 +319,7 @@ class TestRingtailCore:
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(
-            eworst=-7, output_log="different_log.txt", bookmark_name="export_csv"
+            eworst=-7, output_log="different_log.txt", output_bookmark="export_csv"
         )
         rtc.export_table_as_csv("Ligands", "Ligands.csv")
 
@@ -433,7 +435,7 @@ class TestRingtailCore:
             recursive=True,
             docking_mode="vina",
         )
-        rtc.filter(eworst=-1, bookmark_name="flexres")
+        rtc.filter(eworst=-1, output_bookmark="flexres")
         polymer_file = flexres_path + "receptor.json"
         with open(polymer_file) as f:
             json_string = f.read()
@@ -466,7 +468,7 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtcore = RingtailCore(db_file="output.db")
-        rtcore.filter(eworst=-7, bookmark_name="plot_data")
+        rtcore.filter(eworst=-7, output_bookmark="plot_data")
         rtcore.plot("plot_data")
         assert os.path.isfile("scatter.png") == True
         os.system("rm scatter.png")
@@ -475,7 +477,7 @@ class TestRingtailCore:
         if not _db_exists():
             _create_test_db()
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, bookmark_name="export_db")
+        rtc.filter(eworst=-7, output_bookmark="export_db")
         bookmark_db_name = rtc.export_bookmark_db("export_db")
 
         assert os.path.exists(bookmark_db_name)
@@ -798,7 +800,7 @@ class TestStorageMan:
             eworst=-3,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True)],
-            bookmark_name="bookmark_info",
+            output_bookmark="bookmark_info",
         )
         qb = QueryBuilder()
         query_string = (

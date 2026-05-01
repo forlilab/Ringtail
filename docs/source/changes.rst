@@ -13,6 +13,9 @@ Changes in command line tools
 * `--docking_mode` now only an option for `write` as it is not relevant for the `read` processes
 * Writing a filter results "log" file has a new command line keyword `--output_log` (still uses shorthand `-l`), is now optional, and will only be done if `--output_log` is specified
 * The command `--logfile` will write logging output to a file
+* The previous `--filter_bookmark` has been changed to `--input_bookmark` for consistency
+* New CLI flag `--print_bookmarks` prints all current bookmarks in the database
+
 * `--outfields` now uses names of columns as they are in the database. The changes:
     ============ ===============
       Old          New
@@ -64,12 +67,12 @@ Enhancements to the codebase
 
 Changes to code behavior
 =========================
-* The column `nr_interactions` in the Results table is now called `num_interactions`
+* For the methods `filter()` and `cluster()` the keys `bookmark_name` and `filter_bookmark` have been changed to `output_bookmark` and `input_bookmark`, respectively, for clarity
+* The column `nr_interactions` in the Results table is now called `num_interactions` for consistency with `num_hb`
 * The column `ligand_coordinates` in the Results table is now called `pose_coordinates`
 * The column `deltas` in the Results table is now called `delta`
 * Ringtail bookmarks from e.g., filtering clustering were previously created as database views, which appear as tables that are unrealized until viewing them. This has been replaced by a `Filters` table which holds filter information (previous equivalent was `Bookmarks` table) and the poses passing a given filter are stored in a tall-skinny table `Filtered_poses`. A significant speed increase was enabled by this move, and any other behavior related to bookmarks is the same. 
 * The following columns have been removed from the Ligands table (information now stored in the binary rdkit Mol): `atom_index_map`, `hydrogen_parents`, and `input_model`.
-* #TODO Clarification on use of bookmark names, which is filtered on and which is produced by filter/cluster, etc
 
 Bug fixes
 ===========

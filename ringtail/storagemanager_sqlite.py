@@ -1266,7 +1266,7 @@ class StorageManagerSQLite(StorageManager):
     # region Methods for dealing with bookmarks and filtering
 
     def _generate_result_filtering_query(
-        self, filters_dict, bookmark_name: str, filter_bookmark: str
+        self, filters_dict, bookmark_name: str, input_bookmark: str
     ):
         """takes lists of filters, writes sql filtering string
 
@@ -1285,14 +1285,14 @@ class StorageManagerSQLite(StorageManager):
         rdkit_query = False
 
         # if filtering over a bookmark (i.e., already filtered results) as opposed to a whole database
-        if filter_bookmark is not None:
-            if filter_bookmark == bookmark_name:
+        if input_bookmark is not None:
+            if input_bookmark == bookmark_name:
                 # cannot write data from bookmark_a to bookmark_a
                 logger.error(
-                    f"Specified 'filter_bookmark' and 'bookmark_name' are the same: {bookmark_name}"
+                    f"Specified 'input_bookmark' and 'bookmark_name' are the same: {bookmark_name}"
                 )
                 raise OptionError(
-                    "'filter_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
+                    "'input_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
                 )
             # cannot use percentile for an already reduced dataset
             if (
@@ -1300,13 +1300,13 @@ class StorageManagerSQLite(StorageManager):
                 or filters_dict["le_percentile"] is not None
             ):
                 raise OptionError(
-                    "Cannot use 'score_percentile' or 'le_percentile' with 'filter_bookmark'."
+                    "Cannot use 'score_percentile' or 'le_percentile' with 'input_bookmark'."
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
-            if self.is_bookmark(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
-            elif self._is_statustable(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {filter_bookmark}))"""
+            if self.is_bookmark(input_bookmark):
+                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(input_bookmark)}))"""
+            elif self._is_statustable(input_bookmark):
+                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {input_bookmark}))"""
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)

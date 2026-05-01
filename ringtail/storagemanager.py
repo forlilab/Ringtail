@@ -177,15 +177,15 @@ class StorageManager:
     def filter_results(
         self,
         all_filters: Filters,
-        bookmark_name: str,
-        filtering_bookmark: str = None,
+        output_bookmark: str,
+        input_bookmark: str = None,
     ) -> int:
         """Generate and execute database queries from given filters.
 
         Args:
             all_filters (dict): dict containing all filters
-            bookmark_name (str): name of bookmark in which to save the data
-            filtering_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
+            output_bookmark (str): name of bookmark in which to save the data
+            input_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
 
         Returns:
              int: number of passing ligands
@@ -200,7 +200,7 @@ class StorageManager:
 
         # get the final filter query, has a {selection} place holder
         filter_query: str = self._generate_result_filtering_query(
-            all_filters, bookmark_name, filtering_bookmark
+            all_filters, output_bookmark, input_bookmark
         )
 
         logger.debug(f"Query for filtering results: {filter_query}")
@@ -208,19 +208,19 @@ class StorageManager:
         # perform filtering
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
-        if filtering_bookmark == None:
-            filtering_bookmark = "Results"
+        if input_bookmark == None:
+            input_bookmark = "Results"
 
         self._populate_filter_tables(
-            name=bookmark_name,
+            name=output_bookmark,
             query=filter_query,
             filters=all_filters,
-            filtering_bookmark=filtering_bookmark,
+            input_bookmark=input_bookmark,
         )
         logger.debug(
             f"Time to filter results: {time.perf_counter() - time0:.2f} seconds"
         )
-        count = self.get_passing_ligands_count(bookmark_name)
+        count = self.get_passing_ligands_count(output_bookmark)
 
         return count
 
@@ -536,7 +536,7 @@ class StorageManager:
                         approved_ligand_names, store_best_pose
                     ),
                     filters=filter_dict,
-                    filtering_bookmark=bookmark,
+                    input_bookmark=bookmark,
                 )
             else:
                 # detach
@@ -549,7 +549,7 @@ class StorageManager:
                             approved_ligand_names, store_best_pose
                         ),
                         filters=filter_dict,
-                        filtering_bookmark=bookmark,
+                        input_bookmark=bookmark,
                     )
 
         for _, file, bookmark in processed_wanted + processed_unwanted:
@@ -2712,7 +2712,7 @@ class StorageManager:
         return self.db_query(*query.build()).fetchall()
 
     def _populate_filter_tables(
-        self, name, query: str, filters={}, filtering_bookmark: str = ""
+        self, name, query: str, filters={}, input_bookmark: str = ""
     ) -> bool:
         """
         Will run a filter query and determine if there are passing poses, in which case all relevant
@@ -2722,7 +2722,7 @@ class StorageManager:
             name (str): name of new bookmark
             query (str): query that defines what poses to insert
             filters (dict, optional): filters or restrictions used
-            filtering_bookmark (str, optional): If filters were performed across an existing obokmark. Defaults to None.
+            input_bookmark (str, optional): If filters were performed across an existing obokmark. Defaults to None.
 
         Raises:
             StorageError
@@ -2758,7 +2758,7 @@ class StorageManager:
         # insert filter info, return filter_id
         filter_id = self.conn.execute(
             insert_query.build()[0],
-            (name.lower(), query, json.dumps(filters), filtering_bookmark),
+            (name.lower(), query, json.dumps(filters), input_bookmark),
         ).fetchone()[0]
 
         # insert filtered poses with filter_id
@@ -3075,7 +3075,7 @@ class StorageManager:
         pass
 
     def _generate_result_filtering_query(
-        self, filters_dict, bookmark_name, filter_bookmark
+        self, filters_dict, bookmark_name, input_bookmark
     ):
         raise NotImplementedError
 

@@ -189,11 +189,11 @@ The ``ligand_substruct_pos`` option may be used to filter for a specific ligand 
 
 Clustering
 ============
-In addition to the filtering options outlined in the table below, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (``mfpt_cluster``) or interaction (``interaction_cluster``) fingerprints. Dissimilarity is measured by Tanimoto distance (float input to the cluster keyword) and clustering is performed with the Butina clustering algorithm. Clustering can be also be performed on a bookmark that has already been saved to the database, without providing any extra filter values. In this case, the bookmark over which to cluster (or additional filtering) on is specified by ``filter_bookmark`` (must be different from ``bookmark_name`` that contains previously filtered results).
+In addition to the filtering options outlined in the table below, ligands passing given filters can be clustered to provide a reduced set of dissimilar ligands based on Morgan fingerprints (``mfpt_cluster``) or interaction (``interaction_cluster``) fingerprints. Dissimilarity is measured by Tanimoto distance (float input to the cluster keyword) and clustering is performed with the Butina clustering algorithm. Clustering can be also be performed on a bookmark that has already been saved to the database, without providing any extra filter values. In this case, the bookmark over which to cluster (or additional filtering) on is specified by ``input_bookmark`` (must be different from ``bookmark_name`` that contains previously filtered results).
 
 .. code-block:: python
 
-    rtc.filter( filter_bookmark = "eworst6",
+    rtc.filter( input_bookmark = "eworst6",
                 mfpt_cluster = 0.6)
 
 While not quite a filtering option, the user can provide a ligand name from a previously-run clustering and re-output other ligands that were clustered with that query ligand with the method ``find_similar_ligands``. The user is prompted at runtime to choose a specific clustering group from which to re-output ligands. Filtering/clustering will be performed from the same command-line call prior to this similarity search, but all subsequent output tasks will be performed on the group of similar ligands obtained with this option unless otherwise specified. 
