@@ -488,8 +488,8 @@ class StorageManagerSQLite(StorageManager):
     def _create_receptors_table(self):
         """Create table for receptors."""
         receptors_table = """CREATE TABLE IF NOT EXISTS Receptors (
-            Receptor_ID         INTEGER PRIMARY KEY AUTOINCREMENT,
-            RecName             VARCHAR,
+            receptor_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            recname             VARCHAR,
             box_dim             VARCHAR,
             box_center          VARCHAR,
             grid_spacing        FLOAT,
@@ -512,7 +512,7 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
         sql_insert = """INSERT INTO Receptors (
-        RecName,
+        recname,
         box_dim,
         box_center,
         grid_spacing,
@@ -535,12 +535,12 @@ class StorageManagerSQLite(StorageManager):
         if count == 0:
             # Insert receptor statement
             query = f"""INSERT INTO Receptors (
-                      RecName,
+                      recname,
                       receptor_object)
                       VALUES (?,?);"""
 
         else:
-            query = """UPDATE Receptors SET RecName = ?, receptor_object = ? WHERE Receptor_ID == 1"""
+            query = """UPDATE Receptors SET recname = ?, receptor_object = ? WHERE receptor_id == 1"""
         self.db_query(query, (rec_name, receptor), commit=True)
 
     def insert_receptor_polymer(self, receptor: str, rec_name: str):
@@ -556,12 +556,12 @@ class StorageManagerSQLite(StorageManager):
         if count == 0:
             # Insert receptor statement
             query = f"""INSERT INTO Receptors (
-                      RecName,
+                      recname,
                       polymer)
                       VALUES (?,?);"""
 
         else:
-            query = """UPDATE Receptors SET RecName = ?, polymer = ? WHERE Receptor_ID == 1;"""
+            query = """UPDATE Receptors SET recname = ?, polymer = ? WHERE receptor_id == 1;"""
         self.db_query(query, (rec_name, receptor), commit=True)
 
     def _create_db_properties_table(self):
@@ -686,8 +686,7 @@ class StorageManagerSQLite(StorageManager):
         Creates cluster tables if they don't already exist
         """
         # create a cluster description table
-        self.db_query(
-            """
+        self.db_query("""
             CREATE TABLE IF NOT EXISTS
             Clusters (
                 cluster_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -696,30 +695,25 @@ class StorageManagerSQLite(StorageManager):
                 cluster_window VARCHAR,
                 num_clusters INTEGER
                 );
-            """
-        )
+            """)
         # create a table with cluster_id and cluster_group and representative pose
-        self.db_query(
-            """
+        self.db_query("""
             CREATE TABLE IF NOT EXISTS
             Cluster_groups (
                 cluster_id INTEGER REFERENCES Clusters(cluster_id),
                 cluster_group INTEGER,
                 representative INTEGER REFERENCES Results(pose_id)
                 )
-            """
-        )
+            """)
         # create a table of pose and cluster_id and cluster_group
-        self.db_query(
-            """
+        self.db_query("""
             CREATE TABLE IF NOT EXISTS 
             Pose_clusters (
                 cluster_id INTEGER REFERENCES Clusters(cluster_id),
                 cluster_group INTEGER,
                 pose_id INTEGER REFERENCES Results(pose_id)
                 );
-            """
-        )
+            """)
 
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
@@ -839,7 +833,7 @@ class StorageManagerSQLite(StorageManager):
         """
         receptorcheck_sql = """
         SELECT CASE 
-            WHEN Receptors.RecName = merging_receptors.RecName THEN 'True'
+            WHEN Receptors.recname = merging_receptors.recname THEN 'True'
             ELSE 'False'
         END AS comparison_result 
         FROM Receptors 
@@ -1213,7 +1207,7 @@ class StorageManagerSQLite(StorageManager):
         # delete from Interactions where pose_id was added by this merge
         self.conn.execute(
             """
-            DELETE FROM Interactions WHERE Pose_ID IN (
+            DELETE FROM Interactions WHERE pose_id IN (
                 SELECT merged_PK FROM PK_conversions 
                 WHERE merge_id = ? AND table_name = 'Results')""",
             (merge_id,),
@@ -1232,7 +1226,7 @@ class StorageManagerSQLite(StorageManager):
         # delete from Results
         self.conn.execute(
             """
-            DELETE FROM Results WHERE Pose_ID IN (
+            DELETE FROM Results WHERE pose_id IN (
                 SELECT merged_PK FROM PK_conversions 
                 WHERE merge_id = ? AND table_name = 'Results')""",
             (merge_id,),
@@ -1310,9 +1304,9 @@ class StorageManagerSQLite(StorageManager):
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
             if self.is_bookmark(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
             elif self._is_statustable(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN (SELECT Pose_ID FROM {filter_bookmark}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {filter_bookmark}))"""
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
@@ -1364,7 +1358,7 @@ class StorageManagerSQLite(StorageManager):
         # if filter queries exist for each group, string them together appropriately
         if int_query:
             # add with a join statement
-            partial_filter_query += f"JOIN ({int_query}) I ON R.Pose_ID = I.Pose_ID "
+            partial_filter_query += f"JOIN ({int_query}) I ON R.pose_id = I.pose_id "
         if ligname_query:
             # add with a join statement
             partial_filter_query += (
@@ -1392,7 +1386,7 @@ class StorageManagerSQLite(StorageManager):
                 passing_pose_ids.extend(poseids)
 
             # create new partial_filter_query with passing pose ids from the ligand queries
-            partial_filter_query = " R.Pose_ID IN ({0})".format(
+            partial_filter_query = " R.pose_id IN ({0})".format(
                 ",".join(map(str, passing_pose_ids))
             )
 
@@ -1466,7 +1460,7 @@ class StorageManagerSQLite(StorageManager):
 
         # building the query
         # 1. select pose id, call CASE, in paranthesis because grouping with different query
-        query = "SELECT Pose_ID FROM (SELECT Pose_ID "
+        query = "SELECT pose_id FROM (SELECT pose_id "
         if or_include_interactions or or_exclude_interactions:
             # add the case statements
             query += ", CASE "
@@ -1510,7 +1504,7 @@ class StorageManagerSQLite(StorageManager):
                 + ") "
             )
         # 4. add grouping and wildcard for total interactions minus max_miss, essentially
-        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
+        query += f") GROUP BY pose_id HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
 
@@ -1637,10 +1631,7 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             list: column names that has a numeric type
         """
-        return [
-            table[0]
-            for table in self.db_query(
-                f"""SELECT
+        return [table[0] for table in self.db_query(f"""SELECT
                             name
                         FROM
                             pragma_table_info('{table_name}')
@@ -1651,9 +1642,7 @@ class StorageManagerSQLite(StorageManager):
                                 WHEN UPPER(type) LIKE '%DEC%' THEN 'numerical'
                                 WHEN UPPER(type) LIKE '%FLOAT%' THEN 'numerical'
                                 WHEN UPPER(type) LIKE '%DOUBLE%' THEN 'numerical'
-                            END ='numerical';"""
-            ).fetchall()
-        ]
+                            END ='numerical';""").fetchall()]
 
     def _fetch_table_column_names(self, table: str) -> list:
         """Fetches list of string for column names in results table
@@ -1694,7 +1683,7 @@ class StorageManagerSQLite(StorageManager):
         query = """
         SELECT 
             (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
-            (SELECT COUNT(Pose_id) FROM Results) AS num_poses,
+            (SELECT COUNT(pose_id) FROM Results) AS num_poses,
             (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
             (SELECT COUNT(*) 
             FROM (SELECT interaction_id
@@ -1888,10 +1877,10 @@ class StorageManagerSQLite(StorageManager):
             "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
         )
         self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(Pose_id, ligand_id)"
+            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(pose_id, ligand_id)"
         )
         self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(Pose_id, interaction_id)"
+            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(pose_id, interaction_id)"
         )
         self.db_query("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
         self.conn.commit()
@@ -2048,7 +2037,7 @@ class StorageManagerSQLite(StorageManager):
         # upgrade to 1.1.0
         if original_version in ["1.0.0", "1.1.0"]:
             logger.warning(
-                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
+                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the pose_id was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
             )
             if original_version == "1.0.0":
                 self._update_db_100_to_110()
@@ -2100,7 +2089,7 @@ class StorageManagerSQLite(StorageManager):
     def _update_db_110_to_200(self):
         """
         Method to update from database v 1.1.0 to 2.0.0,mainly removes the bitvetor table and creates Interactions table
-        where interaction just lists Pose_id and interaction_id in a long-skinny table
+        where interaction just lists pose_id and interaction_id in a long-skinny table
 
         Raises:
             DatabaseConnectionError
@@ -2131,7 +2120,7 @@ class StorageManagerSQLite(StorageManager):
         try:
             # just populate the Interaction table straight
             cur.executemany(
-                """INSERT INTO Interactions (Pose_id, Interaction_id) VALUES (?,?)""",
+                """INSERT INTO Interactions (pose_id, Interaction_id) VALUES (?,?)""",
                 pose_indices,
             )
             # drop old bitvector table
@@ -2331,12 +2320,10 @@ class StorageManagerSQLite(StorageManager):
         except DatabaseQueryError:
             pass
         # populate ligand_id in Results
-        self.db_query(
-            """UPDATE Results
+        self.db_query("""UPDATE Results
                         SET ligand_id = (
                             SELECT ligand_id FROM Ligands
-                            WHERE Ligands.LigName = Results.LigName);"""
-        )
+                            WHERE Ligands.LigName = Results.LigName);""")
 
         # create new Results table without LigName column
         self._create_results_table("Results_new")
@@ -2677,8 +2664,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Accepted 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
         )
 
@@ -2686,8 +2673,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Maybe 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
         )
 
@@ -2695,8 +2682,8 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Rejected 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
             commit=True,
         )

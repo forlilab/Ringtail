@@ -461,7 +461,7 @@ class StorageManager:
             (SELECT LigName FROM {db_name}.Ligands 
             INNER JOIN {db_name}.Results ON 
                 {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id 
-                WHERE Pose_id IN ({bookmark_poses}))"""
+                WHERE pose_id IN ({bookmark_poses}))"""
         wanted_ctes = []
         for db_name, _, bookmark in processed_wanted:
             wanted_ctes.append(
@@ -767,7 +767,7 @@ class StorageManager:
         WHERE main.Ligands.ligand_id IN (
             SELECT ligand_id from main.Results
             WHERE pose_id IN (
-                SELECT Pose_id FROM main.filtered_poses
+                SELECT pose_id FROM main.filtered_poses
                 WHERE filter_id =
                     (SELECT filter_id FROM main.Filters
                     WHERE name = '{bookmark_name}'))
@@ -786,7 +786,7 @@ class StorageManager:
         INSERT INTO {alias}.Results
         SELECT * FROM main.Results
         WHERE main.Results.pose_id IN (
-            SELECT Pose_id FROM main.filtered_poses
+            SELECT pose_id FROM main.filtered_poses
             WHERE filter_id =
                 (SELECT filter_id FROM main.Filters
                 WHERE name = '{bookmark_name}')
@@ -800,7 +800,7 @@ class StorageManager:
         WHERE main.Interaction_indices.interaction_id IN (
             SELECT interaction_id FROM main.Interactions
             WHERE pose_id IN (
-                SELECT Pose_id FROM main.filtered_poses
+                SELECT pose_id FROM main.filtered_poses
                 WHERE filter_id =
                     (SELECT filter_id FROM main.Filters
                     WHERE name = '{bookmark_name}'))
@@ -811,7 +811,7 @@ class StorageManager:
         INSERT INTO {alias}.Interactions
         SELECT * FROM main.Interactions
         WHERE main.Interactions.pose_id IN (
-            SELECT Pose_id FROM main.filtered_poses
+            SELECT pose_id FROM main.filtered_poses
             WHERE filter_id =
                 (SELECT filter_id FROM main.Filters
                 WHERE name = '{bookmark_name}')
@@ -833,15 +833,15 @@ class StorageManager:
         self.detach_db(alias)
         logger.info(f"Subset database {database_name} has been successfully created.")
 
-    def fetch_pose_interactions(self, Pose_ID) -> iter:
+    def fetch_pose_interactions(self, pose_id) -> iter:
         """
-        Fetch all interactions parameters belonging to a Pose_ID
+        Fetch all interactions parameters belonging to a pose_id
 
         Args:
-            Pose_ID (int): pose id, 1-1 with Results table
+            pose_id (int): pose id, 1-1 with Results table
 
         Returns:
-            iter: of interaction information for given Pose_ID
+            iter: of interaction information for given pose_id
         """
         # check if table exist
         if not "interactions" in self.tables_in_db():
@@ -858,7 +858,7 @@ class StorageManager:
         ).FROM("Interaction_indices", "ii").JOIN(
             "Interactions", "i", "interaction_id"
         ).WHERE(
-            "i.pose_id = ?", Pose_ID
+            "i.pose_id = ?", pose_id
         )
 
         return self.db_query(*query.build()).fetchall()
@@ -1007,7 +1007,7 @@ class StorageManager:
                 ).DESC("DB_write_session").LIMIT(1)
                 cur = self.db_query(query.build()[0])
 
-                (_, last_docking_mode, last_num_poses) = cur.fetchone()
+                _, last_docking_mode, last_num_poses = cur.fetchone()
                 if docking_mode != last_docking_mode:
                     compatible = False
                     compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
@@ -1331,7 +1331,7 @@ class StorageManager:
             "leff",
             "pose_coordinates",
             "flexible_res_coordinates",
-        ).FROM("Results").WHERE(f"Pose_ID IN ({placeholders})", *pose_ids)
+        ).FROM("Results").WHERE(f"pose_id IN ({placeholders})", *pose_ids)
         return self.db_query(*query.build()).fetchall()
 
     def get_gui_plot_data(
@@ -1359,7 +1359,7 @@ class StorageManager:
         bookmark_query.SELECT(
             "R." + x_axis,
             "R." + y_axis,
-            "R." + "Pose_ID",
+            "R." + "pose_id",
             "L." + "LigName",
             # TODO rdbin
             "L." + "ligand_smile",
@@ -1421,7 +1421,7 @@ class StorageManager:
         all_data_query.SELECT("docking_score", "leff").FROM("Results")
         bookmark_query = self.QueryBuilder()
         bookmark_query.SELECT(
-            "R." + x_axis, "R." + y_axis, "R." + "Pose_ID", "L." + "LigName"
+            "R." + x_axis, "R." + y_axis, "R." + "pose_id", "L." + "LigName"
         )
         if limit:
             bookmark_query.LIMIT(limit)
@@ -1509,9 +1509,9 @@ class StorageManager:
         query = self.QueryBuilder()
         query.FROM("Results", "R")
         status_assignement = """CASE
-            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
-            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
-            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
+            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_id) THEN 'accepted'
+            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_id) THEN 'rejected'
+            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_id) THEN 'maybe'
             ELSE ''
         END AS status,"""
 
@@ -1537,7 +1537,7 @@ class StorageManager:
 
         ordered_columns = f"""
         {status_assignement}
-        R.Pose_ID, L.LigName, R.docking_score, 
+        R.pose_id, L.LigName, R.docking_score, 
         R.leff, R.cluster_size, R.cluster_rmsd, 
         R.pose_rank, R.num_hb, R.receptor, R.run_number, 
         R.delta, R.num_interactions, R.unbound_energy, 
@@ -1601,7 +1601,7 @@ class StorageManager:
             list[int]: selected poses for ligand
         """
         query = self.QueryBuilder()
-        query.SELECT("R.Pose_id").FROM("Results", "R").WHERE(
+        query.SELECT("R.pose_id").FROM("Results", "R").WHERE(
             "L.LigName = ?", ligand_name
         ).JOIN("Ligands", "L", "ligand_id")
 
@@ -1611,7 +1611,7 @@ class StorageManager:
             # get all poses for ligand, no WHERE clause for pose_id
             pass
         elif selection.lower() in statuses:
-            query.WHERE(f"R.Pose_ID IN (SELECT Pose_ID FROM {selection})")
+            query.WHERE(f"R.pose_id IN (SELECT pose_id FROM {selection})")
         else:
             logger.error(
                 f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
@@ -1639,7 +1639,7 @@ class StorageManager:
         FROM Interaction_indices AS II
         JOIN Interactions AS I ON I.interaction_id=II.interaction_id
         WHERE I.pose_id IN (
-            SELECT Pose_id FROM filtered_poses 
+            SELECT pose_id FROM filtered_poses 
                 WHERE filter_id = 
                     (SELECT filter_id FROM Filters 
                     WHERE name = '{bookmark_name}')
@@ -1676,10 +1676,10 @@ class StorageManager:
             commit=False,
         )
         self.db_update(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", pose_ids, commit=False
+            """DELETE FROM Maybe WHERE pose_id = ?;""", pose_ids, commit=False
         )
         self.db_update(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", pose_ids, commit=True
+            """DELETE FROM Rejected WHERE pose_id = ?;""", pose_ids, commit=True
         )
 
     def maybe_pose(self, pose_ids: Union[int, list[int]]):
@@ -1699,10 +1699,10 @@ class StorageManager:
             commit=False,
         )
         self.db_update(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", pose_ids, commit=False
+            """DELETE FROM Accepted WHERE pose_id = ?;""", pose_ids, commit=False
         )
         self.db_update(
-            """DELETE FROM Rejected WHERE Pose_id = ?;""", pose_ids, commit=True
+            """DELETE FROM Rejected WHERE pose_id = ?;""", pose_ids, commit=True
         )
 
     def reject_pose(self, pose_ids: Union[int, list[int]]):
@@ -1722,10 +1722,10 @@ class StorageManager:
             commit=False,
         )
         self.db_update(
-            """DELETE FROM Accepted WHERE Pose_id = ?;""", pose_ids, commit=False
+            """DELETE FROM Accepted WHERE pose_id = ?;""", pose_ids, commit=False
         )
         self.db_update(
-            """DELETE FROM Maybe WHERE Pose_id = ?;""", pose_ids, commit=True
+            """DELETE FROM Maybe WHERE pose_id = ?;""", pose_ids, commit=True
         )
 
     def prepare_column_export_query(self, columns: dict, bookmark: str) -> str:
@@ -1887,7 +1887,7 @@ class StorageManager:
 
         #NOTE: If you created the database with the duplicate handling option,
         # there is a chance of inconsistent behavior of anything involving interactions as
-        the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
+        the pose_id was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
 
         Args:
             new_version (str): _description_
@@ -2596,7 +2596,7 @@ class StorageManager:
         """
         # create a list of 0 items the length of interaction_indices table
         query = self.QueryBuilder()
-        query.SELECT("Pose_ID", "interaction_id").FROM("Interactions").WHERE(
+        query.SELECT("pose_id", "interaction_id").FROM("Interactions").WHERE(
             f"""pose_id IN ({",".join(["?"] * len(pose_ids))})""", *pose_ids
         )
 
@@ -2846,7 +2846,7 @@ class StorageManager:
 
     def _create_results_table(self, name="Results"):
         """Creates table for results. Columns are:
-        Pose_ID             INTEGER PRIMARY KEY AUTOINCREMENT,
+        pose_id             INTEGER PRIMARY KEY AUTOINCREMENT,
         ligand_id           INTEGER FOREIGN KEY from Ligands,
         receptor            VARCHAR,
         pose_rank           INTEGER,

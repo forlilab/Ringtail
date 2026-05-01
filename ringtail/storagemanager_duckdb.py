@@ -519,15 +519,13 @@ class StorageManagerDuckDB(StorageManager):
         updates_df = pd.DataFrame(data, columns=["pose_id", "num_int", "num_hb"])
         self.conn.register("updates", updates_df)
 
-        self.db_query(
-            """
+        self.db_query("""
             UPDATE Results
             SET num_interactions = u.num_int,
                 num_hb = u.num_hb
             FROM updates u
             WHERE Results.pose_id = u.pose_id;
-        """
-        )
+        """)
 
     def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
         """
@@ -547,8 +545,8 @@ class StorageManagerDuckDB(StorageManager):
         receptors_table = """
             CREATE SEQUENCE IF NOT EXISTS seq_receptorid START 1;
             CREATE TABLE IF NOT EXISTS Receptors (
-            Receptor_ID         INTEGER DEFAULT nextval('seq_receptorid') PRIMARY KEY,
-            RecName             VARCHAR,
+            receptor_id         INTEGER DEFAULT nextval('seq_receptorid') PRIMARY KEY,
+            recname             VARCHAR,
             box_dim             VARCHAR,
             box_center          VARCHAR,
             grid_spacing        FLOAT,
@@ -567,7 +565,7 @@ class StorageManagerDuckDB(StorageManager):
                 containing formatted receptor rows
         """
         sql_insert = """INSERT INTO Receptors (
-        RecName,
+        recname,
         box_dim,
         box_center,
         grid_spacing,
@@ -592,12 +590,12 @@ class StorageManagerDuckDB(StorageManager):
         if count == 0:
             # Insert receptor statement
             query = f"""INSERT INTO Receptors (
-                      RecName,
+                      recname,
                       receptor_object)
                       VALUES (?,?);"""
 
         else:
-            query = """UPDATE Receptors SET RecName = ?, receptor_object = ? WHERE Receptor_ID == 1"""
+            query = """UPDATE Receptors SET recname = ?, receptor_object = ? WHERE receptor_id == 1"""
         self.db_query(query, (rec_name, receptor), commit=True)
 
     def insert_receptor_polymer(self, receptor: str, rec_name: str):
@@ -613,12 +611,12 @@ class StorageManagerDuckDB(StorageManager):
         if count == 0:
             # Insert receptor statement
             query = f"""INSERT INTO Receptors (
-                      RecName,
+                      recname,
                       polymer)
                       VALUES (?,?);"""
 
         else:
-            query = """UPDATE Receptors SET RecName = ?, polymer = ? WHERE Receptor_ID == 1;"""
+            query = """UPDATE Receptors SET recname = ?, polymer = ? WHERE receptor_id == 1;"""
         self.db_query(query, (rec_name, receptor), commit=True)
 
     def _create_db_properties_table(self):
@@ -757,8 +755,7 @@ class StorageManagerDuckDB(StorageManager):
         Creates cluster tables if they don't already exist
         """
         # create a cluster description table
-        self.db_query(
-            """
+        self.db_query("""
 
         CREATE SEQUENCE IF NOT EXISTS seq_clusterid START 1;
             CREATE TABLE IF NOT EXISTS
@@ -769,30 +766,25 @@ class StorageManagerDuckDB(StorageManager):
                 cluster_window VARCHAR,
                 num_clusters INTEGER
                 );
-            """
-        )
+            """)
         # create a table with cluster_id and cluster_group and representative pose
-        self.db_query(
-            """
+        self.db_query("""
             CREATE TABLE IF NOT EXISTS
             Cluster_groups (
                 cluster_id INTEGER REFERENCES Clusters(cluster_id),
                 cluster_group INTEGER,
                 representative INTEGER REFERENCES Results(pose_id)
                 )
-            """
-        )
+            """)
         # create a table of pose and cluster_id and cluster_group
-        self.db_query(
-            """
+        self.db_query("""
             CREATE TABLE IF NOT EXISTS 
             Pose_clusters (
                 cluster_id INTEGER REFERENCES Clusters(cluster_id),
                 cluster_group INTEGER,
                 pose_id INTEGER REFERENCES Results(pose_id)
                 );
-            """
-        )
+            """)
 
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
@@ -933,7 +925,7 @@ class StorageManagerDuckDB(StorageManager):
         """
         receptorcheck_sql = """
         SELECT CASE 
-            WHEN Receptors.RecName = merging_receptors.RecName THEN 'True'
+            WHEN Receptors.recname = merging_receptors.recname THEN 'True'
             ELSE 'False'
         END AS comparison_result 
         FROM Receptors 
@@ -1082,13 +1074,13 @@ class StorageManagerDuckDB(StorageManager):
         merged_PK) SELECT 
         ?,
         'Results', 
-        Pose_ID,
-        Pose_ID + (SELECT MAX(Pose_ID) FROM Results) 
+        pose_id,
+        pose_id + (SELECT MAX(pose_id) FROM Results) 
         FROM merging.Results;"""
 
         # insert results with updated pose_ids
         insert_Results = """INSERT INTO Results (
-            Pose_ID,
+            pose_id,
             ligand_id,
             receptor,
             pose_rank,
@@ -1142,7 +1134,7 @@ class StorageManagerDuckDB(StorageManager):
             WHERE table_name = 'Results' 
             AND merge_id = ?
             ) pose 
-        ON pose.original_PK = mr.Pose_ID
+        ON pose.original_PK = mr.pose_id
         LEFT JOIN (
             SELECT original_PK, merged_PK 
             FROM PK_conversions 
@@ -1252,14 +1244,14 @@ class StorageManagerDuckDB(StorageManager):
         # TODO #BUG I think the issue is here, because it has interacton_pose_id
         insert_interactions = """
         INSERT INTO Interactions (
-        Pose_ID,
+        pose_id,
         interaction_id
         )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
                 FROM merging.Interactions I
                 LEFT JOIN (SELECT original_PK, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.Pose_ID = P.original_PK)
+                AND merge_id = ?) P ON (I.pose_id = P.original_PK)
             LEFT JOIN (SELECT original_PK, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Interaction_indices' 
@@ -1307,9 +1299,9 @@ class StorageManagerDuckDB(StorageManager):
         sequence_map = {
             "seq_dbwriteid": ("DB_properties", "DB_write_session"),
             "seq_ligandid": ("Ligands", "ligand_id"),
-            "seq_poseid": ("Results", "Pose_ID"),
+            "seq_poseid": ("Results", "pose_id"),
             "seq_interactionid": ("Interaction_indices", "interaction_id"),
-            "seq_interactionposeid": ("Interactions", "interaction_pose_ID"),
+            "seq_interactionposeid": ("Interactions", "interaction_pose_id"),
         }
         for seq_name, (table, column) in sequence_map.items():
             max_val = self.conn.execute(
@@ -1329,7 +1321,7 @@ class StorageManagerDuckDB(StorageManager):
         # delete from Interactions where pose_id was added by this merge
         self.conn.execute(
             """
-            DELETE FROM Interactions WHERE Pose_ID IN (
+            DELETE FROM Interactions WHERE pose_id IN (
                 SELECT merged_PK FROM PK_conversions 
                 WHERE merge_id = ? AND table_name = 'Results')""",
             (merge_id,),
@@ -1348,7 +1340,7 @@ class StorageManagerDuckDB(StorageManager):
         # delete from Results
         self.conn.execute(
             """
-            DELETE FROM Results WHERE Pose_ID IN (
+            DELETE FROM Results WHERE pose_id IN (
                 SELECT merged_PK FROM PK_conversions 
                 WHERE merge_id = ? AND table_name = 'Results')""",
             (merge_id,),
@@ -1429,9 +1421,9 @@ class StorageManagerDuckDB(StorageManager):
                 )
             # filtering window can be specified bookmark, as opposed to entire database using Results table
             if self.is_bookmark(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(filter_bookmark)}))"""
             elif self._is_statustable(filter_bookmark):
-                filtering_window = f"""(SELECT * FROM Results WHERE Pose_id IN (SELECT Pose_ID FROM {filter_bookmark}))"""
+                filtering_window = f"""(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {filter_bookmark}))"""
 
         # process filter values to lists and dicts that are easily incorporated in sql queries
         processed_filters = self._process_filters_for_query(filters_dict)
@@ -1483,7 +1475,7 @@ class StorageManagerDuckDB(StorageManager):
         # if filter queries exist for each group, string them together appropriately
         if int_query:
             # add with a join statement
-            partial_filter_query += f"JOIN ({int_query}) I ON R.Pose_ID = I.Pose_ID "
+            partial_filter_query += f"JOIN ({int_query}) I ON R.pose_id = I.pose_id "
         if ligname_query:
             # add with a join statement
             partial_filter_query += (
@@ -1511,7 +1503,7 @@ class StorageManagerDuckDB(StorageManager):
                 passing_pose_ids.extend(poseids)
 
             # create new partial_filter_query with passing pose ids from the ligand queries
-            partial_filter_query = " R.Pose_ID IN ({0})".format(
+            partial_filter_query = " R.pose_id IN ({0})".format(
                 ",".join(map(str, passing_pose_ids))
             )
 
@@ -1585,7 +1577,7 @@ class StorageManagerDuckDB(StorageManager):
 
         # building the query
         # 1. select pose id, call CASE, in paranthesis because grouping with different query
-        query = "SELECT Pose_ID FROM (SELECT Pose_ID "
+        query = "SELECT pose_id FROM (SELECT pose_id "
         if or_include_interactions or or_exclude_interactions:
             # add the case statements
             query += ", CASE "
@@ -1629,7 +1621,7 @@ class StorageManagerDuckDB(StorageManager):
                 + ") "
             )
         # 4. add grouping and wildcard for total interactions minus max_miss, essentially
-        query += f") GROUP BY Pose_ID HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
+        query += f") GROUP BY pose_id HAVING COUNT(DISTINCT filtered_interactions) >= ({num_of_interactions}) "
 
         return query
 
@@ -1744,11 +1736,9 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             bool: True if column there, False if not
         """
-        column_tuples = self.db_query(
-            f"""SELECT column_name
+        column_tuples = self.db_query(f"""SELECT column_name
                     FROM duckdb_columns()
-                    WHERE table_name = '{table_name}';"""
-        ).fetchall()
+                    WHERE table_name = '{table_name}';""").fetchall()
         column_names = [column[0] for column in column_tuples]
         return bool(column_name in column_names)
 
@@ -1763,10 +1753,7 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             list: column names that has a numeric type
         """
-        return [
-            table[0]
-            for table in self.db_query(
-                f"""SELECT
+        return [table[0] for table in self.db_query(f"""SELECT
                             name
                         FROM
                             pragma_table_info('{table_name}')
@@ -1777,9 +1764,7 @@ class StorageManagerDuckDB(StorageManager):
                                 WHEN UPPER(type) LIKE '%DEC%' THEN 'numerical'
                                 WHEN UPPER(type) LIKE '%FLOAT%' THEN 'numerical'
                                 WHEN UPPER(type) LIKE '%DOUBLE%' THEN 'numerical'
-                            END ='numerical';"""
-            ).fetchall()
-        ]
+                            END ='numerical';""").fetchall()]
 
     def _fetch_table_column_names(self, table: str) -> list:
         """Fetches list of string for column names in results table
@@ -1818,7 +1803,7 @@ class StorageManagerDuckDB(StorageManager):
         query = """
         SELECT 
             (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
-            (SELECT COUNT(Pose_id) FROM Results) AS num_poses,
+            (SELECT COUNT(pose_id) FROM Results) AS num_poses,
             (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
             (SELECT COUNT(*) 
             FROM (SELECT ANY_VALUE(interaction_id) 
@@ -2293,8 +2278,8 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Accepted 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
         )
 
@@ -2302,8 +2287,8 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Maybe 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
         )
 
@@ -2311,8 +2296,8 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(
             f"""
                 CREATE TABLE IF NOT EXISTS Rejected 
-                (Pose_ID INTEGER UNIQUE,
-                FOREIGN KEY (Pose_ID) REFERENCES Results(Pose_ID)
+                (pose_id INTEGER UNIQUE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
                 );""",
             commit=True,
         )
