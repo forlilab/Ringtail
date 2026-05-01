@@ -766,10 +766,9 @@ class RingtailCore:
             if interaction_cluster:
                 clustering["ifp"] = interaction_cluster
 
-        # save the user-provided name; when clustering, the filter result is stored under
-        # {name}_unclust so the final cluster representatives can take the user-provided name
-        user_bookmark_name = bookmark_name
-        effective_bookmark = f"{bookmark_name}_unclust" if clustering else bookmark_name
+        # when clustering, filter writes to {name}_preclust to avoid collision with the final
+        # cluster output, which takes the user-provided bookmark_name
+        effective_bookmark = f"{bookmark_name}_preclust" if clustering else bookmark_name
 
         if write_one_bookmark:
             with self.storageman:
@@ -833,12 +832,9 @@ class RingtailCore:
                 f"\nNumber passing ligands{print_string}: {num_passing_ligands}"
             )
             if clustering:
-                final_name, num_passing_ligands = self._parse_clustering(
-                    clustering, effective_bookmark
+                _, num_passing_ligands = self._parse_clustering(
+                    clustering, bookmark_name, effective_bookmark
                 )
-                with self.storageman:
-                    self.storageman.rename_bookmark(final_name, user_bookmark_name)
-                bookmark_name = user_bookmark_name
             # use original filters for final output log write
             if output_log:
                 self.write_filter_output(
@@ -870,29 +866,35 @@ class RingtailCore:
 
     @_wrap_exceptions
     def cluster(
-        self, bookmark_name: str, type: str = "mfp", cutoff: float = 0.5
+        self,
+        output_bookmark: str,
+        type: str = "mfp",
+        cutoff: float = 0.5,
+        input_bookmark: str | None = None,
     ) -> tuple[str, int]:
         """
-        Clusters data in a bookmark using given cluster algorithm and with given cutoff distance.
+        Clusters data and saves representatives to output_bookmark.
 
         Args:
-            bookmark_name (str): bookmark name that describes what data to cluster
-            type (str, optional): cluster algirithm. Defaults to "mfp".
+            output_bookmark (str): bookmark name for the cluster representatives
+            type (str, optional): cluster algorithm. Defaults to "mfp".
             cutoff (float, optional): cutoff distance for each cluster. Defaults to 0.5.
+            input_bookmark (str | None, optional): bookmark to cluster over; None clusters all results.
 
         Returns:
-            tuple[str, int]: bookmark name of representative poses, number of cluster representatives
+            tuple[str, int]: output_bookmark, number of cluster representatives
         """
         with self.storageman as sm:
-            bookmark_name, num_clusters = sm.cluster_data(
-                bookmark_name,
+            generated_name, num_clusters = sm.cluster_data(
+                input_bookmark,
                 type,
                 cutoff,
             )
+            sm.rename_bookmark(generated_name, output_bookmark)
         logger.info(
-            f"Number of clusters: {num_clusters}.\nPassing poses saved to {bookmark_name}."
+            f"Number of clusters: {num_clusters}.\nPassing poses saved to {output_bookmark}."
         )
-        return bookmark_name, num_clusters
+        return output_bookmark, num_clusters
 
     @_wrap_exceptions
     def write_filter_output(
@@ -2807,41 +2809,52 @@ class RingtailCore:
         return bookmark_name
 
     def _parse_clustering(
-        self, cluster_data: dict, bookmark_name: str
+        self,
+        cluster_data: dict,
+        output_bookmark: str,
+        input_bookmark: str | None = None,
     ) -> tuple[str, int]:
         """
-        Takes dictionary with one or more cluster constraints and performs clustering one after another
+        Takes dictionary with one or more cluster constraints and performs clustering one after another.
 
         Args:
             cluster_data (dict): containing cluster types to be performed and their cutoffs
-            bookmark_name (str): bookmark over which to perform the clustering
+            output_bookmark (str): bookmark name for the final cluster representatives
+            input_bookmark (str | None, optional): bookmark to cluster over; None clusters all results.
 
         Returns:
-            tuple[str,int]: bookmark name of representative poses as well as count of clusters
+            tuple[str,int]: output_bookmark, count of cluster representatives
         """
-        with self.storageman:
-            count_poses = self.storageman.get_passing_poses_count(bookmark_name, False)
+        if input_bookmark is not None:
+            with self.storageman:
+                count_poses = self.storageman.get_passing_poses_count(input_bookmark, False)
+            logger.info(f"Preparing to cluster {count_poses} passing poses.")
+        else:
+            logger.info("Preparing to cluster all results.")
 
-        logger.info(f"Preparing to cluster {count_poses} passing poses.")
         if sum(1 for v in cluster_data.values() if v) > 1:
             logger.warning(
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
             )
         count_reps = 0
         if cluster_data.get("mfp"):
-            bookmark_name, count_reps = self.cluster(
-                bookmark_name,
+            _, count_reps = self.cluster(
+                output_bookmark,
                 "mfp",
                 cluster_data.get("mfp"),
+                input_bookmark,
             )
         if cluster_data.get("ifp"):
-            bookmark_name, count_reps = self.cluster(
-                bookmark_name,
+            # if mfp was also run, chain: cluster the mfp output
+            ifp_input = output_bookmark if cluster_data.get("mfp") else input_bookmark
+            _, count_reps = self.cluster(
+                output_bookmark,
                 "ifp",
                 cluster_data.get("ifp"),
+                ifp_input,
             )
         logger.info(f"\nNumber of cluster representative ligands: {count_reps}")
-        return bookmark_name, count_reps
+        return output_bookmark, count_reps
 
     def _export_csv(self, requested_data: str, csv_name: str, table=False):
         """Get requested data from database, export as CSV

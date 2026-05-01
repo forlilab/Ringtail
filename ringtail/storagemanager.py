@@ -559,7 +559,7 @@ class StorageManager:
 
     def cluster_data(
         self,
-        bookmark_name: str,
+        bookmark_name: str | None,
         cluster_type: str = "mfpt",
         cutoff: float = 0.5,
     ) -> tuple:
@@ -569,7 +569,7 @@ class StorageManager:
         for the clusters
 
         Args:
-            bookmark_name (str): bookmark name with poses to cluster
+            bookmark_name (str | None): bookmark name with poses to cluster; None clusters all results
             cluster_type (str, optional): type of clustering. Defaults to "mfpt".
             cutoff (float, optional): cutoff cluster distance. Defaults to 0.5.
 
@@ -579,15 +579,17 @@ class StorageManager:
         logger.debug("Preparing to cluster")
         time0 = time.perf_counter()
 
+        internal_name = bookmark_name if bookmark_name is not None else "results"
         query = self.QueryBuilder()
 
         if cluster_type.lower() == "ifp":
             query.SELECT("r.pose_id", "r.leff").FROM("Results", "R")
 
-            if self.is_bookmark(bookmark_name):
-                query.IN_BOOKMARK(bookmark_name)
-            elif self._is_statustable(bookmark_name):
-                query.JOIN(bookmark_name, "T", "pose_id")
+            if bookmark_name is not None:
+                if self.is_bookmark(bookmark_name):
+                    query.IN_BOOKMARK(bookmark_name)
+                elif self._is_statustable(bookmark_name):
+                    query.JOIN(bookmark_name, "T", "pose_id")
             # tuple, tuple
             pose_ids, leffs = zip(*self.db_query(query.build()[0]).fetchall())
             leffs = list(leffs)
@@ -603,10 +605,11 @@ class StorageManager:
                 "ligands", "l", "ligand_id", "results"
             )
 
-            if self.is_bookmark(bookmark_name):
-                query.IN_BOOKMARK(bookmark_name)
-            elif self._is_statustable(bookmark_name):
-                query.JOIN(bookmark_name, "T", "pose_id")
+            if bookmark_name is not None:
+                if self.is_bookmark(bookmark_name):
+                    query.IN_BOOKMARK(bookmark_name)
+                elif self._is_statustable(bookmark_name):
+                    query.JOIN(bookmark_name, "T", "pose_id")
 
             pose_ids, leffs, rdmols = zip(*self.db_query(query.build()[0]).fetchall())
             mfpc = MorganFingerprintCluster(pose_ids, leffs, rdmols, cutoff)
@@ -626,7 +629,7 @@ class StorageManager:
             [int(item) for item in representatives],
             cluster_type.lower(),
             str(cutoff),
-            bookmark_name,
+            internal_name,
         )
         if type(cluster_bookmark_name) == tuple:
             logger.info("Clustering has been ran before, old bookmark will be used.")

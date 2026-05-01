@@ -507,7 +507,7 @@ class TestFilters:
         )
         count1 = tablecount("filtered_poses")
         status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --bookmark_name passing_results -mfpc 0.9"
+            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --filter_bookmark passing_results --bookmark_name clustered_results -mfpc 0.9"
         )
         count2 = tablecount("filtered_poses")
 
