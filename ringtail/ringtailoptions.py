@@ -467,7 +467,7 @@ class OutputOptions(RTOptions):
 
     options = {
         "log_file": {
-            "default": "output_log.txt",
+            "default": None,
             "type": str,
             "description": "By default, read and filtering results are saved in 'output_log.txt'; if this option is used, ligands and requested info passing the filters will be written to specified file.",
         },

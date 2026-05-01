@@ -53,6 +53,8 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if self.log_file is None:
+            return
         self.log_file = open(
             self.log_file, "w"
         )  # makes log_file attribute a file pointer from the string path name
@@ -111,6 +113,8 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if not self._log_open:
+            return
         try:
             self.log_file.write(line)
             self.log_file.write("\n")
@@ -127,6 +131,8 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if not self._log_open:
+            return
         try:
             self.log_file.write("\n")
             self.log_file.write(
@@ -145,6 +151,8 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if not self._log_open:
+            return
         try:
             self.log_file.write("\n")
             self.log_file.write(f"Result bookmark name: {bookmark_name}\n")
@@ -218,6 +226,8 @@ class OutputManager:
         """
         Properly formats header for the log file if using max_miss and enumerate_interaction_combs
         """
+        if not self._log_open:
+            return
         self.log_file.write("\n---------------\n")
         self.log_file.write("Max Miss Union:\n")
 

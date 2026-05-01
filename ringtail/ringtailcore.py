@@ -1705,7 +1705,9 @@ class RingtailCore:
 
         return all_mols
 
-    def find_similar_ligands(self, query_ligname: str):
+    def find_similar_ligands(
+        self, query_ligname: str, log_file: str = "output_log.txt"
+    ):
         """
         Find ligands in cluster with query_ligname
 
@@ -1722,8 +1724,7 @@ class RingtailCore:
                 self.storageman.fetch_clustered_similars(query_ligname)
             )
             if similar_ligands is not None:
-                if not hasattr(self, "outputman"):
-                    self.set_output_options()
+                self.set_output_options(log_file=log_file)
                 with self.outputman:
                     self.outputman.write_find_similar_header(
                         query_ligname, cluster_name

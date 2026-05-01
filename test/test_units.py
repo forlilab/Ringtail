@@ -232,7 +232,7 @@ class TestRingtailCore:
     def test_write_sdfs(self):
         sdf_path = "sdf_files"
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7)
+        rtc.filter(eworst=-7, log_file="output_log.txt")
         rtc.write_molecule_sdfs(sdf_path, all_in_one=False)
 
         # ensure correct number of files written
@@ -457,7 +457,7 @@ class TestRingtailCore:
     def test_export_bookmark_db(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7)
-        bookmark_db_name = rtc.export_bookmark_db()
+        bookmark_db_name = rtc.export_bookmark_db("passing_results")
 
         assert os.path.exists(bookmark_db_name)
 

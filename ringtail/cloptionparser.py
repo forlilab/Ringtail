@@ -279,7 +279,9 @@ def cmdline_parser(defaults: dict = {}):
         "-l",
         "--log_file",
         help='by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file',
-        action="store",
+        nargs="?",
+        const="output_log.txt",
+        default=None,
         type=str,
         metavar="[FILE_NAME].TXT",
     )
