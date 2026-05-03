@@ -10,7 +10,7 @@ import os
 from .exceptions import OptionError, NoInputError
 import __main__
 from .ringtailcore import RingtailCore
-from .ringtailoptions import Filters
+from .ringtailoptions import Filters, validate_docking_mode
 
 
 def cmdline_parser(defaults: dict = {}):
@@ -703,14 +703,9 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
 
-        if parsed_opts.docking_mode.lower() not in ["dlg", "vina"]:
-            raise OptionError(
-                f"The chosen docking mode {parsed_opts.docking_mode} is not supported. Please choose either 'dlg' or 'vina'."
-            )
-
         self.rtcore = RingtailCore(
             db_file=db_file,
-            docking_mode=parsed_opts.docking_mode.lower(),
+            docking_mode=validate_docking_mode(parsed_opts.docking_mode),
             logging_level=log_level,
         )
         # make sure we log the command line prompt

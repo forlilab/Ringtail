@@ -40,14 +40,6 @@ def dbquery():
 
 class TestRingtailCore:
 
-    def test_get_defaults(self):
-        os.system("rm output.db output_log.txt")
-        from ringtail import ringtailoptions
-
-        defaults = RingtailCore.default_dict()
-        object_dict = ringtailoptions.ResultsProcessingOptions().todict()
-        assert object_dict.items() <= defaults.items()
-
     def test_add_folder(self, countrows):
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file_path="test_data/adgpu/group1")

@@ -9,7 +9,7 @@ import json
 from meeko import RDKitMolCreate
 from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 from .storagemanager import StorageManager
-from .resultsmanager import ResultsManager
+from .mpmanager import MPManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
 from .ringtailoptions import *
@@ -79,7 +79,6 @@ class RingtailCore:
         self.storageman = storageman(db_file)
         self._run_mode = "api"
         self._docking_mode = docking_mode
-        self.set_storageman_attributes()
 
     def update_database_version(self, consent=False, new_version="2.0.0"):
         """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
@@ -380,208 +379,24 @@ class RingtailCore:
 
         return mol, flexres_mols, properties
 
-    def _set_file_sources(
-        self,
-        file=None,
-        file_path=None,
-        file_list=None,
-        file_pattern=None,
-        recursive=None,
-        receptor_file=None,
-        save_receptor=None,
-        dict: dict = None,
-    ) -> InputFiles:
-        """
-        Object holding all ligand docking results files.
-
-        Args:
-            file (str, optional: list(str)): ligand result file
-            file_path (str, optional: list(str)): list of folders containing one or more result files
-            file_list (str, optional: list(str)): list of ligand result file(s)
-            file_pattern (str): file pattern to use with recursive search in a file_path, "*.dlg*" for AutoDock-GDP and "*.pdbqt*" for vina
-            recursive (bool): used to recursively search file_path for folders inside folders
-            receptor_file (str): string containing the receptor .pdbqt
-            save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-
-        Returns:
-            InputFiles
-        """
-
-        # Method to deal with the file read manager currently expecting file data to be presented as double [[]] lists
-        def ensure_double_list(object) -> list:
-            """Most of ringtail is set up to handle files, file paths, and file lists as double lists [[items]].
-            Instead of changing that for now, the input is checked to ensure they are presented as, or can be
-            converted to a double list. Really only matters for using API."""
-            if type(object) == list:
-                if type(object[0]) == list:
-                    if type(object[0][0]) == str:
-                        pass
-                    else:
-                        raise OptionError(
-                            f"error, object is more than two encapsulated lists: '{object[0][0]}' should be a string."
-                        )
-                elif type(object[0]) == str:
-                    object = [object]
-                else:
-                    self.logger.error("Unable to parse file input.")
-            elif type(object) == str:
-                object = [[object]]
-            else:
-                self.logger.error("Unable to parse file input.")
-
-            return object
-
-        # keywords this pertains to
-        need_to_be_double_list = ["file", "file_path", "file_list"]
-
-        # Set file format automatically if not specified
-        if file_pattern is None:
-            if self.docking_mode == "dlg":
-                file_pattern = "*.dlg*"
-
-            elif self.docking_mode == "vina":
-                file_pattern = "*.pdbqt*"
-            else:
-                self.logger.error(
-                    "Docking mode and file pattern was not specified, can not continue."
-                )
-
-        # Dict of individual arguments
-        individual_options = {
-            "file": file,
-            "file_path": file_path,
-            "file_list": file_list,
-            "file_pattern": file_pattern,
-            "recursive": recursive,
-            "receptor_file": receptor_file,
-            "save_receptor": save_receptor,
-        }
-
-        # Create option object with default values if needed
-        files = InputFiles()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                if k in need_to_be_double_list and v is not None:
-                    v = ensure_double_list(v)
-                setattr(files, k, v)
-            self.logger.debug(
-                f"File attributes {dict} were assigned from provided option dictionary."
-            )
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite provided dictionary
-        for k, v in individual_options.items():
-            if v is not None:
-                if k in need_to_be_double_list:
-                    v = ensure_double_list(v)
-                setattr(files, k, v)
-        self.logger.debug(
-            f"File attributes {individual_options} were assigned from provided individual options."
-        )
-
-        return files
-
-    def _set_results_sources(
-        self,
-        results_strings: dict = None,
-        receptor_file: str = None,
-        save_receptor: bool = None,
-        dict: dict = None,
-    ) -> InputStrings:
-        """
-        Object holding all ligand vina docking results string and corresponding receptor.
-
-        Args:
-            results_string (dict): string containing the ligand identified and docking results as a dictionary
-            receptor_file (str): string containing the receptor .pdbqt
-            save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-
-        Return:
-            InputStrings object
-        """
-        # Dict of individual arguments
-        individual_options = {
-            "results_strings": results_strings,
-            "receptor_file": receptor_file,
-            "save_receptor": save_receptor,
-        }
-        # Create option object with default values if needed
-        strings = InputStrings()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                setattr(strings, k, v)
-            self.logger.debug(f"Docking string results attributes {dict} were set.")
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in individual_options.items():
-            if v is not None:
-                setattr(strings, k, v)
-        self.logger.debug(
-            f"Docking string results attributes {individual_options} were set."
-        )
-
-        return strings
-
-    def _create_resultsmanager(
-        self, file_sources: InputFiles = None, string_sources: InputStrings = None
-    ) -> ResultsManager:
-        """Creates a results manager object based on results provided either as files or as strings (currently only for vina).
-        Will create a new object each time results are added, and use the docking mode specified as an attribute of the core.
-        In its current state it assumes only one source of results will be provided.
-        If both are provided, it will only process the strings.
-
-        Args:
-            file_sources (InputFiles): used if docking results are provided through files
-            string_sources (InputStrings): used if docking results are provided through strings
-
-        Raises:
-            RTCoreError
-        """
-        if file_sources is not None:
-            self.resultsman = ResultsManager(
-                file_sources=file_sources, docking_mode=self.docking_mode
-            )
-            self.logger.debug(
-                "Results manager object has been created with results files."
-            )
-        elif string_sources is not None:
-            self.resultsman = ResultsManager(
-                string_sources=string_sources, docking_mode=self.docking_mode
-            )
-            self.logger.debug(
-                "Results manager object has been created with results strings."
-            )
-        else:
-            raise RTCoreError(
-                "No results sources were provided, a results manager object could not be created."
-            )
-
     def _add_results(
         self,
-        results_sources,
-        strings=False,
-        duplicate_handling: str = None,
-        overwrite: bool = None,
-        store_all_poses: bool = None,
-        max_poses: int = None,
-        add_interactions: bool = None,
-        interaction_tolerance: float = None,
-        interaction_cutoffs: list = None,
-        max_proc: int = None,
-        options_dict: dict = None,
-        finalize: bool = True,
+        results_object: ResultsObject,
+        strings,
+        duplicate_handling: str,
+        overwrite: bool,
+        store_all_poses: bool,
+        max_poses: int,
+        add_interactions: bool,
+        interaction_tolerance: float,
+        interaction_cutoffs: list,
+        max_proc: int,
+        finalize: bool,
     ):
         """Method that is agnostic of results type, and will do the actual call to storage manager to process result files and add to database.
 
         Args:
-            results_sources(InputFiles or InputStrings): type checked and validated results object
+            results_object(InputFiles or InputStrings): type checked and validated results object
             strings (bool): whether or not results are provided as strings or files
             duplicate_handling (str): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
@@ -590,71 +405,78 @@ class RingtailCore:
             interaction_tolerance (float): longest ångström distance that is considered interaction?
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
-            options_dict (dict): write options as a dict
-
+            finalize (bool): whether or not to finalize database write by reindexing
         Raises:
             OptionError
         """
-        # if dictionary of options provided, attribute to appropriate managers
-        if options_dict is not None:
-            write_dict, storage_dict = split_dict(
-                options_dict, ["duplicate_handling", "overwrite"]
+
+        ### option checks
+        if duplicate_handling and not duplicate_handling.lower() in [
+            "ignore",
+            "replace",
+        ]:
+            logger.warning(
+                f"--duplicate_handling option {duplicate_handling} not allowed. Will allow all duplicates."
             )
+            duplicate_handling = None
+
+        if store_all_poses is True and interaction_tolerance is not None:
+            logger.warning(
+                "Cannot use 'interaction_tolerance' with 'store_all_poses'. Removing 'interaction_tolerance'."
+            )
+            interaction_tolerance = None
+
+        if self.docking_mode != "adgpu":
+            if interaction_tolerance is not None:
+                self.logger.warning(
+                    "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
+                )
+                interaction_tolerance = None
+            if add_interactions == True:
+                # cannot be true for adgpu
+                add_interactions = None
+
+        # TODO clean up the log messages to not get annoying, and use proper objects
+        if not strings:
+            logmsg = f"These are the file sources being processed: {str(results_object.file)}, {str(results_object.file_list)}, and {str(results_object.file_path)}"
         else:
-            storage_dict = None
-            write_dict = None
+            logmsg = f"This is the list of ligands whos strings are being procssed: {str(results_object.strings.keys())}"
+        logger.debug(logmsg)
 
-        self.set_storageman_attributes(
-            duplicate_handling=duplicate_handling,
-            overwrite=overwrite,
-            dict=storage_dict,
+        multiprocessor = MPManager(
+            docking_mode=self.docking_mode,
+            max_poses=max_poses,
+            store_all_poses=store_all_poses,
+            add_interactions=add_interactions,
+            interaction_tolerance=interaction_tolerance,
+            interaction_cutoffs=interaction_cutoffs,
+            max_proc=max_proc,
+            storageman=self.storageman,
+            chunk_size=5000,
+            results=results_object,
         )
-
-        # Prepare the results manager with the provided docking results sources
-        if strings == False:
-            self._create_resultsmanager(file_sources=results_sources)
-        elif strings == True:
-            self._create_resultsmanager(string_sources=results_sources)
-        self.resultsman.storageman = self.storageman
-        self.resultsman.storageman_class = self.storageman.__class__
-        self.set_resultsman_attributes(
-            store_all_poses,
-            max_poses,
-            add_interactions,
-            interaction_tolerance,
-            interaction_cutoffs,
-            max_proc,
-            write_dict,
-        )
-
-        # Docking mode compatibility check
-        if (
-            self.docking_mode == "vina"
-            and self.resultsman.interaction_tolerance is not None
-        ):
-            self.logger.warning(
-                "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
-            )
-            self.resultsman.interaction_tolerance = None
 
         # Process results files and handle database versioning
         with self.storageman:
-            if self.storageman.overwrite:
+            if overwrite:
                 self.storageman.overwrite_storage()
 
             self.storageman.check_storage_ready(
                 self._run_mode,
                 self.docking_mode,
-                self.resultsman.store_all_poses,
-                self.resultsman.max_poses,
+                store_all_poses,
+                max_poses,
             )
 
-        if results_sources.save_receptor:
-            self.save_receptor(results_sources.receptor_file)
+        if results_object.save_receptor:
+            self.save_receptor(results_object.receptor_file_path)
+
+        # TODO some pre processing to ensure there is data, can do that in the results_object class
 
         with self.storageman:
             self.logger.info("Adding results...")
-            self.resultsman.process_docking_data()
+            multiprocessor.process_results(duplicate_handling)
+
             if finalize:
                 self.storageman.finalize_database_write()
 
@@ -665,156 +487,6 @@ class RingtailCore:
     This ensures:   - that all options are set to specific types through RingtailOptions
                     - that internal consistency checks are performed on a group of options
                     - these methods ensure options are assigned to the appropriate ringtail manager classes"""
-
-    def set_storageman_attributes(
-        self,
-        filter_bookmark: str = None,
-        duplicate_handling: str = None,
-        overwrite: bool = None,
-        order_results: str = None,
-        outfields: str = None,
-        output_all_poses: str = None,
-        mfpt_cluster: float = None,
-        interaction_cluster: float = None,
-        bookmark_name: str = None,
-        dict: dict = None,
-    ):
-        """
-        Create storage_manager_options object if needed, sets options, and assigns them to the storage manager object.
-
-        Args:
-            filter_bookmark (str): Perform filtering over specified bookmark. (in output group in CLI)
-            duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
-            overwrite (bool): by default, if a log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing log files. Will also overwrite existing database
-            order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
-                    "available fields are:  "
-                    '"e" (docking_score), '
-                    '"le" (ligand efficiency), '
-                    '"delta" (delta energy from best pose), '
-                    '"ref_rmsd" (RMSD to reference pose), '
-                    '"e_inter" (intermolecular energy), '
-                    '"e_vdw" (van der waals energy), '
-                    '"e_elec" (electrostatic energy), '
-                    '"e_intra" (intermolecular energy), '
-                    '"n_interact" (number of interactions), '
-                    '"rank" (rank of ligand pose), '
-                    '"run" (run number for ligand pose), '
-                    '"hb" (hydrogen bonds); '
-            outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=e,le,hb"; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column available fields are:  '
-                    '"Ligand_name" (Ligand name), '
-                    '"e" (docking_score), '
-                    '"le" (ligand efficiency), '
-                    '"delta" (delta energy from best pose), '
-                    '"ref_rmsd" (RMSD to reference pose), '
-                    '"e_inter" (intermolecular energy), '
-                    '"e_vdw" (van der waals energy), '
-                    '"e_elec" (electrostatic energy), '
-                    '"e_intra" (intermolecular energy), '
-                    '"n_interact" (number of interactions), '
-                    '"ligand_smile" , '
-                    '"rank" (rank of ligand pose), '
-                    '"run" (run number for ligand pose), '
-                    '"hb" (hydrogen bonds), '
-                    '"receptor" (receptor name); '
-                    "Fields are printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified.
-            output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
-            mfpt_cluster (float): Cluster filered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
-            interaction_cluster (float): Cluster filered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-            bookmark_name (str): name for resulting book mark file. Default value is "passing_results"
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-
-        # Dict of individual arguments
-        individual_options = {
-            "filter_bookmark": filter_bookmark,
-            "duplicate_handling": duplicate_handling,
-            "overwrite": overwrite,
-            "order_results": order_results,
-            "outfields": outfields,
-            "output_all_poses": output_all_poses,
-            "mfpt_cluster": mfpt_cluster,
-            "interaction_cluster": interaction_cluster,
-            "bookmark_name": bookmark_name,
-        }
-
-        # Create option object with default values if needed
-        if not hasattr(self, "storageopts"):
-            self.storageopts = StorageOptions()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                if v is not None:
-                    setattr(self.storageopts, k, v)
-            self.logger.debug(f"Storage manager attributes {dict} were set.")
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in individual_options.items():
-            if v is not None:
-                setattr(self.storageopts, k, v)
-        self.logger.debug(f"Storage manager attributes {individual_options} were.")
-
-        # Assign attributes to storage manager
-        for k, v in self.storageopts.todict().items():
-            setattr(self.storageman, k, v)
-        self.logger.info("Options for storage manager have been changed.")
-
-    def set_resultsman_attributes(
-        self,
-        store_all_poses: bool = None,
-        max_poses: int = None,
-        add_interactions: bool = None,
-        interaction_tolerance: float = None,
-        interaction_cutoffs: list = None,
-        max_proc: int = None,
-        dict: dict = None,
-    ):
-        """
-        Create results_manager_options object if needed, sets options, and assigns them to the results manager object.
-
-        Args:
-            store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
-            max_poses (int): how many poses to save (ordered by soem score?)
-            add_interactions (bool): add ligand-receptor interaction data, only in vina mode
-            interaction_tolerance (float): longest ångström distance that is considered interaction?
-            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
-            max_proc (int): max number of computer processors to use for file reading
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-        # Dict of individual arguments
-        individual_options = {
-            "store_all_poses": store_all_poses,
-            "max_poses": max_poses,
-            "add_interactions": add_interactions,
-            "interaction_tolerance": interaction_tolerance,
-            "interaction_cutoffs": interaction_cutoffs,
-            "max_proc": max_proc,
-        }
-
-        # Create option object with default values if needed
-        if not hasattr(self, "resultsmanopts"):
-            self.resultsmanopts = ResultsProcessingOptions()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                if v is not None:
-                    setattr(self.resultsmanopts, k, v)
-            self.logger.debug(f"Results manager attributes {dict} were set.")
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in individual_options.items():
-            if v is not None:
-                setattr(self.resultsmanopts, k, v)
-        self.logger.debug(f"Results manager attributes {individual_options} were set.")
-
-        # Assigns options to the results manager object
-        for k, v in self.resultsmanopts.todict().items():
-            if v is not None:
-                setattr(self.resultsman, k, v)
-        self.logger.info("Options for results manager have been changed.")
 
     def set_output_options(
         self,
@@ -960,16 +632,14 @@ class RingtailCore:
         recursive: bool = None,
         receptor_file: str = None,
         save_receptor: bool = None,
-        filesources_dict: dict = None,
-        duplicate_handling: str = None,
-        overwrite: bool = None,
-        store_all_poses: bool = None,
-        max_poses: int = None,
-        add_interactions: bool = None,
-        interaction_tolerance: float = None,
-        interaction_cutoffs: list = None,
-        max_proc: int = None,
-        options_dict: dict = None,
+        duplicate_handling: str = RingtailDefaults.duplicate_handling,
+        overwrite: bool = RingtailDefaults.duplicate_handling,
+        store_all_poses: bool = RingtailDefaults.overwrite,
+        max_poses: int = RingtailDefaults.max_poses,
+        add_interactions: bool = RingtailDefaults.add_interactions,
+        interaction_tolerance: float = RingtailDefaults.interaction_tolerance,
+        interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
+        max_proc: int = RingtailDefaults.max_proc,
         finalize: bool = True,
     ):
         """
@@ -998,32 +668,24 @@ class RingtailCore:
             OptionError
 
         """
+        results_data = ResultsObject()
+        results_data.file = file
+        results_data.file_path = file_path
+        results_data.file_list = file_list
+        results_data.file_pattern = validate_file_pattern(self.docking_mode)
+        results_data.recursive_path_traverse = recursive
+        results_data.receptor_file_path = receptor_file
+        results_data.save_receptor = save_receptor
 
-        files = self._set_file_sources(
-            file,
-            file_path,
-            file_list,
-            file_pattern,
-            recursive,
-            receptor_file,
-            save_receptor,
-            filesources_dict,
-        )
-        results_files_given = (
-            files.file is not None
-            or files.file_path is not None
-            or files.file_list is not None
-        )
-
-        if not results_files_given and not files.save_receptor:
+        if not results_data.has_results and not results_data.save_receptor:
             raise OptionError(
                 "At least one input option needs to be used: file, file_path, file_list, or save_receptor"
             )
 
         # If there are ligand files present, process ligand data
-        if results_files_given or files.save_receptor:
+        if results_data.has_file_results or results_data.save_receptor:
             self._add_results(
-                files,
+                results_data,
                 False,
                 duplicate_handling,
                 overwrite,
@@ -1033,7 +695,6 @@ class RingtailCore:
                 interaction_tolerance,
                 interaction_cutoffs,
                 max_proc,
-                options_dict,
                 finalize,
             )
 
@@ -1042,7 +703,6 @@ class RingtailCore:
         results_strings: dict = None,
         receptor_file: str = None,
         save_receptor: bool = None,
-        resultsources_dict: dict = None,
         duplicate_handling: str = None,
         overwrite: bool = None,
         store_all_poses: bool = None,
@@ -1050,7 +710,6 @@ class RingtailCore:
         add_interactions: bool = None,
         interaction_cutoffs: list = None,
         max_proc: int = None,
-        options_dict: dict = None,
         finalize: bool = True,
     ):
         """
@@ -1062,7 +721,6 @@ class RingtailCore:
             results_string (dict): string containing the ligand identified and docking results as a dictionary
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
-            resultsources_dict (dict): file sources already as an object
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
             max_poses (int): how many poses to save (ordered by soem score?)
@@ -1079,21 +737,24 @@ class RingtailCore:
         if self.docking_mode != "vina":
             self.docking_mode = "vina"
 
-        # create results string object
-        results = self._set_results_sources(
-            results_strings, receptor_file, save_receptor, resultsources_dict
-        )
-        results_strings_given = bool(results.results_strings)
+        results_data = ResultsObject()
+        results_data.strings = results_strings
+        results_data.receptor_file_path = receptor_file
+        results_data.save_receptor = save_receptor
 
-        if not results_strings_given and not results.save_receptor:
+        results_strings_given = (
+            results_data.has_results and not results_data.has_file_results
+        )
+
+        if not results_strings_given and not results_data.save_receptor:
             raise OptionError(
                 "At least one input option needs to be used: 'results_strings', or 'save_receptor'"
             )
 
         # If there are any docking data strings, process docking results
-        if results_strings_given or results.save_receptor:
+        if results_strings_given or results_data.save_receptor:
             self._add_results(
-                results,
+                results_data,
                 True,
                 duplicate_handling,
                 overwrite,
@@ -1103,7 +764,6 @@ class RingtailCore:
                 None,
                 interaction_cutoffs,
                 max_proc,
-                options_dict,
                 finalize,
             )
 
@@ -1336,6 +996,7 @@ class RingtailCore:
         else:
             storage_dict = None
             output_dict = None
+        # TODO
         self.set_storageman_attributes(
             output_all_poses=output_all_poses,
             mfpt_cluster=mfpt_cluster,
@@ -1491,6 +1152,7 @@ class RingtailCore:
         """
         # make flexres rdkit mols for ligand-receptor docking
         if bookmark_name is not None:
+            # TODO
             self.set_storageman_attributes(bookmark_name=bookmark_name)
 
         with self.storageman:
@@ -1615,6 +1277,7 @@ class RingtailCore:
         """
 
         if bookmark_name is not None:
+            # TODO
             self.set_storageman_attributes(bookmark_name=bookmark_name)
 
         with self.storageman:
@@ -1822,6 +1485,7 @@ class RingtailCore:
             matplotlib.pyplot.figure (optional): will not show figure if returning figure handle
         """
         if bookmark_name is not None:
+            # TODO
             self.set_storageman_attributes(bookmark_name=bookmark_name)
         with self.storageman:
             bookmark_filters = (
@@ -1893,6 +1557,7 @@ class RingtailCore:
             list(tuple), list(tuple): [all_data], [filtered_data]
         """
         if bookmark_name is not None:
+            # TODO
             self.set_storageman_attributes(bookmark_name=bookmark_name)
         else:
             if self.storageman.bookmark_name in self.get_bookmark_names():
@@ -1931,6 +1596,7 @@ class RingtailCore:
         time.sleep(10)
 
         if bookmark_name is not None:
+            # TODO
             self.set_storageman_attributes(bookmark_name=bookmark_name)
         else:
             if self.storageman.bookmark_name in self.get_bookmark_names():
@@ -2094,6 +1760,7 @@ class RingtailCore:
             outfields (str): use outfields as described in RingtailOptions > StorageOptions
             bookmark_name (str): bookmark for which the filters were used
         """
+        # TODO
         if bookmark_name is not None:
             self.set_storageman_attributes(bookmark_name=bookmark_name)
         if outfields is not None:
@@ -2171,16 +1838,7 @@ class RingtailCore:
         Return:
             str: json string with options
         """
-        defaults = {}
-        defaults.update(OutputOptions().todict())
-        defaults.update(ResultsProcessingOptions().todict())
-        defaults.update(StorageOptions().todict())
-        defaults.update(Filters().todict())
-        defaults.update(InputFiles().todict())
-        defaults.update(ReadOptions().todict())
-        defaults.update(GeneralOptions().todict())
-
-        return defaults
+        return ringtail_defaults()
 
     @staticmethod
     def generate_config_file_template():
@@ -2201,21 +1859,5 @@ class RingtailCore:
         with open(filename, "w") as f:
             f.write(json.dumps(json_string, indent=4))
         return filename
-
-    @staticmethod
-    def get_options_info() -> dict:
-        """
-        Gets names, default values, and meta data for all Ringtail options.
-        """
-        options = {}
-        options.update(OutputOptions.options)
-        options.update(ResultsProcessingOptions.options)
-        options.update(StorageOptions.options)
-        options.update(Filters.options)
-        options.update(InputFiles.options)
-        options.update(ReadOptions.options)
-        options.update(GeneralOptions.options)
-
-        return options
 
     # endergion

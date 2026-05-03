@@ -39,7 +39,7 @@ class StorageManager:
     _db_schema_code_compatibility = {
         "1.0.0": ["1.0.0"],
         "1.1.0": ["1.1.0"],
-        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2", "2.2.0"],
+        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2", "2.2.0", "2.2.1"],
     }
 
     """Base class for a generic virtual screening database object.
@@ -157,6 +157,7 @@ class StorageManager:
         interaction_list,
         receptor_array=[],
         insert_receptor=False,
+        duplicate_handling: str = None,
     ):
         """Inserts data from all arrays returned from results manager.
 
@@ -167,7 +168,7 @@ class StorageManager:
             receptor_array (list): list of data to be stored in Receptors table
             insert_receptor (bool, optional): flag indicating that receptor info should inserted
         """
-        Pose_IDs, duplicates = self._insert_results(results_array)
+        Pose_IDs, duplicates = self._insert_results(results_array, duplicate_handling)
         self._insert_ligands(ligands_array)
         if insert_receptor and receptor_array != []:
             # first checks if there is receptor info already in the db
@@ -177,9 +178,13 @@ class StorageManager:
                 self._insert_receptors(receptor_array)
         # insert interactions if they are present
         if interaction_list != []:
-            self.insert_interactions(Pose_IDs, interaction_list, duplicates)
+            self.insert_interactions(
+                Pose_IDs, interaction_list, duplicates, duplicate_handling
+            )
 
-    def insert_interactions(self, Pose_IDs: list, interactions_list, duplicates):
+    def insert_interactions(
+        self, Pose_IDs: list, interactions_list, duplicates, duplicate_handling
+    ):
         """Takes list of interactions, inserts into database
 
         Args:
@@ -200,7 +205,7 @@ class StorageManager:
             ]
             # adds each pose_interaction row to list
             interaction_rows.extend(pose_interactions)
-        self._insert_interaction_rows(interaction_rows, duplicates)
+        self._insert_interaction_rows(interaction_rows, duplicates, duplicate_handling)
 
     # endregion
 
@@ -592,7 +597,6 @@ class StorageManagerSQLite(StorageManager):
         open_cursors (list): list of cursors that were not closed by the function that created them.
             Will be closed by close_connection method.
         db_file (str): database name
-        overwrite (bool): switch to overwrite database if it exists
         order_results (str): what column name will be used to order results once read
         outfields (str): data fields/columns to include when reading and outputting data
         filter_bookmark (str): name of bookmark that filtering will be performed over
@@ -600,7 +604,6 @@ class StorageManagerSQLite(StorageManager):
         mfpt_cluster (float): distance in ångströms to cluster ligands based on morgan fingerprints
         interaction_cluster (float): distance in ångströms to cluster ligands based on interactions
         bookmark_name (str): name of current bookmark being written to or read from
-        duplicate_handling (str): optional attribute to deal with insertion of ligands already in the database
 
         current_bookmark_name (str): name of last view to have been written to in the database
         filtering_window (str): name of bookmark/view being filtered on
@@ -613,7 +616,6 @@ class StorageManagerSQLite(StorageManager):
     def __init__(
         self,
         db_file: str = None,
-        overwrite: bool = None,
         order_results: str = None,
         outfields: str = None,
         filter_bookmark: str = None,
@@ -621,10 +623,8 @@ class StorageManagerSQLite(StorageManager):
         mfpt_cluster: float = None,
         interaction_cluster: float = None,
         bookmark_name: str = None,
-        duplicate_handling: str = None,
     ):
         self.db_file = db_file
-        self.overwrite = overwrite
         self.order_results = order_results
         self.outfields = outfields
         self.output_all_poses = output_all_poses
@@ -632,7 +632,6 @@ class StorageManagerSQLite(StorageManager):
         self.interaction_cluster = interaction_cluster
         self.filter_bookmark = filter_bookmark
         self.bookmark_name = bookmark_name
-        self.duplicate_handling = duplicate_handling
         super().__init__()
 
         self.energy_filter_sqlite_call_dict = {
@@ -1113,12 +1112,13 @@ class StorageManagerSQLite(StorageManager):
                 "Error while looking for unique result row."
             ) from e
 
-    def _insert_results(self, results_array):
+    def _insert_results(self, results_array, duplicate_handling: str):
         """Takes array of database rows to insert, adds data to results table. Will handle duplicates if specified
 
         Args:
             results_array (np.ndAaray): numpy array of arrays containing
                 formatted result rows
+            duplicate_handling (str): how to deal with duplicates, if any
 
         Returns:
             Pose_ID (list(int)): returns the pose ids for the ligand written to results, these are used to ensure internal consistency when writing to the interaction table
@@ -1173,16 +1173,16 @@ class StorageManagerSQLite(StorageManager):
                 Pose_ID = (
                     -1
                 )  # nonsensical table index to initialize row index if checking for duplicates
-                if self.duplicate_handling:
+                if duplicate_handling:
                     Pose_ID = self._check_unique_results_row(result)
 
                 if Pose_ID != -1:  # row exists in table
                     duplicates.append(Pose_ID)
                     # row exist, evaluate if ignore or replace
-                    if self.duplicate_handling.upper() == "IGNORE":
+                    if duplicate_handling.upper() == "IGNORE":
                         # do not add the new, duplicated row
                         pass
-                    elif self.duplicate_handling.upper() == "REPLACE":
+                    elif duplicate_handling.upper() == "REPLACE":
                         # update the existing row with the new results
                         # reformat sqlite query to update
                         sql_replace = sql_insert.replace(
@@ -1463,13 +1463,15 @@ class StorageManagerSQLite(StorageManager):
                 "Error while creating interactions table. If database already exists, use 'overwrite' to drop existing tables"
             ) from e
 
-    def _insert_interaction_rows(self, interaction_rows, duplicates):
+    def _insert_interaction_rows(
+        self, interaction_rows, duplicates, duplicate_handling: str
+    ):
         """Inserts the interaction data into a "tall-and-skinny" table, with a primary autoincremented key and a Pose_ID that is 1-to-1 with Results table.
         Table will contain as many rows with the same Pose_ID as that pose has interactions.
 
         Args:
             interaction_rows (list(tuple)): list of tuples containing the interaction data
-            duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones, will be treated according to self.duplicate_handling
+            duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones, will be treated according to duplicate_handling
 
         Raises:
             DatabaseInsertionError
@@ -1480,7 +1482,7 @@ class StorageManagerSQLite(StorageManager):
                             VALUES (?,?);"""
         try:
             cur = self.conn.cursor()
-            if not self.duplicate_handling:  # add all results
+            if duplicate_handling is None:  # add all results
                 cur.executemany(sql_insert, interaction_rows)
             else:
                 # first, add any poses that are not duplicates
@@ -1494,7 +1496,7 @@ class StorageManagerSQLite(StorageManager):
                 cur.executemany(sql_insert, non_duplicates)
 
                 # only look for values to replace if there are duplicate pose ids
-                if self.duplicate_handling == "REPLACE" and duplicates_exist:
+                if duplicate_handling.upper() == "REPLACE" and duplicates_exist:
                     # delete all rows pertaining to duplicated pose_ids
                     duplicated_pose_ids = [id for id in duplicates if id is not None]
                     self._delete_interactions(duplicated_pose_ids)
@@ -1506,7 +1508,7 @@ class StorageManagerSQLite(StorageManager):
                     ]
                     cur.executemany(sql_insert, duplicates_only)
 
-                elif self.duplicate_handling == "IGNORE":
+                elif duplicate_handling.upper() == "IGNORE":
                     # ignore and don't add any poses that are duplicates
                     pass
             self.conn.commit()
@@ -3415,11 +3417,11 @@ class StorageManagerSQLite(StorageManager):
 
     # region Database operations
 
-    def overwrite_storage(self):
+    def overwrite_storage(self, consent: bool = True):
         """
         Will drop all tables in the database.
         """
-        if not self._db_empty() and self.overwrite:
+        if not self._db_empty() and consent:
             self._drop_existing_tables()
             logger.info("Tables in existing database were dropped.")
 
@@ -3837,11 +3839,9 @@ class StorageManagerSQLite(StorageManager):
             )
 
             # 2. Delete orphaned Interaction_indices (no longer referenced by any Interaction)
-            cur.execute(
-                """DELETE FROM Interaction_indices WHERE interaction_id NOT IN (
+            cur.execute("""DELETE FROM Interaction_indices WHERE interaction_id NOT IN (
                     SELECT DISTINCT interaction_id FROM Interactions
-                )"""
-            )
+                )""")
 
             # 3. Delete merged Results
             cur.execute(
@@ -3853,11 +3853,9 @@ class StorageManagerSQLite(StorageManager):
             )
 
             # 4. Delete orphaned Ligands (no longer referenced by any Results)
-            cur.execute(
-                """DELETE FROM Ligands WHERE LigName NOT IN (
+            cur.execute("""DELETE FROM Ligands WHERE LigName NOT IN (
                     SELECT DISTINCT LigName FROM Results
-                )"""
-            )
+                )""")
 
             # 5. Delete merged DB_properties
             cur.execute(
@@ -3885,7 +3883,6 @@ class StorageManagerSQLite(StorageManager):
 
     def _open_storage(self):
         """Create connection to db. Then, check if db needs to be created.
-        If self.overwrite drop existing tables and initialize new tables
 
         Raises:
             StorageError
@@ -3895,7 +3892,7 @@ class StorageManagerSQLite(StorageManager):
             if os.path.isfile(self.db_file):
                 self.conn = self._create_connection()
                 compatible, db_version = self.check_ringtaildb_version()
-                if not compatible and not self.overwrite:
+                if not compatible:
                     raise StorageError(
                         f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
                     )
@@ -3941,7 +3938,7 @@ class StorageManagerSQLite(StorageManager):
                 cur = self.conn.execute(
                     "SELECT * FROM DB_properties ORDER BY DB_write_session DESC LIMIT 1"
                 )
-                (_, last_docking_mode, num_of_poses) = cur.fetchone()
+                _, last_docking_mode, num_of_poses = cur.fetchone()
                 if docking_mode != last_docking_mode:
                     compatible = False
                     compatibility_string += f"Current docking mode is {docking_mode} but last used docking mode of database is {last_docking_mode}.\n"
@@ -4201,7 +4198,7 @@ class StorageManagerSQLite(StorageManager):
         self.open_cursors = []
 
     def _db_empty(self):
-        """empty database, for example if overwrite
+        """
 
         Returns:
             bool: whether or not db is empty
@@ -4269,7 +4266,6 @@ class StorageManagerSQLite(StorageManager):
 
     def _drop_existing_tables(self):
         """drop any existing tables.
-        Will only be called if self.overwrite is true
 
         Raises:
             StorageError

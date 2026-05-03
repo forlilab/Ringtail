@@ -284,7 +284,14 @@ class Writer(multiprocess.Process):
     into datbase"""
 
     def __init__(
-        self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
+        self,
+        queue,
+        num_readers,
+        pipe_conn,
+        chunksize,
+        storageman,
+        docking_mode,
+        duplicate_handling,
     ):
         multiprocess.Process.__init__(self)
         self.queue = queue
@@ -306,6 +313,7 @@ class Writer(multiprocess.Process):
         self.num_files_written = 0
         self.time0 = time.perf_counter()
         self.last_write_time = 0
+        self.duplicate_handling = duplicate_handling
 
     def run(self):
         """Method overload from parent class. This is where the task of this class
@@ -374,6 +382,7 @@ class Writer(multiprocess.Process):
             self.interactions_list,
             self.receptor_array,
             self.first_insert,
+            duplicate_handling=self.duplicate_handling,
         )
         # So at this point the ligand array is empty
         if self.first_insert:  # will only insert receptor for first insertion

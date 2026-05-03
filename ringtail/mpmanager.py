@@ -15,6 +15,8 @@ from .logutils import LOGGER
 from .exceptions import MultiprocessingError, RTCoreError, OptionError
 import traceback
 from datetime import datetime
+from .ringtailoptions import ResultsObject
+from .util import iterate_nested
 
 import multiprocess
 
@@ -47,39 +49,35 @@ class MPManager:
         self,
         docking_mode,
         max_poses,
-        interaction_tolerance,
         store_all_poses,
         add_interactions,
+        interaction_tolerance,
         interaction_cutoffs,
         max_proc,
         storageman,
-        storageman_class,
         chunk_size,
-        target,
-        receptor_file,
-        file_pattern=None,
-        file_sources=None,
-        string_sources=None,
+        results: ResultsObject,
     ):
+
         self.docking_mode = docking_mode
         self.chunk_size = chunk_size
         self.max_poses = max_poses
         self.store_all_poses = store_all_poses
         self.interaction_tolerance = interaction_tolerance
-        self.target = target
+        self.target = results.target_name
         self.add_interactions = add_interactions
         self.interaction_cutoffs = interaction_cutoffs
-        self.receptor_file = receptor_file
-        self.file_sources = file_sources
-        self.file_pattern = file_pattern
-        self.string_sources = string_sources
+        self.receptor_file = results.receptor_file_path
+        self.results = results
+        self.file_pattern = results.file_pattern
+        self.string_sources = results.strings
         self.storageman = storageman
-        self.storageman_class = storageman_class
+        self.storageman_class = self.storageman.__class__
         self.num_files = 0
         self.max_proc = max_proc
         self.logger = LOGGER
 
-    def process_results(self):
+    def process_results(self, duplicate_handling: str):
         """Processes results data (files or string sources) by adding them to the queue
         and starting their processing in multiprocess.
         """
@@ -123,6 +121,7 @@ class MPManager:
             self.chunk_size,
             self.storageman,
             self.docking_mode,
+            duplicate_handling=duplicate_handling,
         )
 
         w.start()
@@ -152,59 +151,42 @@ class MPManager:
         For files, processes lists of files, recursively traveresed filepaths, and individually listed file paths.
         """
 
-        if self.file_sources:
+        if self.results.has_file_results:
             # add individual file(s)
-            if self.file_sources.file != (None and [[]]):
-                for file_list in self.file_sources.file:
-                    for file in file_list:
-                        if os.path.isfile(file):
-                            if (
-                                fnmatch.fnmatch(file, self.file_pattern)
-                                and file != self.receptor_file
-                            ):
-                                self._add_to_queue(file)
-                        else:
-                            raise OptionError(
-                                f"The file {file} is not a a file (or does not exist), and will not be processed."
-                            )
+            files = list(iterate_nested(self.results.file))
+            if files:
+                for file in files:
+                    if (
+                        fnmatch.fnmatch(file, self.file_pattern)
+                        and file != self.receptor_file
+                    ):
+                        self._add_to_queue(file)
 
             # add files from file path(s)
-            if self.file_sources.file_path != (None and [[]]):
-                for path_list in self.file_sources.file_path:
-                    for path in path_list:
-                        # scan for ligand dlgs
-                        if os.path.isdir(path):
-                            for files in self._scan_dir(
-                                path, self.file_pattern, recursive=True
-                            ):
-                                for file in files:
-                                    self._add_to_queue(file)
-                        else:
-                            raise OptionError(
-                                f"The path {path} is not a directory (or does note exist), and will not be processed."
-                            )
+            path_list = list(iterate_nested(self.results.file_path))
+            if path_list:
+                for path in path_list:
+                    # scan for ligand dlgs
+                    for files in self._scan_dir(
+                        path, self.file_pattern, self.results.recursive_path_traverse
+                    ):
+                        for file in files:
+                            self._add_to_queue(file)
 
             # add files from file list(s)
-            if self.file_sources.file_list != (None and [[]]):
-                for filelist_list in self.file_sources.file_list:
-                    for filelist in filelist_list:
-                        self._scan_file_list(
-                            filelist, self.file_pattern.replace("*", "")
-                        )
+            file_lists = list(iterate_nested(self.results.file_list))
+            if file_lists:
+                for file_list in file_lists:
+                    self._scan_file_list(file_list, self.file_pattern.replace("*", ""))
 
         # add docking data from input strings
-        if self.string_sources:
-            try:
-                for (
-                    ligand_name,
-                    docking_result,
-                ) in self.string_sources.results_strings.items():
-                    string_data = {ligand_name: docking_result}
-                    self._add_to_queue(string_data)
-            except:
-                raise RTCoreError(
-                    "There was an error while reading the results string input."
-                )
+        if self.results.strings:
+            for (
+                ligand_name,
+                docking_result,
+            ) in self.results.strings.items():
+                string_data = {ligand_name: docking_result}
+                self._add_to_queue(string_data)
 
     def _add_to_queue(self, results_data):
         """_summary_
@@ -285,7 +267,7 @@ class MPManager:
                     for f in fnmatch.filter(filenames, "*" + pattern)
                 )
         else:
-            yield glob(os.path.join(path, pattern))  # <----
+            yield glob.glob(os.path.join(path, pattern))  # <----
 
     def _scan_file_list(self, filename, pattern):
         """read file names from file list and ensures they exist,
