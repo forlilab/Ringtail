@@ -85,19 +85,18 @@ class OutputManager:
             OutputError
         """
         try:
+            formatted_lines = []
             for line in lines:
                 formatted_tuple = tuple(
                     round(item, 2) if type(item) == float else item for item in line
                 )
-                self._write_log_line(
+                formatted_lines.append(
                     ", ".join(
-                        (
-                            str(item) if type(item) != str else item
-                            for item in formatted_tuple
-                        )
+                        str(item) if type(item) != str else item
+                        for item in formatted_tuple
                     )
                 )
-            self._write_log_line("***************\n")
+            self.output_log.write("\n".join(formatted_lines) + "\n***************\n\n")
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
 
@@ -127,11 +126,9 @@ class OutputManager:
             OutputError
         """
         try:
-            self.output_log.write("\n")
             self.output_log.write(
-                f"Number passing ligands: {str(number_passing_ligands)} \n"
+                f"\nNumber passing ligands: {number_passing_ligands} \n---------------\n"
             )
-            self.output_log.write("---------------\n")
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
 
@@ -145,9 +142,7 @@ class OutputManager:
             OutputError
         """
         try:
-            self.output_log.write("\n")
-            self.output_log.write(f"Result bookmark name: {bookmark_name}\n")
-            self.output_log.write("***************\n")
+            self.output_log.write(f"\nResult bookmark name: {bookmark_name}\n***************\n")
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
