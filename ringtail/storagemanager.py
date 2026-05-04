@@ -587,6 +587,290 @@ class StorageManager:
     }
     # endregion
 
+    # region abstract methods
+    def _detach_db(self, new_db_name):
+        """Detaches new database file from current database
+
+        Args:
+            new_db_name (str): db name for database to detach
+
+        Raises:
+            StorageError
+        """
+        raise NotImplementedError
+
+    def _close_open_cursors(self):
+        """closes any cursors stored in self.open_cursors.
+        Resets self.open_cursors to empty list
+        """
+        raise NotImplementedError
+
+    def _vacuum(self):
+        """SQLite vacuum rebuilds the database file, repacking it into a minimal amount of disk space
+
+        Raises:
+            DatabaseInsertionError
+        """
+        raise NotImplementedError
+
+    def _close_connection(self):
+        """Closes connection to database"""
+        raise NotImplementedError
+
+    def _open_storage(self):
+        """Create connection to db. Then, check if db needs to be created.
+
+        Raises:
+            StorageError
+        """
+        raise NotImplementedError
+
+    def _create_indices(self):
+        """Create index for specified tables and columns. 'ak' stands for 'alternate key' and is prepended to index name to avoid naming conflicts
+
+        Raises:
+            StorageError
+        """
+        raise NotImplementedError
+
+    def _insert_results(self, results_array, duplicate_handling: str):
+        """Takes array of database rows to insert, adds data to results table. Will handle duplicates if specified
+
+        Args:
+            results_array (np.ndAaray): numpy array of arrays containing
+                formatted result rows
+            duplicate_handling (str): how to deal with duplicates, if any
+
+        Returns:
+            Pose_ID (list(int)): returns the pose ids for the ligand written to results, these are used to ensure internal consistency when writing to the interaction table
+            duplicates (list(int)): list of pose ids that are duplicates, if duplicate handling is specified. Filled with None if not specified or not duplicate
+
+        Raises:
+            DatabaseInsertionError
+        """
+        raise NotImplementedError
+
+    def _insert_ligands(self, ligand_array):
+        """Takes array of ligand rows, inserts into Ligands table.
+
+        Args:
+            ligand_array (np.ndarray): Numpy array of arrays
+                containing formatted ligand rows
+
+        Raises:
+            DatabaseInsertionError
+
+        """
+        raise NotImplementedError
+
+    def fetch_receptor_objects(self):
+        """Returns all Receptor objects from database
+
+        Args:
+            rec_name (str): Name of receptor to return object for
+
+        Returns:
+            iter (tuple): of receptor names and objects
+        """
+        raise NotImplementedError
+
+    def _insert_receptors(self, receptor_array):
+        """Takes array of receptor rows, inserts into Receptors table
+
+        Args:
+            receptor_array (list): List of lists
+                containing formatted ligand rows
+
+        Raises:
+            DatabaseInsertionError
+        """
+        raise NotImplementedError
+
+    def _insert_interaction_index_row(self, interaction_tuple) -> tuple:
+        """
+        Writes unique interactions and returns the interaction_id of the given interaction
+
+        Args:
+            interaction_tuple (tuple): (rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)
+
+        Returns:
+            tuple: if interaction index (int_index,)
+
+        Raises:
+            DatabaseInsertionError
+        """
+        raise NotImplementedError
+
+    def _insert_interaction_rows(
+        self, interaction_rows, duplicates, duplicate_handling: str
+    ):
+        """Inserts the interaction data into a "tall-and-skinny" table, with a primary autoincremented key and a Pose_ID that is 1-to-1 with Results table.
+        Table will contain as many rows with the same Pose_ID as that pose has interactions.
+
+        Args:
+            interaction_rows (list(tuple)): list of tuples containing the interaction data
+            duplicates (list(int)): list of pose_ids from results table deemed duplicates, can also contain Nones, will be treated according to duplicate_handling
+
+        Raises:
+            DatabaseInsertionError
+        """
+        raise NotImplementedError
+
+    def check_ringtaildb_version(self):
+        """
+        Checks the database version and confirms whether the code base is compatible with it
+
+        Returns:
+            bool: whether or not db is compatible with the code base
+            str: current database versions
+        """
+        raise NotImplementedError
+
+    def _generate_result_filtering_query(
+        self,
+        filters_dict,
+        bookmark_name,
+        filter_bookmark,
+        mfpt_cluster,
+        interaction_cluster,
+        output_all_poses,
+        order_results,
+        outfields,
+    ):
+        """takes lists of filters, writes sql filtering string
+
+        Args:
+            filters_dict (dict): dict of filters. Keys names and value formats must match those found in the Filters class
+
+        Returns:
+            str: SQLite-formatted string for filtering query
+        """
+        raise NotImplementedError
+
+    def create_bookmark(self, name, query, temp=False, add_poseID=False, filters={}):
+        """Takes name and selection query and creates a bookmark of name.
+        Bookmarks are Ringtail specific views that whose information is stored in the 'Bookmark' table.
+
+        Args:
+            name (str): Name for bookmark which will be created
+            query (str): SQLite-formated query used to create bookmark
+            temp (bool, optional): Flag if bookmark should be temporary
+            add_poseID (bool, optional): Add Pose_ID column to bookmark
+            filters (dict, optional): a dict of filters used to construct the query
+        """
+        raise NotImplementedError
+
+    def _run_query(self, query):
+        """Executes provided SQLite query. Returns cursor for results.
+            Since cursor remains open, added to list of open cursors
+
+        Args:
+            query (str): Formated SQLite query as string
+
+        Returns:
+            SQLite cursor: Contains results of query
+        """
+        raise NotImplementedError
+
+    def get_all_bookmark_names(self):
+        """Get all bookmarks in sql database as a list of names. Bookmarks are a specific type of sqlite-views
+        whose information is stored in the Bookmarks table.
+
+        Returns:
+            list: of bookmark names
+        """
+        raise NotImplementedError
+
+    def _fetch_passing_plot_data(self, bookmark_name: str):
+        """Fetches cursor for best energies and leffs for
+            ligands passing filtering
+
+        Args:
+            bookmark_name (str): name for bookmark for which to fetch data. None will return data for default bookmark_name
+
+        Returns:
+            iter: SQL Cursor containing docking_score,
+                leff for the first pose for passing ligands
+        """
+        raise NotImplementedError
+
+    def _fetch_all_plot_data(self):
+        """Fetches cursor for best energies and leff for all ligands
+
+        Returns:
+             iter: SQLite Cursor containing docking_score,
+                leff for the first pose for each ligand
+        """
+        raise NotImplementedError
+
+    def _attach_db(self, new_db, new_db_name):
+        """Attaches new database file to current database
+
+        Args:
+            new_db (str): file name for database to attach
+            new_db_name (str): name of new database
+
+        Raises:
+            StorageError
+        """
+        raise NotImplementedError
+
+    def _create_temp_table(self, table_name):
+        """create temporary table with given name and with ligand name and pose_id information
+
+        Args:
+            table_name (str): name for temp table
+
+        Raises:
+            DatabaseTableCreationError
+        """
+        raise NotImplementedError
+
+    def _generate_selective_insert_query(
+        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
+    ):
+        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
+
+        Args:
+            bookmark1_name (str): name of bookmark to cross-reference for main db
+            bookmark2_name (str): name of bookmark to cross-reference for attached db
+            select_str (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
+            new_db_name (str): name of attached db
+            temp_table (str): name of temporary table to store passing results in
+
+        Returns:
+            str: sqlite formatted query string
+        """
+        raise NotImplementedError
+
+    def _insert_into_temp_table(self, query):
+        """Execute insertion into temporary table
+
+        Args:
+            query (str): Insertion command
+
+        Raises:
+            DatabaseInsertionError
+        """
+        raise NotImplementedError
+
+    def _get_number_passing_ligands(self, bookmark_name: str):
+        """Returns count of the number of ligands that
+            passed filtering criteria
+
+        Args:
+            bookmark_name (str): bookmark name to query
+
+        Returns:
+            int: Number of passing ligands
+
+        Raises:
+            DatabaseQueryError
+        """
+        raise NotImplementedError
+
+    # endregion
+
 
 class StorageManagerSQLite(StorageManager):
     """SQLite-specific StorageManager subclass
