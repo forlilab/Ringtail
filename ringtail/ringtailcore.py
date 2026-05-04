@@ -28,11 +28,8 @@ class RingtailCore:
     rdkit molecules, plotting docking results, and visualizing select ligands in pymol.
 
     Attributes:
-        db_file (str): name of database file being operated on
         docking_mode (str): specifies what docking mode has been used for the results in the database
         storageman (StorageManager): Interface module with database
-        resultsman (ResultsManager): Module to deal with results processing before adding to database
-        outputman (OutputManager): Manager for output tasks of log-writting, plotting, ligand SDF writing, starting pymol sessions
         filters (Filters): object holding all optional filters
         _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
     """
@@ -41,9 +38,9 @@ class RingtailCore:
 
     def __init__(
         self,
-        db_file: str = "output.db",
-        storage_type: str = "sqlite",
-        docking_mode: str = "dlg",
+        db_file: str = RingtailDefaults.output_db,
+        storage_type: str = RingtailDefaults.storage_type,
+        docking_mode: str = RingtailDefaults.docking_mode,
         logging_level: str = "WARNING",
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
@@ -71,14 +68,13 @@ class RingtailCore:
             storageman = StorageManager.check_storage_compatibility(storage_type)
         except NotImplementedError as e:
             self.logger.error(e)
-            raise e
+            raise
 
         # initialize remaining variables and storagemanager
         self.storagetype = storage_type
-        self.db_file = db_file
         self.storageman = storageman(db_file)
+        self.docking_mode = validate_docking_mode(docking_mode)
         self._run_mode = "api"
-        self._docking_mode = docking_mode
 
     def update_database_version(self, consent=False, new_version="2.0.0"):
         """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
@@ -87,40 +83,6 @@ class RingtailCore:
         # return self.storageman.update_database_version(new_version, consent)
 
     # -#-#- Private methods -#-#-#
-
-    def _validate_docking_mode(self, docking_mode: str):
-        """Method that validates specified AutoDock program used to generate results.
-
-        Args:
-            docking_mode (str): string that describes docking mode
-
-        Raises:
-            RTCoreError: if docking_mode is not supported
-        """
-        if type(docking_mode) is not str:
-            self.logger.warning(
-                'The given docking mode was not given as a string, it will be set to default value "dlg".'
-            )
-            self._docking_mode = "dlg"
-        elif docking_mode.lower() not in ["dlg", "vina"]:
-            raise NotImplementedError(
-                f'Docking mode {docking_mode} is not supported. Please choose between "dlg" and "vina".'
-            )
-        else:
-            self._docking_mode = docking_mode.lower()
-            self.logger.debug(f"Docking mode set to {self.docking_mode}.")
-
-    def _get_docking_mode(self):
-        """
-        Private method to retrieve docking mode
-
-        Returns:
-            str: docking mode
-        """
-        return self._docking_mode
-
-    # making docking mode a property of the ringtail core object
-    docking_mode = property(fget=_get_docking_mode, fset=_validate_docking_mode)
 
     def _add_poses(
         self,
@@ -184,16 +146,18 @@ class RingtailCore:
             ligand_saved_coords.append(ligand_pose)
         return mol, flexres_mols, ligand_saved_coords, flexres_saved_coords, properties
 
-    def _generate_interaction_combinations(self, max_miss=0):
+    def _generate_interaction_combinations(self, filters: dict, max_miss=0):
         """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round
 
         Args:
             max_miss (int): Maximum number of interactions to be excluded
         """
+        if not isinstance(filters, dict):
+            filters = filters.asdict()
 
         all_interactions = []
         for _type in Filters.get_filter_keys("interaction"):
-            interactions = getattr(self.filters, _type)
+            interactions = filters[_type]
             for interact in interactions:
                 all_interactions.append(_type + "-" + interact[0])
         # warn if max_miss greater than number of interactions
@@ -213,10 +177,12 @@ class RingtailCore:
                 )
             )
             return combinations + self._generate_interaction_combinations(
-                max_miss=max_miss - 1
+                filters, max_miss=max_miss - 1
             )
 
-    def _prepare_filters_for_storageman(self, interaction_combination):
+    def _prepare_filters_for_storageman(
+        self, filters: Filters, interaction_combination
+    ):
         """Takes desired interaction combination, formats Filter object to dict, removes interactions not in given interaction_combination
 
         Args:
@@ -225,17 +191,17 @@ class RingtailCore:
         Returns:
             dict: filters for storageman
         """
-
-        filters_dict = self.filters.todict()
+        if not isinstance(filters, dict):
+            filters = filters.asdict()
         for itype in Filters.get_filter_keys("interaction"):
-            itype_interactions = filters_dict[itype]
+            itype_interactions = filters[itype]
             for interaction in itype_interactions:
                 if itype + "-" + interaction[0] not in interaction_combination:
-                    filters_dict[itype].remove(interaction)
+                    filters[itype].remove(interaction)
         # we want a match for all interactions when enumerating combinations
-        filters_dict["max_miss"] = 0
+        filters["max_miss"] = 0
 
-        return filters_dict
+        return filters
 
     def _create_rdkit_mol(
         self,
@@ -307,6 +273,7 @@ class RingtailCore:
         }
 
         if pose_ID is None:  # get all passing and nonpassing poses (if requested)
+            # NOTE this method the temp table created above, explicitly
             passing_properties = self.storageman.fetch_passing_pose_properties(ligname)
             (
                 mol,
@@ -420,21 +387,29 @@ class RingtailCore:
             )
             duplicate_handling = None
 
+        if self.docking_mode != "adgpu" and interaction_tolerance is not None:
+            self.logger.warning(
+                "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
+            )
+            interaction_tolerance = None
+
         if store_all_poses is True and interaction_tolerance is not None:
             logger.warning(
                 "Cannot use 'interaction_tolerance' with 'store_all_poses'. Removing 'interaction_tolerance'."
             )
             interaction_tolerance = None
 
-        if self.docking_mode != "adgpu":
-            if interaction_tolerance is not None:
-                self.logger.warning(
-                    "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
-                )
-                interaction_tolerance = None
-            if add_interactions == True:
-                # cannot be true for adgpu
-                add_interactions = None
+        if self.docking_mode == "adgpu":
+            add_interactions = None
+
+        if (
+            self.docking_mode != "adgpu"
+            and add_interactions == True
+            and results_object.target_name is None
+        ):
+            raise RTCoreError(
+                "Cannot add interactions without a valid receptor path, please provide a valid receptor"
+            )
 
         # TODO clean up the log messages to not get annoying, and use proper objects
         if not strings:
@@ -471,154 +446,12 @@ class RingtailCore:
         if results_object.save_receptor:
             self.save_receptor(results_object.receptor_file_path)
 
-        # TODO some pre processing to ensure there is data, can do that in the results_object class
-
         with self.storageman:
             self.logger.info("Adding results...")
             multiprocessor.process_results(duplicate_handling)
 
             if finalize:
                 self.storageman.finalize_database_write()
-
-    # endregion
-
-    # region #-#-#- Core attribute setting methods -#-#-#
-    """ These methods are used internally to assing values to all ringtail options. 
-    This ensures:   - that all options are set to specific types through RingtailOptions
-                    - that internal consistency checks are performed on a group of options
-                    - these methods ensure options are assigned to the appropriate ringtail manager classes"""
-
-    def set_output_options(
-        self,
-        log_file: str = None,
-        export_sdf_path: str = None,
-        enumerate_interaction_combs: bool = None,
-        dict: dict = None,
-    ):
-        """Creates output options object that holds attributes related to reading and outputting results.
-        Will assign log_file name and export_sdf_path to the output_manager object.
-
-        Args:
-            log_file (str): by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file
-            export_sdf_path (str): specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as SDF files in the order specified.
-            enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-
-        """
-        # Dict of individual arguments
-        individual_options = {
-            "log_file": log_file,
-            "export_sdf_path": export_sdf_path,
-            "enumerate_interaction_combs": enumerate_interaction_combs,
-        }
-        # Create option object with default values if needed
-        if not hasattr(self, "outputopts"):
-            self.outputopts = OutputOptions()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                if v is not None:
-                    setattr(self.outputopts, k, v)
-            self.logger.debug(f"Output options {dict} were set.")
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in individual_options.items():
-            if v is not None:
-                setattr(self.outputopts, k, v)
-        self.logger.debug(f"Output options {individual_options} were set.")
-
-        # Creates output man with attributes if needed
-        self.outputman = OutputManager(
-            self.outputopts.log_file, self.outputopts.export_sdf_path
-        )
-        self.logger.info("Options for output manager have been changed.")
-
-    def set_filters(
-        self,
-        eworst=None,
-        ebest=None,
-        leworst=None,
-        lebest=None,
-        score_percentile=None,
-        le_percentile=None,
-        vdw_interactions=None,
-        hb_interactions=None,
-        reactive_interactions=None,
-        hb_count=None,
-        react_any=None,
-        max_miss=None,
-        ligand_name=None,
-        ligand_operator=None,
-        ligand_substruct=None,
-        ligand_substruct_pos=None,
-        ligand_max_atoms=None,
-        dict: dict = None,
-    ):
-        """
-        Create a filter object containing all numerical and string filters.
-
-        Args:
-            eworst (float): specify the worst energy value accepted
-            ebest (float): specify the best energy value accepted
-            leworst (float): specify the worst ligand efficiency value accepted
-            lebest (float): specify the best ligand efficiency value accepted
-            score_percentile (float): specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.
-            le_percentile (float): specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.
-            vdw_interactions (list[tuple]): define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-            hb_interactions (list[tuple]): define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-            reactive_interactions (list[tuple]): check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-            hb_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
-            react_any (bool): check if ligand reacted with any residue
-            max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
-            ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., ["lig1", "lig2"]
-            ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., ["ccc", "CN"]
-            ligand_substruct_pos (list[str]): SMARTS pattern(s) for substructure matching, e.g., ['"[Oh]C" 0 1.2 -5.5 10.0 15.5'] -> ["smart_string index_of_positioned_atom cutoff_distance x y z"]
-            ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
-            ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
-            dict (dict): dictionary of one or more of the above args, is overwritten by individual args
-        """
-
-        # Dict of individual arguments
-        individual_options = {
-            "eworst": eworst,
-            "ebest": ebest,
-            "leworst": leworst,
-            "lebest": lebest,
-            "score_percentile": score_percentile,
-            "le_percentile": le_percentile,
-            "vdw_interactions": vdw_interactions,
-            "hb_interactions": hb_interactions,
-            "reactive_interactions": reactive_interactions,
-            "hb_count": hb_count,
-            "react_any": react_any,
-            "max_miss": max_miss,
-            "ligand_operator": ligand_operator,
-            "ligand_name": ligand_name,
-            "ligand_substruct": ligand_substruct,
-            "ligand_substruct_pos": ligand_substruct_pos,
-            "ligand_max_atoms": ligand_max_atoms,
-        }
-
-        # Create a filter object
-        self.filters = Filters()
-
-        # Set options from dict if provided
-        if dict is not None:
-            for k, v in dict.items():
-                if v is not None:
-                    setattr(self.filters, k, v)
-            self.logger.debug(f"Filter {dict} were set.")
-
-        # Set additional options from individual arguments
-        # NOTE Will overwrite config file
-        for k, v in individual_options.items():
-            if v is not None:
-                setattr(self.filters, k, v)
-        self.logger.debug(f"Filter {individual_options} were set.")
-
-        self.logger.info("A filter object has been prepared.")
 
     # endregion
 
@@ -703,13 +536,13 @@ class RingtailCore:
         results_strings: dict = None,
         receptor_file: str = None,
         save_receptor: bool = None,
-        duplicate_handling: str = None,
-        overwrite: bool = None,
-        store_all_poses: bool = None,
-        max_poses: int = None,
-        add_interactions: bool = None,
-        interaction_cutoffs: list = None,
-        max_proc: int = None,
+        duplicate_handling: str = RingtailDefaults.duplicate_handling,
+        overwrite: bool = RingtailDefaults.duplicate_handling,
+        store_all_poses: bool = RingtailDefaults.overwrite,
+        max_poses: int = RingtailDefaults.max_poses,
+        add_interactions: bool = RingtailDefaults.add_interactions,
+        interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
+        max_proc: int = RingtailDefaults.max_proc,
         finalize: bool = True,
     ):
         """
@@ -727,7 +560,6 @@ class RingtailCore:
             add_interactions (bool): add ligand-receptor interaction data, only in vina mode
             interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
             max_proc (int): max number of computer processors to use for file reading
-            options_dict (dict): write options as a dict
 
         Raises:
             OptionError
@@ -884,19 +716,17 @@ class RingtailCore:
         ligand_substruct=None,
         ligand_substruct_pos=None,
         ligand_max_atoms=None,
-        filters_dict: dict = None,
         # other processing options:
-        enumerate_interaction_combs: bool = False,
-        output_all_poses: bool = None,
-        mfpt_cluster: float = None,
-        interaction_cluster: float = None,
-        log_file: str = None,
+        enumerate_interaction_combs: bool = RingtailDefaults.enumerate_interaction_combs,
+        output_all_poses: bool = RingtailDefaults.output_all_poses,
+        mfpt_cluster: float = RingtailDefaults.mfpt_cluster,
+        interaction_cluster: float = RingtailDefaults.interaction_cluster,
+        log_file: str = RingtailDefaults.output_log,
         overwrite: bool = None,
-        order_results: str = None,
-        outfields: str = None,
-        bookmark_name: str = None,
-        filter_bookmark: str = None,
-        options_dict: dict = None,
+        order_results: str = RingtailDefaults.order_results,
+        outfields: str = RingtailDefaults.outfields,
+        bookmark_name: str = RingtailDefaults.bookmark_name,
+        filter_bookmark: str = RingtailDefaults.filter_bookmark,
         return_iter=False,
     ):
         """Prepare list of filters, then hand it off to storageman to perform filtering. Creates log of all ligand docking results that passes.
@@ -920,7 +750,6 @@ class RingtailCore:
                 ligand_substruct_pos (list[list[type]]): SMARTS pattern(s) for substructure matching, e.g., [["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5]] -> [["smart_string", index_of_positioned_atom, cutoff_distance, x, y, z]]
                 ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
                 ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
-                filters_dict (dict): provide filters as a dictionary
             Ligand results options:
                 enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
                 output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
@@ -959,7 +788,6 @@ class RingtailCore:
                     "receptor" (receptor name)
                 bookmark_name (str): name for resulting book mark file. Default value is 'passing_results'
                 filter_bookmark (str): name of bookmark to perform filtering over
-                options_dict (dict): write options as a dict
                 return_inter (bool): return an iterable of all of the filtering results
 
         Returns:
@@ -968,146 +796,136 @@ class RingtailCore:
 
         """
 
-        self.set_filters(
-            eworst=eworst,
-            ebest=ebest,
-            leworst=leworst,
-            lebest=lebest,
-            score_percentile=score_percentile,
-            le_percentile=le_percentile,
-            vdw_interactions=vdw_interactions,
-            hb_interactions=hb_interactions,
-            reactive_interactions=reactive_interactions,
-            hb_count=hb_count,
-            react_any=react_any,
-            max_miss=max_miss,
-            ligand_name=ligand_name,
-            ligand_operator=ligand_operator,
-            ligand_substruct=ligand_substruct,
-            ligand_substruct_pos=ligand_substruct_pos,
-            ligand_max_atoms=ligand_max_atoms,
-            dict=filters_dict,
-        )
-
-        if options_dict is not None:
-            storage_dict, output_dict = split_dict(
-                options_dict, ["log_file", "enumerate_interaction_combs"]
-            )
-        else:
-            storage_dict = None
-            output_dict = None
-        # TODO
-        self.set_storageman_attributes(
-            output_all_poses=output_all_poses,
-            mfpt_cluster=mfpt_cluster,
-            interaction_cluster=interaction_cluster,
-            overwrite=overwrite,
-            order_results=order_results,
-            outfields=outfields,
-            bookmark_name=bookmark_name,
-            filter_bookmark=filter_bookmark,
-            dict=storage_dict,
-        )
-        self.set_output_options(
-            log_file=log_file,
-            enumerate_interaction_combs=enumerate_interaction_combs,
-            dict=output_dict,
+        filters = Filters(
+            {
+                "eworst": eworst,
+                "ebest": ebest,
+                "leworst": leworst,
+                "lebest": lebest,
+                "score_percentile": score_percentile,
+                "le_percentile": le_percentile,
+                "vdw_interactions": vdw_interactions,
+                "hb_interactions": hb_interactions,
+                "reactive_interactions": reactive_interactions,
+                "hb_count": hb_count,
+                "react_any": react_any,
+                "max_miss": max_miss,
+                "ligand_name": ligand_name,
+                "ligand_operator": ligand_operator,
+                "ligand_substruct": ligand_substruct,
+                "ligand_substruct_pos": ligand_substruct_pos,
+                "ligand_max_atoms": ligand_max_atoms,
+            }
         )
 
         # Compatibility check with docking mode
-        if self.docking_mode == "vina" and self.filters.react_any:
+        if self.docking_mode == "vina" and filters.react_any:
             self.logger.warning(
                 "Cannot use reaction filters with Vina mode. Removing react_any filter."
             )
-            self.filters.react_any = False
+            filters.react_any = False
 
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
-        if self.filters.max_miss == 0:
-            self.outputopts.enumerate_interaction_combs = True
+        if filters.max_miss == 0:
+            enumerate_interaction_combs = True
 
         # guard against unsing percentile filter with all_poses
-        if self.storageopts.output_all_poses and not (
-            self.filters.score_percentile is None or self.filters.le_percentile is None
+        if output_all_poses and not (
+            filters.score_percentile is None or filters.le_percentile is None
         ):
             self.logger.warning(
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
-            self.storageopts.output_all_poses = False
+            output_all_poses = False
 
         self.logger.info("Filtering results...")
         ligands_passed = 0
+
         # get possible permutations of interaction with max_miss excluded
-        if self.filters.max_miss > 0 and self.outputopts.enumerate_interaction_combs:
+        if filters.max_miss > 0 and enumerate_interaction_combs:
             write_one_bookmark = False
         else:
             write_one_bookmark = True
 
+        outputman = OutputManager(log_file=log_file)
+
         with self.storageman:
             # pre-process if filtering to multiple bookmark combinations
             if write_one_bookmark:
+                # TODO this method needs to take all the inputs
                 filtered_results = self.storageman.filter_results(
-                    self.filters.todict(),
+                    filters.asdict(),
+                    bookmark_name,
+                    filter_bookmark,
+                    mfpt_cluster,
+                    interaction_cluster,
+                    output_all_poses,
+                    order_results,
+                    outfields,
                 )
                 # if there were results of the filtering
                 if filtered_results:
                     # if retuning an iterable with the resulting pose ids
                     if return_iter:
                         return filtered_results
-                    result_bookmark_name = self.storageman.get_current_bookmark_name()
                     # write output log file
-                    with self.outputman:
-                        self.outputman.write_filters_to_log(
-                            self.filters.todict(),
+                    with outputman:
+                        # TODO make writing more efficient
+                        outputman.write_filters_to_log(
+                            filters.asdict(),
                             [],
-                            f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}",
+                            f"Morgan Fingerprints butina clustering cutoff: {mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {interaction_cluster}",
                         )
-                        self.outputman.write_results_bookmark_to_log(
-                            result_bookmark_name
-                        )
-                        number_passing = self.outputman.write_filter_log(
-                            filtered_results
-                        )
-                        self.outputman.log_num_passing_ligands(number_passing)
+                        outputman.write_results_bookmark_to_log(bookmark_name)
+                        number_passing = outputman.write_filter_log(filtered_results)
+                        outputman.log_num_passing_ligands(number_passing)
                         print("\nNumber of ligands passing filters:", number_passing)
                         ligands_passed = number_passing
                 else:
                     self.logger.warning(f"WARNING: No ligands found passing filter.")
-                    self.storageman.drop_bookmark(self.storageman.bookmark_name)
+                    self.storageman.drop_bookmark(bookmark_name)
             # else produce a bookmark for each interaction combination
             elif not write_one_bookmark:
+                bookmark_name_base = bookmark_name
                 interaction_combs = self._generate_interaction_combinations(
-                    self.filters.max_miss
+                    filters, filters.max_miss
                 )
+                passing_bookmarks = []
                 for ic_idx, combination in enumerate(interaction_combs):
                     # prepare Filter object with only desired interaction combination for storageManager
-                    filters_dict = self._prepare_filters_for_storageman(combination)
+                    filters_dict = self._prepare_filters_for_storageman(
+                        filters, combination
+                    )
                     # set storageMan's internal ic_counter to reflect current ic_idx
-                    if len(interaction_combs) > 1:
-                        self.storageman.set_bookmark_suffix(ic_idx)
+
+                    bookmark_name = bookmark_name_base + "_" + str(ic_idx)
                     # ask storageManager to fetch results
                     filtered_results = self.storageman.filter_results(
                         filters_dict,
-                        not self.outputopts.enumerate_interaction_combs,
+                        bookmark_name,
+                        filter_bookmark,
+                        mfpt_cluster,
+                        interaction_cluster,
+                        output_all_poses,
+                        order_results,
+                        outfields,
+                        suppress_output=not enumerate_interaction_combs,
                     )
                     if filtered_results:
                         if return_iter:
                             return filtered_results
-                        result_bookmark_name = (
-                            self.storageman.get_current_bookmark_name()
-                        )
-                        with self.outputman:
-                            self.outputman.write_filters_to_log(
-                                self.filters.todict(),
+                        passing_bookmarks.append(bookmark_name)
+                        with outputman:
+                            outputman.write_filters_to_log(
+                                filters.asdict(),
                                 combination,
-                                f"Morgan Fingerprints butina clustering cutoff: {self.storageman.mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {self.storageman.interaction_cluster}",
+                                f"Morgan Fingerprints butina clustering cutoff: {mfpt_cluster}\nInteraction Fingerprints clustering cutoff: {interaction_cluster}",
                             )
-                            self.outputman.write_results_bookmark_to_log(
-                                result_bookmark_name
-                            )
-                            number_passing = self.outputman.write_filter_log(
+                            outputman.write_results_bookmark_to_log(bookmark_name)
+                            number_passing = outputman.write_filter_log(
                                 filtered_results
                             )
-                            self.outputman.log_num_passing_ligands(number_passing)
+                            outputman.log_num_passing_ligands(number_passing)
                             print(
                                 "\nNumber of ligands passing filters:", number_passing
                             )
@@ -1116,20 +934,24 @@ class RingtailCore:
                         self.logger.warning(
                             f"WARNING: No ligands found passing given interaction combination {combination}"
                         )
-                        self.storageman.drop_bookmark(self.storageman.bookmark_name)
+                        self.storageman.drop_bookmark(bookmark_name)
+
                 if len(interaction_combs) > 1:
                     maxmiss_union_results = self.storageman.get_maxmiss_union(
-                        len(interaction_combs)
+                        bookmark_name_base,
+                        passing_bookmarks,
+                        output_all_poses,
+                        outfields,
                     )
-                with self.outputman:
-                    self.outputman.write_maxmiss_union_header()
-                    self.outputman.write_results_bookmark_to_log(
-                        self.storageman.bookmark_name + "_union"
+                with outputman:
+                    outputman.write_maxmiss_union_header()
+                    outputman.write_results_bookmark_to_log(
+                        bookmark_name_base + "_union"
                     )
-                    number_passing_union = self.outputman.write_filter_log(
+                    number_passing_union = outputman.write_filter_log(
                         maxmiss_union_results
                     )
-                    self.outputman.log_num_passing_ligands(number_passing_union)
+                    outputman.log_num_passing_ligands(number_passing_union)
                     print(
                         "\nNumber passing ligands in max_miss union:",
                         number_passing_union,
@@ -1139,7 +961,7 @@ class RingtailCore:
         return ligands_passed
 
     def write_flexres_pdb(
-        self, receptor_polymer, ligname: str, filename: str, bookmark_name: str = None
+        self, receptor_polymer, ligname: str, filename: str, bookmark_name: str
     ):
         """
         Writes a receptor pdb with flexible residues based on the ligand provided
@@ -1151,12 +973,8 @@ class RingtailCore:
             bookmark_name (str, optional): will use last used bookmark if not specified, will not work in a db without any filtering performed
         """
         # make flexres rdkit mols for ligand-receptor docking
-        if bookmark_name is not None:
-            # TODO
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
-
         with self.storageman:
-            self.storageman.create_temp_table_from_bookmark()
+            self.storageman.create_temp_table_from_bookmark(bookmark_name)
             ligname, ligand_smile, atom_index_map, hydrogen_parents = (
                 self.storageman.fetch_single_ligand_output_info(ligname)
             )
@@ -1222,17 +1040,16 @@ class RingtailCore:
             StorageError: if bookmark or data not found
         """
 
-        if sdf_path is not None:
-            self.set_output_options(export_sdf_path=sdf_path)
-        else:
-            self.set_output_options(export_sdf_path=".")
+        outputman = OutputManager(
+            export_sdf_path=sdf_path if sdf_path is not None else "."
+        )
         try:
             all_mols = self.ligands_rdkit_mol(
                 bookmark_name=bookmark_name, write_nonpassing=write_nonpassing
             )
-        except StorageError as e:
+        except RTCoreError as e:
             self.logger.error(str(e))
-            return
+            raise
 
         if all_mols is None:
             self.logger.error(
@@ -1246,24 +1063,24 @@ class RingtailCore:
             # determine filename
             if all_in_one:
                 # will write one SDF file for all molecules in bookmark (_None if no bookmark present)
-                db_file_name = os.path.splitext(os.path.basename(self.db_file))[0]
-                sdf_file_name = ("{0}_{1}.sdf").format(
-                    db_file_name, str(self.storageman.bookmark_name)
-                )
+                db_file_name = os.path.splitext(
+                    os.path.basename(self.storageman.db_file)
+                )[0]
+                sdf_file_name = ("{0}_{1}.sdf").format(db_file_name, str(bookmark_name))
                 self.logger.info("Writing " + ligname + " to {0}".format(sdf_file_name))
             else:
                 # filename is name of ligand
                 sdf_file_name = ligname + ".sdf"
                 self.logger.info("Writing " + ligname + ".sdf")
 
-            self.outputman.write_out_mol(
+            outputman.write_out_mol(
                 sdf_file_name,
                 info["ligand"],
                 info["flex_residues"],
                 info["properties"],
             )
 
-    def ligands_rdkit_mol(self, bookmark_name=None, write_nonpassing=False) -> dict:
+    def ligands_rdkit_mol(self, bookmark_name, write_nonpassing=False) -> dict:
         """
         Creates a dictionary of RDKit mols of all ligands specified from a bookmark, either excluding (default) or including
         those ligands that did not pass the filter(s).
@@ -1275,26 +1092,26 @@ class RingtailCore:
         Returns:
             all_mols (dict): containing ligand names, RDKit mols, flexible residue bols, and other ligand properties
         """
-
-        if bookmark_name is not None:
-            # TODO
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
+        if bookmark_name is None:
+            raise RTCoreError(
+                "Cannot currently create RDKit mols for data without a bookmark."
+            )
 
         with self.storageman:
             # Ensure bookmarks exist and have data
             all_bookmarks = self.storageman.get_all_bookmark_names()
 
             # is bookmark name actually in database
-            if self.storageman.bookmark_name in all_bookmarks:
+            if bookmark_name in all_bookmarks:
                 # check if has max_miss filter
                 bookmark_filters = self.storageman.fetch_filters_from_bookmark(
-                    self.storageman.bookmark_name
+                    bookmark_name
                 )
                 try:
                     max_miss_present = bool(
                         bookmark_filters["max_miss"] > 0
                         and not bookmark_filters["enumerate_interaction_combs"]
-                        and not "_union" in self.storageman.bookmark_name
+                        and not "_union" in bookmark_name
                     )
                 except:
                     #  in case bookmark query string does not contain the phrase 'max_miss', carry on
@@ -1305,14 +1122,12 @@ class RingtailCore:
                             "'max_miss' used in filtering, but the bookmark used for sdfs writing is not the union of the search"
                         )
             # if bookmark name is not in the database
-            elif not self.storageman.bookmark_name in all_bookmarks:
+            elif not bookmark_name in all_bookmarks:
                 # does bookmark name + _union resolve the issue
                 if self.storageman.check_passing_bookmark_exists(
-                    self.storageman.bookmark_name + "_union"
+                    bookmark_name + "_union"
                 ):
-                    self.storageman.bookmark_name = (
-                        self.storageman.bookmark_name + "_union"
-                    )
+                    bookmark_name = bookmark_name + "_union"
                     self.logger.warning(
                         "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
                     )
@@ -1320,17 +1135,17 @@ class RingtailCore:
                 else:
                     raise StorageError(
                         "Filtering bookmark {0} does not exist in database. Cannot write passing molecule SDFs".format(
-                            self.storageman.bookmark_name
+                            bookmark_name
                         )
                     )
 
-            if not self.storageman.bookmark_has_rows(self.storageman.bookmark_name):
+            if not self.storageman.bookmark_has_rows(bookmark_name):
                 raise StorageError(
                     "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
                 )
 
             # make temp table
-            self.storageman.create_temp_table_from_bookmark()
+            self.storageman.create_temp_table_from_bookmark(bookmark_name)
             passing_molecule_info = self.storageman.fetch_passing_ligand_output_info()
             flexible_residues, flexres_atomnames = self.storageman.fetch_flexres_info()
 
@@ -1387,14 +1202,12 @@ class RingtailCore:
                 self.storageman.fetch_clustered_similars(query_ligname)
             )
             if similar_ligands is not None:
-                self.set_output_options(log_file=log_file)
-                with self.outputman:
-                    self.outputman.write_find_similar_header(
-                        query_ligname, cluster_name
-                    )
-                    self.outputman.write_results_bookmark_to_log(bookmark_name)
-                    number_similar = self.outputman.write_filter_log(similar_ligands)
-                    self.outputman.log_num_passing_ligands(number_similar)
+                outputman = OutputManager(log_file=log_file)
+                with outputman:
+                    outputman.write_find_similar_header(query_ligname, cluster_name)
+                    outputman.write_results_bookmark_to_log(bookmark_name)
+                    number_similar = outputman.write_filter_log(similar_ligands)
+                    outputman.log_num_passing_ligands(number_similar)
                     print("Number similar ligands:", number_similar)
         return number_similar
 
@@ -1419,7 +1232,7 @@ class RingtailCore:
             merging_dbs = [merging_dbs]
 
         # Expand glob patterns and collect unique paths
-        primary_abspath = os.path.abspath(self.db_file)
+        primary_abspath = os.path.abspath(self.storageman.db_file)
         seen = set()
         expanded_dbs = []
         for pattern in merging_dbs:
@@ -1442,7 +1255,9 @@ class RingtailCore:
         LOGGER.warning(
             "If you have performed filtering or clustering, this data will be lost in the new, merged database."
         )
-        LOGGER.info(f"Merging {len(expanded_dbs)} databases into {self.db_file}")
+        LOGGER.info(
+            f"Merging {len(expanded_dbs)} databases into {self.storageman.db_file}"
+        )
 
         with self.storageman as sm:
             if backup:
@@ -1484,12 +1299,9 @@ class RingtailCore:
         Returns:
             matplotlib.pyplot.figure (optional): will not show figure if returning figure handle
         """
-        if bookmark_name is not None:
-            # TODO
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
         with self.storageman:
-            bookmark_filters = (
-                self.storageman.fetch_filters_from_bookmark()
+            bookmark_filters = self.storageman.fetch_filters_from_bookmark(
+                bookmark_name
             )  # fetches the filters used to produce the bookmark
 
         if bookmark_filters:
@@ -1500,7 +1312,7 @@ class RingtailCore:
                 )
 
         logger.info("Creating plot of results")
-        all_data, passing_data = self.get_plot_data()
+        all_data, passing_data = self.get_plot_data(bookmark_name)
         xdata = []
         ydata = []
         # add to list as docking_score/energy and ligand_efficiency
@@ -1523,7 +1335,8 @@ class RingtailCore:
             markersize = 60 - (datalength / 25)
 
         # plot the data
-        fig = self.outputman.plot_all_data(xdata, ydata, num_of_bins)
+        outputman = OutputManager()
+        fig = outputman.plot_all_data(xdata, ydata, num_of_bins)
 
         if passing_data != []:  # handle if no passing ligands
             xaxis = []
@@ -1534,10 +1347,10 @@ class RingtailCore:
                 # leff
                 yaxis.append(line[1])
 
-            self.outputman.plot_single_points(xaxis, yaxis, markersize)
+            outputman.plot_single_points(xaxis, yaxis, markersize)
 
         if save:
-            self.outputman.save_scatterplot()
+            outputman.save_scatterplot()
 
         if return_fig_handle:
             return fig
@@ -1556,25 +1369,17 @@ class RingtailCore:
         Returns:
             list(tuple), list(tuple): [all_data], [filtered_data]
         """
-        if bookmark_name is not None:
-            # TODO
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
-        else:
-            if self.storageman.bookmark_name in self.get_bookmark_names():
-                self.logger.debug(
-                    f"No bookmark specified, using bookmark '{self.storageman.bookmark_name}'."
-                )
-            else:
-                self.logger.info(
-                    "No bookmark specified or available, passing_data will return empty."
-                )
+        if bookmark_name == None or not bookmark_name in self.get_bookmark_names():
+            self.logger.info(
+                "No bookmark specified or available, passing_data will return empty."
+            )
 
         with self.storageman:
-            all_data, passing_data = self.storageman.get_plot_data()
+            all_data, passing_data = self.storageman.get_plot_data(bookmark_name)
 
         return all_data, passing_data
 
-    def display_pymol(self, bookmark_name=None):
+    def display_pymol(self, bookmark_name: str):
         """
         Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
 
@@ -1595,23 +1400,20 @@ class RingtailCore:
 
         time.sleep(10)
 
-        if bookmark_name is not None:
-            # TODO
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
-        else:
-            if self.storageman.bookmark_name in self.get_bookmark_names():
-                self.logger.debug(
-                    f"No bookmark specified, using bookmark '{self.storageman.bookmark_name}'."
-                )
-            else:
-                self.logger.error(
-                    "No bookmark specified or available. display_pymol() currently only works for filtered data. "
-                )
+        if bookmark_name is None:
+            raise RTCoreError(
+                "No bookmark specified . display_pymol() currently only works for filtered data. "
+            )
+
+        if bookmark_name not in self.get_bookmark_names():
+            raise RTCoreError(f"Bookmark name does not exist, cannot proceed.")
 
         poseIDs = {}
         with self.storageman:
             # fetch data for passing ligands
-            _, passing_data = self.storageman.get_plot_data(only_passing=True)
+            _, passing_data = self.storageman.get_plot_data(
+                bookmark_name, only_passing=True
+            )
             for line in passing_data:
                 plt.plot(line[0], line[1], ".r", mfc="None", picker=5)
                 poseIDs[(line[0], line[1])] = (
@@ -1715,7 +1517,9 @@ class RingtailCore:
             str: name of the new, exported database
         """
         if db_filepath is None:
-            db_filepath = self.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+            db_filepath = (
+                self.storageman.db_file.rstrip(".db") + "_" + bookmark_name + ".db"
+            )
 
         self.logger.info("Exporting bookmark database")
         if os.path.exists(db_filepath):
@@ -1740,18 +1544,21 @@ class RingtailCore:
         """
         with self.storageman:
             receptor_tuples = self.storageman.fetch_receptor_objects()
+        outputman = OutputManager()
         for recname, recblob in receptor_tuples:
             if recblob is None:
                 self.logger.warning(
                     f"No receptor pdbqt stored for {recname}. Export failed."
                 )
                 continue
-            if not hasattr(self, "outputman"):
-                self.set_output_options()
-            self.outputman.write_receptor_pdbqt(recname, recblob)
+
+            outputman.write_receptor_pdbqt(recname, recblob)
 
     def get_previous_filter_data(
-        self, outfields=None, bookmark_name=None, log_file=None
+        self,
+        outfields: str = RingtailDefaults.outfields,
+        bookmark_name=None,
+        log_file=None,
     ):
         """Get data requested in self.out_opts['outfields'] from the
         results bookmark of a previous filtering
@@ -1760,18 +1567,17 @@ class RingtailCore:
             outfields (str): use outfields as described in RingtailOptions > StorageOptions
             bookmark_name (str): bookmark for which the filters were used
         """
-        # TODO
-        if bookmark_name is not None:
-            self.set_storageman_attributes(bookmark_name=bookmark_name)
-        if outfields is not None:
-            self.set_storageman_attributes(outfields=outfields)
-        if log_file is not None:
-            self.set_output_options(log_file=log_file)
+        if "Ligand_name" not in outfields:
+            outfields = "Ligand_name," + outfields
 
         with self.storageman:
-            new_data = self.storageman.fetch_data_for_passing_results()
-        with self.outputman:
-            self.outputman.write_filter_log(new_data)
+            new_data = self.storageman.fetch_data_for_passing_results(
+                bookmark_name, outfields
+            )
+
+        outputman = OutputManager(log_file)
+        with outputman:
+            outputman.write_filter_log(new_data)
 
     def cross_reference_databases(
         self,

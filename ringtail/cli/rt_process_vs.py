@@ -67,8 +67,10 @@ def main():
 
             # write out molecules if requested
             if outopts.export_sdf_path:
-                rtcore.write_molecule_sdfs(sdf_path = outopts.export_sdf_path,
-                                           all_in_one=not cmdinput.individual_sdf_files)
+                rtcore.write_molecule_sdfs(
+                    sdf_path=outopts.export_sdf_path,
+                    all_in_one=not cmdinput.individual_sdf_files,
+                )
 
             # write out requested CSVs
             if readopts["export_bookmark_csv"]:
@@ -96,7 +98,7 @@ def main():
 
             # open pymol viewer
             if cmdinput.pymol:
-                rtcore.display_pymol()
+                rtcore.display_pymol(bookmark_name="#TODO")
 
     except Exception as e:
         logger.critical("ERROR: " + str(e))

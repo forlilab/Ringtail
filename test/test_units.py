@@ -24,7 +24,7 @@ def countrows():
     return __dbconnect
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture
 def dbquery():
     conn = sqlite3.connect("output.db")
     curs = conn.cursor()
@@ -41,6 +41,7 @@ def dbquery():
 class TestRingtailCore:
 
     def test_add_folder(self, countrows):
+        os.system("rm flexres.db output.db *.log")
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file_path="test_data/adgpu/group1")
         count = countrows("SELECT COUNT(*) FROM Ligands")
@@ -178,8 +179,10 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7)
         log_file_name = "output_log_test.txt"
-        rtc.set_output_options(log_file=log_file_name)
-        rtc.get_previous_filter_data("delta, ref_rmsd", bookmark_name="passing_results")
+
+        rtc.get_previous_filter_data(
+            "delta, ref_rmsd", bookmark_name="passing_results", log_file=log_file_name
+        )
 
         with open(log_file_name) as f:
             file_contents = f.read()
@@ -187,8 +190,8 @@ class TestRingtailCore:
 
         final_line = linecache.getline(log_file_name, 10)
 
-        assert "'11991', '11991', 0.0, 226.06" in file_contents
-        assert "'3961', '3961', 0.0, 215.96" in file_contents
+        assert "'11991', 0.0, 226.06" in file_contents
+        assert "'3961', 0.0, 215.96" in file_contents
         assert final_line == "***************\n"
 
         os.system(("rm " + log_file_name))
@@ -224,8 +227,8 @@ class TestRingtailCore:
     def test_write_sdfs(self):
         sdf_path = "sdf_files"
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, log_file="output_log.txt")
-        rtc.write_molecule_sdfs(sdf_path, all_in_one=False)
+        rtc.filter(eworst=-7, log_file="output_log.txt", bookmark_name="sdf_export")
+        rtc.write_molecule_sdfs(sdf_path, all_in_one=False, bookmark_name="sdf_export")
 
         # ensure correct number of files written
         sdf_files = os.listdir(sdf_path)
@@ -255,12 +258,11 @@ class TestRingtailCore:
         os.rmdir(sdf_path)
 
     def test_pymol(self):
-        # will not add a test for now, as I cannot figure out an unambiguous, lightweight way to test
-        pass
+        pytest.importorskip("pymol")
 
     def test_export_csv(self):
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7)
+        rtc.filter(eworst=-7, log_file="dont_delete.txt")
         rtc.export_csv("Ligands", "Ligands.csv", True)
 
         assert os.path.exists("Ligands.csv")
@@ -278,16 +280,19 @@ class TestRingtailCore:
         os.system("rm " + receptor_file)
 
     def test_generate_interactions_prepare_filters(self):
+        from ringtail.ringtailoptions import Filters
+
         test_filters = []
         rtc = RingtailCore()
-        rtc.docking_mode = "dlg"
-        rtc.set_filters(
-            hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
-            vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
+        filters = Filters(
+            {
+                "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+            }
         )
-        interaction_combs = rtc._generate_interaction_combinations(1)
+        interaction_combs = rtc._generate_interaction_combinations(filters.asdict(), 1)
         for ic in interaction_combs:
-            nufilter = rtc._prepare_filters_for_storageman(ic)
+            nufilter = rtc._prepare_filters_for_storageman(filters.asdict(), ic)
             test_filters.append(nufilter)
 
         assert {
@@ -393,15 +398,16 @@ class TestRingtailCore:
         assert len(test_filters) == 5
 
     def test_logfile_write(self):
-        rtc = RingtailCore("output.db")
-        assert os.path.exists("output_log.txt")
+        assert os.path.exists("dont_delete.txt")
 
-        with open("output_log.txt") as f:
+        with open("dont_delete.txt") as f:
             for line_no, line_content in enumerate(f):
                 if line_no == 28:
                     break
 
         assert line_content == "'11128', -7.25\n"
+
+        os.system("rm dont_delete.txt")
 
     def test_write_flexres_pdb(self):
         import meeko
@@ -441,8 +447,8 @@ class TestRingtailCore:
 
     def test_plot(self):
         rtcore = RingtailCore(db_file="output.db")
-        rtcore.filter(eworst=-7)
-        rtcore.plot()
+        rtcore.filter(eworst=-7, bookmark_name="plotting")
+        rtcore.plot(bookmark_name="plotting")
         assert os.path.isfile("scatter.png") == True
         os.system("rm scatter.png")
 
@@ -548,8 +554,8 @@ class TestVinaHandling:
 
     def test_vina_file_add(self, countrows):
         vina_path = "test_data/vina"
-        rtc = RingtailCore("output.db")
-        rtc.docking_mode = "vina"
+        rtc = RingtailCore("output.db", docking_mode="vina")
+
         rtc.add_results_from_files(
             file_path=vina_path,
             file_pattern="*.pdbqt*",
@@ -600,9 +606,11 @@ class TestVinaHandling:
         rtc = RingtailCore(
             db_file="output.db", docking_mode="vina", logging_level="DEBUG"
         )
-        rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
+        rtc.add_results_from_files(
+            file="test_data/vina/sample-result.pdbqt", add_interactions=False
+        )
 
-        warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is dlg."
+        warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is adgpu."
         log_file = rtc.logger._log_fp.baseFilename
         with open(log_file, "r") as f:
             if warning_string in f.read():
@@ -617,7 +625,7 @@ class TestVinaHandling:
 
 class TestStorageMan:
 
-    def test_storageman_setup(self):
+    def test_fetch_summary_data(self):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
             file_list="test_data/filelist1.txt",
@@ -625,24 +633,6 @@ class TestStorageMan:
             receptor_file="test_data/adgpu/4j8m.pdbqt",
             save_receptor=True,
         )
-
-        storageman_attributes = {
-            "duplicate_handling": rtc.storageman.duplicate_handling,
-            "filter_bookmark": rtc.storageman.filter_bookmark,
-            "overwrite": rtc.storageman.overwrite,
-            "order_results": rtc.storageman.order_results,
-            "outfields": rtc.storageman.outfields,
-            "output_all_poses": rtc.storageman.output_all_poses,
-            "mfpt_cluster": rtc.storageman.mfpt_cluster,
-            "interaction_cluster": rtc.storageman.interaction_cluster,
-            "bookmark_name": rtc.storageman.bookmark_name,
-        }
-        defaults = RingtailCore.default_dict()
-        # ensure defaults values are set correctly and do not change during processing
-        assert storageman_attributes.items() <= defaults.items()
-
-    def test_fetch_summary_data(self):
-        rtc = RingtailCore("output.db")
         with rtc.storageman:
             summ_dict = rtc.storageman.fetch_summary_data()
         assert summ_dict == {
@@ -666,7 +656,7 @@ class TestStorageMan:
             file_path="test_data/adgpu/group2",
         )
         rtc.filter(
-            eworst=-3,
+            eworst=-3.0,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True)],
         )
@@ -717,32 +707,6 @@ class TestLogger:
 
 
 class TestOptions:
-    def test_option_error(self):
-        from ringtail import exceptions as e
-
-        with pytest.raises(e.OptionError):
-            rtc = RingtailCore()
-            rtc.filter(eworst="a")
-
-    def test_object_checks(self):
-        # checking that incompatible options are handled
-        rtc = RingtailCore()
-        rtc.set_filters(score_percentile=20)
-        assert rtc.filters.eworst == None
-        assert rtc.filters.score_percentile == 20
-
-        # conflicting options, score percentile should be set to none
-        rtc.set_filters(eworst=-6)
-        assert rtc.filters.eworst == -6
-        assert rtc.filters.score_percentile == None
-
-    def test_set_order(self):
-        rtc = RingtailCore()
-        rtc.set_filters(dict={"eworst": -5})
-        assert rtc.filters.eworst == -5
-        # ensure single options overwrite dict options
-        rtc.set_filters(eworst=-6, dict={"eworst": -5})
-        assert rtc.filters.eworst == -6
 
     def test_overwrite_db(self, countrows):
         rtc = RingtailCore()

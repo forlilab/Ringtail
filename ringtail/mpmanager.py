@@ -12,7 +12,7 @@ import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .logutils import LOGGER
-from .exceptions import MultiprocessingError, RTCoreError, OptionError
+from .exceptions import MultiprocessingError
 import traceback
 from datetime import datetime
 from .ringtailoptions import ResultsObject

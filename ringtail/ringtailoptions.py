@@ -109,10 +109,7 @@ class RingtailDefaults:
     interaction_tolerance: float = None
     interaction_cutoffs: tuple[float] = (3.7, 4.0)  # HB CUTOFF,VDW CUTOFF
     add_interactions: bool = True
-    outfields: tuple[str] = (
-        "LigName",
-        "docking_score",
-    )
+    outfields: tuple[str] = "Ligand_name,e"
     order_results: str = None
     mfpt_cluster: float = None
     interaction_cluster: float = None
@@ -193,8 +190,8 @@ class Filters:
     def __init__(self, filters: dict = {}):
         self.eworst: float = None
         self.ebest: float = None
-        self.lebest: float = None
         self.leworst: float = None
+        self.lebest: float = None
         self.score_percentile: float = None
         self.le_percentile: float = None
 
@@ -206,13 +203,10 @@ class Filters:
         self.max_miss: int = 0
 
         self.ligand_name: str = None
-        self.ligand_name_file: str = None
         self.ligand_operator: str = None
         self.ligand_substruct: str = None
         self.ligand_substruct_pos: list = None
         self.ligand_max_atoms: int = None
-        self.ligand_min_molweight: float = None
-        self.ligand_max_molweight: float = None
         if filters:
             for key, value in filters.items():
                 if hasattr(self, key):
@@ -262,13 +256,6 @@ class Filters:
         if self.max_miss < 0:
             raise OptionError("'max_miss' must be greater than or equal to 0.")
 
-        if self.ligand_max_atoms and (
-            self.ligand_min_molweight or self.ligand_max_molweight
-        ):
-            raise OptionError(
-                "Cannot filter based on both max heavy atoms and mol weight restrictions."
-            )
-
     @classmethod
     def get_filter_keys(self, group) -> list:
         """Provide keys associated with each of the filter groups.
@@ -303,8 +290,6 @@ class Filters:
                 "ligand_substruct_pos",
                 "ligand_max_atoms",
                 "ligand_operator",
-                "ligand_min_molweight",
-                "ligand_max_molweight",
             ],
         }
         if group.lower() == "all":
