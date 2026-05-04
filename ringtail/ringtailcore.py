@@ -1564,7 +1564,7 @@ class RingtailCore:
         results bookmark of a previous filtering
 
         Args:
-            outfields (str): use outfields as described in RingtailOptions > StorageOptions
+            outfields (str): use outfields as described in RingtailCore>Filter method stub or cloptionparser for --outfields
             bookmark_name (str): bookmark for which the filters were used
         """
         if "Ligand_name" not in outfields:

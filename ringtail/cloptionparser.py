@@ -621,18 +621,13 @@ class CLOptionParser:
     Attributes:
         process_mode (str): operating in 'write' or 'read' mode
         rtcore (RingtailCore): ringtail core object initialized with the provided db_file
-        filters (dict): fully parsed and organied optional filters
+        filters (Filters): fully parsed and organied optional filters
         file_sources (dict): fully parsed docking results and receptor files
         writeopts (dict): fully parsed arguments related to database writing
-        storageopts (dict): fully parsed arguments related to how the storage system behaves
-        outputopts (dict): fully parsed arguments related to output and reading from the database
+        filter_options (dict): options to use during filtering that are not filters
+        output_options (dict): fully parsed arguments related to output and reading from the database
         print_summary (bool): switch to print database summary
         filtering (bool): switch to run filtering method
-        plot (bool): switch to plot the data
-        export_bookmark_db (bool): switch to export bookmark as a new database
-        export_receptor (bool): switch to export receptor information to pdbqt
-        pymol (bool): switch to visualize ligands in pymol
-        data_from_bookmark (bool): switch to write bookmark data to the output log file
 
     Raises:
         OptionError: Error when an option cannot be parsed correctly

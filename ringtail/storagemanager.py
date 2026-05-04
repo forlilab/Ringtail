@@ -302,55 +302,6 @@ class StorageManager:
         else:
             return self._fetch_all_plot_data(), []
 
-    def crossref_filter(
-        self,
-        new_db: str,
-        bookmark1_name: str,
-        bookmark2_name: str,
-        selection_type="-",
-        old_db=None,
-    ) -> tuple:
-        """Selects ligands found or not found in the given bookmark in both current db and new_db. Stores as temp view
-
-        Args:
-            new_db (str): file name for database to attach
-            bookmark1_name (str): string for name of first bookmark/temp table to compare
-            bookmark2_name (str): string for name of second bookmark to compare
-            selection_type (str): "+" or "-" indicating if ligand names should ("+") or should not "-" be in both databases
-            old_db (str, optional): file name for previous database
-
-        Returns:
-            tuple: (name of new bookmark (str), number of ligands passing new bookmark (int))
-        """
-
-        if old_db is not None:
-            self._detach_db(old_db.split(".")[0])  # remove file extension
-
-        new_db_name = new_db.split(".")[0]  # remove file extension
-
-        self._attach_db(new_db, new_db_name)
-
-        if selection_type == "-":
-            select_str = "NOT IN"
-        elif selection_type == "+":
-            select_str = "IN"
-        else:
-            raise StorageError(f"Unrecognized selection type {selection_type}")
-
-        temp_name = "temp_" + str(self.temptable_suffix)
-        self._create_temp_table(temp_name)
-        temp_insert_query = self._generate_selective_insert_query(
-            bookmark1_name, bookmark2_name, select_str, new_db_name, temp_name
-        )
-
-        self._insert_into_temp_table(temp_insert_query)
-
-        num_passing = self._get_number_passing_ligands(temp_name)
-
-        self.temptable_suffix += 1
-
-        return temp_name, num_passing
-
     def crossref_databases(
         self,
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
@@ -812,60 +763,6 @@ class StorageManager:
 
         Raises:
             StorageError
-        """
-        raise NotImplementedError
-
-    def _create_temp_table(self, table_name):
-        """create temporary table with given name and with ligand name and pose_id information
-
-        Args:
-            table_name (str): name for temp table
-
-        Raises:
-            DatabaseTableCreationError
-        """
-        raise NotImplementedError
-
-    def _generate_selective_insert_query(
-        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
-    ):
-        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
-
-        Args:
-            bookmark1_name (str): name of bookmark to cross-reference for main db
-            bookmark2_name (str): name of bookmark to cross-reference for attached db
-            select_str (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            new_db_name (str): name of attached db
-            temp_table (str): name of temporary table to store passing results in
-
-        Returns:
-            str: sqlite formatted query string
-        """
-        raise NotImplementedError
-
-    def _insert_into_temp_table(self, query):
-        """Execute insertion into temporary table
-
-        Args:
-            query (str): Insertion command
-
-        Raises:
-            DatabaseInsertionError
-        """
-        raise NotImplementedError
-
-    def _get_number_passing_ligands(self, bookmark_name: str):
-        """Returns count of the number of ligands that
-            passed filtering criteria
-
-        Args:
-            bookmark_name (str): bookmark name to query
-
-        Returns:
-            int: Number of passing ligands
-
-        Raises:
-            DatabaseQueryError
         """
         raise NotImplementedError
 
@@ -2115,97 +2012,9 @@ class StorageManagerSQLite(StorageManager):
             "Creating a temporary table of passing ligands named 'passing_temp'."
         )
 
-    def create_bookmark_from_temp_table(
-        self,
-        temp_table_name,
-        bookmark_name,
-        original_bookmark_name,
-        wanted_list,
-        unwanted_list=[],
-    ):
-        """Resaves temp bookmark stored in current_bookmark_name as new permenant bookmark
-
-        Args:
-            bookmark_name (str): name of bookmark to save last temp bookmark as
-            original_bookmark_name (str): name of original bookmark
-            wanted_list (list): List of wanted database names
-            unwanted_list (list, optional): List of unwanted database names
-            temp_table_name (str): name of temporary table
-        """
-        self._create_view(
-            bookmark_name,
-            "SELECT * FROM {0} WHERE Pose_ID in (SELECT Pose_ID FROM {1})".format(
-                original_bookmark_name, temp_table_name
-            ),
-        )
-        compare_bookmark_str = "Comparison. Wanted: "
-        compare_bookmark_str += ", ".join(wanted_list)
-        if unwanted_list is not None:
-            compare_bookmark_str += ". Unwanted: " + ", ".join(unwanted_list)
-        self._insert_bookmark_info(bookmark_name, compare_bookmark_str)
-
-    def _create_temp_table(self, table_name):
-        """create temporary table with given name and with ligand name and pose_id information
-
-        Args:
-            table_name (str): name for temp table
-
-        Raises:
-            DatabaseTableCreationError
-        """
-
-        create_table_str = (
-            f"CREATE TEMP TABLE {table_name}(Pose_ID PRIMARY KEY, LigName)"
-        )
-        try:
-            cur = self.conn.cursor()
-            cur.execute(create_table_str)
-            self.conn.commit()
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseTableCreationError(
-                f"Error while creating temporary table {table_name}"
-            ) from e
-
-    def _insert_into_temp_table(self, query):
-        """Execute insertion into temporary table
-
-        Args:
-            query (str): Insertion command
-
-        Raises:
-            DatabaseInsertionError
-        """
-        try:
-            cur = self.conn.cursor()
-            cur.execute(query)
-            self.conn.commit()
-            cur.close()
-        except sqlite3.OperationalError as e:
-            raise DatabaseInsertionError(
-                f"Error while inserting into temporary table"
-            ) from e
-
     # endregion
 
     # region Methods for getting information from database
-    def fetch_receptor_object_by_name(self, rec_name):
-        """Returns Receptor object from database for given rec_name
-
-        Args:
-            rec_name (str): Name of receptor to return object for
-
-        Returns:
-        str: receptor object as a string
-        """
-
-        cursor = self._run_query(
-            """SELECT receptor_object FROM Receptors WHERE RecName LIKE '{0}'""".format(
-                rec_name
-            )
-        )
-        return str(cursor.fetchone()[0])
-
     def fetch_receptor_objects(self):
         """Returns all Receptor objects from database
 
@@ -2312,20 +2121,6 @@ class StorageManagerSQLite(StorageManager):
         """
         query = f"SELECT Pose_ID, docking_score, leff, ligand_coordinates, flexible_res_coordinates FROM Results WHERE Pose_ID={pose_ID}"
         return self._run_query(query)
-
-    def fetch_interaction_info_by_index(self, interaction_idx) -> tuple:
-        """Returns tuple containing interaction info for given interaction_idx
-
-        Args:
-            interaction_idx (int): interaction index to fetch info for
-
-        Returns:
-            tuple: tuple of info for requested interaction
-        """
-        query = "SELECT * FROM Interaction_indices WHERE interaction_id = {0}".format(
-            interaction_idx
-        )
-        return self._run_query(query).fetchone()[1:]  # cut off interaction index
 
     def create_subset_database(self, bookmark_name: str, database_name: str):
         """
@@ -2616,30 +2411,6 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Methods dealing with filtered results
-
-    def _get_number_passing_ligands(self, bookmark_name: str):
-        """Returns count of the number of ligands that
-            passed filtering criteria
-
-        Args:
-            bookmark_name (str): bookmark name to query
-
-        Returns:
-            int: Number of passing ligands
-
-        Raises:
-            DatabaseQueryError
-        """
-        try:
-            cur = self.conn.cursor()
-            cur.execute(f"SELECT COUNT(DISTINCT LigName) FROM {bookmark_name}")
-            n_ligands = int(cur.fetchone()[0])
-            cur.close()
-            return n_ligands
-        except sqlite3.OperationalError as e:
-            raise DatabaseQueryError(
-                "Error while getting number of passing ligands"
-            ) from e
 
     def get_maxmiss_union(
         self,
@@ -3595,23 +3366,6 @@ class StorageManagerSQLite(StorageManager):
             sql_ligand_string += " AND ".join(query_list)
 
         return sql_ligand_string
-
-    def _generate_selective_insert_query(
-        self, bookmark1_name, bookmark2_name, select_str, new_db_name, temp_table
-    ):
-        """Generates string to select ligands found/not found in the given bookmark in both current db and new_db
-
-        Args:
-            bookmark1_name (str): name of bookmark to cross-reference for main db
-            bookmark2_name (str): name of bookmark to cross-reference for attached db
-            select_str (str): "IN" or "NOT IN" indicating if ligand names should or should not be in both databases
-            new_db_name (str): name of attached db
-            temp_table (str): name of temporary table to store passing results in
-
-        Returns:
-            str: sqlite formatted query string
-        """
-        return f"INSERT INTO {temp_table} SELECT Pose_ID, LigName FROM {bookmark1_name} WHERE LigName {select_str} (SELECT LigName FROM {new_db_name}.{bookmark2_name})"
 
     # endregion
 
