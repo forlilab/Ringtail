@@ -916,6 +916,7 @@ class CLOptionParser:
             ]
 
         # combine all options used in write mode
+
         self.writeopts = {
             "duplicate_handling": parsed_opts.duplicate_handling,
             "overwrite": parsed_opts.overwrite,
@@ -927,37 +928,32 @@ class CLOptionParser:
             "max_proc": parsed_opts.max_proc,
         }
 
-        # parse read methods without inputs
-        self.plot = parsed_opts.plot
-        self.export_bookmark_db = parsed_opts.export_bookmark_db
-        self.export_receptor = parsed_opts.export_receptor
-        self.pymol = parsed_opts.pymol
-        self.data_from_bookmark = parsed_opts.data_from_bookmark
-        self.individual_sdf_files = parsed_opts.individual_sdf_files
-
         # parse read and output options
-        self.outputopts = {
-            "log_file": parsed_opts.log_file,
-            "export_sdf_path": parsed_opts.export_sdf_path,
-            "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
-        }
-
-        # combine all options for the storage manager
-        self.storageopts = {
+        self.filter_options = {
             "filter_bookmark": parsed_opts.filter_bookmark,
-            "duplicate_handling": parsed_opts.duplicate_handling,
-            "overwrite": parsed_opts.overwrite,
             "order_results": parsed_opts.order_results,
             "outfields": parsed_opts.outfields,
             "output_all_poses": parsed_opts.output_all_poses,
             "mfpt_cluster": parsed_opts.mfpt_cluster,
             "interaction_cluster": parsed_opts.interaction_cluster,
             "bookmark_name": parsed_opts.bookmark_name,
+            "log_file": parsed_opts.log_file,
+            "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
         }
 
-        # read methods that require inputs
-        self.readopts = {
+        self.output_options = {
+            "plot": parsed_opts.plot,
+            "export_bookmark_db": parsed_opts.export_bookmark_db,
+            "export_receptor_pdbqt": parsed_opts.export_receptor_pdbqt,
+            "pymol": parsed_opts.pymol,
+            "data_from_bookmark": parsed_opts.data_from_bookmark,
+            "individual_sdf_files": parsed_opts.individual_sdf_files,
+            "output_log": parsed_opts.output_log,
+            "export_sdf_path": parsed_opts.export_sdf_path,
             "export_query_csv": parsed_opts.export_query_csv,
             "find_similar_ligands": parsed_opts.find_similar_ligands,
             "export_bookmark_csv": parsed_opts.export_bookmark_csv,
+            "outfields": parsed_opts.outfields,
+            "order_results": parsed_opts.order_results,
+            "output_all_poses": parsed_opts.output_all_poses,
         }

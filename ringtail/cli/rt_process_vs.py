@@ -31,16 +31,10 @@ def main():
 
     # create manager object for virtual screening. Will make database if needed
     try:
-        rtcore.set_output_options(dict=cmdinput.outputopts)
-        rtcore.set_storageman_attributes(dict=cmdinput.storageopts)
-        readopts = cmdinput.readopts
-        outopts = rtcore.outputopts
         if cmdinput.process_mode == "write":
             logger.debug("Starting write process")
             # -#-#- Processes results, will add receptor if "save_receptor" is true
-            rtcore.add_results_from_files(
-                filesources_dict=cmdinput.file_sources, options_dict=cmdinput.writeopts
-            )
+            rtcore.add_results_from_files(**cmdinput.file_sources, **cmdinput.writeopts)
         time1 = time.perf_counter()
 
         # -#-#- Print database summary
@@ -53,52 +47,62 @@ def main():
             # -#-#- Perform filtering
             if cmdinput.filtering:
                 rtcore.filter(
-                    filters_dict=cmdinput.filters,
-                    enumerate_interaction_combs=outopts.enumerate_interaction_combs,
+                    **cmdinput.filters,
+                    **cmdinput.filter_options,
                 )
+                # TODO the two cases that wont work right now: _union max miss and clustering
 
             # Write log with new data for previous filtering results
-            if cmdinput.data_from_bookmark and not cmdinput.filtering:
-                rtcore.get_previous_filter_data()
+            if cmdinput.output_options["data_from_bookmark"] and not cmdinput.filtering:
+                rtcore.get_previous_filter_data(
+                    cmdinput.filter_options["bookmark_name"]
+                )
 
             # find similar ligands to that specified, if specified (i.e., not None)
-            if readopts["find_similar_ligands"]:
-                rtcore.find_similar_ligands(readopts["find_similar_ligands"])
+            if ligname := cmdinput.output_options["find_similar_ligands"]:
+                rtcore.find_similar_ligands(
+                    ligname, cmdinput.output_options["output_log"]
+                )
 
             # write out molecules if requested
-            if outopts.export_sdf_path:
+            if cmdinput.output_options["export_sdf_path"]:
                 rtcore.write_molecule_sdfs(
-                    sdf_path=outopts.export_sdf_path,
-                    all_in_one=not cmdinput.individual_sdf_files,
+                    sdf_path=cmdinput.output_options["export_sdf_path"],
+                    all_in_one=not cmdinput.output_options["individual_sdf_files"],
+                    bookmark_name=cmdinput.filter_options["bookmark_name"],
                 )
 
             # write out requested CSVs
-            if readopts["export_bookmark_csv"]:
+            if cmdinput.output_options["export_bookmark_csv"]:
                 rtcore.export_csv(
-                    readopts["export_bookmark_csv"],
-                    readopts["export_bookmark_csv"] + ".csv",
+                    cmdinput.output_options["export_bookmark_csv"],
+                    cmdinput.output_options["export_bookmark_csv"] + ".csv",
                     table=True,
                 )
 
             # export query as csv
-            if readopts["export_query_csv"]:
-                rtcore.export_csv(readopts["export_query_csv"], "query.csv")
+            if cmdinput.output_options["export_query_csv"]:
+                rtcore.export_csv(
+                    cmdinput.output_options["export_query_csv"], "query.csv"
+                )
 
             # export bookmark as database
-            if cmdinput.export_bookmark_db:
-                rtcore.export_bookmark_db(rtcore.storageman.bookmark_name)
+            if cmdinput.output_options["export_bookmark_db"]:
+                rtcore.export_bookmark_db(cmdinput.filter_options["bookmark_name"])
 
             # export receptor as .pdbqt
-            if cmdinput.export_receptor:
+            if cmdinput.output_options["export_receptor_pdbqt"]:
                 rtcore.export_receptors()
 
             # plot if requested
-            if cmdinput.plot:
-                rtcore.plot()
+            if cmdinput.output_options["plot"]:
+                rtcore.plot(bookmark_name=cmdinput.filter_options["bookmark_name"])
 
             # open pymol viewer
-            if cmdinput.pymol:
-                rtcore.display_pymol(bookmark_name="#TODO")
+            if cmdinput.output_options["pymol"]:
+                rtcore.display_pymol(
+                    bookmark_name=cmdinput.filter_options["bookmark_name"]
+                )
 
     except Exception as e:
         logger.critical("ERROR: " + str(e))
