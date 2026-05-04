@@ -404,7 +404,6 @@ class StorageManager:
         ligand_sql_string = ", ".join(f"'{l}'" for l in approved_ligand_names)
 
         new_bookmark_names = {}
-        # TODO make adjustments here to store only best ranked pose
 
         if store_best_pose:
             view_creation = """
@@ -2418,7 +2417,7 @@ class StorageManagerSQLite(StorageManager):
         passing_bookmark_names: list,
         output_all_poses,
         outfields,
-    ):
+    ) -> tuple[iter, str]:
         """Get results that are in union considering max miss
 
         Args:
@@ -2450,7 +2449,7 @@ class StorageManagerSQLite(StorageManager):
             )
         self.create_bookmark(bookmark_name, union_view_query)
         self.logger.debug("Running union query...")
-        return self._run_query(union_select_query)
+        return self._run_query(union_select_query), bookmark_name
 
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.

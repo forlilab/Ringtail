@@ -642,4 +642,3 @@ class TestOtherScripts:
                     break
 
         os.system("rm output.db output2.db *_compared_ligands.txt output_log.txt")
-        # TODO add test for the other output options

@@ -411,7 +411,6 @@ class RingtailCore:
                 "Cannot add interactions without a valid receptor path, please provide a valid receptor"
             )
 
-        # TODO clean up the log messages to not get annoying, and use proper objects
         if not strings:
             logmsg = f"These are the file sources being processed: {str(results_object.file)}, {str(results_object.file_list)}, and {str(results_object.file_path)}"
         else:
@@ -852,7 +851,6 @@ class RingtailCore:
         with self.storageman:
             # pre-process if filtering to multiple bookmark combinations
             if write_one_bookmark:
-                # TODO this method needs to take all the inputs
                 filtered_results = self.storageman.filter_results(
                     filters.asdict(),
                     bookmark_name,
@@ -870,7 +868,6 @@ class RingtailCore:
                         return filtered_results
                     # write output log file
                     with outputman:
-                        # TODO make writing more efficient
                         outputman.write_filters_to_log(
                             filters.asdict(),
                             [],
@@ -896,9 +893,9 @@ class RingtailCore:
                     filters_dict = self._prepare_filters_for_storageman(
                         filters, combination
                     )
-                    # set storageMan's internal ic_counter to reflect current ic_idx
+                    if len(interaction_combs) > 1:
+                        bookmark_name = bookmark_name_base + "_" + str(ic_idx)
 
-                    bookmark_name = bookmark_name_base + "_" + str(ic_idx)
                     # ask storageManager to fetch results
                     filtered_results = self.storageman.filter_results(
                         filters_dict,
@@ -937,17 +934,17 @@ class RingtailCore:
                         self.storageman.drop_bookmark(bookmark_name)
 
                 if len(interaction_combs) > 1:
-                    maxmiss_union_results = self.storageman.get_maxmiss_union(
-                        bookmark_name_base,
-                        passing_bookmarks,
-                        output_all_poses,
-                        outfields,
+                    maxmiss_union_results, bookmark_name = (
+                        self.storageman.get_maxmiss_union(
+                            bookmark_name_base,
+                            passing_bookmarks,
+                            output_all_poses,
+                            outfields,
+                        )
                     )
                 with outputman:
                     outputman.write_maxmiss_union_header()
-                    outputman.write_results_bookmark_to_log(
-                        bookmark_name_base + "_union"
-                    )
+                    outputman.write_results_bookmark_to_log(bookmark_name)
                     number_passing_union = outputman.write_filter_log(
                         maxmiss_union_results
                     )
@@ -958,7 +955,7 @@ class RingtailCore:
                     )
                     ligands_passed = number_passing_union
 
-        return ligands_passed
+        return ligands_passed, bookmark_name
 
     def write_flexres_pdb(
         self, receptor_polymer, ligname: str, filename: str, bookmark_name: str

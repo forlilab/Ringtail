@@ -366,6 +366,9 @@ def cmdline_parser(defaults: dict = {}):
         action="store",
         type=str,
         metavar="BOOKMARK_NAME",
+        nargs="?",
+        const=True,
+        default=None,
     )
     output_group.add_argument(
         "-xq",

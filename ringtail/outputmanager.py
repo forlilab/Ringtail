@@ -90,13 +90,15 @@ class OutputManager:
         """
         try:
             time0 = time.perf_counter()
-            num_passing = 0
-            for line in lines:
-                self._write_log_line(
-                    str(line).replace("(", "").replace(")", "")
-                )  # strip parens from line, which is natively a tuple
-                num_passing += 1
-            self._write_log_line("***************\n")
+            if not self._log_open:
+                lines = list(lines)
+                return len(lines)
+            lines = list(lines)
+            num_passing = len(lines)
+            self.log_file.write(
+                "\n".join(str(l).replace("(", "").replace(")", "") for l in lines)
+                + "\n***************\n"
+            )
             self.logger.debug(
                 f"Time to write log: {time.perf_counter() - time0:.2f} seconds"
             )
@@ -134,11 +136,9 @@ class OutputManager:
         if not self._log_open:
             return
         try:
-            self.log_file.write("\n")
             self.log_file.write(
-                f"Number passing ligands: {str(number_passing_ligands)} \n"
+                f"\nNumber passing ligands: {number_passing_ligands} \n---------------\n"
             )
-            self.log_file.write("---------------\n")
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
 
@@ -154,9 +154,7 @@ class OutputManager:
         if not self._log_open:
             return
         try:
-            self.log_file.write("\n")
-            self.log_file.write(f"Result bookmark name: {bookmark_name}\n")
-            self.log_file.write("***************\n")
+            self.log_file.write(f"\nResult bookmark name: {bookmark_name}\n***************\n")
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
@@ -216,8 +214,8 @@ class OutputManager:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
 
-            for line in buff:
-                self._write_log_line(line)
+            if self._log_open:
+                self.log_file.write("\n".join(buff) + "\n")
 
         except Exception as e:
             raise OutputError("Error occurred while writing filters to log") from e

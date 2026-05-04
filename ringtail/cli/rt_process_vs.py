@@ -43,14 +43,13 @@ def main():
 
         if cmdinput.process_mode == "read":
             logger.debug("Starting read process")
-
+            bookmark_name = cmdinput.filter_options["bookmark_name"]
             # -#-#- Perform filtering
             if cmdinput.filtering:
-                rtcore.filter(
+                _, bookmark_name = rtcore.filter(
                     **cmdinput.filters,
                     **cmdinput.filter_options,
                 )
-                # TODO the two cases that wont work right now: _union max miss and clustering
 
             # Write log with new data for previous filtering results
             if cmdinput.output_options["data_from_bookmark"] and not cmdinput.filtering:
@@ -69,14 +68,18 @@ def main():
                 rtcore.write_molecule_sdfs(
                     sdf_path=cmdinput.output_options["export_sdf_path"],
                     all_in_one=not cmdinput.output_options["individual_sdf_files"],
-                    bookmark_name=cmdinput.filter_options["bookmark_name"],
+                    bookmark_name=bookmark_name,
                 )
 
             # write out requested CSVs
-            if cmdinput.output_options["export_bookmark_csv"]:
+            if input := cmdinput.output_options["export_bookmark_csv"]:
+                if input is True:
+                    table_name = bookmark_name
+                else:
+                    table_name = input
                 rtcore.export_csv(
-                    cmdinput.output_options["export_bookmark_csv"],
-                    cmdinput.output_options["export_bookmark_csv"] + ".csv",
+                    table_name,
+                    table_name + ".csv",
                     table=True,
                 )
 
@@ -88,7 +91,7 @@ def main():
 
             # export bookmark as database
             if cmdinput.output_options["export_bookmark_db"]:
-                rtcore.export_bookmark_db(cmdinput.filter_options["bookmark_name"])
+                rtcore.export_bookmark_db(bookmark_name)
 
             # export receptor as .pdbqt
             if cmdinput.output_options["export_receptor_pdbqt"]:
@@ -96,13 +99,11 @@ def main():
 
             # plot if requested
             if cmdinput.output_options["plot"]:
-                rtcore.plot(bookmark_name=cmdinput.filter_options["bookmark_name"])
+                rtcore.plot(bookmark_name=bookmark_name)
 
             # open pymol viewer
             if cmdinput.output_options["pymol"]:
-                rtcore.display_pymol(
-                    bookmark_name=cmdinput.filter_options["bookmark_name"]
-                )
+                rtcore.display_pymol(bookmark_name=bookmark_name)
 
     except Exception as e:
         logger.critical("ERROR: " + str(e))
