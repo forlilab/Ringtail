@@ -80,7 +80,6 @@ class RingtailCore:
         """Method to update database version from earlier versions to either 1.1.0 or 2.0.0"""
         with self.storageman:
             self.storageman.update_database_version(new_version, consent)
-        # return self.storageman.update_database_version(new_version, consent)
 
     # -#-#- Private methods -#-#-#
 

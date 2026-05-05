@@ -226,6 +226,13 @@ class StorageManager:
 
         Args:
             all_filters (dict): dict containing all filters. Expects format and keys corresponding to ringtail.Filters().todict()
+            bookmark_name (str): name for resulting book mark file.
+            filter_bookmark (str): name of bookmark to perform filtering over
+            mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster
+            interaction_cluster (float):  Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster
+            output_all_poses (bool): choose not just the best scored pose to output
+            order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database.
+            outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values
             suppress_output (bool): prints filtering summary to sdout
 
         Returns:
@@ -620,7 +627,7 @@ class StorageManager:
             rec_name (str): Name of receptor to return object for
 
         Returns:
-            iter (tuple): of receptor names and objects
+            tuple[str, bytes]: of receptor names and objects
         """
         raise NotImplementedError
 
@@ -2000,9 +2007,12 @@ class StorageManagerSQLite(StorageManager):
                 f"Error while attempting to drop bookmark {bookmark_name}"
             ) from e
 
-    def create_temp_table_from_bookmark(self, bookmark_name):
+    def create_temp_table_from_bookmark(self, bookmark_name: str):
         """Method that creates a temporary table named "passing_temp".
         Please note that this table will be dropped as soon as the database connection closes.
+
+        Args:
+            bookmark_name (str):
         """
         cur = self.conn.cursor()
         cur.execute(f"CREATE TEMP TABLE passing_temp AS SELECT * FROM {bookmark_name}")
@@ -2014,14 +2024,14 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region Methods for getting information from database
-    def fetch_receptor_objects(self):
+    def fetch_receptor_objects(self) -> tuple[str, bytes]:
         """Returns all Receptor objects from database
 
         Args:
             rec_name (str): Name of receptor to return object for
 
         Returns:
-            iter (tuple): of receptor names and objects
+            tuple[str, bytes]: of receptor names and objects
         """
 
         cursor = self._run_query("SELECT RecName, receptor_object FROM Receptors")
@@ -2083,7 +2093,7 @@ class StorageManagerSQLite(StorageManager):
         query = "SELECT LigName, ligand_smile, atom_index_map, hydrogen_parents FROM Ligands WHERE LigName IN (SELECT DISTINCT LigName FROM passing_temp)"
         return self._run_query(query)
 
-    def fetch_single_ligand_output_info(self, ligname) -> str:
+    def fetch_single_ligand_output_info(self, ligname: str) -> str:
         """get output information for given ligand
 
         Args:
@@ -2233,12 +2243,11 @@ class StorageManagerSQLite(StorageManager):
 
         return self._run_query(query).fetchall()
 
-    def count_receptors_in_db(self):
+    def count_receptors_in_db(self) -> int:
         """returns number of rows in Receptors table where receptor_object already has blob
 
         Returns:
             int: number of rows in receptors table
-            str: name of receptor if present in table
 
         Raises:
             DatabaseQueryError
@@ -2415,16 +2424,20 @@ class StorageManagerSQLite(StorageManager):
         self,
         bookmark_name: str,
         passing_bookmark_names: list,
-        output_all_poses,
-        outfields,
+        output_all_poses: bool,
+        outfields: str,
     ) -> tuple[iter, str]:
-        """Get results that are in union considering max miss
+        """
+        Get results that are in union considering max miss
 
         Args:
-            total_combinations (int): numer of possible combinations
+            bookmark_name (str): _description_
+            passing_bookmark_names (list): list of bookmarks already created by enumerating interaction combinations
+            output_all_poses (bool): _description_
+            outfields (str): _description_
 
         Returns:
-            iter: of passing results
+            tuple[iter, str]: passing results and final (union) bookmark name
         """
         selection_strs = []
         view_strs = []
@@ -3373,6 +3386,9 @@ class StorageManagerSQLite(StorageManager):
     def overwrite_storage(self, consent: bool = True):
         """
         Will drop all tables in the database.
+
+        Args:
+            consent (bool, optional): _description_. Defaults to True.
         """
         if not self._db_empty() and consent:
             self._drop_existing_tables()
