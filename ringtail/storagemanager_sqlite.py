@@ -220,7 +220,7 @@ class StorageManagerSQLite(StorageManager):
                 ligname)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """
-        self.db_update(temp_results_insert, results_array, commit=False)
+        self.db_update(temp_results_insert, [tuple(r) for r in results_array], commit=False)
 
         temp_int_insert = """
             INSERT INTO Interactions_temp (
@@ -236,7 +236,7 @@ class StorageManagerSQLite(StorageManager):
             VALUES (?,?,?,?,?,?,?,?,?)
             """
 
-        self.db_update(temp_int_insert, interactions_array, commit=False)
+        self.db_update(temp_int_insert, [tuple(r) for r in interactions_array], commit=False)
 
     def _move_tempresults_to_database(self):
         """Inserts data from the temporary results tables to their permanent
