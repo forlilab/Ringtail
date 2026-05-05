@@ -182,6 +182,7 @@ def main():
                 if isinstance(outs, str):
                     outs = [item.strip() for item in outs.split(",")]
                 rtcore.export_columns_as_csv(
+                    outs,
                     cli.output_options.export_bookmark_csv,
                     cli.output_options.export_bookmark_csv + ".csv",
                 )
