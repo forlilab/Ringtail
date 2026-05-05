@@ -16,7 +16,7 @@ import copy
 docking_modes = {
     "adgpu": {"adgpu", "dlg", "gpu"},
     "vina": {"vina", "pdbqt"},
-    "adng": {"adng", "ng", "adsandbox", "zeta"},
+    "adng": {"adng", "ng", "zeta"},
 }
 
 docking_mode_file_ext = {"adgpu": "dlg", "vina": "pdbqt", "adng": "sdf"}
@@ -79,7 +79,7 @@ def validate_file_pattern(docking_mode: str, file_pattern: str = None) -> str:
 @dataclass
 class RingtailDefaults:
     # maybe reconsider
-    docking_mode: str = "adgpu"
+    docking_mode: str = "adng"
     output_db: str = "output.db"
     storage_type: str = "duckdb"
     max_proc: int = None
@@ -105,10 +105,7 @@ class RingtailDefaults:
     interaction_tolerance: float = None
     calculate_interactions: bool = True
     interaction_cutoffs: tuple[float] = (3.7, 4.0)  # HB CUTOFF,VDW CUTOFF
-    outfields: tuple[str] = (
-        "LigName",
-        "docking_score",
-    )
+    outfields: tuple[str] = None
     order_results: str = None
     mfpt_cluster: float = None
     interaction_cluster: float = None

@@ -166,8 +166,22 @@ def main():
                 )
 
             # write out requested CSVs
-            if cli.output_options.export_bookmark_csv:
+            # export whole table/all results it not specifying outfields
+            if (
+                cli.output_options.export_bookmark_csv
+                and not cli.output_options.outfields
+            ):
                 rtcore.export_table_as_csv(
+                    cli.output_options.export_bookmark_csv,
+                    cli.output_options.export_bookmark_csv + ".csv",
+                )
+            # If export csv and outfields are both used
+            if cli.output_options.export_bookmark_csv and cli.output_options.outfields:
+                outs = cli.output_options.outfields
+                # ensure outfields is list of strings:
+                if isinstance(outs, str):
+                    outs = [item.strip() for item in outs.split(",")]
+                rtcore.export_columns_as_csv(
                     cli.output_options.export_bookmark_csv,
                     cli.output_options.export_bookmark_csv + ".csv",
                 )

@@ -608,7 +608,7 @@ class RingtailCore:
         mfpt_cluster: float = None,
         interaction_cluster: float = None,
         output_log: str = None,
-        outfields: str = list(RingtailDefaults.outfields),
+        outfields: str = None,
         order_results: str = None,
         output_bookmark: str = RingtailDefaults.bookmark_name,
         input_bookmark: str = None,

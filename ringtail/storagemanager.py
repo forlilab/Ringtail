@@ -885,8 +885,7 @@ class StorageManager:
         Returns:
             str: sql string that describes selection of data from bookmark
         """
-
-        if selection and selection != "*":
+        if selection != "*":
             outfields_list = self._format_output_fields(selection, "R", "L")
         elif selection == "*":
             raise OptionError(
