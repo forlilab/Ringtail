@@ -1105,11 +1105,10 @@ class SDFMoleculeSupplier:  #
                 else:
                     interaction_rows = []
 
-                # add non-specified fields as list of None
                 yield {
                     "ligands": [ligand_row],
-                    "poses": [results_dict],
-                    "interactions": interaction_rows,
+                    "poses": [_dict_to_pose_record(results_dict)],
+                    "interactions": _dicts_to_interaction_records(interaction_rows),
                     "receptor": [],
                 }
 
