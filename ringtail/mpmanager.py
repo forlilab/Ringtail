@@ -13,6 +13,7 @@ import glob
 from .mpreaderwriter import DockingFileReader
 from .mpreaderwriter import Writer
 from .logutils import get_logger
+
 logger = get_logger(__name__)
 from .exceptions import MultiprocessingError, FileParsingError
 import traceback
@@ -21,6 +22,7 @@ import multiprocessing as mp
 
 from .util import iterate_nested
 from .ringtailoptions import ResultsObject, validate_file_pattern
+from .storagemanager import StorageManager
 
 
 def _set_start_method():
@@ -48,7 +50,6 @@ class MPManager:
         queueOut (mp.Queue): queue for files that have been processed and should be written
         writer_options (dict): incoming results writing options
         shared (dict): limited write_options for the docking file readers
-        file_pattern (str): file extension for selected docking_mode
         p_conn (one side of mp.Pipe): parent connection for piping information between processes
         c_conn (one side of mp.Pipe): child connection for piping information between processes
         receptor_file: path to receptor file
@@ -58,11 +59,9 @@ class MPManager:
 
     def __init__(
         self,
-        results: ResultsObject,  # also has receptor information
-        writer_options: dict,  # has mostly settings for Writer
         max_proc: int,
+        receptor_file_path: str = None,
     ):
-        self.results = results
         # initialize multiprocessing variables
         # number of processors
         if max_proc is None:
@@ -76,29 +75,36 @@ class MPManager:
         self.p_conn, self.c_conn = mp.Pipe(duplex=True)
         self.num_files = 0
 
-        self.writer_options = writer_options
-        self.shared = {}
-        # populate read only dict
-        self.shared["docking_mode"] = self.writer_options.pop("docking_mode")
-        self.shared["receptor_string"] = results.receptor_string
-        self.shared["target"] = results.target_name
+        # used to ensure docking file is not receptor file (for pdbqt)
+        self.receptor_file_path = receptor_file_path
 
-        # these two variables are needed for queueing files
-        self.receptor_file = results.receptor_file_path
-        self.file_pattern = validate_file_pattern(
-            self.shared["docking_mode"], results.file_pattern
-        )
-
-    def process_results(self, reader_options: dict):
+    def process_results(
+        self,
+        results: ResultsObject,
+        docking_mode: str,
+        num_poses: int,
+        interaction_tolerance: float,
+        calculate_interactions: bool,
+        interaction_cutoffs: tuple[float, float],
+        db_file: str,
+        storageman_class: StorageManager,
+        chunk_size: int,
+        duplicate_handling: str,
+    ):
         logger.info(f"Starting {self.num_readers} docking results readers")
-        self.shared.update(reader_options)
 
         for _ in range(self.num_readers):
             reader = DockingFileReader(
                 self.queueIn,
                 self.queueOut,
                 self.c_conn,
-                self.shared,
+                docking_mode,
+                results.target_name,
+                num_poses,
+                interaction_tolerance,
+                calculate_interactions,
+                interaction_cutoffs,
+                results.receptor_string,
             )
             reader.start()
             self.workers.append(reader)
@@ -106,12 +112,17 @@ class MPManager:
         writer = Writer(
             self.queueOut,
             self.num_readers,
-            self.writer_options,
+            db_file,
+            storageman_class,
+            chunk_size,
+            duplicate_handling,
         )
         writer.start()
         self.workers.append(writer)
         try:
-            self._process_data_sources()
+            self._process_data_sources(
+                results, file_pattern=validate_file_pattern(docking_mode)
+            )
         except Exception as e:
             tb = traceback.format_exc()
             self._kill_all_workers(e, "results sources processing", tb)
@@ -129,45 +140,44 @@ class MPManager:
 
         logger.info(f"Wrote {self.num_files} docking results to the database")
 
-    def _process_data_sources(self):
+    def _process_data_sources(self, results: ResultsObject, file_pattern: str):
         """Adds each docking result item to the queue, including files and data provided as string/dict.
         For files, processes lists of files, recursively traveresed filepaths, and individually listed file paths.
         """
-
-        if self.results.has_file_results:
+        if results.has_file_results:
             # add individual file(s)
-            files = list(iterate_nested(self.results.file))
+            files = list(iterate_nested(results.file))
             if files:
                 for file in files:
                     if (
-                        fnmatch.fnmatch(file, self.file_pattern)
-                        and file != self.receptor_file
+                        fnmatch.fnmatch(file, file_pattern)
+                        and file != self.receptor_file_path
                     ):
                         self._add_to_queue(file)
 
             # add files from file path(s)
-            path_list = list(iterate_nested(self.results.file_path))
+            path_list = list(iterate_nested(results.file_path))
             if path_list:
                 for path in path_list:
                     # scan for ligand dlgs
                     for files in self._scan_dir(
-                        path, self.file_pattern, self.results.recursive_path_traverse
+                        path, file_pattern, results.recursive_path_traverse
                     ):
                         for file in files:
                             self._add_to_queue(file)
 
             # add files from file list(s)
-            file_lists = list(iterate_nested(self.results.file_list))
+            file_lists = list(iterate_nested(results.file_list))
             if file_lists:
                 for file_list in file_lists:
-                    self._scan_file_list(file_list, self.file_pattern.replace("*", ""))
+                    self._scan_file_list(file_list, file_pattern.replace("*", ""))
 
         # add docking data from input strings
-        if self.results.strings:
+        if results.strings:
             for (
                 ligand_name,
                 docking_result,
-            ) in self.results.strings.items():
+            ) in results.strings.items():
                 string_data = {ligand_name: docking_result}
                 self._add_to_queue(string_data)
 
@@ -183,9 +193,10 @@ class MPManager:
         # adds result file to the multiprocess queue
         max_attempts = 750
         timeout = 0.5  # seconds
-        if not isinstance(results_data, dict) and self.receptor_file is not None:
+        if not isinstance(results_data, dict) and self.receptor_file_path is not None:
             if (
-                os.path.split(results_data)[-1] == os.path.split(self.receptor_file)[-1]
+                os.path.split(results_data)[-1]
+                == os.path.split(self.receptor_file_path)[-1]
             ):  # check that we don't try to add the receptor
                 return
         attempts = 0
@@ -287,5 +298,5 @@ class MPManager:
         )
 
         for file in lig_accepted:
-            if file != self.receptor_file:
+            if file != self.receptor_file_path:
                 self._add_to_queue(file)

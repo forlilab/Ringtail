@@ -36,7 +36,7 @@ from .exceptions import (
     MergeError,
     RingtailError,
 )
-from .resultsmanager import ResultsManager
+from .mpmanager import MPManager
 from .receptormanager import ReceptorManager
 from .outputmanager import OutputManager
 from .storagemanager import StorageManager
@@ -151,7 +151,6 @@ class RingtailCore:
         file: str = RingtailDefaults.file,
         file_path: str = RingtailDefaults.file_path,
         file_list: str = RingtailDefaults.file_list,
-        file_pattern: str = None,
         recursive: bool = RingtailDefaults.recursive,
         receptor_file: str = None,
         save_receptor: bool = RingtailDefaults.save_receptor,
@@ -174,7 +173,6 @@ class RingtailCore:
             file (str, optional: list(str)): ligand result file
             file_path (str, optional: list(str)): list of folders containing one or more result files
             file_list (str, optional: list(str)): list of ligand result file(s)
-            file_pattern (str, optional): optional custom file pattern, such as MY_FAV_PROT_*.pdbqt*
             recursive (bool): used to recursively search file_path for folders inside folders
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
@@ -197,7 +195,6 @@ class RingtailCore:
         results_data.file = file
         results_data.file_path = file_path
         results_data.file_list = file_list
-        results_data.file_pattern = file_pattern
         results_data.recursive_path_traverse = recursive
         results_data.receptor_file_path = receptor_file
         results_data.save_receptor = save_receptor
@@ -2601,17 +2598,15 @@ class RingtailCore:
                 "Cannot use interaction_tolerance with Vina mode. Removing interaction_tolerance."
             )
             interaction_tolerance = None
+        if num_poses == -1 and interaction_tolerance:
+            logger.warning(
+                "Cannot use 'interaction_tolerance' and 'store_all_poses'. Removing 'interaction_tolerance'."
+            )
+            interaction_tolerance = None
+
         # make sure we don't try to calculate interactions for adgpu
         if docking_mode == "adgpu":
             calculate_interactions = False
-
-        processing_options = {
-            "num_poses": num_poses,
-            "calculate_interactions": calculate_interactions,
-            "interaction_tolerance": interaction_tolerance,
-            "interaction_cutoffs": interaction_cutoffs,
-            "max_proc": max_proc,
-        }
 
         # Process results files and handle database versioning
         with self.storageman:
@@ -2623,11 +2618,8 @@ class RingtailCore:
             self.save_receptor(results.receptor_file_path)
 
         # Prepare the results manager with the provided docking results sources
-        resultsman = ResultsManager(
-            self.db_file,
-            docking_mode,
-            get_valid_storageclass(self.storagetype),
-            duplicate_handling,
+        mpmanager = MPManager(
+            max_proc=max_proc, receptor_file_path=results.receptor_file_path
         )
 
         # need receptor file contents if adding interaction
@@ -2689,9 +2681,32 @@ class RingtailCore:
                     logger.warning(
                         "Could not load receptor string from database — interactions will not be calculated."
                     )
-        if results.has_results:
-            logger.info("Adding results...")
-            resultsman.process_docking_data(results, processing_options)
+        if results.has_file_results and results.strings:
+            raise ResultsProcessingError(
+                "Docking results were provided as both file sources and string sources. Currently only one results type is accepted at the time."
+            )
+        if results.has_file_results:
+            logger.debug(
+                f"These are the provided files: {results.file}, directories: {results.file_path}, and file lists: {results.file_list} provided for database storage."
+            )
+        else:
+            logger.debug(
+                f"This is the list of ligands whose strings are being processed: {str(results.strings.keys())}"
+            )
+
+        logger.info("Adding results...")
+        mpmanager.process_results(
+            results,
+            docking_mode,
+            num_poses,
+            interaction_tolerance,
+            calculate_interactions,
+            interaction_cutoffs,
+            self.storageman.db_file,
+            self.storageman.__class__,
+            5000,
+            duplicate_handling,
+        )
         if finalize:
             self.finalize_write()
 

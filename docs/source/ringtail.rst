@@ -70,14 +70,6 @@ ringtail.receptormanager module
    :undoc-members:
    :show-inheritance:
 
-ringtail.resultsmanager module
-------------------------------
-
-.. automodule:: ringtail.resultsmanager
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 ringtail.ringtailcore module
 ----------------------------
 

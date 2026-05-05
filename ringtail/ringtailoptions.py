@@ -96,7 +96,6 @@ class RingtailDefaults:
     file: str = None
     file_path: str = None
     file_list: str = None
-    file_pattern: str = None
     recursive: bool = None
     save_receptor: bool = None
     receptor_file: str = None
@@ -150,7 +149,6 @@ class ResultsObject:
         self.file = None
         self.file_path = None
         self.file_list = None
-        self.file_pattern: str = None
         self.recursive_path_traverse: bool = None
         self.receptor_file_path: str = None
         self.save_receptor: bool = None

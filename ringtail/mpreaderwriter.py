@@ -7,6 +7,7 @@
 import time
 import sys
 from .logutils import get_logger
+
 logger = get_logger(__name__)
 import traceback
 import queue
@@ -33,7 +34,7 @@ class DockingFileReader(mp.Process):
         queueIn (multiprocess.Queue): current queue for the processor/file reader
         queueOut (multiprocess.Queue): queue for the processor/file reader after adding or removing an item
         pipe_conn (multiprocess.Pipe): pipe connection to the reader
-        shared_dict (dict): docking opitions including number of poses, docking mode, duplicate handling, and interaction calculation information
+        #TODO
     """
 
     def __init__(
@@ -41,9 +42,15 @@ class DockingFileReader(mp.Process):
         queueIn,
         queueOut,
         pipe_conn,
-        shared_dict,
+        docking_mode,
+        target_name,
+        num_poses,
+        interaction_tolerance,
+        calculate_interactions,
+        interaction_cutoffs,
+        receptor_string,
     ):
-        self.shared: dict = shared_dict
+
         # initialize the parent class to inherit all multiprocess methods
         mp.Process.__init__(self)
         # each worker knows the queue in (where data to process comes from)
@@ -54,7 +61,13 @@ class DockingFileReader(mp.Process):
         self.pipe = pipe_conn
         self.interaction_finder = None
         self.exception = None
-        self.docking_mode = self.shared.get("docking_mode")
+        self.docking_mode = docking_mode
+        self.target_name = target_name
+        self.num_poses = num_poses
+        self.interaction_tolerance = interaction_tolerance
+        self.interaction_cutoffs = interaction_cutoffs
+        self.calculate_interactions = calculate_interactions
+        self.receptor_string = receptor_string
 
     def run(self):
         """Method overload from parent class .This is where the task of this class is performed.
@@ -69,17 +82,28 @@ class DockingFileReader(mp.Process):
         if self.docking_mode == "adgpu":
             common_processing_vars.update(
                 {
-                    "target": self.shared.get("target", None),
-                    "interaction_tolerance": self.shared.get(
-                        "interaction_tolerance", None
-                    ),
+                    "target": self.target_name,
+                    "interaction_tolerance": self.interaction_tolerance,
                 }
             )
-        # create interaction calculator if requested
-        calculate_interactions = self.shared.get(
-            "calculate_interactions",
-            RingtailDefaults.calculate_interactions,
-        )
+        if self.calculate_interactions:
+            try:
+                interaction_finder = InteractionFinder(
+                    self.receptor_string,
+                    *self.interaction_cutoffs,
+                )
+                common_processing_vars.update(
+                    {
+                        "calculate_interactions": True,
+                        "interaction_finder": interaction_finder,
+                    }
+                )
+            except Exception:
+                common_processing_vars.update(
+                    {
+                        "calculate_interactions": False,
+                    }
+                )
 
         while True:
             try:
@@ -95,30 +119,10 @@ class DockingFileReader(mp.Process):
                     # before leaving, pass the poison pill back in the queue
                     self.queueOut.put(None)
                     break
-                if calculate_interactions:
-                    try:
-                        interaction_finder = InteractionFinder(
-                            self.shared.get("receptor_string", None),
-                            *self.shared.get(
-                                "interaction_cutoffs",
-                                RingtailDefaults.interaction_cutoffs,
-                            ),
-                        )
-                        common_processing_vars.update(
-                            {
-                                "calculate_interactions": True,
-                                "interaction_finder": interaction_finder,
-                            }
-                        )
-                    except Exception:
-                        common_processing_vars.update(
-                            {
-                                "calculate_interactions": False,
-                            }
-                        )
+
                 # initialize a parser for each process with kw-args
                 parser = docking_file_parsers.get(self.docking_mode, "missing_parser")(
-                    self.shared.get("num_poses"), **common_processing_vars
+                    self.num_poses, **common_processing_vars
                 )
                 if parser == "missing_parser":
                     raise NotImplementedError(
@@ -184,16 +188,23 @@ class Writer(mp.Process):
     """This class is a listener that retrieves data from the queue and writes it
     into datbase"""
 
-    def __init__(self, queue, num_readers: int, options: dict):
+    def __init__(
+        self,
+        queue,
+        num_readers: int,
+        db_file: str,
+        storageman_class: StorageManager,
+        chunk_size: int,
+        duplicate_handling: str,
+    ):
         mp.Process.__init__(self)
         self.queue = queue
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
         self.num_readers = num_readers
         # assign pointer to storage object, set chunksize
-        db_file = options.pop("db_file")
-        self.storageman: StorageManager = options.pop("storageman_class")(db_file)
-        self.chunk_size = options.pop("chunk_size")
-        self.duplicate_handling = options.get("duplicate_handling", None)
+        self.storageman: StorageManager = storageman_class(db_file)
+        self.chunk_size = chunk_size
+        self.duplicate_handling = duplicate_handling
         # initialize data array (stack of dictionaries)
         self.docked_ligands = {"ligands": [], "poses": [], "interactions": []}
         self.receptor_written_to_db = False

@@ -150,14 +150,6 @@ def cmdline_parser(defaults: dict = {}):
         nargs="+",
     )
     write_parser.add_argument(
-        "-p",
-        "--file_pattern",
-        help='specify which extension pattern to use when searching for result files to process [only with "--file_path"]',
-        action="store",
-        type=str,
-        metavar="FILE PATTERN",
-    )
-    write_parser.add_argument(
         "-r",
         "--recursive",
         help="enable recursive directory scan when --file_path is used",
@@ -801,7 +793,6 @@ class CLOptionParser:
                 "file_list": parsed_opts.file_list,
                 "receptor_file": parsed_opts.receptor_file,
                 "save_receptor": parsed_opts.save_receptor,
-                "file_pattern": parsed_opts.file_pattern,
             }
 
             if isinstance(parsed_opts.interaction_tolerance, str):

@@ -15,7 +15,7 @@ Changes in command line tools
 * The command `--logfile` will write logging output to a file
 * The previous `--filter_bookmark` has been changed to `--input_bookmark` for consistency
 * New CLI flag `--print_bookmarks` prints all current bookmarks in the database
-
+* `--file_pattern` has been discontinued, and is inferred from docking mode (which will attempt to accept file pattern as input)
 * `--outfields` now uses names of columns as they are in the database. The changes:
     ============ ===============
       Old          New

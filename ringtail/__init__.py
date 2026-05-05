@@ -33,7 +33,6 @@ from .parsers import (
     SDFMoleculeSupplier,
 )
 from .receptormanager import ReceptorManager
-from .resultsmanager import ResultsManager
 from .outputmanager import OutputManager
 from .interactions import InteractionFinder, find_interactions
 from .clustermanager import (
@@ -69,7 +68,6 @@ __all__ = [
     "SDFMoleculeSupplier",
     "find_interactions",
     "ReceptorManager",
-    "ResultsManager",
     "OutputManager",
     "InteractionFinder",
     "MorganFingerprintCluster",
