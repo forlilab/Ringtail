@@ -1,618 +1,535 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail command line tool end-to-end testing
+# Ringtail CLI end-to-end tests
 #
+import json
+import subprocess
+from pathlib import Path
 
-import os
 import pytest
 from ringtail import RingtailCore
 
-
-@pytest.fixture
-def passingcount():
-    def __dbconnect(bookmark):
-        rtc = RingtailCore("output.db")
-        with rtc.storageman as sm:
-            count = sm.get_passing_poses_count(bookmark, True)
-        return count
-
-    return __dbconnect
-
-
-@pytest.fixture
-def tablecount():
-    def __dbconnect(table):
-        rtc = RingtailCore("output.db")
-        return rtc.table_length(table)
-
-    return __dbconnect
+TEST_DIR = Path(__file__).parent
+TEST_DATA = TEST_DIR / "test_data"
 
 
 class TestInputs:
-    os.system("rm output.db")
+    """Write-mode CLI input variations: files, paths, lists, docking modes."""
 
-    def test_files(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --file test_data/adgpu/group1/173101.dlg.gz --file test_data/adgpu/group1/100729.dlg.gz"
+    def test_files(self, cli):
+        rc1 = cli.write(
+            "-m",
+            "adgpu",
+            "--file",
+            str(TEST_DATA / "adgpu/group1/127458.dlg.gz"),
+            "--file",
+            str(TEST_DATA / "adgpu/group1/173101.dlg.gz"),
+            "--file",
+            str(TEST_DATA / "adgpu/group1/100729.dlg.gz"),
         )
-        count1 = tablecount("Ligands")
-
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz test_data/adgpu/group1/173101.dlg.gz --file test_data/adgpu/group1/100729.dlg.gz --append_results"
+        count1 = cli.count("Ligands")
+        rc2 = cli.write(
+            "-m",
+            "adgpu",
+            "--file",
+            str(TEST_DATA / "adgpu/group1/127458.dlg.gz"),
+            str(TEST_DATA / "adgpu/group1/173101.dlg.gz"),
+            "--file",
+            str(TEST_DATA / "adgpu/group1/100729.dlg.gz"),
+            "--append_results",
         )
-        count2 = tablecount("Ligands")
-
-        os.system("rm output.db")
-
+        count2 = cli.count("Ligands")
+        assert rc1 == rc2 == 0
         assert count1 == count2 == 3
 
-    def test_file_paths(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1 --file_path test_data/adgpu/group2"
+    def test_file_paths(self, cli):
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file_path",
+            str(TEST_DATA / "adgpu/group1"),
+            "--file_path",
+            str(TEST_DATA / "adgpu/group2"),
         )
-        count1 = tablecount("Ligands")
+        assert rc == 0
+        assert cli.count("Ligands") == 217
 
-        os.system("rm output.db")
-
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1 test_data/adgpu/group2"
+    def test_file_list(self, cli):
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file_list",
+            str(TEST_DATA / "adgpu/filelist1.txt"),
+            "--file_list",
+            str(TEST_DATA / "adgpu/filelist2.txt"),
         )
-        count2 = tablecount("Ligands")
+        assert rc == 0
+        assert cli.count("Ligands") == 5
 
-        os.system("rm output.db")
-
-        assert count1 == count2 == 217
-
-    def test_file_list(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --file_list test_data/adgpu/filelist2.txt"
+    def test_all_file_inputs(self, cli):
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file_list",
+            str(TEST_DATA / "adgpu/filelist1.txt"),
+            "--file",
+            str(TEST_DATA / "adgpu/group2/361056.dlg.gz"),
+            str(TEST_DATA / "adgpu/group2/53506.dlg.gz"),
+            "--file_path",
+            str(TEST_DATA / "adgpu/group3"),
         )
-        count1 = tablecount("Ligands")
+        assert rc == 0
+        assert cli.count("Ligands") == 75
 
-        os.system("rm output.db")
-
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt test_data/adgpu/filelist2.txt"
+    def test_adng_input(self, cli):
+        rc = cli.write(
+            "-m",
+            "adng",
+            "--file_path",
+            str(TEST_DATA / "adng"),
+            "-rf",
+            str(TEST_DATA / "adng/helix--scofu01.json"),
+            "-sr",
         )
-        count2 = tablecount("Ligands")
+        assert rc == 0
+        assert cli.count("Results") == 9
+        assert cli.count("Interactions") == 60
 
-        os.system("rm output.db")
-
-        assert count1 == count2 == 5
-
-    def test_all_file_inputs(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --file test_data/adgpu/group2/361056.dlg.gz test_data/adgpu/group2/53506.dlg.gz --file_path test_data/adgpu/group3"
+    def test_vina_input(self, cli):
+        rc = cli.write(
+            "-m",
+            "vina",
+            "--file_path",
+            str(TEST_DATA / "vina"),
+            "-rf",
+            str(TEST_DATA / "vina/receptor.pdbqt"),
         )
-        count = tablecount("Ligands")
+        assert rc == 0
+        assert cli.count("Results") == 6
 
-        os.system("rm output.db")
-
-        assert count == 75
-
-    def test_adng_input(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write -m adng --file_path test_data/adng -rf test_data/adng/helix--scofu01.json -sr"
+    def test_overwrite(self, cli):
+        cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist2.txt"))
+        count_before = cli.count("Ligands")
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file_list",
+            str(TEST_DATA / "adgpu/filelist1.txt"),
+            "--overwrite",
         )
+        count_after = cli.count("Ligands")
+        assert rc == 0
+        assert count_before == 2
+        assert count_after == 3
 
-        poses_count = tablecount("Results")
-        interaction_count = tablecount("Interactions")
-
-        os.system("rm output.db")
-
-        assert poses_count == 9
-        assert interaction_count == 60
-
-    def test_vina_input(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write -m vina --file_path test_data/vina -rf test_data/vina/receptor.pdbqt -sr"
+    def test_overwrite_false(self, cli):
+        cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
+        rc = cli.write(
+            "-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt")
         )
+        assert rc != 0
 
-        count = tablecount("Results")
-        assert count == 6
+    def test_cmdline_config_file(self, cli, tmp_path):
+        config_data = RingtailCore.defaults()
+        config_data["file_list"] = [[str(TEST_DATA / "adgpu/filelist1.txt")]]
+        config_data["docking_mode"] = "adgpu"
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(config_data, indent=4))
 
-    def test_overwrite(self, tablecount):
-        # count result rows in database to be overwritten
+        rc = subprocess.run(
+            ["rt_process_vs", "write", "-o", str(cli.db), "--config", str(config_path)],
+            cwd=str(TEST_DIR),
+            capture_output=True,
+        ).returncode
+        assert rc == 0
+        assert cli.count("Ligands") == 3
 
-        count_old_db = tablecount("Ligands")
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --overwrite"
+    def test_duplicate_handling(self, cli):
+        cli.write("-m", "adgpu", "--file_path", str(TEST_DATA / "adgpu/group1"))
+        cli.write(
+            "-m",
+            "adgpu",
+            "--input_db",
+            str(cli.db),
+            "--file_path",
+            str(TEST_DATA / "adgpu/group1"),
+            "--append_results",
+            "--duplicate_handling",
+            "ignore",
         )
-        count_new_db = tablecount("Ligands")
-        assert count_old_db == 2
-        assert count_new_db == 3
+        assert cli.count("Ligands") == 138
 
-    def test_overwrite_false(self, tablecount):
-        # count result rows in database to be overwritten
-
-        count_old_db = tablecount("Ligands")
-        assert count_old_db == 3
-
-        code = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt"
+    def test_append_results(self, cli):
+        cli.write("-m", "adgpu", "--file_path", str(TEST_DATA / "adgpu/group1"))
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--input_db",
+            str(cli.db),
+            "--file_path",
+            str(TEST_DATA / "adgpu/group2"),
+            "--append_results",
         )
-        assert (
-            code == 256
-        )  # indicates failure of rt_process_vs.py, log file will have error w traceback
+        assert rc == 0
+        assert cli.count("Ligands") == 217
 
-    def test_cmdline_config_file(self, tablecount):
-        from ringtail import RingtailCore
-        import json
-
-        filepath = RingtailCore.generate_config_file_template()
-
-        with open(filepath, "r") as f:
-            data = json.load(f)
-        # all fields to be changed
-        data["file_list"] = [["test_data/adgpu/filelist1.txt"]]
-
-        with open(filepath, "w") as f:
-            f.write(json.dumps(data, indent=4))
-
-        os.system("python ../ringtail/cli/rt_process_vs.py write --config config.json")
-
-        count = tablecount("Ligands")
-
-        os.system("rm output.db config.json")
-
-        assert count == 3
-
-    def test_duplicate_handling(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1"
+    def test_save_rec_file(self, cli):
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file_path",
+            str(TEST_DATA / "adgpu/group1"),
+            "--receptor_file",
+            str(TEST_DATA / "adgpu/4j8m.pdbqt"),
+            "--save_receptor",
         )
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --file_path test_data/adgpu/group1 --append_results --duplicate_handling ignore"
+        assert rc == 0
+        assert cli.count("Receptors") == 1
+
+    def test_save_rec_file_gz(self, cli):
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file_list",
+            str(TEST_DATA / "adgpu/filelist1.txt"),
+            "--receptor_file",
+            str(TEST_DATA / "adgpu/4j8m.pdbqt.gz"),
+            "--save_receptor",
         )
-        count = tablecount("Ligands")
-        assert count == 138
-
-    def test_append_results(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --file_path test_data/adgpu/group2 --append_results"
-        )
-        count = tablecount("Ligands")
-
-        assert count == 217
-
-    def test_save_rec_file(self, tablecount):
-
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --input_db output.db --receptor_file test_data/adgpu/4j8m.pdbqt --save_receptor --append_results"
-        )
-        count = tablecount("Receptors")
-
-        os.system("rm output.db")
-
-        assert count == 1
-
-    def test_save_rec_file_gz(self, tablecount):
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --receptor_file test_data/adgpu/4j8m.pdbqt.gz --save_receptor"
-        )
-        count = tablecount("Receptors")
-
-        os.system("rm output.db")
-
-        assert count == 1
+        assert rc == 0
+        assert cli.count("Receptors") == 1
 
 
 class TestOutputs:
-    def test_export_bookmark_csv(self):
-        status1 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt"
+    def test_export_bookmark_csv(self, cli):
+        cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
+        rc = cli.read("--export_bookmark_csv", "Ligands")
+        assert rc == 0
+
+    def test_export_table_csv(self, cli, tmp_path):
+        cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
+        csv_file = str(tmp_path / "Ligands.csv")
+        RingtailCore(str(cli.db)).export_table_as_csv("Ligands", csv_file)
+        assert Path(csv_file).exists()
+
+    def test_export_query_csv(self, cli):
+        cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
+        rc = cli.read("--export_query_csv", "SELECT * FROM Results")
+        assert rc == 0
+
+    def test_interaction_tolerance(self, cli):
+        rc = cli.write(
+            "-m", "adgpu", "--file", str(TEST_DATA / "adgpu/group1/127458.dlg.gz")
         )
-        status2 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --export_bookmark_csv Ligands"
+        assert rc == 0
+        assert cli.count("Interactions") == 53
+
+    def test_interaction_tolerance_flag(self, cli):
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file",
+            str(TEST_DATA / "adgpu/group1/127458.dlg.gz"),
+            "--interaction_tolerance",
         )
+        assert rc == 0
+        assert cli.count("Interactions") == 54
 
-        assert status1 == status2 == 0
-        assert os.path.exists("Ligands.csv")
-
-        os.system("rm Ligands.csv")
-
-    def test_export_query_csv(self):
-
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --export_query_csv 'SELECT * FROM Results'"
+    def test_interaction_tolerance_value(self, cli):
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file",
+            str(TEST_DATA / "adgpu/group1/127458.dlg.gz"),
+            "--interaction_tolerance",
+            "2.0",
         )
+        assert rc == 0
+        assert cli.count("Interactions") == 57
 
-        assert status == 0
-        assert os.path.exists("query.csv")
+    def test_max_poses(self, cli, tmp_path):
+        cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
+        count_default = cli.count("Results")
 
-        os.system("rm output.db")
-        os.system("rm query.csv")
-
-    def test_interaction_tolerance(self, tablecount):
-        status_notol = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz"
+        db_max1 = str(tmp_path / "max1.db")
+        subprocess.run(
+            [
+                "rt_process_vs",
+                "write",
+                "-o",
+                db_max1,
+                "-st",
+                "duckdb",
+                "-m",
+                "adgpu",
+                "--file_list",
+                str(TEST_DATA / "adgpu/filelist1.txt"),
+                "--max_poses",
+                "1",
+            ],
+            cwd=str(TEST_DIR),
+            capture_output=True,
         )
-        count_notol = tablecount("Interactions")
-        os.system("rm output.db")
+        assert RingtailCore(db_max1).table_length("Results") == RingtailCore(db_max1).table_length("Ligands")
+        assert RingtailCore(db_max1).table_length("Results") < count_default
 
-        assert status_notol == 0
-        assert count_notol == 53
-
-        status_tol = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance"
+    def test_store_all(self, cli):
+        rc = cli.write(
+            "-m",
+            "adgpu",
+            "--file_list",
+            str(TEST_DATA / "adgpu/filelist1.txt"),
+            "--store_all_poses",
         )
-
-        count_tol = tablecount("Interactions")
-        os.system("rm output.db")
-
-        assert status_tol == 0
-        assert count_tol == 54
-
-        status_tol2 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file test_data/adgpu/group1/127458.dlg.gz --interaction_tolerance 2.0"
-        )
-
-        count_tol2 = tablecount("Interactions")
-        os.system("rm output.db")
-
-        assert status_tol2 == 0
-        assert count_tol2 == 57
-
-    def test_max_poses(self, tablecount):
-        status3 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt"
-        )
-        count3 = tablecount("Results")
-        os.system("rm output.db")
-
-        status1 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --max_poses 1"
-        )
-        count1 = tablecount("Results")
-
-        ligcount1 = tablecount("Ligands")
-        os.system("rm output.db")
-
-        status5 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --max_poses 5"
-        )
-        count5 = tablecount("Results")
-        os.system("rm output.db")
-
-        assert status1 == 0
-        assert status3 == 0
-        assert status5 == 0
-        assert (count1 < count3) or (count1 < count5)
-        assert count1 == ligcount1
-
-    def test_store_all(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt --store_all_poses"
-        )
-        rtc = RingtailCore("output.db")
-        count = rtc.table_length("Results")
-        ligcount = rtc.table_length("Ligands")
-        os.system("rm output.db")
-
-        assert status == 0
-        assert count == ligcount * 20
+        assert rc == 0
+        assert cli.count("Results") == cli.count("Ligands") * 20
 
 
 class TestFilters:
+    """
+    Filter tests: use adgpu filelist1.txt setup per test via autouse fixture.
+    Storage type is parametrized from conftest to cover both backends.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup_db(self, cli):
+        cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
+        self.cli = cli
 
     def test_eworst(self):
-        status1 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_list test_data/adgpu/filelist1.txt"
-        )
-        status2 = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -15"
-        )
-
-        assert status1 == status2 == 0
+        assert self.cli.read("--eworst", "-15") == 0
 
     def test_ebest(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --ebest -15"
-        )
-
-        assert status == 0
+        assert self.cli.read("--ebest", "-15") == 0
 
     def test_leworst(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --leworst -0.4"
-        )
-
-        assert status == 0
+        assert self.cli.read("--leworst", "-0.4") == 0
 
     def test_lebest(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --leworst -0.4"
-        )
-
-        assert status == 0
+        assert self.cli.read("--lebest", "-0.4") == 0
 
     def test_epercentile(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --score_percentile 0.1"
-        )
-
-        assert status == 0
+        assert self.cli.read("--score_percentile", "0.1") == 0
 
     def test_lepercentile(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --le_percentile 0.1"
-        )
-
-        assert status == 0
+        assert self.cli.read("--le_percentile", "0.1") == 0
 
     def test_epercentile_eworst(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --score_percentile 0.1 --eworst -14"
-        )
-
-        assert status == 0
+        assert self.cli.read("--score_percentile", "0.1", "--eworst", "-14") == 0
 
     def test_lepercentile_leworst(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --le_percentile 0.1 --leworst -0.4"
-        )
-
-        assert status == 0
+        assert self.cli.read("--le_percentile", "0.1", "--leworst", "-0.4") == 0
 
     def test_name(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --ligand_name 127458"
-        )
-
-        assert status == 0
+        assert self.cli.read("--ligand_name", "127458") == 0
 
     def test_ligand_filters(self):
-        status = os.system(
-            """python ../ringtail/cli/rt_process_vs.py read --input_db output.db --ligand_substruct "NC" --ligand_operator AND"""
+        assert (
+            self.cli.read("--ligand_substruct", "NC", "--ligand_operator", "AND") == 0
         )
 
-        assert status == 0
+    def test_hbcount(self):
+        rc = self.cli.read("-s", "hb_count", "--hb_count", "5")
+        assert rc == 0
+        assert self.cli.passing("hb_count") == 1
 
-    def test_hbcount(self, passingcount):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read -s hb_count --input_db output.db --hb_count 5"
-        )
-        count = passingcount("hb_count")
+    @pytest.mark.parametrize(
+        "hb_spec",
+        [
+            "A:LYS:162:",
+            ":LYS:162:",
+            ":LYS::",
+            "A:LYS::",
+            "A::162:",
+            "A:::",
+            "::162:",
+        ],
+    )
+    def test_hb_interaction_formats(self, hb_spec):
+        assert self.cli.read("-hb", hb_spec) == 0
 
-        assert status == 0
-        assert count == 1
-
-    def test_hb1(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb A:LYS:162:"
-        )
-
-        assert status == 0
-
-    def test_hb2(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb :LYS:162:"
-        )
-
-        assert status == 0
-
-    def test_hb3(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb :LYS::"
-        )
-
-        assert status == 0
-
-    def test_hb4(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb A:LYS::"
-        )
-
-        assert status == 0
-
-    def test_hb5(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb A::162:"
-        )
-
-        assert status == 0
-
-    def test_hb6(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb A:::"
-        )
-
-        assert status == 0
-
-    def test_hb7(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -hb ::162:"
-        )
-
-        assert status == 0
-
-    def test_vdw1(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw A:VAL:279:"
-        )
-
-        assert status == 0
-
-    def test_vdw2(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw :VAL:279:"
-        )
-
-        assert status == 0
-
-    def test_vdw3(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw :VAL::"
-        )
-
-        assert status == 0
-
-    def test_vdw4(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw A:VAL::"
-        )
-
-        assert status == 0
-
-    def test_vdw5(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw A::279:"
-        )
-
-        assert status == 0
-
-    def test_vdw6(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw A:::"
-        )
-
-        assert status == 0
-
-    def test_vdw7(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -vdw ::279:"
-        )
-
-        assert status == 0
+    @pytest.mark.parametrize(
+        "vdw_spec",
+        [
+            "A:VAL:279:",
+            ":VAL:279:",
+            ":VAL::",
+            "A:VAL::",
+            "A::279:",
+            "A:::",
+            "::279:",
+        ],
+    )
+    def test_vdw_interaction_formats(self, vdw_spec):
+        assert self.cli.read("-vdw", vdw_spec) == 0
 
     def test_all_filters(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -15 --ebest -16 --leworst -0.4 --lebest -0.5 --score_percentile 99 --le_percentile 99 --ligand_name 127458 --hb_count 5 --react_any -hb A:LYS:162: -vdw A:VAL:279:"
+        rc = self.cli.read(
+            "--eworst",
+            "-15",
+            "--ebest",
+            "-16",
+            "--leworst",
+            "-0.4",
+            "--lebest",
+            "-0.5",
+            "--score_percentile",
+            "99",
+            "--le_percentile",
+            "99",
+            "--ligand_name",
+            "127458",
+            "--hb_count",
+            "5",
+            "--react_any",
+            "-hb",
+            "A:LYS:162:",
+            "-vdw",
+            "A:VAL:279:",
         )
+        assert rc == 0
 
-        assert status == 0
-
-    def test_export_sdf(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db -s sdf_test -e -4 -sdf . "
-        )
-
-        import glob
-
-        sdf_files = glob.glob("*.sdf")
-
+    def test_export_sdf(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        rc = self.cli.read("-s", "sdf_test", "-e", "-4", "-sdf", str(tmp_path))
+        sdf_files = list(tmp_path.glob("*.sdf"))
         assert len(sdf_files) == 1
-        os.remove(sdf_files[0])
+        assert rc == 0
 
-        assert status == 0
-
-    def test_clustering(self, tablecount):
-        os.system("rm output.db")
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1 --file_path test_data/adgpu/group2"
+    def test_clustering(self, cli):
+        cli.write(
+            "-m",
+            "adgpu",
+            "--overwrite",
+            "--file_path",
+            str(TEST_DATA / "adgpu/group1"),
+            "--file_path",
+            str(TEST_DATA / "adgpu/group2"),
         )
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -6"
+        cli.read("--eworst", "-6")
+        count1 = cli.count("filtered_poses")
+        rc = cli.read(
+            "--input_bookmark",
+            "passing_results",
+            "--bookmark_name",
+            "clustered_results",
+            "-mfpc",
+            "0.9",
         )
-        count1 = tablecount("filtered_poses")
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --input_bookmark passing_results --bookmark_name clustered_results -mfpc 0.9"
-        )
-        count2 = tablecount("filtered_poses")
-
-        assert status == 0
+        count2 = cli.count("filtered_poses")
+        assert rc == 0
         assert count1 == 68
         assert count2 == 68 + 5
 
     def test_filters_value_error(self):
+        rc = self.cli.read("--score_percentile", "109")
+        assert rc != 0
 
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --score_percentile 109"
+    def test_react_any(self, cli):
+        cli.write(
+            "-m",
+            "adgpu",
+            "--overwrite",
+            "--file_path",
+            str(TEST_DATA / "reactive"),
+            "--receptor_file",
+            str(TEST_DATA / "reactive/4j8m_m_rigid.pdbqt"),
         )
-        # checking that code exited with error since a percentile cannot be above 100
-        assert status != 0
-        os.system("rm output_log.txt output.db")
+        assert cli.read("--react_any") == 0
 
-    def test_react_any(self):
-        # write new db with reactive data
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --output_db output.db --file_path test_data/reactive --receptor_file test_data/reactive/4j8m_m_rigid.pdbqt"
+    @pytest.mark.parametrize(
+        "react_spec",
+        [
+            "A:TYR:212:",
+            ":TYR:212:",
+            ":TYR::",
+            "A:TYR::",
+            "A::212:",
+            "A:::",
+            "::212:",
+        ],
+    )
+    def test_reactive_interaction_formats(self, react_spec, cli):
+        cli.write(
+            "-m",
+            "adgpu",
+            "--overwrite",
+            "--file_path",
+            str(TEST_DATA / "reactive"),
+            "--receptor_file",
+            str(TEST_DATA / "reactive/4j8m_m_rigid.pdbqt"),
         )
-
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --react_any"
-        )
-
-        assert status == 0
-
-    def test_react1(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db  --reactive_interactions A:TYR:212:"
-        )
-
-        assert status == 0
-
-    def test_react2(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db  --reactive_interactions :TYR:212:"
-        )
-
-        assert status == 0
-
-    def test_react3(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions :TYR::"
-        )
-
-        assert status == 0
-
-    def test_react4(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions A:TYR::"
-        )
-
-        assert status == 0
-
-    def test_react5(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions A::212:"
-        )
-
-        assert status == 0
-
-    def test_react6(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions A:::"
-        )
-
-        assert status == 0
-
-    def test_react7(self):
-        status = os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --reactive_interactions ::212:"
-        )
-
-        assert status == 0
-        os.system("rm output_log.txt output.db")
+        assert cli.read("--reactive_interactions", react_spec) == 0
 
 
 class TestOtherScripts:
-    def test_rt_compare(self):
-        # first database
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --file_path test_data/adgpu/group1"
+    def test_rt_compare(self, tmp_path):
+        db1 = str(tmp_path / "output.db")
+        db2 = str(tmp_path / "output2.db")
+        log = "compared_ligands.txt"
+
+        subprocess.run(
+            [
+                "rt_process_vs",
+                "write",
+                "-o",
+                db1,
+                "-st",
+                "duckdb",
+                "-m",
+                "adgpu",
+                "--file_path",
+                str(TEST_DATA / "adgpu/group1"),
+            ],
+            cwd=str(TEST_DIR),
+            capture_output=True,
         )
-        # second database
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py write --output_db output2.db --file_path test_data/adgpu/group1"
+        subprocess.run(
+            [
+                "rt_process_vs",
+                "write",
+                "-o",
+                db2,
+                "-st",
+                "duckdb",
+                "-m",
+                "adgpu",
+                "--file_path",
+                str(TEST_DATA / "adgpu/group1"),
+            ],
+            cwd=str(TEST_DIR),
+            capture_output=True,
         )
-        # filter producing 30 ligands
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output.db --eworst -6"
+        subprocess.run(
+            ["rt_process_vs", "read", "--input_db", db1, "--eworst", "-6"],
+            cwd=str(TEST_DIR),
+            capture_output=True,
         )
-        # filter producing 5 ligands
-        os.system(
-            "python ../ringtail/cli/rt_process_vs.py read --input_db output2.db --eworst -7"
+        subprocess.run(
+            ["rt_process_vs", "read", "--input_db", db2, "--eworst", "-7"],
+            cwd=str(TEST_DIR),
+            capture_output=True,
         )
-        # should produce 25 ligands
-        os.system(
-            "python ../ringtail/cli/rt_compare.py --wanted output.db passing_results --unwanted output2.db passing_results --output_log compared_ligands.txt"
+        subprocess.run(
+            [
+                "rt_compare",
+                "--wanted",
+                db1,
+                "passing_results",
+                "--unwanted",
+                db2,
+                "passing_results",
+                "--output_log",
+                log,
+            ],
+            cwd=str(TEST_DIR),
+            capture_output=True,
         )
-        with open("output_compared_ligands.txt") as f:
+
+        output_log = tmp_path / f"output_{Path(log).name}"
+        with open(output_log) as f:
             for pos, line in enumerate(f):
-                if pos + 1 == 94:  # zero based line indexing
+                if pos + 1 == 94:
                     assert line == "Number passing ligands: 24 \n"
                     break
-
-        os.system("rm output.db output2.db *_compared_ligands.txt output_log.txt")

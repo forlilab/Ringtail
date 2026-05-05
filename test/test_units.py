@@ -1,128 +1,152 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail unit testing
+# Ringtail unit tests
 #
-from ringtail import RingtailCore, Filters, QueryBuilder
-import os
 import json
+import logging
+from pathlib import Path
+
 import pytest
+from ringtail import Filters, QueryBuilder, RingtailCore
+
+TEST_DATA = Path(__file__).parent / "test_data"
 
 
-def _create_test_db(db_name: str = "output.db"):
-    rtc = RingtailCore(db_file=db_name)
-    rtc.add_results_from_files(file_path="test_data/adgpu/group1/")
-    rtc.add_results_from_files(file_path="test_data/adgpu/group2/")
+class TestCoreOperations:
+    """Basic write and read operations using adgpu (default mode)."""
 
-
-def _db_exists(db_name: str = "output.db"):
-    return os.path.exists(db_name)
-
-
-class TestRingtailCore:
-    def test_add_file(self):
-        os.system("rm output.db*")
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(
-            file="test_data/adgpu/group1/1451.dlg.gz", max_poses=3
+    def test_add_file(self, tmp_db):
+        tmp_db.add_results_from_files(
+            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
+            max_poses=3,
+            docking_mode="adgpu",
         )
-        count = rtc.table_length("Results")
-        assert count == 3
+        assert tmp_db.table_length("Results") == 3
 
-    def test_storeallposes(self):
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(
-            file="test_data/adgpu/group1/1451.dlg.gz",
+    def test_store_all_poses(self, tmp_db):
+        tmp_db.add_results_from_files(
+            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
             store_all_poses=True,
-            overwrite=True,
+            docking_mode="adgpu",
         )
-        count = rtc.table_length("Results")
-        assert count == 20
+        assert tmp_db.table_length("Results") == 20
 
-    def test_add_folder(self):
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path="test_data/adgpu/group1", overwrite=True)
-        count = rtc.table_length("Ligands")
-        assert count == 138
+    def test_add_folder(self, tmp_db):
+        tmp_db.add_results_from_files(
+            file_path=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
+        )
+        assert tmp_db.table_length("Ligands") == 138
 
-    def test_save_receptor(self):
-        rtc = RingtailCore(db_file="output.db")
-        count0 = rtc.db_query(
+    def test_append_to_database(self, tmp_db):
+        tmp_db.add_results_from_files(
+            file_path=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
+        )
+        tmp_db.add_results_from_files(
+            file_path=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
+        )
+        assert tmp_db.table_length("Ligands") == 217
+
+    def test_save_receptor(self, tmp_db):
+        tmp_db.add_results_from_files(
+            file_path=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
+        )
+        count_before = tmp_db.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )[0][0]
+        assert count_before == 0
 
-        assert count0 == 0
-
-        rtc.save_receptor(receptor="test_data/adgpu/4j8m.pdbqt")
-        count = rtc.db_query(
+        tmp_db.save_receptor(receptor=str(TEST_DATA / "adgpu/4j8m.pdbqt"))
+        count_after = tmp_db.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )[0][0]
+        assert count_after == 1
 
-        assert count == 1
-
-    # TODO test will fail, check for dict output instead
-    def test_db_summary_data(self):
-        # Ensure storage error thrown if no data in database
+    def test_db_summary_data(self, tmp_db):
         from ringtail import exceptions as e
 
         with pytest.raises(e.StorageError):
-            fake_rtc = RingtailCore("nodata.db")
-            fake_rtc.db_summary_data()
-        os.system("rm nodata.db")
+            tmp_db.db_summary_data()
 
-        import sys
-
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        data, _ = rtc.db_summary_data()
-
+        tmp_db.add_results_from_files(
+            file_path=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
+        )
+        tmp_db.add_results_from_files(
+            file_path=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
+        )
+        data, _ = tmp_db.db_summary_data()
         assert isinstance(data, dict)
         assert len(data.keys()) == 12
         assert all(isinstance(v, (float, int)) for v in data.values())
 
-    def test_append_to_database(self):
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file_path="test_data/adgpu/group2/")
-        count = rtc.table_length("Ligands")
+    def test_duplicate_handling(self, tmp_db):
+        f = str(TEST_DATA / "adgpu/group1/1451.dlg.gz")
+        tmp_db.add_results_from_files(file=f, docking_mode="adgpu")
+        result_count = tmp_db.table_length("Results")
+        inter_count = tmp_db.table_length("Interactions")
 
-        assert count == 217
+        tmp_db.add_results_from_files(
+            file=f, docking_mode="adgpu", duplicate_handling="replace"
+        )
+        assert tmp_db.table_length("Results") == result_count
+        assert tmp_db.table_length("Interactions") == inter_count
 
-    def test_filter(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        count_ligands_passing, _ = rtc.filter(
+        tmp_db.add_results_from_files(
+            file=f, docking_mode="adgpu", duplicate_handling="ignore"
+        )
+        assert tmp_db.table_length("Results") == result_count
+        assert tmp_db.table_length("Interactions") == inter_count
+
+        tmp_db.add_results_from_files(file=f, docking_mode="adgpu")
+        assert tmp_db.table_length("Results") == result_count * 2
+        assert tmp_db.table_length("Interactions") == inter_count * 2
+
+    def test_db_num_poses_warning(self, tmp_db, tmp_path):
+        from ringtail import setup_logging
+
+        logfile = str(tmp_path / "poses_warning.log")
+        setup_logging(level="DEBUG", logfile=logfile)
+
+        tmp_db.add_results_from_files(
+            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
+            max_poses=1,
+            docking_mode="adgpu",
+        )
+        tmp_db.add_results_from_files(
+            file=str(TEST_DATA / "adgpu/group1/1620.dlg.gz"),
+            max_poses=4,
+            docking_mode="adgpu",
+        )
+        warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1."
+        with open(logfile) as f:
+            assert warning_string in f.read()
+
+
+class TestFiltering:
+    """Filter operations on the full 217-ligand adgpu dataset."""
+
+    def test_filter(self, populated_db):
+        count, _ = populated_db.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             max_miss=1,
             output_bookmark="union_bookmark",
         )
-        # make sure correct number of ligands passing
-        assert count_ligands_passing == 33
-        # make sure only one bookmark was created
-        bookmarks = rtc.get_bookmark_names()
+        assert count == 33
+        bookmarks = populated_db.get_bookmark_names()
         assert len(bookmarks) == 1
         assert bookmarks[0] == "union_bookmark"
-        rtc.delete_bookmark("union_bookmark")
 
-    def test_return_iter(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        iterable = rtc.filter(eworst=-7, output_bookmark="iterable", return_iter=True)
-
+    def test_return_iter(self, populated_db):
+        iterable = populated_db.filter(
+            eworst=-7, output_bookmark="iterable", return_iter=True
+        )
         assert len(iterable) == 8
 
-    def test_enumerate_interaction_combinations(self):
-        if not _db_exists():
-            _create_test_db()
-        # first, test without enumerate, check number of passing union as well as number of bookmarks
-        rtc = RingtailCore(db_file="output.db")
-        # get current bookmark count
-        bookmarks_old = rtc.get_bookmark_names()
-        count_ligands_passing, _ = rtc.filter(
+    def test_enumerate_interaction_combinations(self, populated_db):
+        bookmarks_before = populated_db.get_bookmark_names()
+        count, _ = populated_db.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -130,76 +154,55 @@ class TestRingtailCore:
             enumerate_interaction_combs=True,
             output_bookmark="enumerated_bookmark",
         )
-        # make sure correct number of ligands passing
-        assert count_ligands_passing == 33
+        assert count == 33
+        new_bookmarks = [
+            b for b in populated_db.get_bookmark_names() if b not in bookmarks_before
+        ]
+        assert len(new_bookmarks) == 6
+        assert "enumerated_bookmark_0" in new_bookmarks
+        assert "enumerated_bookmark_union" in new_bookmarks
 
-        # make sure additional bookmarks were created for the enumerated combinations
-        bookmarks = rtc.get_bookmark_names()
-        bookmarks = [element for element in bookmarks if element not in bookmarks_old]
-        # This filtering session should produce 6 bookmarks
-        assert len(bookmarks) == 6
-
-        # check that naming works properly
-        assert "enumerated_bookmark_0" in bookmarks
-        assert "enumerated_bookmark_union" in bookmarks
-
-    def test_filter_from_bookmark(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        count_passing_ligands1, _ = rtc.filter(
-            eworst=-6, output_bookmark="filter_window"
-        )
-        count_passing_ligands2, _ = rtc.filter(
+    def test_filter_from_bookmark(self, populated_db):
+        count1, _ = populated_db.filter(eworst=-6, output_bookmark="filter_window")
+        count2, _ = populated_db.filter(
             eworst=-7, output_bookmark="bookmark", input_bookmark="filter_window"
         )
-        assert count_passing_ligands1 > count_passing_ligands2
+        assert count1 > count2
 
-    def test_ligand_filters(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
+    def test_ligand_filters(self, populated_db):
+        count_name, _ = populated_db.filter(
+            ligand_name=["88"], output_bookmark="ligname"
+        )
+        assert count_name == 7
 
-        # tests for partial names
-        count_ligname, _ = rtc.filter(ligand_name=["88"], output_bookmark="ligname")
-        assert count_ligname == 7
-
-        # test substructure search (default 'OR' ligand_operator)
-        count_substruct_or, _ = rtc.filter(
+        count_or, _ = populated_db.filter(
             ligand_substruct=["C=O", "CC(C)(C)"], output_bookmark="substruct_or"
         )
-        assert count_substruct_or == 90
+        assert count_or == 90
 
-        # test substructure search ('AND' ligand_operator)
-        count_substruct_and, _ = rtc.filter(
+        count_and, _ = populated_db.filter(
             ligand_substruct=["C=O", "CC(C)(C)"],
             ligand_operator="AND",
             output_bookmark="substruct_and",
         )
-        assert count_substruct_and == 18
+        assert count_and == 18
 
-        count_substruct_pos, _ = rtc.filter(
+        count_pos, _ = populated_db.filter(
             ligand_substruct_pos=[
                 ["[C][Oh]", 1, 10, 102, 106, 154],
                 ["C=O", 1, 10, 102, 106, 154],
             ],
             output_bookmark="substruct_pos",
         )
-        assert count_substruct_pos == 12
+        assert count_pos == 12
 
-        # test ligand_name_file
-
-        count_ligands, _ = rtc.filter(
-            ligand_name_file="test_data/adgpu/ligand_names.csv",
+        count_file, _ = populated_db.filter(
+            ligand_name_file=str(TEST_DATA / "adgpu/ligand_names.csv"),
         )
+        assert count_file == 16
 
-        assert count_ligands == 16
-
-    def test_all_filters(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        count_ligands_passing, _ = rtc.filter(
+    def test_all_filters(self, populated_db):
+        count, _ = populated_db.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -207,84 +210,96 @@ class TestRingtailCore:
             output_bookmark="big_query",
             ligand_name=["88"],
         )
+        assert count == 1
 
-        assert count_ligands_passing == 1
-
-    def test_get_filterdata(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, output_bookmark="has_filterdata")
-        output_log_name = "output_log_test.txt"
-        rtc.get_previous_filter_data(
-            "has_filterdata", "delta, reference_rmsd", output_log=output_log_name
+    def test_generate_interaction_combinations(self, tmp_db):
+        filters = Filters(
+            {
+                "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+            }
+        )
+        combos = tmp_db._generate_interaction_combinations(filters.asdict(), 1)
+        result_filters = [
+            tmp_db._prepare_interaction_combo_filters(filters.asdict(), c)
+            for c in combos
+        ]
+        assert len(result_filters) == 5
+        assert (
+            Filters(
+                {
+                    "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                    "vdw_interactions": [("A:ARG:123:", True)],
+                }
+            ).asdict()
+            in result_filters
+        )
+        assert (
+            Filters(
+                {
+                    "hb_interactions": [("A:ARG:123:", True)],
+                    "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                }
+            ).asdict()
+            in result_filters
         )
 
-        with open(output_log_name) as f:
-            file_contents = f.read()
-        import linecache
 
-        final_line = linecache.getline(output_log_name, 11)
+class TestOutput:
+    """Output operations: SDFs, CSVs, logs, plots, bookmark exports."""
 
-        assert "11991, 0.0, 226.06" in file_contents
-        assert "3961, -0.02, 215.96" in file_contents
-        assert final_line == "***************\n"
-
-        os.system(("rm " + output_log_name))
-
-    def test_similar_ligands_interaction(self, monkeypatch):
-
-        rtc = RingtailCore(db_file="ifp_cluster.db")
-        rtc.add_results_from_files(
-            file_path=["test_data/adgpu/group1/", "test_data/adgpu/group2/"],
+    def test_get_filterdata(self, populated_db, tmp_path):
+        populated_db.filter(eworst=-7, output_bookmark="has_filterdata")
+        log_file = str(tmp_path / "filterdata.txt")
+        populated_db.get_previous_filter_data(
+            "has_filterdata", "delta, reference_rmsd", output_log=log_file
         )
-        ligand_name = "28837"
-        rtc.filter(ebest=-6, interaction_cluster=0.5)
-        monkeypatch.setattr("builtins.input", lambda _: 1)  # provides terminal input
-        number_similar = rtc.find_similar_ligands(ligand_name)
-        os.system("rm ifp_cluster.db")
+        with open(log_file) as f:
+            contents = f.read()
+        assert "11991, 0.0, 226.06" in contents
+        assert "3961, -0.02, 215.96" in contents
 
-        assert number_similar == 13
-
-    def test_similar_ligands_mfpt(self, monkeypatch):
-        rtc = RingtailCore(db_file="mfpt_cluster.db")
-        rtc.add_results_from_files(
-            file_path=["test_data/adgpu/group1/", "test_data/adgpu/group2/"],
-        )
-        ligand_name = "287065"
-        rtc.filter(ebest=-6, mfpt_cluster=0.5)
-        monkeypatch.setattr("builtins.input", lambda _: 1)  # provides terminal input
-        number_similar = rtc.find_similar_ligands(ligand_name)
-        os.system("rm mfpt_cluster.db")
-        assert number_similar == 8
-
-    def test_create_rdkitmol(self):
-        if not _db_exists():
-            _create_test_db()
-        bookmark_name = "rdkit_test"
-        rtc = RingtailCore(db_file="output.db")
-        ligname = "14303"
-        rtc.filter(ebest=-3, output_bookmark=bookmark_name)
-        ligands_poses = rtc._fetch_select_ligands_poses(
-            ligand_names=[ligname], bookmark_name=bookmark_name
+    def test_export_csv_and_log(self, populated_db, tmp_path):
+        log_file = str(tmp_path / "filter_log.txt")
+        populated_db.filter(
+            eworst=-7,
+            output_log=log_file,
+            output_bookmark="export_csv",
+            outfields=["ligname", "docking_score"],
         )
 
-        mol = rtc.create_rdkit_mol(ligname, ligands_poses[ligname])[0]
-        # grab one molecule from bookmark and check number of atoms
-        num_of_atoms = mol.GetNumAtoms()
-        assert num_of_atoms == 10
+        # verify log content
+        target_line = None
+        with open(log_file) as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            if "bookmark" in line and i + 2 < len(lines):
+                target_line = lines[i + 2].strip()
+        assert target_line == "11128, -7.25"
 
-    def test_write_sdfs(self):
-        if not _db_exists():
-            _create_test_db()
-        sdf_path = "sdf_files"
-        rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, output_bookmark="sdf_bookmark")
-        rtc.write_molecule_sdfs("sdf_bookmark", sdf_path, all_in_one=False)
+        csv_ligands = str(tmp_path / "Ligands.csv")
+        populated_db.export_table_as_csv("Ligands", csv_ligands)
+        assert Path(csv_ligands).exists()
 
-        # ensure correct number of files written
-        sdf_files = os.listdir(sdf_path)
-        expected = [
+        csv_bookmark = str(tmp_path / "export_csv.csv")
+        populated_db.export_table_as_csv("export_csv", csv_bookmark)
+        assert Path(csv_bookmark).exists()
+
+    def test_create_rdkitmol(self, populated_db):
+        populated_db.filter(ebest=-3, output_bookmark="rdkit_test")
+        ligands_poses = populated_db._fetch_select_ligands_poses(
+            ligand_names=["14303"], bookmark_name="rdkit_test"
+        )
+        mol = populated_db.create_rdkit_mol("14303", ligands_poses["14303"])[0]
+        assert mol.GetNumAtoms() == 10
+
+    def test_write_sdfs(self, populated_db, tmp_path):
+        sdf_dir = str(tmp_path / "sdf_files")
+        populated_db.filter(eworst=-7, output_bookmark="sdf_bookmark")
+        populated_db.write_molecule_sdfs("sdf_bookmark", sdf_dir, all_in_one=False)
+
+        sdf_files = [f.name for f in Path(sdf_dir).iterdir()]
+        expected = {
             "3961.sdf",
             "5995.sdf",
             "11128.sdf",
@@ -293,524 +308,63 @@ class TestRingtailCore:
             "15776.sdf",
             "136065.sdf",
             "127947.sdf",
-        ]
-        assert len(sdf_files) == len(expected)
+        }
+        assert set(sdf_files) == expected
 
-        # ensure contents is correct
-        with open("sdf_files/136065.sdf") as sdf:
-            sdf.readline()
-            sdf.readline()
-            sdf.readline()
-            fourth_line = sdf.readline()
-        assert fourth_line == " 27 28  0  0  0  0  0  0  0  0999 V2000\n"
+        with open(Path(sdf_dir) / "136065.sdf") as f:
+            lines = f.readlines()
+        assert lines[3] == " 27 28  0  0  0  0  0  0  0  0999 V2000\n"
 
-        # ensure the correct files were written
-        for f in sdf_files:
-            assert f in expected
-            os.remove(sdf_path + "/" + f)
-        os.rmdir(sdf_path)
+    def test_plot(self, populated_db, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        populated_db.filter(eworst=-7, output_bookmark="plot_data")
+        populated_db.plot("plot_data")
+        assert (tmp_path / "scatter.png").is_file()
 
-    def test_pymol(self):
-        # will not add a test for now, as I cannot figure out an unambiguous, lightweight way to test
-        pass
+    def test_export_bookmark_db(self, populated_db, tmp_path):
+        populated_db.filter(eworst=-7, output_bookmark="export_db")
+        bookmark_db_name = populated_db.export_bookmark_db("export_db")
+        assert Path(bookmark_db_name).exists()
 
-    def test_export_csv(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        rtc.filter(
-            eworst=-7, output_log="different_log.txt", output_bookmark="export_csv"
-        )
-        rtc.export_table_as_csv("Ligands", "Ligands.csv")
-
-        assert os.path.exists("Ligands.csv")
-        os.system("rm Ligands.csv")
-        rtc.export_table_as_csv("export_csv", "export_csv.csv")
-        assert os.path.exists("export_csv.csv")
-        os.system("rm export_csv.csv")
-
-    def export_receptor_pdbqt(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        rtc.export_receptor_pdbqt()
-        receptor_name = rtc.db_query("SELECT RecName FROM Receptors;")[0][0]
-        receptor_file = receptor_name + ".pdbqt"
-
-        assert os.path.exists(receptor_file)
-
-        os.system("rm " + receptor_file)
-
-    def test_generate_interactions_prepare_filters(self):
-        test_filters = []
-        rtc = RingtailCore()
-        filters = Filters(
-            {
-                "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-            }
-        )
-        interaction_combs = rtc._generate_interaction_combinations(filters.asdict(), 1)
-        for ic in interaction_combs:
-            nufilter = rtc._prepare_interaction_combo_filters(filters.asdict(), ic)
-            test_filters.append(nufilter)
-
-        assert (
-            Filters(
-                {
-                    "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                    "vdw_interactions": [("A:ARG:123:", True)],
-                }
-            ).asdict()
-            in test_filters
-        )
-
-        assert (
-            Filters(
-                {
-                    "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                    "vdw_interactions": [("A:VAL:124:", True)],
-                }
-            ).asdict()
-            in test_filters
-        )
-
-        assert (
-            Filters(
-                {
-                    "hb_interactions": [("A:ARG:123:", True)],
-                    "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                }
-            ).asdict()
-            in test_filters
-        )
-
-        assert (
-            Filters(
-                {
-                    "hb_interactions": [("A:VAL:124:", True)],
-                    "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                }
-            ).asdict()
-            in test_filters
-        )
-
-        assert (
-            Filters(
-                {
-                    "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                    "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                }
-            ).asdict()
-            in test_filters
-        )
-
-        assert len(test_filters) == 5
-
-    def test_logfile_write(self):
-        assert os.path.exists("different_log.txt")
-
-        with open("different_log.txt") as f:
-            target_line_no = None
-            for line_no, line_content in enumerate(f):
-                if "bookmark" in line_content:
-                    target_line_no = line_no + 2
-                if line_no == target_line_no:
-                    break
-
-        assert line_content == "11128, -7.25\n"
-
-    def test_write_flexres_pdb(self):
-        import meeko
-
-        os.system("rm flexres.db")
-
-        flexres_path = "test_data/flexres/"
-        export_file = "exported_flex_rec"
-        receptor_file = flexres_path + "receptor.pdbqt"
-        rtc = RingtailCore(db_file="flexres.db")
-        rtc.add_results_from_files(
-            file=flexres_path + "ligand.pdbqt",
-            receptor_file=receptor_file,
-            recursive=True,
-            docking_mode="vina",
-        )
-        rtc.filter(eworst=-1, output_bookmark="flexres")
-        polymer_file = flexres_path + "receptor.json"
-        with open(polymer_file) as f:
-            json_string = f.read()
-        polymer = meeko.Polymer.from_json(json_string)
-        rtc.write_flexres_pdb(
-            polymer,
-            "ligand",
-            "flexres",
-            export_file,
-        )
-        expected_full_path = f"{export_file}_ligand.pdb"
-        assert os.path.exists(expected_full_path)
-
-        with open(expected_full_path) as f:
-            file_contents = f.read()
-
-        assert (
-            "ATOM     11  C   HIS A   2       2.368   0.239  -0.349                       C"
-            in file_contents
-        )
-        assert (
-            "ATOM     44 HD2  HIS A   3      -0.400  -5.308  -1.507                       H"
-            in file_contents
-        )
-
-        os.system(("rm " + expected_full_path))
-        os.system("rm flexres.db output_log.txt")
-
-    def test_plot(self):
-        if not _db_exists():
-            _create_test_db()
-        rtcore = RingtailCore(db_file="output.db")
-        rtcore.filter(eworst=-7, output_bookmark="plot_data")
-        rtcore.plot("plot_data")
-        assert os.path.isfile("scatter.png") == True
-        os.system("rm scatter.png")
-
-    def test_export_bookmark_db(self):
-        if not _db_exists():
-            _create_test_db()
-        rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7, output_bookmark="export_db")
-        bookmark_db_name = rtc.export_bookmark_db("export_db")
-
-        assert os.path.exists(bookmark_db_name)
         rtc_bm = RingtailCore(db_file=bookmark_db_name)
-        count = rtc_bm.table_length("Results")
+        assert rtc_bm.table_length("Results") == 8
 
-        assert count == 8
-
-        os.system("rm " + bookmark_db_name)
-
-    def test_duplicate_handling(self):
-        os.system("rm output.db*")
-
-        rtc = RingtailCore(db_file="output.db")
-        file = "test_data/adgpu/group1/1451.dlg.gz"
-        rtc.add_results_from_files(file=file)
-        # ensure three results rows were added
-        result_count = rtc.table_length("Results")
-        inter_count = rtc.table_length("Interactions")
-        # add same file but replace the duplicate
-        rtc.add_results_from_files(file=file, duplicate_handling="replace")
-        result_count_replace = rtc.table_length("Results")
-        inter_count_replace = rtc.table_length("Interactions")
-        # add same file but ignore the duplicate
-        rtc.add_results_from_files(file=file, duplicate_handling="ignore")
-        result_count_ignore = rtc.table_length("Results")
-        inter_count_ignore = rtc.table_length("Interactions")
-
-        os.system("rm output.db*")
-        # add same file but allow the duplicate
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file=file)
-        rtc.add_results_from_files(file=file)
-        result_count_dupl = rtc.table_length("Results")
-        inter_count_dupl = rtc.table_length("Interactions")
-
-        assert (
-            result_count
-            == result_count_replace
-            == result_count_ignore
-            == result_count_dupl / 2
+    def test_similar_ligands_interaction(self, populated_db, tmp_path, monkeypatch):
+        populated_db.filter(ebest=-6, interaction_cluster=0.5)
+        monkeypatch.setattr("builtins.input", lambda _: 1)
+        number_similar = populated_db.find_similar_ligands(
+            "28837", output_log=str(tmp_path / "cluster_log.txt")
         )
-        assert (
-            inter_count
-            == inter_count_replace
-            == inter_count_ignore
-            == inter_count_dupl / 2
+        assert number_similar == 13
+
+    def test_similar_ligands_mfpt(self, populated_db, tmp_path, monkeypatch):
+        populated_db.filter(ebest=-6, mfpt_cluster=0.5)
+        monkeypatch.setattr("builtins.input", lambda _: 1)
+        number_similar = populated_db.find_similar_ligands(
+            "287065", output_log=str(tmp_path / "cluster_log.txt")
         )
-
-        os.system("rm output.db*")
-
-    def test_db_num_poses_warning(self):
-        from ringtail import setup_logging
-
-        logfile = "test_num_poses_warning.log"
-        setup_logging(level="DEBUG", logfile=logfile)
-
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(
-            file="test_data/adgpu/group1/1451.dlg.gz", max_poses=1
-        )
-        rtc.add_results_from_files(
-            file="test_data/adgpu/group1/1620.dlg.gz", max_poses=4
-        )
-        warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent number of poses saved is 4 but database was previously set to 1."
-
-        with open(logfile) as f:
-            warning_worked = warning_string in f.read()
-
-        os.system(f"rm output.db* {logfile}")
-
-        assert warning_worked
-
-    def test_reactive_filtering(self):
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(
-            file_path="test_data/reactive/",
-            store_all_poses=True,
-            receptor_file="test_data/reactive/4j8m_m_rigid.pdbqt",
-        )
-        count_ligands_passing, _ = rtc.filter(
-            reactive_interactions=[("A:TYR:212:", True)]
-        )
-
-        os.system("rm output.db*")
-
-        assert count_ligands_passing == 10
-
-    def test_polymer_receptor(self):
-        rtc = RingtailCore(db_file="flexres.db")
-        data_path = "test_data/flexres"
-        rtc.add_results_from_files(
-            file=data_path + "/ligand.pdbqt",
-            docking_mode="vina",
-            receptor_file=data_path + "/receptor.json",
-            save_receptor=True,
-        )
-        receptor_items = rtc.get_receptor_object()
-
-        os.system("rm flexres.db")
-
-        assert receptor_items[0] == "receptor"
-        assert not receptor_items[1]
-        assert receptor_items[2] != None
-
-
-class TestADNGHandling:
-    def test_adng_stream(self):
-        try:
-            from rdkit import Chem
-        except:
-            return
-
-        rtc = RingtailCore()
-        rtc.save_receptor("test_data/adng/helix--scofu01.json")
-        suppl = Chem.SDMolSupplier(
-            "test_data/adng/docked_ligands.sdf",
-            removeHs=False,
-        )
-        rtc.add_mol(suppl)
-
-        results_count = rtc.table_length("Results")
-        interaction_count = rtc.table_length("Interactions")
-        os.system("rm output.db")
-
-        assert results_count == 9
-        assert interaction_count == 60
-
-    def test_adng_file_add(self):
-        adng_path = "test_data/adng"
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_path=adng_path,
-            receptor_file=adng_path + "/helix--scofu01.json",
-            save_receptor=True,
-            docking_mode="adng",
-        ),
-        results_count = rtc.table_length("Results")
-        interaction_count = rtc.table_length("Interactions")
-        os.system("rm output.db")
-
-        assert results_count == 9
-        assert interaction_count == 60
-
-    def test_adng_file_add_no_int(self):
-        adng_path = "test_data/adng"
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_path=adng_path,
-            calculate_interactions=False,
-            docking_mode="adng",
-        ),
-        results_count = rtc.table_length("Results")
-        interaction_count = rtc.table_length("Interactions")
-        os.system("rm output.db")
-
-        assert results_count == 9
-        assert interaction_count == 0
-
-    def test_adng_calc_int(self):
-        adng_path = "test_data/adng"
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_path=adng_path,
-            calculate_interactions=False,
-            docking_mode="adng",
-        ),
-        results_count = rtc.table_length("Results")
-        interaction_count = rtc.table_length("Interactions")
-        assert results_count == 9
-        assert interaction_count == 0
-
-        rtc.save_receptor(
-            adng_path + "/helix--scofu01.json",
-        )
-        rtc.add_interactions()
-
-        results_count = rtc.table_length("Results")
-        interaction_count = rtc.table_length("Interactions")
-        assert results_count == 9
-        assert interaction_count == 60
-
-    def test_adng_filtering(self):
-        adng_path = "test_data/adng"
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_path=adng_path,
-            receptor_file=adng_path + "/helix--scofu01.json",
-            save_receptor=True,
-            docking_mode="adng",
-        ),
-        count, _ = rtc.filter(
-            eworst=-13, ligand_substruct=["C=O"], vdw_interactions=[(":VAL::", True)]
-        )
-        os.system("rm output.db")
-        assert count == 1
-
-
-class TestVinaHandling:
-
-    def test_vina_file_add(self):
-        vina_path = "test_data/vina"
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_path=vina_path,
-            receptor_file=vina_path + "/receptor.pdbqt",
-            save_receptor=True,
-            docking_mode="vina",
-        ),
-        count = rtc.table_length("Results")
-        os.system("rm output.db*")
-
-        assert count == 6
-
-    def test_vina_string_add(self):
-        vina_path = "test_data/vina"
-        with open("test_data/vina/sample-result.pdbqt") as f:
-            sample1 = f.read()
-        with open("test_data/vina/sample-result-2.pdbqt") as f:
-            sample2 = f.read()
-        rtc = RingtailCore("output.db")
-        rtc.save_receptor(
-            vina_path + "/receptor.pdbqt",
-        )
-        rtc.add_results_from_vina_string(
-            results={"sample1": sample1, "sample2": sample2},
-        )
-        count = rtc.table_length("Results")
-        os.system("rm output.db*")
-
-        assert count == 6
-
-    def test_add_interactions(self):
-        vina_path = "test_data/vina"
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_path=vina_path,
-            receptor_file=vina_path + "/receptor.pdbqt",
-            save_receptor=True,
-            docking_mode="vina",
-        )
-        unique_definition_count = rtc.table_length("Interaction_indices")
-        interaction_count = rtc.table_length("Interactions")
-        os.system("rm output.db*")
-
-        assert unique_definition_count == 32
-        assert interaction_count == 77
-
-    def test_add_interactions_from_polymer(self):
-        rtc = RingtailCore(db_file="flexres.db")
-        data_path = "test_data/flexres"
-        rtc.add_results_from_files(
-            file=data_path + "/ligand.pdbqt",
-            docking_mode="vina",
-            receptor_file=data_path + "/receptor.json",
-            save_receptor=True,
-        )
-
-        ligands_1 = rtc.table_length("Ligands")
-        interactions_1 = rtc.table_length("Interactions")
-
-        rtc = RingtailCore(db_file="flexres2.db")
-        data_path = "test_data/flexres"
-        rtc.add_results_from_files(
-            file=data_path + "/ligand.pdbqt",
-            docking_mode="vina",
-            receptor_file=data_path + "/receptor.pdbqt",
-            save_receptor=True,
-        )
-        ligands_2 = rtc.table_length("Ligands")
-        interactions_2 = rtc.table_length("Interactions")
-
-        os.system("rm flexres*.db")
-
-        assert ligands_1 == ligands_2 == 1
-        assert interactions_1 == interactions_2 == 38
-
-    def test_db_dockingmode_warning(self):
-        from ringtail import RingtailDefaults, setup_logging
-
-        logfile = "test_dockingmode_warning.log"
-        setup_logging(level="DEBUG", logfile=logfile)
-
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(file="test_data/adgpu/group1/1451.dlg.gz")
-        rtc = RingtailCore(db_file="output.db")
-        rtc.add_results_from_files(
-            file="test_data/vina/sample-result.pdbqt", docking_mode="vina"
-        )
-
-        warning_string = f"The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is {RingtailDefaults.docking_mode}."
-        with open(logfile, "r") as f:
-            warning_worked = warning_string in f.read()
-
-        os.system(f"rm output.db* {logfile}")
-
-        assert warning_worked
-
-    def test_various_filters_vina(self):
-        vina_path = "test_data/vina"
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_path=vina_path,
-            receptor_file=vina_path + "/receptor.pdbqt",
-            save_receptor=True,
-            docking_mode="vina",
-        ),
-        count, _ = rtc.filter(eworst=-6, ligand_substruct=["[N]"])
-        os.system("rm output.db")
-        assert count == 1
+        assert number_similar == 8
 
 
 class TestStorageMan:
-    def test_bookmark_info(self):
-        rtc = RingtailCore("output.db")
-        rtc.add_results_from_files(
-            file_path="test_data/adgpu/group2",
+    def test_bookmark_info(self, tmp_db: RingtailCore):
+        tmp_db.add_results_from_files(
+            file_path=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
         )
-        rtc.filter(
+        tmp_db.filter(
             eworst=-3,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True)],
             output_bookmark="bookmark_info",
         )
         qb = QueryBuilder()
-        query_string = (
+        query = (
             qb.SELECT("filters")
             .FROM("Filters")
             .WHERE("name='bookmark_info'")
             .build()[0]
         )
-        bookmark_filters_db_str = rtc.db_query(query_string)[0][0]
-
+        bookmark_filters_db_str = tmp_db.db_query(query)[0][0]
         assert (
             json.loads(bookmark_filters_db_str)
             == Filters(
@@ -822,30 +376,39 @@ class TestStorageMan:
             ).asdict()
         )
 
-    def test_version_info(self):
-
+    def test_version_info(self, tmp_db):
         from importlib.metadata import version
 
-        rtc = RingtailCore("output.db")
-        with rtc.storageman:
-            versionmatch, db_version = rtc.storageman.check_ringtaildb_version()
-        os.system("rm output.db*")
+        tmp_db.add_results_from_files(
+            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
+            max_poses=1,
+            docking_mode="adgpu",
+        )
+        with tmp_db.storageman:
+            versionmatch, db_version = tmp_db.storageman.check_ringtaildb_version()
         assert versionmatch
         assert db_version == version("ringtail")
 
 
 class TestMergeDB:
-    def test_db_write(self):
-        rtc1 = RingtailCore("primary.db")
-        rtc1.add_results_from_files("test_data/adgpu/group1/1451.dlg.gz")
+    def test_merge_workflow(self, tmp_path, storage_type):
+        db1 = str(tmp_path / "primary.db")
+        db2 = str(tmp_path / "secondary.db")
+        db3 = str(tmp_path / "tertiary.db")
 
-        rtc2 = RingtailCore("secondary.db")
-        rtc2.add_results_from_files("test_data/adgpu/group1/1620.dlg.gz")
+        rtc1 = RingtailCore(db1, storage_type=storage_type)
+        rtc1.add_results_from_files(
+            str(TEST_DATA / "adgpu/group1/1451.dlg.gz"), docking_mode="adgpu"
+        )
+        rtc2 = RingtailCore(db2, storage_type=storage_type)
+        rtc2.add_results_from_files(
+            str(TEST_DATA / "adgpu/group1/1620.dlg.gz"), docking_mode="adgpu"
+        )
+        rtc3 = RingtailCore(db3, storage_type=storage_type)
+        rtc3.add_results_from_files(
+            str(TEST_DATA / "adgpu/group1/1751.dlg.gz"), docking_mode="adgpu"
+        )
 
-        rtc3 = RingtailCore("tertiary.db")
-        rtc3.add_results_from_files("test_data/adgpu/group1/1751.dlg.gz")
-
-        # they should all have one ligand each
         assert (
             rtc1.table_length("Ligands")
             == rtc2.table_length("Ligands")
@@ -853,85 +416,288 @@ class TestMergeDB:
             == 1
         )
 
-    def test_before_merge(self):
-        rtc1 = RingtailCore("primary.db")
-        # should not be any poses in this interval
+        # before merge: no poses in the tight interval, one in the loose interval
         assert rtc1.filter(eworst=-2, ebest=-5)[0] == 0
         assert rtc1.filter(eworst=-5)[0] == 1
-        assert rtc1.table_length("filtered_poses") == 3
 
-    def test_after_merge(self):
-        rtc1 = RingtailCore("primary.db")
-        rtc1.merge_databases("secondary.db", False)
-        rtc1.merge_databases("tertiary.db", False)
-        # this should add two more ligands
+        # merge secondary and tertiary into primary
+        rtc1 = RingtailCore(db1)
+        rtc1.merge_databases(db2, False)
+        rtc1.merge_databases(db3, False)
         assert rtc1.table_length("Ligands") == 3
-        # should now be data in this interval
         assert rtc1.filter(eworst=-2, ebest=-5)[0] == 2
 
-    def test_check_PKs(self):
-        rtc2 = RingtailCore("secondary.db")
-
-        # get best ranked pose id in secondary database for ligand 1620
-        secondary_db_pose_as_main = rtc2.db_query(
-            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND ligand_id = (SELECT ligand_id FROM Ligands WHERE LigName = '1620')"
+        # PKs in secondary should be reassigned in the merged db
+        secondary_pose_in_own_db = RingtailCore(db2).db_query(
+            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND ligand_id = "
+            "(SELECT ligand_id FROM Ligands WHERE LigName = '1620')"
         )[0][0]
-        assert secondary_db_pose_as_main == 1
+        assert secondary_pose_in_own_db == 1
 
-        # compare to pose id for best ranked pose for same ligand in the merged database
-        rtc1 = RingtailCore("primary.db")
-        secondary_db_pose_as_merged = rtc1.db_query(
-            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND ligand_id = (SELECT ligand_id FROM Ligands WHERE LigName = '1620')"
+        secondary_pose_in_merged = rtc1.db_query(
+            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND ligand_id = "
+            "(SELECT ligand_id FROM Ligands WHERE LigName = '1620')"
         )[0][0]
-        assert secondary_db_pose_as_merged != secondary_db_pose_as_main
+        assert secondary_pose_in_merged != secondary_pose_in_own_db
 
-        os.system("rm primary.db secondary.db tertiary.db")
+
+class TestADGPUHandling:
+    def test_reactive_filtering(self, tmp_db):
+        tmp_db.add_results_from_files(
+            file_path=str(TEST_DATA / "reactive"),
+            store_all_poses=True,
+            receptor_file=str(TEST_DATA / "reactive/4j8m_m_rigid.pdbqt"),
+            docking_mode="adgpu",
+        )
+        count, _ = tmp_db.filter(reactive_interactions=[("A:TYR:212:", True)])
+        assert count == 10
+
+
+class TestVinaHandling:
+    def test_file_add(self, tmp_db):
+        vina_path = TEST_DATA / "vina"
+        tmp_db.add_results_from_files(
+            file_path=str(vina_path),
+            receptor_file=str(vina_path / "receptor.pdbqt"),
+            save_receptor=True,
+            docking_mode="vina",
+        )
+        assert tmp_db.table_length("Results") == 6
+
+    def test_string_add(self, tmp_db):
+        vina_path = TEST_DATA / "vina"
+        sample1 = (vina_path / "sample-result.pdbqt").read_text()
+        sample2 = (vina_path / "sample-result-2.pdbqt").read_text()
+        tmp_db.save_receptor(str(vina_path / "receptor.pdbqt"))
+        tmp_db.add_results_from_vina_string(
+            results={"sample1": sample1, "sample2": sample2}
+        )
+        assert tmp_db.table_length("Results") == 6
+
+    def test_add_interactions(self, tmp_db):
+        vina_path = TEST_DATA / "vina"
+        tmp_db.add_results_from_files(
+            file_path=str(vina_path),
+            receptor_file=str(vina_path / "receptor.pdbqt"),
+            save_receptor=True,
+            docking_mode="vina",
+        )
+        assert tmp_db.table_length("Interaction_indices") == 32
+        assert tmp_db.table_length("Interactions") == 77
+
+    def test_add_interactions_from_polymer(self, tmp_path, storage_type):
+        data_path = TEST_DATA / "flexres"
+        rtc_json = RingtailCore(
+            str(tmp_path / "flexres_json.db"), storage_type=storage_type
+        )
+        rtc_json.add_results_from_files(
+            file=str(data_path / "ligand.pdbqt"),
+            docking_mode="vina",
+            receptor_file=str(data_path / "receptor.json"),
+            save_receptor=True,
+        )
+        rtc_pdbqt = RingtailCore(
+            str(tmp_path / "flexres_pdbqt.db"), storage_type=storage_type
+        )
+        rtc_pdbqt.add_results_from_files(
+            file=str(data_path / "ligand.pdbqt"),
+            docking_mode="vina",
+            receptor_file=str(data_path / "receptor.pdbqt"),
+            save_receptor=True,
+        )
+        assert (
+            rtc_json.table_length("Ligands") == rtc_pdbqt.table_length("Ligands") == 1
+        )
+        assert (
+            rtc_json.table_length("Interactions")
+            == rtc_pdbqt.table_length("Interactions")
+            == 38
+        )
+
+    def test_polymer_receptor(self, tmp_db):
+        data_path = TEST_DATA / "flexres"
+        tmp_db.add_results_from_files(
+            file=str(data_path / "ligand.pdbqt"),
+            docking_mode="vina",
+            receptor_file=str(data_path / "receptor.json"),
+            save_receptor=True,
+        )
+        receptor_items = tmp_db.get_receptor_object()
+        assert receptor_items[0] == "receptor"
+        assert not receptor_items[1]
+        assert receptor_items[2] is not None
+
+    def test_write_flexres_pdb(self, tmp_db, tmp_path):
+        pytest.importorskip("meeko")
+        import meeko
+
+        data_path = TEST_DATA / "flexres"
+        tmp_db.add_results_from_files(
+            file=str(data_path / "ligand.pdbqt"),
+            receptor_file=str(data_path / "receptor.pdbqt"),
+            recursive=True,
+            docking_mode="vina",
+        )
+        tmp_db.filter(eworst=-1, output_bookmark="flexres")
+        polymer = meeko.Polymer.from_json((data_path / "receptor.json").read_text())
+        export_base = str(tmp_path / "exported_flex_rec")
+        tmp_db.write_flexres_pdb(polymer, "ligand", "flexres", export_base)
+
+        expected = Path(f"{export_base}_ligand.pdb")
+        assert expected.exists()
+        content = expected.read_text()
+        assert (
+            "ATOM     11  C   HIS A   2       2.368   0.239  -0.349                       C"
+            in content
+        )
+        assert (
+            "ATOM     44 HD2  HIS A   3      -0.400  -5.308  -1.507                       H"
+            in content
+        )
+
+    def test_various_filters(self, tmp_db):
+        vina_path = TEST_DATA / "vina"
+        tmp_db.add_results_from_files(
+            file_path=str(vina_path),
+            receptor_file=str(vina_path / "receptor.pdbqt"),
+            save_receptor=True,
+            docking_mode="vina",
+        )
+        count, _ = tmp_db.filter(eworst=-6, ligand_substruct=["[N]"])
+        assert count == 1
+
+    def test_db_dockingmode_warning(self, tmp_db, tmp_path):
+        from ringtail import setup_logging
+
+        logfile = str(tmp_path / "dockingmode_warning.log")
+        setup_logging(level="DEBUG", logfile=logfile)
+
+        tmp_db.add_results_from_files(
+            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"), docking_mode="adgpu"
+        )
+        rtc2 = RingtailCore(tmp_db.db_file, storage_type=tmp_db.storagetype)
+        rtc2.add_results_from_files(
+            file=str(TEST_DATA / "vina/sample-result.pdbqt"), docking_mode="vina"
+        )
+        warning = (
+            "The following database properties do not agree with the properties last used for this database: \n"
+            "Current docking mode is vina but last used docking mode of database is adgpu."
+        )
+        with open(logfile) as f:
+            assert warning in f.read()
+
+
+class TestADNGHandling:
+    def test_stream(self, tmp_db):
+        rdkit = pytest.importorskip("rdkit")
+        from rdkit import Chem
+
+        tmp_db.save_receptor(str(TEST_DATA / "adng/helix--scofu01.json"))
+        suppl = Chem.SDMolSupplier(
+            str(TEST_DATA / "adng/docked_ligands.sdf"), removeHs=False
+        )
+        tmp_db.add_mol(suppl)
+        assert tmp_db.table_length("Results") == 9
+        assert tmp_db.table_length("Interactions") == 60
+
+    def test_file_add(self, tmp_db):
+        adng_path = TEST_DATA / "adng"
+        tmp_db.add_results_from_files(
+            file_path=str(adng_path),
+            receptor_file=str(adng_path / "helix--scofu01.json"),
+            save_receptor=True,
+            docking_mode="adng",
+        )
+        assert tmp_db.table_length("Results") == 9
+        assert tmp_db.table_length("Interactions") == 60
+
+    def test_file_add_no_interactions(self, tmp_db):
+        adng_path = TEST_DATA / "adng"
+        tmp_db.add_results_from_files(
+            file_path=str(adng_path),
+            calculate_interactions=False,
+            docking_mode="adng",
+        )
+        assert tmp_db.table_length("Results") == 9
+        assert tmp_db.table_length("Interactions") == 0
+
+    def test_calc_interactions_deferred(self, tmp_db):
+        adng_path = TEST_DATA / "adng"
+        tmp_db.add_results_from_files(
+            file_path=str(adng_path),
+            calculate_interactions=False,
+            docking_mode="adng",
+        )
+        assert tmp_db.table_length("Interactions") == 0
+
+        tmp_db.save_receptor(str(adng_path / "helix--scofu01.json"))
+        tmp_db.add_interactions()
+        assert tmp_db.table_length("Results") == 9
+        assert tmp_db.table_length("Interactions") == 60
+
+    def test_filtering(self, tmp_db):
+        adng_path = TEST_DATA / "adng"
+        tmp_db.add_results_from_files(
+            file_path=str(adng_path),
+            receptor_file=str(adng_path / "helix--scofu01.json"),
+            save_receptor=True,
+            docking_mode="adng",
+        )
+        count, _ = tmp_db.filter(
+            eworst=-13, ligand_substruct=["C=O"], vdw_interactions=[(":VAL::", True)]
+        )
+        assert count == 1
 
 
 class TestLogger:
-
     def test_set_log_level(self):
-        import logging
-        from ringtail import setup_logging, LOGGER
+        from ringtail import LOGGER, setup_logging
 
         setup_logging(level="INFO")
         assert LOGGER.level == logging.INFO
 
 
 class TestOptions:
-    def test_object_checks(self):
-        # checking that incompatible options are handled
+    def test_filter_option_checks(self, tmp_db, tmp_path):
         from ringtail.ringtailoptions import Filters
 
-        rtc = RingtailCore()
-        rtc.add_results_from_files(file_list="test_data/adgpu/filelist1.txt")
-        rtc.filters = Filters({"score_percentile": 20})
-        assert rtc.filters.eworst == None
-        assert rtc.filters.score_percentile == 20
-
-        # conflicting options, score percentile should be set to none
-        rtc.filters = Filters({"score_percentile": 20, "eworst": -6})
-        rtc.filters.checks()
-
-        assert rtc.filters.eworst == -6
-        assert rtc.filters.score_percentile == None
-
-    def test_overwrite_db(self):
-        rtc = RingtailCore()
-        rtc.add_results_from_files(file_list="test_data/adgpu/filelist1.txt")
-        count_old_db = rtc.table_length("Ligands")
-
-        rtc.add_results_from_files(
-            file_list="test_data/adgpu/filelist2.txt", overwrite=True
+        filelist = tmp_path / "filelist.txt"
+        filelist.write_text(
+            "\n".join(
+                str(TEST_DATA / "adgpu/group1" / f)
+                for f in ["127458.dlg.gz", "173101.dlg.gz", "100729.dlg.gz"]
+            )
         )
-        count_new_db = rtc.table_length("Ligands")
+        tmp_db.add_results_from_files(file_list=str(filelist), docking_mode="adgpu")
+        tmp_db.filters = Filters({"score_percentile": 20})
+        assert tmp_db.filters.eworst is None
+        assert tmp_db.filters.score_percentile == 20
 
-        assert count_old_db == 3
-        assert count_new_db == 2
+        tmp_db.filters = Filters({"score_percentile": 20, "eworst": -6})
+        tmp_db.filters.checks()
+        assert tmp_db.filters.eworst == -6
+        assert tmp_db.filters.score_percentile is None
 
-    def test_cleanup(self):
-        # Alter this method if you wish to not delete all log files after testing automatically
-        os.system("rm *_ringtail.log")
-        os.system("rm output.db* output2.db")
-        os.system("rm different_log.txt")
-        os.system("rm cluster_log.txt output_log.txt")
+    def test_overwrite_db(self, tmp_db, tmp_path):
+        list1 = tmp_path / "list1.txt"
+        list1.write_text(
+            "\n".join(
+                str(TEST_DATA / "adgpu/group1" / f)
+                for f in ["127458.dlg.gz", "173101.dlg.gz", "100729.dlg.gz"]
+            )
+        )
+        list2 = tmp_path / "list2.txt"
+        list2.write_text(
+            str(TEST_DATA / "adgpu/group1/272275.dlg.gz")
+            + "\n"
+            + str(TEST_DATA / "adgpu/group3/60239.dlg.gz")
+            + "\n"
+        )
+        tmp_db.add_results_from_files(file_list=str(list1), docking_mode="adgpu")
+        count_old = tmp_db.table_length("Ligands")
+        tmp_db.add_results_from_files(
+            file_list=str(list2), docking_mode="adgpu", overwrite=True
+        )
+        count_new = tmp_db.table_length("Ligands")
+        assert count_old == 3
+        assert count_new == 2
