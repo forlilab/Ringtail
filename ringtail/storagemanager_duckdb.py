@@ -23,6 +23,14 @@ from .exceptions import (
 from .clustermanager import *
 from .storagemanager import StorageManager
 from .querybuilder import QueryBuilderDuck
+from .schema import (
+    build_create_table,
+    LIGANDS_SCHEMA, RESULTS_SCHEMA, RECEPTORS_SCHEMA, DB_PROPERTIES_SCHEMA,
+    INTERACTION_INDICES_SCHEMA, INTERACTIONS_SCHEMA, FILTERS_SCHEMA,
+    FILTERED_POSES_SCHEMA, CLUSTERS_SCHEMA, CLUSTER_GROUPS_SCHEMA,
+    POSE_CLUSTERS_SCHEMA, MERGED_TABLES_SCHEMA, PK_CONVERSIONS_SCHEMA,
+    STATUS_TABLE_SCHEMA,
+)
 
 try:
     import duckdb
@@ -58,21 +66,13 @@ class StorageManagerDuckDB(StorageManager):
 
     def _create_ligands_table(self, name="Ligands"):
         """
-        Creates ligands table with a primary key defined by a
-        sequence
+        Creates ligands table with a primary key defined by a sequence.
 
         Args:
             name (str, optional): Defaults to "Ligands".
         """
-        ligand_table = f"""
-            CREATE SEQUENCE IF NOT EXISTS seq_ligandid START 1;
-            CREATE TABLE IF NOT EXISTS {name} (
-            ligand_id           INTEGER DEFAULT nextval('seq_ligandid') PRIMARY KEY,
-            LigName             VARCHAR NOT NULL UNIQUE,
-            ligand_smile        VARCHAR,
-            rdmol               BLOB)"""
-
-        self.db_query(ligand_table)
+        for sql in build_create_table(name, LIGANDS_SCHEMA, "duckdb"):
+            self.db_query(sql)
 
     def _insert_ligands(self, ligands: list):
         """
@@ -108,42 +108,14 @@ class StorageManagerDuckDB(StorageManager):
 
     def _create_results_table(self, name="Results"):
         """
-        Creates table for results, including a sequence creating the primary key
-        pose_id as well as referencing foreign key ligand_id
+        Creates table for results, including a sequence for the primary key
+        and a foreign key reference to Ligands.
 
         Args:
-            name (str, optional): _description_. Defaults to "Results".
+            name (str, optional): Defaults to "Results".
         """
-
-        sql_results_table = f"""
-            CREATE SEQUENCE IF NOT EXISTS seq_poseid START 1;
-            CREATE TABLE IF NOT EXISTS {name} (
-            pose_id             INTEGER DEFAULT nextval('seq_poseid') PRIMARY KEY,
-            ligand_id           INTEGER REFERENCES Ligands(ligand_id),
-            receptor            VARCHAR,
-            pose_rank           INTEGER,
-            run_number          INTEGER,
-            docking_score       FLOAT,
-            leff                FLOAT,
-            delta               FLOAT,
-            cluster_rmsd        FLOAT,
-            cluster_size        INTEGER,
-            reference_rmsd      FLOAT,
-            energies_inter      FLOAT,
-            energies_vdw        FLOAT,
-            energies_electro    FLOAT,
-            energies_flexLig    FLOAT,
-            energies_flexLR     FLOAT,
-            energies_intra      FLOAT,
-            energies_torsional  FLOAT,
-            unbound_energy      FLOAT,
-            num_interactions     INTEGER,
-            num_hb              INTEGER,
-            pose_coordinates         VARCHAR,
-            flexible_res_coordinates   VARCHAR,
-            ); """
-
-        self.db_query(sql_results_table)
+        for sql in build_create_table(name, RESULTS_SCHEMA, "duckdb"):
+            self.db_query(sql)
 
     def _create_temporary_results_tables(self):
         """
@@ -541,21 +513,9 @@ class StorageManagerDuckDB(StorageManager):
         self.db_update(query, pose_ids, commit=False)
 
     def _create_receptors_table(self):
-        """Create table for receptors. Has primary key although only one receptor allowed"""
-        receptors_table = """
-            CREATE SEQUENCE IF NOT EXISTS seq_receptorid START 1;
-            CREATE TABLE IF NOT EXISTS Receptors (
-            receptor_id         INTEGER DEFAULT nextval('seq_receptorid') PRIMARY KEY,
-            recname             VARCHAR,
-            box_dim             VARCHAR,
-            box_center          VARCHAR,
-            grid_spacing        FLOAT,
-            flexible_residues   VARCHAR,
-            flexres_atomnames   VARCHAR,
-            receptor_object     BLOB,
-            polymer             JSON
-        );"""
-        self.db_query(receptors_table)
+        """Create table for receptors. Has primary key although only one receptor allowed."""
+        for sql in build_create_table("Receptors", RECEPTORS_SCHEMA, "duckdb"):
+            self.db_query(sql)
 
     def _insert_receptors(self, receptor_array: list):
         """Takes array of receptor rows, inserts into Receptors table
@@ -620,20 +580,9 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(query, (rec_name, receptor), commit=True)
 
     def _create_db_properties_table(self):
-        """Create table of database properties used during write session to the database. Columns are:
-        DB_write_session int (primary key)
-        docking_mode (vina or adgpu)
-        num_of_poses (int, -1 for all, otherwise value)
-        """
-
-        sql_str = """
-        CREATE SEQUENCE IF NOT EXISTS seq_dbwriteid START 1;
-        CREATE TABLE IF NOT EXISTS DB_properties (
-        DB_write_session    INTEGER DEFAULT nextval('seq_dbwriteid') PRIMARY KEY,
-        docking_mode        VARCHAR,
-        number_of_poses     INTEGER);"""
-
-        self.db_query(sql_str)
+        """Create table of database properties used during write session to the database."""
+        for sql in build_create_table("DB_properties", DB_PROPERTIES_SCHEMA, "duckdb"):
+            self.db_query(sql)
 
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
@@ -649,32 +598,14 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(sql_insert, [docking_mode, number_of_poses], commit=True)
 
     def _create_interaction_index_table(self):
-        """Creates a table describing unique interactions in the database"""
-        interaction_index_table = """
-        CREATE SEQUENCE IF NOT EXISTS seq_interactionid START 1;
-        CREATE TABLE IF NOT EXISTS Interaction_indices (
-        interaction_id      INTEGER DEFAULT nextval('seq_interactionid') PRIMARY KEY,
-        interaction_type    VARCHAR,
-        rec_chain           VARCHAR,
-        rec_resname         VARCHAR,
-        rec_resid           VARCHAR,
-        rec_atom            VARCHAR,
-        rec_atomid          VARCHAR,
-        UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid));
-        """
-        self.db_query(interaction_index_table)
+        """Creates a table describing unique interactions in the database."""
+        for sql in build_create_table("Interaction_indices", INTERACTION_INDICES_SCHEMA, "duckdb"):
+            self.db_query(sql)
 
     def _create_interaction_table(self):
         """Creates a table of each pose-interaction combination."""
-
-        interaction_table = """
-        CREATE SEQUENCE IF NOT EXISTS seq_interactionposeid START 1;
-        CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_pose_id INTEGER DEFAULT nextval('seq_interactionposeid') PRIMARY KEY,
-        pose_id  INTEGER REFERENCES Results(pose_id),
-        interaction_id INTEGER REFERENCES Interaction_indices(interaction_id))"""
-
-        self.db_query(interaction_table)
+        for sql in build_create_table("Interactions", INTERACTIONS_SCHEMA, "duckdb"):
+            self.db_query(sql)
 
     def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
@@ -723,68 +654,23 @@ class StorageManagerDuckDB(StorageManager):
 
     def _create_filtering_tables(self):
         """
-        Creates a Filter table which includes filter_id (PK), name (bookmark_name), duckdb formatted query,
-        and dictionary of filters used, as well as Filtered_poses, which uses filter_id as FK,
-        and lists all poses passing that filter_id
+        Creates Filters (bookmark metadata) and Filtered_poses (bookmark members) tables.
         """
-        filters_sql = """
-        CREATE SEQUENCE IF NOT EXISTS seq_filterid START 1;
-        CREATE TABLE IF NOT EXISTS Filters (
-        filter_id           INTEGER DEFAULT nextval('seq_filterid') PRIMARY KEY,
-        name                VARCHAR,
-        query               VARCHAR,
-        filters             VARCHAR,
-        filter_window       VARCHAR);"""
-
-        filter_pose_sql = """
-        CREATE TABLE IF NOT EXISTS Filtered_poses (
-        filter_id           INTEGER REFERENCES Filters(filter_id),
-        pose_id             INTEGER REFERENCES Results(pose_id));"""
-
-        self.db_query(filters_sql)
-        self.db_query(filter_pose_sql)
-
-    def _create_indices(self):
-        """
-        Duckdb does not use indexing like other databases
-        """
-        pass
+        for sql in build_create_table("Filters", FILTERS_SCHEMA, "duckdb"):
+            self.db_query(sql)
+        for sql in build_create_table("Filtered_poses", FILTERED_POSES_SCHEMA, "duckdb"):
+            self.db_query(sql)
 
     def _create_cluster_tables(self):
         """
-        Creates cluster tables if they don't already exist
+        Creates cluster tables if they don't already exist.
         """
-        # create a cluster description table
-        self.db_query("""
-
-        CREATE SEQUENCE IF NOT EXISTS seq_clusterid START 1;
-            CREATE TABLE IF NOT EXISTS
-            Clusters (
-                cluster_id INTEGER DEFAULT nextval('seq_clusterid') PRIMARY KEY,
-                name VARCHAR,
-                description VARCHAR,
-                cluster_window VARCHAR,
-                num_clusters INTEGER
-                );
-            """)
-        # create a table with cluster_id and cluster_group and representative pose
-        self.db_query("""
-            CREATE TABLE IF NOT EXISTS
-            Cluster_groups (
-                cluster_id INTEGER REFERENCES Clusters(cluster_id),
-                cluster_group INTEGER,
-                representative INTEGER REFERENCES Results(pose_id)
-                )
-            """)
-        # create a table of pose and cluster_id and cluster_group
-        self.db_query("""
-            CREATE TABLE IF NOT EXISTS 
-            Pose_clusters (
-                cluster_id INTEGER REFERENCES Clusters(cluster_id),
-                cluster_group INTEGER,
-                pose_id INTEGER REFERENCES Results(pose_id)
-                );
-            """)
+        for sql in build_create_table("Clusters", CLUSTERS_SCHEMA, "duckdb"):
+            self.db_query(sql)
+        for sql in build_create_table("Cluster_groups", CLUSTER_GROUPS_SCHEMA, "duckdb"):
+            self.db_query(sql)
+        for sql in build_create_table("Pose_clusters", POSE_CLUSTERS_SCHEMA, "duckdb"):
+            self.db_query(sql)
 
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
@@ -945,30 +831,18 @@ class StorageManagerDuckDB(StorageManager):
             StorageError
         """
         try:
-            # create mergedata table: merge_id (PK), dbfile, timestamp, numofrows table
-            mergetbl_sql = """
-            CREATE SEQUENCE IF NOT EXISTS seq_mergeid START 1;
-            CREATE TABLE IF NOT EXISTS merged_tables (
-            merge_id                INTEGER DEFAULT nextval('seq_mergeid') PRIMARY KEY,
-            dbfile                  VARCHAR,
-            merge_start             TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"""
-            self.conn.execute(mergetbl_sql)
-
-            # create PK table: merge_id(FK), table, original_val, merge_val
-            pktable_sql = """CREATE TABLE IF NOT EXISTS PK_conversions (
-            merge_id        INTEGER REFERENCES merged_tables(merge_id),
-            table_name      VARCHAR,
-            original_PK     INTEGER,
-            merged_PK       INTEGER);"""
-            self.conn.execute(pktable_sql)
+            for sql in build_create_table("merged_tables", MERGED_TABLES_SCHEMA, "duckdb"):
+                self.conn.execute(sql)
+            for sql in build_create_table("PK_conversions", PK_CONVERSIONS_SCHEMA, "duckdb"):
+                self.conn.execute(sql)
 
             # If table already has data, reset sequence to continue from max
             max_id = self.conn.execute(
                 "SELECT COALESCE(MAX(merge_id), 0) FROM merged_tables"
             ).fetchone()[0]
             if max_id > 0:
-                self.conn.execute("DROP SEQUENCE seq_mergeid;")
-                self.conn.execute(f"CREATE SEQUENCE seq_mergeid START {max_id + 1};")
+                self.conn.execute("DROP SEQUENCE seq_merged_tables_merge_id;")
+                self.conn.execute(f"CREATE SEQUENCE seq_merged_tables_merge_id START {max_id + 1};")
 
         except Exception as e:
             raise MergeError(e) from e
@@ -2144,10 +2018,6 @@ class StorageManagerDuckDB(StorageManager):
 
         return self.db_query(query, params).fetchone()[0]
 
-    def _vacuum(self):
-        """duckdb doesn't really have this, can VACUUM ANALYZE <table>"""
-        pass
-
     def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
         """Attaches new database file to current database
 
@@ -2273,35 +2143,11 @@ class StorageManagerDuckDB(StorageManager):
 
     def _create_status_tables(self) -> None:
         """
-        Creates pose status tables if needed
+        Creates pose status tables (Accepted, Maybe, Rejected) if needed.
         """
-        self.db_query(
-            f"""
-                CREATE TABLE IF NOT EXISTS Accepted 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
-                );""",
-        )
-
-        # create maybe table
-        self.db_query(
-            f"""
-                CREATE TABLE IF NOT EXISTS Maybe 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
-                );""",
-        )
-
-        # create rejected table
-        self.db_query(
-            f"""
-                CREATE TABLE IF NOT EXISTS Rejected 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
-                );""",
-            commit=True,
-        )
-
-        return None
+        for name in ("Accepted", "Maybe", "Rejected"):
+            for sql in build_create_table(name, STATUS_TABLE_SCHEMA, "duckdb"):
+                self.db_query(sql)
+        self.conn.commit()
 
     # endregion

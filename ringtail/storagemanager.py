@@ -7,6 +7,7 @@
 import time
 import json
 import os.path
+from abc import ABC, abstractmethod
 from pathlib import Path
 import pandas as pd
 from .logutils import get_logger
@@ -23,6 +24,7 @@ from .ringtailoptions import Filters, statuses
 from .exceptions import StorageError, OptionError, VersionError, MergeError
 from .clustermanager import *
 from .querybuilder import QueryBuilder
+from .schema import OUTFIELD_BY_TABLE
 from collections import defaultdict
 
 RESULTS_COLUMNS = [
@@ -60,7 +62,7 @@ II_COLUMNS = [
 ]
 
 
-class StorageManager:
+class StorageManager(ABC):
     # NOTE gotta be careful with schema
     _db_schema_ver = "3.0.0"
     QueryBuilder = QueryBuilder
@@ -1742,7 +1744,7 @@ class StorageManager:
         # Build a flat map of column_name -> table from all queryable tables
         column_to_table = {
             col: table
-            for table, cols in self.get_useful_columns().items()
+            for table, cols in OUTFIELD_BY_TABLE.items()
             for col in cols
         }
 
@@ -1779,21 +1781,6 @@ class StorageManager:
 
         return query.build()[0]
 
-    def get_useful_columns(self) -> dict:
-        """
-        Gets list of columns that are approved for use in e.g., exporting csv files
-
-        Returns:
-            dict: dict of tables and their columns
-        """
-        return {
-            "Results": self._fetch_table_column_names("Results"),
-            "Ligands": self._fetch_table_column_names("Ligands"),
-            "Interaction_indices": self._fetch_table_column_names(
-                "Interaction_indices"
-            ),
-        }
-
     def clear_interaction_tables(self) -> bool:
         """
         Clears (deletes and reuilds) the two interaction tables
@@ -1823,6 +1810,7 @@ class StorageManager:
     # endregion
 
     # region virtual public api
+    @abstractmethod
     def close_storage(self, attached_db=None, vacuum=False):
         """Close connection to database
 
@@ -1830,8 +1818,9 @@ class StorageManager:
             attached_db (str, optional): name of attached DB (not including file extension)
             vacuum (bool, optional): indicates that database should be vacuumed before closing
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def check_ringtaildb_version(self):
         """
         Checks the database version and confirms whether the code base is compatible with it
@@ -1840,8 +1829,9 @@ class StorageManager:
             bool: whether or not db is compatible with the code base
             str: current database version
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
 
@@ -1849,8 +1839,9 @@ class StorageManager:
             receptor (bytes): bytes receptor object to be inserted into DB
             rec_name (string): Name of receptor. Used to insert into correct row of DB
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def insert_receptor_polymer(self, receptor: str, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
 
@@ -1858,8 +1849,9 @@ class StorageManager:
             receptor (str): json string representation of a receptor meeko.Polymer oobject to be inserted into DB
             rec_name (str): Name of receptor. Used to insert into correct row of DB
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def clone(self, backup_name: str = None) -> str:
         """Creates a copy of the db
 
@@ -1869,8 +1861,9 @@ class StorageManager:
         Returns:
             str: path of backed up database
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
         """
         Creates a table to track pose ids to which are part of a multiple transaction
@@ -1879,7 +1872,7 @@ class StorageManager:
         Args:
             table_name (str, optional): Name of the table. Defaults to "tracking_table".
         """
-        raise NotImplementedError
+        ...
 
     def update_database_version(self, new_version: str, consent=False, backup=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
@@ -1898,6 +1891,7 @@ class StorageManager:
         """
         raise NotImplementedError
 
+    @abstractmethod
     def db_query(self, query: str, params: iter) -> iter:
         """Executes provided sql query. Returns iter for results.
 
@@ -1908,8 +1902,9 @@ class StorageManager:
         Returns:
             iter: Contains results of query
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
         """
         A db query that uses executemany
@@ -1926,14 +1921,16 @@ class StorageManager:
         Returns:
             iter: if requesting return value(s)
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def prepare_for_merging(self):
         """
         Prepares the database for merging
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def table_length(self, table: str) -> int:
         """
         Get length of table or bookmark
@@ -1944,8 +1941,9 @@ class StorageManager:
         Returns:
             int: number of poses in table/bookmark
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def fetch_clustered_similars(self, ligname: str):
         """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
 
@@ -1955,8 +1953,9 @@ class StorageManager:
         Raises:
             ValueError: wrong terminal input
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def fetch_summary_data(
         self, columns=["docking_score", "leff"], percentiles=[1, 10]
     ) -> dict:
@@ -1974,8 +1973,9 @@ class StorageManager:
         Returns:
             dict: of data summary
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
         """
         Find the row id of a pose in a given table
@@ -1987,8 +1987,9 @@ class StorageManager:
         Returns:
             Union[None, int]: rowid if any
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def tables_in_db(self) -> list:
         """
         Returns a list of all table names in the database
@@ -1996,8 +1997,9 @@ class StorageManager:
         Returns:
             list: list of table names
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def get_starting_rowid(self, table: str) -> int:
         """
         Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
@@ -2009,7 +2011,7 @@ class StorageManager:
         Returns:
             int: first row id belonging to that selection
         """
-        raise NotImplementedError
+        ...
 
     # endregion
 

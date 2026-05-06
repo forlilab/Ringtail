@@ -18,6 +18,26 @@ from .ringtailoptions import (
     ringtail_defaults,
     RingtailDefaults,
 )
+from .schema import OUTFIELD_SCHEMA, ORDER_RESULT_SCHEMA
+
+_outfields_opts = "; ".join(
+    f'"{name}" ({col.description})' for name, col in OUTFIELD_SCHEMA.items()
+)
+_outfields_help = (
+    "Defines which fields are used when reporting results (to eg output csv or output_log). "
+    "Comma-separated, e.g. --outfields=docking_score,leff,num_hb. "
+    f"Available fields: {_outfields_opts}. "
+    "Ligand name is always returned first."
+)
+
+_order_opts = "; ".join(
+    f'"{name}" ({col.description})' for name, col in ORDER_RESULT_SCHEMA.items()
+)
+_order_help = (
+    "Order results by this single field when e.g., writing to the output log file."
+    "By default ordered by database insertion order. "
+    f"Available fields: {_order_opts}."
+)
 from types import SimpleNamespace
 
 
@@ -307,26 +327,7 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-of",
         "--outfields",
-        help=(
-            'defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. "--outfields=docking_score,leff,num_hb"; by default, docking_score (energy) and ligname (ligand name) are reported; ligand always reported in first column, suggested fields are:  '
-            '"ligname" , '
-            '"docking_score", '
-            '"leff"'
-            '"delta" (delta energy from best pose), '
-            '"reference_rmsd" (RMSD to reference pose), '
-            '"energies_inter" (intermolecular energy), '
-            '"energies_vdw" (van der waals energy), '
-            '"energies_electro" (electrostatic energy), '
-            '"energies_intra" (intermolecular energy), '
-            '"num_interactions" (number of interactions), '
-            '"ligand_smile" , '
-            '"pose_rank" (rank of ligand pose), '
-            '"run_number" (run number for ligand pose), '
-            '"num_hb" (hydrogen bonds), '
-            '"receptor" (receptor name); '
-            "Fields are "
-            "printed in the order in which they are provided. Ligand name will always be returned and will be added in first position if not specified."
-        ),
+        help=_outfields_help,
         action="store",
         type=str,
         metavar="FIELD1,FIELD2,...",
@@ -334,20 +335,7 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-ord",
         "--order_results",
-        help="Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION."
-        "available fields are:  "
-        '"docking_score", '
-        '"leff"'
-        '"delta" (delta energy from best pose), '
-        '"reference_rmsd" (RMSD to reference pose), '
-        '"energies_inter" (intermolecular energy), '
-        '"energies_vdw" (van der waals energy), '
-        '"energies_electro" (electrostatic energy), '
-        '"energies_intra" (intermolecular energy), '
-        '"num_interactions" (number of interactions), '
-        '"pose_rank" (rank of ligand pose), '
-        '"run_number" (run number for ligand pose), '
-        '"num_hb" (hydrogen bonds)',
+        help=_order_help,
         action="store",
         type=str,
         metavar="STRING",

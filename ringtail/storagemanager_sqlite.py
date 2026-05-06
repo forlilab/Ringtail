@@ -24,6 +24,14 @@ from .exceptions import (
 from .clustermanager import *
 from .storagemanager import StorageManager
 from .querybuilder import QueryBuilderSQLite
+from .schema import (
+    build_create_table, build_create_indices,
+    LIGANDS_SCHEMA, RESULTS_SCHEMA, RECEPTORS_SCHEMA, DB_PROPERTIES_SCHEMA,
+    INTERACTION_INDICES_SCHEMA, INTERACTIONS_SCHEMA, FILTERS_SCHEMA,
+    FILTERED_POSES_SCHEMA, CLUSTERS_SCHEMA, CLUSTER_GROUPS_SCHEMA,
+    POSE_CLUSTERS_SCHEMA, MERGED_TABLES_SCHEMA, PK_CONVERSIONS_SCHEMA,
+    STATUS_TABLE_SCHEMA,
+)
 
 try:
     import sqlite3
@@ -64,15 +72,10 @@ class StorageManagerSQLite(StorageManager):
         """Create table for ligands
 
         Args:
-            name (str, optional): _description_. Defaults to "Ligands".
+            name (str, optional): Defaults to "Ligands".
         """
-        ligand_table = f"""CREATE TABLE IF NOT EXISTS {name} (
-            ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-            ligand_smile        VARCHAR,
-            rdmol               BLOB)"""
-
-        self.db_query(ligand_table)
+        for sql in build_create_table(name, LIGANDS_SCHEMA, "sqlite"):
+            self.db_query(sql)
 
     def _insert_ligands(self, ligands: list):
         """Takes list of ligand rows, inserts into Ligands table using executemany.
@@ -97,35 +100,8 @@ class StorageManagerSQLite(StorageManager):
 
     def _create_results_table(self, name="Results"):
         """Creates table for results."""
-
-        sql_results_table = f"""CREATE TABLE IF NOT EXISTS {name} (
-            pose_id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            ligand_id           INT,
-            receptor            VARCHAR,
-            pose_rank           INTEGER,
-            run_number          INTEGER,
-            docking_score       FLOAT,
-            leff                FLOAT,
-            delta               FLOAT,
-            cluster_rmsd        FLOAT,
-            cluster_size        INTEGER,
-            reference_rmsd      FLOAT,
-            energies_inter      FLOAT,
-            energies_vdw        FLOAT,
-            energies_electro    FLOAT,
-            energies_flexLig    FLOAT,
-            energies_flexLR     FLOAT,
-            energies_intra      FLOAT,
-            energies_torsional  FLOAT,
-            unbound_energy      FLOAT,
-            num_interactions     INTEGER,
-            num_hb              INTEGER,
-            pose_coordinates         VARCHAR,
-            flexible_res_coordinates   VARCHAR,
-            FOREIGN KEY (ligand_id) REFERENCES Ligands(ligand_id)
-            ); """
-
-        self.db_query(sql_results_table)
+        for sql in build_create_table(name, RESULTS_SCHEMA, "sqlite"):
+            self.db_query(sql)
 
     def _create_temporary_results_tables(self):
         """
@@ -487,19 +463,8 @@ class StorageManagerSQLite(StorageManager):
 
     def _create_receptors_table(self):
         """Create table for receptors."""
-        receptors_table = """CREATE TABLE IF NOT EXISTS Receptors (
-            receptor_id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            recname             VARCHAR,
-            box_dim             VARCHAR,
-            box_center          VARCHAR,
-            grid_spacing        FLOAT,
-            flexible_residues   VARCHAR,
-            flexres_atomnames   VARCHAR,
-            receptor_object     BLOB,
-            polymer             VARCHAR
-        );"""
-
-        self.db_query(receptors_table)
+        for sql in build_create_table("Receptors", RECEPTORS_SCHEMA, "sqlite"):
+            self.db_query(sql)
 
     def _insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
@@ -565,18 +530,9 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(query, (rec_name, receptor), commit=True)
 
     def _create_db_properties_table(self):
-        """Create table of database properties used during write session to the database. Columns are:
-        DB_write_session int (primary key)
-        docking_mode (vina or dlg)
-        num_of_poses (int, -1 for all, otherwise value)
-        """
-
-        sql_str = """CREATE TABLE IF NOT EXISTS DB_properties (
-        DB_write_session    INTEGER PRIMARY KEY AUTOINCREMENT,
-        docking_mode        VARCHAR,
-        number_of_poses     INTEGER)"""
-
-        self.db_query(sql_str)
+        """Create table of database properties used during write session to the database."""
+        for sql in build_create_table("DB_properties", DB_PROPERTIES_SCHEMA, "sqlite"):
+            self.db_query(sql)
 
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
@@ -592,30 +548,14 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(sql_insert, [docking_mode, number_of_poses], commit=True)
 
     def _create_interaction_index_table(self):
-        """Creates a table describing unique interactions in the database"""
-        interaction_index_table = """CREATE TABLE IF NOT EXISTS Interaction_indices (
-                                        interaction_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                                        interaction_type    VARCHAR,
-                                        rec_chain           VARCHAR,
-                                        rec_resname         VARCHAR,
-                                        rec_resid           VARCHAR,
-                                        rec_atom            VARCHAR,
-                                        rec_atomid          VARCHAR,
-                                        UNIQUE (interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid) ON CONFLICT IGNORE );
-                                        """
-        self.db_query(interaction_index_table)
+        """Creates a table describing unique interactions in the database."""
+        for sql in build_create_table("Interaction_indices", INTERACTION_INDICES_SCHEMA, "sqlite"):
+            self.db_query(sql)
 
     def _create_interaction_table(self):
         """Creates a table of each pose-interaction combination."""
-
-        interaction_table = """CREATE TABLE IF NOT EXISTS Interactions (
-        interaction_pose_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        pose_id   INTEGER,
-        interaction_id INTEGER,
-        FOREIGN KEY (pose_id) REFERENCES Results(pose_id),
-        FOREIGN KEY (interaction_id) REFERENCES Interaction_indices(interaction_id))"""
-
-        self.db_query(interaction_table)
+        for sql in build_create_table("Interactions", INTERACTIONS_SCHEMA, "sqlite"):
+            self.db_query(sql)
 
     def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
@@ -660,60 +600,23 @@ class StorageManagerSQLite(StorageManager):
 
     def _create_filtering_tables(self):
         """
-        Creates a Filter table which includes filter_id (PK), name (bookmark_name), sqlite formatted query,
-        and dictionary of filters used, as well as Filtered_poses, which uses filter_id as FK,
-        and lists all poses passing that filter_id
+        Creates Filters (bookmark metadata) and Filtered_poses (bookmark members) tables.
         """
-        # Create filters table keeping track of filter id etc
-        filters_sql = """CREATE TABLE IF NOT EXISTS Filters (
-        filter_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        name                VARCHAR,
-        query               VARCHAR,
-        filters             VARCHAR,
-        filter_window       VARCHAR);"""
-
-        filter_pose_sql = """CREATE TABLE IF NOT EXISTS Filtered_poses (
-        filter_id           INTEGER,
-        pose_id             INTEGER,
-        FOREIGN KEY(filter_id) REFERENCES Filters(filter_id),
-        FOREIGN KEY(pose_id) REFERENCES Results(pose_id));"""
-
-        self.db_query(filters_sql)
-        self.db_query(filter_pose_sql)
+        for sql in build_create_table("Filters", FILTERS_SCHEMA, "sqlite"):
+            self.db_query(sql)
+        for sql in build_create_table("Filtered_poses", FILTERED_POSES_SCHEMA, "sqlite"):
+            self.db_query(sql)
 
     def _create_cluster_tables(self):
         """
-        Creates cluster tables if they don't already exist
+        Creates cluster tables if they don't already exist.
         """
-        # create a cluster description table
-        self.db_query("""
-            CREATE TABLE IF NOT EXISTS
-            Clusters (
-                cluster_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name VARCHAR,
-                description VARCHAR,
-                cluster_window VARCHAR,
-                num_clusters INTEGER
-                );
-            """)
-        # create a table with cluster_id and cluster_group and representative pose
-        self.db_query("""
-            CREATE TABLE IF NOT EXISTS
-            Cluster_groups (
-                cluster_id INTEGER REFERENCES Clusters(cluster_id),
-                cluster_group INTEGER,
-                representative INTEGER REFERENCES Results(pose_id)
-                )
-            """)
-        # create a table of pose and cluster_id and cluster_group
-        self.db_query("""
-            CREATE TABLE IF NOT EXISTS 
-            Pose_clusters (
-                cluster_id INTEGER REFERENCES Clusters(cluster_id),
-                cluster_group INTEGER,
-                pose_id INTEGER REFERENCES Results(pose_id)
-                );
-            """)
+        for sql in build_create_table("Clusters", CLUSTERS_SCHEMA, "sqlite"):
+            self.db_query(sql)
+        for sql in build_create_table("Cluster_groups", CLUSTER_GROUPS_SCHEMA, "sqlite"):
+            self.db_query(sql)
+        for sql in build_create_table("Pose_clusters", POSE_CLUSTERS_SCHEMA, "sqlite"):
+            self.db_query(sql)
 
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
@@ -871,21 +774,10 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             cur = self.conn.cursor()
-            # create mergedata table: merge_id (PK), dbfile, timestamp, numofrows table
-            mergetbl_sql = """CREATE TABLE IF NOT EXISTS merged_tables (
-            merge_id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            dbfile                  VARCHAR,
-            merge_start             DATETIME DEFAULT CURRENT_TIMESTAMP);"""
-            cur.execute(mergetbl_sql)
-
-            # create PK table: merge_id(FK), table, original_val, merge_val
-            pktable_sql = """CREATE TABLE IF NOT EXISTS PK_conversions (
-            merge_id        INTEGER,
-            table_name      VARCHAR,
-            original_PK     INTEGER,
-            merged_PK       INTEGER,
-            FOREIGN KEY(merge_id) REFERENCES merged_tables(merge_id));"""
-            cur.execute(pktable_sql)
+            for sql in build_create_table("merged_tables", MERGED_TABLES_SCHEMA, "sqlite"):
+                cur.execute(sql)
+            for sql in build_create_table("PK_conversions", PK_CONVERSIONS_SCHEMA, "sqlite"):
+                cur.execute(sql)
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS ak_merge ON PK_conversions(merge_id, original_PK)"
             )
@@ -1869,24 +1761,17 @@ class StorageManagerSQLite(StorageManager):
         return tables
 
     def _create_indices(self):
-        """Create index for specified tables and columns. 'ak' stands for 'alternate key'
-        and is prepended to index name to avoid naming conflicts
-        """
+        """Create alternate-key indices ('ak_*') for queryable tables."""
         logger.debug("Creating columns indices...")
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
-        )
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_resultids ON Results(pose_id, ligand_id)"
-        )
-        self.db_query(
-            "CREATE INDEX IF NOT EXISTS ak_interactions ON Interactions(pose_id, interaction_id)"
-        )
-        self.db_query("CREATE INDEX IF NOT EXISTS ak_ligands ON Ligands(ligand_id)")
+        for table, schema in [
+            ("Results", RESULTS_SCHEMA),
+            ("Interactions", INTERACTIONS_SCHEMA),
+            ("Interaction_indices", INTERACTION_INDICES_SCHEMA),
+        ]:
+            for sql in build_create_indices(table, schema):
+                self.db_query(sql)
         self.conn.commit()
-        logger.info(
-            "Indicies were created for specified Results, Ligands, and Interaction_indices columns."
-        )
+        logger.info("Indices created for Results, Interactions, and Interaction_indices.")
 
     def _get_length_of_table(self, table_name: str) -> int:
         """
@@ -2659,35 +2544,11 @@ class StorageManagerSQLite(StorageManager):
 
     def _create_status_tables(self) -> None:
         """
-        Creates pose status tables if needed
+        Creates pose status tables (Accepted, Maybe, Rejected) if needed.
         """
-        self.db_query(
-            f"""
-                CREATE TABLE IF NOT EXISTS Accepted 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
-                );""",
-        )
-
-        # create maybe table
-        self.db_query(
-            f"""
-                CREATE TABLE IF NOT EXISTS Maybe 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
-                );""",
-        )
-
-        # create rejected table
-        self.db_query(
-            f"""
-                CREATE TABLE IF NOT EXISTS Rejected 
-                (pose_id INTEGER UNIQUE,
-                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
-                );""",
-            commit=True,
-        )
-
-        return None
+        for name in ("Accepted", "Maybe", "Rejected"):
+            for sql in build_create_table(name, STATUS_TABLE_SCHEMA, "sqlite"):
+                self.db_query(sql)
+        self.conn.commit()
 
     # endregion

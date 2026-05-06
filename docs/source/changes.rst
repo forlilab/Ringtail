@@ -17,7 +17,7 @@ Changes in command line tools
 * New CLI flag `--print_bookmarks` prints all current bookmarks in the database
 * `--file_pattern` has been discontinued, and is inferred from docking mode (which will attempt to accept file pattern as input)
 * `--export_bookmark_csv` can now be used as a flag (True/False) to export bookmark given in `--bookmark_name`, or with string input as the resulting csv file name. If used in conjunction with `--bookmark_name` and `--outfields` it will produce a csv with the desired columns. Full tables can be exported using the `--bookmar_name` tag, but this will not work with `--outfields`
-* `--outfields` now uses names of columns as they are in the database. The changes:
+* `--outfields` now uses names of columns as they are in the database from the Results, Ligands, and Interaction_indices tables. This inculdes new fields from the interaction table, and that some old fields have changed:
     ============ ===============
       Old          New
     ============ ===============
@@ -58,7 +58,7 @@ Enhancements to the codebase
 * The method `export_csv` has been broken into three distinct methods, `export_columns_as_csv` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, `export_table_as_csv` where an entire table is exported, and `export_sql_as_csv` where the user specifies a properly formatted SQL prompt
 * The method `export_bookmark_db` 
 * Status selection enabled using `set_ligand_status` API, three new tables included: Accepted, Maybe, Rejected
-* The method `get_plot_data` now has more input parameters including specifying x and y axis, and returning the status of a pose/point (see #TODO ref to explaining status)
+* The method `get_plot_data` now has more input parameters including specifying x and y axis, and returning the status of a pose/point 
 * The method `drop_bookmark` is now `delete_bookmark`
 * New method `get_bookmark_interactions` to get interaction data from a bookmark
 * Several new APIs to support the GUI, generally not useful outside the GUI

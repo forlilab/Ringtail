@@ -27,6 +27,7 @@ from .ringtailoptions import (
     statuses,
     validate_docking_mode,
 )
+from .schema import ORDER_RESULT_SCHEMA, OUTFIELD_BY_TABLE
 from .exceptions import (
     RTCoreError,
     OutputError,
@@ -647,36 +648,11 @@ class RingtailCore:
                 mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
                 interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
                 output_log (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
-                outfields (str): defines which fields are used when reporting the results (to stdout and to the log file); fields are specified as comma-separated values, e.g. `--outfields=e,le,hb`; by default, docking_score (energy) and ligand name are reported; ligand always reported in first column. Any column in Results and Ligands tables are available, although one of the following is recommended: \n
-                    #TODO most of these names are not in use the way they are presented anymore
-                    "Ligand_name" (Ligand name),
-                    "e" (docking_score),
-                    "le" (ligand efficiency),
-                    "delta" (delta energy from best pose),
-                    "ref_rmsd" (RMSD to reference pose),
-                    "e_inter" (intermolecular energy),
-                    "e_vdw" (van der waals energy),
-                    "e_elec" (electrostatic energy),
-                    "e_intra" (intermolecular energy),
-                    "n_interact" (number of iteractions),
-                    "ligand_smile" ,
-                    "rank" (rank of ligand pose),
-                    "run" (run number for ligand pose),
-                    "hb" (hydrogen bonds),
-                    "receptor" (receptor name)
-                order_results (str): Stipulates how to order the results when written to the log file. By default will be ordered by order results were added to the database. ONLY TAKES ONE OPTION. Some available fields are shown, although any sortable column in Ligands or Results tables are OK:\n
-                    "e" (docking_score),
-                    "le" (ligand efficiency),
-                    "delta" (delta energy from best pose),
-                    "ref_rmsd" (RMSD to reference pose),
-                    "e_inter" (intermolecular energy),
-                    "e_vdw" (van der waals energy),
-                    "e_elec" (electrostatic energy),
-                    "e_intra" (intermolecular energy),
-                    "n_interact" (number of interactions),
-                    "rank" (rank of ligand pose),
-                    "run" (run number for ligand pose),
-                    "hb" (hydrogen bonds);
+                outfields (str): Comma-separated columns to include in output, e.g.
+                    ``"docking_score,leff,num_hb"``. Ligand name is always returned first.
+                    Available fields are the keys of ``ringtail.schema.OUTFIELD_SCHEMA``.
+                order_results (str): Single column name to sort results by. Takes one value.
+                    Available fields are the keys of ``ringtail.schema.ORDER_RESULT_SCHEMA``.
                 output_bookmark (str): name for resulting book mark file. Default value is 'passing_results', can only contain lower case letters, numbers, and underscore (_)
                 input_bookmark (str): name of bookmark to perform filtering over
                 return_iter (bool): return an iterable of all of the filtering results
@@ -1256,6 +1232,15 @@ class RingtailCore:
         output_manager.write_receptor_pdbqt(recname, recstr)
 
     @_wrap_exceptions
+    def get_available_outfields(self) -> dict[str, str]:
+        """Return all column names available as output fields with their descriptions.
+
+        Returns:
+            dict[str, str]: mapping of column name to human-readable description.
+                No database connection is required.
+        """
+        return {col: desc for cols in self.get_exportable_columns().values() for col, desc in cols.items()}
+
     def get_previous_filter_data(
         self,
         bookmark_name: str,
@@ -1811,15 +1796,18 @@ class RingtailCore:
             return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
 
     @_wrap_exceptions
-    def get_exportable_columns(self) -> dict[(str, list)]:
-        """
-        Creates a dict of useful export columns from Results, Ligands, and Interactions
+    def get_exportable_columns(self) -> dict[str, dict[str, str]]:
+        """Return exportable columns grouped by table with descriptions.
 
         Returns:
-            dict: table: [columns]
+            dict[str, dict[str, str]]: ``{table_name: {col_name: description}}``
+                for Results, Ligands, and Interaction_indices.
+                No database connection is required.
         """
-        with self.storageman as sm:
-            return sm.get_useful_columns()
+        return {
+            table: {name: col.description for name, col in cols.items()}
+            for table, cols in OUTFIELD_BY_TABLE.items()
+        }
 
     @_wrap_exceptions
     def get_row_from_pose(self, table: str, pose_id: int) -> int:
