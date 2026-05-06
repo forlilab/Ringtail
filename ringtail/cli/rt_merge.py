@@ -35,6 +35,7 @@ python rt_merge.py -db1 db1.db -db2 db2.db -l mergetest.log
 python rt_merge.py -db1 db1.db -db2 db*.db
 
 """
+
 import argparse
 import sys
 import logging
@@ -95,7 +96,9 @@ def main():
 
     try:
         failed = rtc.merge_databases(
-            merging_dbs=merging_dbs, backup=not args.dont_backup_db1
+            merging_dbs=merging_dbs,
+            backup=not args.dont_backup_db1,
+            finalize=not args.dont_finalize,
         )
     except Exception as e:
         logger.error(f"Merge process encountered a fatal error: {e}")
