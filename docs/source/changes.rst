@@ -16,6 +16,7 @@ Changes in command line tools
 * The previous `--filter_bookmark` has been changed to `--input_bookmark` for consistency
 * New CLI flag `--print_bookmarks` prints all current bookmarks in the database
 * `--file_pattern` has been discontinued, and is inferred from docking mode (which will attempt to accept file pattern as input)
+* `--export_bookmark_csv` can now be used as a flag (True/False) to export bookmark given in `--bookmark_name`, or with string input as the resulting csv file name. If used in conjunction with `--bookmark_name` and `--outfields` it will produce a csv with the desired columns. Full tables can be exported using the `--bookmar_name` tag, but this will not work with `--outfields`
 * `--outfields` now uses names of columns as they are in the database. The changes:
     ============ ===============
       Old          New

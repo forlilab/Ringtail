@@ -202,16 +202,17 @@ class TestInputs:
 
 
 class TestOutputs:
-    def test_export_bookmark_csv(self, cli):
+    def test_export_bookmark_csv(self, cli, tmp_path):
         cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
-        rc = cli.read("--export_bookmark_csv", "Ligands")
+        rc = cli.read("-e", "-6", "--export_bookmark_csv", "hits.csv")
         assert rc == 0
+        assert Path(tmp_path / "hits.csv").exists()
 
     def test_export_table_csv(self, cli, tmp_path):
         cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
-        csv_file = str(tmp_path / "Ligands.csv")
-        RingtailCore(str(cli.db)).export_table_as_csv("Ligands", csv_file)
-        assert Path(csv_file).exists()
+        rc = cli.read("-s", "Ligands", "-xs")
+        assert rc == 0
+        assert Path(tmp_path / "Ligands.csv").exists()
 
     def test_export_query_csv(self, cli):
         cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
@@ -271,7 +272,9 @@ class TestOutputs:
             cwd=str(TEST_DIR),
             capture_output=True,
         )
-        assert RingtailCore(db_max1).table_length("Results") == RingtailCore(db_max1).table_length("Ligands")
+        assert RingtailCore(db_max1).table_length("Results") == RingtailCore(
+            db_max1
+        ).table_length("Ligands")
         assert RingtailCore(db_max1).table_length("Results") < count_default
 
     def test_store_all(self, cli):

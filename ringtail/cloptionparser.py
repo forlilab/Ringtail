@@ -381,10 +381,13 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-xs",
         "--export_bookmark_csv",
-        help="Create csv of the bookmark given with bookmark_name. Output as <bookmark_name>.csv. Can also export full database tables",
+        help="Create csv of the bookmark given with bookmark_name. Output as <filename>.csv. Can also export full database tables",
         action="store",
         type=str,
-        metavar="BOOKMARK_NAME",
+        metavar="<filename>.csv",
+        const=True,
+        default=None,
+        nargs="?",
     )
     output_group.add_argument(
         "-xq",
