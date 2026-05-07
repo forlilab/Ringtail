@@ -204,6 +204,7 @@ class StorageManager(ABC):
         filter_query: str = self._generate_result_filtering_query(
             all_filters, output_bookmark, input_bookmark
         )
+        print("\n\n the filtering query", filter_query)
 
         logger.debug(f"Query for filtering results: {filter_query}")
 
@@ -2334,10 +2335,18 @@ class StorageManager(ABC):
                         # cast last four items to float
                         for index in range(2, 6):
                             filter[index] = float(filter[index])
-                if filter_key == "ligand_name" and len(filter_value) > 50:
-                    raise OptionError(
-                        "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
-                    )
+                if filter_key == "ligand_name":
+                    from .util import iterate_nested
+
+                    filter_value = [
+                        name
+                        for item in iterate_nested(filter_value)
+                        for name in item.split(",")
+                    ]
+                    if len(filter_value) > 50:
+                        raise OptionError(
+                            "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
+                        )
                 ligand_filters[filter_key] = filter_value
 
             if filter_key == "max_miss":
