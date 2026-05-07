@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Union
 
 
 @dataclass
@@ -10,8 +11,8 @@ class Column:
     nullable: bool = True
     unique: bool = False
     on_conflict_ignore: bool = False  # SQLite only: ON CONFLICT IGNORE on UNIQUE
-    foreign_key: str | None = None  # "ReferencedTable.column"
-    default: str | None = None  # raw SQL default expression
+    foreign_key: Union[str, None] = None  # "ReferencedTable.column"
+    default: Union[str, None] = None  # raw SQL default expression
 
 
 @dataclass

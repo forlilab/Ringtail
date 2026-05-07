@@ -910,7 +910,7 @@ class RingtailCore:
         output_bookmark: str,
         type: str = "mfp",
         cutoff: float = 0.5,
-        input_bookmark: str | None = None,
+        input_bookmark: Union[str, None] = None,
     ) -> tuple[str, int]:
         """
         Clusters data and saves representatives to output_bookmark.
@@ -2798,7 +2798,7 @@ class RingtailCore:
         self,
         cluster_data: dict,
         output_bookmark: str,
-        input_bookmark: str | None = None,
+        input_bookmark: Union[str, None] = None,
     ) -> tuple[str, int]:
         """
         Takes dictionary with one or more cluster constraints and performs clustering one after another.

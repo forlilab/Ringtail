@@ -562,7 +562,7 @@ class StorageManager(ABC):
 
     def cluster_data(
         self,
-        bookmark_name: str | None,
+        bookmark_name: Union[str, None],
         cluster_type: str = "mfpt",
         cutoff: float = 0.5,
     ) -> tuple:

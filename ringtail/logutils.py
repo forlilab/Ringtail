@@ -15,11 +15,14 @@ To configure output in an application or script:
 
 import logging
 import sys
+from typing import Union
 
 LOGGER_NAME = "ringtail"
 
 _root_logger = logging.getLogger(LOGGER_NAME)
-_root_logger.addHandler(logging.NullHandler())  # silent by default (library best practice)
+_root_logger.addHandler(
+    logging.NullHandler()
+)  # silent by default (library best practice)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -28,8 +31,8 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def setup_logging(
-    level: str | int = "WARNING",
-    logfile: str | None = None,
+    level: Union[str, int] = "WARNING",
+    logfile: Union[str, None] = None,
     fmt: str = "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
     datefmt: str = "%H:%M:%S",
 ) -> None:
