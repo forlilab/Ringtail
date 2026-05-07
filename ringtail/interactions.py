@@ -6,6 +6,7 @@
 
 import numpy as np
 import tempfile
+from typing import Union
 from meeko import PDBQTReceptor, MoleculePreparation
 from .receptormanager import ReceptorManager
 from .exceptions import InteractionError
@@ -202,6 +203,18 @@ class InteractionFinder:
         }
 
 
+def make_interaction_finder(
+    receptor_string: str,
+    interaction_cutoffs: list,
+) -> Union[InteractionFinder, None]:
+    """Construct an InteractionFinder; return None on failure."""
+    try:
+        return InteractionFinder(receptor_string, *interaction_cutoffs)
+    except Exception as e:
+        logger.warning("Could not create InteractionFinder: %s", e)
+        return None
+
+
 def find_interactions(
     poses_coordinates: list[tuple[dict, list]],
     mol: Chem.Mol,
@@ -211,7 +224,11 @@ def find_interactions(
     interaction_finder: InteractionFinder = None,
 ):
     if not interaction_finder:
-        interaction_finder = InteractionFinder(receptor_string, hb_cutoff, vdw_cutoff)
+        interaction_finder = make_interaction_finder(receptor_string, [hb_cutoff, vdw_cutoff])
+    if not interaction_finder:
+        n = len(poses_coordinates)
+        return [], [0] * n, [0] * n
+
     interactions = []
     num_hb = []
     num_interactions = []

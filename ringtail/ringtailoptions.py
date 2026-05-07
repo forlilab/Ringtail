@@ -150,7 +150,6 @@ class ResultsObject:
         self.receptor_file_path: str = None
         self.save_receptor: bool = None
         self.receptor_string: str = None
-        self.strings: dict = None
 
     @property
     def target_name(self):
@@ -165,7 +164,6 @@ class ResultsObject:
             any(iterate_nested(self.file))
             or any(iterate_nested(self.file_path))
             or any(iterate_nested(self.file_list))
-            or self.strings
         )
         return results
 

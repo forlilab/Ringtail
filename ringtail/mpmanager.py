@@ -172,15 +172,6 @@ class MPManager:
                 for file_list in file_lists:
                     self._scan_file_list(file_list, file_pattern.replace("*", ""))
 
-        # add docking data from input strings
-        if results.strings:
-            for (
-                ligand_name,
-                docking_result,
-            ) in results.strings.items():
-                string_data = {ligand_name: docking_result}
-                self._add_to_queue(string_data)
-
     def _add_to_queue(self, results_data):
         """_summary_
 

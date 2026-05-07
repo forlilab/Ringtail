@@ -21,7 +21,6 @@ from .exceptions import (
     MultiprocessingError,
 )
 import multiprocessing as mp
-from .ringtailoptions import RingtailDefaults
 from .storagemanager import StorageManager
 from .interactions import InteractionFinder
 

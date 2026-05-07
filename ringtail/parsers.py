@@ -22,7 +22,7 @@ from .logutils import get_logger
 logger = get_logger(__name__)
 from rdkit import Chem
 from meeko import PDBQTMolecule, RDKitMolCreate
-from .interactions import find_interactions, InteractionFinder
+from .interactions import find_interactions, make_interaction_finder
 
 
 class PoseRecord(NamedTuple):
@@ -323,22 +323,10 @@ class VinaMoleculeSupplier:
         )
         pose_coordinates = pick_best_poses(coordinates, self.num_poses)
 
-        if calculate_interactions:
-            if not interaction_finder:
-                try:
-                    interaction_finder = InteractionFinder(
-                        receptor_string, *interaction_cutoffs
-                    )
-                except Exception:
-                    logger.error(
-                        "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
-                    )
-                    interaction_info = {
-                        "nr_interactions": [0] * data_length,
-                        "num_hb": [0] * data_length,
-                    }
-                    interactions = []
+        if calculate_interactions and not interaction_finder:
+            interaction_finder = make_interaction_finder(receptor_string, interaction_cutoffs)
 
+        if interaction_finder:
             pose_identifiers = [
                 {"ligname": lig, "run_number": run, "pose_rank": rank}
                 for lig, run, rank in zip(
@@ -352,7 +340,6 @@ class VinaMoleculeSupplier:
                 poseids_coordinates, mol, interaction_finder=interaction_finder
             )
             interaction_rows = generate_interaction_tuples(interactions)
-            # use interaction stuff here
             interaction_info = {
                 "num_interactions": num_interactions,
                 "num_hb": num_hb,
@@ -1059,18 +1046,10 @@ class SDFMoleculeSupplier:  #
                     }
                 )
                 # calculate interactions
-                if calculate_interactions:
-                    if not interaction_finder:
-                        try:
-                            interaction_finder = InteractionFinder(
-                                receptor_string, *interaction_cutoffs
-                            )
-                        except Exception:
-                            logger.error(
-                                "Cannot calculate interactions, missing receptor representation. Interactions can be calculated at a later time if receptor is provided."
-                            )
-                            interactions = []
+                if calculate_interactions and not interaction_finder:
+                    interaction_finder = make_interaction_finder(receptor_string, interaction_cutoffs)
 
+                if interaction_finder:
                     poseids_coordinates = [
                         (
                             {
