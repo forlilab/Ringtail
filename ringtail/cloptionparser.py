@@ -981,6 +981,10 @@ class CLOptionParser:
                 mfpt_cluster=parsed_opts.mfpt_cluster,
                 interaction_cluster=parsed_opts.interaction_cluster,
                 ligand_name_file=parsed_opts.ligand_name_file,
+                output_log=parsed_opts.output_log,
+                outfields=parsed_opts.outfields,
+                order_results=parsed_opts.order_results,
+                output_all_poses=parsed_opts.output_all_poses,
             )
 
             self.output_options = SimpleNamespace(

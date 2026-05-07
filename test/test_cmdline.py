@@ -202,11 +202,43 @@ class TestInputs:
 
 
 class TestOutputs:
-    def test_export_bookmark_csv(self, cli, tmp_path):
+    def test_output_log_and_csv(self, cli, tmp_path):
+        import csv
+
         cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
-        rc = cli.read("-e", "-6", "--export_bookmark_csv", "hits.csv")
+        log_file = tmp_path / "filter_log.txt"
+        csv_file = tmp_path / "hits.csv"
+        rc = cli.read(
+            "-e",
+            "-6",
+            "-s",
+            "hits",
+            "--outfields",
+            "ligname,docking_score",
+            "--output_log",
+            str(log_file),
+            "--export_bookmark_csv",
+            str(csv_file),
+        )
         assert rc == 0
-        assert Path(tmp_path / "hits.csv").exists()
+
+        # log: line 32 is first data row
+        with open(log_file) as f:
+            lines = f.readlines()
+        assert lines[31].strip() == "127458, -6.66"
+
+        # csv: headers and single passing ligand
+        with open(csv_file) as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+            rows = list(reader)
+        assert "ligname" in headers
+        assert "docking_score" in headers
+        ligname_idx = headers.index("ligname")
+        score_idx = headers.index("docking_score")
+        assert len(rows) == 1
+        assert rows[0][ligname_idx] == "127458"
+        assert float(rows[0][score_idx]) == pytest.approx(-6.66, abs=0.01)
 
     def test_export_table_csv(self, cli, tmp_path):
         cli.write("-m", "adgpu", "--file_list", str(TEST_DATA / "adgpu/filelist1.txt"))
