@@ -1674,7 +1674,7 @@ class RingtailCore:
             poseIDs[(line[0], line[1])] = (
                 line[2],
                 line[3],
-            )  # line[0] is LE, line[1] is docking score, line[2] is pose_ID, line[3] is LigName
+            )  # line[0] is LE, line[1] is docking score, line[2] is pose_id, line[3] is ligname
         axes.set_ylabel("Ligand Efficiency (kcal/mol/heavy atom)")
         axes.set_xlabel("Docking Score (kcal/mol)")
         axes.set_title("Passing Docking Poses")
@@ -1725,7 +1725,7 @@ class RingtailCore:
             chosen_pose = poseIDs[coords]
             ligname = chosen_pose[1]
             pose_id = chosen_pose[0]
-            logger.info(f"LigName: {ligname}; Pose_ID: {pose_id}")
+            logger.info(f"ligname: {ligname}; pose_id: {pose_id}")
 
             # make rdkit mol for poseid
             mol, flexres_mols, _, flexible_residues = self.create_rdkit_mol(
@@ -1978,7 +1978,7 @@ class RingtailCore:
     @_wrap_exceptions
     def get_ligand_name(self, pose_id: int = None):
         return self.db_query(
-            "SELECT LigName FROM Ligands WHERE ligand_id = (SELECT ligand_id FROM Results WHERE pose_id = ? LIMIT 1);",
+            "SELECT ligname FROM Ligands WHERE ligand_id = (SELECT ligand_id FROM Results WHERE pose_id = ? LIMIT 1);",
             (pose_id,),
         )[0][0]
 
@@ -2560,14 +2560,14 @@ class RingtailCore:
         """
         with self.storageman as sm:
             for (
-                Pose_ID,
+                pose_id,
                 docking_score,
                 leff,
                 pose_coordinates,
                 flexres_pose_coordinates,
             ) in sm.fetch_rdkit_pose_properties(pose_ids):
                 # fetch info about pose interactions and format into string with format <type>-<chain>:<resname>:<resnum>:<atomname>:<atomnumber>, joined by commas
-                interactions = sm.fetch_pose_interactions(Pose_ID)
+                interactions = sm.fetch_pose_interactions(pose_id)
                 # if that pose id has interactions
                 if interactions is not None:
                     # make a list of all of them

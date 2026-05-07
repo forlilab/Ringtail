@@ -348,7 +348,7 @@ class StorageManager(ABC):
             str: ligand name
         """
         query = self.QueryBuilder()
-        query.SELECT("L.LigName").FROM("Ligands", "L").JOIN(
+        query.SELECT("L.ligname").FROM("Ligands", "L").JOIN(
             "Results", "R", "ligand_id"
         ).WHERE("R.pose_id =?", pose_id)
         return self.db_query(*query.build()).fetchone()[0]
@@ -460,7 +460,7 @@ class StorageManager(ABC):
         # make subqueries/common table expressions for each set of ligands
         selection_query = """
         {db_name} AS 
-            (SELECT LigName FROM {db_name}.Ligands 
+            (SELECT ligname FROM {db_name}.Ligands 
             INNER JOIN {db_name}.Results ON 
                 {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id 
                 WHERE pose_id IN ({bookmark_poses}))"""
@@ -489,13 +489,13 @@ class StorageManager(ABC):
         all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
 
         wanted_joins = " ".join(
-            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.LigName = {db[0]}.LigName"
+            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.ligname = {db[0]}.ligname"
             for db in processed_wanted[1:]
         )
 
         # build exclusion union
         exclude_union = " UNION ".join(
-            f"SELECT LigName FROM {db[0]}" for db in processed_unwanted
+            f"SELECT ligname FROM {db[0]}" for db in processed_unwanted
         )
 
         if unwanted_dbs:
@@ -503,7 +503,7 @@ class StorageManager(ABC):
                 unwanted AS (
                     {exclude_union}
                 )"""
-            unwanted_where = """WHERE i.LigName NOT IN (SELECT LigName FROM unwanted)"""
+            unwanted_where = """WHERE i.ligname NOT IN (SELECT ligname FROM unwanted)"""
         else:
             unwanted_ctes = ""
             unwanted_where = ""
@@ -511,10 +511,10 @@ class StorageManager(ABC):
         query = f"""
         {all_ctes},
         wanted AS (
-            SELECT {processed_wanted[0][0]}.LigName
+            SELECT {processed_wanted[0][0]}.ligname
             FROM {processed_wanted[0][0]} {wanted_joins}
         ){unwanted_ctes}
-        SELECT DISTINCT i.LigName
+        SELECT DISTINCT i.ligname
         FROM wanted i
         {unwanted_where}
         """
@@ -702,10 +702,10 @@ class StorageManager(ABC):
 
         # merge tables
         try:
-            # merge DB_properties table
+            # merge db_properties table
             self._merge_db_properties_table(merge_id)
             self.conn.commit()
-            logger.info("The 'DB_properties' table has been merged.")
+            logger.info("The 'db_properties' table has been merged.")
 
             # merge Ligands and Results tables
             self._merge_ligands_and_results_tables(merge_id)
@@ -822,11 +822,11 @@ class StorageManager(ABC):
         logger.debug("Interactions have been copied into the new subset database.")
         # receptor
         dbprop = f"""
-        INSERT INTO {alias}.DB_properties
-        SELECT * FROM main.DB_properties;
+        INSERT INTO {alias}.db_properties
+        SELECT * FROM main.db_properties;
         """
         self.db_query(dbprop)
-        logger.debug("The DB_properties have been copied into the new subset database.")
+        logger.debug("The db_properties have been copied into the new subset database.")
         try:
             self.conn.commit()
         except Exception as e:
@@ -968,7 +968,7 @@ class StorageManager(ABC):
         if self.db_empty():
             return None
         query = self.QueryBuilder()
-        query.SELECT("docking_mode").FROM("DB_properties").ORDER_BY(
+        query.SELECT("docking_mode").FROM("db_properties").ORDER_BY(
             "DB_write_session"
         ).DESC("DB_write_session").LIMIT(1)
         docking_mode = self.db_query(query.build()[0]).fetchone()
@@ -992,7 +992,7 @@ class StorageManager(ABC):
             self._create_tables()
         if docking_mode:
             query = self.QueryBuilder()
-            query.SELECT("COUNT(*)").FROM("DB_properties")
+            query.SELECT("COUNT(*)").FROM("db_properties")
             count = self.db_query(query.build()[0]).fetchone()[0]
 
             compatible = True
@@ -1003,7 +1003,7 @@ class StorageManager(ABC):
             else:
                 compatibility_string = "The following database properties do not agree with the properties last used for this database: \n"
                 query = self.QueryBuilder()
-                query.SELECT("*").FROM("DB_properties").ORDER_BY(
+                query.SELECT("*").FROM("db_properties").ORDER_BY(
                     "DB_write_session"
                 ).DESC("DB_write_session").LIMIT(1)
                 cur = self.db_query(query.build()[0])
@@ -1361,7 +1361,7 @@ class StorageManager(ABC):
             "R." + x_axis,
             "R." + y_axis,
             "R." + "pose_id",
-            "L." + "LigName",
+            "L." + "ligname",
             "L." + "ligand_smile",
         )
         if limit:
@@ -1421,7 +1421,7 @@ class StorageManager(ABC):
         all_data_query.SELECT("docking_score", "leff").FROM("Results")
         bookmark_query = self.QueryBuilder()
         bookmark_query.SELECT(
-            "R." + x_axis, "R." + y_axis, "R." + "pose_id", "L." + "LigName"
+            "R." + x_axis, "R." + y_axis, "R." + "pose_id", "L." + "ligname"
         )
         if limit:
             bookmark_query.LIMIT(limit)
@@ -1537,7 +1537,7 @@ class StorageManager(ABC):
 
         ordered_columns = f"""
         {status_assignement}
-        R.pose_id, L.LigName, R.docking_score, 
+        R.pose_id, L.ligname, R.docking_score, 
         R.leff, R.cluster_size, R.cluster_rmsd, 
         R.pose_rank, R.num_hb, R.receptor, R.run_number, 
         R.delta, R.num_interactions, R.unbound_energy, 
@@ -1602,7 +1602,7 @@ class StorageManager(ABC):
         """
         query = self.QueryBuilder()
         query.SELECT("R.pose_id").FROM("Results", "R").WHERE(
-            "L.LigName = ?", ligand_name
+            "L.ligname = ?", ligand_name
         ).JOIN("Ligands", "L", "ligand_id")
 
         if self.is_bookmark(selection):
@@ -1728,7 +1728,9 @@ class StorageManager(ABC):
             """DELETE FROM Maybe WHERE pose_id = ?;""", pose_ids, commit=True
         )
 
-    def prepare_column_export_query(self, columns: dict, bookmark: str) -> str:
+    def prepare_column_export_query(
+        self, columns: dict[str, str], bookmark: str
+    ) -> str:
         """
         Writes a query based on what columns are requested. Resolves each column
         to its source table automatically.
@@ -1747,7 +1749,7 @@ class StorageManager(ABC):
 
         columns_by_table = {}
         for col in columns:
-            table = column_to_table.get(col)
+            table = column_to_table.get(col.lower())
             if table is None:
                 raise OptionError(f"Column '{col}' not found in any queryable table.")
             columns_by_table.setdefault(table, []).append(col)
@@ -2874,7 +2876,7 @@ class StorageManager(ABC):
     def _create_ligands_table(self, name="Ligands") -> None:
         """Create table for ligands. Columns are:
         ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        LigName             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
+        ligname             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
         ligand_smile        VARCHAR,
         rdmol               BLOB,
         """
@@ -3190,7 +3192,7 @@ class StorageManager(ABC):
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
     ) -> str:
-        """Handles string or list input of column names to be outputted, will make sure LigName
+        """Handles string or list input of column names to be outputted, will make sure ligname
         is in the list, and make sure all options are valid
 
         Returns:

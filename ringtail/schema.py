@@ -10,8 +10,8 @@ class Column:
     nullable: bool = True
     unique: bool = False
     on_conflict_ignore: bool = False  # SQLite only: ON CONFLICT IGNORE on UNIQUE
-    foreign_key: str | None = None   # "ReferencedTable.column"
-    default: str | None = None       # raw SQL default expression
+    foreign_key: str | None = None  # "ReferencedTable.column"
+    default: str | None = None  # raw SQL default expression
 
 
 @dataclass
@@ -30,20 +30,20 @@ class TableSchema:
 # ---------------------------------------------------------------------------
 
 SQLITE_TYPES: dict[str, str] = {
-    "INTEGER":         "INTEGER",
-    "FLOAT":           "FLOAT",
-    "VARCHAR":         "VARCHAR",
-    "BLOB":            "BLOB",
-    "DATETIME":        "DATETIME",
+    "INTEGER": "INTEGER",
+    "FLOAT": "FLOAT",
+    "VARCHAR": "VARCHAR",
+    "BLOB": "BLOB",
+    "DATETIME": "DATETIME",
     "JSON_OR_VARCHAR": "VARCHAR",
 }
 
 DUCKDB_TYPES: dict[str, str] = {
-    "INTEGER":         "INTEGER",
-    "FLOAT":           "FLOAT",
-    "VARCHAR":         "VARCHAR",
-    "BLOB":            "BLOB",
-    "DATETIME":        "TIMESTAMP",
+    "INTEGER": "INTEGER",
+    "FLOAT": "FLOAT",
+    "VARCHAR": "VARCHAR",
+    "BLOB": "BLOB",
+    "DATETIME": "TIMESTAMP",
     "JSON_OR_VARCHAR": "JSON",
 }
 
@@ -53,159 +53,253 @@ DUCKDB_TYPES: dict[str, str] = {
 
 LIGANDS_SCHEMA = TableSchema(
     columns={
-        "ligand_id":    Column("INTEGER", "unique ligand identifier",  primary_key=True, autoincrement=True, nullable=False),
-        "LigName":      Column("VARCHAR", "ligand name",               nullable=False, unique=True, on_conflict_ignore=True),
+        "ligand_id": Column(
+            "INTEGER",
+            "unique ligand identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "ligname": Column(
+            "VARCHAR",
+            "ligand name",
+            nullable=False,
+            unique=True,
+            on_conflict_ignore=True,
+        ),
         "ligand_smile": Column("VARCHAR", "SMILES string"),
-        "rdmol":        Column("BLOB",    "RDKit molecule binary"),
+        "rdmol": Column("BLOB", "RDKit molecule binary"),
     }
 )
 
 RESULTS_SCHEMA = TableSchema(
     columns={
-        "pose_id":                  Column("INTEGER", "unique pose identifier",          primary_key=True, autoincrement=True, nullable=False),
-        "ligand_id":                Column("INTEGER", "owning ligand",                   foreign_key="Ligands.ligand_id"),
-        "receptor":                 Column("VARCHAR", "receptor name"),
-        "pose_rank":                Column("INTEGER", "rank of ligand pose"),
-        "run_number":               Column("INTEGER", "run number for ligand pose"),
-        "docking_score":            Column("FLOAT",   "docking score / energy"),
-        "leff":                     Column("FLOAT",   "ligand efficiency"),
-        "delta":                    Column("FLOAT",   "delta energy from best pose"),
-        "cluster_rmsd":             Column("FLOAT",   "RMSD within cluster"),
-        "cluster_size":             Column("INTEGER", "cluster size"),
-        "reference_rmsd":           Column("FLOAT",   "RMSD to reference pose"),
-        "energies_inter":           Column("FLOAT",   "intermolecular energy"),
-        "energies_vdw":             Column("FLOAT",   "van der Waals energy"),
-        "energies_electro":         Column("FLOAT",   "electrostatic energy"),
-        "energies_flexLig":         Column("FLOAT",   "flexible ligand energy"),
-        "energies_flexLR":          Column("FLOAT",   "flexible receptor energy"),
-        "energies_intra":           Column("FLOAT",   "intramolecular energy"),
-        "energies_torsional":       Column("FLOAT",   "torsional energy"),
-        "unbound_energy":           Column("FLOAT",   "unbound state energy"),
-        "num_interactions":         Column("INTEGER", "number of interactions"),
-        "num_hb":                   Column("INTEGER", "hydrogen bonds"),
-        "pose_coordinates":         Column("VARCHAR", "pose atom coordinates"),
+        "pose_id": Column(
+            "INTEGER",
+            "unique pose identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "ligand_id": Column(
+            "INTEGER", "owning ligand", foreign_key="Ligands.ligand_id"
+        ),
+        "receptor": Column("VARCHAR", "receptor name"),
+        "pose_rank": Column("INTEGER", "rank of ligand pose"),
+        "run_number": Column("INTEGER", "run number for ligand pose"),
+        "docking_score": Column("FLOAT", "docking score / energy"),
+        "leff": Column("FLOAT", "ligand efficiency"),
+        "delta": Column("FLOAT", "delta energy from best pose"),
+        "cluster_rmsd": Column("FLOAT", "RMSD within cluster"),
+        "cluster_size": Column("INTEGER", "cluster size"),
+        "reference_rmsd": Column("FLOAT", "RMSD to reference pose"),
+        "energies_inter": Column("FLOAT", "intermolecular energy"),
+        "energies_vdw": Column("FLOAT", "van der Waals energy"),
+        "energies_electro": Column("FLOAT", "electrostatic energy"),
+        "energies_flexLig": Column("FLOAT", "flexible ligand energy"),
+        "energies_flexLR": Column("FLOAT", "flexible receptor energy"),
+        "energies_intra": Column("FLOAT", "intramolecular energy"),
+        "energies_torsional": Column("FLOAT", "torsional energy"),
+        "unbound_energy": Column("FLOAT", "unbound state energy"),
+        "num_interactions": Column("INTEGER", "number of interactions"),
+        "num_hb": Column("INTEGER", "hydrogen bonds"),
+        "pose_coordinates": Column("VARCHAR", "pose atom coordinates"),
         "flexible_res_coordinates": Column("VARCHAR", "flexible residue coordinates"),
     },
     sqlite_indices=[
         ["docking_score", "leff"],
         ["ligand_id"],
-    ]
+    ],
 )
 
 RECEPTORS_SCHEMA = TableSchema(
     columns={
-        "receptor_id":        Column("INTEGER",        "unique receptor identifier", primary_key=True, autoincrement=True, nullable=False),
-        "recname":            Column("VARCHAR",        "receptor name"),
-        "box_dim":            Column("VARCHAR",        "docking box dimensions"),
-        "box_center":         Column("VARCHAR",        "docking box center"),
-        "grid_spacing":       Column("FLOAT",          "grid spacing"),
-        "flexible_residues":  Column("VARCHAR",        "flexible residue names"),
-        "flexres_atomnames":  Column("VARCHAR",        "flexible residue atom names"),
-        "receptor_object":    Column("BLOB",           "receptor binary object"),
-        "polymer":            Column("JSON_OR_VARCHAR", "polymer data"),
+        "receptor_id": Column(
+            "INTEGER",
+            "unique receptor identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "recname": Column("VARCHAR", "receptor name"),
+        "box_dim": Column("VARCHAR", "docking box dimensions"),
+        "box_center": Column("VARCHAR", "docking box center"),
+        "grid_spacing": Column("FLOAT", "grid spacing"),
+        "flexible_residues": Column("VARCHAR", "flexible residue names"),
+        "flexres_atomnames": Column("VARCHAR", "flexible residue atom names"),
+        "receptor_object": Column("BLOB", "receptor binary object"),
+        "polymer": Column("JSON_OR_VARCHAR", "polymer data"),
     }
 )
 
 DB_PROPERTIES_SCHEMA = TableSchema(
     columns={
-        "DB_write_session": Column("INTEGER", "write session identifier", primary_key=True, autoincrement=True, nullable=False),
-        "docking_mode":     Column("VARCHAR", "docking mode used"),
-        "number_of_poses":  Column("INTEGER", "number of poses in session"),
+        "db_write_session": Column(
+            "INTEGER",
+            "write session identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "docking_mode": Column("VARCHAR", "docking mode used"),
+        "number_of_poses": Column("INTEGER", "number of poses in session"),
     }
 )
 
 INTERACTION_INDICES_SCHEMA = TableSchema(
     columns={
-        "interaction_id":   Column("INTEGER", "unique interaction type identifier", primary_key=True, autoincrement=True, nullable=False),
+        "interaction_id": Column(
+            "INTEGER",
+            "unique interaction type identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
         "interaction_type": Column("VARCHAR", "type of interaction"),
-        "rec_chain":        Column("VARCHAR", "receptor chain"),
-        "rec_resname":      Column("VARCHAR", "receptor residue name"),
-        "rec_resid":        Column("VARCHAR", "receptor residue id"),
-        "rec_atom":         Column("VARCHAR", "receptor atom name"),
-        "rec_atomid":       Column("VARCHAR", "receptor atom id"),
+        "rec_chain": Column("VARCHAR", "receptor chain"),
+        "rec_resname": Column("VARCHAR", "receptor residue name"),
+        "rec_resid": Column("VARCHAR", "receptor residue id"),
+        "rec_atom": Column("VARCHAR", "receptor atom name"),
+        "rec_atomid": Column("VARCHAR", "receptor atom id"),
     },
     unique_together=[
-        ["interaction_type", "rec_chain", "rec_resname", "rec_resid", "rec_atom", "rec_atomid"]
+        [
+            "interaction_type",
+            "rec_chain",
+            "rec_resname",
+            "rec_resid",
+            "rec_atom",
+            "rec_atomid",
+        ]
     ],
     sqlite_indices=[
-        ["interaction_type", "rec_chain", "rec_resname", "rec_resid", "rec_atom", "rec_atomid"]
-    ]
+        [
+            "interaction_type",
+            "rec_chain",
+            "rec_resname",
+            "rec_resid",
+            "rec_atom",
+            "rec_atomid",
+        ]
+    ],
 )
 
 INTERACTIONS_SCHEMA = TableSchema(
     columns={
-        "interaction_pose_id": Column("INTEGER", "unique interaction-pose record", primary_key=True, autoincrement=True, nullable=False),
-        "pose_id":             Column("INTEGER", "pose",              foreign_key="Results.pose_id"),
-        "interaction_id":      Column("INTEGER", "interaction index", foreign_key="Interaction_indices.interaction_id"),
+        "interaction_pose_id": Column(
+            "INTEGER",
+            "unique interaction-pose record",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "pose_id": Column("INTEGER", "pose", foreign_key="Results.pose_id"),
+        "interaction_id": Column(
+            "INTEGER",
+            "interaction index",
+            foreign_key="Interaction_indices.interaction_id",
+        ),
     },
-    sqlite_indices=[["pose_id", "interaction_id"]]
+    sqlite_indices=[["pose_id", "interaction_id"]],
 )
 
 FILTERS_SCHEMA = TableSchema(
     columns={
-        "filter_id":     Column("INTEGER", "unique filter/bookmark identifier", primary_key=True, autoincrement=True, nullable=False),
-        "name":          Column("VARCHAR", "bookmark name"),
-        "query":         Column("VARCHAR", "SQL query string"),
-        "filters":       Column("VARCHAR", "filter parameters as string"),
+        "filter_id": Column(
+            "INTEGER",
+            "unique filter/bookmark identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "name": Column("VARCHAR", "bookmark name"),
+        "query": Column("VARCHAR", "SQL query string"),
+        "filters": Column("VARCHAR", "filter parameters as string"),
         "filter_window": Column("VARCHAR", "filter window parameters"),
     }
 )
 
 FILTERED_POSES_SCHEMA = TableSchema(
     columns={
-        "filter_id": Column("INTEGER", "bookmark reference", foreign_key="Filters.filter_id"),
-        "pose_id":   Column("INTEGER", "pose reference",     foreign_key="Results.pose_id"),
+        "filter_id": Column(
+            "INTEGER", "bookmark reference", foreign_key="Filters.filter_id"
+        ),
+        "pose_id": Column("INTEGER", "pose reference", foreign_key="Results.pose_id"),
     }
 )
 
 CLUSTERS_SCHEMA = TableSchema(
     columns={
-        "cluster_id":     Column("INTEGER", "unique clustering session identifier", primary_key=True, autoincrement=True, nullable=False),
-        "name":           Column("VARCHAR", "cluster name"),
-        "description":    Column("VARCHAR", "cluster description"),
+        "cluster_id": Column(
+            "INTEGER",
+            "unique clustering session identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "name": Column("VARCHAR", "cluster name"),
+        "description": Column("VARCHAR", "cluster description"),
         "cluster_window": Column("VARCHAR", "clustering parameters"),
-        "num_clusters":   Column("INTEGER", "number of clusters"),
+        "num_clusters": Column("INTEGER", "number of clusters"),
     }
 )
 
 CLUSTER_GROUPS_SCHEMA = TableSchema(
     columns={
-        "cluster_id":     Column("INTEGER", "clustering session",  foreign_key="Clusters.cluster_id"),
-        "cluster_group":  Column("INTEGER", "cluster group number"),
-        "representative": Column("INTEGER", "representative pose", foreign_key="Results.pose_id"),
+        "cluster_id": Column(
+            "INTEGER", "clustering session", foreign_key="Clusters.cluster_id"
+        ),
+        "cluster_group": Column("INTEGER", "cluster group number"),
+        "representative": Column(
+            "INTEGER", "representative pose", foreign_key="Results.pose_id"
+        ),
     }
 )
 
 POSE_CLUSTERS_SCHEMA = TableSchema(
     columns={
-        "cluster_id":    Column("INTEGER", "clustering session", foreign_key="Clusters.cluster_id"),
+        "cluster_id": Column(
+            "INTEGER", "clustering session", foreign_key="Clusters.cluster_id"
+        ),
         "cluster_group": Column("INTEGER", "cluster group number"),
-        "pose_id":       Column("INTEGER", "pose",               foreign_key="Results.pose_id"),
+        "pose_id": Column("INTEGER", "pose", foreign_key="Results.pose_id"),
     }
 )
 
 MERGED_TABLES_SCHEMA = TableSchema(
     columns={
-        "merge_id":    Column("INTEGER",  "unique merge session identifier", primary_key=True, autoincrement=True, nullable=False),
-        "dbfile":      Column("VARCHAR",  "path to merged database file"),
-        "merge_start": Column("DATETIME", "merge start timestamp", default="CURRENT_TIMESTAMP"),
+        "merge_id": Column(
+            "INTEGER",
+            "unique merge session identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "dbfile": Column("VARCHAR", "path to merged database file"),
+        "merge_start": Column(
+            "DATETIME", "merge start timestamp", default="CURRENT_TIMESTAMP"
+        ),
     }
 )
 
 PK_CONVERSIONS_SCHEMA = TableSchema(
     columns={
-        "merge_id":    Column("INTEGER", "merge session",                   foreign_key="merged_tables.merge_id"),
-        "table_name":  Column("VARCHAR", "table with remapped primary keys"),
+        "merge_id": Column(
+            "INTEGER", "merge session", foreign_key="merged_tables.merge_id"
+        ),
+        "table_name": Column("VARCHAR", "table with remapped primary keys"),
         "original_PK": Column("INTEGER", "original primary key value"),
-        "merged_PK":   Column("INTEGER", "new primary key after merge"),
+        "merged_PK": Column("INTEGER", "new primary key after merge"),
     },
-    sqlite_indices=[["merge_id", "original_PK"]]
+    sqlite_indices=[["merge_id", "original_PK"]],
 )
 
 # Accepted, Maybe, Rejected share this structure; pass the name to build_create_table.
 STATUS_TABLE_SCHEMA = TableSchema(
     columns={
-        "pose_id": Column("INTEGER", "pose", unique=True, foreign_key="Results.pose_id"),
+        "pose_id": Column(
+            "INTEGER", "pose", unique=True, foreign_key="Results.pose_id"
+        ),
     }
 )
 
@@ -227,9 +321,21 @@ OUTFIELD_SCHEMA: dict[str, Column] = {
 
 # Same columns grouped by source table — used for export and column-to-table resolution.
 OUTFIELD_BY_TABLE: dict[str, dict[str, Column]] = {
-    "Results":             {n: c for n, c in RESULTS_SCHEMA.columns.items()             if not c.primary_key and not c.foreign_key},
-    "Ligands":             {n: c for n, c in LIGANDS_SCHEMA.columns.items()              if not c.primary_key and not c.foreign_key},
-    "Interaction_indices": {n: c for n, c in INTERACTION_INDICES_SCHEMA.columns.items() if not c.primary_key and not c.foreign_key},
+    "Results": {
+        n: c
+        for n, c in RESULTS_SCHEMA.columns.items()
+        if not c.primary_key and not c.foreign_key
+    },
+    "Ligands": {
+        n: c
+        for n, c in LIGANDS_SCHEMA.columns.items()
+        if not c.primary_key and not c.foreign_key
+    },
+    "Interaction_indices": {
+        n: c
+        for n, c in INTERACTION_INDICES_SCHEMA.columns.items()
+        if not c.primary_key and not c.foreign_key
+    },
 }
 
 # Only numeric columns make sense as an ORDER BY key.
@@ -242,6 +348,7 @@ ORDER_RESULT_SCHEMA: dict[str, Column] = {
 # ---------------------------------------------------------------------------
 # DDL builder
 # ---------------------------------------------------------------------------
+
 
 def build_create_table(table_name: str, schema: TableSchema, dialect: str) -> list[str]:
     """Return SQL statements that create the table for the given dialect.
@@ -323,7 +430,9 @@ def build_create_indices(table_name: str, schema: TableSchema) -> list[str]:
     """
     statements = []
     for i, index_cols in enumerate(schema.sqlite_indices):
-        index_name = f"ak_{table_name.lower()}_{i}" if i > 0 else f"ak_{table_name.lower()}"
+        index_name = (
+            f"ak_{table_name.lower()}_{i}" if i > 0 else f"ak_{table_name.lower()}"
+        )
         cols = ", ".join(index_cols)
         statements.append(
             f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name}({cols})"

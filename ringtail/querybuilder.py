@@ -46,9 +46,9 @@ class QueryBuilder:
 
     def SELECT_STATUS(self):
         status_case = """CASE
-            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_ID) THEN 'accepted'
-            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_ID) THEN 'rejected'
-            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_ID) THEN 'maybe'
+            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_id) THEN 'accepted'
+            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_id) THEN 'rejected'
+            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_id) THEN 'maybe'
             ELSE ''
         END AS status"""
         self.selects.append(status_case)
@@ -62,7 +62,7 @@ class QueryBuilder:
     def bookmark_query(bookmark, db_alias=""):
         if db_alias:
             db_alias += "."
-        query = f"""SELECT Pose_id FROM {db_alias}filtered_poses 
+        query = f"""SELECT pose_id FROM {db_alias}filtered_poses 
         WHERE filter_id = 
             (SELECT filter_id FROM {db_alias}Filters 
             WHERE name = '{bookmark}')"""

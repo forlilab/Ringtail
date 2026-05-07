@@ -243,7 +243,7 @@ It is also possible to write a database query and export the results of the quer
 
 .. code-block:: python
 
-    query_string = "SELECT docking_score, leff, Pose_ID, LigName FROM Results"
+    query_string = "SELECT docking_score, leff, pose_id, ligname FROM Results"
     rtc.export_csv(requested_data = query_string, csv_name = "query_results.csv", table = False)
 
 Creating a new database from a bookmark

@@ -429,14 +429,14 @@ class TestMergeDB:
 
         # PKs in secondary should be reassigned in the merged db
         secondary_pose_in_own_db = RingtailCore(db2).db_query(
-            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND ligand_id = "
-            "(SELECT ligand_id FROM Ligands WHERE LigName = '1620')"
+            "SELECT pose_id FROM Results WHERE pose_rank = 1 AND ligand_id = "
+            "(SELECT ligand_id FROM Ligands WHERE ligname = '1620')"
         )[0][0]
         assert secondary_pose_in_own_db == 1
 
         secondary_pose_in_merged = rtc1.db_query(
-            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND ligand_id = "
-            "(SELECT ligand_id FROM Ligands WHERE LigName = '1620')"
+            "SELECT pose_id FROM Results WHERE pose_rank = 1 AND ligand_id = "
+            "(SELECT ligand_id FROM Ligands WHERE ligname = '1620')"
         )[0][0]
         assert secondary_pose_in_merged != secondary_pose_in_own_db
 

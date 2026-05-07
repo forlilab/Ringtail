@@ -132,7 +132,7 @@ Enhancements to the codebase
 Changes to code behavior
 =========================
 * Interaction tables: one new table has been added (`Interactions`) which references the interaction id from `Interaction_indices`, while the table `Interaction_bitvectors` has been discontinued.
-* A new method to update an existing database 1.1.0 (or 1.0.0) to 2.0 is included. However, if the existing database was created with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the Pose_ID was not used as an explicit foreign key in db v1.0.0 and v1.1.0 (see Bug fixes below).
+* A new method to update an existing database 1.1.0 (or 1.0.0) to 2.0 is included. However, if the existing database was created with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the pose_id was not used as an explicit foreign key in db v1.0.0 and v1.1.0 (see Bug fixes below).
 
 Bug fixes
 ===========

@@ -97,7 +97,7 @@ class StorageManagerDuckDB(StorageManager):
         df = pd.DataFrame(
             ligands,
             columns=[
-                "LigName",
+                "ligname",
                 "ligand_smile",
                 "rdmol",
             ],
@@ -106,12 +106,12 @@ class StorageManagerDuckDB(StorageManager):
         # to insert interaction if unique
         sql_insert = """
         INSERT INTO Ligands (
-            LigName,
+            ligname,
             ligand_smile,
             rdmol
             ) 
         SELECT * FROM df_view
-        ON CONFLICT(LigName) DO NOTHING;"""
+        ON CONFLICT(ligname) DO NOTHING;"""
 
         self.conn.execute(sql_insert)
 
@@ -313,7 +313,7 @@ class StorageManagerDuckDB(StorageManager):
                 T.pose_coordinates,
                 T.flexible_res_coordinates
             FROM Results_temp AS T
-            JOIN Ligands AS L ON L.LigName = T.LigName
+            JOIN Ligands AS L ON L.ligname = T.ligname
             RETURNING pose_id, ligand_id, run_number, pose_rank;"""
 
         temp_to_interaction = """
@@ -590,7 +590,7 @@ class StorageManagerDuckDB(StorageManager):
 
     def _create_db_properties_table(self):
         """Create table of database properties used during write session to the database."""
-        for sql in build_create_table("DB_properties", DB_PROPERTIES_SCHEMA, "duckdb"):
+        for sql in build_create_table("db_properties", DB_PROPERTIES_SCHEMA, "duckdb"):
             self.db_query(sql)
 
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
@@ -600,7 +600,7 @@ class StorageManagerDuckDB(StorageManager):
             docking_mode (str): docking mode for the current dataset being written
             number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
         """
-        sql_insert = """INSERT INTO DB_properties (
+        sql_insert = """INSERT INTO db_properties (
         docking_mode,
         number_of_poses
         ) VALUES (?,?);"""
@@ -885,7 +885,7 @@ class StorageManagerDuckDB(StorageManager):
                 original_PK,
                 merged_PK) SELECT 
                 ?,
-                'DB_properties', 
+                'db_properties', 
                 DB_write_session,
                 DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
                 FROM merging.db_properties;"""
@@ -893,15 +893,15 @@ class StorageManagerDuckDB(StorageManager):
                 convert_dbprop_sql,
                 [merge_id],
             )
-            insert_dbprops_sql = """INSERT INTO DB_properties (
+            insert_dbprops_sql = """INSERT INTO db_properties (
                 DB_write_session,
                 docking_mode,
                 number_of_poses)
                 SELECT 
-                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'DB_properties'),
+                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'db_properties'),
                     docking_mode,
                     number_of_poses
-                FROM merging.DB_properties;"""
+                FROM merging.db_properties;"""
             self.conn.execute(insert_dbprops_sql, [merge_id])
 
         except Exception as e:
@@ -935,13 +935,13 @@ class StorageManagerDuckDB(StorageManager):
                     SELECT 1
                     FROM Ligands
                     WHERE
-                        merging.Ligands.LigName = Ligands.LigName
+                        merging.Ligands.ligname = Ligands.ligname
                     ) 
                 THEN (
                     SELECT main.Ligands.ligand_id
                     FROM main.Ligands
                     WHERE
-                        merging.Ligands.LigName = Ligands.LigName
+                        merging.Ligands.ligname = Ligands.ligname
                     )
                 ELSE merging.Ligands.ligand_id + (SELECT MAX(ligand_id) FROM Ligands)
             END AS new_ligand_id
@@ -950,12 +950,12 @@ class StorageManagerDuckDB(StorageManager):
         # then inserting only those that aren't already in the table
         insert_new_ligands = """INSERT INTO Ligands (
         ligand_id,
-        LigName,
+        ligname,
         ligand_smile,
         rdmol)
         SELECT 
             (SELECT merged_PK FROM PK_conversions WHERE original_PK = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
-            LigName,
+            ligname,
             ligand_smile,
             rdmol
         FROM merging.Ligands WHERE new_id > (SELECT MAX(ligand_id) FROM Ligands);
@@ -1149,7 +1149,7 @@ class StorageManagerDuckDB(StorageManager):
             LEFT JOIN (SELECT original_PK, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Interaction_indices' 
-                AND merge_id = ?) II ON (I.Interaction_ID = II.original_PK);"""
+                AND merge_id = ?) II ON (I.interaction_id = II.original_PK);"""
 
         try:
             cur = self.conn.cursor()
@@ -1191,7 +1191,7 @@ class StorageManagerDuckDB(StorageManager):
     def _sync_auto_increment_state(self):
         """Reset all sequences to current MAX values in their tables"""
         sequence_map = {
-            "seq_dbwriteid": ("DB_properties", "DB_write_session"),
+            "seq_dbwriteid": ("db_properties", "DB_write_session"),
             "seq_ligandid": ("Ligands", "ligand_id"),
             "seq_poseid": ("Results", "pose_id"),
             "seq_interactionid": ("Interaction_indices", "interaction_id"),
@@ -1250,12 +1250,12 @@ class StorageManagerDuckDB(StorageManager):
             (merge_id,),
         )
 
-        # delete from DB_properties
+        # delete from db_properties
         self.conn.execute(
             """
-            DELETE FROM DB_properties WHERE DB_write_session IN (
+            DELETE FROM db_properties WHERE DB_write_session IN (
                 SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'DB_properties')""",
+                WHERE merge_id = ? AND table_name = 'db_properties')""",
             (merge_id,),
         )
 
@@ -1354,13 +1354,13 @@ class StorageManagerDuckDB(StorageManager):
             if "ligand_name" in lig_filters:
                 lig_names = lig_filters.pop("ligand_name")
                 ligname_query = " OR ".join(
-                    [f"LigName LIKE '%{ligname}%' " for ligname in lig_names if ligname]
+                    [f"ligname LIKE '%{ligname}%' " for ligname in lig_names if ligname]
                 )
                 ligname_query = "SELECT ligand_id FROM Ligands WHERE " + ligname_query
             elif "ligand_name_file" in lig_filters:
                 csv_path = lig_filters.pop("ligand_name_file")
                 self._create_ligname_temp_table(csv_path)
-                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON LigName = tmp_lignames.ligandname"
+                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON ligname = tmp_lignames.ligandname"
             # rdkit queries need to be handled in memory separate from the main query
             if lig_filters:
                 rdkit_query = True
@@ -1530,7 +1530,7 @@ class StorageManagerDuckDB(StorageManager):
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
     ) -> str:
-        """Handles string or list input of column names to be outputted, will make sure LigName
+        """Handles string or list input of column names to be outputted, will make sure ligname
         is in the list, and make sure all options are valid
 
         Returns:
@@ -1552,7 +1552,7 @@ class StorageManagerDuckDB(StorageManager):
             outfields_list = []
         table_formatted_outfields = []
         if "ligname" not in [field.lower() for field in outfields_list]:
-            outfields_list.insert(0, "LigName")
+            outfields_list.insert(0, "ligname")
         possible_columns, table_formatted_columns = self._get_possible_output_columns()
 
         for outfield in outfields_list:
@@ -1603,7 +1603,7 @@ class StorageManagerDuckDB(StorageManager):
             AND R.pose_rank = sel.best_pose
             JOIN Ligands AS L
             ON R.ligand_id = L.ligand_id
-            WHERE L.LigName
+            WHERE L.ligname
             IN ({ligand_sql_string})
             """
         else:
@@ -1611,7 +1611,7 @@ class StorageManagerDuckDB(StorageManager):
             SELECT pose_id FROM Results
             WHERE ligand_id IN (
                 SELECT ligand_id FROM Ligands 
-                WHERE LigName IN ({ligand_sql_string})
+                WHERE ligname IN ({ligand_sql_string})
                 )
                 """
 
@@ -1669,8 +1669,11 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             StorageError
         """
-        data = self.db_query(f"PRAGMA table_info({table})").fetchall()
-        return [column_tuple[1].lower() for column_tuple in data]
+
+        data = self.db_query(
+            f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}'"
+        ).fetchall()
+        return [column_tuple[0].lower() for column_tuple in data]
 
     def fetch_summary_data(
         self,
@@ -1795,14 +1798,14 @@ class StorageManagerDuckDB(StorageManager):
         placeholders = ",".join(["?"] * len(groups))
         ligands = self.db_query(
             f"""
-            SELECT L.LigName FROM Results AS R
+            SELECT L.ligname FROM Results AS R
             JOIN Ligands AS L
                 ON R.ligand_id = L.ligand_id
             WHERE R.pose_id IN (
                 SELECT pose_id FROM Pose_clusters 
                 WHERE cluster_id = ?
                 AND cluster_group IN ({placeholders}))
-            GROUP BY L.LigName;
+            GROUP BY L.ligname;
             """,
             input_params,
         ).fetchall()
