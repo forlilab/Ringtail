@@ -105,7 +105,14 @@ def results_row() -> dict:
     }
 
 
-RESULTS_TEMPLATE = results_row()
+def _open_fn_and_name(fname: str) -> tuple:
+    """Return (open_fn, stem_name) for a plain or .gz file."""
+    clean = os.path.basename(fname)
+    name, ext = os.path.splitext(clean)
+    if ext[1:].lower() == "gz":
+        name, _ = os.path.splitext(name)
+        return gzip.open, name
+    return open, name
 
 
 def make_ringtail_data_dict(
@@ -192,42 +199,37 @@ class VinaMoleculeSupplier:
                     if line.startswith("MODEL"):
                         flexible_res_coords.append([])
                         run_number.append(line.split()[1])
-                    if line.startswith("REMARK VINA RESULT:"):
+                    elif line.startswith("REMARK VINA RESULT:"):
                         scores.append(float(line.split()[3]))
-                    if line.startswith("REMARK INTER:"):
+                    elif line.startswith("REMARK INTER:"):
                         intermolecular_energy.append(float(line.split()[2]))
-                    if line.startswith("REMARK INTRA:"):
+                    elif line.startswith("REMARK INTRA:"):
                         internal_energy.append(float(line.split()[2]))
-                    if line.startswith("REMARK UNBOUND:"):
+                    elif line.startswith("REMARK UNBOUND:"):
                         unbound_energy.append(float(line.split()[2]))
-                    if line.startswith("HETATM") or line.startswith("ATOM"):
+                    elif line.startswith("HETATM") or line.startswith("ATOM"):
                         if inside_res:
                             flexible_res_coords[-1][-1].append(
                                 [line[30:38], line[38:46], line[46:54]]
                             )
                             if first_model:
                                 flexres_atomnames[-1].append(line[12:16].strip())
-                        else:
-                            if first_model:
-                                if line[13] != "H":
-                                    num_heavy_atoms += 1
-                    if line.startswith("ENDMDL") and first_model:
+                        elif first_model and line[13] != "H":
+                            num_heavy_atoms += 1
+                    elif line.startswith("ENDMDL") and first_model:
                         first_model = False
                     # make new flexible residue list if in the coordinates for a flexible residue
-                    if line.startswith("BEGIN_RES"):
+                    elif line.startswith("BEGIN_RES"):
                         flexible_res_coords[-1].append([])
+                        inside_res = True
                         if first_model:
                             flexres_atomnames.append([])
-                        inside_res = True
-                    if line.startswith("END_RES"):
+                            res = line[10:13].strip()
+                            chain = line[14].strip()
+                            resnum = line[15:19].strip()
+                            flexible_residues.append("%s:%s%s" % (res, chain, resnum))
+                    elif line.startswith("END_RES"):
                         inside_res = False
-                    # store flexible residue identities
-                    if line.startswith("BEGIN_RES") and first_model:
-                        res = line[10:13].strip()
-                        chain = line[14].strip()
-                        resnum = line[15:19].strip()
-                        res_string = "%s:%s%s" % (res, chain, resnum)
-                        flexible_residues.append(res_string)
                 except ValueError:
                     raise FileParsingErrorPdbqt(
                         "ERROR! Cannot parse {0} in {1}".format(line, name)
@@ -268,24 +270,12 @@ class VinaMoleculeSupplier:
             return selected_results, receptor_dict
 
         if is_file:
-            # read and decode contents
-            fname_clean = os.path.basename(data_pointer)
-            # split the first name/extension
-            name, ext = os.path.splitext(fname_clean)
-            ext = ext[1:].lower()
-            if ext == "gz":
-                open_fn = gzip.open
-                # split the second name/extension
-                name, ext = os.path.splitext(name)
-                ext = ext[1:].lower()
-            else:
-                open_fn = open
+            open_fn, _ = _open_fn_and_name(data_pointer)
             ligname = data_pointer.split(".pdbqt")[0].split("/")[-1]
             logger.debug("Parsing vina docking file")
             with open_fn(data_pointer, "rb") as fp:
-                # this should decode lines into iterable object
-                data_object = [line.decode("utf-8") for line in fp]
-                pdbqt_str_list = "".join(data_object)
+                pdbqt_str_list = fp.read().decode("utf-8")
+            data_object = pdbqt_str_list.splitlines()
         else:
             # input provided as string and convert from '\n' separated to to iterable lines
             pdbqt_str_list = list(data_pointer.values())[0]
@@ -479,42 +469,15 @@ class ADGPUMoleculeSupplier:
                 data_index = run_number - 1
                 # parse Results data
                 results_rows.append(
-                    {
-                        "receptor": receptor_name,
-                        "pose_rank": pose_rank,
-                        "run_number": run_number,
-                        "cluster_rmsd": results_dict["cluster_rmsd"][data_index],
-                        "reference_rmsd": results_dict["ref_rmsd"][data_index],
-                        "docking_score": results_dict["docking_score"][data_index],
-                        "leff": results_dict["leff"][data_index],
-                        "delta": results_dict["delta"][data_index],
-                        "energies_inter": results_dict["energies_inter"][data_index],
-                        "energies_vdw": results_dict["energies_vdw"][data_index],
-                        "energies_electro": results_dict["energies_electro"][
-                            data_index
-                        ],
-                        "energies_flexLig": results_dict["energies_flexLig"][
-                            data_index
-                        ],
-                        "energies_flexLR": results_dict["energies_flexLR"][data_index],
-                        "energies_intra": results_dict["energies_intra"][data_index],
-                        "energies_torsional": results_dict["energies_torsional"][
-                            data_index
-                        ],
-                        "unbound_energy": results_dict["unbound_energy"][data_index],
-                        "num_interactions": results_dict["num_interactions"][
-                            data_index
-                        ],
-                        "num_hb": results_dict["num_hb"][data_index],
-                        "cluster_size": cluster_sizes[cluster_number],
-                        "pose_coordinates": results_dict["pose_coordinates"][
-                            data_index
-                        ],
-                        "flexible_res_coordinates": json.dumps(
-                            results_dict["flexible_res_coordinates"][data_index]
-                        ),
-                        "ligname": ligname,
-                    }
+                    self._build_result_row(
+                        results_dict,
+                        data_index,
+                        run_number,
+                        pose_rank,
+                        receptor_name,
+                        ligname,
+                        cluster_sizes[cluster_number],
+                    )
                 )
 
                 # parse interactions
@@ -544,42 +507,15 @@ class ADGPUMoleculeSupplier:
                 pose_rank = sorted_idx + 1
                 # parse Results data
                 results_rows.append(
-                    {
-                        "receptor": receptor_name,
-                        "pose_rank": pose_rank,
-                        "run_number": run_number,
-                        "cluster_rmsd": results_dict["cluster_rmsd"][data_index],
-                        "reference_rmsd": results_dict["ref_rmsd"][data_index],
-                        "docking_score": results_dict["docking_score"][data_index],
-                        "leff": results_dict["leff"][data_index],
-                        "delta": results_dict["delta"][data_index],
-                        "energies_inter": results_dict["energies_inter"][data_index],
-                        "energies_vdw": results_dict["energies_vdw"][data_index],
-                        "energies_electro": results_dict["energies_electro"][
-                            data_index
-                        ],
-                        "energies_flexLig": results_dict["energies_flexLig"][
-                            data_index
-                        ],
-                        "energies_flexLR": results_dict["energies_flexLR"][data_index],
-                        "energies_intra": results_dict["energies_intra"][data_index],
-                        "energies_torsional": results_dict["energies_torsional"][
-                            data_index
-                        ],
-                        "unbound_energy": results_dict["unbound_energy"][data_index],
-                        "num_interactions": results_dict["num_interactions"][
-                            data_index
-                        ],
-                        "num_hb": results_dict["num_hb"][data_index],
-                        "cluster_size": 1,
-                        "pose_coordinates": results_dict["pose_coordinates"][
-                            data_index
-                        ],
-                        "flexible_res_coordinates": json.dumps(
-                            results_dict["flexible_res_coordinates"][data_index]
-                        ),
-                        "ligname": ligname,
-                    }
+                    self._build_result_row(
+                        results_dict,
+                        data_index,
+                        run_number,
+                        pose_rank,
+                        receptor_name,
+                        ligname,
+                        1,
+                    )
                 )
 
                 # parse interactions
@@ -604,6 +540,54 @@ class ADGPUMoleculeSupplier:
             ),
         }
 
+    @staticmethod
+    def _parse_energy(line: str, idx: int, fname: str) -> float:
+        parts = line.split()
+        try:
+            return float(parts[idx])
+        except ValueError:
+            try:
+                return float(parts[idx - 1].lstrip("="))
+            except ValueError:
+                raise ValueError(f"ERROR! Cannot parse {line!r} in {fname}")
+
+    def _build_result_row(
+        self,
+        results_dict: dict,
+        data_index: int,
+        run_number: int,
+        pose_rank: int,
+        receptor_name: str,
+        ligname: str,
+        cluster_size: int,
+    ) -> dict:
+        return {
+            "receptor": receptor_name,
+            "pose_rank": pose_rank,
+            "run_number": run_number,
+            "cluster_rmsd": results_dict["cluster_rmsd"][data_index],
+            "reference_rmsd": results_dict["ref_rmsd"][data_index],
+            "docking_score": results_dict["docking_score"][data_index],
+            "leff": results_dict["leff"][data_index],
+            "delta": results_dict["delta"][data_index],
+            "energies_inter": results_dict["energies_inter"][data_index],
+            "energies_vdw": results_dict["energies_vdw"][data_index],
+            "energies_electro": results_dict["energies_electro"][data_index],
+            "energies_flexLig": results_dict["energies_flexLig"][data_index],
+            "energies_flexLR": results_dict["energies_flexLR"][data_index],
+            "energies_intra": results_dict["energies_intra"][data_index],
+            "energies_torsional": results_dict["energies_torsional"][data_index],
+            "unbound_energy": results_dict["unbound_energy"][data_index],
+            "num_interactions": results_dict["num_interactions"][data_index],
+            "num_hb": results_dict["num_hb"][data_index],
+            "cluster_size": cluster_size,
+            "pose_coordinates": results_dict["pose_coordinates"][data_index],
+            "flexible_res_coordinates": json.dumps(
+                results_dict["flexible_res_coordinates"][data_index]
+            ),
+            "ligname": ligname,
+        }
+
     def _parse_docking_file_dlg(self, fname: str) -> tuple[dict, dict, dict]:
         """Parse an ADGPU DLG file uncompressed or gzipped
 
@@ -621,20 +605,7 @@ class ADGPUMoleculeSupplier:
         STD_END = "DOCKED: ENDMDL"
         STD_KW = "DOCKED: "
 
-        INPUT_KW = "INPUT LIGAND PDBQT FILE"
-        INPUT_END = "FINAL DOCKED STATE"
-
-        # split the first name/extension
-        fname_clean = os.path.basename(fname)
-        name, ext = os.path.splitext(fname_clean)
-        ext = ext[1:].lower()
-        if ext == "gz":
-            open_fn = gzip.open
-            # split the second name/extension
-            name, ext = os.path.splitext(name)
-            ext = ext[1:].lower()
-        else:
-            open_fn = open
+        open_fn, name = _open_fn_and_name(fname)
 
         # intialize containers for pose data
         interactions = []
@@ -653,279 +624,149 @@ class ADGPUMoleculeSupplier:
         flexible_residues = []
         flexres_startlines = set()
         flexible_res_coords = []
+        flexres_atomnames = []
 
         # Define empty center list for backwards compatibility with DLGs without grid centers
         center = [None, None, None]
 
-        # read poses
         heavy_at_count = 0
         heavy_at_count_complete = False
-        file_as_string = ""
+        # read file contents
         with open_fn(fname, "rb") as fp:
-            inside_header = True
-            inside_pose = False
-            inside_input = False
-            inside_res = False
-            flexres_atomnames = []
-            for line in fp.readlines():
-                line = line.decode("utf-8")
-                file_as_string += line
-                if inside_header:
-                    # store ligand file name
-                    if line[0:11] == "Ligand file":
-                        ligname = (
-                            line.split(":", 1)[1].split("/")[-1].split(".")[0].strip()
-                        )  # remove path and file extension
-                    # store receptor name and grid parameters
-                    elif line[:13] == "Receptor name":
-                        receptor = line.split()[2]
-                    elif line[:21] == "Number of grid points":
-                        npts = [
-                            pts.rstrip("\n").replace(" ", "")
-                            for pts in line.split(":")[1].split(",")
-                        ]
-                    elif line[:12] == "Grid spacing":
-                        spacing = line.split()[2].rstrip(
-                            "A"
-                        )  # remove A unit from string
-                    elif line[:11] == "Grid center":
-                        center = [
-                            coord.rstrip("\n").replace(" ", "")
-                            for coord in line.split(":")[1].split(",")
-                        ]
-                    # store flexible residue identities and atomtyps
-                    if "INPUT-FLEXRES-PDBQT:" in line:
-                        if "ATOM" in line or "HETATM" in line:
-                            flexres_atomnames[-1].append(line[33:37])
-                            if (
-                                line[38:41] + ":" + line[42] + line[44:47]
-                                in flexible_residues
-                            ):
-                                continue
-                            flexible_residues.append(
-                                line[38:41] + ":" + line[42] + line[44:47]
-                            )  # RES:<chain><resnum>
-                            flexres_startlines.add(line[21:53])  # save startline
-                        # add new list for new flexres
-                        elif "INPUT-FLEXRES-PDBQT: ROOT" in line:
-                            flexres_atomnames.append([])
-                    # store number of runs
-                    elif "Number of runs:" in line:
-                        nruns = int(line.split()[3])
-                        cluster_rmsds = list(range(nruns))
-                        ref_rmsds = list(range(nruns))
-                    # store input pdbqt lines
-                    elif INPUT_KW in line:
-                        inside_input = True
-                    elif INPUT_END in line:
-                        inside_input = False
-                    if inside_input is True:
-                        if line.startswith("INPUT-LIGAND-PDBQT"):
-                            if (
-                                " UNK " in line
-                            ):  # replace ligand atoms ATOM flag with HETATM
-                                line = line.replace("ATOM", "HETATM")
-                    if "FINAL DOCKED STATE" in line:
-                        inside_header = False
-                    if inside_header:
-                        continue
+            file_as_string = fp.read().decode("utf-8")
 
-                if "FINAL DOCKED STATE" in line:
-                    # first time inside a pose block
-                    inside_pose = True
-                    interactions.append({})
-                    flexible_res_coords.append([])
-                # store pose anaylsis
-                elif line[0:9] == "ANALYSIS:":
-                    # storing interactions
-                    line = line.split("ANALYSIS:")[1]
-                    kw, info = line.split(None, 1)
-                    info = info.replace("{", "")
-                    info = info.replace("}", "")
-                    info = info.replace('"', "")
-                    if kw.lower() == "count":
-                        interactions[-1][kw.lower()] = int(
-                            [x.strip() for x in info.split(",")][0]
+        # divide
+        header_str, sep, body_str = file_as_string.partition("FINAL DOCKED STATE")
+
+        # parse header
+        for line in header_str.splitlines():
+            if line[0:11] == "Ligand file":
+                ligname = (
+                    line.split(":", 1)[1].split("/")[-1].split(".")[0].strip()
+                )  # remove path and file extension
+            # store receptor name and grid parameters
+            elif line[:13] == "Receptor name":
+                receptor = line.split()[2]
+            elif line[:21] == "Number of grid points":
+                npts = [
+                    pts.rstrip("\n").replace(" ", "")
+                    for pts in line.split(":")[1].split(",")
+                ]
+            elif line[:12] == "Grid spacing":
+                spacing = line.split()[2].rstrip("A")  # remove A unit from string
+            elif line[:11] == "Grid center":
+                center = [
+                    coord.rstrip("\n").replace(" ", "")
+                    for coord in line.split(":")[1].split(",")
+                ]
+            # store flexible residue identities and atomtypes
+            if "INPUT-FLEXRES-PDBQT:" in line:
+                if "ATOM" in line or "HETATM" in line:
+                    flexres_atomnames[-1].append(line[33:37])
+                    if (
+                        line[38:41] + ":" + line[42] + line[44:47]
+                        not in flexible_residues
+                    ):
+                        flexible_residues.append(
+                            line[38:41] + ":" + line[42] + line[44:47]
+                        )  # RES:<chain><resnum>
+                        flexres_startlines.add(line[21:53])  # save startline
+                # add new list for new flexres
+                elif "INPUT-FLEXRES-PDBQT: ROOT" in line:
+                    flexres_atomnames.append([])
+            # store number of runs
+            elif "Number of runs:" in line:
+                nruns = int(line.split()[3])
+                cluster_rmsds = list(range(nruns))
+                ref_rmsds = list(range(nruns))
+
+        # energy to variable table with nan ok/not ok
+        _ENERGY_SPECS = [
+            ("Estimated Free Energy of Binding", 7, scores, True),
+            ("Final Intermolecular Energy", 6, intermolecular_energy, False),
+            ("vdW + Hbond + desolv Energy", 8, vdw_hb_desolv, False),
+            ("Electrostatic Energy", 4, electrostatic, False),
+            ("Moving Ligand-Fixed Receptor", 5, flex_ligand, False),
+            ("Moving Ligand-Moving Receptor", 5, flexLigand_flexReceptor, False),
+            ("Final Total Internal Energy", 7, internal_energy, False),
+            ("Torsional Free Energy", 6, torsion, False),
+            ("Unbound System's Energy", 6, unbound_energy, False),
+        ]
+
+        # parse poses
+        inside_pose = False
+        inside_res = False
+        for line in (sep + body_str).splitlines():
+            if "FINAL DOCKED STATE" in line:
+                inside_pose = True
+                interactions.append({})
+                flexible_res_coords.append([])
+            # store pose analysis
+            elif line[0:9] == "ANALYSIS:":
+                line = line.split("ANALYSIS:")[1]
+                kw, info = line.split(None, 1)
+                info = info.replace("{", "").replace("}", "").replace('"', "")
+                if kw.lower() == "count":
+                    interactions[-1][kw.lower()] = int(
+                        [x.strip() for x in info.split(",")][0]
+                    )
+                else:
+                    interactions[-1][kw.lower()] = [x.strip() for x in info.split(",")]
+                if "COUNT" in line:
+                    interact_count = int(line.split()[1])
+                    pose_interact_count.append(str(interact_count))
+                    if interact_count == 0:
+                        pose_hb_counts.append("0")
+                elif "TYPE" in line:
+                    pose_hb_counts.append(line.count("H"))
+
+            # make new flexible residue list if in the coordinates for a flexible residue
+            if line[8:40] in flexres_startlines:
+                flexible_res_coords[-1].append([])
+                inside_res = True
+            elif STD_END in line:
+                inside_pose = False
+                inside_res = False
+                heavy_at_count_complete = True
+            elif "DOCKED: ROOT" in line:
+                inside_res = False
+
+            if (line[: len(STD_KW)] == STD_KW) and inside_pose:
+                # store the pose raw data
+                line = line.split(STD_KW)[1]
+                # store pose coordinates
+                if "ATOM" in line or "HETATM" in line:
+                    if inside_res:
+                        flexible_res_coords[-1][-1].append(
+                            [line[30:38], line[38:46], line[46:54]]
                         )
-                    else:
-                        interactions[-1][kw.lower()] = [
-                            x.strip() for x in info.split(",")
-                        ]
-
-                    if "COUNT" in line:
-                        interact_count = int(line.split()[1])
-                        pose_interact_count.append(str(interact_count))
-                        if interact_count == 0:
-                            pose_hb_counts.append("0")
-                    else:
-                        if "TYPE" in line:
-                            hb_count = line.count("H")
-                            pose_hb_counts.append(hb_count)
-
-                # make new flexible residue list if in the coordinates for a flexible residue
-                if line[8:40] in flexres_startlines:
-                    flexible_res_coords[-1].append([])
-                    inside_res = True
-                elif STD_END in line:
-                    inside_pose = False
-                    inside_res = False
-                    heavy_at_count_complete = True
-                elif "DOCKED: ROOT" in line:
-                    inside_res = False
-                if (line[: len(STD_KW)] == STD_KW) and inside_pose:
-                    # store the pose raw data
-                    line = line.split(STD_KW)[1]
-                    # store pose coordinates
-                    if "ATOM" in line or "HETATM" in line:
-                        if inside_res:
-                            flexible_res_coords[-1][-1].append(
-                                [line[30:38], line[38:46], line[46:54]]
-                            )
-                    # store pose data
-                    elif "Estimated Free Energy of Binding" in line:
-                        try:
-                            e = float(line.split()[7])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[6].lstrip("="))
-                            except ValueError:
+                else:
+                    for marker, idx, target, check_nan in _ENERGY_SPECS:
+                        if marker in line:
+                            e = self._parse_energy(line, idx, fname)
+                            if check_nan and np.isnan(e):
                                 raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
+                                    "Error! File contains NaN value for energy."
                                 )
-                        if np.isnan(e):
-                            raise ValueError(
-                                "Error! File contains NaN value for energy."
-                            )
-                        scores.append(e)
-                    elif "Final Intermolecular Energy" in line:
-                        try:
-                            e = float(line.split()[6])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[5].lstrip("="))
-                            except ValueError:
-                                raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
-                                )
-                        intermolecular_energy.append(e)
-                    elif "vdW + Hbond + desolv Energy" in line:
-                        try:
-                            e = float(line.split()[8])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[7].lstrip("="))
-                            except ValueError:
-                                raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
-                                )
-                        vdw_hb_desolv.append(e)
-                    elif "Electrostatic Energy" in line:
-                        try:
-                            e = float(line.split()[4])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[3].lstrip("="))
-                            except ValueError:
-                                raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
-                                )
-                        electrostatic.append(e)
-                    elif "Moving Ligand-Fixed Receptor" in line:
-                        try:
-                            e = float(line.split()[5])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[4].lstrip("="))
-                            except ValueError:
-                                raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
-                                )
-                        flex_ligand.append(e)
-                    elif "Moving Ligand-Moving Receptor" in line:
-                        try:
-                            e = float(line.split()[5])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[4].lstrip("="))
-                            except ValueError:
-                                raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
-                                )
-                        flexLigand_flexReceptor.append(e)
-                    elif "Final Total Internal Energy" in line:
-                        try:
-                            e = float(line.split()[7])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[6].lstrip("="))
-                            except ValueError:
-                                raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
-                                )
-                        internal_energy.append(e)
-                    elif "Torsional Free Energy" in line:
-                        try:
-                            e = float(line.split()[6])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[5].lstrip("="))
-                            except ValueError:
-                                raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
-                                )
-                        torsion.append(e)
-                    elif "Unbound System's Energy" in line:
-                        try:
-                            e = float(line.split()[6])
-                        except (
-                            ValueError
-                        ):  # catch off-by-one error if number is next to =
-                            try:
-                                e = float(line.split()[5].lstrip("="))
-                            except ValueError:
-                                raise ValueError(
-                                    "ERROR! Cannot parse {0} in {1}".format(line, fname)
-                                )
-                        unbound_energy.append(e)
-
-                    # update heavy atom count
-                    if heavy_at_count_complete:
-                        continue
-                    elif line[0:4] == "ATOM" or line[0:6] == "HETATM":
-                        # count heavy atoms
+                            target.append(e)
+                            break
+                # update heavy atom count
+                if not heavy_at_count_complete:
+                    if line[0:4] == "ATOM" or line[0:6] == "HETATM":
                         if not line[-2] == "HD":
                             heavy_at_count += 1
 
-                    continue
+            # store poses in each cluster in dictionary as list of ordered runs
+            elif "RANKING" in line:
+                cluster_num = int(line.split()[0]) - 1  # make it zero based integer
+                run = line.split()[2]
+                clusters[cluster_num].append(int(run))
+                cluster_rmsds[int(run) - 1] = float(
+                    line.split()[4]
+                )  # will be stored in order of runs
+                ref_rmsds[int(run) - 1] = float(line.split()[5])
 
-                # store poses in each cluster in dictionary as list of ordered runs
-                elif "RANKING" in line:
-                    cluster_num = int(line.split()[0]) - 1  # make it zero based integer
-                    run = line.split()[2]
-                    clusters[cluster_num].append(int(run))
-
-                    cluster_rmsds[int(run) - 1] = float(
-                        line.split()[4]
-                    )  # will be stored in order of runs
-                    ref_rmsds[int(run) - 1] = float(line.split()[5])
-
-        # ensure adta is complete
+        # ensure data is complete
         if (
             len(scores) == 0
             or len(intermolecular_energy) == 0
@@ -1012,7 +853,7 @@ class SDFMoleculeSupplier:  #
                 if pose_count > self.num_poses:
                     continue
 
-                results_dict = RESULTS_TEMPLATE.copy()
+                results_dict = results_row()
                 # remove coordinates and docking properties (retains other custom properties)
                 mol, mol_properties = prepare_mol_for_database(
                     mol, store_properties=["ligname", "docking_score", "pose_rank"]
