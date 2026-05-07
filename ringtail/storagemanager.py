@@ -1362,7 +1362,6 @@ class StorageManager(ABC):
             "R." + y_axis,
             "R." + "pose_id",
             "L." + "LigName",
-            # TODO rdbin
             "L." + "ligand_smile",
         )
         if limit:
@@ -1743,9 +1742,7 @@ class StorageManager(ABC):
         """
         # Build a flat map of column_name -> table from all queryable tables
         column_to_table = {
-            col: table
-            for table, cols in OUTFIELD_BY_TABLE.items()
-            for col in cols
+            col: table for table, cols in OUTFIELD_BY_TABLE.items() for col in cols
         }
 
         columns_by_table = {}

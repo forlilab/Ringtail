@@ -15,7 +15,7 @@ from .mpreaderwriter import Writer
 from .logutils import get_logger
 
 logger = get_logger(__name__)
-from .exceptions import MultiprocessingError, FileParsingError
+from .exceptions import MultiprocessingError
 import traceback
 from datetime import datetime
 import multiprocessing as mp

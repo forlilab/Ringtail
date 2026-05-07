@@ -168,7 +168,6 @@ class QueryBuilder:
         if self.selects:
             parts.extend(["SELECT", ", ".join(self.selects)])
 
-        # TODO gotta add some guards if I wanna use this loosey goosey
         if self.delete_from:
             parts.append(self.delete_from)
 

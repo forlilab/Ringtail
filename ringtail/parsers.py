@@ -324,7 +324,9 @@ class VinaMoleculeSupplier:
         pose_coordinates = pick_best_poses(coordinates, self.num_poses)
 
         if calculate_interactions and not interaction_finder:
-            interaction_finder = make_interaction_finder(receptor_string, interaction_cutoffs)
+            interaction_finder = make_interaction_finder(
+                receptor_string, interaction_cutoffs
+            )
 
         if interaction_finder:
             pose_identifiers = [
@@ -1047,7 +1049,9 @@ class SDFMoleculeSupplier:  #
                 )
                 # calculate interactions
                 if calculate_interactions and not interaction_finder:
-                    interaction_finder = make_interaction_finder(receptor_string, interaction_cutoffs)
+                    interaction_finder = make_interaction_finder(
+                        receptor_string, interaction_cutoffs
+                    )
 
                 if interaction_finder:
                     poseids_coordinates = [
@@ -1230,7 +1234,6 @@ def prepare_mol_for_database(
     """
     In this method right now the pose coordinates assumes one or more conformers,
     while the property assumes only one mol with non-list property
-    #TODO probably make two different methods
 
     Args:
         mol (Chem.Mol): _description_
@@ -1255,7 +1258,6 @@ def prepare_mol_for_database(
                 )
                 mol.ClearProp(prop_name)
             else:
-                # TODO raise error if missing ligand name?
                 properties.update({db_column: None})
     return mol, properties
 

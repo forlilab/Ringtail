@@ -33,21 +33,29 @@ class DockingFileReader(mp.Process):
         queueIn (multiprocess.Queue): current queue for the processor/file reader
         queueOut (multiprocess.Queue): queue for the processor/file reader after adding or removing an item
         pipe_conn (multiprocess.Pipe): pipe connection to the reader
-        #TODO
+        interaction_finder (InteractionFinder): class that calculates interactions
+        exception:  for surfacing up an excpetion without crashing the program
+        docking_mode (str): docking mode which determines which parser to use
+        target_name(str): receptor name to check against certain docking mode files to ensure they belong to the correct target
+        num_poses (int): number of poses to store, -1 means all
+        interaction_tolerance (float): for docking clusters (eg adgpu) if wanting to store interactions for poses that are part of a cluster
+        interaction_cutoffs (list[float,float]): interaction cutoff distances for hb and vdw if calculating interactions
+        calculate_interactions (bool):
+        receptor_string (str): string representation of receptor to use for calculating interactions
     """
 
     def __init__(
         self,
-        queueIn,
-        queueOut,
+        queueIn: mp.Queue,
+        queueOut: mp.Queue,
         pipe_conn,
-        docking_mode,
-        target_name,
-        num_poses,
+        docking_mode: str,
+        target_name: str,
+        num_poses: int,
         interaction_tolerance,
-        calculate_interactions,
-        interaction_cutoffs,
-        receptor_string,
+        calculate_interactions: float,
+        interaction_cutoffs: list[float, float],
+        receptor_string: str,
     ):
 
         # initialize the parent class to inherit all multiprocess methods

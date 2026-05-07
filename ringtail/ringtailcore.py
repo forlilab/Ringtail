@@ -1478,7 +1478,6 @@ class RingtailCore:
         Returns:
             tuple[str,str, str]: receptor name and receptor blob and receptor serialized polymer as strings
         """
-        # TODO redo this method
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
             polymer_json = rec_data.get("polymer")
@@ -2591,7 +2590,7 @@ class RingtailCore:
                 if not flexres_pose_coordinates:
                     flexres_pose_coordinates = "[]"
                 flexres_pose_coordinates = json.loads(flexres_pose_coordinates)
-                # TODO make a meeko method?
+
                 if mol.GetNumAtoms() != len(pose_coordinates):
                     logger.error(
                         f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}"

@@ -25,10 +25,19 @@ from .storagemanager import StorageManager
 from .querybuilder import QueryBuilderDuck
 from .schema import (
     build_create_table,
-    LIGANDS_SCHEMA, RESULTS_SCHEMA, RECEPTORS_SCHEMA, DB_PROPERTIES_SCHEMA,
-    INTERACTION_INDICES_SCHEMA, INTERACTIONS_SCHEMA, FILTERS_SCHEMA,
-    FILTERED_POSES_SCHEMA, CLUSTERS_SCHEMA, CLUSTER_GROUPS_SCHEMA,
-    POSE_CLUSTERS_SCHEMA, MERGED_TABLES_SCHEMA, PK_CONVERSIONS_SCHEMA,
+    LIGANDS_SCHEMA,
+    RESULTS_SCHEMA,
+    RECEPTORS_SCHEMA,
+    DB_PROPERTIES_SCHEMA,
+    INTERACTION_INDICES_SCHEMA,
+    INTERACTIONS_SCHEMA,
+    FILTERS_SCHEMA,
+    FILTERED_POSES_SCHEMA,
+    CLUSTERS_SCHEMA,
+    CLUSTER_GROUPS_SCHEMA,
+    POSE_CLUSTERS_SCHEMA,
+    MERGED_TABLES_SCHEMA,
+    PK_CONVERSIONS_SCHEMA,
     STATUS_TABLE_SCHEMA,
 )
 
@@ -599,7 +608,9 @@ class StorageManagerDuckDB(StorageManager):
 
     def _create_interaction_index_table(self):
         """Creates a table describing unique interactions in the database."""
-        for sql in build_create_table("Interaction_indices", INTERACTION_INDICES_SCHEMA, "duckdb"):
+        for sql in build_create_table(
+            "Interaction_indices", INTERACTION_INDICES_SCHEMA, "duckdb"
+        ):
             self.db_query(sql)
 
     def _create_interaction_table(self):
@@ -658,7 +669,9 @@ class StorageManagerDuckDB(StorageManager):
         """
         for sql in build_create_table("Filters", FILTERS_SCHEMA, "duckdb"):
             self.db_query(sql)
-        for sql in build_create_table("Filtered_poses", FILTERED_POSES_SCHEMA, "duckdb"):
+        for sql in build_create_table(
+            "Filtered_poses", FILTERED_POSES_SCHEMA, "duckdb"
+        ):
             self.db_query(sql)
 
     def _create_cluster_tables(self):
@@ -667,7 +680,9 @@ class StorageManagerDuckDB(StorageManager):
         """
         for sql in build_create_table("Clusters", CLUSTERS_SCHEMA, "duckdb"):
             self.db_query(sql)
-        for sql in build_create_table("Cluster_groups", CLUSTER_GROUPS_SCHEMA, "duckdb"):
+        for sql in build_create_table(
+            "Cluster_groups", CLUSTER_GROUPS_SCHEMA, "duckdb"
+        ):
             self.db_query(sql)
         for sql in build_create_table("Pose_clusters", POSE_CLUSTERS_SCHEMA, "duckdb"):
             self.db_query(sql)
@@ -831,9 +846,13 @@ class StorageManagerDuckDB(StorageManager):
             StorageError
         """
         try:
-            for sql in build_create_table("merged_tables", MERGED_TABLES_SCHEMA, "duckdb"):
+            for sql in build_create_table(
+                "merged_tables", MERGED_TABLES_SCHEMA, "duckdb"
+            ):
                 self.conn.execute(sql)
-            for sql in build_create_table("PK_conversions", PK_CONVERSIONS_SCHEMA, "duckdb"):
+            for sql in build_create_table(
+                "PK_conversions", PK_CONVERSIONS_SCHEMA, "duckdb"
+            ):
                 self.conn.execute(sql)
 
             # If table already has data, reset sequence to continue from max
@@ -842,7 +861,9 @@ class StorageManagerDuckDB(StorageManager):
             ).fetchone()[0]
             if max_id > 0:
                 self.conn.execute("DROP SEQUENCE seq_merged_tables_merge_id;")
-                self.conn.execute(f"CREATE SEQUENCE seq_merged_tables_merge_id START {max_id + 1};")
+                self.conn.execute(
+                    f"CREATE SEQUENCE seq_merged_tables_merge_id START {max_id + 1};"
+                )
 
         except Exception as e:
             raise MergeError(e) from e
@@ -1115,7 +1136,6 @@ class StorageManagerDuckDB(StorageManager):
         """
 
         # Adding new data to Interactions table with (updated) pose_id and interaction_id
-        # TODO #BUG I think the issue is here, because it has interacton_pose_id
         insert_interactions = """
         INSERT INTO Interactions (
         pose_id,
@@ -1959,7 +1979,6 @@ class StorageManagerDuckDB(StorageManager):
         """
         try:
             conn = duckdb.connect(self.db_file)
-            # TODO database settings?
         except duckdb.OperationalError as e:
             raise DatabaseConnectionError(
                 "Error while establishing database connection"
@@ -1974,7 +1993,6 @@ class StorageManagerDuckDB(StorageManager):
             attached_db (str, optional): alias of attached database. Defaults to None.
             vacuum (bool, optional): whether or not to vacuum file to save space. Defaults to None.
         """
-        # TODO maybe, check attached + vacuuming
 
         # close db itself
         logger.debug(f"Closing database connection {self.conn}")
