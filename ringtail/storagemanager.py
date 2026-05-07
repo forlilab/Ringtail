@@ -908,6 +908,9 @@ class StorageManager(ABC):
                 query.ORDER_BY(order_by)
         return query.build()[0]
 
+    def _execute_to_df(self, sql: str) -> pd.DataFrame:
+        return pd.read_sql_query(sql, self.conn)
+
     def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
         """Returns a panda dataframe of table or query given as requested_data
 
@@ -928,9 +931,9 @@ class StorageManager(ABC):
                 query.WHERE(f"pose_id in {requested_data}")
             else:
                 query.SELECT("*").FROM(requested_data)
-            return pd.read_sql_query(query.build()[0], self.conn)
+            return self._execute_to_df(query.build()[0])
         else:
-            return pd.read_sql_query(requested_data, self.conn)
+            return self._execute_to_df(requested_data)
 
     def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
         """

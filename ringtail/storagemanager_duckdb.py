@@ -71,6 +71,9 @@ class StorageManagerDuckDB(StorageManager):
         super().__init__()
         self.conn: duckdb.DuckDBPyConnection
 
+    def _execute_to_df(self, sql: str) -> pd.DataFrame:
+        return self.conn.execute(sql).df()
+
     # region Methods for creating and inserting into tables the database
 
     def _create_ligands_table(self, name="Ligands"):
