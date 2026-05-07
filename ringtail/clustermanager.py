@@ -16,7 +16,7 @@ class MorganFingerprintCluster:
     Attributes:
         unclustered_data: identifiers for the data being clustered
         rating_data: data used to identify the top scoring/representative item per cluster
-        cutoff: cutoff distance (å) for each cluster
+        cutoff: cutoff for each cluster
         rdmols: of the data, will be used to create the bitvectors
     """
 
@@ -86,7 +86,7 @@ class InteractionBitvectorCluster:
     Attributes:
         unclustered_data: identifiers for the data being clustered
         rating_data: data used to identify the top scoring/representative item per cluster
-        cutoff: cutoff distance (å) for each cluster
+        cutoff: cutoff for each cluster
         bitvectors: created based on interactions
     """
 
@@ -172,9 +172,14 @@ def butina_cluster_fingerprints(fps, cutoff) -> tuple[tuple]:
     dists = []
     nfps = len(fps)
 
+    n_dists = nfps * (nfps - 1) // 2
+    dists = np.empty(n_dists, dtype=np.float64)
+    idx = 0
     for i in range(1, nfps):
         sims = DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
-        dists.extend([1 - x for x in sims])
+        n = i
+        dists[idx : idx + n] = 1.0 - np.array(sims)
+        idx += n
 
     # now cluster the data:
     cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)

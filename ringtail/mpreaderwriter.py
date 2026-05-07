@@ -105,7 +105,10 @@ class DockingFileReader(mp.Process):
                         "interaction_finder": interaction_finder,
                     }
                 )
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    f"InteractionFinder setup failed; interactions will not be calculated. Reason: {e}"
+                )
                 common_processing_vars.update(
                     {
                         "calculate_interactions": False,
@@ -252,10 +255,6 @@ class Writer(mp.Process):
                 if self.counter >= self.chunk_size:
                     self._log_progress()
                     self.write_to_storage()
-            if self.counter > 0:
-                logger.info("Performing final database write")
-                self.write_to_storage()
-                logger.info("File processing completed")
 
         except Exception:
             tb = traceback.format_exc()
