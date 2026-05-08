@@ -1801,9 +1801,11 @@ class StorageManagerSQLite(StorageManager):
             self.logger.debug("Creating columns index...")
 
             cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_results ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
+                "CREATE INDEX IF NOT EXISTS ak_results ON Results(docking_score, leff)"
             )
-            cur.execute("CREATE INDEX IF NOT EXISTS ak_poseid ON Results(Pose_id)")
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS ak_results_ligname ON Results(LigName)"
+            )
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
             )
@@ -3411,6 +3413,11 @@ class StorageManagerSQLite(StorageManager):
                 cur.execute(f"DROP VIEW IF EXISTS {v[0]};")
             cur.execute("DELETE FROM Bookmarks;")
             cur.execute("DROP TABLE IF EXISTS Ligand_clusters;")
+            # Drop indices that are only used for reading/querying
+            cur.execute("DROP INDEX IF EXISTS ak_results;")
+            cur.execute("DROP INDEX IF EXISTS ak_results_ligname;")
+            cur.execute("DROP INDEX IF EXISTS ak_poseid;")
+            cur.execute("DROP INDEX IF EXISTS ak_interactions;")
         except Exception as e:
             raise MergeError(
                 f"Error during deletion of incompatible tables: {e}"
@@ -3779,6 +3786,8 @@ class StorageManagerSQLite(StorageManager):
         Completes the merging process by creating empty filter tables, as well
         as resetting any auto incremented values for safety
         """
+        # Recreate indices dropped in prepare_for_merging() before VACUUM/REINDEX
+        self._create_indices()
         self._vacuum()
         # rebuild indices in main table
         self.conn.execute("REINDEX;")
