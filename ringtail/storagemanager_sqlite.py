@@ -746,6 +746,13 @@ class StorageManagerSQLite(StorageManager):
         self._delete_table("Clusters")
         self._delete_table("Filtered_poses")
         self._delete_table("Filters")
+        # Drop user-created indices on tables that grow during merge
+        for table in ("Results", "Interactions"):
+            indices = self.db_query(
+                f"SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='{table}' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+            for (index_name,) in indices:
+                self.db_query(f"DROP INDEX IF EXISTS {index_name}")
 
     def _merging_receptors_compatible(self) -> bool:
         """

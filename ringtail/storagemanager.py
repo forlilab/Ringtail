@@ -736,6 +736,8 @@ class StorageManager(ABC):
         Completes the merging process by creating empty filter tables, as well
         as resetting any auto incremented values for safety
         """
+        # Rebuild indices dropped in prepare_for_merging()
+        self._create_indices()
         self._create_filtering_tables()
         self._sync_auto_increment_state()
 
