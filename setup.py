@@ -21,7 +21,7 @@ def find_files(directory):
 
 setup(
     name="ringtail",
-    version="2.3",
+    version="2.3.0",
     author="Forli Lab",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/Ringtail",
