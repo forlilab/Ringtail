@@ -25,7 +25,8 @@ def main():
         sys.tracebacklimit = 0
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
-    except Exception as e:
+    except BaseException as e:
+        traceback.print_exc()
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
 
@@ -105,7 +106,8 @@ def main():
             if cmdinput.output_options["pymol"]:
                 rtcore.display_pymol(bookmark_name=bookmark_name)
 
-    except Exception as e:
+    except BaseException as e:
+        traceback.print_exc()
         logger.critical("ERROR: " + str(e))
         sys.exit(1)
 
