@@ -129,7 +129,7 @@ class DockingFileReader(multiprocess.Process):
 
                 # generate CPU LOAD
                 # parser depends on requested docking_mode
-                if self.docking_mode == "dlg":
+                if self.docking_mode == "adgpu":
                     parsed_file_dict = parse_single_dlg(next_task)
                     # find the run number for the best pose in each cluster for adgpu
                     parsed_file_dict = self._find_best_cluster_poses(parsed_file_dict)
@@ -147,7 +147,7 @@ class DockingFileReader(multiprocess.Process):
                 if (
                     parsed_file_dict["receptor"] != self.target
                     and self.target is not None
-                    and self.docking_mode == "dlg"
+                    and self.docking_mode == "adgpu"
                 ):
                     raise FileParsingError(
                         "Receptor name {0} in {1} does not match given target name {2}. Please ensure that this file belongs to the current virtual screening.".format(
@@ -161,20 +161,28 @@ class DockingFileReader(multiprocess.Process):
                 )
                 # Calculate interactions if requested
                 if self.add_interactions:
-                    try:
-                        from .receptormanager import ReceptorManager as rm
+                    from .receptormanager import ReceptorManager as rm
 
-                        with self.storageman:
-                            # grab receptor info from database, this assumes there is only one receptor in the database
-                            receptor_blob = self.storageman.fetch_receptor_objects()[0][
-                                1
-                            ]  # method returns and iter of tuples, blob is the second tuple element in the first list element
-                            # convert receptor blob to string
-                            receptor_string = rm.blob2str(receptor_blob)
-                    except:
-                        raise ResultsProcessingError(
-                            "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                    if self.receptor_file:
+                        receptor_string = rm.blob2str(
+                            rm.make_receptor_blobs([self.receptor_file])[0][0]
                         )
+                    else:
+                        # look for the receptor in the database
+                        try:
+                            with self.storageman:
+                                # grab receptor info from database, this assumes there is only one receptor in the database
+                                receptor_blob = self.storageman.fetch_receptor_objects()[
+                                    0
+                                ][
+                                    1
+                                ]  # method returns and iter of tuples, blob is the second tuple element in the first list element
+                                # convert receptor blob to string
+                                receptor_string = rm.blob2str(receptor_blob)
+                        except:
+                            raise ResultsProcessingError(
+                                "add_interactions was requested, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
+                            )
                     if self.interaction_finder is None:
                         self.interaction_finder = InteractionFinder(
                             receptor_string, self.interaction_cutoffs
@@ -250,7 +258,7 @@ class DockingFileReader(multiprocess.Process):
         """
         if self.store_all_poses_flag:
             poses_to_save = ligand_dict["sorted_runs"]
-        elif self.docking_mode == "dlg":
+        elif self.docking_mode == "adgpu":
             # will only select top n clusters. Default 3
             poses_to_save = ligand_dict["cluster_top_poses"][: self.max_poses]
         # if not adgpu, save top n poses
@@ -284,7 +292,14 @@ class Writer(multiprocess.Process):
     into datbase"""
 
     def __init__(
-        self, queue, num_readers, pipe_conn, chunksize, storageman, docking_mode
+        self,
+        queue,
+        num_readers,
+        pipe_conn,
+        chunksize,
+        storageman,
+        docking_mode,
+        duplicate_handling,
     ):
         multiprocess.Process.__init__(self)
         self.queue = queue
@@ -306,6 +321,7 @@ class Writer(multiprocess.Process):
         self.num_files_written = 0
         self.time0 = time.perf_counter()
         self.last_write_time = 0
+        self.duplicate_handling = duplicate_handling
 
     def run(self):
         """Method overload from parent class. This is where the task of this class
@@ -374,6 +390,7 @@ class Writer(multiprocess.Process):
             self.interactions_list,
             self.receptor_array,
             self.first_insert,
+            duplicate_handling=self.duplicate_handling,
         )
         # So at this point the ligand array is empty
         if self.first_insert:  # will only insert receptor for first insertion

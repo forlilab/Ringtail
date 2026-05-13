@@ -12,8 +12,8 @@ import pytest
 
 @pytest.fixture
 def countrows():
-    def __dbconnect(query):
-        conn = sqlite3.connect("output.db")
+    def __dbconnect(query, db_name="output.db"):
+        conn = sqlite3.connect(db_name)
         curs = conn.cursor()
         curs.execute(query)
         count = curs.fetchone()[0]
@@ -24,7 +24,7 @@ def countrows():
     return __dbconnect
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture
 def dbquery():
     conn = sqlite3.connect("output.db")
     curs = conn.cursor()
@@ -40,15 +40,8 @@ def dbquery():
 
 class TestRingtailCore:
 
-    def test_get_defaults(self):
-        os.system("rm output.db output_log.txt")
-        from ringtail import ringtailoptions
-
-        defaults = RingtailCore.default_dict()
-        object_dict = ringtailoptions.ResultsProcessingOptions().todict()
-        assert object_dict.items() <= defaults.items()
-
     def test_add_folder(self, countrows):
+        os.system("rm flexres.db output.db *.log")
         rtc = RingtailCore(db_file="output.db")
         rtc.add_results_from_files(file_path="test_data/adgpu/group1")
         count = countrows("SELECT COUNT(*) FROM Ligands")
@@ -104,7 +97,7 @@ class TestRingtailCore:
 
     def test_filter(self):
         rtc = RingtailCore(db_file="output.db")
-        count_ligands_passing = rtc.filter(
+        count_ligands_passing, _ = rtc.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -124,7 +117,7 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
         # get current bookmark count
         bookmarks_old = rtc.get_bookmark_names()
-        count_ligands_passing = rtc.filter(
+        count_ligands_passing, _ = rtc.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -148,20 +141,20 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
 
         # tests for partial names
-        count_ligands_passing = rtc.filter(ligand_name=["88"])
+        count_ligands_passing, _ = rtc.filter(ligand_name=["88"])
         assert count_ligands_passing == 7
 
         # test substructure search (default 'OR' ligand_operator)
-        count_ligands_passing = rtc.filter(ligand_substruct=["C=O", "CC(C)(C)"])
+        count_ligands_passing, _ = rtc.filter(ligand_substruct=["C=O", "CC(C)(C)"])
         assert count_ligands_passing == 90
 
         # test substructure search (default 'OR' ligand_operator)
-        count_ligands_passing = rtc.filter(
+        count_ligands_passing, _ = rtc.filter(
             ligand_substruct=["C=O", "CC(C)(C)"], ligand_operator="AND"
         )
         assert count_ligands_passing == 18
 
-        count_ligands_passing = rtc.filter(
+        count_ligands_passing, _ = rtc.filter(
             ligand_substruct_pos=[
                 ["[C][Oh]", 1, 10, 102, 106, 154],
                 ["C=O", 1, 10, 102, 106, 154],
@@ -171,7 +164,7 @@ class TestRingtailCore:
 
     def test_all_filters(self):
         rtc = RingtailCore(db_file="output.db")
-        count_ligands_passing = rtc.filter(
+        count_ligands_passing, _ = rtc.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
@@ -186,8 +179,10 @@ class TestRingtailCore:
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7)
         log_file_name = "output_log_test.txt"
-        rtc.set_output_options(log_file=log_file_name)
-        rtc.get_previous_filter_data("delta, ref_rmsd", bookmark_name="passing_results")
+
+        rtc.get_previous_filter_data(
+            "delta, ref_rmsd", bookmark_name="passing_results", log_file=log_file_name
+        )
 
         with open(log_file_name) as f:
             file_contents = f.read()
@@ -195,8 +190,8 @@ class TestRingtailCore:
 
         final_line = linecache.getline(log_file_name, 10)
 
-        assert "'11991', '11991', 0.0, 226.06" in file_contents
-        assert "'3961', '3961', 0.0, 215.96" in file_contents
+        assert "'11991', 0.0, 226.06" in file_contents
+        assert "'3961', 0.0, 215.96" in file_contents
         assert final_line == "***************\n"
 
         os.system(("rm " + log_file_name))
@@ -232,8 +227,8 @@ class TestRingtailCore:
     def test_write_sdfs(self):
         sdf_path = "sdf_files"
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7)
-        rtc.write_molecule_sdfs(sdf_path, all_in_one=False)
+        rtc.filter(eworst=-7, log_file="output_log.txt", bookmark_name="sdf_export")
+        rtc.write_molecule_sdfs(sdf_path, all_in_one=False, bookmark_name="sdf_export")
 
         # ensure correct number of files written
         sdf_files = os.listdir(sdf_path)
@@ -263,12 +258,11 @@ class TestRingtailCore:
         os.rmdir(sdf_path)
 
     def test_pymol(self):
-        # will not add a test for now, as I cannot figure out an unambiguous, lightweight way to test
-        pass
+        pytest.importorskip("pymol")
 
     def test_export_csv(self):
         rtc = RingtailCore(db_file="output.db")
-        rtc.filter(eworst=-7)
+        rtc.filter(eworst=-7, log_file="dont_delete.txt")
         rtc.export_csv("Ligands", "Ligands.csv", True)
 
         assert os.path.exists("Ligands.csv")
@@ -286,16 +280,19 @@ class TestRingtailCore:
         os.system("rm " + receptor_file)
 
     def test_generate_interactions_prepare_filters(self):
+        from ringtail.ringtailoptions import Filters
+
         test_filters = []
         rtc = RingtailCore()
-        rtc.docking_mode = "dlg"
-        rtc.set_filters(
-            hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
-            vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
+        filters = Filters(
+            {
+                "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+                "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
+            }
         )
-        interaction_combs = rtc._generate_interaction_combinations(1)
+        interaction_combs = rtc._generate_interaction_combinations(filters.asdict(), 1)
         for ic in interaction_combs:
-            nufilter = rtc._prepare_filters_for_storageman(ic)
+            nufilter = rtc._prepare_filters_for_storageman(filters.asdict(), ic)
             test_filters.append(nufilter)
 
         assert {
@@ -401,15 +398,16 @@ class TestRingtailCore:
         assert len(test_filters) == 5
 
     def test_logfile_write(self):
-        rtc = RingtailCore("output.db")
-        assert os.path.exists("output_log.txt")
+        assert os.path.exists("dont_delete.txt")
 
-        with open("output_log.txt") as f:
+        with open("dont_delete.txt") as f:
             for line_no, line_content in enumerate(f):
                 if line_no == 28:
                     break
 
         assert line_content == "'11128', -7.25\n"
+
+        os.system("rm dont_delete.txt")
 
     def test_write_flexres_pdb(self):
         import meeko
@@ -449,15 +447,15 @@ class TestRingtailCore:
 
     def test_plot(self):
         rtcore = RingtailCore(db_file="output.db")
-        rtcore.filter(eworst=-7)
-        rtcore.plot()
+        rtcore.filter(eworst=-7, bookmark_name="plotting")
+        rtcore.plot(bookmark_name="plotting")
         assert os.path.isfile("scatter.png") == True
         os.system("rm scatter.png")
 
     def test_export_bookmark_db(self):
         rtc = RingtailCore(db_file="output.db")
         rtc.filter(eworst=-7)
-        bookmark_db_name = rtc.export_bookmark_db()
+        bookmark_db_name = rtc.export_bookmark_db("passing_results")
 
         assert os.path.exists(bookmark_db_name)
 
@@ -545,7 +543,9 @@ class TestRingtailCore:
             store_all_poses=True,
             receptor_file="test_data/reactive/4j8m_m_rigid.pdbqt",
         )
-        count_ligands_passing = rtc.filter(reactive_interactions=[("A:TYR:212:", True)])
+        count_ligands_passing, _ = rtc.filter(
+            reactive_interactions=[("A:TYR:212:", True)]
+        )
 
         os.system("rm output.db")
 
@@ -556,8 +556,8 @@ class TestVinaHandling:
 
     def test_vina_file_add(self, countrows):
         vina_path = "test_data/vina"
-        rtc = RingtailCore("output.db")
-        rtc.docking_mode = "vina"
+        rtc = RingtailCore("output.db", docking_mode="vina")
+
         rtc.add_results_from_files(
             file_path=vina_path,
             file_pattern="*.pdbqt*",
@@ -608,9 +608,11 @@ class TestVinaHandling:
         rtc = RingtailCore(
             db_file="output.db", docking_mode="vina", logging_level="DEBUG"
         )
-        rtc.add_results_from_files(file="test_data/vina/sample-result.pdbqt")
+        rtc.add_results_from_files(
+            file="test_data/vina/sample-result.pdbqt", add_interactions=False
+        )
 
-        warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is dlg."
+        warning_string = "The following database properties do not agree with the properties last used for this database: \nCurrent docking mode is vina but last used docking mode of database is adgpu."
         log_file = rtc.logger._log_fp.baseFilename
         with open(log_file, "r") as f:
             if warning_string in f.read():
@@ -625,7 +627,7 @@ class TestVinaHandling:
 
 class TestStorageMan:
 
-    def test_storageman_setup(self):
+    def test_fetch_summary_data(self):
         rtc = RingtailCore("output.db")
         rtc.add_results_from_files(
             file_list="test_data/filelist1.txt",
@@ -633,24 +635,6 @@ class TestStorageMan:
             receptor_file="test_data/adgpu/4j8m.pdbqt",
             save_receptor=True,
         )
-
-        storageman_attributes = {
-            "duplicate_handling": rtc.storageman.duplicate_handling,
-            "filter_bookmark": rtc.storageman.filter_bookmark,
-            "overwrite": rtc.storageman.overwrite,
-            "order_results": rtc.storageman.order_results,
-            "outfields": rtc.storageman.outfields,
-            "output_all_poses": rtc.storageman.output_all_poses,
-            "mfpt_cluster": rtc.storageman.mfpt_cluster,
-            "interaction_cluster": rtc.storageman.interaction_cluster,
-            "bookmark_name": rtc.storageman.bookmark_name,
-        }
-        defaults = RingtailCore.default_dict()
-        # ensure defaults values are set correctly and do not change during processing
-        assert storageman_attributes.items() <= defaults.items()
-
-    def test_fetch_summary_data(self):
-        rtc = RingtailCore("output.db")
         with rtc.storageman:
             summ_dict = rtc.storageman.fetch_summary_data()
         assert summ_dict == {
@@ -674,7 +658,7 @@ class TestStorageMan:
             file_path="test_data/adgpu/group2",
         )
         rtc.filter(
-            eworst=-3,
+            eworst=-3.0,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True)],
         )
@@ -725,32 +709,6 @@ class TestLogger:
 
 
 class TestOptions:
-    def test_option_error(self):
-        from ringtail import exceptions as e
-
-        with pytest.raises(e.OptionError):
-            rtc = RingtailCore()
-            rtc.filter(eworst="a")
-
-    def test_object_checks(self):
-        # checking that incompatible options are handled
-        rtc = RingtailCore()
-        rtc.set_filters(score_percentile=20)
-        assert rtc.filters.eworst == None
-        assert rtc.filters.score_percentile == 20
-
-        # conflicting options, score percentile should be set to none
-        rtc.set_filters(eworst=-6)
-        assert rtc.filters.eworst == -6
-        assert rtc.filters.score_percentile == None
-
-    def test_set_order(self):
-        rtc = RingtailCore()
-        rtc.set_filters(dict={"eworst": -5})
-        assert rtc.filters.eworst == -5
-        # ensure single options overwrite dict options
-        rtc.set_filters(eworst=-6, dict={"eworst": -5})
-        assert rtc.filters.eworst == -6
 
     def test_overwrite_db(self, countrows):
         rtc = RingtailCore()
@@ -768,3 +726,60 @@ class TestOptions:
     def test_remove_test_log_files(self):
         # Alter this method if you wish to not delete all log files after testing automatically
         os.system("rm *_ringtail.log")
+
+
+class TestMergeDB:
+
+    def test_db_write(self, countrows):
+        rtc1 = RingtailCore("primary.db")
+        rtc1.add_results_from_files("test_data/adgpu/group1/1451.dlg.gz")
+
+        rtc2 = RingtailCore("secondary.db")
+        rtc2.add_results_from_files("test_data/adgpu/group1/1620.dlg.gz")
+
+        rtc3 = RingtailCore("tertiary.db")
+        rtc3.add_results_from_files("test_data/adgpu/group1/1751.dlg.gz")
+
+        # they should all have one ligand each
+        assert (
+            countrows("SELECT COUNT(*) FROM Ligands", "primary.db")
+            == countrows("SELECT COUNT(*) FROM Ligands", "secondary.db")
+            == countrows("SELECT COUNT(*) FROM Ligands", "tertiary.db")
+            == 1
+        )
+
+    def test_before_merge(self, countrows):
+        rtc1 = RingtailCore("primary.db")
+        # should not be any poses in this interval
+        count, _ = rtc1.filter(eworst=-2, ebest=-5, output_all_poses=True)
+        assert count == 0
+        count, _ = rtc1.filter(eworst=-5, output_all_poses=True)
+        assert count == 3
+        assert countrows("SELECT COUNT(*) FROM passing_results", "primary.db") == 3
+
+    def test_after_merge(self, countrows):
+        rtc1 = RingtailCore("primary.db")
+        rtc1.merge_databases("secondary.db", False)
+        rtc1.merge_databases("tertiary.db", False)
+        # this should add two more ligands
+        assert countrows("SELECT COUNT(*) FROM Ligands", "primary.db") == 3
+        # should now be data in this interval
+        count, _ = rtc1.filter(eworst=-2, ebest=-5)
+        assert count == 2
+
+    def test_check_PKs(self, countrows):
+        # get best ranked pose id in secondary database for ligand 1620
+        secondary_db_pose_as_main = countrows(
+            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND LigName = '1620'",
+            "secondary.db",
+        )
+        assert secondary_db_pose_as_main == 1
+
+        # compare to pose id for best ranked pose for same ligand in the merged database
+        secondary_db_pose_as_merged = countrows(
+            "SELECT Pose_ID FROM Results WHERE pose_rank = 1 AND LigName = '1620'",
+            "primary.db",
+        )
+        assert secondary_db_pose_as_merged != secondary_db_pose_as_main
+
+        os.system("rm primary.db secondary.db tertiary.db")

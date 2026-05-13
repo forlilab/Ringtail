@@ -5,25 +5,6 @@
 #
 
 
-def split_dict(dict: dict, items: list) -> tuple:
-    """Utility method that takes one dictionary and splits it into two based on the listed keys
-
-    Args:
-        dict (dict): original dictionary
-        items (list): ist of keys to use for separation
-
-    Returns:
-        tuple: original dict minus the removed items and new dict containing the items removed from the original dict
-    """
-
-    new_dict = {}
-
-    for key in items:
-        new_dict[key] = dict.pop(key)
-
-    return dict, new_dict
-
-
 def caller_info(skip=2):
     import inspect
 
@@ -94,3 +75,25 @@ def numlist2str(list: list, separator: str) -> str:
         str: list as a string separated by separator
     """
     return separator.join([str(x) for x in list])
+
+
+def iterate_nested(obj):
+    """
+    File inputs can come in multiple levels of nested lists, this method unpacks them
+
+    Args:
+        obj (list[list[list[etc]]]): None or nested lists
+
+    Returns:
+        None: if input is None
+
+    Yields:
+        str: should be unpacked paths to docking results
+    """
+    if obj is None:
+        return None
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from iterate_nested(item)
+    else:
+        yield obj

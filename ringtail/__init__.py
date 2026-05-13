@@ -11,7 +11,6 @@ from .mpmanager import MPManager
 from .mpreaderwriter import DockingFileReader, Writer
 from .parsers import parse_single_dlg, parse_vina_result
 from .receptormanager import ReceptorManager
-from .resultsmanager import ResultsManager
 from .ringtailcore import RingtailCore
 from .ringtailoptions import *
 
@@ -41,7 +40,6 @@ __all__ = [
     "parse_single_dlg",
     "parse_vina_result",
     "ReceptorManager",
-    "ResultsManager",
     "RingtailCore",
     "OutputManager",
     "InteractionFinder",

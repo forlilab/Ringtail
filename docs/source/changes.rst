@@ -3,6 +3,19 @@
 Changes in Ringtail
 ######################
 
+Changes in 2.3.0: New merge database functionality and bug fixes
+*****************************************************************
+Enhancements
+============
+* New CLI (`rt_merge`) and API for merge two or more databases, for example if creating multiple databases per receptor in parallell and wanting to combine them to one
+* Create new database from bookmark data subset has been sped up significantly
+* Crossrefering databases has been sped up significantly, as well as some added functionality like various export options
+
+Bug fixes
+=========
+* Checks for poses in bookmark before attempting to export bookmark/subset database
+* Only writes an output log file if requested
+* `--export_bookmark_csv` can now be used as a flag if exporting the bookmark filtered in the same command, otherwise as before by specifying bookmark/table after the tag
 
 Changes in 2.2.0: new API method for flex res receptor export and bug fixes
 **************************************************************************

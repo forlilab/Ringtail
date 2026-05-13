@@ -53,6 +53,8 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if self.log_file is None:
+            return
         self.log_file = open(
             self.log_file, "w"
         )  # makes log_file attribute a file pointer from the string path name
@@ -88,13 +90,15 @@ class OutputManager:
         """
         try:
             time0 = time.perf_counter()
-            num_passing = 0
-            for line in lines:
-                self._write_log_line(
-                    str(line).replace("(", "").replace(")", "")
-                )  # strip parens from line, which is natively a tuple
-                num_passing += 1
-            self._write_log_line("***************\n")
+            if not self._log_open:
+                lines = list(lines)
+                return len(lines)
+            lines = list(lines)
+            num_passing = len(lines)
+            self.log_file.write(
+                "\n".join(str(l).replace("(", "").replace(")", "") for l in lines)
+                + "\n***************\n"
+            )
             self.logger.debug(
                 f"Time to write log: {time.perf_counter() - time0:.2f} seconds"
             )
@@ -111,6 +115,8 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if not self._log_open:
+            return
         try:
             self.log_file.write(line)
             self.log_file.write("\n")
@@ -127,12 +133,12 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if not self._log_open:
+            return
         try:
-            self.log_file.write("\n")
             self.log_file.write(
-                f"Number passing ligands: {str(number_passing_ligands)} \n"
+                f"\nNumber passing ligands: {number_passing_ligands} \n---------------\n"
             )
-            self.log_file.write("---------------\n")
         except Exception as e:
             raise OutputError("Error writing number of passing ligands in log") from e
 
@@ -145,10 +151,10 @@ class OutputManager:
         Raises:
             OutputError
         """
+        if not self._log_open:
+            return
         try:
-            self.log_file.write("\n")
-            self.log_file.write(f"Result bookmark name: {bookmark_name}\n")
-            self.log_file.write("***************\n")
+            self.log_file.write(f"\nResult bookmark name: {bookmark_name}\n***************\n")
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
@@ -208,8 +214,8 @@ class OutputManager:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
 
-            for line in buff:
-                self._write_log_line(line)
+            if self._log_open:
+                self.log_file.write("\n".join(buff) + "\n")
 
         except Exception as e:
             raise OutputError("Error occurred while writing filters to log") from e
@@ -218,6 +224,8 @@ class OutputManager:
         """
         Properly formats header for the log file if using max_miss and enumerate_interaction_combs
         """
+        if not self._log_open:
+            return
         self.log_file.write("\n---------------\n")
         self.log_file.write("Max Miss Union:\n")
 
@@ -293,44 +301,6 @@ class OutputManager:
         receptor_str = ReceptorManager.blob2str(receptor_compbytes)
         with open(recname, "w") as f:
             f.write(receptor_str)
-
-    def scatter_hist(self, x, y, z, ax_histx, ax_histy):
-        """
-        Makes scatterplot with a histogram on each axis
-
-        Args:
-            x (list): x coordinates for data
-            y (list): y coordinates for data
-            z (list): z coordinates for data
-            ax (matplotlib.axis): scatterplot axis
-            ax_histx (matplotlib.axis): x histogram axis
-            ax_histy (matplotlib.axis): y histogram axis
-
-        Raises:
-            OutputError
-        """
-        try:
-            # no labels
-            ax_histx.tick_params(axis="x", labelbottom=False)
-            ax_histy.tick_params(axis="y", labelleft=False)
-
-            # the scatter plot:
-            self.ax_main.scatter(x, y, c=z, cmap="viridis")
-
-            # now determine nice limits by hand:
-            xbinwidth = 0.25
-            ybinwidth = 0.01
-            xminlim = (int(min(x) / xbinwidth) + 3) * xbinwidth
-            xmaxlim = (int(max(x) / xbinwidth) + 3) * xbinwidth
-            yminlim = (int(min(y) / ybinwidth) + 3) * ybinwidth
-            ymaxlim = (int(max(y) / ybinwidth) + 3) * ybinwidth
-
-            xbins = np.arange(xminlim, xmaxlim + xbinwidth, xbinwidth)
-            ybins = np.arange(yminlim, ymaxlim + ybinwidth, ybinwidth)
-            ax_histx.hist(x, bins=xbins, color="dimgrey")
-            ax_histy.hist(y, bins=ybins, orientation="horizontal", color="dimgrey")
-        except Exception as e:
-            raise OutputError("Error occurred while adding all data to plot") from e
 
     def plot_all_data(self, xdata, ydata, num_of_bins: int = 100):
         """Takes dictionary of binned data where key is the

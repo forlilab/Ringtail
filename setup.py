@@ -5,7 +5,6 @@ import os
 import fnmatch
 from setuptools import setup, find_packages
 
-
 # Path to the directory that contains this setup.py file.
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
@@ -22,7 +21,7 @@ def find_files(directory):
 
 setup(
     name="ringtail",
-    version="2.2.0",
+    version="2.3.0",
     author="Forli Lab",
     author_email="forli@scripps.edu",
     url="https://github.com/forlilab/Ringtail",
@@ -62,6 +61,7 @@ setup(
             "rt_db_v100_to_v110=ringtail.cli.rt_db_v100_to_v110:main",
             "rt_db_to_v200=ringtail.cli.rt_db_to_v200:main",
             "rt_generate_config_file=ringtail.cli.rt_generate_config_file:main",
+            "rt_merge=ringtail.cli.rt_merge:main",
         ]
     },
 )

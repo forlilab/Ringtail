@@ -646,39 +646,3 @@ def parse_vina_result(data_pointer) -> dict:
         logger.debug("Parsing vina docking string")
 
     return _read_vina_results_lines(data_object, ligname)
-
-
-def receptor_pdbqt_parser(fname):
-    """Parse receptor PDBQT file into list of dictionary with dictionary containing data for a single atom line
-
-    Args:
-        fname (string): name of receptor pdbqt file to parse
-    """
-
-    with open(fname, "rb") as f:
-        raw_lines = f.readlines()
-
-    lines = []
-    for line in raw_lines:
-        line = line.decode("utf-8")
-        if not line.startswith("ATOM") and not line.startswith("HETATM"):
-            continue
-        line_dict = {}
-        # column magic numbers from PDBQT format
-        line_dict["atm_flag"] = line[:6]
-        line_dict["atm_num"] = int(line[6:11])
-        line_dict["atm_name"] = line[12:16]
-        line_dict["res_name"] = line[17:20]
-        line_dict["chain"] = line[21]
-        line_dict["res_num"] = int(line[22:26])
-        line_dict["x"] = float(line[30:38])
-        line_dict["y"] = float(line[38:46])
-        line_dict["z"] = float(line[46:54])
-        line_dict["occupancy"] = float(line[54:60])
-        line_dict["b_iso"] = float(line[60:66])
-        line_dict["q"] = float(line[70:76])
-        line_dict["atomtype"] = line[77:]
-
-        lines.append(line_dict)
-
-    return lines

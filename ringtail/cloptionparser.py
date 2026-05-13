@@ -10,7 +10,7 @@ import os
 from .exceptions import OptionError, NoInputError
 import __main__
 from .ringtailcore import RingtailCore
-from .ringtailoptions import Filters
+from .ringtailoptions import Filters, validate_docking_mode
 
 
 def cmdline_parser(defaults: dict = {}):
@@ -279,7 +279,9 @@ def cmdline_parser(defaults: dict = {}):
         "-l",
         "--log_file",
         help='by default, results are saved in "output_log.txt"; if this option is used, ligands and requested info passing the filters will be written to specified file',
-        action="store",
+        nargs="?",
+        const="output_log.txt",
+        default=None,
         type=str,
         metavar="[FILE_NAME].TXT",
     )
@@ -364,6 +366,9 @@ def cmdline_parser(defaults: dict = {}):
         action="store",
         type=str,
         metavar="BOOKMARK_NAME",
+        nargs="?",
+        const=True,
+        default=None,
     )
     output_group.add_argument(
         "-xq",
@@ -619,18 +624,13 @@ class CLOptionParser:
     Attributes:
         process_mode (str): operating in 'write' or 'read' mode
         rtcore (RingtailCore): ringtail core object initialized with the provided db_file
-        filters (dict): fully parsed and organied optional filters
+        filters (Filters): fully parsed and organied optional filters
         file_sources (dict): fully parsed docking results and receptor files
         writeopts (dict): fully parsed arguments related to database writing
-        storageopts (dict): fully parsed arguments related to how the storage system behaves
-        outputopts (dict): fully parsed arguments related to output and reading from the database
+        filter_options (dict): options to use during filtering that are not filters
+        output_options (dict): fully parsed arguments related to output and reading from the database
         print_summary (bool): switch to print database summary
         filtering (bool): switch to run filtering method
-        plot (bool): switch to plot the data
-        export_bookmark_db (bool): switch to export bookmark as a new database
-        export_receptor (bool): switch to export receptor information to pdbqt
-        pymol (bool): switch to visualize ligands in pymol
-        data_from_bookmark (bool): switch to write bookmark data to the output log file
 
     Raises:
         OptionError: Error when an option cannot be parsed correctly
@@ -701,14 +701,9 @@ class CLOptionParser:
         else:
             db_file = parsed_opts.output_db
 
-        if parsed_opts.docking_mode.lower() not in ["dlg", "vina"]:
-            raise OptionError(
-                f"The chosen docking mode {parsed_opts.docking_mode} is not supported. Please choose either 'dlg' or 'vina'."
-            )
-
         self.rtcore = RingtailCore(
             db_file=db_file,
-            docking_mode=parsed_opts.docking_mode.lower(),
+            docking_mode=validate_docking_mode(parsed_opts.docking_mode),
             logging_level=log_level,
         )
         # make sure we log the command line prompt
@@ -919,6 +914,7 @@ class CLOptionParser:
             ]
 
         # combine all options used in write mode
+
         self.writeopts = {
             "duplicate_handling": parsed_opts.duplicate_handling,
             "overwrite": parsed_opts.overwrite,
@@ -930,37 +926,32 @@ class CLOptionParser:
             "max_proc": parsed_opts.max_proc,
         }
 
-        # parse read methods without inputs
-        self.plot = parsed_opts.plot
-        self.export_bookmark_db = parsed_opts.export_bookmark_db
-        self.export_receptor = parsed_opts.export_receptor
-        self.pymol = parsed_opts.pymol
-        self.data_from_bookmark = parsed_opts.data_from_bookmark
-        self.individual_sdf_files = parsed_opts.individual_sdf_files
-
         # parse read and output options
-        self.outputopts = {
-            "log_file": parsed_opts.log_file,
-            "export_sdf_path": parsed_opts.export_sdf_path,
-            "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
-        }
-
-        # combine all options for the storage manager
-        self.storageopts = {
+        self.filter_options = {
             "filter_bookmark": parsed_opts.filter_bookmark,
-            "duplicate_handling": parsed_opts.duplicate_handling,
-            "overwrite": parsed_opts.overwrite,
             "order_results": parsed_opts.order_results,
             "outfields": parsed_opts.outfields,
             "output_all_poses": parsed_opts.output_all_poses,
             "mfpt_cluster": parsed_opts.mfpt_cluster,
             "interaction_cluster": parsed_opts.interaction_cluster,
             "bookmark_name": parsed_opts.bookmark_name,
+            "log_file": parsed_opts.log_file,
+            "enumerate_interaction_combs": parsed_opts.enumerate_interaction_combs,
         }
 
-        # read methods that require inputs
-        self.readopts = {
+        self.output_options = {
+            "plot": parsed_opts.plot,
+            "export_bookmark_db": parsed_opts.export_bookmark_db,
+            "export_receptor_pdbqt": parsed_opts.export_receptor_pdbqt,
+            "pymol": parsed_opts.pymol,
+            "data_from_bookmark": parsed_opts.data_from_bookmark,
+            "individual_sdf_files": parsed_opts.individual_sdf_files,
+            "output_log": parsed_opts.output_log,
+            "export_sdf_path": parsed_opts.export_sdf_path,
             "export_query_csv": parsed_opts.export_query_csv,
             "find_similar_ligands": parsed_opts.find_similar_ligands,
             "export_bookmark_csv": parsed_opts.export_bookmark_csv,
+            "outfields": parsed_opts.outfields,
+            "order_results": parsed_opts.order_results,
+            "output_all_poses": parsed_opts.output_all_poses,
         }
