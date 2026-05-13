@@ -31,50 +31,22 @@ In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedoc
 
 
 
-### Version 2.2.0: enhancements and bug fixes
-- New method added to enable exporting receptor pdb with flexible residues given ligand (currently for API only)
-- During results writing: check to ensure files provided with `file` option, and directories provided with `file_path` option
-- Multiprocess removed from clustering methods, speeding up the process significantly
-- Minor sqlite query updates for enhanced query speed, such as replacing `LIKE` with `=` where possible when matching text
-- Initializing ringtail with full path to a database could result in issues exporting SDFs to specified folder, this has been fixed
-- Clustering without filtering could result in error, this has been fixed
+### Changes in 2.3.0: New merge database functionality and bug fixes
 
-### Version 2.1.2 bug fixes
-- Removing of union operand that made Ringtail incompatible with python=3.9
-- Pymol now displays receptor if present in database
-- Proper handling in preparing rdkit Mols in absence of flexible residues
-- Enhanced error messages and docs related to plotting and pymol
+#### Enhancements
+* New CLI (`rt_merge`) and API for merge two or more databases, for example if creating multiple databases per receptor in parallell and wanting to combine them to one
+* Create new database from bookmark data subset has been sped up significantly
+* Crossrefering databases has been sped up significantly, as well as some added functionality like various export options
 
-### Version 2.1.1 bug fixes
-- bugs related to ligand filtering and certain uses of the `overwrite` option in the command line have been fixed
-- enhancements to the result plotting feature
+#### Bug fixes
+* Checks for poses in bookmark before attempting to export bookmark/subset database
+* Only writes an output log file if requested
+* `--export_bookmark_csv` can now be used as a flag if exporting the bookmark filtered in the same command, otherwise as before by specifying bookmark/table after the tag
 
-### New in version 2.0.0 and 2.1.0
-
-- changes in keywords used for the command line tool
-- fully developed API can add docking results without using file system (for Vina)
-- much faster filtering (v2.1.0)
-- bug fixes
-- see detailed list of changes on [ReadTheDocs](https://ringtail.readthedocs.io)
-
-#### Updating database to work with v2.0
-If you have previously written a database with Ringtail < v2, it will need to be updated to be compatible with filtering with v2. We have included a new script `rt_db_to_v200` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
-
-```
-$ rt_db_to_v200 -d <v2 database 1 (required)> <v2 database 2+ (optional)>
-```
-
-Multiple databases may be specified at once. The update may take a few minutes per database.
 
 ##### Example Filtering Timings (M1Pro MacBook, ~2 million ligands)
 ![rt_v11_timings](https://github.com/forlilab/Ringtail/assets/41704502/eac373fc-1324-45df-b845-6697dc9d1465)
 
-#### Updating database written with v1.0.0 to work with v1.1.0
-If you have previously written a database with Ringtail v1.0.0, it will need to be updated to be compatible with filtering with v1.1.0. We have included a new script `rt_db_v100_to_v110` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
-
-```
-$ rt_db_v100_to_v110 -d <v1.0.0 database 1 (required)> <v1.0.0 database 2+ (optional)>
-```
 
 ### Installation 
 #### Create a Ringtail environment
@@ -105,7 +77,7 @@ $ conda install -c conda-forge chemicalite
 ```
 
 #### From conda-forge
-Ringtail 2 is now available on conda-forge, and installation from conda-forge will handle all of the dependencies. 
+Ringtail 2 is available on conda-forge, and installation from conda-forge will handle all of the dependencies. 
 
 ```bash
 $ conda install -c conda-forge ringtail
@@ -180,6 +152,8 @@ The Ringtail package includes two command line oriented scripts: `rt_process_vs`
 [`rt_db_to_v200`](https://github.com/forlilab/Ringtail#Updating-database-to-work-with-v200) is used to update older databases to version 2.1. 
 
 [`rt_db_v100_to_v110`](https://github.com/forlilab/Ringtail#Updating-database-written-with-v100-to-work-with-v110) is used to update db v1.0.0 to 1.1.0. 
+
+['rt_merge'] is used to merge two or more databases that share a common target/receptor, for example if writing databases in paralell. 
 
 ## Advanced usage: scripting with Ringtail API 
 Ringtail has been re-designed to allow for direct use of its API for e.g., scripting purposes. This circumvents the use of the command line tools, and allows for more advanced usage.
