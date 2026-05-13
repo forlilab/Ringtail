@@ -35,12 +35,18 @@ class StorageManager:
 
     _db_schema_ver = "2.0.0"
 
-    # "db_schema_ver":list("compatible code versions")
-    _db_schema_code_compatibility = {
+    # Legacy schemas have incompatible designs and require exact code version pinning.
+    # v2+ schemas are forward-compatible within the same major version — no updates needed on release.
+    _legacy_db_schema_compatibility = {
         "1.0.0": ["1.0.0"],
         "1.1.0": ["1.1.0"],
-        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2", "2.2.0", "2.2.1", "2.3.0"],
     }
+
+    @staticmethod
+    def _is_version_compatible(db_schema_ver: str, code_ver: str) -> bool:
+        if db_schema_ver in StorageManager._legacy_db_schema_compatibility:
+            return code_ver in StorageManager._legacy_db_schema_compatibility[db_schema_ver]
+        return db_schema_ver.split(".")[0] == code_ver.split(".")[0]
 
     """Base class for a generic virtual screening database object.
     This class holds some of the common API for StorageManager child classes. 
@@ -3966,7 +3972,7 @@ class StorageManagerSQLite(StorageManager):
         """
         # check that code base is compatible with db schema version
         code_version = version("ringtail")
-        if code_version in self._db_schema_code_compatibility[db_version]:
+        if self._is_version_compatible(db_version, code_version):
             rtdb_version = db_version.replace(".", "")
             # if so, proceed to set db schema version
             cur = self.conn.cursor()
@@ -4003,7 +4009,7 @@ class StorageManagerSQLite(StorageManager):
                     f"The database requested {self.db_file} does not exist or does not have any tables. Check for spelling errors, else the database may be corrupt (delete the file before using the same name again)"
                 )
         db_schema_ver = ".".join([*db_version])
-        if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
+        if self._is_version_compatible(db_schema_ver, version("ringtail")):
             is_compatible = True
         else:
             is_compatible = False
