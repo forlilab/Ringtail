@@ -6,6 +6,8 @@
 
 import sqlite3
 import os
+import subprocess
+import sys
 import pytest
 
 
@@ -642,3 +644,28 @@ class TestOtherScripts:
                     break
 
         os.system("rm output.db output2.db *_compared_ligands.txt output_log.txt")
+
+
+class TestHelpFlags:
+    """Smoke tests: every CLI entry point must exit 0 when called with --help."""
+
+    CLI_SCRIPTS = [
+        "../ringtail/cli/rt_process_vs.py",
+        "../ringtail/cli/rt_compare.py",
+        "../ringtail/cli/rt_db_v100_to_v110.py",
+        "../ringtail/cli/rt_db_to_v200.py",
+        "../ringtail/cli/rt_generate_config_file.py",
+    ]
+
+    @pytest.mark.parametrize("script", CLI_SCRIPTS)
+    def test_help_exits_zero(self, script):
+        result = subprocess.run(
+            [sys.executable, script, "--help"],
+            capture_output=True,
+        )
+        assert result.returncode == 0, (
+            f"{script} --help exited with {result.returncode}\n"
+            f"stderr: {result.stderr.decode()}"
+        )
+
+        os.system("rm config.json")
