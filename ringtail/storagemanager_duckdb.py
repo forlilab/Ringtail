@@ -2174,4 +2174,13 @@ class StorageManagerDuckDB(StorageManager):
                 self.db_query(sql)
         self.conn.commit()
 
+    def ensure_gui_tables(self) -> None:
+        """
+        Ensures gui-specific tables exist in database
+        """
+        from .schema import POSE_COMMENTS_SCHEMA, build_create_table
+
+        for sql in build_create_table("Pose_comments", POSE_COMMENTS_SCHEMA, "duckdb"):
+            self.conn.execute(sql)
+
     # endregion

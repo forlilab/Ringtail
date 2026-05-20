@@ -304,6 +304,16 @@ STATUS_TABLE_SCHEMA = TableSchema(
     }
 )
 
+# Table of comments from e.g., visual inspection
+POSE_COMMENTS_SCHEMA = TableSchema(
+    columns={
+        "pose_id": Column(
+            "INTEGER", "pose", primary_key=True, foreign_key="Results.pose_id"
+        ),
+        "comment": Column("VARCHAR", "user comment on pose"),
+    }
+)
+
 # ---------------------------------------------------------------------------
 # Derived schemas for outfields and order_results
 # ---------------------------------------------------------------------------

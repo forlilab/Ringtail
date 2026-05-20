@@ -1879,6 +1879,13 @@ class StorageManager(ABC):
         """
         ...
 
+    @abstractmethod
+    def ensure_gui_tables(self):
+        """
+        Ensures gui-specific tables exist in database
+        """
+        ...
+
     def update_database_version(self, new_version: str, consent=False, backup=False):
         """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
 
@@ -3007,6 +3014,12 @@ class StorageManager(ABC):
     def _create_status_tables(self):
         """
         Creates status tables if needed
+        """
+        raise NotImplementedError
+
+    def _create_gui_tables(self):
+        """
+        Create GUI tables if not exist
         """
         raise NotImplementedError
 

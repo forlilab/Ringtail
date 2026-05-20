@@ -131,7 +131,10 @@ class RingtailCore:
             f"[     New RingtailCore object initialized with database file {db_file}    ]"
         )
 
-        self._run_mode = access_mode
+        self._run_mode = access_mode.lower()
+        if self._run_mode == "gui":
+            with self.storageman as sm:
+                sm.ensure_gui_tables()
 
     @_wrap_exceptions
     def get_previous_docking_mode(self) -> Union[None, str]:
