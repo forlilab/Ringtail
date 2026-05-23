@@ -290,7 +290,7 @@ class TestOutput:
         ligands_poses = populated_db._fetch_select_ligands_poses(
             ligand_names=["14303"], bookmark_name="rdkit_test"
         )
-        mol = populated_db.create_rdkit_mol("14303", ligands_poses["14303"])[0]
+        _, mol, _, _, _, _ = populated_db.create_rdkit_mols(ligands_poses["14303"])[0]
         assert mol.GetNumAtoms() == 10
 
     def test_write_sdfs(self, populated_db, tmp_path):
@@ -298,18 +298,9 @@ class TestOutput:
         populated_db.filter(eworst=-7, output_bookmark="sdf_bookmark")
         populated_db.write_molecule_sdfs("sdf_bookmark", sdf_dir, all_in_one=False)
 
-        sdf_files = [f.name for f in Path(sdf_dir).iterdir()]
-        expected = {
-            "3961.sdf",
-            "5995.sdf",
-            "11128.sdf",
-            "11991.sdf",
-            "13974.sdf",
-            "15776.sdf",
-            "136065.sdf",
-            "127947.sdf",
-        }
-        assert set(sdf_files) == expected
+        sdf_files = {f.stem for f in Path(sdf_dir).iterdir()}
+        expected_lignames = {"3961", "5995", "11128", "11991", "13974", "15776", "136065", "127947"}
+        assert sdf_files == expected_lignames
 
         with open(Path(sdf_dir) / "136065.sdf") as f:
             lines = f.readlines()

@@ -12,8 +12,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib import colors
+from rdkit import Chem
 from rdkit.Chem import SDWriter
 from meeko import RDKitMolCreate
+
+
+def _mol_with_one_conformer(mol: Chem.Mol, conf_id: int) -> Chem.Mol:
+    """Return a copy of mol retaining only the specified conformer."""
+    copy = Chem.RWMol(mol)
+    for cid in [c.GetId() for c in mol.GetConformers() if c.GetId() != conf_id]:
+        copy.RemoveConformer(cid)
+    return copy.GetMol()
 
 
 class OutputManager:
@@ -234,41 +243,70 @@ class OutputManager:
 
     # -#-#- Non-logfile methods -#-#-#
 
+    def write_out_mols(self, filename: str, mol_entries, export_sdf_directory: str):
+        """Batch-write multiple mols to one SDF file with a single file-open.
+
+        Args:
+            filename (str): SDF filename
+            mol_entries: iterable of (mol, flexres_mols, properties)
+            export_sdf_directory (str): directory to write into
+        """
+        filepath = export_sdf_directory + "/" + filename
+        try:
+            with open(filepath, "w") as sdf_file:
+                w = SDWriter(sdf_file)
+                for mol, flexres_mols, properties in mol_entries:
+                    combined = RDKitMolCreate.combine_rdkit_mols([mol] + flexres_mols)
+                    for k, v in properties.items():
+                        if isinstance(v, list):
+                            v = json.dumps(v)
+                        elif not isinstance(v, str):
+                            v = str(v)
+                        combined.SetProp(k, v)
+                    for conf in combined.GetConformers():
+                        w.write(combined, conf.GetId())
+                w.close()
+        except Exception as e:
+            raise OutputError("Error occurred while batch-writing SDF") from e
+
     def write_out_mol(
-        self, filename, mol, flexres_mols, properties, export_sdf_directory: str
+        self, filename, mol, flexres_per_conf, properties, export_sdf_directory: str
     ):
         """Writes out given mol as sdf. Will create the specified sdf folder in
         current working directory if needed.
 
         Args:
             filename (str): name of SDF file that will be written to
-            mol (RDKit.Chem.Mol): RDKit molobject to be written to SDF
-            flexres_mols (list): dictionary of rdkit molecules for flexible residues
-            properties (dict): dictionary of list of properties to add to mol before writing
+            mol (Chem.Mol): RDKit mol with 1+ conformers
+            flexres_per_conf (list[list[Chem.Mol]]): per-conformer flexres mol lists,
+                or [] if no flexres
+            properties (dict): properties to embed in each SDF record
 
         Raises:
             OutputError
         """
-        filename = export_sdf_directory + "/" + filename
+        filepath = export_sdf_directory + "/" + filename
         try:
-            mol_flexres_list = [mol]
-            mol_flexres_list += flexres_mols
-            mol = RDKitMolCreate.combine_rdkit_mols(mol_flexres_list)
-            # convert properties to strings as needed
-            for k, v in properties.items():
-                if isinstance(v, list):
-                    v = json.dumps(v)
-                elif not isinstance(v, str):
-                    v = str(v)
-                mol.SetProp(k, v)
-
-            # open/create file so it can be appended to if requested
-            with open(filename, "a") as sdf_file:
+            str_props = {
+                k: (json.dumps(v) if isinstance(v, list) else v if isinstance(v, str) else str(v))
+                for k, v in properties.items()
+            }
+            with open(filepath, "a") as sdf_file:
                 w = SDWriter(sdf_file)
-                for conf in mol.GetConformers():
-                    w.write(mol, conf.GetId())
+                if not flexres_per_conf:
+                    for k, v in str_props.items():
+                        mol.SetProp(k, v)
+                    for conf in mol.GetConformers():
+                        w.write(mol, conf.GetId())
+                else:
+                    for conf_idx, conf in enumerate(mol.GetConformers()):
+                        single = _mol_with_one_conformer(mol, conf.GetId())
+                        flexres = flexres_per_conf[conf_idx] if conf_idx < len(flexres_per_conf) else []
+                        combined = RDKitMolCreate.combine_rdkit_mols([single] + flexres)
+                        for k, v in str_props.items():
+                            combined.SetProp(k, v)
+                        w.write(combined, combined.GetConformer().GetId())
                 w.close()
-
         except Exception as e:
             raise OutputError("Error occurred while writing SDF from RDKit Mol") from e
 

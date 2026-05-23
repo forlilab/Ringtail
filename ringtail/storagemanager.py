@@ -24,7 +24,9 @@ from .ringtailoptions import Filters, statuses
 from .exceptions import StorageError, OptionError, VersionError, MergeError
 from .clustermanager import *
 from .querybuilder import QueryBuilder
-from .schema import OUTFIELD_BY_TABLE
+from .schema import OUTFIELD_BY_TABLE, RESULTS_SCHEMA, LIGANDS_SCHEMA
+
+_LIGANDS_ONLY_COLS = set(LIGANDS_SCHEMA.columns) - set(RESULTS_SCHEMA.columns)
 from collections import defaultdict
 
 RESULTS_COLUMNS = [
@@ -204,7 +206,6 @@ class StorageManager(ABC):
         filter_query: str = self._generate_result_filtering_query(
             all_filters, output_bookmark, input_bookmark
         )
-        print("\n\n the filtering query", filter_query)
 
         logger.debug(f"Query for filtering results: {filter_query}")
 
@@ -838,22 +839,26 @@ class StorageManager(ABC):
         self.detach_db(alias)
         logger.info(f"Subset database {database_name} has been successfully created.")
 
-    def fetch_pose_interactions(self, pose_id) -> iter:
+    def fetch_pose_interactions(self, pose_ids) -> "list | dict":
         """
-        Fetch all interactions parameters belonging to a pose_id
+        Fetch interaction parameters for one pose or a batch of poses.
 
         Args:
-            pose_id (int): pose id, 1-1 with Results table
+            pose_ids (int | list[int]): single pose id or list of pose ids
 
         Returns:
-            iter: of interaction information for given pose_id
+            list: interaction rows for a single pose (backward-compatible)
+            dict[int, list]: {pose_id: [interaction_rows]} for a list input
         """
-        # check if table exist
-        if not "interactions" in self.tables_in_db():
-            return
-
+        batch = isinstance(pose_ids, list)
+        if not batch:
+            pose_ids = [pose_ids]
+        if "interactions" not in self.tables_in_db():
+            return {} if batch else None
+        placeholders = ",".join(["?"] * len(pose_ids))
         query = self.QueryBuilder()
         query.SELECT(
+            "i.pose_id",
             "ii.interaction_type",
             "ii.rec_chain",
             "ii.rec_resname",
@@ -863,10 +868,17 @@ class StorageManager(ABC):
         ).FROM("Interaction_indices", "ii").JOIN(
             "Interactions", "i", "interaction_id"
         ).WHERE(
-            "i.pose_id = ?", pose_id
+            f"i.pose_id IN ({placeholders})", *pose_ids
         )
-
-        return self.db_query(*query.build()).fetchall()
+        rows = self.db_query(*query.build()).fetchall()
+        if not batch:
+            return [
+                row[1:] for row in rows
+            ]  # strip pose_id column, backward-compatible
+        result = {}
+        for pose_id, *interaction in rows:
+            result.setdefault(pose_id, []).append(interaction)
+        return result
 
     def get_bookmark_selection(
         self,
@@ -1302,43 +1314,32 @@ class StorageManager(ABC):
             info = [], []
         return info
 
-    def fetch_ligand_mol(self, ligname: str = None, pose_id: int = None) -> Chem.Mol:
-        """Gets the binary rdkit mol and returns a regular Mol
-
-        Returns:
-            Chem.Mol: RDKit mol of the ligand
+    def fetch_rdkit_pose_properties(self, pose_ids) -> list:
         """
-        query = self.QueryBuilder()
-        query.SELECT("rdmol").FROM("Ligands")
-        if ligname:
-            query.WHERE(f"ligname = ?", ligname)
-        elif pose_id:
-            query.WHERE(
-                f"ligand_id=(SELECT ligand_id FROM Results WHERE pose_id=? LIMIT 1)",
-                pose_id,
-            )
-        return Chem.Mol(self.db_query(*query.build()).fetchone()[0])
-
-    def fetch_rdkit_pose_properties(self, pose_ids: list) -> iter:
-        """
-        Gets molecular data that is needed to create rdkit mols for a given list of poses
+        Gets molecular data needed to create rdkit mols for the given pose(s), including
+        ligand mol binary and name via a JOIN with Ligands.
 
         Args:
-            pose_ids (list): pose ids for which to collect molecular data
+            pose_ids (int | list[int]): one or more pose ids
 
         Returns:
-            iter: of the following columns pose_id, docking_score, leff, pose_coordinates, flexible_res_coordinates
+            list of (pose_id, rdmol_binary, ligname, docking_score, leff, pose_coordinates, flexible_res_coordinates)
         """
+        if isinstance(pose_ids, int):
+            pose_ids = [pose_ids]
         placeholders = ",".join(["?"] * len(pose_ids))
-
         query = self.QueryBuilder()
         query.SELECT(
-            "pose_id",
-            "docking_score",
-            "leff",
-            "pose_coordinates",
-            "flexible_res_coordinates",
-        ).FROM("Results").WHERE(f"pose_id IN ({placeholders})", *pose_ids)
+            "R.pose_id",
+            "L.rdmol",
+            "L.ligname",
+            "R.docking_score",
+            "R.leff",
+            "R.pose_coordinates",
+            "R.flexible_res_coordinates",
+        ).FROM("Results", "R").JOIN("Ligands", "L", "ligand_id").WHERE(
+            f"R.pose_id IN ({placeholders})", *pose_ids
+        )
         return self.db_query(*query.build()).fetchall()
 
     def get_gui_plot_data(
@@ -1385,7 +1386,7 @@ class StorageManager(ABC):
         elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
             from .ringtailoptions import statuses
 
-            status_map = {v: k for k, v in statuses}
+            status_map = {v: k for k, v in statuses.items()}
             # will assume it is a status table
             if include_status:
                 bookmark_query.SELECT(
@@ -1476,30 +1477,63 @@ class StorageManager(ABC):
         return all_data, passing_data
 
     def fetch_columns_from_table_as_dicts(
-        self, table: str, columns: list, length: int = 500, starting_rowid: int = 0
+        self, table: str, columns: list, length: int = None, starting_rowid: int = 0
     ) -> tuple[list[str], list[dict]]:
-        """
-        Will get requested table data for a table given one or more columns.
-        Data will be limited by a certain length, and can be retrieved from a desired
-        rowid.
+        """Get requested columns from Results, a bookmark, or a status table.
+
+        Automatically JOINs Ligands when Ligands-only columns (ligname, ligand_smile,
+        rdmol) are requested, and applies the appropriate WHERE/JOIN for bookmarks and
+        status tables. Pass "status" as a column name to include pose status.
 
         Args:
-            table (str): name of table or bookmark
-            columns (list, optional): list of columns to retrieve. Defaults to ["*"].
-            length (int, optional): number of rows to collect. Defaults to 500.
-            starting_rowid (int, optional): rowid to start with. Defaults to 0.
+            table (str): Results table name, bookmark name, or status table name
+            columns (list): column names to select; "status" is a special sentinel
+            length (int, optional): max rows to return. Defaults to None (all rows).
+            starting_rowid (int, optional): R.rowid lower bound. Defaults to 0.
 
         Returns:
-            tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
-                                            and column is the key, value is the row-col cell value
+            tuple[list[str], list[dict]]: column names and list of row dicts
         """
+        # Direct physical table that is not Results/bookmark/status — naive query
+        if self._is_table(table) and not self.is_bookmark(table) and not self._is_statustable(table) and table.lower() != "results":
+            naive = self.QueryBuilder()
+            naive.SELECT(",".join(columns)).FROM(table)
+            if length:
+                naive.LIMIT(length)
+            if starting_rowid:
+                naive.WHERE(f"{table}.rowid >= {starting_rowid}")
+            return self.get_query_data_as_dicts(naive.build()[0])
+
+        include_status = "status" in columns
+        data_cols = [c for c in columns if c != "status"]
+        needs_ligands = any(c in _LIGANDS_ONLY_COLS for c in data_cols)
+
+        def _qualify(col):
+            return f"L.{col}" if col in _LIGANDS_ONLY_COLS else f"R.{col}"
+
         query = self.QueryBuilder()
-        query.SELECT(",".join(columns)).FROM(table)
+        for col in data_cols:
+            query.SELECT(_qualify(col))
+        query.FROM("Results", "R")
+        if needs_ligands:
+            query.JOIN("Ligands", "L", "ligand_id")
+
+        if self.is_bookmark(table):
+            if include_status:
+                query.SELECT_STATUS()
+            query.IN_BOOKMARK(table)
+        elif self._is_statustable(table):
+            if include_status:
+                query.SELECT(f"'{table.lower()}' as status")
+            query.JOIN(table, "T", "pose_id")
+        else:
+            if include_status:
+                query.SELECT_STATUS()
 
         if length:
             query.LIMIT(length)
         if starting_rowid:
-            query.WHERE(f"{table}.rowid = {starting_rowid}")
+            query.WHERE(f"R.rowid >= {starting_rowid}")
 
         return self.get_query_data_as_dicts(query.build()[0])
 
@@ -2214,8 +2248,9 @@ class StorageManager(ABC):
         self._delete_table("Filters")
         self._delete_table("Interactions")
         self._delete_table("Interaction_indices")
-        for table in statuses:
-            self._delete_table(table.capitalize())
+        for status in statuses.values():
+            if status:
+                self._delete_table(status.capitalize())
         self._delete_table("Results")
         # then, fetch remaining tables
         tables = self.tables_in_db()
