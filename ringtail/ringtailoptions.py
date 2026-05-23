@@ -26,7 +26,7 @@ for canonical, aliases in docking_modes.items():
     for alias in aliases:
         docking_alias_to_mode[alias] = canonical
 
-statuses = ["accepted", "maybe", "rejected"]
+statuses = {1: "accepted", 2: "maybe", 3: "rejected", 0: None}
 
 
 def validate_docking_mode(docking_mode: str):

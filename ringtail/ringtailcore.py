@@ -1818,7 +1818,7 @@ class RingtailCore:
         self.update_pose_status(pose_id=parsed_poses, status=status)
 
     @_wrap_exceptions
-    def update_pose_status(self, pose_id: Union[int, list[int]], status: str):
+    def update_pose_status(self, pose_id: Union[int, list[int]], status: int):
         """
         Updates the status of a given pose so that it is only ever in one status table
 
@@ -1829,19 +1829,20 @@ class RingtailCore:
         Raises:
             OptionError
         """
-        status = status.lower()
-        if status not in statuses:
+        if status not in statuses.keys():
             raise OptionError(
                 f"""The selected status {status} is not a valid option for Ringtail. Please choose between {','.join(statuses)}"""
             )
 
         with self.storageman as sm:
-            if status == "accepted":
+            if status == 1:
                 sm.accept_pose(pose_id)
-            elif status == "maybe":
+            elif status == 2:
                 sm.maybe_pose(pose_id)
-            elif status == "rejected":
+            elif status == 3:
                 sm.reject_pose(pose_id)
+            else:
+                sm.remove_status(pose_id)
 
     @_wrap_exceptions
     def get_data_table_pointer(

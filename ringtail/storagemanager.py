@@ -1383,9 +1383,14 @@ class StorageManager(ABC):
             data = self.db_query(bookmark_query.build()[0]).fetchall()
 
         elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
+            from .ringtailoptions import statuses
+
+            status_map = {v: k for k, v in statuses}
             # will assume it is a status table
             if include_status:
-                bookmark_query.SELECT(f"""'{bookmark_name.lower()}' as status""")
+                bookmark_query.SELECT(
+                    f"""'{status_map[bookmark_name.lower()]}' as status"""
+                )
             bookmark_query.FROM("Results", "R").JOIN(
                 bookmark_name, "T", "pose_id"
             ).JOIN("Ligands", "L", "ligand_id")
@@ -1733,6 +1738,22 @@ class StorageManager(ABC):
         self.db_update(
             """DELETE FROM Maybe WHERE pose_id = ?;""", pose_ids, commit=True
         )
+
+    def remove_status(self, pose_ids: Union[int, list[int]]):
+        """
+        Will remove status associated with a pose
+
+        Args:
+            pose_ids (Union[int, list[int]])
+        """
+        if isinstance(pose_ids, int):
+            pose_ids = [pose_ids]
+        pose_ids = [(pose,) for pose in pose_ids]
+        self.db_update(
+            "DELETE FROM Accepted WHERE pose_id = ?;", pose_ids, commit=False
+        )
+        self.db_update("DELETE FROM Maybe WHERE pose_id = ?;", pose_ids, commit=False)
+        self.db_update("DELETE FROM Rejected WHERE pose_id = ?;", pose_ids, commit=True)
 
     def prepare_column_export_query(
         self, columns: dict[str, str], bookmark: str
