@@ -74,10 +74,12 @@ Changes to code behavior
 * The column `deltas` in the Results table is now called `delta`
 * Ringtail bookmarks from e.g., filtering clustering were previously created as database views, which appear as tables that are unrealized until viewing them. This has been replaced by a `Filters` table which holds filter information (previous equivalent was `Bookmarks` table) and the poses passing a given filter are stored in a tall-skinny table `Filtered_poses`. A significant speed increase was enabled by this move, and any other behavior related to bookmarks is the same. 
 * The following columns have been removed from the Ligands table (information now stored in the binary rdkit Mol): `atom_index_map`, `hydrogen_parents`, and `input_model`.
+* `create_rdkit_mol` now `create_rdkit_mols` and supports more efficient database fetching of binary rdkit write_molecule_sdfs
 
 Bug fixes
 ===========
 * For vina results, special docking atoms (for macrocycles and waters) may have been contributing to calculated van der Waals interactions in the database. This is no longer the case, so if e.g., a database is recreated in v3.0.0 from the original docking .PDBQTs the new database may have fewer interactions. 
+* Exporting poses with flexible receptor residues will now export all poses of a given ligand, not just the best scoring one 
 
 
 Changes in 2.1.1: bug fixes and result plot enhancements
