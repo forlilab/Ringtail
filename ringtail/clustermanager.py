@@ -72,8 +72,7 @@ class MorganFingerprintCluster:
         mfps = []
         # prepare each mol json to fingerprint
         for rdmol in self.rdmols:
-            # deserialize mols
-            mol = Chem.Mol(rdmol)
+            mol = Chem.RemoveHs(Chem.Mol(rdmol))
             Chem.SanitizeMol(mol)
             mfps.append(mfpgenerator.GetFingerprint(mol))
 
