@@ -2158,7 +2158,8 @@ class RingtailCore:
                 continue
 
             mol = self._add_conformer(mol, pose_coordinates)
-            mol = Chem.AddHs(mol, addCoords=True)
+            if any(a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()):
+                mol = Chem.AddHs(mol, addCoords=True)
             mol.SetProp("_Name", ligname)
 
             # Build properties dict (single-element lists matching old format)
@@ -2202,19 +2203,20 @@ class RingtailCore:
         ligands_poses: dict,
         flexres_data: tuple = None,
         include_interactions: bool = True,
-    ) -> list:
+    ):
         """One multi-conformer mol per ligand; all poses become conformers.
 
         Parses rdmol_binary once per ligand; subsequent poses reuse an in-memory
-        topology copy instead of re-deserializing the binary.
+        topology copy instead of re-deserializing the binary. Yields one ligand
+        at a time so callers can process/display progressively.
 
         Args:
             ligands_poses (dict): {ligname: [pose_id, ...]} from _fetch_select_ligands_poses
             flexres_data (tuple, optional): output of make_receptor_flexres_mols()
             include_interactions (bool): whether to embed interaction strings
 
-        Returns:
-            list of (ligname, mol_N_conformers, per_pose_flexres_mols, merged_properties, flexres_residues)
+        Yields:
+            (ligname, mol_N_conformers, per_pose_flexres_mols, merged_properties, flexres_residues)
             where per_pose_flexres_mols is a list of flexres_mol lists, one per pose
         """
         all_pose_ids = [pid for poses in ligands_poses.values() for pid in poses]
@@ -2235,25 +2237,33 @@ class RingtailCore:
         else:
             flexres_mols_tmpl, flexres_info, flexres_residues = [], [], []
 
-        result = []
         for ligname, rows in by_ligand.items():
-            # Deserialize binary ONCE per ligand → topology skeleton (no H, no conformers)
-            topology = Chem.Mol(rows[0][1])
+            try:
+                # Deserialize binary ONCE per ligand → topology skeleton (no H, no conformers)
+                topology = Chem.Mol(rows[0][1])
+            except Exception:
+                logger.error(f"Failed to deserialize topology for {ligname}, skipping")
+                continue
 
             base_mol = None
             merged_props = {"Binding energies": [], "Ligand effiencies": [], "Interactions": []}
             all_flexres = []
 
             for pose_id, _, _, docking_score, leff, coords_json, fr_coords_json in rows:
-                coords = json.loads(coords_json)
+                try:
+                    coords = json.loads(coords_json)
 
-                # In-memory copy of topology (no binary parse for poses 2..N)
-                tmp = Chem.Mol(topology)
-                if tmp.GetNumAtoms() != len(coords):
-                    logger.error(f"atom/coord mismatch for pose {pose_id}, skipping")
+                    # In-memory copy of topology (no binary parse for poses 2..N)
+                    tmp = Chem.Mol(topology)
+                    if tmp.GetNumAtoms() != len(coords):
+                        logger.error(f"atom/coord mismatch for pose {pose_id}, skipping")
+                        continue
+                    tmp = self._add_conformer(tmp, coords)
+                    if any(a.GetNumImplicitHs() > 0 for a in tmp.GetAtoms()):
+                        tmp = Chem.AddHs(tmp, addCoords=True)
+                except Exception:
+                    logger.error(f"Failed to process pose {pose_id}, skipping")
                     continue
-                tmp = self._add_conformer(tmp, coords)
-                tmp = Chem.AddHs(tmp, addCoords=True)
 
                 if base_mol is None:
                     base_mol = tmp
@@ -2272,22 +2282,24 @@ class RingtailCore:
 
                 pose_flexres = []
                 if flexres_mols_tmpl and fr_coords_json:
-                    flexres_pose_coords = json.loads(fr_coords_json)
-                    for fr_idx, fr_mol in enumerate(flexres_mols_tmpl):
-                        fr_copy = Chem.Mol(fr_mol)
-                        fr_copy = RDKitMolCreate.add_pose_to_mol(
-                            fr_copy, flexres_pose_coords[fr_idx], flexres_info[fr_idx][1]
-                        )
-                        fr_copy = RDKitMolCreate.add_hydrogens(
-                            fr_copy, [flexres_pose_coords[fr_idx]], flexres_info[fr_idx][2], True
-                        )
-                        pose_flexres.append(fr_copy)
+                    try:
+                        flexres_pose_coords = json.loads(fr_coords_json)
+                        for fr_idx, fr_mol in enumerate(flexres_mols_tmpl):
+                            fr_copy = Chem.Mol(fr_mol)
+                            fr_copy = RDKitMolCreate.add_pose_to_mol(
+                                fr_copy, flexres_pose_coords[fr_idx], flexres_info[fr_idx][1]
+                            )
+                            fr_copy = RDKitMolCreate.add_hydrogens(
+                                fr_copy, [flexres_pose_coords[fr_idx]], flexres_info[fr_idx][2], True
+                            )
+                            pose_flexres.append(fr_copy)
+                    except Exception:
+                        logger.error(f"Failed to process flexres for pose {pose_id}, skipping flexres")
+                        pose_flexres = []
                 all_flexres.append(pose_flexres)
 
             if base_mol is not None:
-                result.append((ligname, base_mol, all_flexres, merged_props, flexres_residues))
-
-        return result
+                yield (ligname, base_mol, all_flexres, merged_props, flexres_residues)
 
     @_wrap_exceptions
     def make_receptor_flexres_mols(

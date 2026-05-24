@@ -854,6 +854,10 @@ class SDFMoleculeSupplier:  #
                     continue
 
                 results_dict = results_row()
+                # Add all Hs with coords before stripping conformers so they are stored.
+                if any(a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()):
+                    mol = Chem.AddHs(mol, addCoords=True)
+                n_heavy = mol.GetNumHeavyAtoms()
                 # remove coordinates and docking properties (retains other custom properties)
                 mol, mol_properties = prepare_mol_for_database(
                     mol, store_properties=["ligname", "docking_score", "pose_rank"]
@@ -873,9 +877,7 @@ class SDFMoleculeSupplier:  #
                     {
                         "ligname": ligname,
                         "run_number": run_number,
-                        "leff": round(
-                            results_dict["docking_score"] / mol.GetNumAtoms(), 2
-                        ),
+                        "leff": round(results_dict["docking_score"] / n_heavy, 2),
                     }
                 )
                 single_pose_coordinate = results_dict["pose_coordinates"][0]
@@ -949,24 +951,27 @@ def process_docked_mol(
     ligname = mol.GetProp("_Name")
     run_number = 1
     smiles = Chem.MolToSmiles(mol)
-    ligand_row = [ligname, smiles, mol.ToBinary(Chem.PropertyPickleOptions.AllProps)]
     interaction_rows = []
     if add_default_columns:
         results_dict = results_row()
     else:
         results_dict = {}
+    # Add all Hs with coords before stripping conformers so they are stored.
+    if mol.GetNumConformers() > 0 and any(a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()):
+        mol = Chem.AddHs(mol, addCoords=True)
+    n_heavy = mol.GetNumHeavyAtoms()
     # remove coordinates and docking properties (retains other custom properties)
-    # I think conformers are properly parsed but not sure about scores
     mol, mol_properties = prepare_mol_for_database(
         mol, store_properties=["docking_score", "pose_rank"]
     )
+    ligand_row = [ligname, smiles, mol.ToBinary(Chem.PropertyPickleOptions.AllProps)]
 
     results_dict.update(mol_properties)
     results_dict.update(
         {
             "ligname": ligname,
             "run_number": run_number,
-            "leff": round(results_dict["docking_score"] / mol.GetNumAtoms(), 2),
+            "leff": round(results_dict["docking_score"] / n_heavy, 2),
         }
     )
     single_pose_coordinate = results_dict["pose_coordinates"][0]
@@ -1058,6 +1063,10 @@ def generate_ligand_data_list_from_pdbqt_dlg(
     pdbqt_mol = PDBQTMolecule(file_str, name=ligname, is_dlg=is_dlg, skip_typing=True)
     # return the whole list with conformers if requested
     rdkit_mol = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol, only_hs_with_coords=True)[0]
+
+    # Store all H coordinates now so read-time loading skips the expensive AddHs step.
+    # meeko gives us polar Hs; AddHs fills in the nonpolar ones from the existing conformer.
+    rdkit_mol = Chem.AddHs(rdkit_mol, addCoords=True)
 
     rdkit_mol, properties = prepare_mol_for_database(rdkit_mol)
     pose_coordinates = properties.get("pose_coordinates")
