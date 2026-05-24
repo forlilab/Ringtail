@@ -204,14 +204,6 @@ def main():
             if cli.output_options.export_receptor_pdbqt:
                 rtcore.export_receptor_pdbqt()
 
-            # plot if requested
-            if cli.output_options.plot:
-                rtcore.plot(bookmark_name)
-
-            # open pymol viewer
-            if cli.output_options.pymol:
-                rtcore.display_pymol(bookmark_name)
-
     except Exception as e:
         logger.critical("ERROR: " + str(e))
         return 1

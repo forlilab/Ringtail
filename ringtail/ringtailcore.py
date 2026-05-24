@@ -11,7 +11,6 @@ import functools
 from collections.abc import Iterable
 import json
 from pathlib import Path
-import matplotlib.pyplot as plt
 from meeko import RDKitMolCreate
 from rdkit import Chem
 
@@ -89,8 +88,7 @@ def get_valid_storageclass(storage_type) -> StorageManager:
 
 class RingtailCore:
     """Core class for coordinating different actions on virtual screening
-    including adding results to storage, filtering and clusteirng, and outputting data as
-    rdkit molecules, plotting docking results, and visualizing select ligands in pymol.
+    including adding results to storage, filtering and clusteirng
 
     Attributes:
         db_file (str): name of database file being operated on
@@ -1092,7 +1090,11 @@ class RingtailCore:
             lig_flex_mol[ligand] = {
                 "ligand_mol": ligand_mol,
                 "flexmoldict": {
-                    f"{flexres.split(':')[1][0]}:{flexres.split(':')[1][1:]}" : all_flexres_per_pose[0][i]
+                    f"{flexres.split(':')[1][0]}:{flexres.split(':')[1][1:]}": all_flexres_per_pose[
+                        0
+                    ][
+                        i
+                    ]
                     for i, flexres in enumerate(flexible_residues)
                 },
             }
@@ -1152,7 +1154,10 @@ class RingtailCore:
             logger.info(f"Writing {len(mol_results)} poses to {sdf_file_name}")
             opm.write_out_mols(
                 sdf_file_name,
-                ((mol, flexres_mols, properties) for _, mol, _, flexres_mols, properties, _ in mol_results),
+                (
+                    (mol, flexres_mols, properties)
+                    for _, mol, _, flexres_mols, properties, _ in mol_results
+                ),
                 sdf_path,
             )
         else:
@@ -1164,7 +1169,9 @@ class RingtailCore:
                 return
             for mol_ligname, mol, all_flexres, properties, _ in grouped:
                 sdf_file_name = f"{mol_ligname}.sdf"
-                logger.info(f"Writing {mol.GetNumConformers()} conformers to {sdf_file_name}")
+                logger.info(
+                    f"Writing {mol.GetNumConformers()} conformers to {sdf_file_name}"
+                )
                 opm.write_out_mol(sdf_file_name, mol, all_flexres, properties, sdf_path)
 
     @_wrap_exceptions
@@ -1381,69 +1388,6 @@ class RingtailCore:
         return db_alias_from_path(db_path)
 
     @_wrap_exceptions
-    def get_gui_plot_data(
-        self,
-        bookmark_name: str = None,
-        include_status: bool = False,
-        x_axis: str = "docking_score",
-        y_axis: str = "leff",
-        limit: int = None,
-    ):
-        """
-        Data from Ringtail formatted to work with the GUI plotting tool. Will most likely depreceate the get_plot_data and functionality
-        outside of GUI, and change name of this method accordingly
-
-        Args:
-            bookmark_name (str, optional): _description_. Defaults to None.
-            include_status (bool, optional): _description_. Defaults to False.
-            x_axis (str, optional): _description_. Defaults to "docking_score".
-            y_axis (str, optional): _description_. Defaults to "leff".
-            limit (int, optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
-        """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
-
-        with self.storageman:
-            return self.storageman.get_gui_plot_data(
-                bookmark_name, include_status, x_axis, y_axis, limit
-            )
-
-    @_wrap_exceptions
-    def get_plot_data(
-        self,
-        bookmark_name: str = None,
-        only_passing: bool = False,
-        include_status: bool = False,
-        x_axis: str = "docking_score",
-        y_axis: str = "leff",
-        limit: int = None,
-    ) -> tuple[
-        list[tuple[float, float]], list[tuple[float, float, int, str, Union[None, str]]]
-    ]:
-        """
-        Get ligand efficiency and energy for all docking data and for ligands that passed
-        filtering in specified bookmark. Each tuple in the respective lists contains
-        docking_score, leff, pose_id, and ligand name. If requested, will also include
-        pose_id status if previously assigned
-
-        Args:
-            bookmark_name (str): name for which to fetch passing poses
-            include_status (bool, optional): Whether to include pose_id status in the data (a 5th column). Defaults to False
-
-        Returns:
-            list(tuple), list(tuple): [all_data <only docking score and ligand efficiency], [filtered_data <also includes pose id and ligand name>]
-        """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
-        with self.storageman:
-            all_data, passing_data = self.storageman.get_plot_data(
-                bookmark_name, only_passing, include_status, x_axis, y_axis, limit
-            )
-
-        return all_data, passing_data
-
-    @_wrap_exceptions
     def get_receptor_representation(self) -> str:
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
@@ -1478,273 +1422,6 @@ class RingtailCore:
                 )
             else:
                 return None, None, None
-
-    # endregion
-
-    # region visualize ringtail
-
-    @_wrap_exceptions
-    def plot(
-        self, bookmark_name: str, save: bool = True, return_fig_handle: bool = False
-    ) -> Union[None, plt.Figure]:
-        """
-        Get data needed for creating Ligand Efficiency vs
-        Energy scatter plot from storageManager. Call OutputManager to create plot.
-        Option to save the plot and close it immediately, or keep it open and save it manually later.
-
-        Args:
-            bookmark_name (str): bookmark from which to fetch filtered data to plot
-            save (bool): whether to save plot to cd. Will save and close figure
-            return_fig_handle (bool): use to return a handle to the matplotlib figure instead of saving or showing figure
-
-        Returns:
-            matplotlib.pyplot.figure (optional): will not show figure if returning figure handle
-        """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
-        with self.storageman:
-            bookmark_filters = self.storageman.fetch_filters_from_bookmark(
-                bookmark_name
-            )  # fetches the filters used to produce the bookmark
-
-        if bookmark_filters:
-            max_miss = bookmark_filters["max_miss"]
-            if max_miss > 0:
-                raise OptionError(
-                    "Cannot use --plot with --max_miss > 0. Can plot for desired bookmark with --bookmark_name."
-                )
-
-        logger.info("Creating plot of results")
-        all_data, passing_data = self.get_plot_data(bookmark_name)
-        xdata = []
-        ydata = []
-        # add to list as docking_score/energy and ligand_efficiency
-        for line in all_data:
-            # handle empty db rows
-            if None in line:
-                continue
-            xdata.append(line[0])
-            ydata.append(line[1])
-
-        # base number of bins on data size
-        datalength = len(xdata)
-        # scale some plot parameters to size of dataset
-        if datalength > 1000:
-            num_of_bins = 100
-            markersize = 20
-        # for smaller dataset, scale num of bins and markersize to size of dataset
-        else:
-            num_of_bins = max(1, round(datalength / 10))
-            markersize = 60 - (datalength / 25)
-
-        # plot the data
-        output_manager = OutputManager()
-        fig = output_manager.plot_all_data(xdata, ydata, num_of_bins)
-
-        if passing_data != []:  # handle if no passing ligands
-            xaxis = []
-            yaxis = []
-            for line in passing_data:
-                # energy
-                xaxis.append(line[0])
-                # leff
-                yaxis.append(line[1])
-
-            output_manager.plot_single_points(xaxis, yaxis, markersize)
-
-        if save:
-            output_manager.save_scatterplot()
-
-        if return_fig_handle:
-            return fig
-        else:
-            plt.show()
-
-    @_wrap_exceptions
-    def display_pymol(self, bookmark_name, viewer_name: str = "pymol"):
-        # TODO update to new gui viewer paradigm
-        """
-        Launch pymol session and plot of LE vs docking score. Displays molecules when clicked.
-
-        Args:
-            bookmark_name (str): bookmark name to use in pymol. 'None' uses the whole db?
-        """
-        available_viewers = {
-            "pymol": self.launch_pymol,
-            "molview": self.launch_molviewer,
-        }
-        if viewer_name.lower() not in available_viewers.keys():
-            raise OptionError(
-                f"Selected viewer type {viewer_name} not in list of available viewers: {available_viewers.keys()}. Please pick a valid molecular viewer."
-            )
-
-        viewer = available_viewers[viewer_name]()
-        self.make_clickable_plot(viewer, bookmark_name, viewer_name)
-
-    @_wrap_exceptions
-    def launch_molviewer(self):
-        # placeholder for forli lab mol viewer
-        return True
-
-    @_wrap_exceptions
-    def launch_pymol(self):
-        """doc string"""
-        import subprocess
-        from rdkit.Chem import PyMol
-        import socket
-        import time
-
-        # launch pymol session
-        process = subprocess.Popen(
-            ["pymol", "-R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-
-        # ensure pymol was opened
-        def _is_pymol_running(host="localhost", port=9123):
-            """Check if PyMOL's remote server is responding."""
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                return sock.connect_ex((host, port)) == 0
-
-        # Wait until PyMOL is fully loaded
-        timeout = 10  # max wait time in seconds
-        start_time = time.time()
-
-        while not _is_pymol_running():
-            if time.time() - start_time > timeout:
-                break
-            time.sleep(0.5)
-
-        if not _is_pymol_running():
-            logger.error("PyMOL failed to start.")
-
-        try:
-            pymol = PyMol.MolViewer()
-        except ConnectionRefusedError as e:
-            raise RTCoreError(
-                "Error establishing connection with PyMol. Try manually launching PyMol with `pymol -R` in another terminal window."
-            ) from e
-        return pymol, process
-
-    @_wrap_exceptions
-    def make_clickable_plot(
-        self,
-        viewer,
-        bookmark_name: str,
-        viewer_type: str,
-        canvas=None,
-    ):
-        """should be handed a molecular viewer, plot requested data, and
-        have the plotted data be clickable which click will display them
-        in the molecular viewer"""
-        # NOTE not being maintained as of 2025/10
-
-        if hasattr(self, "cid"):
-            # disconnect any old connections
-            canvas.mpl_disconnect(self.cid)
-
-        # in case plot exist
-        if canvas is None:
-            axes = plt.axes()
-        else:
-            axes = canvas.axes
-
-        poseIDs = {}
-        with self.storageman:
-            # fetch data for passing ligands
-            _, passing_data = self.storageman.get_plot_data(
-                bookmark_name, only_passing=True
-            )
-
-        for line in passing_data:
-            axes.plot(line[0], line[1], ".r", mfc="None", picker=5)
-            poseIDs[(line[0], line[1])] = (
-                line[2],
-                line[3],
-            )  # line[0] is LE, line[1] is docking score, line[2] is pose_id, line[3] is ligname
-        axes.set_ylabel("Ligand Efficiency (kcal/mol/heavy atom)")
-        axes.set_xlabel("Docking Score (kcal/mol)")
-        axes.set_title("Passing Docking Poses")
-
-        # check if receptor in db
-        receptor = self.get_receptor_object()
-        if receptor[1]:
-
-            # load receptor if it exist in database
-            rec_name = receptor[0]
-            rec_string = receptor[1]
-
-            rec_string_list = rec_string.split("\n")
-            if viewer_type.lower() == "pymol":
-                import tempfile
-
-                rec_string = ReceptorManager.blob2str(receptor[1])
-                # with the rdkit pymol api, easiest to read receptor from file
-                with tempfile.NamedTemporaryFile(suffix=".pdbqt") as temp_file:
-                    temp_file.write(rec_string.encode("utf-8"))
-                    temp_file.flush()
-                    temp_file_path = temp_file.name
-                    viewer.LoadFile(temp_file_path, rec_name)
-                    # center view on receptor
-                    viewer.server.do("zoom")
-            else:
-                viewer.addpdbqt(
-                    rec_string_list,
-                    name=rec_name,
-                    parent=None,
-                    metadata=None,
-                    assign_radii_and_bonds=True,
-                )
-                o = viewer.objects
-                o.summary
-                viewer.showspheres(o[0])
-                viewer.autozoom()
-        else:
-            logger.debug(
-                "No receptor information in the database, receptor will not be displayed."
-            )
-
-        def _onpick(event):
-            # get info about the point
-            line = event.artist
-            # coordinates is x (leff) and y (e) axis
-            coords = tuple([c[0] for c in line.get_data()])
-            chosen_pose = poseIDs[coords]
-            ligname = chosen_pose[1]
-            pose_id = chosen_pose[0]
-            logger.info(f"ligname: {ligname}; pose_id: {pose_id}")
-
-            # make rdkit mol for poseid
-            _, mol, _, flexres_mols, _, flexible_residues = self.create_rdkit_mols([pose_id])[0]
-
-            # update viewer
-            if viewer_type.lower() == "pymol":
-                viewer.ShowMol(mol, name=ligname, showOnly=False)
-                for idx, resmol in enumerate(flexres_mols):
-                    viewer.ShowMol(
-                        resmol,
-                        name=ligname + "_" + flexible_residues[idx],
-                        showOnly=False,
-                    )
-            else:
-                o = viewer.objects
-                # this prop is required by _load_rdkit
-                mol.SetProp("_Name", f"{Chem.MolToSmiles(mol)}")
-                metadata = {"source": f"name::{Chem.MolToSmiles(mol)}"}
-
-                viewer.hidesticks(o[-1])
-                viewer.addrdkit(mol, "ligand smiles:" + Chem.MolToSmiles(mol))
-                viewer.showsticks(o[-1])
-                viewer.autozoom(o[-1])
-                viewer.colorbyelement(o[-1], carbon_color="grey")
-
-        if not canvas:
-            fig = plt.gcf()
-            self.cid = fig.canvas.mpl_connect("pick_event", _onpick)
-            plt.show()
-        else:
-            # the connection ID terminates once a new plot is made, need to keep track of
-            self.cid = canvas.mpl_connect("pick_event", _onpick)
-            # need to return updated mol
-            return canvas
 
     # endregion
 
@@ -2150,11 +1827,21 @@ class RingtailCore:
             )
 
         result = []
-        for pose_id, rdmol_binary, ligname, docking_score, leff, pose_coords_json, flexres_coords_json in pose_rows:
+        for (
+            pose_id,
+            rdmol_binary,
+            ligname,
+            docking_score,
+            leff,
+            pose_coords_json,
+            flexres_coords_json,
+        ) in pose_rows:
             mol = Chem.Mol(rdmol_binary)
             pose_coordinates = json.loads(pose_coords_json)
             if mol.GetNumAtoms() != len(pose_coordinates):
-                logger.error(f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}")
+                logger.error(
+                    f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}"
+                )
                 continue
 
             mol = self._add_conformer(mol, pose_coordinates)
@@ -2194,7 +1881,9 @@ class RingtailCore:
                     )
                     pose_flexres_mols.append(fr_copy)
 
-            result.append((pose_id, mol, ligname, pose_flexres_mols, properties, flexres_residues))
+            result.append(
+                (pose_id, mol, ligname, pose_flexres_mols, properties, flexres_residues)
+            )
 
         return result
 
@@ -2246,7 +1935,11 @@ class RingtailCore:
                 continue
 
             base_mol = None
-            merged_props = {"Binding energies": [], "Ligand effiencies": [], "Interactions": []}
+            merged_props = {
+                "Binding energies": [],
+                "Ligand effiencies": [],
+                "Interactions": [],
+            }
             all_flexres = []
 
             for pose_id, _, _, docking_score, leff, coords_json, fr_coords_json in rows:
@@ -2256,11 +1949,12 @@ class RingtailCore:
                     # In-memory copy of topology (no binary parse for poses 2..N)
                     tmp = Chem.Mol(topology)
                     if tmp.GetNumAtoms() != len(coords):
-                        logger.error(f"atom/coord mismatch for pose {pose_id}, skipping")
+                        logger.error(
+                            f"atom/coord mismatch for pose {pose_id}, skipping"
+                        )
                         continue
                     tmp = self._add_conformer(tmp, coords)
-                    if any(a.GetNumImplicitHs() > 0 for a in tmp.GetAtoms()):
-                        tmp = Chem.AddHs(tmp, addCoords=True)
+                    tmp = Chem.AddHs(tmp, addCoords=True)
                 except Exception:
                     logger.error(f"Failed to process pose {pose_id}, skipping")
                     continue
@@ -2287,14 +1981,21 @@ class RingtailCore:
                         for fr_idx, fr_mol in enumerate(flexres_mols_tmpl):
                             fr_copy = Chem.Mol(fr_mol)
                             fr_copy = RDKitMolCreate.add_pose_to_mol(
-                                fr_copy, flexres_pose_coords[fr_idx], flexres_info[fr_idx][1]
+                                fr_copy,
+                                flexres_pose_coords[fr_idx],
+                                flexres_info[fr_idx][1],
                             )
                             fr_copy = RDKitMolCreate.add_hydrogens(
-                                fr_copy, [flexres_pose_coords[fr_idx]], flexres_info[fr_idx][2], True
+                                fr_copy,
+                                [flexres_pose_coords[fr_idx]],
+                                flexres_info[fr_idx][2],
+                                True,
                             )
                             pose_flexres.append(fr_copy)
                     except Exception:
-                        logger.error(f"Failed to process flexres for pose {pose_id}, skipping flexres")
+                        logger.error(
+                            f"Failed to process flexres for pose {pose_id}, skipping flexres"
+                        )
                         pose_flexres = []
                 all_flexres.append(pose_flexres)
 

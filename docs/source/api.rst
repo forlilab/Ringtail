@@ -207,22 +207,6 @@ Output options
 ***************
 There are multiple options to output and visualize data in Ringtail.
 
-Creating scatter plot of ligands
-=================================
-The method ``plot`` generates a scatterplot of ligand efficiency vs docking score for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with the keyword ``bookmark_name`` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as ``scatter.png``.
-
-.. code-block:: python
-
-    rtc.plot()
-
-Evaluating molecules in 3d space with PyMol
-=============================================
-The ``pymol`` flag generates a scatterplot of ligand efficiency vs docking score as well, but only for the ligands contained in the bookmark specified with ``bookmark_name``. It also launches a PyMol session and will display the ligands in PyMol when clicked on the scatterplot. N.B.: Some users may encounter a ``ConnectionRefusedError``. If this happens, try manually launching PyMol (``pymol -R``) in a separate terminal window.
-
-.. code-block:: python
-
-    rtc.pymol(bookmark_name = "eworst6")
-
 Export molecule SDF files
 ==========================
 The method ``write_molecule_sdfs`` will write SDF files for each ligand passing the filter and saved in a specified bookmark (can also include those who don't pass by invoking the ``write_nonpassing = True`` option). The files will be saved to the path specified in the method call. If none is specified, the files will be saved in the current working directory. The SDF will contain poses passing the filter/in the bookmark ordered by increasing docking score. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
@@ -231,7 +215,7 @@ The method ``write_molecule_sdfs`` will write SDF files for each ligand passing 
 
     rtc.write_molecule_sdfs(sdf_path = "sdf_files", bookmark_name = "eworst6")
 
-Exporting tables or query results as CSV files
+Exporting select columns, tables, or query results as CSV files
 ==============================================
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. First, you can export a database table or bookmark (``requested_data``) to a csv file with a name (``csv_name``) specified in the method call. In this case one must specify that the type of the ``requested_data`` is of database type table. 
 

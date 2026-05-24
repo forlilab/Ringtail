@@ -246,7 +246,7 @@ class TestFiltering:
 
 
 class TestOutput:
-    """Output operations: SDFs, CSVs, logs, plots, bookmark exports."""
+    """Output operations: SDFs, CSVs, logs, bookmark exports."""
 
     def test_get_filterdata(self, populated_db, tmp_path):
         populated_db.filter(eworst=-7, output_bookmark="has_filterdata")
@@ -299,18 +299,21 @@ class TestOutput:
         populated_db.write_molecule_sdfs("sdf_bookmark", sdf_dir, all_in_one=False)
 
         sdf_files = {f.stem for f in Path(sdf_dir).iterdir()}
-        expected_lignames = {"3961", "5995", "11128", "11991", "13974", "15776", "136065", "127947"}
+        expected_lignames = {
+            "3961",
+            "5995",
+            "11128",
+            "11991",
+            "13974",
+            "15776",
+            "136065",
+            "127947",
+        }
         assert sdf_files == expected_lignames
 
         with open(Path(sdf_dir) / "136065.sdf") as f:
             lines = f.readlines()
         assert lines[3] == " 27 28  0  0  0  0  0  0  0  0999 V2000\n"
-
-    def test_plot(self, populated_db, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        populated_db.filter(eworst=-7, output_bookmark="plot_data")
-        populated_db.plot("plot_data")
-        assert (tmp_path / "scatter.png").is_file()
 
     def test_export_bookmark_db(self, populated_db, tmp_path):
         populated_db.filter(eworst=-7, output_bookmark="export_db")

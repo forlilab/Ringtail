@@ -2,7 +2,7 @@
 
 Exploring the database in the command line
 ############################################
-View the data contained within the database using a terminal, we recommend using the `VisiData tool <https://www.visidata.org/>`_. In addition to command line visualization, this tool has a number of other feature, including plotting. Upon opening the database with ``vd``, the terminal should look like this:
+View the data contained within the database using a terminal, we recommend using the `VisiData tool <https://www.visidata.org/>`_. In addition to command line visualization, this tool has a number of other features. Upon opening the database with ``vd``, the terminal should look like this:
 
 .. image:: https://user-images.githubusercontent.com/41704502/169162632-3a71d338-faa1-4109-8f04-40a96ee6d24e.png 
 

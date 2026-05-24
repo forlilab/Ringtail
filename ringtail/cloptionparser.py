@@ -430,18 +430,6 @@ def cmdline_parser(defaults: dict = {}):
         action="store",
         type=str,
     )
-    output_group.add_argument(
-        "-p",
-        "--plot",
-        help="Makes scatterplot of LE vs Best Energy, saves as scatter.png.",
-        action="store_true",
-    )
-    output_group.add_argument(
-        "-py",
-        "--pymol",
-        help="Lauch PyMOL session and plot of ligand efficiency vs docking score for molecules in bookmark specified with --bookmark_name. Will display molecule in PyMOL when clicked on plot. Will open receptor if one is saved in the database.",
-        action="store_true",
-    )
 
     properties_group = read_parser.add_argument_group(
         "Property Filters", "Specify energy and ligand efficiency filters"
@@ -988,10 +976,8 @@ class CLOptionParser:
             )
 
             self.output_options = SimpleNamespace(
-                plot=parsed_opts.plot,
                 export_bookmark_db=parsed_opts.export_bookmark_db,
                 export_receptor_pdbqt=parsed_opts.export_receptor_pdbqt,
-                pymol=parsed_opts.pymol,
                 data_from_bookmark=parsed_opts.data_from_bookmark,
                 individual_sdf_files=parsed_opts.individual_sdf_files,
                 output_log=parsed_opts.output_log,

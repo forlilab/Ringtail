@@ -11,8 +11,8 @@ Package for creating SQLite database from virtual screening results, performing 
 
 Ringtail reads collections of Docking Log File (DLG) from virtual screenings performed with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU)
 or PDBQT results from [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina), and deposits them into
-a SQLite database. It then allows for the filtering of results with numerous pre-defined options, generation of a simple result scatterplot, export of 
-molecule SDFs, and export of CSVs of result data. Parsing of output files from docking is parallelized across the user's CPU.
+a SQLite database. It then allows for the filtering of results with numerous pre-defined options including export of 
+molecule SDFs, export of fields of choice to a CSV format, and exporting smaller, filtered databases that are convenient to share with co-workers. Parsing of output files from docking is parallelized across the user's CPU.
 
 The publication describing the design, implementation, and features of Ringtail may be found in the JCIM paper:
 
@@ -133,10 +133,10 @@ Multiple groups of filters are available in Ringtail, including simpler filters 
 $ rt_process_vs read --input_db output.db --eworst -6 --vdw_interactions A:VAL:279:
 ```
 
-This produces an output log `output_log.txt` with the names of ligands passing the filter, as well as their binding energies. Each round of filtering is also stored in the database as a SQLite view, which we refer to as a "bookmark" (default value is `passing_results`). In addition to the easy-to-read text file, filtered ligands can be written to SDF files and visualized in PyMol (other output options like plotting are described on [ReadTheDocs](/https://ringtail.readthedocs.io)).
+This produces an output log `output_log.txt` with the names of ligands passing the filter, as well as their binding energies. Each round of filtering is also stored in the database as a SQLite view, which we refer to as a "bookmark" (default value is `passing_results`). In addition to the easy-to-read text file, filtered ligands can be written to SDF files to CSV files (other output options are described on [ReadTheDocs](/https://ringtail.readthedocs.io)).
 
 ```bash
-$ rt_process_vs read --input_db output.db --bookmark_name passing_results --export_sdf_path . --pymol
+$ rt_process_vs read --input_db output.db --bookmark_name passing_results --export_sdf_path . 
 ```
 
 For quick access to the options in the command line interface, you can use the keyword `--help`:
@@ -187,23 +187,8 @@ rtc.filter(eworst=-6,
            output_log = "filtered_results.txt")
 ```
 
-To export filtered molecules in a specific bookmark to SDF files use the following method, where the `sdf_path` directory will be created if it does not already exist. Visualizing molecules in pymol is similarly accomplished by calling the `pymol` method.
 
-```python
-rtc.write_molecule_sdfs(sdf_path = ".", bookmark_name = "passing_results")
-
-rtc.pymol(bookmark_name = "passing_results")
-```
 
 ### Arguments used for API vs command line
-All of the arguments used for the command line tool applies to the Ringtail API in some form. For example, bookmark names and filter values are provided when an API method is called, while the log level can be sat at instantiation or at any time during the scripting process. When using the API, instead of differentiating between an `--input_db` and `--output_db`, only one database file is operated on in a given instantiated `RingtailCore` object. A subset of the command line arguments are actual API methods (such as `--plot` or `--find_similar_ligands`) that will be called directly as methods, with optional input arguments (typically a `bookmark_name` or `ligand_name`). Each API method comes with type hints and extensive documentation. Additionally, extensive example of the use of both can be found on [readthedocs](https://ringtail.readthedocs.io/). 
+All of the arguments used for the command line tool applies to the Ringtail API in some form. For example, bookmark names and filter values are provided when an API method is called, while the log level can be sat at instantiation or at any time during the scripting process. When using the API, instead of differentiating between an `--input_db` and `--output_db`, only one database file is operated on in a given instantiated `RingtailCore` object. A subset of the command line arguments are actual API methods (e.g., `--find_similar_ligands`) that will be called directly as methods, with optional input arguments (typically a `bookmark_name` or `ligand_name`). Each API method comes with type hints and extensive documentation. Additionally, extensive example of the use of both can be found on [readthedocs](https://ringtail.readthedocs.io/). 
 
-
-# Testing with the Salticidae viewer
-
-- Clone the PrivateRingtail repository and switch to `salticidae_viewer` branch
-- In the root directory of PrivateRingtail, clone the `forlilab/salticidae` repo
-- In `salticidae` switch to the `pyside` branch 
-- Run `python GUI/ringtail_gui.py` as usual. 
-
-This should open two windows, the Ringtail gui and the Salticidae viewer. If you load the database as usual and generate the interactive plot, clicking in the dots should display the molecule on the viewer, just like in the pymol implementation. 

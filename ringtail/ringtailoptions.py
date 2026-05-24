@@ -118,8 +118,6 @@ class RingtailDefaults:
     data_from_bookmark: bool = None
     input_bookmark: str = None
     find_similar_ligands: bool = None
-    plot: bool = None
-    pymol: bool = None
 
     @classmethod
     def all_fields(cls):

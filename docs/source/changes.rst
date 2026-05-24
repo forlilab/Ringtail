@@ -58,7 +58,6 @@ Enhancements to the codebase
 * The method `export_csv` has been broken into three distinct methods, `export_columns_as_csv` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, `export_table_as_csv` where an entire table is exported, and `export_sql_as_csv` where the user specifies a properly formatted SQL prompt
 * The method `export_bookmark_db` 
 * Status selection enabled using `set_ligand_status` API, three new tables included: Accepted, Maybe, Rejected
-* The method `get_plot_data` now has more input parameters including specifying x and y axis, and returning the status of a pose/point 
 * The method `drop_bookmark` is now `delete_bookmark`
 * New method `get_bookmark_interactions` to get interaction data from a bookmark
 * Several new APIs to support the GUI, generally not useful outside the GUI
@@ -68,6 +67,7 @@ Enhancements to the codebase
 
 Changes to code behavior
 =========================
+* The options for creating plots and opening PyMol sessions (and associated methods) have been discontinued in favor for the Ringtail GUI.
 * For the methods `filter()` and `cluster()` the keys `bookmark_name` and `filter_bookmark` have been changed to `output_bookmark` and `input_bookmark`, respectively, for clarity
 * The column `nr_interactions` in the Results table is now called `num_interactions` for consistency with `num_hb`
 * The column `ligand_coordinates` in the Results table is now called `pose_coordinates`

@@ -158,10 +158,6 @@ Outputs
 *********
 The primary outputs from ``rt_process_vs`` are the database itself (``write`` mode) and the filtering log file (``read`` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
-The ``--plot`` flag generates a scatterplot of ligand efficiency vs docking score for the top-scoring pose from each ligand. Ligands passing the given filters or in the bookmark given with ``--bookmark_name`` will be highlighted in red. The plot also includes histograms of the ligand efficiencies and binding energies. The plot is saved as ``scatter.png``.
-
-The ``--pymol`` flag also generates a scatterplot of ligand efficiency vs docking score, but only for the ligands contained in the bookmark specified with ``--bookmark_name``. It also launches a PyMol session and will display the ligands in PyMol when clicked on the scatterplot. N.B.: Some users may encounter a ``ConnectionRefusedError``. If this happens, try manually launching PyMol (``pymol -R``) in a separate terminal window.
-
 Using the ``--export_sdf_path`` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the bookmark given with ``--bookmark_name``. The SDF will contain poses passing the filter/in the bookmark ordered by increasing docking score. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
 
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is ``--export_bookmark_csv``, which takes a string for the name of a table or result bookmark in the database and returns the CSV of the data in that table. The file will be saved as ``<table_name>.csv``.
@@ -180,19 +176,6 @@ Export results from a previous filtering as a CSV
     $ rt_process_vs read --input_db output.db --score_percentile 0.1 --bookmark_name filter1
     $ rt_process_vs read --input_db output.db --export_bookmark_csv filter1
 
-Create scatterplot highlighting ligands passing filters
-=======================================================
-It is possible to create a scatter plot of the data in the database. All the data in the database will be plotted as histograms as well as a gradient representation of the histograms in the main scatter plot. Any ligands passing the filters will be plotted as single points atop of the binned data. The plot has cutoffs at 0 for both the x and y axis. 
-
-.. code-block:: bash
-
-    $ rt_process_vs write --file_path Files/
-    $ rt_process_vs read --input_db output.db --score_percentile 0.1 --bookmark_name filter1
-    $ rt_process_vs read --input_db output.db --bookmark_name filter1 --plot
-
-    `all_ligands_scatter.png`
-
-.. image:: https://user-images.githubusercontent.com/41704502/215909808-2edc29e9-ebdb-4f0e-a87a-a1c293687b2e.png
 
 Using a config file
 *********************
@@ -331,6 +314,3 @@ Keywords pertaining to output methods
     "find_similar_ligands", "Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest.", "query_ligname (str)"
     "get_previous_filter_data", "Get data requested in `outfields` from the bookmark of a previous filtering", "outfields (str), bookmark_name (str)"
     "find_similar_ligands", "Find ligands in cluster with query_ligname", "query_ligname (str)"
-    "plot", "Create scatterplot of ligand efficiency vs docking score for best pose of each ligand. Saves as 'scatter.png'.", "save (bool)"
-    "pymol", "Launch interactive LE vs Docking Score plot and PyMol session. Ligands in the bookmark specified with bookmark_name will be ploted and displayed in PyMol when clicked on.","bookmark_name (str)"
-

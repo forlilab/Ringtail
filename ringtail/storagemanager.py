@@ -1342,140 +1342,6 @@ class StorageManager(ABC):
         )
         return self.db_query(*query.build()).fetchall()
 
-    def get_gui_plot_data(
-        self,
-        bookmark_name: str,
-        include_status: bool = False,
-        x_axis: str = "docking_score",
-        y_axis: str = "leff",
-        limit: int = None,
-    ):
-        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
-        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
-
-        Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
-            include_status (bool): look for status tables and include if requested
-            x_axis (str, optional): Defaults to "docking_score".
-            y_axis (str, optional): Defaults to "leff".
-
-        Returns:
-            tuple: cursors as (<all data cursor>, <passing data cursor>)
-        """
-
-        bookmark_query = self.QueryBuilder()
-        bookmark_query.SELECT(
-            "R." + x_axis,
-            "R." + y_axis,
-            "R." + "pose_id",
-            "L." + "ligname",
-            "L." + "ligand_smile",
-        )
-        if limit:
-            bookmark_query.LIMIT(limit)
-
-        if self.is_bookmark(bookmark_name):
-            if include_status:
-                bookmark_query.SELECT_STATUS()
-            bookmark_query.FROM("Results", "R").IN_BOOKMARK(bookmark_name).JOIN(
-                "Ligands", "L", "ligand_id"
-            )
-
-            data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
-            from .ringtailoptions import statuses
-
-            status_map = {v: k for k, v in statuses.items()}
-            # will assume it is a status table
-            if include_status:
-                bookmark_query.SELECT(
-                    f"""'{status_map[bookmark_name.lower()]}' as status"""
-                )
-            bookmark_query.FROM("Results", "R").JOIN(
-                bookmark_name, "T", "pose_id"
-            ).JOIN("Ligands", "L", "ligand_id")
-
-            data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        else:
-            if include_status:
-                bookmark_query.SELECT_STATUS()
-            bookmark_query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
-
-            data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        return data
-
-    def get_plot_data(
-        self,
-        bookmark_name: str,
-        only_passing: bool = False,
-        include_status: bool = False,
-        x_axis: str = "docking_score",
-        y_axis: str = "leff",
-        limit: int = None,
-    ):
-        """This function gathers two docking results columns (docking score and ligand efficienct) from all data,
-        as well as pose_id and ligand name from given bookmark. Can request the data just for poses in the bookmark.
-
-        Args:
-            bookmark_name (str): name of bookmark for which to fetch passing data. Returns empty list if bookmark does not exist.
-            only_passing (bool): Only return data for passing ligands. Will return empty list for all data.
-            include_status (bool): look for status tables and include if requested
-            x_axis (str, optional): Defaults to "docking_score".
-            y_axis (str, optional): Defaults to "leff".
-
-        Returns:
-            tuple: cursors as (<all data cursor>, <passing data cursor>)
-        """
-        all_data_query = self.QueryBuilder()
-        all_data_query.SELECT("docking_score", "leff").FROM("Results")
-        bookmark_query = self.QueryBuilder()
-        bookmark_query.SELECT(
-            "R." + x_axis, "R." + y_axis, "R." + "pose_id", "L." + "ligname"
-        )
-        if limit:
-            bookmark_query.LIMIT(limit)
-
-        if self.is_bookmark(bookmark_name):
-            if include_status:
-                bookmark_query.SELECT_STATUS()
-            bookmark_query.FROM("Results", "R").IN_BOOKMARK(bookmark_name).JOIN(
-                "Ligands", "L", "ligand_id"
-            )
-
-            if only_passing:
-                all_data = []
-            else:
-                all_data = self.db_query(all_data_query.build()[0]).fetchall()
-            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        elif self._is_table(bookmark_name) and bookmark_name.lower() != "results":
-            # will assume it is a status table
-            if include_status:
-                bookmark_query.SELECT(f"""'{bookmark_name.lower()}' as status""")
-            bookmark_query.FROM("Results", "R").JOIN(
-                bookmark_name, "T", "pose_id"
-            ).JOIN("Ligands", "L", "ligand_id")
-
-            if only_passing:
-                all_data = []
-            else:
-                all_data = self.db_query(all_data_query.build()[0]).fetchall()
-            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        else:
-            all_data = self.db_query(all_data_query.build()[0]).fetchall()
-
-            if include_status:
-                bookmark_query.SELECT_STATUS()
-            bookmark_query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
-
-            passing_data = self.db_query(bookmark_query.build()[0]).fetchall()
-
-        return all_data, passing_data
-
     def fetch_columns_from_table_as_dicts(
         self, table: str, columns: list, length: int = None, starting_rowid: int = 0
     ) -> tuple[list[str], list[dict]]:
@@ -1495,7 +1361,12 @@ class StorageManager(ABC):
             tuple[list[str], list[dict]]: column names and list of row dicts
         """
         # Direct physical table that is not Results/bookmark/status — naive query
-        if self._is_table(table) and not self.is_bookmark(table) and not self._is_statustable(table) and table.lower() != "results":
+        if (
+            self._is_table(table)
+            and not self.is_bookmark(table)
+            and not self._is_statustable(table)
+            and table.lower() != "results"
+        ):
             naive = self.QueryBuilder()
             naive.SELECT(",".join(columns)).FROM(table)
             if length:

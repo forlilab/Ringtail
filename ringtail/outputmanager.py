@@ -8,10 +8,6 @@ from .exceptions import OutputError
 from .ringtailoptions import Filters
 import os
 import json
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import cm
-from matplotlib import colors
 from rdkit import Chem
 from rdkit.Chem import SDWriter
 from meeko import RDKitMolCreate
@@ -151,7 +147,9 @@ class OutputManager:
             OutputError
         """
         try:
-            self.output_log.write(f"\nResult bookmark name: {bookmark_name}\n***************\n")
+            self.output_log.write(
+                f"\nResult bookmark name: {bookmark_name}\n***************\n"
+            )
         except Exception as e:
             raise OutputError("Error writing bookmark name to log") from e
 
@@ -288,7 +286,11 @@ class OutputManager:
         filepath = export_sdf_directory + "/" + filename
         try:
             str_props = {
-                k: (json.dumps(v) if isinstance(v, list) else v if isinstance(v, str) else str(v))
+                k: (
+                    json.dumps(v)
+                    if isinstance(v, list)
+                    else v if isinstance(v, str) else str(v)
+                )
                 for k, v in properties.items()
             }
             with open(filepath, "a") as sdf_file:
@@ -301,7 +303,11 @@ class OutputManager:
                 else:
                     for conf_idx, conf in enumerate(mol.GetConformers()):
                         single = _mol_with_one_conformer(mol, conf.GetId())
-                        flexres = flexres_per_conf[conf_idx] if conf_idx < len(flexres_per_conf) else []
+                        flexres = (
+                            flexres_per_conf[conf_idx]
+                            if conf_idx < len(flexres_per_conf)
+                            else []
+                        )
                         combined = RDKitMolCreate.combine_rdkit_mols([single] + flexres)
                         for k, v in str_props.items():
                             combined.SetProp(k, v)
@@ -326,168 +332,3 @@ class OutputManager:
                 f.write(receptor_str)
         except Exception as e:
             raise OutputError(f"Error writing receptor pdbqt to {recname}") from e
-
-    def scatter_hist(self, x, y, z, ax_histx, ax_histy):
-        """
-        Makes scatterplot with a histogram on each axis
-
-        Args:
-            x (list): x coordinates for data
-            y (list): y coordinates for data
-            z (list): z coordinates for data
-            ax (matplotlib.axis): scatterplot axis
-            ax_histx (matplotlib.axis): x histogram axis
-            ax_histy (matplotlib.axis): y histogram axis
-
-        Raises:
-            OutputError
-        """
-        try:
-            # no labels
-            ax_histx.tick_params(axis="x", labelbottom=False)
-            ax_histy.tick_params(axis="y", labelleft=False)
-
-            # the scatter plot:
-            self.ax_main.scatter(x, y, c=z, cmap="viridis")
-
-            # now determine nice limits by hand:
-            xbinwidth = 0.25
-            ybinwidth = 0.01
-            xminlim = (int(min(x) / xbinwidth) + 3) * xbinwidth
-            xmaxlim = (int(max(x) / xbinwidth) + 3) * xbinwidth
-            yminlim = (int(min(y) / ybinwidth) + 3) * ybinwidth
-            ymaxlim = (int(max(y) / ybinwidth) + 3) * ybinwidth
-
-            xbins = np.arange(xminlim, xmaxlim + xbinwidth, xbinwidth)
-            ybins = np.arange(yminlim, ymaxlim + ybinwidth, ybinwidth)
-            ax_histx.hist(x, bins=xbins, color="dimgrey")
-            ax_histy.hist(y, bins=ybins, orientation="horizontal", color="dimgrey")
-        except Exception as e:
-            raise OutputError("Error occurred while adding all data to plot") from e
-
-    def plot_all_data(self, xdata, ydata, num_of_bins: int = 100):
-        """Takes dictionary of binned data where key is the
-        coordinates of the bin and value is the number of points in that bin.
-        Adds to scatter plot colored by value
-
-        Args:
-            xdata (list): list of x axis data (needs to be same length as ydata)
-            ydata (list): list of y axis data (needs to be same length as xdata)
-            num_of_bins (int): number of bins to organize data in
-
-        Returns:
-            matplotlib.pyplot.figure
-
-        Raises:
-            OutputError
-        """
-        try:
-            # calculate axis ranges
-            data_xy_range = [[min(xdata), 0], [min(ydata), 0]]
-            # bin data using numpy
-            hist, xbins, ybins = np.histogram2d(
-                xdata,
-                ydata,
-                bins=num_of_bins,
-                range=data_xy_range,
-                density=False,
-            )
-            # start with a square Figure
-            fig = plt.figure()
-
-            gs = fig.add_gridspec(
-                2,
-                2,
-                width_ratios=(7, 2),
-                height_ratios=(2, 7),
-                left=0.1,
-                right=0.9,
-                bottom=0.1,
-                top=0.9,
-                wspace=0.05,
-                hspace=0.05,
-            )
-            # create main axis
-            self.ax_main = fig.add_subplot(gs[1, 0])
-
-            # histogram, X/docking score
-            ax_histx = fig.add_subplot(gs[0, 0], sharex=self.ax_main)
-            ax_histx.hist(xdata, bins=xbins, color="dimgrey")
-            ax_histx.tick_params(axis="x", labelbottom=False)
-
-            # histogram, Y/ligand efficiency
-            ax_histy = fig.add_subplot(gs[1, 1], sharey=self.ax_main)
-            ax_histy.hist(ydata, bins=ybins, orientation="horizontal", color="dimgrey")
-            ax_histy.tick_params(axis="y", labelleft=False)
-
-            # produce the heat map as a showable image
-            cmap = plt.colormaps["plasma"]
-            # set full transparancy for bin counts below the limit (i.e., 0)
-            cmap.set_under(alpha=0)
-            self.im = self.ax_main.imshow(
-                hist.T,
-                origin="lower",
-                extent=[xbins[0], xbins[-1], ybins[0], ybins[-1]],
-                aspect="auto",
-                cmap=cmap,
-                # only show bins with one or more values
-                vmin=1,
-            )
-            # add 5 % padding to the lower limit of x and y axes
-            self.ax_main.set_xlim(min(xdata) * 1.05, 0)
-            self.ax_main.set_ylim(min(ydata) * 1.05, 0)
-            # create colorbar for the heatmap
-            cbar = fig.colorbar(
-                mappable=cm.ScalarMappable(
-                    colors.Normalize(vmin=hist.min(), vmax=hist.max()), cmap=cmap
-                ),
-                ax=fig.gca(),
-                label="Scatterplot bin count",
-            )
-            self.ax_main.set_xlabel("Best docking score (kcal/mol)")
-            self.ax_main.set_ylabel("Best ligand efficiency")
-
-        except Exception as e:
-            raise OutputError("Error occurred while initializing plot") from e
-
-        return fig
-
-    def plot_single_points(
-        self, x: list, y: list, markersize: int = 20, color="crimson"
-    ):
-        """Add points to scatter plot with given x and y coordinates and color.
-
-        Args:
-            x (float): x coordinate
-            y (float): y coordinate
-            color (str, optional): Color for point. Default black.
-
-        Raises:
-            OutputError
-        """
-        try:
-            self.ax_main.scatter(
-                x,
-                y,
-                c=color,
-                label="Single passing poses",
-                edgecolors="black",
-                s=markersize,
-            )
-            self.ax_main.legend()
-            self.ax_main.legend().set_loc("best")
-        except Exception as e:
-            raise OutputError("Error occurred while plotting") from e
-
-    def save_scatterplot(self):
-        """
-        Saves and closes current figure as scatter.png
-
-        Raises:
-            OutputError
-        """
-        try:
-            plt.savefig("scatter.png", bbox_inches="tight")
-            plt.close()
-        except Exception as e:
-            raise OutputError("Error while saving figure") from e
