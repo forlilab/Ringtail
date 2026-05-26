@@ -30,7 +30,7 @@ def populated_db(tmp_path, storage_type):
     """Fresh 217-ligand adgpu db (group1 + group2) for each test."""
     rtc = RingtailCore(str(tmp_path / "populated.db"), storage_type=storage_type)
     rtc.add_results_from_files(
-        file_path=[str(TEST_DATA / "adgpu/group1"), str(TEST_DATA / "adgpu/group2")],
+        docking_results=[str(TEST_DATA / "adgpu/group1"), str(TEST_DATA / "adgpu/group2")],
         docking_mode="adgpu",
     )
     return rtc

@@ -18,7 +18,7 @@ class TestCoreOperations:
 
     def test_add_file(self, tmp_db):
         tmp_db.add_results_from_files(
-            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
+            docking_results=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
             max_poses=3,
             docking_mode="adgpu",
         )
@@ -26,7 +26,7 @@ class TestCoreOperations:
 
     def test_store_all_poses(self, tmp_db):
         tmp_db.add_results_from_files(
-            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
+            docking_results=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
             store_all_poses=True,
             docking_mode="adgpu",
         )
@@ -34,22 +34,22 @@ class TestCoreOperations:
 
     def test_add_folder(self, tmp_db):
         tmp_db.add_results_from_files(
-            file_path=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
         )
         assert tmp_db.table_length("Ligands") == 138
 
     def test_append_to_database(self, tmp_db):
         tmp_db.add_results_from_files(
-            file_path=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
         )
         tmp_db.add_results_from_files(
-            file_path=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
         )
         assert tmp_db.table_length("Ligands") == 217
 
     def test_save_receptor(self, tmp_db):
         tmp_db.add_results_from_files(
-            file_path=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
         )
         count_before = tmp_db.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
@@ -69,10 +69,10 @@ class TestCoreOperations:
             tmp_db.db_summary_data()
 
         tmp_db.add_results_from_files(
-            file_path=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
         )
         tmp_db.add_results_from_files(
-            file_path=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
         )
         data, _ = tmp_db.db_summary_data()
         assert isinstance(data, dict)
@@ -81,23 +81,23 @@ class TestCoreOperations:
 
     def test_duplicate_handling(self, tmp_db):
         f = str(TEST_DATA / "adgpu/group1/1451.dlg.gz")
-        tmp_db.add_results_from_files(file=f, docking_mode="adgpu")
+        tmp_db.add_results_from_files(docking_results=f, docking_mode="adgpu")
         result_count = tmp_db.table_length("Results")
         inter_count = tmp_db.table_length("Interactions")
 
         tmp_db.add_results_from_files(
-            file=f, docking_mode="adgpu", duplicate_handling="replace"
+            docking_results=f, docking_mode="adgpu", duplicate_handling="replace"
         )
         assert tmp_db.table_length("Results") == result_count
         assert tmp_db.table_length("Interactions") == inter_count
 
         tmp_db.add_results_from_files(
-            file=f, docking_mode="adgpu", duplicate_handling="ignore"
+            docking_results=f, docking_mode="adgpu", duplicate_handling="ignore"
         )
         assert tmp_db.table_length("Results") == result_count
         assert tmp_db.table_length("Interactions") == inter_count
 
-        tmp_db.add_results_from_files(file=f, docking_mode="adgpu")
+        tmp_db.add_results_from_files(docking_results=f, docking_mode="adgpu")
         assert tmp_db.table_length("Results") == result_count * 2
         assert tmp_db.table_length("Interactions") == inter_count * 2
 
@@ -108,12 +108,12 @@ class TestCoreOperations:
         setup_logging(level="DEBUG", logfile=logfile)
 
         tmp_db.add_results_from_files(
-            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
+            docking_results=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
             max_poses=1,
             docking_mode="adgpu",
         )
         tmp_db.add_results_from_files(
-            file=str(TEST_DATA / "adgpu/group1/1620.dlg.gz"),
+            docking_results=str(TEST_DATA / "adgpu/group1/1620.dlg.gz"),
             max_poses=4,
             docking_mode="adgpu",
         )
@@ -343,7 +343,7 @@ class TestOutput:
 class TestStorageMan:
     def test_bookmark_info(self, tmp_db: RingtailCore):
         tmp_db.add_results_from_files(
-            file_path=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
         )
         tmp_db.filter(
             eworst=-3,
@@ -374,7 +374,7 @@ class TestStorageMan:
         from importlib.metadata import version
 
         tmp_db.add_results_from_files(
-            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
+            docking_results=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
             max_poses=1,
             docking_mode="adgpu",
         )
@@ -438,7 +438,7 @@ class TestMergeDB:
 class TestADGPUHandling:
     def test_reactive_filtering(self, tmp_db):
         tmp_db.add_results_from_files(
-            file_path=str(TEST_DATA / "reactive"),
+            docking_results=str(TEST_DATA / "reactive"),
             store_all_poses=True,
             receptor_file=str(TEST_DATA / "reactive/4j8m_m_rigid.pdbqt"),
             docking_mode="adgpu",
@@ -451,7 +451,7 @@ class TestVinaHandling:
     def test_file_add(self, tmp_db):
         vina_path = TEST_DATA / "vina"
         tmp_db.add_results_from_files(
-            file_path=str(vina_path),
+            docking_results=str(vina_path),
             receptor_file=str(vina_path / "receptor.pdbqt"),
             save_receptor=True,
             docking_mode="vina",
@@ -471,7 +471,7 @@ class TestVinaHandling:
     def test_add_interactions(self, tmp_db):
         vina_path = TEST_DATA / "vina"
         tmp_db.add_results_from_files(
-            file_path=str(vina_path),
+            docking_results=str(vina_path),
             receptor_file=str(vina_path / "receptor.pdbqt"),
             save_receptor=True,
             docking_mode="vina",
@@ -485,7 +485,7 @@ class TestVinaHandling:
             str(tmp_path / "flexres_json.db"), storage_type=storage_type
         )
         rtc_json.add_results_from_files(
-            file=str(data_path / "ligand.pdbqt"),
+            docking_results=str(data_path / "ligand.pdbqt"),
             docking_mode="vina",
             receptor_file=str(data_path / "receptor.json"),
             save_receptor=True,
@@ -494,7 +494,7 @@ class TestVinaHandling:
             str(tmp_path / "flexres_pdbqt.db"), storage_type=storage_type
         )
         rtc_pdbqt.add_results_from_files(
-            file=str(data_path / "ligand.pdbqt"),
+            docking_results=str(data_path / "ligand.pdbqt"),
             docking_mode="vina",
             receptor_file=str(data_path / "receptor.pdbqt"),
             save_receptor=True,
@@ -511,7 +511,7 @@ class TestVinaHandling:
     def test_polymer_receptor(self, tmp_db):
         data_path = TEST_DATA / "flexres"
         tmp_db.add_results_from_files(
-            file=str(data_path / "ligand.pdbqt"),
+            docking_results=str(data_path / "ligand.pdbqt"),
             docking_mode="vina",
             receptor_file=str(data_path / "receptor.json"),
             save_receptor=True,
@@ -527,7 +527,7 @@ class TestVinaHandling:
 
         data_path = TEST_DATA / "flexres"
         tmp_db.add_results_from_files(
-            file=str(data_path / "ligand.pdbqt"),
+            docking_results=str(data_path / "ligand.pdbqt"),
             receptor_file=str(data_path / "receptor.pdbqt"),
             recursive=True,
             docking_mode="vina",
@@ -552,7 +552,7 @@ class TestVinaHandling:
     def test_various_filters(self, tmp_db):
         vina_path = TEST_DATA / "vina"
         tmp_db.add_results_from_files(
-            file_path=str(vina_path),
+            docking_results=str(vina_path),
             receptor_file=str(vina_path / "receptor.pdbqt"),
             save_receptor=True,
             docking_mode="vina",
@@ -567,11 +567,11 @@ class TestVinaHandling:
         setup_logging(level="DEBUG", logfile=logfile)
 
         tmp_db.add_results_from_files(
-            file=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"), docking_mode="adgpu"
         )
         rtc2 = RingtailCore(tmp_db.db_file, storage_type=tmp_db.storagetype)
         rtc2.add_results_from_files(
-            file=str(TEST_DATA / "vina/sample-result.pdbqt"), docking_mode="vina"
+            docking_results=str(TEST_DATA / "vina/sample-result.pdbqt"), docking_mode="vina"
         )
         warning = (
             "The following database properties do not agree with the properties last used for this database: \n"
@@ -597,7 +597,7 @@ class TestADNGHandling:
     def test_file_add(self, tmp_db):
         adng_path = TEST_DATA / "adng"
         tmp_db.add_results_from_files(
-            file_path=str(adng_path),
+            docking_results=str(adng_path),
             receptor_file=str(adng_path / "helix--scofu01.json"),
             save_receptor=True,
             docking_mode="adng",
@@ -608,7 +608,7 @@ class TestADNGHandling:
     def test_file_add_no_interactions(self, tmp_db):
         adng_path = TEST_DATA / "adng"
         tmp_db.add_results_from_files(
-            file_path=str(adng_path),
+            docking_results=str(adng_path),
             calculate_interactions=False,
             docking_mode="adng",
         )
@@ -618,7 +618,7 @@ class TestADNGHandling:
     def test_calc_interactions_deferred(self, tmp_db):
         adng_path = TEST_DATA / "adng"
         tmp_db.add_results_from_files(
-            file_path=str(adng_path),
+            docking_results=str(adng_path),
             calculate_interactions=False,
             docking_mode="adng",
         )
@@ -632,7 +632,7 @@ class TestADNGHandling:
     def test_filtering(self, tmp_db):
         adng_path = TEST_DATA / "adng"
         tmp_db.add_results_from_files(
-            file_path=str(adng_path),
+            docking_results=str(adng_path),
             receptor_file=str(adng_path / "helix--scofu01.json"),
             save_receptor=True,
             docking_mode="adng",
@@ -662,7 +662,7 @@ class TestOptions:
                 for f in ["127458.dlg.gz", "173101.dlg.gz", "100729.dlg.gz"]
             )
         )
-        tmp_db.add_results_from_files(file_list=str(filelist), docking_mode="adgpu")
+        tmp_db.add_results_from_files(docking_results=str(filelist), docking_mode="adgpu")
         tmp_db.filters = Filters({"score_percentile": 20})
         assert tmp_db.filters.eworst is None
         assert tmp_db.filters.score_percentile == 20
@@ -687,10 +687,10 @@ class TestOptions:
             + str(TEST_DATA / "adgpu/group3/60239.dlg.gz")
             + "\n"
         )
-        tmp_db.add_results_from_files(file_list=str(list1), docking_mode="adgpu")
+        tmp_db.add_results_from_files(docking_results=str(list1), docking_mode="adgpu")
         count_old = tmp_db.table_length("Ligands")
         tmp_db.add_results_from_files(
-            file_list=str(list2), docking_mode="adgpu", overwrite=True
+            docking_results=str(list2), docking_mode="adgpu", overwrite=True
         )
         count_new = tmp_db.table_length("Ligands")
         assert count_old == 3

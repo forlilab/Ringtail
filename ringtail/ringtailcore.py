@@ -130,9 +130,10 @@ class RingtailCore:
         )
 
         self._run_mode = access_mode.lower()
-        if self._run_mode == "gui":
-            with self.storageman as sm:
-                sm.ensure_gui_tables()
+
+    def build_gui_tables(self):
+        with self.storageman as sm:
+            sm.ensure_gui_tables()
 
     @_wrap_exceptions
     def get_previous_docking_mode(self) -> Union[None, str]:
@@ -150,9 +151,7 @@ class RingtailCore:
     @_wrap_exceptions
     def add_results_from_files(
         self,
-        file: str = RingtailDefaults.file,
-        file_path: str = RingtailDefaults.file_path,
-        file_list: str = RingtailDefaults.file_list,
+        docking_results: "str | list[str]" = RingtailDefaults.docking_results,
         recursive: bool = RingtailDefaults.recursive,
         receptor_file: str = None,
         save_receptor: bool = RingtailDefaults.save_receptor,
@@ -172,10 +171,9 @@ class RingtailCore:
         Options can be provided as a dict or as individual options. If both are provided, individual options will overwrite those from the dictionary.
 
         Args:
-            file (str, optional: list(str)): ligand result file
-            file_path (str, optional: list(str)): list of folders containing one or more result files
-            file_list (str, optional: list(str)): list of ligand result file(s)
-            recursive (bool): used to recursively search file_path for folders inside folders
+            docking_results (str | list[str]): one or more docking result files, directories to scan,
+                or text files listing result paths. Type is auto-detected per item.
+            recursive (bool): used to recursively search directories in docking_results
             receptor_file (str): string containing the receptor .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
@@ -194,16 +192,14 @@ class RingtailCore:
 
         """
         results = ResultsObject()
-        results.file = file
-        results.file_path = file_path
-        results.file_list = file_list
+        results.docking_results = docking_results
         results.recursive_path_traverse = recursive
         results.receptor_file_path = receptor_file
         results.save_receptor = save_receptor
 
         if not results.has_results and not results.save_receptor:
             raise OptionError(
-                "At least one input option needs to be used: file, file_path, file_list, or save_receptor"
+                "At least one input option needs to be used: docking_results or save_receptor"
             )
 
         # validate docking mode
@@ -301,7 +297,7 @@ class RingtailCore:
                     )
 
         logger.debug(
-            f"These are the provided files: {results.file}, directories: {results.file_path}, and file lists: {results.file_list} provided for database storage."
+            f"These are the provided docking results for database storage: {results.docking_results}"
         )
 
         logger.info("Adding results...")

@@ -20,7 +20,6 @@ import traceback
 from datetime import datetime
 import multiprocessing as mp
 
-from .util import iterate_nested
 from .ringtailoptions import ResultsObject, validate_file_pattern
 from .storagemanager import StorageManager
 
@@ -141,36 +140,22 @@ class MPManager:
         logger.info(f"Wrote {self.num_files} docking results to the database")
 
     def _process_data_sources(self, results: ResultsObject, file_pattern: str):
-        """Adds each docking result item to the queue, including files and data provided as string/dict.
-        For files, processes lists of files, recursively traveresed filepaths, and individually listed file paths.
+        """Adds each docking result item to the queue.
+        Per-item type detection: directory → scan, docking file → direct, other → file list.
         """
-        if results.has_file_results:
-            # add individual file(s)
-            files = list(iterate_nested(results.file))
-            if files:
-                for file in files:
-                    if (
-                        fnmatch.fnmatch(file, file_pattern)
-                        and file != self.receptor_file_path
-                    ):
-                        self._add_to_queue(file)
-
-            # add files from file path(s)
-            path_list = list(iterate_nested(results.file_path))
-            if path_list:
-                for path in path_list:
-                    # scan for ligand dlgs
-                    for files in self._scan_dir(
-                        path, file_pattern, results.recursive_path_traverse
-                    ):
-                        for file in files:
-                            self._add_to_queue(file)
-
-            # add files from file list(s)
-            file_lists = list(iterate_nested(results.file_list))
-            if file_lists:
-                for file_list in file_lists:
-                    self._scan_file_list(file_list, file_pattern.replace("*", ""))
+        inputs = results.docking_results
+        if inputs is not None:
+            if isinstance(inputs, str):
+                inputs = [inputs]
+            for item in inputs:
+                if os.path.isdir(item):
+                    for batch in self._scan_dir(item, file_pattern, results.recursive_path_traverse):
+                        for f in batch:
+                            self._add_to_queue(f)
+                elif fnmatch.fnmatch(item, file_pattern) and item != self.receptor_file_path:
+                    self._add_to_queue(item)
+                else:
+                    self._scan_file_list(item, file_pattern.replace("*", ""))
 
     def _add_to_queue(self, results_data):
         """_summary_

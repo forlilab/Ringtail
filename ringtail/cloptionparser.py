@@ -143,9 +143,19 @@ def cmdline_parser(defaults: dict = {}):
         default=None,
     )
     write_parser.add_argument(
+        "-dr",
+        "--docking_results",
+        help="docking result file(s), director(ies) to scan, or text file(s) listing result paths. "
+             "Type is auto-detected per item. Replaces --file / --file_path / --file_list.",
+        action="append",
+        type=str,
+        metavar="FILE_OR_DIR_OR_LIST",
+        nargs="+",
+    )
+    write_parser.add_argument(
         "-f",
         "--file",
-        help="ligand docking output file to save. Compressed (.gz) files allowed. Only 1 receptor allowed.",
+        help="(deprecated, use --docking_results) ligand docking output file to save.",
         action="append",
         type=str,
         metavar="FILENAME.[DLG/PDBQT][.gz]",
@@ -154,7 +164,7 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-fp",
         "--file_path",
-        help="directory(s) containing docking output files to save. Compressed (.gz) files allowed",
+        help="(deprecated, use --docking_results) directory(s) containing docking output files to save.",
         action="append",
         type=str,
         metavar="DIRNAME",
@@ -163,7 +173,7 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-fl",
         "--file_list",
-        help="file(s) containing the list of docking output files to save; relative or absolute paths are allowed. Compressed (.gz) files allowed",
+        help="(deprecated, use --docking_results) file(s) containing the list of docking output files to save.",
         action="append",
         type=str,
         metavar="FILENAME",
@@ -750,6 +760,7 @@ class CLOptionParser:
             # Check if writing to an existing database
             only_adding_receptor = (
                 parsed_opts.receptor_file
+                and not parsed_opts.docking_results
                 and not parsed_opts.file
                 and not parsed_opts.file_path
                 and not parsed_opts.file_list
@@ -764,12 +775,20 @@ class CLOptionParser:
                     f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
                 )
 
-            # Create dictionary of all file sources
+            import itertools
+
+            def _flatten(arg):
+                return list(itertools.chain.from_iterable(arg)) if arg else []
+
+            all_inputs = (
+                _flatten(parsed_opts.docking_results)
+                + _flatten(parsed_opts.file)
+                + _flatten(parsed_opts.file_path)
+                + _flatten(parsed_opts.file_list)
+            )
             self.file_sources = {
-                "file": parsed_opts.file,
-                "file_path": parsed_opts.file_path,
+                "docking_results": all_inputs or None,
                 "recursive": parsed_opts.recursive,
-                "file_list": parsed_opts.file_list,
                 "receptor_file": parsed_opts.receptor_file,
                 "save_receptor": parsed_opts.save_receptor,
             }

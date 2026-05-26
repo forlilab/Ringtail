@@ -9,7 +9,6 @@ from .exceptions import OptionError, RTCoreError
 from .logutils import get_logger
 
 logger = get_logger(__name__)
-from .util import iterate_nested
 from dataclasses import dataclass, asdict, fields
 import copy
 
@@ -93,9 +92,7 @@ class RingtailDefaults:
     print_summary: bool = None
     verbose: bool = None
     debug: bool = None
-    file: str = None
-    file_path: str = None
-    file_list: str = None
+    docking_results: str = None
     recursive: bool = None
     save_receptor: bool = None
     receptor_file: str = None
@@ -141,9 +138,7 @@ class ResultsObject:
     """
 
     def __init__(self):
-        self.file = None
-        self.file_path = None
-        self.file_list = None
+        self.docking_results = None
         self.recursive_path_traverse: bool = None
         self.receptor_file_path: str = None
         self.save_receptor: bool = None
@@ -158,21 +153,11 @@ class ResultsObject:
 
     @property
     def has_results(self):
-        results = bool(
-            any(iterate_nested(self.file))
-            or any(iterate_nested(self.file_path))
-            or any(iterate_nested(self.file_list))
-        )
-        return results
+        return bool(self.docking_results)
 
     @property
     def has_file_results(self):
-        results = bool(
-            any(iterate_nested(self.file))
-            or any(iterate_nested(self.file_path))
-            or any(iterate_nested(self.file_list))
-        )
-        return results
+        return bool(self.docking_results)
 
 
 class Filters:
