@@ -224,7 +224,7 @@ class Writer(mp.Process):
         self.num_files_written = 0
         self.time0 = time.perf_counter()
         self.total_runtime = 0
-        self.last_write_time = 0
+        self.last_print_time = 0
 
     def run(self):
         self.time0 = time.perf_counter()
@@ -241,6 +241,10 @@ class Writer(mp.Process):
                         logger.info("Performing final database write")
                         self.write_to_storage()
                         logger.info("File processing completed")
+                        sys.stdout.write(
+                            f"\nWrote {self.num_files_written} docking results to the database.\n"
+                        )
+                        sys.stdout.flush()
                         break
                     continue
 
@@ -250,10 +254,11 @@ class Writer(mp.Process):
                 self.docked_ligands["poses"].extend(next_task["poses"])
                 self.docked_ligands["interactions"].extend(next_task["interactions"])
                 self.counter += 1
-
-                # After every n (chunk size) files, write to storage
-                if self.counter >= self.chunk_size:
+                now = time.perf_counter()
+                if now - self.last_print_time >= 2.0:
                     self._log_progress()
+                    self.last_print_time = now
+                if self.counter >= self.chunk_size:
                     self.write_to_storage()
 
         except Exception:
@@ -283,9 +288,11 @@ class Writer(mp.Process):
         self.counter = 0
 
     def _log_progress(self):
-        rate = self.num_files_written * 60 / (self.total_runtime or 1)
+        current = self.num_files_written + self.counter
+        elapsed = time.perf_counter() - self.time0
+        rate = current * 60 / (elapsed or 1)
         sys.stdout.write(
-            f"\r{self.num_files_written} files written. {rate:.0f} files/min. "
-            f"Elapsed: {self.total_runtime:.0f}s."
+            f"\r{current} files processed. {rate:.0f} files/min. "
+            f"Elapsed: {elapsed:.0f}s."
         )
         sys.stdout.flush()
