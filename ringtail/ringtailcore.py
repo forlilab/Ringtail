@@ -1541,6 +1541,18 @@ class RingtailCore:
         }
 
     @_wrap_exceptions
+    def set_pose_comment(self, pose_id: int, comment: str) -> None:
+        """Write or clear a user comment for a pose."""
+        with self.storageman as sm:
+            sm.set_pose_comment(pose_id, comment)
+
+    @_wrap_exceptions
+    def get_pose_comment(self, pose_id: int) -> "str | None":
+        """Return the comment for a pose, or None if none exists."""
+        with self.storageman as sm:
+            return sm.get_pose_comment(pose_id)
+
+    @_wrap_exceptions
     def get_row_from_pose(self, table: str, pose_id: int) -> int:
         """
         Method to get table row for a a pose id in given table, used to support gui

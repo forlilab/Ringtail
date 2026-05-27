@@ -1474,14 +1474,16 @@ class StorageManager(ABC):
                 f"Table '{table}' is not a results table, status table, or bookmark."
             )
 
+        query.JOIN("Pose_comments", "Pc", "pose_id", kind="LEFT")
+
         ordered_columns = f"""
         {status_assignement}
-        L.ligname, R.pose_id,  R.pose_rank, 
-        R.docking_score,R.leff, R.cluster_size, 
-        R.cluster_rmsd, R.num_hb, R.receptor, R.run_number, 
-        R.delta, R.num_interactions, R.unbound_energy, 
-        R.reference_RMSD, R.energies_inter, R.energies_vdw, 
-        R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
+        L.ligname, R.pose_id,  R.pose_rank,
+        R.docking_score, R.leff, COALESCE(Pc.comment, '') AS comment, R.cluster_size,
+        R.cluster_rmsd, R.num_hb, R.receptor, R.run_number,
+        R.delta, R.num_interactions, R.unbound_energy,
+        R.reference_RMSD, R.energies_inter, R.energies_vdw,
+        R.energies_electro, R.energies_flexLig, R.energies_flexLR,
         R.energies_intra, R.energies_torsional, {rowid}"""
 
         query.SELECT(ordered_columns)
@@ -1976,6 +1978,16 @@ class StorageManager(ABC):
         Returns:
             int: first row id belonging to that selection
         """
+        ...
+
+    @abstractmethod
+    def set_pose_comment(self, pose_id: int, comment: str) -> None:
+        """Write (or clear) a user comment for a pose."""
+        ...
+
+    @abstractmethod
+    def get_pose_comment(self, pose_id: int) -> "str | None":
+        """Return the comment for a pose, or None if none exists."""
         ...
 
     # endregion

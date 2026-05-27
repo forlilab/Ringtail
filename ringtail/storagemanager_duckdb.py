@@ -2171,6 +2171,23 @@ class StorageManagerDuckDB(StorageManager):
             return None
         return self.db_query(*query.build()).fetchone()[0]
 
+    def set_pose_comment(self, pose_id: int, comment: str) -> None:
+        if comment:
+            self.db_query(
+                "INSERT INTO Pose_comments (pose_id, comment) VALUES (?, ?)"
+                " ON CONFLICT(pose_id) DO UPDATE SET comment = excluded.comment",
+                (pose_id, comment),
+            )
+        else:
+            self.db_query("DELETE FROM Pose_comments WHERE pose_id = ?", (pose_id,))
+        self.conn.commit()
+
+    def get_pose_comment(self, pose_id: int) -> "str | None":
+        row = self.db_query(
+            "SELECT comment FROM Pose_comments WHERE pose_id = ?", (pose_id,)
+        ).fetchone()
+        return row[0] if row else None
+
     def _create_status_tables(self) -> None:
         """
         Creates pose status tables (Accepted, Maybe, Rejected) if needed.
