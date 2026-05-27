@@ -1453,9 +1453,9 @@ class StorageManager(ABC):
 
         ordered_columns = f"""
         {status_assignement}
-        R.pose_id, L.ligname, R.docking_score, 
-        R.leff, R.cluster_size, R.cluster_rmsd, 
-        R.pose_rank, R.num_hb, R.receptor, R.run_number, 
+        L.ligname, R.pose_id,  R.pose_rank, 
+        R.docking_score,R.leff, R.cluster_size, 
+        R.cluster_rmsd, R.num_hb, R.receptor, R.run_number, 
         R.delta, R.num_interactions, R.unbound_energy, 
         R.reference_RMSD, R.energies_inter, R.energies_vdw, 
         R.energies_electro, R.energies_flexLig, R.energies_flexLR, 
