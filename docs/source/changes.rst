@@ -7,6 +7,7 @@ Changes in 3.x: New graphical user interface and support for DuckDB
 
 Changes in command line tools
 ==================================================
+* New field `--docking_results`, `--dr` accepts any file input including one or more folders/file paths, one or more single files, and one or more file lists (.txt). The depreceated fields `--file`, `--file_list`, and `--file_path` will remain for compatibility with existing scripts.
 * New filter options for molecular weight `--ligand_min_molweight` and `--ligand_max_molweight`
 * There is now one upgrade script with version as input, where there previously was one db upgrade script per version
 * `--storage_type` can be used to specify database engine, with option to use 'duckdb' (defualts to sqlite)
@@ -41,7 +42,8 @@ Enhancements to the codebase
 * DuckDB offered as an alternative to SQLite, with overall similar database creating times and significantly enhanced filtering times
 * `storage_type` needs only be specified when a database is first created, storage_type will automatically be detected for an existing database (detected storage_type takes precedence over specified storage_type)
 * New dataclass `RingtailDefaults` which are used to a larger extend in method signatures where appropriate
-* Using toml 
+* Using toml #TODO
+* Simplified `add_results_from_files` API has only one file input field `docking_results` which will accept a single or a list of, and a mix of files, folders, and lists of file paths. `file`, `file_list`, and `file_path` have been depreceated from the API. 
 * Validation of docking mode adds some flexibility in how a docking engine is reference to, eg ADGPU vs GPU
 * Multiprocess now uses 'fork' start method for compatibility with multithreaded processes such as the GUI
 * Ligand efficiency, a calculated value, is rounded to two decimal points reflect the accuracy of the numbers used to calculate it (docking score and number of atoms)
