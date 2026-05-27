@@ -29,6 +29,8 @@ from .schema import OUTFIELD_BY_TABLE, RESULTS_SCHEMA, LIGANDS_SCHEMA
 _LIGANDS_ONLY_COLS = set(LIGANDS_SCHEMA.columns) - set(RESULTS_SCHEMA.columns)
 from collections import defaultdict
 
+_CANDIDATES_SUBQ = "(SELECT pose_id FROM Accepted UNION SELECT pose_id FROM Maybe)"
+
 RESULTS_COLUMNS = [
     "pose_id",
     "ligand_id",
@@ -594,6 +596,8 @@ class StorageManager(ABC):
                     query.IN_BOOKMARK(bookmark_name)
                 elif self._is_statustable(bookmark_name):
                     query.JOIN(bookmark_name, "T", "pose_id")
+                elif self._is_candidates_table(bookmark_name):
+                    query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
             # tuple, tuple
             pose_ids, leffs = zip(*self.db_query(query.build()[0]).fetchall())
             leffs = list(leffs)
@@ -614,6 +618,8 @@ class StorageManager(ABC):
                     query.IN_BOOKMARK(bookmark_name)
                 elif self._is_statustable(bookmark_name):
                     query.JOIN(bookmark_name, "T", "pose_id")
+                elif self._is_candidates_table(bookmark_name):
+                    query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
 
             pose_ids, leffs, rdmols = zip(*self.db_query(query.build()[0]).fetchall())
             mfpc = MorganFingerprintCluster(pose_ids, leffs, rdmols, cutoff)
@@ -1123,6 +1129,8 @@ class StorageManager(ABC):
             ).WHERE("f.name = ?", table)
         elif self._is_statustable(table):
             query.JOIN(table, "T", "pose_id")
+        elif self._is_candidates_table(table):
+            query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
 
         return self.db_query(*query.build()).fetchall()[0]
 
@@ -1155,6 +1163,8 @@ class StorageManager(ABC):
             query.IN_BOOKMARK(table)
         elif self._is_statustable(table):
             query.JOIN(table, "T", "pose_id")
+        elif self._is_candidates_table(table):
+            query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
         query.GROUP_BY("ligand_id")
         values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
 
@@ -1189,6 +1199,9 @@ class StorageManager(ABC):
             where_sql = f"Results.pose_id IN ({bm_subq}) AND {column} IS NOT NULL"
         elif self._is_statustable(bookmark_name):
             join_sql = f"INNER JOIN {bookmark_name} AS T ON Results.pose_id = T.pose_id"
+            where_sql = f"{column} IS NOT NULL"
+        elif self._is_candidates_table(bookmark_name):
+            join_sql = f"INNER JOIN {_CANDIDATES_SUBQ} AS T ON Results.pose_id = T.pose_id"
             where_sql = f"{column} IS NOT NULL"
         else:
             join_sql = ""
@@ -1398,6 +1411,10 @@ class StorageManager(ABC):
             if include_status:
                 query.SELECT(f"'{table.lower()}' as status")
             query.JOIN(table, "T", "pose_id")
+        elif self._is_candidates_table(table):
+            if include_status:
+                query.SELECT_STATUS()
+            query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
         else:
             if include_status:
                 query.SELECT_STATUS()
@@ -1440,6 +1457,11 @@ class StorageManager(ABC):
             rowid = "T.rowid"
             # status assignement doesn't make sense for status tables
             status_assignement = f"""'{table.lower()}',"""
+
+        elif self._is_candidates_table(table):
+            query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
+            rowid = "R.rowid"
+            # keep CASE status_assignement — shows real accepted/maybe per row
 
         elif self.is_bookmark(table):
             query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
@@ -1492,8 +1514,10 @@ class StorageManager(ABC):
         )
         if self.is_bookmark(selection):
             query.IN_BOOKMARK(selection)
-        elif selection.lower() in statuses:
+        elif selection.lower() in statuses.values():
             query.WHERE(f"R.pose_id IN {selection}")
+        elif self._is_candidates_table(selection):
+            query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
         else:
             logger.error(
                 f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
@@ -1527,8 +1551,10 @@ class StorageManager(ABC):
         elif selection == None:
             # get all poses for ligand, no WHERE clause for pose_id
             pass
-        elif selection.lower() in statuses:
+        elif selection.lower() in statuses.values():
             query.WHERE(f"R.pose_id IN (SELECT pose_id FROM {selection})")
+        elif self._is_candidates_table(selection):
+            query.WHERE(f"R.pose_id IN {_CANDIDATES_SUBQ}")
         else:
             logger.error(
                 f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
@@ -2159,10 +2185,14 @@ class StorageManager(ABC):
         Returns:
             bool: if table name is a status table
         """
-        if table.lower() in statuses:
+        if table.lower() in statuses.values():
             return True
         else:
             return False
+
+    def _is_candidates_table(self, table: str) -> bool:
+        """Returns True if table name is the virtual Candidates table (Accepted ∪ Maybe)."""
+        return table.lower() == "candidates"
 
     def _format_orderby(self, column_name: str) -> str:
         """

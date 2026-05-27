@@ -2496,7 +2496,7 @@ class RingtailCore:
                     logger.warning(
                         "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
                     )
-                elif bookmark_name.lower() in statuses:
+                elif bookmark_name.lower() in statuses.values():
                     # that is valid, will be handled properly
                     pass
                 # if not, raise error

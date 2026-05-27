@@ -21,7 +21,7 @@ from .exceptions import (
     MergeError,
 )
 from .clustermanager import *
-from .storagemanager import StorageManager
+from .storagemanager import StorageManager, _CANDIDATES_SUBQ
 from .querybuilder import QueryBuilderDuck
 from .schema import (
     build_create_table,
@@ -2036,6 +2036,9 @@ class StorageManagerDuckDB(StorageManager):
         elif self.is_bookmark(table):
             query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?);"""
             params = (table,)
+        elif self._is_candidates_table(table):
+            query = f"SELECT COUNT(*) FROM {_CANDIDATES_SUBQ} AS _c;"
+            params = ()
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
             return None
@@ -2130,6 +2133,8 @@ class StorageManagerDuckDB(StorageManager):
             query.FROM("Filtered_poses").WHERE(
                 "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
             )
+        elif self._is_candidates_table(table):
+            query.FROM("Results").WHERE(f"pose_id IN {_CANDIDATES_SUBQ}")
         else:
             query.FROM(table)
         query.WHERE("pose_id = ?", pose_id)
@@ -2159,7 +2164,8 @@ class StorageManagerDuckDB(StorageManager):
             query.FROM("Filtered_poses").WHERE(
                 "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
             )
-
+        elif self._is_candidates_table(table):
+            query.FROM("Results").WHERE(f"pose_id IN {_CANDIDATES_SUBQ}")
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
             return None
