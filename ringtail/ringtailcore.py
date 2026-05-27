@@ -1460,6 +1460,14 @@ class RingtailCore:
         """
         bookmark_name = self._normalize_bookmark_name(bookmark_name)
         status = status.lower()
+        str_to_int = {v: k for k, v in statuses.items() if v is not None}
+        str_to_int.update({"none": 0, "0": 0})
+        if status not in str_to_int:
+            raise OptionError(
+                f"The selected status '{status}' is not valid. "
+                f"Choose from: {', '.join(str_to_int.keys())}"
+            )
+        status = str_to_int[status]
 
         ligands_poses = self._fetch_select_ligands_poses(
             ligands, pose_ids, bookmark_name
@@ -1477,7 +1485,7 @@ class RingtailCore:
 
         Args:
             pose_id (Union[int, list[int]]): pose id for which a status is assigned, can be a single pose or a list
-            status (str): new status
+            status (int): new status (0=unassign, 1=accepted, 2=maybe, 3=rejected)
 
         Raises:
             OptionError
