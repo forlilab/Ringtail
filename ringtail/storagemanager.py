@@ -1323,7 +1323,7 @@ class StorageManager(ABC):
             pose_ids (int | list[int]): one or more pose ids
 
         Returns:
-            list of (pose_id, rdmol_binary, ligname, docking_score, leff, pose_coordinates, flexible_res_coordinates)
+            list of (pose_id, rdmol_binary, ligname, docking_score, leff, pose_coordinates, flexible_res_coordinates, pose_rank)
         """
         if isinstance(pose_ids, int):
             pose_ids = [pose_ids]
@@ -1337,6 +1337,7 @@ class StorageManager(ABC):
             "R.leff",
             "R.pose_coordinates",
             "R.flexible_res_coordinates",
+            "R.pose_rank",
         ).FROM("Results", "R").JOIN("Ligands", "L", "ligand_id").WHERE(
             f"R.pose_id IN ({placeholders})", *pose_ids
         )

@@ -1841,6 +1841,7 @@ class RingtailCore:
             leff,
             pose_coords_json,
             flexres_coords_json,
+            pose_rank,
         ) in pose_rows:
             mol = Chem.Mol(rdmol_binary)
             pose_coordinates = json.loads(pose_coords_json)
@@ -1868,6 +1869,7 @@ class RingtailCore:
                 "Binding energies": [docking_score],
                 "Ligand effiencies": [leff],
                 "Interactions": [interactions_str] if interactions_str else [],
+                "pose_rank": pose_rank,
             }
             if not mol.HasProp("_Name"):
                 properties["_Name"] = ligname
