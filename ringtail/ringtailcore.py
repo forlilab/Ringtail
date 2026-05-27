@@ -1791,7 +1791,6 @@ class RingtailCore:
             return sm.fetch_bookmark_interactions(bookmark_name)
 
     @_wrap_exceptions
-    @_wrap_exceptions
     def create_rdkit_mols(
         self,
         pose_ids,
@@ -1818,9 +1817,12 @@ class RingtailCore:
 
         with self.storageman as sm:
             pose_rows = sm.fetch_rdkit_pose_properties(pose_ids)
-            interactions_by_pose = (
-                sm.fetch_pose_interactions(pose_ids) if include_interactions else {}
-            )
+            if include_interactions:
+                interactions_by_pose = (
+                    sm.fetch_pose_interactions(pose_ids) if include_interactions else {}
+                )
+            else:
+                interactions_by_pose = []
 
         result = []
         for (
@@ -1846,10 +1848,14 @@ class RingtailCore:
             mol.SetProp("_Name", ligname)
 
             # Build properties dict (single-element lists matching old format)
-            interactions = interactions_by_pose.get(pose_id, [])
-            interactions_str = ", ".join(
-                f"{row[0]}-{':'.join(str(x) for x in row[1:])}" for row in interactions
-            )
+            if include_interactions:
+                interactions = interactions_by_pose.get(pose_id, [])
+                interactions_str = ", ".join(
+                    f"{row[0]}-{':'.join(str(x) for x in row[1:])}"
+                    for row in interactions
+                )
+            else:
+                interactions_str = None
             properties = {
                 "Binding energies": [docking_score],
                 "Ligand effiencies": [leff],
