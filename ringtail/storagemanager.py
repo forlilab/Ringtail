@@ -1456,7 +1456,7 @@ class StorageManager(ABC):
             query.JOIN(table, "T", "pose_id")
             rowid = "T.rowid"
             # status assignement doesn't make sense for status tables
-            status_assignement = f"""'{table.lower()}',"""
+            status_assignement = f"""'{table.lower()}' AS status,"""
 
         elif self._is_candidates_table(table):
             query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
