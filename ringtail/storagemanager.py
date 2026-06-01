@@ -1841,20 +1841,12 @@ class StorageManager(ABC):
         """
         ...
 
-    def update_database_version(self, new_version: str, consent=False, backup=False):
-        """method that updates sqlite database schema 1.0.0 or 1.1.0 to 1.1.0 or 2.0.0
-
-        #NOTE: If you created the database with the duplicate handling option,
-        # there is a chance of inconsistent behavior of anything involving interactions as
-        the pose_id was not used as an explicit foreign key in db v1.0.0 and v1.1.0.
+    def update_database_version(self, new_version: str, backup=False):
+        """Updates sqlite database schema from older versions to new_version.
 
         Args:
-            new_version (str): _description_
-            consent (bool, optional): variable to ensure consent to update database is explicit
-            backup (bool, optional): _description_. Defaults to False.
-
-        Returns:
-            bool: final consent
+            new_version (str): target version string, e.g. "3.0.0"
+            backup (bool, optional): clone database before upgrading. Defaults to False.
         """
         raise NotImplementedError
 

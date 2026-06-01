@@ -2168,23 +2168,18 @@ class RingtailCore:
         self, consent: bool = False, new_version: str = "3.0.0", backup: bool = False
     ):
         """
-        Updates/upgrades sqlite database schema 1.0.0 through 3.0.0. The upgrade may take a while to
-        complete, as it has to upgrade via each major upgrade, e.g., it will not upgrade straight
-        from 1.0.0 to 3.0.0, but rather 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0 etc.
-
-        Please #NOTE that currently no backup is made of the database, so please do this prior to
-            upgrading.
-
+        Updates/upgrades sqlite database schema 1.0.0 through 3.0.0. Upgrades step-by-step,
+        e.g. 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0. All existing filters and bookmarks will be dropped.
 
         Args:
-            consent (bool, optional): You have to give explicit consent to perform upgrade. Defaults to False.
-            new_version (str, optional): What version you want to upgrade to. Defaults to "3.0.0".
-
-        Returns:
-            bool: consent/success
+            consent (bool): must be True to proceed. Defaults to False.
+            new_version (str, optional): target version. Defaults to "3.0.0".
+            backup (bool, optional): clone database before upgrading. Defaults to False.
         """
-
-        return self.storageman.update_database_version(new_version, consent, backup)
+        if not consent:
+            logger.critical("Consent not given for database update. Cancelling...")
+            return
+        self.storageman.update_database_version(new_version, backup)
 
     @_wrap_exceptions
     def db_compatibility_check(self, database_path: str) -> bool:

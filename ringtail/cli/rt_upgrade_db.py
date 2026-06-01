@@ -59,7 +59,6 @@ def main():
         args = cmdline_parser()
         setup_logging(level="DEBUG" if args.debug else "INFO", logfile=args.logfile)
 
-        consent = False
         version = args.version
         # validate version
         if version not in ["1.1.0", "2.0.0", "3.0.0"]:
@@ -67,9 +66,14 @@ def main():
                 f"Requested upgrade version {version} not recognized. Please choose 1.1.0, 2.0.0, or 3.0.0."
             )
 
+        logger.warning(
+            "WARNING: All existing filters and bookmarks in database will be dropped during database update!"
+        )
+        consent = input("Type 'yes' if you wish to continue: ") == "yes"
+
         for db in args.database:
             rtcore = RingtailCore(db)
-            consent = rtcore.update_database_version(consent, version)
+            rtcore.update_database_version(consent=consent, new_version=version)
 
         logger.info(
             "Time to upgrade: {0:.0f} seconds".format(time.perf_counter() - time0)

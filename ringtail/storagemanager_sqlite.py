@@ -1652,7 +1652,9 @@ class StorageManagerSQLite(StorageManager):
             "SELECT cluster_id, cluster_window, name FROM Clusters;"
         ).fetchall()
 
-    def fetch_clustered_similars(self, ligname: str, cluster_id: int) -> tuple[list, str, str]:
+    def fetch_clustered_similars(
+        self, ligname: str, cluster_id: int
+    ) -> tuple[list, str, str]:
         """Given ligname and a chosen cluster_id, return similar ligands.
 
         Args:
@@ -1909,29 +1911,17 @@ class StorageManagerSQLite(StorageManager):
 
         return True
 
-    def update_database_version(self, new_version, consent=False, backup=False):
-        """method that updates sqlite database schema 1.0.0 through 3.0.0.
-        The way it currently works, it has to upgrade via each major upgrade, e.g., it will not upgrade straight
-        from 1.0.0 to 3.0.0, but rather 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0
+    def update_database_version(self, new_version, backup=False):
+        """Updates sqlite database schema 1.0.0 through 3.0.0.
+        Upgrades step-by-step through each major version, e.g. 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0.
 
         Args:
-            consent (bool, optional): variable to ensure consent to update database is explicit
-
-        Returns:
-            bool: final consent
+            new_version (str): target version string
+            backup (bool, optional): clone database before upgrading. Defaults to False.
         """
         self.conn = self._create_connection()
         if backup:
             self.clone()
-        # get consent, same for both
-        if not consent:
-            logger.warning(
-                "WARNING: All existing filters and bookmarks in database will be dropped during database update!"
-            )
-            consent = input("Type 'yes' if you wish to continue: ") == "yes"
-        if not consent:
-            logger.critical("Consent not given for database update. Cancelling...")
-            sys.exit(1)
 
         original_version = self.check_ringtaildb_version()[1]
         logger.info(
@@ -1956,8 +1946,6 @@ class StorageManagerSQLite(StorageManager):
         if new_version == "3.0.0" and original_version == "2.0.0":
             self._update_db_200_to_300()
             logger.info("\n\nSuccessfully upgraded to 3.0.0!\n\n")
-
-        return consent
 
     def _update_db_100_to_110(self):
         """
