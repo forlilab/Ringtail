@@ -196,11 +196,16 @@ In addition to the filtering options outlined in the table below, ligands passin
     rtc.filter( input_bookmark = "eworst6",
                 mfpt_cluster = 0.6)
 
-While not quite a filtering option, the user can provide a ligand name from a previously-run clustering and re-output other ligands that were clustered with that query ligand with the method ``find_similar_ligands``. The user is prompted at runtime to choose a specific clustering group from which to re-output ligands. Filtering/clustering will be performed from the same command-line call prior to this similarity search, but all subsequent output tasks will be performed on the group of similar ligands obtained with this option unless otherwise specified. 
+While not quite a filtering option, the user can provide a ligand name from a previously-run clustering and re-output other ligands that were clustered with that query ligand. First fetch the available clustering groups, then pass the chosen cluster ID to retrieve similar ligands. Filtering/clustering will be performed prior to this similarity search, but all subsequent output tasks will be performed on the group of similar ligands obtained with this option unless otherwise specified.
 
 .. code-block:: python
 
-    rtc.find_similar_ligands("ligand_name")
+    options = rtc.fetch_cluster_options("ligand_name")
+    # options is a list of (cluster_id, cluster_window, name) tuples
+    cluster_id = options[0][0]  # choose the desired cluster
+    ligands, bookmark_name, cluster_name = rtc.fetch_clustered_similars(
+        "ligand_name", cluster_id, output_log="cluster_log.txt"
+    )
 
 
 Output options

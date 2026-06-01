@@ -30,6 +30,7 @@ at [Scripps Research](https://www.scripps.edu/).
 In-depth documentation can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
 ### Version 3: GUI and database schema overhaul
+#TODO
 
 ### Version 2.1.1 bug fixes
 - bugs related to ligand filtering and certain uses of the `overwrite` option in the command line have been fixed
@@ -190,5 +191,5 @@ rtc.filter(eworst=-6,
 
 
 ### Arguments used for API vs command line
-All of the arguments used for the command line tool applies to the Ringtail API in some form. For example, bookmark names and filter values are provided when an API method is called, while the log level can be sat at instantiation or at any time during the scripting process. When using the API, instead of differentiating between an `--input_db` and `--output_db`, only one database file is operated on in a given instantiated `RingtailCore` object. A subset of the command line arguments are actual API methods (e.g., `--find_similar_ligands`) that will be called directly as methods, with optional input arguments (typically a `bookmark_name` or `ligand_name`). Each API method comes with type hints and extensive documentation. Additionally, extensive example of the use of both can be found on [readthedocs](https://ringtail.readthedocs.io/). 
+All of the arguments used for the command line tool applies to the Ringtail API in some form. For example, bookmark names and filter values are provided when an API method is called, while the log level can be sat at instantiation or at any time during the scripting process. When using the API, instead of differentiating between an `--input_db` and `--output_db`, only one database file is operated on in a given instantiated `RingtailCore` object. A subset of the command line arguments correspond to API methods that will be called directly, with optional input arguments (typically a `bookmark_name` or `ligand_name`). Each API method comes with type hints and extensive documentation. Additionally, extensive example of the use of both can be found on [readthedocs](https://ringtail.readthedocs.io/). 
 

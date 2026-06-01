@@ -323,21 +323,25 @@ class TestOutput:
         rtc_bm = RingtailCore(db_file=bookmark_db_name)
         assert rtc_bm.table_length("Results") == 8
 
-    def test_similar_ligands_interaction(self, populated_db, tmp_path, monkeypatch):
+    def test_similar_ligands_interaction(self, populated_db, tmp_path):
         populated_db.filter(ebest=-6, interaction_cluster=0.5)
-        monkeypatch.setattr("builtins.input", lambda _: 1)
-        number_similar = populated_db.find_similar_ligands(
-            "28837", output_log=str(tmp_path / "cluster_log.txt")
+        options = populated_db.fetch_cluster_options("28837")
+        assert len(options) > 0
+        cluster_id = options[0][0]
+        ligands, bookmark_name, cluster_name = populated_db.fetch_clustered_similars(
+            "28837", cluster_id, output_log=str(tmp_path / "cluster_log.txt")
         )
-        assert number_similar == 13
+        assert len(ligands) == 13
 
-    def test_similar_ligands_mfpt(self, populated_db, tmp_path, monkeypatch):
+    def test_similar_ligands_mfpt(self, populated_db, tmp_path):
         populated_db.filter(ebest=-6, mfpt_cluster=0.5)
-        monkeypatch.setattr("builtins.input", lambda _: 1)
-        number_similar = populated_db.find_similar_ligands(
-            "287065", output_log=str(tmp_path / "cluster_log.txt")
+        options = populated_db.fetch_cluster_options("287065")
+        assert len(options) > 0
+        cluster_id = options[0][0]
+        ligands, bookmark_name, cluster_name = populated_db.fetch_clustered_similars(
+            "287065", cluster_id, output_log=str(tmp_path / "cluster_log.txt")
         )
-        assert number_similar == 8
+        assert len(ligands) == 8
 
 
 class TestStorageMan:

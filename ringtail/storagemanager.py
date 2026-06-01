@@ -1911,14 +1911,27 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def fetch_clustered_similars(self, ligname: str):
-        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
+    def fetch_cluster_options(self, ligname: str) -> list[tuple]:
+        """Return available clustering groups for selection.
 
         Args:
             ligname (str): ligname for ligand to find similarity with
 
-        Raises:
-            ValueError: wrong terminal input
+        Returns:
+            list[tuple]: list of (cluster_id, cluster_window, name) tuples
+        """
+        ...
+
+    @abstractmethod
+    def fetch_clustered_similars(self, ligname: str, cluster_id: int) -> tuple[list, str, str]:
+        """Given ligname and a chosen cluster_id, return similar ligands.
+
+        Args:
+            ligname (str): ligname for ligand to find similarity with
+            cluster_id (int): cluster to search within
+
+        Returns:
+            tuple[list, str, str]: (ligands, bookmark_name, cluster_name)
         """
         ...
 

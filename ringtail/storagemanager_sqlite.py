@@ -1639,57 +1639,43 @@ class StorageManagerSQLite(StorageManager):
 
         return summary_data
 
-    def fetch_clustered_similars(self, ligname: str) -> tuple[list, str, str]:
-        """Given ligname, returns poseids for similar poses/ligands from previous clustering. User prompted at runtime to choose cluster.
+    def fetch_cluster_options(self, ligname: str) -> list[tuple]:
+        """Return available clustering groups as (cluster_id, cluster_window, name) tuples.
 
         Args:
             ligname (str): ligname for ligand to find similarity with
 
-        Raises:
-            ValueError: wrong terminal input
-            DatabaseQueryError
+        Returns:
+            list[tuple]: list of (cluster_id, cluster_window, name)
         """
-        logger.warning(
-            "N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters."
-        )
-
-        cluster_info = self.db_query(
+        return self.db_query(
             "SELECT cluster_id, cluster_window, name FROM Clusters;"
         ).fetchall()
 
-        print(
-            "Here are the existing clustering groups. Please ensure that you query ligand(s) is a part of the group you select."
-        )
-        print(
-            "   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint_cutoff   "
-        )
-        print(
-            "----------------------------------------------------------------------------------------------------------"
-        )
-        cluster_options = []
-        for cluster_id, filter_window, name in cluster_info:
-            cluster_options.append(cluster_id)
-            option_list = [str(cluster_id), filter_window, name]
-            print(f"{'             |    '.join(option_list)}")
+    def fetch_clustered_similars(self, ligname: str, cluster_id: int) -> tuple[list, str, str]:
+        """Given ligname and a chosen cluster_id, return similar ligands.
 
-        cluster_choice = input(
-            "Please specify choice number for the cluster you would like to return similar ligands from: "
-        )
-        if not int(cluster_choice) in cluster_options:
-            raise ValueError(
-                f"Given cluster number {cluster_choice} does not exist in the database. Please be sure you are specifying an integer in the given cluster options."
-            )
+        Args:
+            ligname (str): ligname for ligand to find similarity with
+            cluster_id (int): cluster to search within
+
+        Returns:
+            tuple[list, str, str]: (ligands, bookmark_name, cluster_name)
+
+        Raises:
+            DatabaseQueryError
+        """
         # get group(s) that poses of that ligand belongs to, make set so unique groups only
         groups = {
             row[0]
             for row in self.db_query(
                 """
                 SELECT cluster_group FROM pose_clusters
-                    WHERE cluster_id = ? 
+                    WHERE cluster_id = ?
                     AND pose_id IN (
                         SELECT pose_id FROM Results
                         WHERE ligand_id = (
-                            SELECT ligand_id FROM Ligands 
+                            SELECT ligand_id FROM Ligands
                                 WHERE ligname = ?));
                 """,
                 (
@@ -1707,7 +1693,7 @@ class StorageManagerSQLite(StorageManager):
             JOIN Ligands AS L
                 ON R.ligand_id = L.ligand_id
             WHERE R.pose_id IN (
-                SELECT pose_id FROM Pose_clusters 
+                SELECT pose_id FROM Pose_clusters
                 WHERE cluster_id = ?
                 AND cluster_group IN ({placeholders}))
             GROUP BY L.ligname;

@@ -1171,32 +1171,49 @@ class RingtailCore:
                 opm.write_out_mol(sdf_file_name, mol, all_flexres, properties, sdf_path)
 
     @_wrap_exceptions
-    def find_similar_ligands(
-        self, query_ligname: str, output_log: str = "cluster_log.txt"
-    ) -> int:
-        """
-        Find ligands in cluster with query_ligname
+    def fetch_cluster_options(self, ligname: str) -> list[tuple]:
+        """Return available clustering groups for the given ligand.
 
         Args:
-            query_ligname (str): name of the ligand in the ligand table to look for similars to
+            ligname (str): ligname for ligand to find similarity with
 
         Returns:
-            int: number of ligands that are similar
+            list[tuple]: list of (cluster_id, cluster_window, name) tuples
         """
-        number_similar = 0
+        with self.storageman:
+            return self.storageman.fetch_cluster_options(ligname)
+
+    @_wrap_exceptions
+    def fetch_clustered_similars(
+        self, query_ligname: str, cluster_id: int, output_log: str = None
+    ) -> tuple[list, str, str]:
+        """Return ligands similar to query_ligname within the given cluster.
+
+        Args:
+            query_ligname (str): name of the ligand to find similars for
+            cluster_id (int): cluster to search within
+            output_log (str, optional): path for log file; if provided, writes results
+
+        Returns:
+            tuple[list, str, str]: (ligands, bookmark_name, cluster_name)
+        """
+        logger.warning(
+            "N.B.: When finding similar ligands, export tasks (i.e. SDF export) will be for the selected similar ligands, NOT ligands passing given filters."
+        )
         with self.storageman:
             similar_ligands, bookmark_name, cluster_name = (
-                self.storageman.fetch_clustered_similars(query_ligname)
+                self.storageman.fetch_clustered_similars(query_ligname, cluster_id)
             )
-            if similar_ligands is not None:
-                number_similar = len(similar_ligands)
+            if similar_ligands is not None and output_log is not None:
                 with OutputManager(output_log) as opm:
                     opm.write_find_similar_header(query_ligname, cluster_name)
                     opm.write_bookmarkname_in_log(bookmark_name)
                     opm.write_filter_results_in_log(similar_ligands)
-                    opm.log_num_passing_ligands(number_similar)
-            logger.info(f"\nNumber of similar ligands: {number_similar}")
-        return number_similar
+                    opm.log_num_passing_ligands(len(similar_ligands))
+            logger.info(
+                f"\nNumber of similar ligands: {len(similar_ligands) if similar_ligands else 0}"
+            )
+        return similar_ligands, bookmark_name, cluster_name
 
     @_wrap_exceptions
     def export_columns_as_csv(
@@ -1966,7 +1983,16 @@ class RingtailCore:
             }
             all_flexres = []
 
-            for pose_id, _, _, docking_score, leff, coords_json, fr_coords_json in rows:
+            for (
+                pose_id,
+                _,
+                _,
+                docking_score,
+                leff,
+                coords_json,
+                fr_coords_json,
+                _,
+            ) in rows:
                 try:
                     coords = json.loads(coords_json)
 

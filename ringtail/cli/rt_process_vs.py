@@ -155,7 +155,29 @@ def main():
 
             # find similar ligands to that specified, if specified (i.e., not None)
             if cli.output_options.find_similar_ligands:
-                rtcore.find_similar_ligands(cli.output_options.find_similar_ligands)
+                ligname = cli.output_options.find_similar_ligands
+                options = rtcore.fetch_cluster_options(ligname)
+                print(
+                    "Here are the existing clustering groups. Please ensure that your query ligand(s) is a part of the group you select."
+                )
+                print(
+                    "   Choice number   |   Underlying filter bookmark   |   Morgan or interaction fingerprint_cutoff   "
+                )
+                print(
+                    "----------------------------------------------------------------------------------------------------------"
+                )
+                ids = []
+                for cluster_id, filter_window, name in options:
+                    ids.append(cluster_id)
+                    print(f"{cluster_id}             |    {filter_window}             |    {name}")
+                cluster_choice = int(
+                    input("Please specify choice number for the cluster you would like to return similar ligands from: ")
+                )
+                if cluster_choice not in ids:
+                    raise ValueError(
+                        f"Given cluster number {cluster_choice} does not exist in the database. Please be sure you are specifying an integer in the given cluster options."
+                    )
+                rtcore.fetch_clustered_similars(ligname, cluster_choice, output_log="cluster_log.txt")
 
             # write out molecules if requested
             if cli.output_options.export_sdf_path:
