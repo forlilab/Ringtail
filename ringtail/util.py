@@ -10,64 +10,6 @@ from .logutils import get_logger
 logger = get_logger(__name__)
 
 
-def caller_info(skip=2):
-    import inspect
-
-    """Get the name of a caller in the format module.class.method.
-
-    https://gist.github.com/lee-pai-long/d3004225e1847b84acb4fbba0c2aea91
-    Copied from: https://gist.github.com/techtonik/2151727
-
-    :arguments:
-        - skip (integer): Specifies how many levels of stack
-                          to skip while getting caller name.
-                          skip=1 means "who calls me",
-                          skip=2 "who calls my caller" etc.
-
-    :returns:
-        - package (string): caller package.
-        - module (string): caller module.
-        - klass (string): caller classname if one otherwise None.
-        - caller (string): caller function or method (if a class exist).
-        - line (int): the line of the call.
-        - An empty string is returned if skipped levels exceed stack height.
-    """
-    stack = inspect.stack()
-    start = 0 + skip
-    if len(stack) < start + 1:
-        return ""
-    parentframe = stack[start][0]
-
-    # module and packagename.
-    module_info = inspect.getmodule(parentframe)
-    if module_info:
-        mod = module_info.__name__.split(".")
-        package = mod[0]
-        try:
-            module = mod[1]
-        except IndexError:
-            module = ""
-
-    # class name.
-    klass = None
-    if "self" in parentframe.f_locals:
-        klass = parentframe.f_locals["self"].__class__.__name__
-
-    # method or function name.
-    caller = None
-    if parentframe.f_code.co_name != "<module>":  # top level usually
-        caller = parentframe.f_code.co_name
-
-    # call line.
-    line = parentframe.f_lineno
-
-    # Remove reference to frame
-    # See: https://docs.python.org/3/library/inspect.html#the-interpreter-stack
-    del parentframe
-
-    return package, module, klass, caller, line
-
-
 def numlist2str(list: list, separator: str) -> str:
     """
     Joines item in a list by specified string separator
@@ -111,7 +53,7 @@ def valid_bookmark_name(name: str) -> Union[str, None]:
         name (str): bookmark name
 
     Returns:
-        bool: true if bookmark name is valid
+        str, None: bookmark name if valid else None
 
     """
     import re
@@ -123,24 +65,6 @@ def valid_bookmark_name(name: str) -> Union[str, None]:
         name = name.lower()
 
     return name if re.match(r"^[a-z0-9_]*$", name) else None
-
-
-def ligand_sdf_to_pdb(sdf_file: str):
-
-    import os
-    from rdkit import Chem
-    from rdkit.Chem import AllChem
-
-    suppl = Chem.SDMolSupplier(sdf_file)
-    for mol in suppl:
-        name = mol.GetProp("_Name")
-
-    if mol.GetNumConformers() == 0 or not mol.GetConformer(0).Is3D():
-        mol = Chem.AddHs(mol, addCoords=True)
-        AllChem.EmbedMolecule(mol)
-    else:
-        mol = Chem.AddHs(mol, addCoords=True)
-    Chem.MolToPDBFile(mol, os.path.join(name + ".pdb"), flavor=0)
 
 
 def detect_db_type(filepath: str) -> str:

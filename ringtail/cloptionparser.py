@@ -107,7 +107,7 @@ def cmdline_parser(defaults: dict = {}):
         help="specify a database file to perform actions with",
         action="store",
         type=str,
-        metavar="sqlite",
+        metavar="duckdb",
     )
     write_parser.add_argument(
         "-m",
@@ -115,7 +115,7 @@ def cmdline_parser(defaults: dict = {}):
         help='specify AutoDock program used to generate results. Available options are "adgpu"/"dlg" and "vina"/"pdbqt". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
-        metavar="'adgpu' or 'vina'",
+        metavar="'adng','adgpu' or 'vina'",
     )
     write_parser.add_argument(
         "-su",
@@ -146,7 +146,7 @@ def cmdline_parser(defaults: dict = {}):
         "-dr",
         "--docking_results",
         help="docking result file(s), director(ies) to scan, or text file(s) listing result paths. "
-             "Type is auto-detected per item. Replaces --file / --file_path / --file_list.",
+        "Type is auto-detected per item. Replaces --file / --file_path / --file_list.",
         action="append",
         type=str,
         metavar="FILE_OR_DIR_OR_LIST",
@@ -182,7 +182,7 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-r",
         "--recursive",
-        help="enable recursive directory scan when --file_path is used",
+        help="enable recursive directory scan when providing paths to folders/directories",
         action="store_true",
     )
     write_parser.add_argument(
@@ -200,9 +200,17 @@ def cmdline_parser(defaults: dict = {}):
         metavar="'ignore' or 'replace'",
     )
     write_parser.add_argument(
+        "-rf",
+        "--receptor_file",
+        help="Give file for receptor .pdbqt OR .json file for a receptor meeko.Polymer.",
+        action="store",
+        type=str,
+        metavar="STRING",
+    )
+    write_parser.add_argument(
         "-sr",
         "--save_receptor",
-        help="Saves receptor PDBQT to database. Receptor location must be specied with in --file, --file_path directory or --file_list file",
+        help="Stores receptor PDBQT or polymer/json to database (otherwise it will just store data in memory for e.g., interaction calculation). Receptor location must be specied with in --receptor_file",
         action="store_true",
     )
     write_parser.add_argument(
@@ -217,13 +225,13 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-ov",
         "--overwrite",
-        help="by default, if a database or log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing database and/or log file.",
+        help="by default, if a database or filter log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing database and/or filter log file.",
         action="store_true",
     )
     write_parser.add_argument(
         "-mp",
         "--max_poses",
-        help="n: Store top pose for top n clusters",
+        help="Store max n top poses per ligand",
         action="store",
         type=int,
         metavar="INT",
@@ -231,13 +239,13 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-sa",
         "--store_all_poses",
-        help="Store all poses from input files. Overrides --max_poses",
+        help="Store all poses per ligand. Overrides --max_poses",
         action="store_true",
     )
     write_parser.add_argument(
         "-it",
         "--interaction_tolerance",
-        help="Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired. Only compatible with ADGPU mode",
+        help="ADGPU only: Will add the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired.",
         action="store",
         type=float,
         metavar="FLOAT",
@@ -247,7 +255,7 @@ def cmdline_parser(defaults: dict = {}):
     write_parser.add_argument(
         "-ni",
         "--no_interactions",
-        help="If interactions for vina results should not be calculated and stored",
+        help="If interactions for e.g., adng or vina results should not be calculated and stored",
         action="store_true",
     )
     write_parser.add_argument(
@@ -256,15 +264,7 @@ def cmdline_parser(defaults: dict = {}):
         help="Specify distance cutoffs for measuring interactions between ligand and receptor in angstroms if other than default. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '-ic 3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0. These are the default cutoffs.",
         action="store",
         type=str,
-        metavar="[HB CUTOFF],[VDW CUTOFF]",
-    )
-    write_parser.add_argument(
-        "-rf",
-        "--receptor_file",
-        help="Give file for receptor .pdbqt OR .json file for a receptor meeko.Polymer.",
-        action="store",
-        type=str,
-        metavar="STRING",
+        metavar="<HB CUTOFF>,<VDW CUTOFF>",
     )
     write_parser.add_argument(
         "-mpr",
@@ -332,7 +332,7 @@ def cmdline_parser(defaults: dict = {}):
         type=str,
         const="output_log.txt",
         nargs="?",
-        metavar="[FILE_NAME].TXT",
+        metavar="<FILE_NAME>.TXT",
     )
     output_group.add_argument(
         "-of",
@@ -353,7 +353,7 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-oap",
         "--output_all_poses",
-        help="By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.",
+        help="By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be included in export option(s).",
         action="store_true",
     )
     output_group.add_argument(
@@ -393,7 +393,7 @@ def cmdline_parser(defaults: dict = {}):
         help="Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]",
         action="store",
         type=str,
-        metavar="[VALID SQL QUERY]",
+        metavar="<VALID SQL QUERY>",
     )
     output_group.add_argument(
         "-sdf",
@@ -436,7 +436,7 @@ def cmdline_parser(defaults: dict = {}):
     output_group.add_argument(
         "-fsl",
         "--find_similar_ligands",
-        help="Allows user to find similar ligands to given ligand name based on previously performed morgan fingerprint or interaction clustering.",
+        help="Allows user to find similar ligands to given ligand name based on previously performed clustering.",
         action="store",
         type=str,
     )
@@ -447,7 +447,7 @@ def cmdline_parser(defaults: dict = {}):
     properties_group.add_argument(
         "-e",
         "--eworst",
-        help="specify the worst energy value accepted",
+        help="specify the worst/highest energy value accepted",
         action="store",
         type=float,
         metavar="FLOAT",
@@ -455,7 +455,7 @@ def cmdline_parser(defaults: dict = {}):
     properties_group.add_argument(
         "-eb",
         "--ebest",
-        help="specify the best energy value accepted",
+        help="specify the best/lowest energy value accepted",
         action="store",
         type=float,
         metavar="FLOAT",
@@ -463,7 +463,7 @@ def cmdline_parser(defaults: dict = {}):
     properties_group.add_argument(
         "-le",
         "--leworst",
-        help="specify the worst ligand efficiency value accepted",
+        help="specify the worst/highest ligand efficiency value accepted",
         action="store",
         type=float,
         metavar="FLOAT",
@@ -471,7 +471,7 @@ def cmdline_parser(defaults: dict = {}):
     properties_group.add_argument(
         "-leb",
         "--lebest",
-        help="specify the best ligand efficiency value accepted",
+        help="specify the best/lowest ligand efficiency value accepted",
         action="store",
         type=float,
         metavar="FLOAT",
@@ -650,19 +650,19 @@ class CLOptionParser:
     'rt_process_vs.py'.
 
     Attributes:
-        process_mode (str): operating in 'write' or 'read' mode
-        db_file
-        logging_level
-        storage_type
-        file_sources (dict): paths to docking results and receptor files
-        print_summary (bool): switch to print database summary
-        filtering (bool): switch to run filtering method
-        in write mode:
-            write_options (SimpleNamespace)
-        in read mode:
-            filters (dict): parsed and organized filters
-            filter_options (SimpleNamespace)
-            output_options (SimpleNamespace)
+        process_mode (str)
+        db_file (str)
+        storage_type (str)
+        logging_level (str)
+        write_options (SimpleNamespace)
+        file_sources (dict)
+        filters (dict)
+        filtering (bool)
+        clustering_only (bool)
+        print_summary (bool)
+        print_bookmark (bool)
+        filter_options (SimpleNamespace)
+        output_options (SimpleNamespace)
 
     Raises:
         OptionError: Error when an option cannot be parsed correctly

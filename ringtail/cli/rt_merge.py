@@ -21,7 +21,7 @@ If the user wishes to merge databases of filtered results only they need to run 
 
 The script does not look for or handle duplicates in the Results or Interactions table. The Ligands table will by default not allow duplicates.
 Since Ringtail only allows one receptor per database, the receptor names in both databases will be checked, and the merge will only proceed if the receptor name matches
-(as well as PRAGMA user_version). The script will delete existing bookmarks and ligand_cluster tables, as these can be dependent on primary keys which may have changed.
+(as well as PRAGMA user_version for sqlite3 databases). The script will delete existing bookmarks and ligand_cluster tables, as these can be dependent on primary keys which may have changed.
 A log file of the process will be written by default, and the name of this log file can be specified by user.
 
 --------- Example usage ---------
@@ -38,6 +38,7 @@ python rt_merge.py -db1 db1.db -db2 db2.db -l mergetest.log
 python rt_merge.py -db1 db1.db -db2 db*.db
 
 """
+
 import argparse
 import sys
 import traceback

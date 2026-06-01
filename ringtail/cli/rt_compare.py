@@ -48,14 +48,14 @@ def cmdline_parser(defaults={}):
 
     parser = argparse.ArgumentParser(
         usage="Please see GitHub for full usage details.",
-        description="Script for filtering unique passing ligands across multiple virtual screenings. Takes databases created and filtered with rt_process_vs.py.",
+        description="Script for filtering unique passing ligands across multiple virtual screenings. Will look for the same ligand names in two or more databases in specified bookmark names (i.e., filtered ligands). Ligands existing in all specified databases can be exported to eg SDF files.",
         epilog="""
 
         REQUIRED PACKAGES
                 Requires RDkit, SciPy, Meeko.\n
 
         AUTHOR
-                Written by Althea Hansel-Harris and May-Linn Paulsen. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n
+                Written by Althea Hansel-Harris, PhD and May-Linn Paulsen, PhD. Based on code by Stefano Forli, PhD, Andreas Tillack, PhD, and Diogo Santos-Martins, PhD.\n
 
         REPORTING BUGS
                 Please report bugs to:
