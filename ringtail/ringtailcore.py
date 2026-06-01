@@ -497,7 +497,7 @@ class RingtailCore:
         hb_cutoff: float = RingtailDefaults.interaction_cutoffs[0],
         vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
         receptor_string: str = None,
-        get_consent: Callable = None,
+        consent: bool = False,
         chunk_size: int = 500,
     ):
         """
@@ -507,7 +507,7 @@ class RingtailCore:
             hb_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[0].
             vdw_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[1].
             receptor_string (str, optional): _description_. Defaults to None.
-            get_consent (Callable, optional): _description_. Defaults to None.
+            consent (bool): must be True to proceed when existing interactions are present (recalc deletes them). Defaults to False.
             chunk_size (int, optional): _description_. Defaults to 10.
 
         Raises:
@@ -521,17 +521,7 @@ class RingtailCore:
         # make sure user knows risk of calculating interaction in db with existing interactions
         track_table_name = "recomputed_interactions"
         if self.table_length("Interactions") > 0:
-
-            def _api_cmd_consent():
-                consent = input(
-                    "WARNING: Calculating interactions for a database with existing interactions will delete all existing interactions.\n Are you sure you wish to proceed? If so, type 'yes': "
-                )
-                return consent.strip().lower() == "yes"
-
-            if get_consent is None:
-                get_consent = _api_cmd_consent
-
-            if not get_consent():
+            if not consent:
                 logger.critical(
                     "Consent not given for deleting and re-calculating interactions, exiting."
                 )
@@ -997,7 +987,7 @@ class RingtailCore:
         ligname: Union[str, list] = None,
         bookmark_name: str = None,
         filename: str = "receptor.pdb",
-        get_consent: Callable = None,
+        consent: bool = False,
     ) -> tuple[Chem.rdchem.Mol, dict]:
         """
         Writes a receptor pdb with flexible residues based on the ligand provided
@@ -1031,17 +1021,7 @@ class RingtailCore:
             ligand_names=ligname, bookmark_name=bookmark_name
         )
         if length := len(ligands_poses) > 10:
-
-            def _api_cmd_consent(length: int):
-                consent = input(
-                    f"WARNING: You are requesting to prepare pdbs for {length} ligands/flexible residue combinations.\n Are you sure you wish to proceed? If so, type 'yes': "
-                )
-                return consent.strip().lower() == "yes"
-
-            if get_consent is None:
-                get_consent = _api_cmd_consent
-
-            if not get_consent(length):
+            if not consent:
                 logger.critical(
                     "Consent not given for large number of pdbs to write, exiting."
                 )
