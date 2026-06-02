@@ -6,7 +6,6 @@
 import itertools
 import os
 from typing import Callable, Union
-from collections import defaultdict
 import functools
 from collections.abc import Iterable
 import json
@@ -26,7 +25,7 @@ from .ringtailoptions import (
     statuses,
     validate_docking_mode,
 )
-from .schema import ORDER_RESULT_SCHEMA, OUTFIELD_BY_TABLE
+from .schema import OUTFIELD_BY_TABLE
 from .exceptions import (
     RTCoreError,
     OutputError,
@@ -132,6 +131,10 @@ class RingtailCore:
         self._run_mode = access_mode.lower()
 
     def build_gui_tables(self):
+        """
+        Create tables (if not exists) that are used in the GUI,
+        but not directly by other cli/api processes
+        """
         with self.storageman as sm:
             sm.ensure_gui_tables()
 
@@ -151,7 +154,7 @@ class RingtailCore:
     @_wrap_exceptions
     def add_results_from_files(
         self,
-        docking_results: "str | list[str]" = RingtailDefaults.docking_results,
+        docking_results: Union[str, list[str]] = RingtailDefaults.docking_results,
         recursive: bool = RingtailDefaults.recursive,
         receptor_file: str = None,
         save_receptor: bool = RingtailDefaults.save_receptor,
@@ -326,7 +329,7 @@ class RingtailCore:
         calculate_interactions: bool = RingtailDefaults.calculate_interactions,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         receptor_string: str = None,
-        chunk_size: int = 5000,
+        chunk_size: int = RingtailDefaults.chunk_size,
         finalize: bool = False,
     ):
         """Add Vina docking results from a dict or iterable of dicts to the database.
@@ -347,8 +350,11 @@ class RingtailCore:
         elif not isinstance(results, Iterable):
             results = [results]
 
-        interaction_finder = self._build_interaction_finder(
-            calculate_interactions, receptor_string, interaction_cutoffs
+        receptor_string = receptor_string or self.get_receptor_representation()
+        interaction_finder = (
+            make_interaction_finder(receptor_string, interaction_cutoffs)
+            if calculate_interactions
+            else None
         )
         num_poses = self._num_poses_to_store(max_poses, store_all_poses)
         vina_parser = VinaMoleculeSupplier(num_poses)
@@ -376,7 +382,7 @@ class RingtailCore:
         calculate_interactions: bool = RingtailDefaults.calculate_interactions,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         receptor_string: str = None,
-        chunk_size: int = 5000,
+        chunk_size: int = RingtailDefaults.chunk_size,
         duplicate_handling: str = RingtailDefaults.duplicate_handling,
         finalize: bool = False,
     ):
@@ -402,8 +408,11 @@ class RingtailCore:
         if not isinstance(mols, Iterable):
             mols = [mols]
 
-        interaction_finder = self._build_interaction_finder(
-            calculate_interactions, receptor_string, interaction_cutoffs
+        receptor_string = receptor_string or self.get_receptor_representation()
+        interaction_finder = (
+            make_interaction_finder(receptor_string, interaction_cutoffs)
+            if calculate_interactions
+            else None
         )
 
         self._insert_non_file_results(
@@ -423,7 +432,7 @@ class RingtailCore:
     @_wrap_exceptions
     def finalize_write(self):
         """
-        Finalize database write by creating indices
+        Finalize database write by e.g., creating indices
         """
         with self.storageman:
             self.storageman.finalize_database_write()
@@ -498,7 +507,7 @@ class RingtailCore:
         vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
         receptor_string: str = None,
         consent: bool = False,
-        chunk_size: int = 500,
+        chunk_size: int = RingtailDefaults.chunk_size / 10,
     ):
         """
         ###NOTE SLOOOOOOW
@@ -508,7 +517,7 @@ class RingtailCore:
             vdw_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[1].
             receptor_string (str, optional): _description_. Defaults to None.
             consent (bool): must be True to proceed when existing interactions are present (recalc deletes them). Defaults to False.
-            chunk_size (int, optional): _description_. Defaults to 10.
+            chunk_size (int, optional): _description_. Defaults to RingtailDefaults.chunk_size,.
 
         Raises:
             RTCoreError: _description_
@@ -671,41 +680,39 @@ class RingtailCore:
         In the case of clustering, the representative ligands will be the ones written to the output log.
 
         Args:
-            Filters:
-                eworst (float): specify the worst energy value accepted
-                ebest (float): specify the best energy value accepted
-                leworst (float): specify the worst ligand efficiency value accepted
-                lebest (float): specify the best ligand efficiency value accepted
-                score_percentile (float): specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.
-                le_percentile (float): specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.
-                vdw_interactions (list[tuple]): define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-                hb_interactions (list[tuple]): define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-                reactive_interactions (list[tuple]): check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-                hb_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
-                react_any (bool): check if ligand reacted with any residue
-                max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
-                ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., [["lig1", "lig2"]]
-                ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., [["ccc", "CN"]]
-                ligand_substruct_pos (list[list[type]]): SMARTS pattern(s) for substructure matching, e.g., [["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5]] -> [["smart_string", index_of_positioned_atom, cutoff_distance, x, y, z]]
-                ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
-                ligand_min_molweight (float): min molweight (inclusive, g/mol) for the ligand
-                ligand_max_molweight (float): max molweight (inclusive, g/mol) for the ligand
-                ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
-                ligand_name_file (str); csv file containing a list of ligand names to be filtered for
-            Ligand results options:
-                enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
-                output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
-                mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
-                interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-                output_log (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
-                outfields (str): Comma-separated columns to include in output, e.g.
-                    ``"docking_score,leff,num_hb"``. Ligand name is always returned first.
-                    Available fields are the keys of ``ringtail.schema.OUTFIELD_SCHEMA``.
-                order_results (str): Single column name to sort results by. Takes one value.
-                    Available fields are the keys of ``ringtail.schema.ORDER_RESULT_SCHEMA``.
-                output_bookmark (str): name for resulting book mark file. Default value is 'passing_results', can only contain lower case letters, numbers, and underscore (_)
-                input_bookmark (str): name of bookmark to perform filtering over
-                return_iter (bool): return an iterable of all of the filtering results
+            eworst (float): specify the worst energy value accepted
+            ebest (float): specify the best energy value accepted
+            leworst (float): specify the worst ligand efficiency value accepted
+            lebest (float): specify the best ligand efficiency value accepted
+            score_percentile (float): specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.
+            le_percentile (float): specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.
+            vdw_interactions (list[tuple]): define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+            hb_interactions (list[tuple]): define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+            reactive_interactions (list[tuple]): check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+            hb_count (list[tuple]): accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions. E.g., [('hb_count', 5)]
+            react_any (bool): check if ligand reacted with any residue
+            max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
+            ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., [["lig1", "lig2"]]
+            ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., [["ccc", "CN"]]
+            ligand_substruct_pos (list[list[type]]): SMARTS pattern(s) for substructure matching, e.g., [["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5]] -> [["smart_string", index_of_positioned_atom, cutoff_distance, x, y, z]]
+            ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
+            ligand_min_molweight (float): min molweight (inclusive, g/mol) for the ligand
+            ligand_max_molweight (float): max molweight (inclusive, g/mol) for the ligand
+            ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
+            ligand_name_file (str); csv file containing a list of ligand names to be filtered for
+            enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
+            output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
+            mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
+            interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
+            output_log (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
+            outfields (str): Comma-separated columns to include in output, e.g.
+                ``"docking_score,leff,num_hb"``. Ligand name is always returned first.
+                Available fields are the keys of ``ringtail.schema.OUTFIELD_SCHEMA``.
+            order_results (str): Single column name to sort results by. Takes one value.
+                Available fields are the keys of ``ringtail.schema.ORDER_RESULT_SCHEMA``.
+            output_bookmark (str): name for resulting book mark file. Default value is 'passing_results', can only contain lower case letters, numbers, and underscore (_)
+            input_bookmark (str): name of bookmark to perform filtering over
+            return_iter (bool): return an iterable of all of the filtering results
 
         Returns:
             tuple[int, str]: number of ligands passing filter and final bookmark name (may change if eg filtering and clustering)
@@ -953,7 +960,7 @@ class RingtailCore:
         Raises:
             OptionError
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
         if not order_results:
             order_results = "ligname"
         with self.storageman:
@@ -990,21 +997,37 @@ class RingtailCore:
         consent: bool = False,
     ) -> tuple[Chem.rdchem.Mol, dict]:
         """
+        _summary_
+
+        Args:
+            receptor_polymer (Union[object, str], optional): _description_. Defaults to None.
+            ligname (Union[str, list], optional): _description_. Defaults to None.
+            bookmark_name (str, optional): _description_. Defaults to None.
+            filename (str, optional): _description_. Defaults to "receptor.pdb".
+            consent (bool, optional): _description_. Defaults to False.
+
+        Raises:
+            OptionError: _description_
+
+        Returns:
+            tuple[Chem.rdchem.Mol, dict]: _description_
+        """
+        """
         Writes a receptor pdb with flexible residues based on the ligand provided
 
         Args:
             receptor_polymer (Polymer, json string, .json file): version of receptor produced by meeko,
                                         or a json representation that can be rebuilt to a polymer, including
                                         valid json string and valid json file
-            ligname (str | list): ligand name for which the receptor flexible residue info should be collected
-            filename (str): name of the output pdb, extension is optional, will default to '.pdb'
-            bookmark_name (str, optional): if provided, it will only export flex res for ligand poses passing bookmark filters
-
+            ligname (Union[str, list], optional): ligand name for which the receptor flexible residue info should be collected. Defaults to None.
+            bookmark_name (str, optional): if provided, it will only export flex res for ligand poses passing bookmark filters. Defaults to None.
+            filename (str, optional): name of the output pdb, extension is optional, will default to '.pdb'. Defaults to "receptor.pdb".
+            consent (bool, optional): Necessary if exporting more than 10 poses/flexres PDBs per one receptor. Defaults to False. 
+        
         Returns
-            Chem.rdchem.Mol: the Mol object for the given ligand
             dict: dictionary describing the Mols for the flexible residues
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
         # check database if polymer not provided, else error
         if not receptor_polymer:
             _, _, polymer_string = self.get_receptor_object()
@@ -1020,7 +1043,7 @@ class RingtailCore:
         ligands_poses = self._fetch_select_ligands_poses(
             ligand_names=ligname, bookmark_name=bookmark_name
         )
-        if length := len(ligands_poses) > 10:
+        if len(ligands_poses) > 10:
             if not consent:
                 logger.critical(
                     "Consent not given for large number of pdbs to write, exiting."
@@ -1096,7 +1119,7 @@ class RingtailCore:
         Raises:
             StorageError: if bookmark or data not found
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
 
         try:
             ligands_poses = self._fetch_select_ligands_poses(
@@ -1210,7 +1233,7 @@ class RingtailCore:
             bookmark_name (str): data limiting table/bookmark to export for
             csv_name (str, optional): name of csv file. Defaults to "columns_output.csv".
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
         with self.storageman as sm:
             sql = sm.prepare_column_export_query(columns, bookmark_name)
 
@@ -1244,11 +1267,12 @@ class RingtailCore:
 
         Args:
             bookmark_name (str): name for bookmark_db
+            db_filepath (str, optional): where to store the database. Defaults to None.
 
         Returns:
             str: name of the new, exported database
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
         if db_filepath is None:
             db_filepath = self.db_file.removesuffix(".db") + "_" + bookmark_name + ".db"
 
@@ -1309,7 +1333,7 @@ class RingtailCore:
             order_results (str, optional): how to order the data. Defaults to "ligname".
             output_log (str, optional): log file name to write to. Defaults to None.
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
         if output_log is None:
             return
         if bookmark_name is None:
@@ -1347,8 +1371,9 @@ class RingtailCore:
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
 
         Returns:
-            tuple[int, dict, list, dict]: Number of "passing" ligands, dict of database {database
-            file path: new bookmark name from cross ref}, list of passing ligand names, dict of dbs and how they were compared
+            int: number of passing crossref ligands
+            dict: {db_file: new_bookmark_name,}
+            dict: "filter" {"wanted":[list of wanted dbs],"unwanted":[list of unwanted dbs]
         """
         with self.storageman as sm:
             return sm.crossref_databases(
@@ -1382,6 +1407,13 @@ class RingtailCore:
 
     @_wrap_exceptions
     def get_receptor_representation(self) -> str:
+        """
+        Returns -a- representation of the receptor that exists in the database, defaulting to receptor_blob.pdbqt
+        but will use json of pdbqt data is not there (and polymer data is)
+
+        Returns:
+            str: _description_
+        """
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
             if receptor_blob := rec_data.get("receptor_object"):
@@ -1436,53 +1468,13 @@ class RingtailCore:
             return sm.db_query(query, params, commit).fetchall()
 
     @_wrap_exceptions
-    def set_ligand_status(
-        self,
-        status: str,
-        ligands: Union[str, list[str]] = None,
-        pose_ids: Union[int, list[int]] = None,
-        bookmark_name: str = None,
-    ):
-        """
-        Will update the status of specified ligand-pose-bookmark combination. E.g., if only a ligand is provided, all its poses will be given
-        the desired status. If just poses are provided, they will be given chosen status. If only a bookmark is provided, all poses in that
-        bookmark will be given the status. If one or more ligands are given + a bookmark, the poses of those ligands in that bookmark will
-        be given the status. If pose_ids are also specified, they will be given the set status even if not in the bookmark.
-
-        Args:
-            status (str): _description_
-            ligand_name (Union[str, list[str]], optional): _description_. Defaults to None.
-            pose_id (Union[int, list[int]], optional): _description_. Defaults to None.
-            bookmark_name (str, optional): _description_. Defaults to None.
-        """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
-        status = status.lower()
-        str_to_int = {v: k for k, v in statuses.items() if v is not None}
-        str_to_int.update({"none": 0, "0": 0})
-        if status not in str_to_int:
-            raise OptionError(
-                f"The selected status '{status}' is not valid. "
-                f"Choose from: {', '.join(str_to_int.keys())}"
-            )
-        status = str_to_int[status]
-
-        ligands_poses = self._fetch_select_ligands_poses(
-            ligands, pose_ids, bookmark_name
-        )
-        # parse to just poses, I don't need ligand names for this
-        parsed_poses = [
-            pose for pose_list in ligands_poses.values() for pose in pose_list
-        ]
-        self.update_pose_status(pose_id=parsed_poses, status=status)
-
-    @_wrap_exceptions
     def update_pose_status(self, pose_id: Union[int, list[int]], status: int):
         """
         Updates the status of a given pose so that it is only ever in one status table
 
         Args:
             pose_id (Union[int, list[int]]): pose id for which a status is assigned, can be a single pose or a list
-            status (int): new status (0=unassign, 1=accepted, 2=maybe, 3=rejected)
+            status (int): new status (0=unassign, 1=accepted, 2=maybe, 3=rejected, 0 or other=remove status assignmetn)
 
         Raises:
             OptionError
@@ -1503,27 +1495,6 @@ class RingtailCore:
                 sm.remove_status(pose_id)
 
     @_wrap_exceptions
-    def get_data_table_pointer(
-        self, table: str, length: int = 100, starting_pose_id: int = 0
-    ) -> iter:
-        """
-        Returns a pointer or cursor (iterable) to the data in the Results table,
-        if table is a bookmark it will limit the Results data to the poses represented
-        in the bookmark.
-
-        Args:
-            table (str): name of table or bookmark
-            length (int, optional): number of rows to collect. Defaults to 100.
-            starting_pose_id (int, optional): pose id to start with. Defaults to 0.
-
-        Returns:
-            iter: iterable/cursor pointing to data in given table or bookmark
-        """
-        table = self._normalize_bookmark_name(table)
-        with self.storageman as sm:
-            return sm.fetch_viewable_data_columns_from(table, length, starting_pose_id)
-
-    @_wrap_exceptions
     def get_exportable_columns(self) -> dict[str, dict[str, str]]:
         """Return exportable columns grouped by table with descriptions.
 
@@ -1539,13 +1510,28 @@ class RingtailCore:
 
     @_wrap_exceptions
     def set_pose_comment(self, pose_id: int, comment: str) -> None:
-        """Write or clear a user comment for a pose."""
+        """
+        Write pose user comment
+
+        Args:
+            pose_id (int)
+            comment (str)
+        """
         with self.storageman as sm:
             sm.set_pose_comment(pose_id, comment)
 
     @_wrap_exceptions
-    def get_pose_comment(self, pose_id: int) -> "str | None":
-        """Return the comment for a pose, or None if none exists."""
+    def get_pose_comment(self, pose_id: int) -> Union[str, None]:
+        """
+        Return the comment for a pose, or None if none exists.
+
+        Args:
+            pose_id (int)
+
+        Returns:
+            Union[str,None]: comment or None
+
+        """
         with self.storageman as sm:
             return sm.get_pose_comment(pose_id)
 
@@ -1561,7 +1547,7 @@ class RingtailCore:
         Returns:
             int: row in given table
         """
-        table = self._normalize_bookmark_name(table)
+        table = table.lower()
         with self.storageman as sm:
             return sm.pose_row_in_table(table, pose_id)
 
@@ -1583,7 +1569,7 @@ class RingtailCore:
         Returns:
             dict[list[str], list]: dict of headers and data
         """
-        table = self._normalize_bookmark_name(table)
+        table = table.lower()
         with self.storageman as sm:
             return sm.fetch_viewable_data_columns_from(
                 table, length, starting_row_id, reverse
@@ -1612,7 +1598,7 @@ class RingtailCore:
             tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
                                             and column is the key, value is the row-col cell value
         """
-        table = self._normalize_bookmark_name(table)
+        table = table.lower()
         with self.storageman as sm:
             return sm.fetch_columns_from_table_as_dicts(
                 table, columns, length, starting_rowid
@@ -1651,13 +1637,6 @@ class RingtailCore:
             return self.storageman.table_length(table)
 
     @_wrap_exceptions
-    def get_ligand_name(self, pose_id: int = None):
-        return self.db_query(
-            "SELECT ligname FROM Ligands WHERE ligand_id = (SELECT ligand_id FROM Results WHERE pose_id = ? LIMIT 1);",
-            (pose_id,),
-        )[0][0]
-
-    @_wrap_exceptions
     def get_starting_rowid(self, table: str):
         """
         Returns the starting row id for a table. For a normal table like Results or status table, this will be
@@ -1669,7 +1648,7 @@ class RingtailCore:
         Returns:
             int: rowid
         """
-        table = self._normalize_bookmark_name(table)
+        table = table.lower()
         with self.storageman:
             return self.storageman.get_starting_rowid(table)
 
@@ -1747,7 +1726,7 @@ class RingtailCore:
         Returns:
             tuple[list[float], list[int]]: (bin_edges, counts) where len(bin_edges) == len(counts) + 1
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
         with self.storageman as sm:
             return sm.fetch_histogram_counts(column, num_bins, bookmark_name)
 
@@ -1769,7 +1748,7 @@ class RingtailCore:
         Args:
             bookmark_name (str): name of bookmark to be dropped.
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
         with self.storageman:
             self.storageman.delete_bookmark(bookmark_name)
         logger.info(
@@ -1803,7 +1782,7 @@ class RingtailCore:
         Returns:
             dict: key is column name,
         """
-        bookmark_name = self._normalize_bookmark_name(bookmark_name)
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
         with self.storageman as sm:
             return sm.fetch_bookmark_interactions(bookmark_name)
 
@@ -2083,7 +2062,9 @@ class RingtailCore:
         return mols, info, saved_coords, residues
 
     @_wrap_exceptions
-    def merge_databases(self, merging_dbs: list[str], backup: bool = True):
+    def merge_databases(
+        self, merging_dbs: list[str], backup: bool = True
+    ) -> list[tuple[str, str]]:
         """
         Merges one or more databases into the primary database. Accepts a list
         of explicit paths, glob patterns (e.g. "path/to/*.db"), or a mix of both.
@@ -2181,7 +2162,7 @@ class RingtailCore:
         Creates a dict of all Ringtail options.
 
         Return:
-            str: json string with options
+            dict: json string with options
         """
         from .ringtailoptions import ringtail_defaults
 
@@ -2218,13 +2199,13 @@ class RingtailCore:
         Method to process non-file results
 
         Args:
-            docking_mode (str): _description_
-            items (Iterable): _description_
-            parse_fn (Callable): _description_
-            duplicate_handling (str): _description_
-            num_poses (int): _description_
-            chunk_size (int): _description_
-            finalize (bool): _description_
+            docking_mode (str)
+            items (Iterable): items to be parsed
+            parse_fn (Callable): function used to parse the results (e.g., vina or adng parser)
+            duplicate_handling (str): how to deal with duplicates
+            num_poses (int): num poses to store for each
+            chunk_size (int): how many results to parse before writing to db
+            finalize (bool): whether to finalize db write
         """
         with self.storageman:
             self.storageman.check_storage_ready(self._run_mode, docking_mode, num_poses)
@@ -2260,29 +2241,6 @@ class RingtailCore:
         else:
             return max_poses
 
-    def _build_interaction_finder(
-        self,
-        calculate_interactions: bool,
-        receptor_string: str,
-        interaction_cutoffs: list[float, float],
-    ):
-        """
-        Create an InteractionFinder object
-
-        Args:
-            calculate_interactions (bool): _description_
-            receptor_string (str): _description_
-            interaction_cutoffs (list[float,float]): hb and vdw max distance for interaction
-
-        Returns:
-            _type_: _description_
-        """
-        if not calculate_interactions:
-            return None
-        if not receptor_string:
-            receptor_string = self.get_receptor_representation()
-        return make_interaction_finder(receptor_string, interaction_cutoffs)
-
     def _fetch_select_ligands_poses(
         self,
         ligand_names: Union[str, list] = None,
@@ -2303,43 +2261,25 @@ class RingtailCore:
         Returns:
             dict[str, list[int]]: _description_
         """
-        select_ligand_poses = defaultdict(list)
 
         # if just given bookmark, get all ligands in that bookmark
-        if bookmark_name:
-            if not self._validate_bookmark_name(bookmark_name):
-                raise RTCoreError(
-                    f"Requested data, -{bookmark_name}-, is not a valid bookmark."
-                )
-            if not ligand_names and not pose_ids:
-                with self.storageman as sm:
-                    select_ligand_poses = sm.fetch_lignames_and_poses_for_selection(
-                        bookmark_name
-                    )
+        if bookmark_name is not None and not self._validate_bookmark_name(
+            bookmark_name
+        ):
+            raise RTCoreError(
+                f"Requested data, -{bookmark_name}-, is not a valid bookmark."
+            )
 
         # if just pose_id(s), get their ligand names and add to dict
         # assumes that the specific IDs were given for a reason, bookmark will not be considered
-        if pose_ids:
-            # ensure list
-            if type(pose_ids) == int:
-                pose_ids = [pose_ids]
-            with self.storageman as sm:
-                # get ligand name and add to dict
-                for pose_id in pose_ids:
-                    select_ligand_poses[sm.get_ligname_from_pose(pose_id)].append(
-                        pose_id
-                    )
-
-        if ligand_names:
-            # ensure list
-            if type(ligand_names) == str:
-                ligand_names = [ligand_names]
-            for ligand_name in ligand_names:
-                # get all poses for that ligand, possibly bracketed by bookmark or status table
-                with self.storageman as sm:
-                    poses = sm.fetch_selected_ligand_poses(ligand_name, bookmark_name)
-                    select_ligand_poses[ligand_name].extend(poses)
-        return select_ligand_poses
+        pose_ids = [pose_ids] if isinstance(pose_ids, int) else (pose_ids or None)
+        ligand_names = (
+            [ligand_names] if isinstance(ligand_names, int) else (ligand_names or None)
+        )
+        with self.storageman as sm:
+            return sm.fetch_lignames_and_poses_for_selection(
+                bookmark_name, ligand_names, pose_ids
+            )
 
     def _add_conformer(self, mol: Chem.Mol, coordinates: list[list]) -> Chem.Mol:
         """
@@ -2517,9 +2457,10 @@ class RingtailCore:
                     raise OptionError(
                         f"Filtering bookmark {bookmark_name} does not exist in database. "
                     )
+            bookmark_name = bookmark_name.lower() if bookmark_name else None
 
             if not self.storageman.get_passing_poses_count(bookmark_name) and not (
-                bookmark_name.lower() in statuses
+                bookmark_name in statuses
             ):
                 raise StorageError(
                     "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
@@ -2587,10 +2528,5 @@ class RingtailCore:
         with self.storageman:
             df = self.storageman.to_dataframe(requested_data, table=table)
             df.to_csv(csv_name)
-
-    def _normalize_bookmark_name(self, bookmark_name: str) -> str:
-        if bookmark_name is None:
-            return None
-        return bookmark_name.lower()
 
     # endregion

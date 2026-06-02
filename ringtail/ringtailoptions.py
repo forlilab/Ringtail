@@ -115,6 +115,7 @@ class RingtailDefaults:
     data_from_bookmark: bool = None
     input_bookmark: str = None
     find_similar_ligands: bool = None
+    chunk_size: int = 5000
 
     @classmethod
     def all_fields(cls):
