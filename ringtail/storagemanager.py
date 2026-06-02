@@ -24,50 +24,11 @@ from .ringtailoptions import Filters, statuses
 from .exceptions import StorageError, OptionError, VersionError, MergeError
 from .clustermanager import *
 from .querybuilder import QueryBuilder
-from .schema import OUTFIELD_BY_TABLE, RESULTS_SCHEMA, LIGANDS_SCHEMA
-
-_LIGANDS_ONLY_COLS = set(LIGANDS_SCHEMA.columns) - set(RESULTS_SCHEMA.columns)
+from .schema import OUTFIELD_BY_TABLE, _CANDIDATES_SUBQ, _LIGANDS_ONLY_COLS
 from collections import defaultdict
-
-_CANDIDATES_SUBQ = "(SELECT pose_id FROM Accepted UNION SELECT pose_id FROM Maybe)"
-
-RESULTS_COLUMNS = [
-    "pose_id",
-    "ligand_id",
-    "receptor",
-    "pose_rank",
-    "run_number",
-    "docking_score",
-    "leff",
-    "delta",
-    "cluster_rmsd",
-    "cluster_size",
-    "reference_rmsd",
-    "energies_inter",
-    "energies_vdw",
-    "energies_electro",
-    "energies_flexlig",
-    "energies_flexlr",
-    "energies_intra",
-    "energies_torsional",
-    "unbound_energy",
-    "num_interactions",
-    "num_hb",
-    "pose_coordinates",
-    "flexible_res_coordinates",
-]
-II_COLUMNS = [
-    "interaction_type",
-    "rec_chain",
-    "rec_resname",
-    "rec_resid",
-    "rec_atom",
-    "rec_atomid",
-]
 
 
 class StorageManager(ABC):
-    # NOTE gotta be careful with schema
     _db_schema_ver = "3.0.0"
     QueryBuilder = QueryBuilder
 
@@ -158,6 +119,16 @@ class StorageManager(ABC):
         processed_pose_ids: list[tuple],
         tracking_table_name: str,
     ):
+        """
+        Method to insert interactions into an already populated database, for example when
+        recalculating interactions with new interaction distances
+
+        Args:
+            interactions (list[tuple]): list of interaction tuples
+            interaction_counts (list[dict]): interaction counts for the Results table
+            processed_pose_ids (list[tuple]): psoe_ids whose interactions have been (re-)calculated
+            tracking_table_name (str): table that tracks (re-)processed pose interactions
+        """
         self._begin_transaction()
 
         self._insert_interaction_index_rows(interactions)
@@ -194,7 +165,7 @@ class StorageManager(ABC):
             input_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
 
         Returns:
-             int: number of passing ligands
+            int: number of passing ligands
         """
         # before we do anything, check that the DB version matches the version number of our module
         rt_version_same, db_rt_version = self.check_ringtaildb_version()
@@ -341,29 +312,16 @@ class StorageManager(ABC):
         self.conn.commit()
         logger.info(f"Bookmark '{old_name}' renamed to '{new_name}'.")
 
-    def get_ligname_from_pose(self, pose_id: int) -> str:
-        """
-        Get ligand name given a pose_id
-
-        Args:
-            pose_id (int): pose id for which to get ligand name
-
-        Returns:
-            str: ligand name
-        """
-        query = self.QueryBuilder()
-        query.SELECT("L.ligname").FROM("Ligands", "L").JOIN(
-            "Results", "R", "ligand_id"
-        ).WHERE("R.pose_id =?", pose_id)
-        return self.db_query(*query.build()).fetchone()[0]
-
     def get_maxmiss_union(
         self, total_combinations: int, bookmark_name: str, all_filters={}
     ):
-        """Get results that are in union considering max miss
+        """
+        Get results that are in union considering max miss
 
         Args:
             total_combinations (int): numer of possible combinations
+            bookmark_name (str): name of bookmark to store
+            all_filters (dict, optional): All filters used. Defaults to {}.
 
         Returns:
             iter: of passing results
@@ -422,8 +380,9 @@ class StorageManager(ABC):
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
 
         Returns:
-            tuple[int, dict, dict]: Number of "passing" ligands, dict of database {database
-            file path: new bookmark name from cross ref},  dict of dbs and how they were compared
+            int: number of passing crossref ligands
+            dict: {db_file: new_bookmark_name,}
+            dict: "filter" {"wanted":[list of wanted dbs],"unwanted":[list of unwanted dbs]
         """
         processed_wanted = []
         for index, database in enumerate(wanted_dbs):
@@ -568,7 +527,7 @@ class StorageManager(ABC):
         bookmark_name: Union[str, None],
         cluster_type: str = "mfpt",
         cutoff: float = 0.5,
-    ) -> tuple:
+    ) -> tuple[str, int]:
         """
         Clusters data in a given bookmark. Will create a new bookmark with the format
         <bookmark_name>_<cluster-type>_clustered containing the representative poses
@@ -845,7 +804,7 @@ class StorageManager(ABC):
         self.detach_db(alias)
         logger.info(f"Subset database {database_name} has been successfully created.")
 
-    def fetch_pose_interactions(self, pose_ids) -> "list | dict":
+    def fetch_pose_interactions(self, pose_ids) -> Union[list, dict]:
         """
         Fetch interaction parameters for one pose or a batch of poses.
 
@@ -927,9 +886,6 @@ class StorageManager(ABC):
             if order_by:
                 query.ORDER_BY(order_by)
         return query.build()[0]
-
-    def _execute_to_df(self, sql: str) -> pd.DataFrame:
-        return pd.read_sql_query(sql, self.conn)
 
     def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
         """Returns a panda dataframe of table or query given as requested_data
@@ -1091,7 +1047,6 @@ class StorageManager(ABC):
 
         Returns:
             int: number of rows in receptors table
-            str: name of receptor if present in table
 
         Raises:
             DatabaseQueryError
@@ -1201,7 +1156,9 @@ class StorageManager(ABC):
             join_sql = f"INNER JOIN {bookmark_name} AS T ON Results.pose_id = T.pose_id"
             where_sql = f"{column} IS NOT NULL"
         elif self._is_candidates_table(bookmark_name):
-            join_sql = f"INNER JOIN {_CANDIDATES_SUBQ} AS T ON Results.pose_id = T.pose_id"
+            join_sql = (
+                f"INNER JOIN {_CANDIDATES_SUBQ} AS T ON Results.pose_id = T.pose_id"
+            )
             where_sql = f"{column} IS NOT NULL"
         else:
             join_sql = ""
@@ -1241,10 +1198,15 @@ class StorageManager(ABC):
     def fetch_data_for_passing_results(
         self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
     ) -> iter:
-        """Will return duckdb cursor with requested data for outfields for poses that passed filter in bookmark_name
+        """Will return cursor with requested data for outfields for poses that passed filter in bookmark_name
+
+        Args:
+            bookmark_name (str): bookmark for which to retrieve data
+            outfields (Union[str, list]): columns to include
+            order_results (str, optional): if ordering by a column. Defaults to None.
 
         Returns:
-            iter: duckdb cursor of data from passing data
+            iter: cursor of data from passing data
 
         Raises:
             OptionError
@@ -1498,7 +1460,10 @@ class StorageManager(ABC):
         return {"headers": headers, "data": data}
 
     def fetch_lignames_and_poses_for_selection(
-        self, selection: str
+        self,
+        selection: str = None,
+        ligand_names: list[str] = None,
+        pose_ids: list[int] = None,
     ) -> dict[str, list[int]]:
         """
         Creates a dictionary of ligands and the selected poses that appear in a selection,
@@ -1511,58 +1476,37 @@ class StorageManager(ABC):
             dict[str, list[int]]: ligand name is keyword, value is list of poses in given selection
         """
         query = self.QueryBuilder()
+        # general selection
         query.SELECT("L.Ligname", "r.pose_id").FROM("Ligands", "L").JOIN(
             "Results", "R", "ligand_id"
         )
-        if self.is_bookmark(selection):
-            query.IN_BOOKMARK(selection)
-        elif selection.lower() in statuses.values():
-            query.WHERE(f"R.pose_id IN {selection}")
-        elif self._is_candidates_table(selection):
-            query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
-        else:
-            logger.error(
-                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
-            )
-            return
-        rows = self.db_query(query.build()[0]).fetchall()
+        # narrow it by selection table/bookmark
+        if selection is not None:
+            if self.is_bookmark(selection):
+                query.IN_BOOKMARK(selection)
+            elif selection.lower() in statuses.values():
+                query.WHERE(f"R.pose_id IN {selection}")
+            elif self._is_candidates_table(selection):
+                query.JOIN(_CANDIDATES_SUBQ, "T", "pose_id")
+            else:
+                logger.error(
+                    f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
+                )
+                return
+        # narrow to pose id(s)
+        if pose_ids is not None:
+            placeholders = ", ".join("?" * len(pose_ids))
+            query.WHERE(f"R.pose_id IN ({placeholders})", *pose_ids)
+        # narrow to ligand name(s)
+        if ligand_names is not None:
+            placeholders = ", ".join("?" * len(ligand_names))
+            query.WHERE(f"L.ligname IN ({placeholders})", *ligand_names)
+
+        rows = self.db_query(*query.build()).fetchall()
         ligand_poses = defaultdict(list)
         for name, id in rows:
             ligand_poses[name].append(id)
-        # convert to normal dict
         return dict(ligand_poses)
-
-    def fetch_selected_ligand_poses(self, ligand_name: str, selection: str):
-        """
-        Gets only the poses of a given ligand that are present in give selection (e.g., a bookmark)
-
-        Args:
-            ligand_name (str)
-            selection (str): status table or bookmark name
-
-        Returns:
-            list[int]: selected poses for ligand
-        """
-        query = self.QueryBuilder()
-        query.SELECT("R.pose_id").FROM("Results", "R").WHERE(
-            "L.ligname = ?", ligand_name
-        ).JOIN("Ligands", "L", "ligand_id")
-
-        if self.is_bookmark(selection):
-            query.IN_BOOKMARK(selection)
-        elif selection == None:
-            # get all poses for ligand, no WHERE clause for pose_id
-            pass
-        elif selection.lower() in statuses.values():
-            query.WHERE(f"R.pose_id IN (SELECT pose_id FROM {selection})")
-        elif self._is_candidates_table(selection):
-            query.WHERE(f"R.pose_id IN {_CANDIDATES_SUBQ}")
-        else:
-            logger.error(
-                f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
-            )
-            return
-        return [row[0] for row in self.db_query(*query.build()).fetchall()]
 
     def fetch_bookmark_interactions(self, bookmark_name: str) -> pd.DataFrame:
         """
@@ -1915,7 +1859,9 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def fetch_clustered_similars(self, ligname: str, cluster_id: int) -> tuple[list, str, str]:
+    def fetch_clustered_similars(
+        self, ligname: str, cluster_id: int
+    ) -> tuple[list, str, str]:
         """Given ligname and a chosen cluster_id, return similar ligands.
 
         Args:
@@ -2813,6 +2759,19 @@ class StorageManager(ABC):
                 break
             for row in batch:
                 yield row
+
+    def _execute_to_df(self, sql: str) -> pd.DataFrame:
+        """
+        Helper function for compatibility for eg sqlite queries that have a different
+        implementation than duckdb of pandas
+
+        Args:
+            sql (str): query
+
+        Returns:
+            pd.DataFrame: data in data frame
+        """
+        return pd.read_sql_query(sql, self.conn)
 
     # endregion
 

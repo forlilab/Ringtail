@@ -1844,15 +1844,12 @@ class RingtailCore:
                 mol = Chem.AddHs(mol, addCoords=True)
             mol.SetProp("_Name", ligname)
 
-            # Build properties dict (single-element lists matching old format)
-            if include_interactions:
-                interactions = interactions_by_pose.get(pose_id, [])
-                interactions_str = ", ".join(
-                    f"{row[0]}-{':'.join(str(x) for x in row[1:])}"
-                    for row in interactions
-                )
-            else:
-                interactions_str = None
+            interactions = (
+                interactions_by_pose.get(pose_id, []) if include_interactions else []
+            )
+            interactions_str = (
+                self._interactions_str(interactions) if interactions else None
+            )
             properties = {
                 "Binding energies": [docking_score],
                 "Ligand effiencies": [leff],
@@ -1862,24 +1859,9 @@ class RingtailCore:
             if not mol.HasProp("_Name"):
                 properties["_Name"] = ligname
 
-            # Flexres: fresh copy of templates for each pose
-            pose_flexres_mols = []
-            if flexres_mols_tmpl and flexres_coords_json:
-                flexres_pose_coords = json.loads(flexres_coords_json)
-                for fr_idx, fr_mol in enumerate(flexres_mols_tmpl):
-                    fr_copy = Chem.Mol(fr_mol)
-                    fr_copy = RDKitMolCreate.add_pose_to_mol(
-                        fr_copy,
-                        flexres_pose_coords[fr_idx],
-                        flexres_info[fr_idx][1],
-                    )
-                    fr_copy = RDKitMolCreate.add_hydrogens(
-                        fr_copy,
-                        [flexres_pose_coords[fr_idx]],
-                        flexres_info[fr_idx][2],
-                        True,
-                    )
-                    pose_flexres_mols.append(fr_copy)
+            pose_flexres_mols = self._build_pose_flexres(
+                flexres_mols_tmpl, flexres_info, flexres_coords_json, pose_id
+            )
 
             result.append(
                 (pose_id, mol, ligname, pose_flexres_mols, properties, flexres_residues)
@@ -1975,38 +1957,19 @@ class RingtailCore:
                     base_mol.AddConformer(tmp.GetConformer(), assignId=True)
 
                 interactions = interactions_by_pose.get(pose_id, [])
-                interactions_str = ", ".join(
-                    f"{r[0]}-{':'.join(str(x) for x in r[1:])}" for r in interactions
+                interactions_str = (
+                    self._interactions_str(interactions) if interactions else None
                 )
                 merged_props["Binding energies"].append(docking_score)
                 merged_props["Ligand effiencies"].append(leff)
                 if interactions_str:
                     merged_props["Interactions"].append(interactions_str)
 
-                pose_flexres = []
-                if flexres_mols_tmpl and fr_coords_json:
-                    try:
-                        flexres_pose_coords = json.loads(fr_coords_json)
-                        for fr_idx, fr_mol in enumerate(flexres_mols_tmpl):
-                            fr_copy = Chem.Mol(fr_mol)
-                            fr_copy = RDKitMolCreate.add_pose_to_mol(
-                                fr_copy,
-                                flexres_pose_coords[fr_idx],
-                                flexres_info[fr_idx][1],
-                            )
-                            fr_copy = RDKitMolCreate.add_hydrogens(
-                                fr_copy,
-                                [flexres_pose_coords[fr_idx]],
-                                flexres_info[fr_idx][2],
-                                True,
-                            )
-                            pose_flexres.append(fr_copy)
-                    except Exception:
-                        logger.error(
-                            f"Failed to process flexres for pose {pose_id}, skipping flexres"
-                        )
-                        pose_flexres = []
-                all_flexres.append(pose_flexres)
+                all_flexres.append(
+                    self._build_pose_flexres(
+                        flexres_mols_tmpl, flexres_info, fr_coords_json, pose_id
+                    )
+                )
 
             if base_mol is not None:
                 yield (ligname, base_mol, all_flexres, merged_props, flexres_residues)
@@ -2274,12 +2237,46 @@ class RingtailCore:
         # assumes that the specific IDs were given for a reason, bookmark will not be considered
         pose_ids = [pose_ids] if isinstance(pose_ids, int) else (pose_ids or None)
         ligand_names = (
-            [ligand_names] if isinstance(ligand_names, int) else (ligand_names or None)
+            [ligand_names] if isinstance(ligand_names, str) else (ligand_names or None)
         )
         with self.storageman as sm:
             return sm.fetch_lignames_and_poses_for_selection(
                 bookmark_name, ligand_names, pose_ids
             )
+
+    @staticmethod
+    def _interactions_str(interactions: list) -> str:
+        return ", ".join(
+            f"{r[0]}-{':'.join(str(x) for x in r[1:])}" for r in interactions
+        )
+
+    @staticmethod
+    def _build_pose_flexres(
+        flexres_mols_tmpl, flexres_info, fr_coords_json, pose_id
+    ) -> list:
+        if not flexres_mols_tmpl or not fr_coords_json:
+            return []
+        try:
+            flexres_pose_coords = json.loads(fr_coords_json)
+            result = []
+            for fr_idx, fr_mol in enumerate(flexres_mols_tmpl):
+                fr_copy = Chem.Mol(fr_mol)
+                fr_copy = RDKitMolCreate.add_pose_to_mol(
+                    fr_copy, flexres_pose_coords[fr_idx], flexres_info[fr_idx][1]
+                )
+                fr_copy = RDKitMolCreate.add_hydrogens(
+                    fr_copy,
+                    [flexres_pose_coords[fr_idx]],
+                    flexres_info[fr_idx][2],
+                    True,
+                )
+                result.append(fr_copy)
+            return result
+        except Exception:
+            logger.error(
+                f"Failed to process flexres for pose {pose_id}, skipping flexres"
+            )
+            return []
 
     def _add_conformer(self, mol: Chem.Mol, coordinates: list[list]) -> Chem.Mol:
         """
