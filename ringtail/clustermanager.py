@@ -8,6 +8,7 @@ import numpy as np
 from rdkit import DataStructs
 from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator
+from rdkit.ML.Cluster import Butina
 
 
 class MorganFingerprintCluster:
@@ -44,13 +45,9 @@ class MorganFingerprintCluster:
             self.generate_morgan_fingerprints(),
             self.cutoff,
         )
-        clusters = []
-        for cluster_group in cluster_indices:
-            cluster = []
-            for index in cluster_group:
-                cluster.append(self.unclustered_items[index])
-            clusters.append(cluster)
-
+        clusters = [
+            [self.unclustered_items[i] for i in group] for group in cluster_indices
+        ]
         return clusters, top_score_per_cluster(
             cluster_indices, self.rating_data, self.unclustered_items
         )
@@ -101,7 +98,7 @@ class InteractionBitvectorCluster:
         self.cutoff = cutoff_distance
         self.bitvectors = bitvectors
 
-    def cluster(self):
+    def cluster(self) -> tuple[list, list]:
         """
         Clusters self.unclustered_items using interaction bitvectors
 
@@ -110,19 +107,12 @@ class InteractionBitvectorCluster:
             list: of top rated item for each cluster
         """
         cluster_indices = butina_cluster_fingerprints(
-            [
-                DataStructs.CreateFromBitString(bitvector)
-                for bitvector in self.bitvectors
-            ],
+            [DataStructs.CreateFromBitString(bv) for bv in self.bitvectors],
             self.cutoff,
         )
-        clusters = []
-        for cluster_group in cluster_indices:
-            cluster = []
-            for index in cluster_group:
-                cluster.append(self.unclustered_items[index])
-            clusters.append(cluster)
-
+        clusters = [
+            [self.unclustered_items[i] for i in group] for group in cluster_indices
+        ]
         return clusters, top_score_per_cluster(
             cluster_indices, self.rating_data, self.unclustered_items
         )
@@ -132,8 +122,8 @@ def top_score_per_cluster(
     clusters: list[list], rating_data: list, unclustered_items: list
 ) -> list[int]:
     """
-    Finds the stop scored representative for each cluster, based on the supplied
-    rating data
+    Finds the top scored representative for each cluster, based on the supplied
+    rating data.
 
     Args:
         clusters (list[list]): list of clusters
@@ -141,18 +131,12 @@ def top_score_per_cluster(
         unclustered_items (list): original data from before clustering
 
     Returns:
-        list[int]: list of items that are representative (best rating) for each cluster
+        list[int]: representative (best rating) item per cluster
     """
-
     cluster_representatives = []
-
     for cluster in clusters:
-        cluster_scores = np.array(
-            [rating_data[cluster_element] for cluster_element in cluster]
-        )
-        best_rep_score = unclustered_items[cluster[np.argmin(cluster_scores)]]
-        cluster_representatives.append(str(best_rep_score))
-
+        cluster_scores = np.array([rating_data[i] for i in cluster])
+        cluster_representatives.append(unclustered_items[cluster[np.argmin(cluster_scores)]])
     return cluster_representatives
 
 
@@ -165,20 +149,14 @@ def butina_cluster_fingerprints(fps, cutoff) -> tuple[tuple]:
         fps (): fingerprints
         cutoff distance (float)
     """
-    from rdkit.ML.Cluster import Butina
 
-    # first generate the distance matrix:
-    dists = []
     nfps = len(fps)
-
-    n_dists = nfps * (nfps - 1) // 2
-    dists = np.empty(n_dists, dtype=np.float64)
+    dists = np.empty(nfps * (nfps - 1) // 2, dtype=np.float64)
     idx = 0
     for i in range(1, nfps):
         sims = DataStructs.BulkTanimotoSimilarity(fps[i], fps[:i])
-        n = i
-        dists[idx : idx + n] = 1.0 - np.array(sims)
-        idx += n
+        dists[idx : idx + i] = 1.0 - np.array(sims)
+        idx += i
 
     # now cluster the data:
     cs = Butina.ClusterData(dists, nfps, cutoff, isDistData=True)

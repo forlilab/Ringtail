@@ -620,7 +620,7 @@ class StorageManager(ABC):
         # write to db
         cluster_bookmark_name = self._insert_cluster_data(
             clusters,
-            [int(item) for item in representatives],
+            representatives,
             cluster_type.lower(),
             str(cutoff),
             internal_name,
@@ -633,7 +633,7 @@ class StorageManager(ABC):
 
             clustered_poses = self.QueryBuilder()
             clustered_poses.SELECT("pose_id").FROM("results").WHERE(
-                f"pose_id IN ({','.join(representatives)})"
+                f"pose_id IN ({','.join(str(r) for r in representatives)})"
             )
 
             self._populate_filter_tables(

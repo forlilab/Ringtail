@@ -31,6 +31,7 @@ class OutputManager:
 
     def __init__(self, output_log: str = "output_log.txt", append_to_file: bool = True):
         self.output_log = output_log
+        self._log_file = None
         self._log_open = False
         self.append = append_to_file
 
@@ -60,23 +61,19 @@ class OutputManager:
         else:
             open_mode = "w"
         try:
-            self.output_log = open(
-                self.output_log, open_mode
-            )  # makes output_log attribute a file pointer from the string path name
+            self._log_file = open(self.output_log, open_mode)
             self._log_open = True
             if write_filters_header:
-                self.output_log.write("Filters:\n")
-                self.output_log.write("***************\n")
+                self._log_file.write("Filters:\n")
+                self._log_file.write("***************\n")
         except Exception as e:
             raise OutputError("Error while creating log file") from e
 
     def close_logfile(self):
-        """Closes the log file properly and reset file pointer to filename"""
+        """Closes the log file."""
         if self._log_open:
-            self.output_log.close()
-            self.output_log = os.path.basename(
-                self.output_log.name
-            )  # returns output_log attribute from file pointer to string path name
+            self._log_file.close()
+            self._log_file = None
             self._log_open = False
 
     def write_filter_results_in_log(self, lines):
@@ -93,15 +90,15 @@ class OutputManager:
             formatted_lines = []
             for line in lines:
                 formatted_tuple = tuple(
-                    round(item, 2) if type(item) == float else item for item in line
+                    round(item, 2) if isinstance(item, float) else item for item in line
                 )
                 formatted_lines.append(
                     ", ".join(
-                        str(item) if type(item) != str else item
+                        str(item) if not isinstance(item, str) else item
                         for item in formatted_tuple
                     )
                 )
-            self.output_log.write("\n".join(formatted_lines) + "\n***************\n\n")
+            self._log_file.write("\n".join(formatted_lines) + "\n***************\n\n")
         except Exception as e:
             raise OutputError("Error occurred during log writing") from e
 
@@ -115,8 +112,8 @@ class OutputManager:
             OutputError
         """
         try:
-            self.output_log.write(line)
-            self.output_log.write("\n")
+            self._log_file.write(line)
+            self._log_file.write("\n")
         except Exception as e:
             raise OutputError(f"Error writing line {line} to log") from e
 
@@ -131,7 +128,7 @@ class OutputManager:
             OutputError
         """
         try:
-            self.output_log.write(
+            self._log_file.write(
                 f"\nNumber passing ligands: {number_passing_ligands} \n---------------\n"
             )
         except Exception as e:
@@ -147,7 +144,7 @@ class OutputManager:
             OutputError
         """
         try:
-            self.output_log.write(
+            self._log_file.write(
                 f"\nResult bookmark name: {bookmark_name}\n***************\n"
             )
         except Exception as e:
@@ -172,8 +169,9 @@ class OutputManager:
         """
         try:
             buff = [additional_info, "##### PROPERTIES"]
+            filters = filters_dict.copy()
             for k in Filters.get_filter_keys("property"):
-                v = filters_dict.pop(k, None)
+                v = filters.pop(k, None)
                 if v is not None:
                     v = "%2.3f" % v
                 else:
@@ -181,7 +179,7 @@ class OutputManager:
                 buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### LIGAND FILTERS")
             for k in Filters.get_filter_keys("ligand"):
-                v = filters_dict.pop(k, None)
+                v = filters.pop(k, None)
                 if v is not None:
                     if isinstance(v, list):
                         v = ", ".join([str(f) for f in v if f != ""])
@@ -189,9 +187,8 @@ class OutputManager:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
             buff.append("#### INTERACTIONS")
-            labels = ["~", ""]
             for _type in Filters.get_filter_keys("interaction"):
-                info = filters_dict.pop(_type, None)
+                info = filters.pop(_type, None)
                 kept_interactions = []
                 if len(info or []) == 0:
                     buff.append("#  % 7s :  [ none ]" % (_type))
@@ -202,13 +199,13 @@ class OutputManager:
                     else:
                         kept_interactions.append(interact)
                 res_str = ", ".join(
-                    ["(%s)%s" % (labels[int(x[1])], x[0]) for x in kept_interactions]
+                    ["(%s)%s" % ("~" if x[1] else "", x[0]) for x in kept_interactions]
                 )
-                l_str = "#  % 7s : %s" % (_type, res_str)
-                buff.append(l_str)
+                label_str = "#  % 7s : %s" % (_type, res_str)
+                buff.append(label_str)
 
             buff.append("#### OTHER FILTERS")
-            for k, v in filters_dict.items():
+            for k, v in filters.items():
                 if v is None:
                     v = " [ none ]"
                 buff.append("#  % 7s : %s" % (k, v))
@@ -225,8 +222,8 @@ class OutputManager:
         """
         Properly formats header for the log file if using max_miss and enumerate_interaction_combs
         """
-        self.output_log.write("\n---------------\n")
-        self.output_log.write("Max Miss Union:\n")
+        self._log_file.write("\n---------------\n")
+        self._log_file.write("Max Miss Union:\n")
 
     def write_find_similar_header(self, query_ligname, cluster_name):
         """
@@ -234,12 +231,19 @@ class OutputManager:
         """
         if not self._log_open:
             self.open_logfile(write_filters_header=False)
-        self.output_log.write("\n---------------\n")
-        self.output_log.write(
+        self._log_file.write("\n---------------\n")
+        self._log_file.write(
             f"Found ligands similar to {query_ligname} in clustering {cluster_name}:\n"
         )
 
     # -#-#- Non-logfile methods -#-#-#
+
+    @staticmethod
+    def _serialize_properties(properties: dict) -> dict:
+        return {
+            k: json.dumps(v) if isinstance(v, list) else v if isinstance(v, str) else str(v)
+            for k, v in properties.items()
+        }
 
     def write_out_mols(self, filename: str, mol_entries, export_sdf_directory: str):
         """Batch-write multiple mols to one SDF file with a single file-open.
@@ -249,17 +253,13 @@ class OutputManager:
             mol_entries: iterable of (mol, flexres_mols, properties)
             export_sdf_directory (str): directory to write into
         """
-        filepath = export_sdf_directory + "/" + filename
+        filepath = os.path.join(export_sdf_directory, filename)
         try:
             with open(filepath, "w") as sdf_file:
                 w = SDWriter(sdf_file)
                 for mol, flexres_mols, properties in mol_entries:
                     combined = RDKitMolCreate.combine_rdkit_mols([mol] + flexres_mols)
-                    for k, v in properties.items():
-                        if isinstance(v, list):
-                            v = json.dumps(v)
-                        elif not isinstance(v, str):
-                            v = str(v)
+                    for k, v in self._serialize_properties(properties).items():
                         combined.SetProp(k, v)
                     for conf in combined.GetConformers():
                         w.write(combined, conf.GetId())
@@ -283,16 +283,9 @@ class OutputManager:
         Raises:
             OutputError
         """
-        filepath = export_sdf_directory + "/" + filename
+        filepath = os.path.join(export_sdf_directory, filename)
         try:
-            str_props = {
-                k: (
-                    json.dumps(v)
-                    if isinstance(v, list)
-                    else v if isinstance(v, str) else str(v)
-                )
-                for k, v in properties.items()
-            }
+            str_props = self._serialize_properties(properties)
             with open(filepath, "a") as sdf_file:
                 w = SDWriter(sdf_file)
                 if not flexres_per_conf:
