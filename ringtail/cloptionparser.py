@@ -6,6 +6,8 @@
 
 import sys
 import argparse
+import itertools
+import json
 import os
 from .exceptions import OptionError
 import __main__
@@ -34,14 +36,14 @@ _order_opts = "; ".join(
     f'"{name}" ({col.description})' for name, col in ORDER_RESULT_SCHEMA.items()
 )
 _order_help = (
-    "Order results by this single field when e.g., writing to the output log file."
+    "Order results by this single field when e.g., writing to the output log file. "
     "By default ordered by database insertion order. "
     f"Available fields: {_order_opts}."
 )
 from types import SimpleNamespace
 
 
-def cmdline_parser(defaults: dict = {}):
+def cmdline_parser(defaults: dict = None):
     """Parses options provided using the command line.
     All arguments are first populated with default values.
     If a config file is provided, these will overwrite default values.
@@ -53,6 +55,7 @@ def cmdline_parser(defaults: dict = {}):
 
     """
 
+    defaults = defaults or {}
     conf_parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -630,8 +633,6 @@ def cmdline_parser(defaults: dict = {}):
         # update default values with those given in the config file
         try:
             with open(confargs.config) as json_file:
-                import json
-
                 config_dict = json.load(json_file)
                 defaults.update(config_dict)
         except FileNotFoundError as e:
@@ -775,8 +776,6 @@ class CLOptionParser:
                     f"The database {db_file} exists but the user has not specified to --append_results or --overwrite. Please include one of these options if writing to an existing database."
                 )
 
-            import itertools
-
             def _flatten(arg):
                 return list(itertools.chain.from_iterable(arg)) if arg else []
 
@@ -853,7 +852,7 @@ class CLOptionParser:
                         else:
                             found_res.append(res)
                     for res in found_res:
-                        if type(res) == str:
+                        if isinstance(res, str):
                             logger.debug(
                                 "cloptionparser: interaction filters provided as string"
                             )
@@ -876,9 +875,7 @@ class CLOptionParser:
                             logger.debug(
                                 "cloptionparser: interaction filters provided as list"
                             )
-                            if (
-                                not res[0].count(":") == 3
-                            ):  # first element of list is the interaction
+                            if res[0].count(":") != 3:  # first element of list is the interaction
                                 raise OptionError(
                                     (
                                         "[%s]: to specify a residue use "
@@ -894,14 +891,8 @@ class CLOptionParser:
                     filters[k] = v
 
                 # count interactions
-                hb_count = []
-                count_kw = [("hb_count", ("hb_count"))]
-                for kw, pool in count_kw:
-                    c = getattr(parsed_opts, kw, None)
-                    if c is None:
-                        continue
-                    hb_count.append((pool, c))
-                filters["hb_count"] = hb_count
+                c = getattr(parsed_opts, "hb_count", None)
+                filters["hb_count"] = [("hb_count", c)] if c is not None else []
 
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")
@@ -926,27 +917,21 @@ class CLOptionParser:
                         ligand_filters[_type] = ligand_filter_value
                         continue
                     # don't include None values
-                    if ligand_filter_value is (None):
+                    if ligand_filter_value is None:
                         continue
                     ligand_filters[_type] = []
                     # the other ligand filters can come as [[filter1,filter2,filter3]] or [[filter1],[filter2, filter3]]
                     for filter_list in ligand_filter_value:
                         # if more than one filter in list, go through each
                         if len(filter_list) > 1:
-                            for filter in filter_list:
+                            for f in filter_list:
                                 if _type == "ligand_substruct_pos":
-                                    # make a lits of the six values
-                                    ligand_filters[_type].append(
-                                        [i for i in filter.split(" ")]
-                                    )
+                                    ligand_filters[_type].append(f.split(" "))
                                 else:
-                                    ligand_filters[_type].append(filter)
+                                    ligand_filters[_type].append(f)
                         else:
                             if _type == "ligand_substruct_pos":
-                                # if only one item in list, append to ligand list
-                                ligand_filters[_type].append(
-                                    [i for i in filter_list[0].split(" ")]
-                                )
+                                ligand_filters[_type].append(filter_list[0].split(" "))
                             else:
                                 ligand_filters[_type].append(filter_list[0])
 
