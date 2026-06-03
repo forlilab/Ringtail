@@ -21,10 +21,11 @@ from .exceptions import (
     MergeError,
 )
 from .clustermanager import *
-from .storagemanager import StorageManager, _CANDIDATES_SUBQ
+from .storagemanager import StorageManager
 from .querybuilder import QueryBuilderDuck
 from .schema import (
     build_create_table,
+    _CANDIDATES_SUBQ,
     LIGANDS_SCHEMA,
     RESULTS_SCHEMA,
     RECEPTORS_SCHEMA,
@@ -1622,23 +1623,6 @@ class StorageManagerDuckDB(StorageManager):
 
     # region data
 
-    def _check_if_column_in_table(self, table_name: str, column_name: str) -> bool:
-        """
-        Checks if a column exist in given table
-
-        Args:
-            table_name (str):
-            column_name (str):
-
-        Returns:
-            bool: True if column there, False if not
-        """
-        column_tuples = self.db_query(f"""SELECT column_name
-                    FROM duckdb_columns()
-                    WHERE table_name = '{table_name}';""").fetchall()
-        column_names = [column[0] for column in column_tuples]
-        return bool(column_name in column_names)
-
     def _get_numeric_columns(self, table_name: str) -> list:
         """
         Method to get the names of all numeric columns in a table, for example for
@@ -1750,7 +1734,9 @@ class StorageManagerDuckDB(StorageManager):
             "SELECT cluster_id, cluster_window, name FROM Clusters;"
         ).fetchall()
 
-    def fetch_clustered_similars(self, ligname: str, cluster_id: int) -> tuple[list, str, str]:
+    def fetch_clustered_similars(
+        self, ligname: str, cluster_id: int
+    ) -> tuple[list, str, str]:
         """Given ligname and a chosen cluster_id, return similar ligands.
 
         Args:
@@ -1892,20 +1878,6 @@ class StorageManagerDuckDB(StorageManager):
         if sequences:
             for sequence in sequences.fetchall():
                 self.db_query(f"DROP SEQUENCE {sequence[0]};")
-
-    def _get_length_of_table(self, table_name: str):
-        """
-        Finds the rowcount/length of a table based on the rowid
-
-        Args:
-            table_name (str): name of table to count the length of
-
-        Returns:
-            int: length of the table
-        """
-        query = f"""SELECT COUNT(*) from {table_name};"""
-
-        return self.db_query(query).fetchone()[0]
 
     def clone(self, backup_name: str = None) -> str:
         import shutil

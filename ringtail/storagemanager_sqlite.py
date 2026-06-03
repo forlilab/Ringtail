@@ -4,7 +4,6 @@
 # Ringtail storage adaptors
 #
 
-import os.path
 from .logutils import get_logger
 
 logger = get_logger(__name__)
@@ -12,7 +11,7 @@ import sys
 from rdkit import Chem
 from typing import Union
 from importlib.metadata import version
-from .util import numlist2str, db_alias_from_path
+from .util import numlist2str
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -22,11 +21,12 @@ from .exceptions import (
     MergeError,
 )
 from .clustermanager import *
-from .storagemanager import StorageManager, _CANDIDATES_SUBQ
+from .storagemanager import StorageManager
 from .querybuilder import QueryBuilderSQLite
 from .schema import (
     build_create_table,
     build_create_indices,
+    _CANDIDATES_SUBQ,
     LIGANDS_SCHEMA,
     RESULTS_SCHEMA,
     RECEPTORS_SCHEMA,
@@ -1432,7 +1432,13 @@ class StorageManagerSQLite(StorageManager):
         return query
 
     def _create_ligname_temp_table(self, csv_path: str):
-        """Reads ligand names from a CSV and loads them into a temporary table for joining."""
+        """
+        Reads ligand names from a CSV and loads them into a temporary table for joining.
+
+        Args:
+            csv_path (str)
+
+        """
         import csv
 
         with open(csv_path, newline="") as f:
@@ -1527,45 +1533,6 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region data
-
-    def _check_if_column_in_table(self, table_name: str, column_name: str) -> bool:
-        """
-        Checks if a column exist in given table
-
-        Args:
-            table_name (str):
-            column_name (str):
-
-        Returns:
-            bool: True if column there, False if not
-        """
-        column_tuples = self.db_query(f"""PRAGMA table_info({table_name});""")
-        column_names = [column[1] for column in column_tuples]
-        return bool(column_name in column_names)
-
-    def _get_numeric_columns(self, table_name: str) -> list:
-        """
-        Method to get the names of all numeric columns in a table, for example for
-        allowable sorting options
-
-        Args:
-            table_name (str): table name to evaluate
-
-        Returns:
-            list: column names that has a numeric type
-        """
-        return [table[0] for table in self.db_query(f"""SELECT
-                            name
-                        FROM
-                            pragma_table_info('{table_name}')
-                            WHERE CASE 
-                                WHEN UPPER(type) LIKE '%INT%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%REAL%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%NUM%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%DEC%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%FLOAT%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%DOUBLE%' THEN 'numerical'
-                            END ='numerical';""").fetchall()]
 
     def _fetch_table_column_names(self, table: str) -> list:
         """Fetches list of string for column names in results table
@@ -1793,20 +1760,6 @@ class StorageManagerSQLite(StorageManager):
         logger.info(
             "Indices created for Results, Interactions, and Interaction_indices."
         )
-
-    def _get_length_of_table(self, table_name: str) -> int:
-        """
-        Finds the rowcount/length of a table based on the rowid
-
-        Args:
-            table_name (str): name of table to count the length of
-
-        Returns:
-            int: length of the table
-        """
-        query = f"""SELECT COUNT(rowid) from {table_name}"""
-
-        return self.db_query(query).fetchone()[0]
 
     def clone(self, backup_name: str = None) -> str:
         """Creates a copy of the db

@@ -1441,7 +1441,7 @@ class RingtailCore:
                 polymer = polymer_json
             if rec_data is not None:
                 return (
-                    rec_data.get("RecName"),
+                    rec_data.get("recname"),
                     ReceptorManager.blob2str(rec_data.get("receptor_object")),
                     polymer,
                 )
@@ -1812,6 +1812,7 @@ class RingtailCore:
             flexres_mols_tmpl, flexres_info, flexres_residues = [], [], []
 
         with self.storageman as sm:
+            # TODO this method is only used here, why not use different method, and why not needed in other method?
             pose_rows = sm.fetch_rdkit_pose_properties(pose_ids)
             if include_interactions:
                 interactions_by_pose = (
@@ -2421,6 +2422,7 @@ class RingtailCore:
         with self.storageman:
             if self.storageman.is_bookmark(bookmark_name):
                 # check if has max_miss filter
+                # TODO do I always have to do tihs check
                 bookmark_filters = self.storageman.fetch_filters_from_bookmark(
                     bookmark_name
                 )

@@ -24,7 +24,12 @@ from .ringtailoptions import Filters, statuses
 from .exceptions import StorageError, OptionError, VersionError, MergeError
 from .clustermanager import *
 from .querybuilder import QueryBuilder
-from .schema import OUTFIELD_BY_TABLE, _CANDIDATES_SUBQ, _LIGANDS_ONLY_COLS
+from .schema import (
+    OUTFIELD_BY_TABLE,
+    _CANDIDATES_SUBQ,
+    _LIGANDS_ONLY_COLS,
+    RESULTS_NUMERIC_COLS,
+)
 from collections import defaultdict
 
 
@@ -148,7 +153,7 @@ class StorageManager(ABC):
         """
         receptors = self.fetch_receptor_object()
         # insert receptor if database does not have already have a receptor entry
-        if not receptors.get("RecName"):
+        if not receptors.get("recname"):
             self._insert_receptors(receptor_data)
 
     def filter_results(
@@ -1090,7 +1095,7 @@ class StorageManager(ABC):
             tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
         """
 
-        if not column in self._get_numeric_columns("Results"):
+        if column not in RESULTS_NUMERIC_COLS:
             raise OptionError(
                 f"Requested column {column} in not numeric, percentiles cannot be calcualted."
             )
@@ -1126,7 +1131,7 @@ class StorageManager(ABC):
         Returns:
             tuple[list[float], list[int]]: bin_edges and per-bin counts
         """
-        if column not in self._get_numeric_columns("Results"):
+        if column not in RESULTS_NUMERIC_COLS:
             raise OptionError(f"Column {column} is not numeric")
 
         # Build portable filter fragments for raw SQL
@@ -1234,20 +1239,20 @@ class StorageManager(ABC):
         Returns:
             dict: of receptor name and object and/or polymer json if column exist
         """
-
-        columns = ["RecName", "receptor_object"]
-
-        if self._check_if_column_in_table("Receptors", "polymer"):
-            columns.append("polymer")
-
         query = self.QueryBuilder()
-        query.SELECT(*columns).FROM("Receptors")
-        # check if polymer column exist
-        row = self.db_query(query.build()[0]).fetchone()
-        if not row:
-            return {}
-        else:
-            return dict(zip(columns, row))
+        try:
+            row = self.db_query(
+                *query.SELECT("recname", "receptor_object", "polymer")
+                .FROM("Receptors")
+                .build()
+            ).fetchone()
+            columns = ["recname", "receptor_object", "polymer"]
+        except Exception:
+            row = self.db_query(
+                *query.SELECT("recname", "receptor_object").FROM("Receptors").build()
+            ).fetchone()
+            columns = ["recname", "receptor_object"]
+        return dict(zip(columns, row)) if row else {}
 
     def fetch_flexres_info(self, receptor: Union[str, int]):
         """fetch flexible residues names and atomname lists
@@ -3071,32 +3076,6 @@ class StorageManager(ABC):
 
         Args:
             cluster_id (int): cluster id to delete
-        """
-        raise NotImplementedError
-
-    def _get_numeric_columns(self, table_name: str) -> list:
-        """
-        Method to get the names of all numeric columns in a table, for example for
-        allowable sorting options
-
-        Args:
-            table_name (str): table name to evaluate
-
-        Returns:
-            list: column names that has a numeric type
-        """
-        raise NotImplementedError
-
-    def _check_if_column_in_table(self, table_name: str, column_name: str) -> bool:
-        """
-        Checks if a column exist in given table
-
-        Args:
-            table_name (str):
-            column_name (str):
-
-        Returns:
-            bool: True if column there, False if not
         """
         raise NotImplementedError
 

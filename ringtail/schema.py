@@ -113,6 +113,14 @@ RESULTS_SCHEMA = TableSchema(
     ],
 )
 
+_NUMERIC_TYPES = {"INTEGER", "FLOAT"}
+
+RESULTS_NUMERIC_COLS = frozenset(
+    name
+    for name, col in RESULTS_SCHEMA.columns.items()
+    if col.sql_type in _NUMERIC_TYPES
+)
+
 RECEPTORS_SCHEMA = TableSchema(
     columns={
         "receptor_id": Column(
@@ -303,6 +311,9 @@ STATUS_TABLE_SCHEMA = TableSchema(
         ),
     }
 )
+
+_CANDIDATES_SUBQ = "(SELECT pose_id FROM Accepted UNION SELECT pose_id FROM Maybe)"
+_LIGANDS_ONLY_COLS = set(LIGANDS_SCHEMA.columns) - set(RESULTS_SCHEMA.columns)
 
 # Table of comments from e.g., visual inspection
 POSE_COMMENTS_SCHEMA = TableSchema(
