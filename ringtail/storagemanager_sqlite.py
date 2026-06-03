@@ -27,20 +27,11 @@ from .schema import (
     build_create_table,
     build_create_indices,
     _CANDIDATES_SUBQ,
-    LIGANDS_SCHEMA,
     RESULTS_SCHEMA,
-    RECEPTORS_SCHEMA,
-    DB_PROPERTIES_SCHEMA,
     INTERACTION_INDICES_SCHEMA,
     INTERACTIONS_SCHEMA,
-    FILTERS_SCHEMA,
-    FILTERED_POSES_SCHEMA,
-    CLUSTERS_SCHEMA,
-    CLUSTER_GROUPS_SCHEMA,
-    POSE_CLUSTERS_SCHEMA,
     MERGED_TABLES_SCHEMA,
     PK_CONVERSIONS_SCHEMA,
-    STATUS_TABLE_SCHEMA,
 )
 
 try:
@@ -75,17 +66,9 @@ class StorageManagerSQLite(StorageManager):
         self.db_file = db_file
         super().__init__()
         self.conn: sqlite3.Connection
+        self.dialect = "sqlite"
 
     # region Methods for creating and inserting into tables the database
-
-    def _create_ligands_table(self, name="Ligands"):
-        """Create table for ligands
-
-        Args:
-            name (str, optional): Defaults to "Ligands".
-        """
-        for sql in build_create_table(name, LIGANDS_SCHEMA, "sqlite"):
-            self.db_query(sql)
 
     def _insert_ligands(self, ligands: list):
         """Takes list of ligand rows, inserts into Ligands table using executemany.
@@ -107,11 +90,6 @@ class StorageManagerSQLite(StorageManager):
         ON CONFLICT(ligname) DO NOTHING"""
 
         self.db_update(sql_insert, ligands, commit=False)
-
-    def _create_results_table(self, name="Results"):
-        """Creates table for results."""
-        for sql in build_create_table(name, RESULTS_SCHEMA, "sqlite"):
-            self.db_query(sql)
 
     def _create_temporary_results_tables(self):
         """
@@ -475,11 +453,6 @@ class StorageManagerSQLite(StorageManager):
         """
         self.db_update(query, pose_ids, commit=False)
 
-    def _create_receptors_table(self):
-        """Create table for receptors."""
-        for sql in build_create_table("Receptors", RECEPTORS_SCHEMA, "sqlite"):
-            self.db_query(sql)
-
     def _insert_receptors(self, receptor_array):
         """Takes array of receptor rows, inserts into Receptors table
 
@@ -543,11 +516,6 @@ class StorageManagerSQLite(StorageManager):
             query = """UPDATE Receptors SET recname = ?, polymer = ? WHERE receptor_id == 1;"""
         self.db_query(query, (rec_name, receptor), commit=True)
 
-    def _create_db_properties_table(self):
-        """Create table of database properties used during write session to the database."""
-        for sql in build_create_table("db_properties", DB_PROPERTIES_SCHEMA, "sqlite"):
-            self.db_query(sql)
-
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
 
@@ -560,18 +528,6 @@ class StorageManagerSQLite(StorageManager):
         number_of_poses
         ) VALUES (?,?);"""
         self.db_query(sql_insert, [docking_mode, number_of_poses], commit=True)
-
-    def _create_interaction_index_table(self):
-        """Creates a table describing unique interactions in the database."""
-        for sql in build_create_table(
-            "Interaction_indices", INTERACTION_INDICES_SCHEMA, "sqlite"
-        ):
-            self.db_query(sql)
-
-    def _create_interaction_table(self):
-        """Creates a table of each pose-interaction combination."""
-        for sql in build_create_table("Interactions", INTERACTIONS_SCHEMA, "sqlite"):
-            self.db_query(sql)
 
     def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
@@ -613,30 +569,6 @@ class StorageManagerSQLite(StorageManager):
         FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
         );"""
         self.db_query(table_sql, commit=True)
-
-    def _create_filtering_tables(self):
-        """
-        Creates Filters (bookmark metadata) and Filtered_poses (bookmark members) tables.
-        """
-        for sql in build_create_table("Filters", FILTERS_SCHEMA, "sqlite"):
-            self.db_query(sql)
-        for sql in build_create_table(
-            "Filtered_poses", FILTERED_POSES_SCHEMA, "sqlite"
-        ):
-            self.db_query(sql)
-
-    def _create_cluster_tables(self):
-        """
-        Creates cluster tables if they don't already exist.
-        """
-        for sql in build_create_table("Clusters", CLUSTERS_SCHEMA, "sqlite"):
-            self.db_query(sql)
-        for sql in build_create_table(
-            "Cluster_groups", CLUSTER_GROUPS_SCHEMA, "sqlite"
-        ):
-            self.db_query(sql)
-        for sql in build_create_table("Pose_clusters", POSE_CLUSTERS_SCHEMA, "sqlite"):
-            self.db_query(sql)
 
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
@@ -802,11 +734,11 @@ class StorageManagerSQLite(StorageManager):
         try:
             cur = self.conn.cursor()
             for sql in build_create_table(
-                "merged_tables", MERGED_TABLES_SCHEMA, "sqlite"
+                MERGED_TABLES_SCHEMA.name, MERGED_TABLES_SCHEMA, self.dialect
             ):
                 cur.execute(sql)
             for sql in build_create_table(
-                "PK_conversions", PK_CONVERSIONS_SCHEMA, "sqlite"
+                PK_CONVERSIONS_SCHEMA.name, PK_CONVERSIONS_SCHEMA, self.dialect
             ):
                 cur.execute(sql)
             cur.execute(
@@ -1534,20 +1466,6 @@ class StorageManagerSQLite(StorageManager):
 
     # region data
 
-    def _fetch_table_column_names(self, table: str) -> list:
-        """Fetches list of string for column names in results table
-
-        Returns:
-            list: List of strings of results table column names
-
-        Raises:
-            StorageError
-        """
-        return [
-            column_tuple[1].lower()
-            for column_tuple in self.db_query(f"PRAGMA table_info({table})")
-        ]
-
     def fetch_summary_data(
         self,
         columns: list[str] = ["docking_score", "leff"],
@@ -1750,9 +1668,9 @@ class StorageManagerSQLite(StorageManager):
         """Create alternate-key indices ('ak_*') for queryable tables."""
         logger.debug("Creating columns indices...")
         for table, schema in [
-            ("Results", RESULTS_SCHEMA),
-            ("Interactions", INTERACTIONS_SCHEMA),
-            ("Interaction_indices", INTERACTION_INDICES_SCHEMA),
+            (RESULTS_SCHEMA.name, RESULTS_SCHEMA),
+            (INTERACTIONS_SCHEMA.name, INTERACTIONS_SCHEMA),
+            (INTERACTION_INDICES_SCHEMA.name, INTERACTION_INDICES_SCHEMA),
         ]:
             for sql in build_create_indices(table, schema):
                 self.db_query(sql)
@@ -1992,7 +1910,8 @@ class StorageManagerSQLite(StorageManager):
         - removes the use of views for storing filtered data, instead adds a Filtered_poses table to store all passing poses
         - keeps bookmark table but gives each bookmark an id which is used in the Filtered_poses table
         - removes some of the rarely used indices and adds a few others for minimizing db file size
-
+        #TODO
+            - receptor column?
         Raises:
             StorageError
         """
@@ -2355,7 +2274,7 @@ class StorageManagerSQLite(StorageManager):
         """
         try:
             cur = self.conn.cursor()
-            cur.execute("VACUUM")
+            cur.execute("VACUUM;")
             self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
@@ -2384,7 +2303,13 @@ class StorageManagerSQLite(StorageManager):
             logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
             return new_db_alias
 
-    def _check_attached(self):
+    def _check_attached(self) -> iter:
+        """
+        Check what databases are attached
+
+        Returns:
+            iter: attached database names
+        """
         return self.db_query("PRAGMA database_list;").fetchall()
 
     def detach_db(self, new_db_alias):
@@ -2524,23 +2449,5 @@ class StorageManagerSQLite(StorageManager):
             "SELECT comment FROM Pose_comments WHERE pose_id = ?", (pose_id,)
         ).fetchone()
         return row[0] if row else None
-
-    def _create_status_tables(self) -> None:
-        """
-        Creates pose status tables (Accepted, Maybe, Rejected) if needed.
-        """
-        for name in ("Accepted", "Maybe", "Rejected"):
-            for sql in build_create_table(name, STATUS_TABLE_SCHEMA, "sqlite"):
-                self.db_query(sql)
-        self.conn.commit()
-
-    def ensure_gui_tables(self) -> None:
-        """
-        Ensures gui-specific tables exist in database
-        """
-        from .schema import POSE_COMMENTS_SCHEMA, build_create_table
-
-        for sql in build_create_table("Pose_comments", POSE_COMMENTS_SCHEMA, "sqlite"):
-            self.conn.execute(sql)
 
     # endregion

@@ -25,10 +25,28 @@ from .exceptions import StorageError, OptionError, VersionError, MergeError
 from .clustermanager import *
 from .querybuilder import QueryBuilder
 from .schema import (
+    _NUMERIC_TYPES,
     OUTFIELD_BY_TABLE,
     _CANDIDATES_SUBQ,
+    _CANDIDATES_NAME,
     _LIGANDS_ONLY_COLS,
-    RESULTS_NUMERIC_COLS,
+    TABLE_SCHEMAS,
+    LIGANDS_SCHEMA,
+    RESULTS_SCHEMA,
+    DB_PROPERTIES_SCHEMA,
+    INTERACTION_INDICES_SCHEMA,
+    INTERACTIONS_SCHEMA,
+    FILTERS_SCHEMA,
+    FILTERED_POSES_SCHEMA,
+    CLUSTERS_SCHEMA,
+    CLUSTER_GROUPS_SCHEMA,
+    POSE_CLUSTERS_SCHEMA,
+    MERGED_TABLES_SCHEMA,
+    PK_CONVERSIONS_SCHEMA,
+    RECEPTORS_SCHEMA,
+    STATUS_TABLE_SCHEMA,
+    POSE_COMMENTS_SCHEMA,
+    build_create_table,
 )
 from collections import defaultdict
 
@@ -52,6 +70,10 @@ class StorageManager(ABC):
     def __init__(self):
         self.keyboard_interrupt_allowed = False
         self.db_file: str
+
+    @property
+    @abstractmethod
+    def dialect(self) -> str: ...
 
     def __enter__(self):
         """Used to access the database if using storage manager as a context manager
@@ -1348,9 +1370,9 @@ class StorageManager(ABC):
         query = self.QueryBuilder()
         for col in data_cols:
             query.SELECT(_qualify(col))
-        query.FROM("Results", "R")
+        query.FROM(RESULTS_SCHEMA.name, "R")
         if needs_ligands:
-            query.JOIN("Ligands", "L", "ligand_id")
+            query.JOIN(LIGANDS_SCHEMA.name, "L", "ligand_id")
 
         if self.is_bookmark(table):
             if include_status:
@@ -1699,6 +1721,17 @@ class StorageManager(ABC):
         else:
             return True
 
+    def ensure_gui_tables(self) -> None:
+        """
+        Ensures gui-specific tables exist in database
+        """
+
+        for sql in build_create_table(
+            POSE_COMMENTS_SCHEMA.name, POSE_COMMENTS_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+        self.conn.commit()
+
     # endregion
 
     # region virtual public api
@@ -1763,13 +1796,6 @@ class StorageManager(ABC):
 
         Args:
             table_name (str, optional): Name of the table. Defaults to "tracking_table".
-        """
-        ...
-
-    @abstractmethod
-    def ensure_gui_tables(self):
-        """
-        Ensures gui-specific tables exist in database
         """
         ...
 
@@ -1962,6 +1988,87 @@ class StorageManager(ABC):
         if commit:
             self.conn.commit()
 
+    def _create_ligands_table(self, name=LIGANDS_SCHEMA.name):
+        """Create table for ligands
+
+        Args:
+            name (str, optional): Defaults to "Ligands".
+        """
+        for sql in build_create_table(name, LIGANDS_SCHEMA, self.dialect):
+            self.db_query(sql)
+
+    def _create_results_table(self, name=RESULTS_SCHEMA.name):
+        """Creates table for results."""
+        for sql in build_create_table(name, RESULTS_SCHEMA, self.dialect):
+            self.db_query(sql)
+
+    def _create_receptors_table(self):
+        """Create table for receptors."""
+        for sql in build_create_table(
+            RECEPTORS_SCHEMA.name, RECEPTORS_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+
+    def _create_interaction_index_table(self):
+        """Creates a table describing unique interactions in the database."""
+        for sql in build_create_table(
+            INTERACTION_INDICES_SCHEMA.name, INTERACTION_INDICES_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+
+    def _create_interaction_table(self):
+        """Creates a table of each pose-interaction combination."""
+        for sql in build_create_table(
+            INTERACTIONS_SCHEMA.name, INTERACTIONS_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+
+    def _create_db_properties_table(self):
+        """Create table of database properties used during write session to the database."""
+        for sql in build_create_table(
+            DB_PROPERTIES_SCHEMA.name, DB_PROPERTIES_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+
+    def _create_filtering_tables(self):
+        """
+        Creates Filters (bookmark metadata) and Filtered_poses (bookmark members) tables.
+        """
+        for sql in build_create_table(
+            FILTERS_SCHEMA.name, FILTERS_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+        for sql in build_create_table(
+            FILTERED_POSES_SCHEMA.name, FILTERED_POSES_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+
+    def _create_cluster_tables(self):
+        """
+        Creates cluster tables if they don't already exist.
+        """
+        for sql in build_create_table(
+            CLUSTERS_SCHEMA.name, CLUSTERS_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+        for sql in build_create_table(
+            CLUSTER_GROUPS_SCHEMA.name, CLUSTER_GROUPS_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+        for sql in build_create_table(
+            POSE_CLUSTERS_SCHEMA.name, POSE_CLUSTERS_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+
+    def _create_status_tables(self) -> None:
+        """
+        Creates pose status tables (Accepted, Maybe, Rejected) if needed.
+        """
+        for name in ("Accepted", "Maybe", "Rejected"):
+            for sql in build_create_table(name, STATUS_TABLE_SCHEMA, self.dialect):
+                self.db_query(sql)
+        self.conn.commit()
+
     def _insert_docking_data(
         self, results: list[list], interactions: list[list], duplicate_handling: str
     ):
@@ -2100,19 +2207,19 @@ class StorageManager(ABC):
     def _drop_existing_tables(self):
         """Drops existing tables, in order of foreign key dependency"""
         # first, delete tables with foreign keys
-        self._delete_table("merged_tables")
-        self._delete_table("PK_conversions")
-        self._delete_table("Pose_clusters")
-        self._delete_table("Cluster_groups")
-        self._delete_table("Clusters")
-        self._delete_table("Filtered_poses")
-        self._delete_table("Filters")
-        self._delete_table("Interactions")
-        self._delete_table("Interaction_indices")
+        self._delete_table(MERGED_TABLES_SCHEMA.name)
+        self._delete_table(PK_CONVERSIONS_SCHEMA.name)
+        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
+        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
+        self._delete_table(CLUSTERS_SCHEMA.name)
+        self._delete_table(FILTERED_POSES_SCHEMA.name)
+        self._delete_table(FILTERS_SCHEMA.name)
+        self._delete_table(INTERACTIONS_SCHEMA.name)
+        self._delete_table(INTERACTION_INDICES_SCHEMA.name)
         for status in statuses.values():
             if status:
                 self._delete_table(status.capitalize())
-        self._delete_table("Results")
+        self._delete_table(name=RESULTS_SCHEMA.name)
         # then, fetch remaining tables
         tables = self.tables_in_db()
         for table in tables:
@@ -2139,6 +2246,34 @@ class StorageManager(ABC):
         query.DROP_IF_EXISTS(name)
         return self.db_query(query.build()[0])
 
+    def _get_numeric_columns(self, table: str) -> list:
+        """
+        Get all numeric (float, int) columns from a table
+
+        Args:
+            table (str)
+
+        Returns:
+            list: column names that are numeric
+        """
+        return [
+            name
+            for name, col in TABLE_SCHEMAS[table.lower()].columns.items()
+            if col.sql_type in _NUMERIC_TYPES
+        ]
+
+    def _fetch_table_column_names(self, table: str) -> list:
+        """
+        Get all column names in a table
+
+        Args:
+            table (str)
+
+        Returns:
+            list: column names in table schema
+        """
+        return list(TABLE_SCHEMAS[table.lower()].columns)
+
     def _is_statustable(self, table: str) -> bool:
         """
         Returns True if table name is actually a status table (table with poses who have been assigned a status like accept, reject, maybe)
@@ -2164,7 +2299,7 @@ class StorageManager(ABC):
             Returns:
                 bool: if this is candidates table or not
         """
-        return table.lower() == "candidates"
+        return table.lower() == _CANDIDATES_NAME
 
     def _format_orderby(self, column_name: str) -> Union[str, None]:
         """
@@ -2808,33 +2943,6 @@ class StorageManager(ABC):
         """
         raise NotImplementedError
 
-    def _create_results_table(self, name="Results"):
-        """Creates table for results. Schema defined in schema.py"""
-        raise NotImplementedError
-
-    def _create_ligands_table(self, name="Ligands") -> None:
-        """Create table for ligands. Schema defined in schema.py"""
-        raise NotImplementedError
-
-    def _create_receptors_table(self):
-        """Create table for receptors. Has primary key although only one receptor allowed.
-        Schema defined in schema.py"""
-        raise NotImplementedError
-
-    def _create_interaction_index_table(self):
-        """Creates a table describing unique interactions in the database. Schema defined in schema.py"""
-        raise NotImplementedError
-
-    def _create_interaction_table(self):
-        """Creates a table of each pose-interaction combination. Schema defined in schema.py"""
-        raise NotImplementedError
-
-    def _create_db_properties_table(self):
-        """Create table of database properties used during write session to the database.
-        Schema defined in schema.py
-        """
-        raise NotImplementedError
-
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
 
@@ -2912,26 +3020,6 @@ class StorageManager(ABC):
 
         Args:
             pose_ids (list[int]): _description_
-        """
-        raise NotImplementedError
-
-    def _create_filtering_tables(self):
-        """
-        Creates a Filter table which includes filter_id (PK), name (bookmark_name), duckdb formatted query,
-        and dictionary of filters used, as well as Filtered_poses, which uses filter_id as FK,
-        and lists all poses passing that filter_id
-        """
-        raise NotImplementedError
-
-    def _create_status_tables(self):
-        """
-        Creates status tables if needed
-        """
-        raise NotImplementedError
-
-    def _create_gui_tables(self):
-        """
-        Create GUI tables if not exist
         """
         raise NotImplementedError
 
@@ -3018,12 +3106,6 @@ class StorageManager(ABC):
         """
         raise NotImplementedError
 
-    def _create_cluster_tables(self):
-        """
-        Creates cluster tables if they don't already exist
-        """
-        raise NotImplementedError
-
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
     ) -> Union[int, None]:
@@ -3076,17 +3158,6 @@ class StorageManager(ABC):
 
         Args:
             cluster_id (int): cluster id to delete
-        """
-        raise NotImplementedError
-
-    def _fetch_table_column_names(self, table: str) -> list:
-        """Fetches list of string for column names in results table
-
-        Returns:
-            list: List of strings of results table column names
-
-        Raises:
-            StorageError
         """
         raise NotImplementedError
 

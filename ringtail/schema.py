@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Union
 
+_NUMERIC_TYPES = {"INTEGER", "FLOAT"}
+
 
 @dataclass
 class Column:
@@ -24,6 +26,7 @@ class TableSchema:
     sqlite_indices: list[list[str]] = field(default_factory=list)
     # SQLite index column groups. DuckDB ignores these (auto-optimises).
     temporary: bool = False
+    name: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +56,7 @@ DUCKDB_TYPES: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 LIGANDS_SCHEMA = TableSchema(
+    name="Ligands",
     columns={
         "ligand_id": Column(
             "INTEGER",
@@ -70,10 +74,11 @@ LIGANDS_SCHEMA = TableSchema(
         ),
         "ligand_smile": Column("VARCHAR", "SMILES string"),
         "rdmol": Column("BLOB", "RDKit molecule binary"),
-    }
+    },
 )
 
 RESULTS_SCHEMA = TableSchema(
+    name="Results",
     columns={
         "pose_id": Column(
             "INTEGER",
@@ -113,15 +118,8 @@ RESULTS_SCHEMA = TableSchema(
     ],
 )
 
-_NUMERIC_TYPES = {"INTEGER", "FLOAT"}
-
-RESULTS_NUMERIC_COLS = frozenset(
-    name
-    for name, col in RESULTS_SCHEMA.columns.items()
-    if col.sql_type in _NUMERIC_TYPES
-)
-
 RECEPTORS_SCHEMA = TableSchema(
+    name="Receptors",
     columns={
         "receptor_id": Column(
             "INTEGER",
@@ -138,10 +136,11 @@ RECEPTORS_SCHEMA = TableSchema(
         "flexres_atomnames": Column("VARCHAR", "flexible residue atom names"),
         "receptor_object": Column("BLOB", "receptor binary object"),
         "polymer": Column("JSON_OR_VARCHAR", "polymer data"),
-    }
+    },
 )
 
 DB_PROPERTIES_SCHEMA = TableSchema(
+    name="db_properties",
     columns={
         "db_write_session": Column(
             "INTEGER",
@@ -152,10 +151,11 @@ DB_PROPERTIES_SCHEMA = TableSchema(
         ),
         "docking_mode": Column("VARCHAR", "docking mode used"),
         "number_of_poses": Column("INTEGER", "number of poses in session"),
-    }
+    },
 )
 
 INTERACTION_INDICES_SCHEMA = TableSchema(
+    name="Interaction_indices",
     columns={
         "interaction_id": Column(
             "INTEGER",
@@ -194,6 +194,7 @@ INTERACTION_INDICES_SCHEMA = TableSchema(
 )
 
 INTERACTIONS_SCHEMA = TableSchema(
+    name="Interactions",
     columns={
         "interaction_pose_id": Column(
             "INTEGER",
@@ -213,6 +214,7 @@ INTERACTIONS_SCHEMA = TableSchema(
 )
 
 FILTERS_SCHEMA = TableSchema(
+    name="Filters",
     columns={
         "filter_id": Column(
             "INTEGER",
@@ -225,19 +227,21 @@ FILTERS_SCHEMA = TableSchema(
         "query": Column("VARCHAR", "SQL query string"),
         "filters": Column("VARCHAR", "filter parameters as string"),
         "filter_window": Column("VARCHAR", "filter window parameters"),
-    }
+    },
 )
 
 FILTERED_POSES_SCHEMA = TableSchema(
+    name="Filtered_poses",
     columns={
         "filter_id": Column(
             "INTEGER", "bookmark reference", foreign_key="Filters.filter_id"
         ),
         "pose_id": Column("INTEGER", "pose reference", foreign_key="Results.pose_id"),
-    }
+    },
 )
 
 CLUSTERS_SCHEMA = TableSchema(
+    name="Clusters",
     columns={
         "cluster_id": Column(
             "INTEGER",
@@ -250,10 +254,11 @@ CLUSTERS_SCHEMA = TableSchema(
         "description": Column("VARCHAR", "cluster description"),
         "cluster_window": Column("VARCHAR", "clustering parameters"),
         "num_clusters": Column("INTEGER", "number of clusters"),
-    }
+    },
 )
 
 CLUSTER_GROUPS_SCHEMA = TableSchema(
+    name="Cluster_groups",
     columns={
         "cluster_id": Column(
             "INTEGER", "clustering session", foreign_key="Clusters.cluster_id"
@@ -262,20 +267,22 @@ CLUSTER_GROUPS_SCHEMA = TableSchema(
         "representative": Column(
             "INTEGER", "representative pose", foreign_key="Results.pose_id"
         ),
-    }
+    },
 )
 
 POSE_CLUSTERS_SCHEMA = TableSchema(
+    name="Pose_clusters",
     columns={
         "cluster_id": Column(
             "INTEGER", "clustering session", foreign_key="Clusters.cluster_id"
         ),
         "cluster_group": Column("INTEGER", "cluster group number"),
         "pose_id": Column("INTEGER", "pose", foreign_key="Results.pose_id"),
-    }
+    },
 )
 
 MERGED_TABLES_SCHEMA = TableSchema(
+    name="Merged_tables",
     columns={
         "merge_id": Column(
             "INTEGER",
@@ -288,10 +295,11 @@ MERGED_TABLES_SCHEMA = TableSchema(
         "merge_start": Column(
             "DATETIME", "merge start timestamp", default="CURRENT_TIMESTAMP"
         ),
-    }
+    },
 )
 
 PK_CONVERSIONS_SCHEMA = TableSchema(
+    name="PK_conversions",
     columns={
         "merge_id": Column(
             "INTEGER", "merge session", foreign_key="merged_tables.merge_id"
@@ -313,6 +321,7 @@ STATUS_TABLE_SCHEMA = TableSchema(
 )
 
 _CANDIDATES_SUBQ = "(SELECT pose_id FROM Accepted UNION SELECT pose_id FROM Maybe)"
+_CANDIDATES_NAME = "candidates"
 _LIGANDS_ONLY_COLS = set(LIGANDS_SCHEMA.columns) - set(RESULTS_SCHEMA.columns)
 
 # Table of comments from e.g., visual inspection
@@ -324,6 +333,31 @@ POSE_COMMENTS_SCHEMA = TableSchema(
         "comment": Column("VARCHAR", "user comment on pose"),
     }
 )
+
+TABLE_SCHEMAS: dict[str, TableSchema] = {
+    s.name.lower(): s
+    for s in [
+        LIGANDS_SCHEMA,
+        RESULTS_SCHEMA,
+        RECEPTORS_SCHEMA,
+        DB_PROPERTIES_SCHEMA,
+        INTERACTION_INDICES_SCHEMA,
+        INTERACTIONS_SCHEMA,
+        FILTERS_SCHEMA,
+        FILTERED_POSES_SCHEMA,
+        CLUSTERS_SCHEMA,
+        CLUSTER_GROUPS_SCHEMA,
+        POSE_CLUSTERS_SCHEMA,
+        MERGED_TABLES_SCHEMA,
+        PK_CONVERSIONS_SCHEMA,
+        POSE_COMMENTS_SCHEMA,
+    ]
+}
+# Status tables share a schema — register them separately
+for _status in ("accepted", "maybe", "rejected"):
+    TABLE_SCHEMAS[_status] = STATUS_TABLE_SCHEMA
+
+ALL_TABLE_NAMES = frozenset(TABLE_SCHEMAS)
 
 # ---------------------------------------------------------------------------
 # Derived schemas for outfields and order_results

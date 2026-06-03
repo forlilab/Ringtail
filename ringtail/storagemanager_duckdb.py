@@ -1,17 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail storage adaptor for DuckDB
+# Ringtail storage adapter for DuckDB
 #
 
-import os.path
 import pandas as pd
 from .logutils import get_logger
 
 logger = get_logger(__name__)
 from typing import Union
 from importlib.metadata import version
-from .util import numlist2str, db_alias_from_path
+from .util import numlist2str
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -28,7 +27,6 @@ from .schema import (
     _CANDIDATES_SUBQ,
     LIGANDS_SCHEMA,
     RESULTS_SCHEMA,
-    RECEPTORS_SCHEMA,
     DB_PROPERTIES_SCHEMA,
     INTERACTION_INDICES_SCHEMA,
     INTERACTIONS_SCHEMA,
@@ -71,21 +69,12 @@ class StorageManagerDuckDB(StorageManager):
         self.db_file = db_file
         super().__init__()
         self.conn: duckdb.DuckDBPyConnection
+        self.dialect = "duckdb"
 
     def _execute_to_df(self, sql: str) -> pd.DataFrame:
         return self.conn.execute(sql).df()
 
     # region Methods for creating and inserting into tables the database
-
-    def _create_ligands_table(self, name="Ligands"):
-        """
-        Creates ligands table with a primary key defined by a sequence.
-
-        Args:
-            name (str, optional): Defaults to "Ligands".
-        """
-        for sql in build_create_table(name, LIGANDS_SCHEMA, "duckdb"):
-            self.db_query(sql)
 
     def _insert_ligands(self, ligands: list):
         """
@@ -118,17 +107,6 @@ class StorageManagerDuckDB(StorageManager):
         ON CONFLICT(ligname) DO NOTHING;"""
 
         self.conn.execute(sql_insert)
-
-    def _create_results_table(self, name="Results"):
-        """
-        Creates table for results, including a sequence for the primary key
-        and a foreign key reference to Ligands.
-
-        Args:
-            name (str, optional): Defaults to "Results".
-        """
-        for sql in build_create_table(name, RESULTS_SCHEMA, "duckdb"):
-            self.db_query(sql)
 
     def _create_temporary_results_tables(self):
         """
@@ -525,11 +503,6 @@ class StorageManagerDuckDB(StorageManager):
         """
         self.db_update(query, pose_ids, commit=False)
 
-    def _create_receptors_table(self):
-        """Create table for receptors. Has primary key although only one receptor allowed."""
-        for sql in build_create_table("Receptors", RECEPTORS_SCHEMA, "duckdb"):
-            self.db_query(sql)
-
     def _insert_receptors(self, receptor_array: list):
         """Takes array of receptor rows, inserts into Receptors table
 
@@ -592,11 +565,6 @@ class StorageManagerDuckDB(StorageManager):
             query = """UPDATE Receptors SET recname = ?, polymer = ? WHERE receptor_id == 1;"""
         self.db_query(query, (rec_name, receptor), commit=True)
 
-    def _create_db_properties_table(self):
-        """Create table of database properties used during write session to the database."""
-        for sql in build_create_table("db_properties", DB_PROPERTIES_SCHEMA, "duckdb"):
-            self.db_query(sql)
-
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
 
@@ -609,18 +577,6 @@ class StorageManagerDuckDB(StorageManager):
         number_of_poses
         ) VALUES (?,?);"""
         self.db_query(sql_insert, [docking_mode, number_of_poses], commit=True)
-
-    def _create_interaction_index_table(self):
-        """Creates a table describing unique interactions in the database."""
-        for sql in build_create_table(
-            "Interaction_indices", INTERACTION_INDICES_SCHEMA, "duckdb"
-        ):
-            self.db_query(sql)
-
-    def _create_interaction_table(self):
-        """Creates a table of each pose-interaction combination."""
-        for sql in build_create_table("Interactions", INTERACTIONS_SCHEMA, "duckdb"):
-            self.db_query(sql)
 
     def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
@@ -666,30 +622,6 @@ class StorageManagerDuckDB(StorageManager):
         FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
         );"""
         self.db_query(table_sql, commit=True)
-
-    def _create_filtering_tables(self):
-        """
-        Creates Filters (bookmark metadata) and Filtered_poses (bookmark members) tables.
-        """
-        for sql in build_create_table("Filters", FILTERS_SCHEMA, "duckdb"):
-            self.db_query(sql)
-        for sql in build_create_table(
-            "Filtered_poses", FILTERED_POSES_SCHEMA, "duckdb"
-        ):
-            self.db_query(sql)
-
-    def _create_cluster_tables(self):
-        """
-        Creates cluster tables if they don't already exist.
-        """
-        for sql in build_create_table("Clusters", CLUSTERS_SCHEMA, "duckdb"):
-            self.db_query(sql)
-        for sql in build_create_table(
-            "Cluster_groups", CLUSTER_GROUPS_SCHEMA, "duckdb"
-        ):
-            self.db_query(sql)
-        for sql in build_create_table("Pose_clusters", POSE_CLUSTERS_SCHEMA, "duckdb"):
-            self.db_query(sql)
 
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
@@ -794,12 +726,12 @@ class StorageManagerDuckDB(StorageManager):
         # create new tables to keep track of merger
         self._create_merge_tables()
         # delete incompatible tables and sequences for main db
-        self._delete_table("Pose_clusters")
-        self._delete_table("Cluster_groups")
+        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
+        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
         self.db_query("DROP SEQUENCE IF EXISTS seq_clusterid;")
-        self._delete_table("Clusters")
-        self._delete_table("Filtered_poses")
-        self._delete_table("Filters")
+        self._delete_table(CLUSTERS_SCHEMA.name)
+        self._delete_table(FILTERED_POSES_SCHEMA.name)
+        self._delete_table(FILTERS_SCHEMA.name)
         self.db_query("DROP SEQUENCE IF EXISTS seq_filterid;")
         # sync sequences to current max values, critical for databases
         # created via export_bookmark_db where data was inserted with
@@ -851,11 +783,11 @@ class StorageManagerDuckDB(StorageManager):
         """
         try:
             for sql in build_create_table(
-                "merged_tables", MERGED_TABLES_SCHEMA, "duckdb"
+                MERGED_TABLES_SCHEMA.name, MERGED_TABLES_SCHEMA, self.dialect
             ):
                 self.conn.execute(sql)
             for sql in build_create_table(
-                "PK_conversions", PK_CONVERSIONS_SCHEMA, "duckdb"
+                PK_CONVERSIONS_SCHEMA.name, PK_CONVERSIONS_SCHEMA, self.dialect
             ):
                 self.conn.execute(sql)
 
@@ -1195,11 +1127,11 @@ class StorageManagerDuckDB(StorageManager):
     def _sync_auto_increment_state(self):
         """Reset all sequences to current MAX values in their tables"""
         sequence_map = {
-            "seq_dbwriteid": ("db_properties", "DB_write_session"),
-            "seq_ligandid": ("Ligands", "ligand_id"),
-            "seq_poseid": ("Results", "pose_id"),
-            "seq_interactionid": ("Interaction_indices", "interaction_id"),
-            "seq_interactionposeid": ("Interactions", "interaction_pose_id"),
+            "seq_dbwriteid": (DB_PROPERTIES_SCHEMA.name, "DB_write_session"),
+            "seq_ligandid": (LIGANDS_SCHEMA.name, "ligand_id"),
+            "seq_poseid": (RESULTS_SCHEMA.name, "pose_id"),
+            "seq_interactionid": (INTERACTION_INDICES_SCHEMA.name, "interaction_id"),
+            "seq_interactionposeid": (INTERACTIONS_SCHEMA.name, "interaction_pose_id"),
         }
         for seq_name, (table, column) in sequence_map.items():
             max_val = self.conn.execute(
@@ -1524,7 +1456,13 @@ class StorageManagerDuckDB(StorageManager):
         return query
 
     def _create_ligname_temp_table(self, csv_path: str):
-        """Loads ligand names from CSV into a temporary table using DuckDB's native CSV reader."""
+        """
+        Loads ligand names from CSV into a temporary table using DuckDB's native CSV reader.
+
+        Args:
+            csv_path (str)
+
+        """
         self.conn.execute("DROP TABLE IF EXISTS tmp_lignames")
         self.conn.execute(
             f"CREATE TEMP TABLE tmp_lignames AS "
@@ -1622,45 +1560,6 @@ class StorageManagerDuckDB(StorageManager):
     # endregion
 
     # region data
-
-    def _get_numeric_columns(self, table_name: str) -> list:
-        """
-        Method to get the names of all numeric columns in a table, for example for
-        allowable sorting options
-
-        Args:
-            table_name (str): table name to evaluate
-
-        Returns:
-            list: column names that has a numeric type
-        """
-        return [table[0] for table in self.db_query(f"""SELECT
-                            name
-                        FROM
-                            pragma_table_info('{table_name}')
-                            WHERE CASE 
-                                WHEN UPPER(type) LIKE '%INT%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%REAL%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%NUM%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%DEC%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%FLOAT%' THEN 'numerical'
-                                WHEN UPPER(type) LIKE '%DOUBLE%' THEN 'numerical'
-                            END ='numerical';""").fetchall()]
-
-    def _fetch_table_column_names(self, table: str) -> list:
-        """Fetches list of string for column names in results table
-
-        Returns:
-            list: List of strings of results table column names
-
-        Raises:
-            StorageError
-        """
-
-        data = self.db_query(
-            f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}'"
-        ).fetchall()
-        return [column_tuple[0].lower() for column_tuple in data]
 
     def fetch_summary_data(
         self,
@@ -1975,6 +1874,7 @@ class StorageManagerDuckDB(StorageManager):
             vacuum (bool, optional): not used for duckdb, present for signature compatibility
             reindex (bool, optional): not used for duckdb, present for signature compatibility
         """
+        # TODO vacuum?
         if attached_db_alias is not None:
             self.detach_db(attached_db_alias)
 
@@ -2145,23 +2045,5 @@ class StorageManagerDuckDB(StorageManager):
             "SELECT comment FROM Pose_comments WHERE pose_id = ?", (pose_id,)
         ).fetchone()
         return row[0] if row else None
-
-    def _create_status_tables(self) -> None:
-        """
-        Creates pose status tables (Accepted, Maybe, Rejected) if needed.
-        """
-        for name in ("Accepted", "Maybe", "Rejected"):
-            for sql in build_create_table(name, STATUS_TABLE_SCHEMA, "duckdb"):
-                self.db_query(sql)
-        self.conn.commit()
-
-    def ensure_gui_tables(self) -> None:
-        """
-        Ensures gui-specific tables exist in database
-        """
-        from .schema import POSE_COMMENTS_SCHEMA, build_create_table
-
-        for sql in build_create_table("Pose_comments", POSE_COMMENTS_SCHEMA, "duckdb"):
-            self.conn.execute(sql)
 
     # endregion
