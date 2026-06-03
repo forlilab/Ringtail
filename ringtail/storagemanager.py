@@ -24,7 +24,7 @@ from .exceptions import StorageError, OptionError, VersionError, MergeError
 from .clustermanager import *
 from .querybuilder import QueryBuilder
 from .schema import (
-    _NUMERIC_TYPES,
+    NUMERIC_TYPES,
     OUTFIELD_BY_TABLE,
     CANDIDATES_SUBQ,
     CANDIDATES_NAME,
@@ -1152,7 +1152,7 @@ class StorageManager(ABC):
         Returns:
             tuple[list[float], list[int]]: bin_edges and per-bin counts
         """
-        if column not in RESULTS_NUMERIC_COLS:
+        if column not in NUMERIC_TYPES:
             raise OptionError(f"Column {column} is not numeric")
 
         # Build portable filter fragments for raw SQL
@@ -2255,7 +2255,7 @@ class StorageManager(ABC):
         return [
             name
             for name, col in TABLE_SCHEMAS[table.lower()].columns.items()
-            if col.sql_type in _NUMERIC_TYPES
+            if col.sql_type in NUMERIC_TYPES
         ]
 
     def _fetch_table_column_names(self, table: str) -> list:

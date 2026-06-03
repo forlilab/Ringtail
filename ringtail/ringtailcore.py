@@ -1553,7 +1553,7 @@ class RingtailCore:
             return sm.pose_row_in_table(table, pose_id)
 
     @_wrap_exceptions
-    def get_limited_table_data(
+    def get_scrolling_table_data(
         self, table: str, length: int = 100, starting_row_id: int = 1, reverse=False
     ) -> dict[list[str], list]:
         """
@@ -1577,7 +1577,7 @@ class RingtailCore:
             )
 
     @_wrap_exceptions
-    def get_table_columns(
+    def get_table_data(
         self,
         table: str,
         columns: list = ["*"],

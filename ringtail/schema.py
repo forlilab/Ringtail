@@ -8,7 +8,7 @@
 from dataclasses import dataclass, field
 from typing import Union
 
-_NUMERIC_TYPES = {"INTEGER", "FLOAT"}
+NUMERIC_TYPES = {"INTEGER", "FLOAT"}
 
 
 @dataclass
