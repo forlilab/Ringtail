@@ -17,7 +17,7 @@ from .util import db_alias_from_path
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
-from typing import Union
+from typing import Union, ClassVar
 import time
 from importlib.metadata import version
 from .ringtailoptions import Filters, statuses
@@ -66,14 +66,12 @@ class StorageManager(ABC):
         keyboard_interrupt_allowed (bool): if Ctrl+Z will work, for example not supported in a GUI
     """
 
+    dialect: ClassVar[str]
+
     # region setup
     def __init__(self):
         self.keyboard_interrupt_allowed = False
         self.db_file: str
-
-    @property
-    @abstractmethod
-    def dialect(self) -> str: ...
 
     def __enter__(self):
         """Used to access the database if using storage manager as a context manager
@@ -2219,7 +2217,7 @@ class StorageManager(ABC):
         for status in statuses.values():
             if status:
                 self._delete_table(status.capitalize())
-        self._delete_table(name=RESULTS_SCHEMA.name)
+        self._delete_table(RESULTS_SCHEMA.name)
         # then, fetch remaining tables
         tables = self.tables_in_db()
         for table in tables:

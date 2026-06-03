@@ -32,6 +32,7 @@ from .schema import (
     INTERACTIONS_SCHEMA,
     MERGED_TABLES_SCHEMA,
     PK_CONVERSIONS_SCHEMA,
+    LIGANDS_SCHEMA,
 )
 
 try:
@@ -2074,7 +2075,7 @@ class StorageManagerSQLite(StorageManager):
                 "Problems while upgrading database, Ligands table did not copy properly."
             )
         # delete old table
-        self._delete_table("Ligands")
+        self._delete_table(LIGANDS_SCHEMA.name)
         # rename new table
         self.db_query("ALTER TABLE Ligands_new RENAME TO Ligands;", commit=True)
 
