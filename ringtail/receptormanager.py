@@ -6,6 +6,7 @@
 
 import gzip
 from .logutils import get_logger
+
 logger = get_logger(__name__)
 from meeko import PDBQTWriterLegacy, Polymer, MoleculePreparation
 
@@ -60,14 +61,14 @@ class ReceptorManager:
                 return r.read()
 
     @staticmethod
-    def _parse_polymer_json(polymer_json) -> tuple[str, dict]:
+    def _parse_polymer_json(polymer_json: str) -> tuple[str, dict]:
         """
         Makes a polymer object from a receptor polymer json, and uses
         meeko method PDBQTWriterLegacy to create a string and dict representation
         of the receptor in the pdbqt format
 
         Args:
-            polymer_json (_type_): _description_
+            polymer_json (str): json string (not dict) representation of receptor
 
         Returns:
             tuple[str, dict]: _description_
@@ -78,12 +79,12 @@ class ReceptorManager:
         return PDBQTWriterLegacy.write_from_polymer(polymer)
 
     @staticmethod
-    def polymer_json2pdbqt_str(polymer_json) -> str:
+    def polymer_json2pdbqt_str(polymer_json: str) -> str:
         """
         Returns pdbqt string representation of a polymer json
 
         Args:
-            polymer_json (_type_): _description_
+            polymer_json (str): _description_
 
         Returns:
             str: _description_
@@ -91,14 +92,14 @@ class ReceptorManager:
         return ReceptorManager._parse_polymer_json(polymer_json)[0]
 
     @staticmethod
-    def polymer_json2pdbqt_dict(polymer_json) -> dict:
+    def polymer_json2pdbqt_dict(polymer_json: str) -> dict:
         """
         Returns pdbqt dict representation of a polymer json
 
         Args:
-            polymer_json (_type_): _description_
+            polymer_json (str): _description_
 
         Returns:
-            dict: _description_
+            dict: dict repr of the pdbqt string
         """
         return ReceptorManager._parse_polymer_json(polymer_json)[1]

@@ -200,7 +200,7 @@ class RingtailCore:
         results.receptor_file_path = receptor_file
         results.save_receptor = save_receptor
 
-        if not results.has_results and not results.save_receptor:
+        if not bool(results.docking_results) and not results.save_receptor:
             raise OptionError(
                 "At least one input option needs to be used: docking_results or save_receptor"
             )
@@ -721,28 +721,26 @@ class RingtailCore:
         """
 
         filters = Filters(
-            {
-                "eworst": eworst,
-                "ebest": ebest,
-                "leworst": leworst,
-                "lebest": lebest,
-                "score_percentile": score_percentile,
-                "le_percentile": le_percentile,
-                "vdw_interactions": vdw_interactions,
-                "hb_interactions": hb_interactions,
-                "reactive_interactions": reactive_interactions,
-                "hb_count": hb_count,
-                "react_any": react_any,
-                "max_miss": max_miss,
-                "ligand_name": ligand_name,
-                "ligand_operator": ligand_operator,
-                "ligand_substruct": ligand_substruct,
-                "ligand_substruct_pos": ligand_substruct_pos,
-                "ligand_max_atoms": ligand_max_atoms,
-                "ligand_min_molweight": ligand_min_molweight,
-                "ligand_max_molweight": ligand_max_molweight,
-                "ligand_name_file": ligand_name_file,
-            }
+            eworst=eworst,
+            ebest=ebest,
+            leworst=leworst,
+            lebest=lebest,
+            score_percentile=score_percentile,
+            le_percentile=le_percentile,
+            vdw_interactions=vdw_interactions,
+            hb_interactions=hb_interactions,
+            reactive_interactions=reactive_interactions,
+            hb_count=hb_count,
+            react_any=react_any,
+            max_miss=max_miss,
+            ligand_name=ligand_name,
+            ligand_operator=ligand_operator,
+            ligand_substruct=ligand_substruct,
+            ligand_substruct_pos=ligand_substruct_pos,
+            ligand_max_atoms=ligand_max_atoms,
+            ligand_min_molweight=ligand_min_molweight,
+            ligand_max_molweight=ligand_max_molweight,
+            ligand_name_file=ligand_name_file,
         )
 
         # Compatibility check with docking mode

@@ -9,8 +9,7 @@ from .exceptions import OptionError, RTCoreError
 from .logutils import get_logger
 
 logger = get_logger(__name__)
-from dataclasses import dataclass, asdict, fields
-import copy
+from dataclasses import dataclass, asdict, field, fields
 
 docking_modes = {
     "adgpu": {"adgpu", "dlg", "gpu"},
@@ -20,10 +19,10 @@ docking_modes = {
 
 docking_mode_file_ext = {"adgpu": "dlg", "vina": "pdbqt", "adng": "sdf"}
 
-docking_alias_to_mode = {}
-for canonical, aliases in docking_modes.items():
-    for alias in aliases:
-        docking_alias_to_mode[alias] = canonical
+docking_alias_to_mode = {
+    alias: mode for mode, aliases in docking_modes.items() for alias in aliases
+}
+
 
 statuses = {1: "accepted", 2: "maybe", 3: "rejected", 0: None}
 
@@ -37,11 +36,10 @@ def validate_docking_mode(docking_mode: str):
     Raises:
         RTCoreError: if docking_mode is not supported
     """
-    if type(docking_mode) is not str:
-        logger.warning(
-            f'The given docking mode was not given as a string, it will be set to default value "{RingtailDefaults.docking_mode}".'
+    if not isinstance(docking_mode, str):
+        raise RTCoreError(
+            f"The given docking mode was not given as a string: {type(docking_mode)}."
         )
-        return RingtailDefaults.docking_mode
     elif docking_mode.lower() not in docking_alias_to_mode:
         raise RTCoreError(
             f"Docking mode {docking_mode} is not supported. Please choose between {docking_modes}."
@@ -152,55 +150,47 @@ class ResultsObject:
         else:
             return None
 
-    @property
-    def has_results(self):
-        return bool(self.docking_results)
 
-    @property
-    def has_file_results(self):
-        return bool(self.docking_results)
-
-
+@dataclass
 class Filters:
     """Object that holds all optional filters."""
 
-    def __init__(self, filters: dict = {}):
-        self.eworst: float = None
-        self.ebest: float = None
-        self.lebest: float = None
-        self.leworst: float = None
-        self.score_percentile: float = None
-        self.le_percentile: float = None
+    eworst: float = None
+    ebest: float = None
+    lebest: float = None
+    leworst: float = None
+    score_percentile: float = None
+    le_percentile: float = None
+    vdw_interactions: list = field(default_factory=list)
+    hb_interactions: list = field(default_factory=list)
+    reactive_interactions: list = field(default_factory=list)
+    hb_count: int = None
+    react_any: bool = None
+    max_miss: int = 0
+    ligand_name: str = None
+    ligand_name_file: str = None
+    ligand_operator: str = None
+    ligand_substruct: str = None
+    ligand_substruct_pos: list = None
+    ligand_max_atoms: int = None
+    ligand_min_molweight: float = None
+    ligand_max_molweight: float = None
 
-        self.vdw_interactions: list = []
-        self.hb_interactions: list = []
-        self.reactive_interactions: list = []
-        self.hb_count: int = None
-        self.react_any: bool = None
-        self.max_miss: int = 0
-
-        self.ligand_name: str = None
-        self.ligand_name_file: str = None
-        self.ligand_operator: str = None
-        self.ligand_substruct: str = None
-        self.ligand_substruct_pos: list = None
-        self.ligand_max_atoms: int = None
-        self.ligand_min_molweight: float = None
-        self.ligand_max_molweight: float = None
-        if filters:
-            for key, value in filters.items():
-                if hasattr(self, key):
-                    if value is not None:
-                        setattr(self, key, value)
-
+    def __post_init__(self):
+        if self.vdw_interactions is None:
+            self.vdw_interactions = []
+        if self.hb_interactions is None:
+            self.hb_interactions = []
+        if self.reactive_interactions is None:
+            self.reactive_interactions = []
         self.checks()
 
     def asdict(self):
-        return copy.deepcopy(vars(self))
+        return asdict(self)
 
     def checks(self):
-        """Ensures all values are internally consistent and valid. Runs once after all values are set initially,
-        then every time a value is changed."""
+        """Ensures all values are internally consistent and valid. Runs once after all values are
+        set initially"""
         if self.eworst is not None and self.score_percentile is not None:
             logger.warning(
                 "Cannot use 'eworst' cutoff with 'score_percentile'. Overiding 'score_percentile' with 'eworst'."
@@ -244,7 +234,7 @@ class Filters:
             )
 
     @classmethod
-    def get_filter_keys(self, group) -> list:
+    def get_filter_keys(cls, group: str) -> list:
         """Provide keys associated with each of the filter groups.
         Args:
             group (str): includese property filters, interaction filters, ligand filters, or all filters
@@ -282,10 +272,10 @@ class Filters:
             ],
         }
         if group.lower() == "all":
-            list = []
+            lst = []
             for i in filter_groups:
-                list.extend(filter_groups[i])
-            return list
+                lst.extend(filter_groups[i])
+            return lst
         else:
-            list = filter_groups[group.lower()]
-        return list
+            lst = filter_groups[group.lower()]
+        return lst

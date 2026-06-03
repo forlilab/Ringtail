@@ -214,10 +214,8 @@ class TestFiltering:
 
     def test_generate_interaction_combinations(self, tmp_db):
         filters = Filters(
-            {
-                "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-            }
+            hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
+            vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
         )
         combos = tmp_db._generate_interaction_combinations(filters.asdict(), 1)
         result_filters = [
@@ -227,19 +225,15 @@ class TestFiltering:
         assert len(result_filters) == 5
         assert (
             Filters(
-                {
-                    "hb_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                    "vdw_interactions": [("A:ARG:123:", True)],
-                }
+                hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
+                vdw_interactions=[("A:ARG:123:", True)],
             ).asdict()
             in result_filters
         )
         assert (
             Filters(
-                {
-                    "hb_interactions": [("A:ARG:123:", True)],
-                    "vdw_interactions": [("A:ARG:123:", True), ("A:VAL:124:", True)],
-                }
+                hb_interactions=[("A:ARG:123:", True)],
+                vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
             ).asdict()
             in result_filters
         )
@@ -366,11 +360,9 @@ class TestStorageMan:
         assert (
             json.loads(bookmark_filters_db_str)
             == Filters(
-                {
-                    "eworst": -3.0,
-                    "vdw_interactions": [["A:VAL:279:", True]],
-                    "hb_interactions": [["A:VAL:279:", True], ["A:LYS:162:", True]],
-                }
+                eworst=-3.0,
+                vdw_interactions=[["A:VAL:279:", True]],
+                hb_interactions=[["A:VAL:279:", True], ["A:LYS:162:", True]],
             ).asdict()
         )
 
@@ -667,11 +659,11 @@ class TestOptions:
             )
         )
         tmp_db.add_results_from_files(docking_results=str(filelist), docking_mode="adgpu")
-        tmp_db.filters = Filters({"score_percentile": 20})
+        tmp_db.filters = Filters(score_percentile=20)
         assert tmp_db.filters.eworst is None
         assert tmp_db.filters.score_percentile == 20
 
-        tmp_db.filters = Filters({"score_percentile": 20, "eworst": -6})
+        tmp_db.filters = Filters(score_percentile=20, eworst=-6)
         tmp_db.filters.checks()
         assert tmp_db.filters.eworst == -6
         assert tmp_db.filters.score_percentile is None

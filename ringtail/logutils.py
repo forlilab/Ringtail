@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail logging module
+#
+
 """
 Central logger for the ringtail package.
 
