@@ -109,7 +109,7 @@ class StorageManager(ABC):
         poses = docking_data.get("poses", None)
         if poses:
             # interactions has ligname and pose rank
-            self._insert_bulk_docking_data(poses, interaction_data, duplicate_handling)
+            self._insert_docking_data(poses, interaction_data, duplicate_handling)
         self.conn.commit()
 
     def post_insert_interactions(
@@ -1042,24 +1042,6 @@ class StorageManager(ABC):
             datacount = 0
         return True if datacount == 0 else False
 
-    def count_receptors_in_db(self):
-        """returns number of rows in Receptors table where receptor_object already has blob
-
-        Returns:
-            int: number of rows in receptors table
-
-        Raises:
-            DatabaseQueryError
-        """
-        query = self.QueryBuilder()
-        row_count = self.db_query(
-            *query.SELECT("COUNT(*)")
-            .FROM("Receptors")
-            .WHERE("receptor_object NOT NULL")
-            .build()
-        ).fetchone()[0]
-        return row_count
-
     def get_range_of_e_le(self, table: str) -> tuple:
         """
         Get min and max of e/docking_score and ligand efficiency/le/leff/
@@ -1511,6 +1493,7 @@ class StorageManager(ABC):
     def fetch_bookmark_interactions(self, bookmark_name: str) -> pd.DataFrame:
         """
         Get all interactions represented in a bookmark (as opposed to the whole database)
+        Mostly used for GUI applications
 
         Args:
             bookmark_name (str): from which to get pose interactions from
@@ -1941,6 +1924,18 @@ class StorageManager(ABC):
         """Return the comment for a pose, or None if none exists."""
         ...
 
+    @abstractmethod
+    def detach_db(self, new_db_alias):
+        """Detaches new database file from current database
+
+        Args:
+            new_db_name (str): db name for database to detach
+
+        Raises:
+            StorageError
+        """
+        ...
+
     # endregion
 
     # region private api
@@ -1962,7 +1957,7 @@ class StorageManager(ABC):
         if commit:
             self.conn.commit()
 
-    def _insert_bulk_docking_data(
+    def _insert_docking_data(
         self, results: list[list], interactions: list[list], duplicate_handling: str
     ):
         """Takes list of database rows to insert, adds data to results table.
@@ -2127,6 +2122,7 @@ class StorageManager(ABC):
 
         Args:
             table_name (str): table to be dropped
+            db_alias (str): Optional alias for attached databases
 
         """
 
@@ -2154,10 +2150,18 @@ class StorageManager(ABC):
             return False
 
     def _is_candidates_table(self, table: str) -> bool:
-        """Returns True if table name is the virtual Candidates table (Accepted ∪ Maybe)."""
+        """
+        Returns True if table name is the virtual Candidates table (Accepted ∪ Maybe).
+
+        Args:
+            table (str): tabale name to check
+
+            Returns:
+                bool: if this is candidates table or not
+        """
         return table.lower() == "candidates"
 
-    def _format_orderby(self, column_name: str) -> str:
+    def _format_orderby(self, column_name: str) -> Union[str, None]:
         """
         Ensures chosen order by column is a valid choice
 
@@ -2800,60 +2804,29 @@ class StorageManager(ABC):
         raise NotImplementedError
 
     def _create_results_table(self, name="Results"):
-        """Creates table for results. Columns are:
-        pose_id             INTEGER PRIMARY KEY AUTOINCREMENT,
-        ligand_id           INTEGER FOREIGN KEY from Ligands,
-        receptor            VARCHAR,
-        pose_rank           INTEGER,
-        run_number          INTEGER,
-        docking_score       FLOAT,
-        leff                FLOAT,
-        delta               FLOAT,
-        cluster_rmsd        FLOAT,
-        cluster_size        INTEGER,
-        reference_rmsd      FLOAT,
-        energies_inter      FLOAT,
-        energies_vdw        FLOAT,
-        energies_electro    FLOAT,
-        energies_flexLig    FLOAT,
-        energies_flexLR     FLOAT,
-        energies_intra      FLOAT,
-        energies_torsional  FLOAT,
-        unbound_energy      FLOAT,
-        num_interactions     INTEGER,
-        num_hb              INTEGER,
-        pose_coordinates         VARCHAR,
-        flexible_res_coordinates   VARCHAR
-
-        """
+        """Creates table for results. Schema defined in schema.py"""
         raise NotImplementedError
 
     def _create_ligands_table(self, name="Ligands") -> None:
-        """Create table for ligands. Columns are:
-        ligand_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        ligname             VARCHAR NOT NULL UNIQUE ON CONFLICT IGNORE,
-        ligand_smile        VARCHAR,
-        rdmol               BLOB,
-        """
+        """Create table for ligands. Schema defined in schema.py"""
         raise NotImplementedError
 
     def _create_receptors_table(self):
-        """Create table for receptors. Has primary key although only one receptor allowed"""
+        """Create table for receptors. Has primary key although only one receptor allowed.
+        Schema defined in schema.py"""
         raise NotImplementedError
 
     def _create_interaction_index_table(self):
-        """Creates a table describing unique interactions in the database"""
+        """Creates a table describing unique interactions in the database. Schema defined in schema.py"""
         raise NotImplementedError
 
     def _create_interaction_table(self):
-        """Creates a table of each pose-interaction combination."""
+        """Creates a table of each pose-interaction combination. Schema defined in schema.py"""
         raise NotImplementedError
 
     def _create_db_properties_table(self):
-        """Create table of database properties used during write session to the database. Columns are:
-        DB_write_session int (primary key)
-        docking_mode (vina or adgpu)
-        num_of_poses ("all" or str(int))
+        """Create table of database properties used during write session to the database.
+        Schema defined in schema.py
         """
         raise NotImplementedError
 
@@ -2954,18 +2927,6 @@ class StorageManager(ABC):
     def _create_gui_tables(self):
         """
         Create GUI tables if not exist
-        """
-        raise NotImplementedError
-
-    def _get_length_of_table(self, table_name: str) -> int:
-        """
-        Finds the rowcount/length of a table based on the rowid
-
-        Args:
-            table_name (str): name of table to count the length of
-
-        Returns:
-            int: length of the table
         """
         raise NotImplementedError
 
@@ -3162,17 +3123,6 @@ class StorageManager(ABC):
 
         Raises:
             OptionError
-        """
-        raise NotImplementedError
-
-    def detach_db(self, new_db_alias):
-        """Detaches new database file from current database
-
-        Args:
-            new_db_name (str): db name for database to detach
-
-        Raises:
-            StorageError
         """
         raise NotImplementedError
 
