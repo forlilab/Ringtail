@@ -53,7 +53,7 @@ class DockingFileReader(mp.Process):
         target_name: str,
         num_poses: int,
         interaction_tolerance,
-        calculate_interactions: float,
+        calculate_interactions: bool,
         interaction_cutoffs: list[float, float],
         receptor_string: str,
     ):
@@ -119,7 +119,7 @@ class DockingFileReader(mp.Process):
             try:
                 # retrieve from the queue in the next task to be done
                 next_task = self.queueIn.get()
-                if type(next_task) == dict:
+                if isinstance(next_task, dict):
                     text = list(next_task.keys())[0]
                 else:
                     text = next_task
@@ -131,13 +131,12 @@ class DockingFileReader(mp.Process):
                     break
 
                 # initialize a parser for each process with kw-args
-                parser = docking_file_parsers.get(self.docking_mode, "missing_parser")(
-                    self.num_poses, **common_processing_vars
-                )
-                if parser == "missing_parser":
+                parser_class = docking_file_parsers.get(self.docking_mode)
+                if parser_class is None:
                     raise NotImplementedError(
-                        f"Parser for input file docking_mode {self.docking_mode} not implemented!"
+                        f"Parser for docking_mode {self.docking_mode} not implemented!"
                     )
+                parser = parser_class(self.num_poses, **common_processing_vars)
 
                 try:
                     # generate CPU LOAD
@@ -183,7 +182,7 @@ class DockingFileReader(mp.Process):
             if attempts >= max_attempts:
                 raise MultiprocessingError(
                     "Something is blocking the progressing of file writing. Exiting program."
-                ) from queue.Full
+                ) from queue.Full()
             try:
                 self.queueOut.put(obj, block=True, timeout=timeout)
                 break

@@ -29,9 +29,10 @@ class InteractionFinder:
         try:
             self.pdb = PDBQTReceptor(rec_string)
         except OSError:
-            with tempfile.NamedTemporaryFile(mode="wt") as f:
+            with tempfile.NamedTemporaryFile(mode="wt", delete=False, suffix=".pdbqt") as f:
                 f.write(rec_string)
-                self.pdb = PDBQTReceptor(f.name)
+                fname = f.name
+            self.pdb = PDBQTReceptor(fname)
         except Exception:
             try:
                 # assume it is a polymer json string
@@ -45,103 +46,22 @@ class InteractionFinder:
         # other interaction pre-calculations
 
     def __call__(self, lig_atomtype_list: list, lig_coordinates: list) -> dict:
-        """Method that identifies interactions for a pose within th given cutoff distances in the main class.
-
-        Args:
-            lig_atomtype_list (list): list of atoms in the ligand
-            lig_coordinates (list): coordinates for the atoms in the ligand
-
-        Returns:
-            dict: all interaction details for a given ligand pose
-        """
-
-        def append_rec_atom_info(rec_at):
-            # rec_at is array of format (atom_id, ?, atom_name, resid, resname, chain, xyz, q, t)
-            recid_list.append(str(rec_at[0]))
-            recname_list.append(str(rec_at[2]))
-            residue_list.append(rec_at[4])
-            resid_list.append(str(rec_at[3]))
-            chain_list.append(rec_at[5])
-
-        type_list = []
-        recid_list = []
-        recname_list = []
-        residue_list = []
-        resid_list = []
-        chain_list = []
-        # check coordinate type:
-        if not type(lig_coordinates) == np.ndarray:
-            needs_conversion = True
-        else:
-            needs_conversion = False
-
-        for idx, atomtype in enumerate(lig_atomtype_list):
-            if atomtype == None:
-                continue
-            if needs_conversion:
-                coords = np.array([float(coord) for coord in lig_coordinates[idx]])
-            else:
-                coords = lig_coordinates[idx]
-
-            hbd_neighbors = self.pdb.closest_atoms_from_positions(
-                coords, self.hb_cutoff, atom_properties="hb_don"
-            )
-            for rec_at in hbd_neighbors:
-                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
-                if not atomtype.endswith("A"):
-                    continue
-                append_rec_atom_info(rec_at)
-                type_list.append("H")
-
-            hba_neighbors = self.pdb.closest_atoms_from_positions(
-                coords, self.hb_cutoff, atom_properties="hb_acc"
-            )
-            for rec_at in hba_neighbors:
-                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
-                if not atomtype.endswith("D"):
-                    continue
-                append_rec_atom_info(rec_at)
-                type_list.append("H")
-
-            vdw_neighbors = self.pdb.closest_atoms_from_positions(
-                coords, self.vdw_cutoff, atom_properties="vdw"
-            )
-            for rec_at in vdw_neighbors:
-                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
-                append_rec_atom_info(rec_at)
-                type_list.append("V")
-
-        return {
-            "type": type_list,
-            "recid": recid_list,
-            "recname": recname_list,
-            "residue": residue_list,
-            "resid": resid_list,
-            "chain": chain_list,
-            "count": len(type_list),
-            "hb_count": type_list.count("H"),
-        }
+        """Identify interactions for a pose; delegates to find_pose_interactions."""
+        return self.find_pose_interactions(lig_atomtype_list, lig_coordinates)
 
     def find_pose_interactions(
         self, lig_atomtype_list: list, lig_coordinates: list
     ) -> dict:
-        """Method that identifies interactions for a pose within th given cutoff distances in the main class.
+        """Identify interactions for a pose within the cutoff distances.
 
         Args:
-            lig_atomtype_list (list): list of atoms in the ligand
+            lig_atomtype_list (list): list of atom types in the ligand
             lig_coordinates (list): coordinates for the atoms in the ligand
 
         Returns:
             dict: all interaction details for a given ligand pose
         """
-
-        def append_rec_atom_info(rec_at):
-            # rec_at is array of format (atom_id, ?, atom_name, resid, resname, chain, xyz, q, t)
-            recid_list.append(str(rec_at[0]))
-            recname_list.append(str(rec_at[2]))
-            residue_list.append(rec_at[4])
-            resid_list.append(str(rec_at[3]))
-            chain_list.append(rec_at[5])
+        needs_conversion = not isinstance(lig_coordinates, np.ndarray)
 
         type_list = []
         recid_list = []
@@ -149,45 +69,43 @@ class InteractionFinder:
         residue_list = []
         resid_list = []
         chain_list = []
-        # check coordinate type:
-        if not type(lig_coordinates) == np.ndarray:
-            needs_conversion = True
-        else:
-            needs_conversion = False
+
+        def append_rec_atom_info(rec_at):
+            # rec_at: (atom_id, ?, atom_name, resid, resname, chain, xyz, q, t)
+            recid_list.append(str(rec_at[0]))
+            recname_list.append(str(rec_at[2]))
+            residue_list.append(rec_at[4])
+            resid_list.append(str(rec_at[3]))
+            chain_list.append(rec_at[5])
 
         for idx, atomtype in enumerate(lig_atomtype_list):
-            if atomtype == None:
+            if atomtype is None:
                 continue
-            if needs_conversion:
-                coords = np.array([float(coord) for coord in lig_coordinates[idx]])
-            else:
-                coords = lig_coordinates[idx]
-
-            hbd_neighbors = self.pdb.closest_atoms_from_positions(
-                coords, self.hb_cutoff, atom_properties="hb_don"
+            coords = (
+                np.array([float(c) for c in lig_coordinates[idx]])
+                if needs_conversion
+                else lig_coordinates[idx]
             )
-            for rec_at in hbd_neighbors:
-                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
+
+            for rec_at in self.pdb.closest_atoms_from_positions(
+                coords, self.hb_cutoff, atom_properties="hb_don"
+            ):
                 if not atomtype.endswith("A"):
                     continue
                 append_rec_atom_info(rec_at)
                 type_list.append("H")
 
-            hba_neighbors = self.pdb.closest_atoms_from_positions(
+            for rec_at in self.pdb.closest_atoms_from_positions(
                 coords, self.hb_cutoff, atom_properties="hb_acc"
-            )
-            for rec_at in hba_neighbors:
-                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
+            ):
                 if not atomtype.endswith("D"):
                     continue
                 append_rec_atom_info(rec_at)
                 type_list.append("H")
 
-            vdw_neighbors = self.pdb.closest_atoms_from_positions(
+            for rec_at in self.pdb.closest_atoms_from_positions(
                 coords, self.vdw_cutoff, atom_properties="vdw"
-            )
-            for rec_at in vdw_neighbors:
-                # rec_at is array of format (atom_id, atom_name, resname, resid, chainid, xyz, q, t)
+            ):
                 append_rec_atom_info(rec_at)
                 type_list.append("V")
 
@@ -242,13 +160,12 @@ def find_interactions(
     mol.AddConformer(conf, assignId=True)
     mol = Chem.AddHs(mol, addCoords=True)
     # calculate interactions for each pose
-    for id, coords in poses_coordinates:
-        # make a molsetup for the Mol which includes atom types needed for interaction calculations
-        mk_prep = MoleculePreparation(rigid_macrocycles=True)
+    mk_prep = MoleculePreparation(rigid_macrocycles=True)
+    for pose_meta, coords in poses_coordinates:
         molsetup_list = mk_prep(mol)
         if not molsetup_list:
             logger.warning(
-                f"MoleculePreparation returned no setups for ligand {id.get('ligname', '?')} — skipping interaction calculation for this pose"
+                f"MoleculePreparation returned no setups for ligand {pose_meta.get('ligname', '?')} — skipping interaction calculation for this pose"
             )
             interactions.append(
                 {
@@ -260,27 +177,19 @@ def find_interactions(
                     "chain": [],
                     "count": 0,
                     "hb_count": 0,
-                    "id": id,
+                    "id": pose_meta,
                 }
             )
             num_hb.append(0)
             num_interactions.append(0)
             continue
         molsetup = molsetup_list[0]
-        atom_types = []
-        for _, atom in enumerate(molsetup.atoms):
-            if atom.is_ignore:
-                continue
-            atom_types.append(atom.atom_type)
-        # engage interaction finder
-        pose_interactions = interaction_finder.find_pose_interactions(
-            atom_types, coords
-        )
+        atom_types = [atom.atom_type for atom in molsetup.atoms if not atom.is_ignore]
+        pose_interactions = interaction_finder.find_pose_interactions(atom_types, coords)
         logger.debug(
-            f"Ligand {id.get('ligname', '?')} pose {id.get('pose_rank', '?')}: {pose_interactions.get('count', 0)} interactions found"
+            f"Ligand {pose_meta.get('ligname', '?')} pose {pose_meta.get('pose_rank', '?')}: {pose_interactions.get('count', 0)} interactions found"
         )
-        # add unique
-        pose_interactions.update({"id": id})
+        pose_interactions.update({"id": pose_meta})
         num_hb.append(pose_interactions.pop("hb_count"))
         num_interactions.append(pose_interactions["count"])
         interactions.append(pose_interactions)

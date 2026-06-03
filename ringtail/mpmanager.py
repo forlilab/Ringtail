@@ -149,9 +149,8 @@ class MPManager:
                 inputs = [inputs]
             for item in inputs:
                 if os.path.isdir(item):
-                    for batch in self._scan_dir(item, file_pattern, results.recursive_path_traverse):
-                        for f in batch:
-                            self._add_to_queue(f)
+                    for f in self._scan_dir(item, file_pattern, results.recursive_path_traverse):
+                        self._add_to_queue(f)
                 elif fnmatch.fnmatch(item, file_pattern) and item != self.receptor_file_path:
                     self._add_to_queue(item)
                 else:
@@ -180,7 +179,7 @@ class MPManager:
             if attempts >= max_attempts:
                 raise MultiprocessingError(
                     "Something is blocking the progressing of results data reading. Exiting program."
-                ) from queue.Full
+                ) from queue.Full()
             try:
                 self.queueIn.put(results_data, block=True, timeout=timeout)
                 self.num_files += 1
@@ -214,30 +213,28 @@ class MPManager:
         raise error
 
     def _scan_dir(self, path, pattern, recursive=False):
-        """scan for valid output files in a directory the pattern is used
-        to glob files optionally, a recursive search is performed
+        """Scan for valid output files in a directory.
 
         Args:
             path (str): folder path
-            pattern (str): file extension
-            recursive (bool, optional): look for files and folders recursively
+            pattern (str): file glob pattern
+            recursive (bool, optional): look for files recursively
 
         Yields:
-            list: of file paths found in the search
+            str: file paths matching the pattern
         """
         logger.info(
             "Scanning directory [%s] for files (pattern:|%s|)" % (path, pattern)
         )
         if recursive:
-            path = os.path.normpath(path)
-            path = os.path.expanduser(path)
+            path = os.path.normpath(os.path.expanduser(path))
             for dirpath, _, filenames in os.walk(path):
-                yield (  # <----
+                yield from (
                     os.path.join(dirpath, f)
-                    for f in fnmatch.filter(filenames, "*" + pattern)
+                    for f in fnmatch.filter(filenames, pattern)
                 )
         else:
-            yield glob.glob(os.path.join(path, pattern))  # <----
+            yield from glob.glob(os.path.join(path, pattern))
 
     def _scan_file_list(self, filename, pattern):
         """read file names from file list and ensures they exist,
@@ -270,7 +267,7 @@ class MPManager:
             )
         logger.info(
             "# [ %5.3f%% files in list accepted (%d) ]"
-            % ((len(lig_accepted) / c * 100, c))
+            % (len(lig_accepted) / c * 100, c)
         )
 
         for file in lig_accepted:

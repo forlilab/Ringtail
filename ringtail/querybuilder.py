@@ -19,7 +19,7 @@ class QueryBuilder:
         self.order_by = None
         self.delete_from = None
         self.drop_if_exists = None
-        self.subquery = {}
+        self.subqueries = []
         self.params = []
         self.aliases = {}
         self.insert_into = None
@@ -55,27 +55,23 @@ class QueryBuilder:
         return self
 
     def FROM_BOOKMARK(self, bookmark, alias=None, db_alias=""):
-        bookmark_query = f"({self.bookmark_query(bookmark, db_alias)})"
-        return self.FROM(bookmark_query, alias)
+        return self.FROM(f"({self.bookmark_query(bookmark, db_alias)})", alias)
 
     @staticmethod
     def bookmark_query(bookmark, db_alias=""):
+        # bookmark names are validated to [a-z0-9_] by valid_bookmark_name() before reaching here
+        if not all(c.isalnum() or c == "_" for c in bookmark):
+            raise ValueError(f"Unsafe bookmark name: {bookmark!r}")
         if db_alias:
             db_alias += "."
-        query = f"""SELECT pose_id FROM {db_alias}filtered_poses 
-        WHERE filter_id = 
-            (SELECT filter_id FROM {db_alias}Filters 
-            WHERE name = '{bookmark}')"""
-
-        return query
+        return (
+            f"SELECT pose_id FROM {db_alias}filtered_poses "
+            f"WHERE filter_id = "
+            f"(SELECT filter_id FROM {db_alias}Filters WHERE name = '{bookmark}')"
+        )
 
     def IN_BOOKMARK(self, bookmark):
-        """
-        should make string that adds to
-        <results-alias> in (<bookmark_query>)
-        """
-        query = f"""{self.aliased("Results")}.pose_id IN ({self.bookmark_query(bookmark)})"""
-        return self.WHERE(query)
+        return self.WHERE(f"{self.aliased('Results')}.pose_id IN ({self.bookmark_query(bookmark)})")
 
     def FROM(self, table, alias=None, db_name=None):
         if db_name and alias:
@@ -89,13 +85,14 @@ class QueryBuilder:
         self.from_table = (table, alias)
         return self
 
-    def JOIN(self, table, alias=None, on=None, to=None, kind="INNER"):
+    def JOIN(self, table, alias=None, on: str = None, to=None, kind="INNER"):
+        if on is None:
+            raise ValueError(f"JOIN on table '{table}' requires an 'on' column")
         if alias:
             alias = self._add_alias(table, alias)
         if to:
             join_on = self.aliased(to) + "." + on + "=" + alias + "." + on
         else:
-            # use last added select table
             join_on = (
                 self.aliased(self.from_table[-1]) + "." + on + "=" + alias + "." + on
             )
@@ -116,7 +113,7 @@ class QueryBuilder:
         return self
 
     def LIMIT(self, limit: int):
-        self.limit = str(limit)
+        self.limit = limit
         return self
 
     def DESC(self, descending):
@@ -124,9 +121,7 @@ class QueryBuilder:
         return self
 
     def WITH_SUBQUERY(self, name, query, params=None):
-        # This could in theory accept a QueryBuilder object instead
-        self.subquery["name"] = name
-        self.subquery["query"] = query
+        self.subqueries.append((name, query))
         if params:
             self.params.extend(params)
         return self
@@ -140,17 +135,14 @@ class QueryBuilder:
         return self
 
     def aliased(self, table: str):
-        if table.lower() in self.aliases.keys():
-            return self.aliases[table.lower()]
-        else:
-            return table.lower()
+        return self.aliases.get(table.lower(), table.lower())
 
     def _add_alias(self, table: str, alias: str) -> str:
         if alias.lower() in self.aliases.values():
-            raise Exception(f"Alias {alias} already in use for table {table}")
-        if table.lower() in self.aliases.keys():
-            raise Exception(
-                f"WARNING: Table {table} already has an alias: {self.aliases[table]}. Please use this instead."
+            raise ValueError(f"Alias {alias} already in use for table {table}")
+        if table.lower() in self.aliases:
+            raise ValueError(
+                f"Table {table} already has an alias: {self.aliases[table.lower()]}. Please use this instead."
             )
         self.aliases[table.lower()] = alias.lower()
         return alias
@@ -160,10 +152,9 @@ class QueryBuilder:
         if self.insert_into:
             parts.append(f"""{self.insert_into}""")
 
-        if self.subquery:
-            parts.append(
-                f"""WITH {self.subquery["name"]} AS ({self.subquery["query"]})"""
-            )
+        if self.subqueries:
+            ctes = ", ".join(f"{name} AS ({query})" for name, query in self.subqueries)
+            parts.append(f"WITH {ctes}")
 
         if self.selects:
             parts.extend(["SELECT", ", ".join(self.selects)])
@@ -198,16 +189,18 @@ class QueryBuilder:
         if self.descending:
             parts.append("DESC")
 
-        if self.limit:
-            parts.append("LIMIT " + self.limit)
+        if self.limit is not None:
+            parts.append(f"LIMIT {self.limit}")
 
         if self.returning:
             parts.append("RETURNING " + self.returning)
 
+        sql = " ".join(parts)
         if count:
-            return f"SELECT COUNT(*) FROM ({' '.join(parts)})", self.params
-        else:
-            return " ".join(parts), self.params
+            if not self.selects:
+                raise ValueError("build(count=True) is only valid for SELECT queries")
+            return f"SELECT COUNT(*) FROM ({sql})", self.params
+        return sql, self.params
 
 
 class QueryBuilderSQLite(QueryBuilder):
@@ -223,15 +216,8 @@ class QueryBuilderDuck(QueryBuilder):
 
     def GROUP_BY(self, *fields):
         self.group_bys.extend(fields)
-        # add ANY_VALUE() to SELECT fields
+        group_set = {f.lower() for f in self.group_bys}
         for index, item in enumerate(self.selects):
-            if "ANY_VALUE" not in item:
+            if "ANY_VALUE" not in item and item.lower() not in group_set:
                 self.selects[index] = f"ANY_VALUE({item})"
-
         return self
-
-    # def ORDER_BY(self, column):
-    #     self.order_by = column
-    #     if column not in self.group_bys:
-    #         self.GROUP_BY(column)
-    #     return self
