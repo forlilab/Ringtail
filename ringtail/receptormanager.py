@@ -19,30 +19,27 @@ class ReceptorManager:
         """Creates compressed receptor info (blob)
 
         Args:
-            file_list (str): path to receptor file
+            receptor_file (str): path to receptor file
 
         Returns:
-            dict: rec_name and blob (compressed receptor)
+            tuple[str, bytes]: rec_name and blob (compressed receptor)
         """
-        # check file extension, compress to bytes if needed
-        rec_name = receptor_file.split(".")[0].split("/")[
-            -1
-        ]  # remove file extension and path
+        rec_name = receptor_file.split(".")[0].split("/")[-1]
         if receptor_file.endswith(".gz"):
             with open(receptor_file, "rb") as r:
                 receptor = r.read()
         else:
             with open(receptor_file, "r") as r:
                 receptor = gzip.compress(r.read().encode())
-        logger.debug(f"Receptor blob for receptor {rec_name} parepared successfully.")
+        logger.debug(f"Receptor blob for receptor {rec_name} prepared successfully.")
         return rec_name, receptor
 
     @staticmethod
     def blob2str(receptor_blob):
-        """Creates blob of compresser receptor file info
+        """Decompresses a receptor blob to a string.
 
         Args:
-            receptor_blob (blob): zipped receptor blob
+            receptor_blob (bytes): gzip-compressed receptor blob
 
         Returns:
             str: receptor string, or None if receptor_blob is None

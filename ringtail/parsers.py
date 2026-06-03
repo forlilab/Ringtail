@@ -6,9 +6,7 @@
 
 import os
 import gzip
-import bz2
 import json
-import traceback
 from typing import Union, NamedTuple
 from collections import defaultdict
 import numpy as np
@@ -26,28 +24,28 @@ from .interactions import find_interactions, make_interaction_finder
 
 
 class PoseRecord(NamedTuple):
-    receptor: object
-    pose_rank: object
-    run_number: object
-    cluster_rmsd: object
-    reference_rmsd: object
-    docking_score: object
-    leff: object
-    delta: object
-    energies_inter: object
-    energies_vdw: object
-    energies_electro: object
-    energies_flexLig: object
-    energies_flexLR: object
-    energies_intra: object
-    energies_torsional: object
-    unbound_energy: object
-    num_interactions: object
-    num_hb: object
-    cluster_size: object
-    pose_coordinates: object
-    flexible_res_coordinates: object
-    ligname: object
+    receptor: object = None
+    pose_rank: object = None
+    run_number: object = None
+    cluster_rmsd: object = 0
+    reference_rmsd: object = 0
+    docking_score: object = 0
+    leff: object = 0
+    delta: object = 0
+    energies_inter: object = 0
+    energies_vdw: object = 0
+    energies_electro: object = 0
+    energies_flexLig: object = 0
+    energies_flexLR: object = 0
+    energies_intra: object = 0
+    energies_torsional: object = 0
+    unbound_energy: object = 0
+    num_interactions: object = 0
+    num_hb: object = 0
+    cluster_size: object = 1
+    pose_coordinates: object = None
+    flexible_res_coordinates: object = "[]"
+    ligname: object = None
 
 
 class InteractionRecord(NamedTuple):
@@ -73,36 +71,8 @@ def _dict_to_pose_record(d: dict) -> PoseRecord:
 
 
 def results_row() -> dict:
-    """
-    Returns a dict with expected keys and None values for inserting into ringtail
-
-    Returns:
-        dict:
-    """
-    return {
-        "receptor": None,
-        "pose_rank": None,
-        "run_number": None,
-        "cluster_rmsd": 0,
-        "reference_rmsd": 0,
-        "docking_score": 0,
-        "leff": 0,
-        "delta": 0,
-        "energies_inter": 0,
-        "energies_vdw": 0,
-        "energies_electro": 0,
-        "energies_flexLig": 0,
-        "energies_flexLR": 0,
-        "energies_intra": 0,
-        "energies_torsional": 0,
-        "unbound_energy": 0,
-        "num_interactions": 0,
-        "num_hb": 0,
-        "cluster_size": 1,
-        "pose_coordinates": None,
-        "flexible_res_coordinates": str([]),
-        "ligname": None,
-    }
+    """Return a dict of default pose field values, derived from PoseRecord."""
+    return PoseRecord()._asdict()
 
 
 def _open_fn_and_name(fname: str) -> tuple:
@@ -113,32 +83,6 @@ def _open_fn_and_name(fname: str) -> tuple:
         name, _ = os.path.splitext(name)
         return gzip.open, name
     return open, name
-
-
-def make_ringtail_data_dict(
-    ligand_row: list,
-    receptor_row: list,
-    data_rows: list,
-    interaction_rows: list,
-) -> dict:
-    """
-    Simple wrapper method to unify dict keywords
-
-    Args:
-        ligand_row (list): _description_
-        receptor_row (list): _description_
-        data_rows (list): _description_
-        interaction_rows (list): _description_
-
-    Returns:
-        _type_: _description_
-    """
-    return {
-        "ligand_row": ligand_row,
-        "receptor_row": receptor_row,
-        "results_rows": data_rows,
-        "interaction_rows": interaction_rows,
-    }
 
 
 class VinaMoleculeSupplier:
@@ -187,7 +131,6 @@ class VinaMoleculeSupplier:
             intermolecular_energy = []
             internal_energy = []
             unbound_energy = []
-            num_heavy_atoms = 0
             flexible_res_coords = []
             inside_res = False
             flexible_residues = []
@@ -291,9 +234,7 @@ class VinaMoleculeSupplier:
         empty_columns = {
             "receptor": ["receptor"] * data_length,
             "cluster_rmsd": [None] * data_length,
-            "delta": [None] * data_length,
             "reference_rmsd": [None] * data_length,
-            "energies_inter": [None] * data_length,
             "energies_vdw": [None] * data_length,
             "energies_electro": [None] * data_length,
             "energies_flexLig": [None] * data_length,
@@ -351,9 +292,8 @@ class VinaMoleculeSupplier:
                 ]
             }
         )
-        # zip all the rows together so there is one record per row/pose
         results_rows = [
-            PoseRecord(**dict(zip(results_dict.keys(), values)))
+            _dict_to_pose_record(dict(zip(results_dict.keys(), values)))
             for values in zip(*results_dict.values())
         ]
 
@@ -469,7 +409,7 @@ class ADGPUMoleculeSupplier:
                 data_index = run_number - 1
                 # parse Results data
                 results_rows.append(
-                    self._build_result_row(
+                    self._build_pose_record(
                         results_dict,
                         data_index,
                         run_number,
@@ -507,7 +447,7 @@ class ADGPUMoleculeSupplier:
                 pose_rank = sorted_idx + 1
                 # parse Results data
                 results_rows.append(
-                    self._build_result_row(
+                    self._build_pose_record(
                         results_dict,
                         data_index,
                         run_number,
@@ -533,7 +473,7 @@ class ADGPUMoleculeSupplier:
         # prepare data in ringtail recognizable format
         return {
             "ligands": [ligand_row],
-            "poses": [_dict_to_pose_record(d) for d in results_rows],
+            "poses": results_rows,
             "receptor": receptor_row,
             "interactions": _dicts_to_interaction_records(
                 generate_interaction_tuples(interaction_dicts)
@@ -542,6 +482,20 @@ class ADGPUMoleculeSupplier:
 
     @staticmethod
     def _parse_energy(line: str, idx: int, fname: str) -> float:
+        """
+        Helper method to parse energies from .dlg strings
+
+        Args:
+            line (str): _description_
+            idx (int): _description_
+            fname (str): _description_
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            float: _description_
+        """
         parts = line.split()
         try:
             return float(parts[idx])
@@ -551,7 +505,7 @@ class ADGPUMoleculeSupplier:
             except ValueError:
                 raise ValueError(f"ERROR! Cannot parse {line!r} in {fname}")
 
-    def _build_result_row(
+    def _build_pose_record(
         self,
         results_dict: dict,
         data_index: int,
@@ -560,33 +514,48 @@ class ADGPUMoleculeSupplier:
         receptor_name: str,
         ligname: str,
         cluster_size: int,
-    ) -> dict:
-        return {
-            "receptor": receptor_name,
-            "pose_rank": pose_rank,
-            "run_number": run_number,
-            "cluster_rmsd": results_dict["cluster_rmsd"][data_index],
-            "reference_rmsd": results_dict["ref_rmsd"][data_index],
-            "docking_score": results_dict["docking_score"][data_index],
-            "leff": results_dict["leff"][data_index],
-            "delta": results_dict["delta"][data_index],
-            "energies_inter": results_dict["energies_inter"][data_index],
-            "energies_vdw": results_dict["energies_vdw"][data_index],
-            "energies_electro": results_dict["energies_electro"][data_index],
-            "energies_flexLig": results_dict["energies_flexLig"][data_index],
-            "energies_flexLR": results_dict["energies_flexLR"][data_index],
-            "energies_intra": results_dict["energies_intra"][data_index],
-            "energies_torsional": results_dict["energies_torsional"][data_index],
-            "unbound_energy": results_dict["unbound_energy"][data_index],
-            "num_interactions": results_dict["num_interactions"][data_index],
-            "num_hb": results_dict["num_hb"][data_index],
-            "cluster_size": cluster_size,
-            "pose_coordinates": results_dict["pose_coordinates"][data_index],
-            "flexible_res_coordinates": json.dumps(
+    ) -> PoseRecord:
+        """
+        Convert parsed results to PoseRecord
+
+        Args:
+            results_dict (dict): _description_
+            data_index (int): _description_
+            run_number (int): _description_
+            pose_rank (int): _description_
+            receptor_name (str): _description_
+            ligname (str): _description_
+            cluster_size (int): _description_
+
+        Returns:
+            PoseRecord: _description_
+        """
+        return PoseRecord(
+            receptor=receptor_name,
+            pose_rank=pose_rank,
+            run_number=run_number,
+            cluster_rmsd=results_dict["cluster_rmsd"][data_index],
+            reference_rmsd=results_dict["ref_rmsd"][data_index],
+            docking_score=results_dict["docking_score"][data_index],
+            leff=results_dict["leff"][data_index],
+            delta=results_dict["delta"][data_index],
+            energies_inter=results_dict["energies_inter"][data_index],
+            energies_vdw=results_dict["energies_vdw"][data_index],
+            energies_electro=results_dict["energies_electro"][data_index],
+            energies_flexLig=results_dict["energies_flexLig"][data_index],
+            energies_flexLR=results_dict["energies_flexLR"][data_index],
+            energies_intra=results_dict["energies_intra"][data_index],
+            energies_torsional=results_dict["energies_torsional"][data_index],
+            unbound_energy=results_dict["unbound_energy"][data_index],
+            num_interactions=results_dict["num_interactions"][data_index],
+            num_hb=results_dict["num_hb"][data_index],
+            cluster_size=cluster_size,
+            pose_coordinates=results_dict["pose_coordinates"][data_index],
+            flexible_res_coordinates=json.dumps(
                 results_dict["flexible_res_coordinates"][data_index]
             ),
-            "ligname": ligname,
-        }
+            ligname=ligname,
+        )
 
     def _parse_docking_file_dlg(self, fname: str) -> tuple[dict, dict, dict]:
         """Parse an ADGPU DLG file uncompressed or gzipped
@@ -813,13 +782,10 @@ class ADGPUMoleculeSupplier:
         return ligand_dict, receptor_dict, results
 
 
-class SDFMoleculeSupplier:  #
+class SDFMoleculeSupplier:
     def __init__(self, num_poses: int, **kwargs):
         self.kwargs = kwargs
-        if num_poses == -1:
-            self.num_poses = float("inf")
-        else:
-            self.num_poses = num_poses
+        self.num_poses = num_poses
 
     def __call__(self, fname: str):
         return self.parse_adng_results(fname, **self.kwargs)
@@ -832,11 +798,26 @@ class SDFMoleculeSupplier:  #
         interaction_cutoffs: list[float] = None,
         receptor_string: str = None,
     ):
+        """
+        Method to parse docking results from SDF files, uses Chem.ForwardSDMolSupplier
 
-        # keep track of parsed ligands
+        Args:
+            fname (str): sdf file name
+            calculate_interactions (bool, optional): _description_. Defaults to None.
+            interaction_finder (_type_, optional): _description_. Defaults to None.
+            interaction_cutoffs (list[float], optional): _description_. Defaults to None.
+            receptor_string (str, optional): _description_. Defaults to None.
+
+        Yields:
+            _type_: _description_
+        """
+        if calculate_interactions and not interaction_finder:
+            interaction_finder = make_interaction_finder(
+                receptor_string, interaction_cutoffs
+            )
+
         processed_ligands = set()
         last_ligand = None
-        run_number = 1
 
         with open(fname, "rb") as file_stream:
             suppl = Chem.ForwardSDMolSupplier(file_stream, removeHs=False)
@@ -844,123 +825,65 @@ class SDFMoleculeSupplier:  #
                 if mol is None:
                     continue
                 ligname = mol.GetProp("_Name")
-                # only grab num_poses
                 if ligname != last_ligand:
                     last_ligand = ligname
                     pose_count = 1
                 else:
                     pose_count += 1
-                if pose_count > self.num_poses:
+                if self.num_poses != -1 and pose_count > self.num_poses:
                     continue
 
-                results_dict = results_row()
-                # Add all Hs with coords before stripping conformers so they are stored.
-                if any(a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()):
-                    mol = Chem.AddHs(mol, addCoords=True)
-                n_heavy = mol.GetNumHeavyAtoms()
-                # remove coordinates and docking properties (retains other custom properties)
-                mol, mol_properties = prepare_mol_for_database(
-                    mol, store_properties=["ligname", "docking_score", "pose_rank"]
-                )
-
-                if ligname not in processed_ligands:
-                    smiles = Chem.MolToSmiles(mol)
-                    processed_ligands.add(ligname)
-                    ligand_row = [
-                        ligname,
-                        smiles,
-                        mol.ToBinary(Chem.PropertyPickleOptions.AllProps),
-                    ]
-
-                results_dict.update(mol_properties)
-                results_dict.update(
-                    {
-                        "ligname": ligname,
-                        "run_number": run_number,
-                        "leff": round(results_dict["docking_score"] / n_heavy, 2),
-                    }
-                )
-                single_pose_coordinate = results_dict["pose_coordinates"][0]
-                results_dict.update(
-                    {
-                        "pose_coordinates": (
-                            json.dumps(single_pose_coordinate.tolist())
-                            if isinstance(single_pose_coordinate, np.ndarray)
-                            else single_pose_coordinate
-                        ),
-                    }
-                )
-                # calculate interactions
-                if calculate_interactions and not interaction_finder:
-                    interaction_finder = make_interaction_finder(
-                        receptor_string, interaction_cutoffs
-                    )
-
-                if interaction_finder:
-                    poseids_coordinates = [
-                        (
-                            {
-                                "ligname": ligname,
-                                "run_number": run_number,
-                                "pose_rank": mol_properties["pose_rank"],
-                            },
-                            single_pose_coordinate,
-                        )
-                    ]
-
-                    interactions, num_hb, num_interactions = find_interactions(
-                        poseids_coordinates,
+                try:
+                    result = process_docked_mol(
                         mol,
+                        calculate_interactions=bool(interaction_finder),
                         interaction_finder=interaction_finder,
                     )
-                    interaction_rows = generate_interaction_tuples(interactions)
-                    # use interaction stuff here
-                    results_dict.update(
-                        {
-                            "num_interactions": num_interactions[0],
-                            "num_hb": num_hb[0],
-                            "pose_coordinates": (
-                                json.dumps(results_dict["pose_coordinates"].tolist())
-                                if isinstance(
-                                    results_dict["pose_coordinates"], np.ndarray
-                                )
-                                else results_dict["pose_coordinates"]
-                            ),
-                        }
-                    )
+                except Exception as e:
+                    raise FileParsingErrorSdf(
+                        f"Failed to process mol '{ligname}' in {fname}: {e}"
+                    ) from e
+                # Only emit the ligand row on first occurrence — subsequent poses
+                # of the same ligand rely on ON CONFLICT IGNORE in the DB, but
+                # avoid the smiles/binary cost by clearing the list here.
+                if ligname in processed_ligands:
+                    result["ligands"] = []
                 else:
-                    interaction_rows = []
+                    processed_ligands.add(ligname)
 
-                yield {
-                    "ligands": [ligand_row],
-                    "poses": [_dict_to_pose_record(results_dict)],
-                    "interactions": _dicts_to_interaction_records(interaction_rows),
-                    "receptor": [],
-                }
+                yield result
 
 
 def process_docked_mol(
     mol,
     calculate_interactions: bool,
     interaction_finder=None,
-    receptor_string: str = None,
-    interaction_cutoffs: list[float] = None,
     add_default_columns: bool = True,
 ):
+    """
+    Processes a single docked Mol, which includes removing certain properties and preserving others,
+    as well as parsing some like coordinates, as needed for the Ringtail database
 
+    Args:
+        mol (_type_): _description_
+        calculate_interactions (bool): _description_
+        interaction_finder (_type_, optional): _description_. Defaults to None.
+        add_default_columns (bool, optional): _description_. Defaults to True.
+
+    Returns:
+        _type_: _description_
+    """
     ligname = mol.GetProp("_Name")
     run_number = 1
     smiles = Chem.MolToSmiles(mol)
     interaction_rows = []
-    if add_default_columns:
-        results_dict = results_row()
-    else:
-        results_dict = {}
+    results_dict = results_row() if add_default_columns else {}
     # Add all Hs with coords before stripping conformers so they are stored.
-    if mol.GetNumConformers() > 0 and any(a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()):
+    if mol.GetNumConformers() > 0 and any(
+        a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()
+    ):
         mol = Chem.AddHs(mol, addCoords=True)
     n_heavy = mol.GetNumHeavyAtoms()
-    # remove coordinates and docking properties (retains other custom properties)
     mol, mol_properties = prepare_mol_for_database(
         mol, store_properties=["docking_score", "pose_rank"]
     )
@@ -975,49 +898,25 @@ def process_docked_mol(
         }
     )
     single_pose_coordinate = results_dict["pose_coordinates"][0]
-    results_dict.update(
-        {
-            "pose_coordinates": (
-                json.dumps(single_pose_coordinate.tolist())
-                if isinstance(single_pose_coordinate, np.ndarray)
-                else single_pose_coordinate
-            ),
-        }
+    results_dict["pose_coordinates"] = (
+        json.dumps(single_pose_coordinate.tolist())
+        if isinstance(single_pose_coordinate, np.ndarray)
+        else single_pose_coordinate
     )
-    # calculate interactions
 
-    if calculate_interactions:
+    if calculate_interactions and interaction_finder:
         poseids_coordinates = [
             (
                 {"ligname": ligname, "run_number": run_number, "pose_rank": 1},
                 single_pose_coordinate,
             )
         ]
-        if interaction_finder:
-            interactions, num_hb, num_interactions = find_interactions(
-                poseids_coordinates,
-                mol,
-                interaction_finder=interaction_finder,
-            )
-        else:
-            interactions, num_hb, num_interactions = find_interactions(
-                poseids_coordinates,
-                mol,
-                receptor_string,
-                *interaction_cutoffs,
-            )
+        interactions, num_hb, num_interactions = find_interactions(
+            poseids_coordinates, mol, interaction_finder=interaction_finder
+        )
         interaction_rows = generate_interaction_tuples(interactions)
-        # use interaction stuff here
         results_dict.update(
-            {
-                "num_interactions": num_interactions[0],
-                "num_hb": num_hb[0],
-                "pose_coordinates": (
-                    json.dumps(results_dict["pose_coordinates"].tolist())
-                    if isinstance(results_dict["pose_coordinates"], np.ndarray)
-                    else results_dict["pose_coordinates"]
-                ),
-            }
+            {"num_interactions": num_interactions[0], "num_hb": num_hb[0]}
         )
 
     return {
@@ -1112,10 +1011,6 @@ def prepare_mol_for_database(
     return mol, properties
 
 
-def adng_to_db(adng_property: str) -> str:
-    return adng_aliases.get(adng_property, adng_property)
-
-
 def db_to_adng(db_column: str) -> str:
     return db_alias_to_adng.get(db_column, db_column)
 
@@ -1150,37 +1045,31 @@ def generate_receptor_row(receptor_data: dict) -> list:
     ]
 
 
-def generate_interaction_tuples(interaction_dictionaries: list, unique_id=True) -> list:
-    """Takes dictionary of file results, formats as list of tuples for interactions.
-    To each interaction description is added business keys/columns that identifies
-    which results row/pose each interaction belongs to
+def generate_interaction_tuples(interaction_dictionaries: list) -> list:
+    """Format pose interaction dicts into deduplicated InteractionRecord-ready dicts.
+
+    Each entry includes the pose identity keys (ligname, run_number, pose_rank)
+    plus the interaction descriptor fields.
 
     Args:
-        interaction_dictionaries (list): List of pose interaction
-            dictionaries from parser
+        interaction_dictionaries (list): List of pose interaction dicts from parser.
 
     Returns:
-        list: of tuples of interaction data
+        list: Deduplicated dicts ready to be converted to InteractionRecords.
     """
+    if not interaction_dictionaries:
+        return []
 
     interaction_keywords = ["type", "chain", "residue", "resid", "recname", "recid"]
+    id_keys = list(interaction_dictionaries[0]["id"].keys())
+    all_keys = id_keys + interaction_keywords
 
-    # Extract ID keys if needed (check first pose for structure)
-    id_keys = (
-        list(interaction_dictionaries[0]["id"].keys())
-        if unique_id and interaction_dictionaries
-        else []
-    )
-    all_keys = id_keys + interaction_keywords if unique_id else interaction_keywords
-
-    # Generate tuples and deduplicate
-    tuples = set(
+    tuples = dict.fromkeys(
         tuple(pose["id"][k] if k in id_keys else pose[k][i] for k in all_keys)
         for pose in interaction_dictionaries
         for i in range(pose["count"])
     )
 
-    # Convert back to dicts with proper keys
     return [dict(zip(all_keys, t)) for t in tuples]
 
 

@@ -4,6 +4,7 @@
 # Ringtail virtual screening manager
 #
 import itertools
+import glob
 import os
 from typing import Callable, Union
 import functools
@@ -41,7 +42,7 @@ from .outputmanager import OutputManager
 from .storagemanager import StorageManager
 from .storagemanager_duckdb import StorageManagerDuckDB, HAS_DUCK
 from .storagemanager_sqlite import StorageManagerSQLite, HAS_SQLITE
-from .parsers import process_docked_mol, VinaMoleculeSupplier
+from .parsers import process_docked_mol, VinaMoleculeSupplier, generate_interaction_tuples
 
 storage_types = {}
 if HAS_SQLITE:
@@ -243,18 +244,16 @@ class RingtailCore:
         if calculate_interactions:
             # grab receptor info from database, this assumes there is only one receptor in the database
             if results.receptor_file_path:
-                import pathlib
-
                 # parse the receptor string for interaction calculation
                 # make receptor string
-                if ".pdbqt" in pathlib.Path(results.receptor_file_path).suffixes:
+                if ".pdbqt" in Path(results.receptor_file_path).suffixes:
                     logger.debug(
                         "Building receptor string from .pdbqt file for interaction calculation"
                     )
                     results.receptor_string = ReceptorManager.receptor_str_from_file(
                         results.receptor_file_path
                     )
-                elif ".json" in pathlib.Path(results.receptor_file_path).suffixes:
+                elif ".json" in Path(results.receptor_file_path).suffixes:
                     logger.debug(
                         "Building receptor string from polymer .json file for interaction calculation"
                     )
@@ -451,7 +450,7 @@ class RingtailCore:
 
         receptor_blob = None
         receptor_jsons = None
-        if type(receptor) == str:
+        if isinstance(receptor, str):
             # get all extensions, lower case, account for zipped files
             extensions = Path(receptor).suffixes
             extensions = [e.lower() for e in extensions]
@@ -463,7 +462,7 @@ class RingtailCore:
             from meeko import Polymer
 
             try:
-                receptor_name = receptor_name.keys()[0]
+                receptor_name = list(receptor.keys())[0]
                 receptor_polymer: Polymer = receptor[receptor_name]
                 receptor_jsons = receptor_polymer.to_json()
             except Exception as e:
@@ -507,7 +506,7 @@ class RingtailCore:
         vdw_cutoff: float = RingtailDefaults.interaction_cutoffs[1],
         receptor_string: str = None,
         consent: bool = False,
-        chunk_size: int = RingtailDefaults.chunk_size / 10,
+        chunk_size: int = RingtailDefaults.chunk_size // 10,
     ):
         """
         ###NOTE SLOOOOOOW
@@ -525,8 +524,6 @@ class RingtailCore:
         Returns:
             _type_: _description_
         """
-        from .parsers import generate_interaction_tuples
-
         # make sure user knows risk of calculating interaction in db with existing interactions
         track_table_name = "recomputed_interactions"
         if self.table_length("Interactions") > 0:
@@ -538,7 +535,7 @@ class RingtailCore:
             else:
                 with self.storageman as sm:
                     # Check if track table name exist, then do not clear but use
-                    if not track_table_name in sm.tables_in_db():
+                    if track_table_name not in sm.tables_in_db():
                         success = sm.clear_interaction_tables()
                         if not success:
                             raise RTCoreError(
@@ -809,7 +806,7 @@ class RingtailCore:
                 )
             print_string = ""
         # else produce a bookmark for each interaction combination
-        elif not write_one_bookmark:
+        else:
             for ic_idx, combination in enumerate(interaction_combs):
 
                 filters_copy = filters.asdict()
@@ -888,11 +885,11 @@ class RingtailCore:
                     output_bookmark, outfields, not output_all_poses, order_results
                 )
                 # have to make it into list of tuples since storageman uses row factory
-                iter = [
+                rows = [
                     tuple(row)
                     for row in self.storageman.db_query(formatted_query).fetchall()
                 ]
-            return iter
+            return rows
         else:
             return num_passing_ligands, output_bookmark
 
@@ -900,7 +897,7 @@ class RingtailCore:
     def cluster(
         self,
         output_bookmark: str,
-        type: str = "mfp",
+        cluster_type: str = "mfp",
         cutoff: float = 0.5,
         input_bookmark: Union[str, None] = None,
     ) -> tuple[str, int]:
@@ -909,7 +906,7 @@ class RingtailCore:
 
         Args:
             output_bookmark (str): bookmark name for the cluster representatives
-            type (str, optional): cluster algorithm. Defaults to "mfp".
+            cluster_type (str, optional): cluster algorithm. Defaults to "mfp".
             cutoff (float, optional): cutoff distance for each cluster. Defaults to 0.5.
             input_bookmark (str | None, optional): bookmark to cluster over; None clusters all results.
 
@@ -919,7 +916,7 @@ class RingtailCore:
         with self.storageman as sm:
             generated_name, num_clusters = sm.cluster_data(
                 input_bookmark,
-                type,
+                cluster_type,
                 cutoff,
             )
             sm.rename_bookmark(generated_name, output_bookmark)
@@ -938,7 +935,7 @@ class RingtailCore:
         output_fields: Union[str, list] = RingtailDefaults.outfields,
         output_all_poses: bool = RingtailDefaults.output_all_poses,
         order_results: str = RingtailDefaults.order_results,
-        clustering: dict = {},
+        clustering: dict = None,
         max_miss_combs: int = None,
         append_to_log: bool = None,
     ):
@@ -951,13 +948,14 @@ class RingtailCore:
             output_fields (Union[str, list]): output columns to include
             output_all_poses (bool): whether or not to output one or all passing poses
             order_results (str): if ordering the results by a specific column
-            clustering (dict, optional): dict describing any clustering done. Defaults to {}.
+            clustering (dict, optional): dict describing any clustering done. Defaults to None.
             max_miss_combs (int, optional): how many max_miss combinations were used. Defaults to None.
             append_to_log (bool, optional): whether or not to append to existing logfile. Defaults to None.
 
         Raises:
             OptionError
         """
+        clustering = clustering or {}
         bookmark_name = bookmark_name.lower() if bookmark_name else None
         if not order_results:
             order_results = "ligname"
@@ -1049,7 +1047,7 @@ class RingtailCore:
                 return
 
         # ensure polymer is correct type, else check if string or path
-        if type(receptor_polymer) == str:
+        if isinstance(receptor_polymer, str):
             from meeko import Polymer
 
             _, polymer_string = self._process_receptor_polymer(receptor_polymer)
@@ -1315,6 +1313,7 @@ class RingtailCore:
             for col, desc in cols.items()
         }
 
+    @_wrap_exceptions
     def get_previous_filter_data(
         self,
         bookmark_name: str,
@@ -1812,12 +1811,7 @@ class RingtailCore:
         with self.storageman as sm:
             # TODO this method is only used here, why not use different method, and why not needed in other method?
             pose_rows = sm.fetch_rdkit_pose_properties(pose_ids)
-            if include_interactions:
-                interactions_by_pose = (
-                    sm.fetch_pose_interactions(pose_ids) if include_interactions else {}
-                )
-            else:
-                interactions_by_pose = []
+            interactions_by_pose = sm.fetch_pose_interactions(pose_ids) if include_interactions else {}
 
         result = []
         for (
@@ -1851,7 +1845,7 @@ class RingtailCore:
             )
             properties = {
                 "Binding energies": [docking_score],
-                "Ligand effiencies": [leff],
+                "Ligand efficiencies": [leff],
                 "Interactions": [interactions_str] if interactions_str else [],
                 "pose_rank": pose_rank,
             }
@@ -1918,7 +1912,7 @@ class RingtailCore:
             base_mol = None
             merged_props = {
                 "Binding energies": [],
-                "Ligand effiencies": [],
+                "Ligand efficiencies": [],
                 "Interactions": [],
             }
             all_flexres = []
@@ -1960,7 +1954,7 @@ class RingtailCore:
                     self._interactions_str(interactions) if interactions else None
                 )
                 merged_props["Binding energies"].append(docking_score)
-                merged_props["Ligand effiencies"].append(leff)
+                merged_props["Ligand efficiencies"].append(leff)
                 if interactions_str:
                     merged_props["Interactions"].append(interactions_str)
 
@@ -2039,8 +2033,6 @@ class RingtailCore:
         Returns:
             list[tuple[str, str]]: list of (db_path, error_message) for failed merges
         """
-        import glob
-
         if isinstance(merging_dbs, str):
             merging_dbs = [merging_dbs]
 
@@ -2175,7 +2167,11 @@ class RingtailCore:
         buffer = {"ligands": [], "poses": [], "interactions": []}
         with self.storageman as sm:
             for item in items:
-                result = parse_fn(item)
+                try:
+                    result = parse_fn(item)
+                except Exception as e:
+                    logger.warning(f"Skipping item due to parsing error: {e}")
+                    continue
                 for key in buffer:
                     buffer[key].extend(result.get(key, []))
                 if len(buffer["ligands"]) >= chunk_size:
@@ -2325,10 +2321,12 @@ class RingtailCore:
                 )
         else:
             try:
-                polymer_string = json.loads(receptor_file)
+                json.loads(receptor_file)  # validate only
+                polymer_string = receptor_file
+                receptor_name = "receptor"
             except json.JSONDecodeError:
                 raise OptionError(
-                    "The provided input for receptor_polymer was provided is not a valid Polymer object, not a valid path or valid json, cannot proceed."
+                    "The provided input for receptor_polymer is not a valid path or valid JSON, cannot proceed."
                 )
         return receptor_name, polymer_string
 
