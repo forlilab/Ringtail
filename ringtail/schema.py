@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Ringtail database schema and supporting functionality
+#
+
+
 from dataclasses import dataclass, field
 from typing import Union
 
@@ -320,9 +327,9 @@ STATUS_TABLE_SCHEMA = TableSchema(
     }
 )
 
-_CANDIDATES_SUBQ = "(SELECT pose_id FROM Accepted UNION SELECT pose_id FROM Maybe)"
-_CANDIDATES_NAME = "candidates"
-_LIGANDS_ONLY_COLS = set(LIGANDS_SCHEMA.columns) - set(RESULTS_SCHEMA.columns)
+CANDIDATES_SUBQ = "(SELECT pose_id FROM Accepted UNION SELECT pose_id FROM Maybe)"
+CANDIDATES_NAME = "candidates"
+LIGANDS_ONLY_COLS = set(LIGANDS_SCHEMA.columns) - set(RESULTS_SCHEMA.columns)
 
 # Table of comments from e.g., visual inspection
 POSE_COMMENTS_SCHEMA = TableSchema(
@@ -398,7 +405,7 @@ OUTFIELD_BY_TABLE: dict[str, dict[str, Column]] = {
 ORDER_RESULT_SCHEMA: dict[str, Column] = {
     name: col
     for name, col in OUTFIELD_SCHEMA.items()
-    if col.sql_type in ("FLOAT", "INTEGER")
+    if col.sql_type in ("FLOAT", "INTEGER", "VARCHAR")
 }
 
 # ---------------------------------------------------------------------------

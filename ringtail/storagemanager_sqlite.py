@@ -26,7 +26,7 @@ from .querybuilder import QueryBuilderSQLite
 from .schema import (
     build_create_table,
     build_create_indices,
-    _CANDIDATES_SUBQ,
+    CANDIDATES_SUBQ,
     RESULTS_SCHEMA,
     INTERACTION_INDICES_SCHEMA,
     INTERACTIONS_SCHEMA,
@@ -2259,7 +2259,7 @@ class StorageManagerSQLite(StorageManager):
             query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?);"""
             params = (table,)
         elif self._is_candidates_table(table):
-            query = f"SELECT COUNT(*) FROM {_CANDIDATES_SUBQ} AS _c;"
+            query = f"SELECT COUNT(*) FROM {CANDIDATES_SUBQ} AS _c;"
             params = ()
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
@@ -2397,7 +2397,7 @@ class StorageManagerSQLite(StorageManager):
                 "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
             )
         elif self._is_candidates_table(table):
-            query.FROM("Results").WHERE(f"pose_id IN {_CANDIDATES_SUBQ}")
+            query.FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
         else:
             query.FROM(table)
         query.WHERE("pose_id = ?", pose_id)
@@ -2428,7 +2428,7 @@ class StorageManagerSQLite(StorageManager):
                 "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
             )
         elif self._is_candidates_table(table):
-            query.FROM("Results").WHERE(f"pose_id IN {_CANDIDATES_SUBQ}")
+            query.FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
             return None
