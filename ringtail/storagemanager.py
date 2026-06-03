@@ -578,12 +578,7 @@ class StorageManager(ABC):
             query.SELECT("r.pose_id", "r.leff").FROM("Results", "R")
 
             if bookmark_name is not None:
-                if self.is_bookmark(bookmark_name):
-                    query.IN_BOOKMARK(bookmark_name)
-                elif self._is_statustable(bookmark_name):
-                    query.JOIN(bookmark_name, "T", "pose_id")
-                elif self._is_candidates_table(bookmark_name):
-                    query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
+                self._apply_table_filter(query, bookmark_name)
             # tuple, tuple
             pose_ids, leffs = zip(*self.db_query(query.build()[0]).fetchall())
             leffs = list(leffs)
@@ -600,12 +595,7 @@ class StorageManager(ABC):
             )
 
             if bookmark_name is not None:
-                if self.is_bookmark(bookmark_name):
-                    query.IN_BOOKMARK(bookmark_name)
-                elif self._is_statustable(bookmark_name):
-                    query.JOIN(bookmark_name, "T", "pose_id")
-                elif self._is_candidates_table(bookmark_name):
-                    query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
+                self._apply_table_filter(query, bookmark_name)
 
             pose_ids, leffs, rdmols = zip(*self.db_query(query.build()[0]).fetchall())
             mfpc = MorganFingerprintCluster(pose_ids, leffs, rdmols, cutoff)
@@ -764,12 +754,7 @@ class StorageManager(ABC):
         SELECT * FROM main.Ligands
         WHERE main.Ligands.ligand_id IN (
             SELECT ligand_id from main.Results
-            WHERE pose_id IN (
-                SELECT pose_id FROM main.filtered_poses
-                WHERE filter_id =
-                    (SELECT filter_id FROM main.Filters
-                    WHERE name = '{bookmark_name}'))
-                    );"""
+            WHERE pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")}));"""
         self.db_query(ligands)
         logger.debug("Ligands have been copied into the new subset database.")
         # receptor
@@ -783,12 +768,7 @@ class StorageManager(ABC):
         poses = f"""
         INSERT INTO {alias}.Results
         SELECT * FROM main.Results
-        WHERE main.Results.pose_id IN (
-            SELECT pose_id FROM main.filtered_poses
-            WHERE filter_id =
-                (SELECT filter_id FROM main.Filters
-                WHERE name = '{bookmark_name}')
-                );"""
+        WHERE main.Results.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
         self.db_query(poses)
         logger.debug("Results have been copied into the new subset database.")
         # interaction_indices
@@ -797,23 +777,13 @@ class StorageManager(ABC):
         SELECT * FROM main.Interaction_indices
         WHERE main.Interaction_indices.interaction_id IN (
             SELECT interaction_id FROM main.Interactions
-            WHERE pose_id IN (
-                SELECT pose_id FROM main.filtered_poses
-                WHERE filter_id =
-                    (SELECT filter_id FROM main.Filters
-                    WHERE name = '{bookmark_name}'))
-            );"""
+            WHERE pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")}));"""
         self.db_query(interaction_indices)
         # interactions
         interactions = f"""
         INSERT INTO {alias}.Interactions
         SELECT * FROM main.Interactions
-        WHERE main.Interactions.pose_id IN (
-            SELECT pose_id FROM main.filtered_poses
-            WHERE filter_id =
-                (SELECT filter_id FROM main.Filters
-                WHERE name = '{bookmark_name}')
-                );"""
+        WHERE main.Interactions.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
         self.db_query(interactions)
         logger.debug("Interactions have been copied into the new subset database.")
         # receptor
@@ -1122,12 +1092,7 @@ class StorageManager(ABC):
             )
         query = self.QueryBuilder()
         query.SELECT(f"{column}").FROM("Results")
-        if self.is_bookmark(table):
-            query.IN_BOOKMARK(table)
-        elif self._is_statustable(table):
-            query.JOIN(table, "T", "pose_id")
-        elif self._is_candidates_table(table):
-            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
+        self._apply_table_filter(query, table)
         query.GROUP_BY("ligand_id")
         values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
 
@@ -1155,45 +1120,39 @@ class StorageManager(ABC):
         if column not in NUMERIC_TYPES:
             raise OptionError(f"Column {column} is not numeric")
 
-        # Build portable filter fragments for raw SQL
-        if self.is_bookmark(bookmark_name):
-            bm_subq = self.QueryBuilder.bookmark_query(bookmark_name)
-            join_sql = ""
-            where_sql = f"Results.pose_id IN ({bm_subq}) AND {column} IS NOT NULL"
-        elif self._is_statustable(bookmark_name):
-            join_sql = f"INNER JOIN {bookmark_name} AS T ON Results.pose_id = T.pose_id"
-            where_sql = f"{column} IS NOT NULL"
-        elif self._is_candidates_table(bookmark_name):
-            join_sql = (
-                f"INNER JOIN {CANDIDATES_SUBQ} AS T ON Results.pose_id = T.pose_id"
-            )
-            where_sql = f"{column} IS NOT NULL"
-        else:
-            join_sql = ""
-            where_sql = f"{column} IS NOT NULL"
+        # Build filtered base subquery via QueryBuilder + _apply_table_filter.
+        # base_params is always [] — all filter conditions embed values as SQL literals.
+        base_q = self.QueryBuilder()
+        base_q.SELECT(column).FROM("Results")
+        if bookmark_name and bookmark_name.lower() != "results":
+            self._apply_table_filter(base_q, bookmark_name)
+        base_q.WHERE(f"{column} IS NOT NULL")
+        base_sql, base_params = base_q.build()
 
-        range_sql = f"SELECT MIN({column}), MAX({column}) FROM Results {join_sql} WHERE {where_sql}"
-        row = self.db_query(range_sql).fetchone()
+        row = self.db_query(
+            f"SELECT MIN({column}), MAX({column}) FROM ({base_sql}) sub", base_params
+        ).fetchone()
         if not row or row[0] is None:
             return [], []
         min_val, max_val = float(row[0]), float(row[1])
         if max_val == min_val:
             total = self.db_query(
-                f"SELECT COUNT(*) FROM Results {join_sql} WHERE {where_sql}"
+                f"SELECT COUNT(*) FROM ({base_sql}) sub", base_params
             ).fetchone()[0]
             return [min_val - 0.5, min_val + 0.5], [total]
         bin_width = (max_val - min_val) / num_bins
 
+        # Raw SQL kept for GROUP BY on computed column — avoids QueryBuilderDuck
+        # wrapping bin_idx in ANY_VALUE(), which breaks the aggregation.
         bin_sql = f"""
             SELECT
                 CAST(({column} - {min_val}) / {bin_width} AS INTEGER) AS bin_idx,
                 COUNT(*) AS cnt
-            FROM Results {join_sql}
-            WHERE {where_sql}
+            FROM ({base_sql}) sub
             GROUP BY bin_idx
             ORDER BY bin_idx
         """
-        rows = self.db_query(bin_sql).fetchall()
+        rows = self.db_query(bin_sql, base_params).fetchall()
 
         counts = [0] * num_bins
         for bin_idx, cnt in rows:
@@ -1373,21 +1332,12 @@ class StorageManager(ABC):
         if needs_ligands:
             query.JOIN(LIGANDS_SCHEMA.name, "L", "ligand_id")
 
-        if self.is_bookmark(table):
-            if include_status:
-                query.SELECT_STATUS()
-            query.IN_BOOKMARK(table)
-        elif self._is_statustable(table):
-            if include_status:
+        if include_status:
+            if self._is_statustable(table):
                 query.SELECT(f"'{table.lower()}' as status")
-            query.JOIN(table, "T", "pose_id")
-        elif self._is_candidates_table(table):
-            if include_status:
+            else:
                 query.SELECT_STATUS()
-            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
-        else:
-            if include_status:
-                query.SELECT_STATUS()
+        self._apply_table_filter(query, table)
 
         if length:
             query.LIMIT(length)
@@ -1536,12 +1486,7 @@ class StorageManager(ABC):
             II.rec_atom
         FROM Interaction_indices AS II
         JOIN Interactions AS I ON I.interaction_id=II.interaction_id
-        WHERE I.pose_id IN (
-            SELECT pose_id FROM filtered_poses 
-                WHERE filter_id = 
-                    (SELECT filter_id FROM Filters 
-                    WHERE name = '{bookmark_name}')
-                    );"""
+        WHERE I.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name)});"""
         # iterable of tuples
         interactions = self.db_query(query).fetchall()
         interactions_df = pd.DataFrame(
@@ -2269,6 +2214,24 @@ class StorageManager(ABC):
             list: column names in table schema
         """
         return list(TABLE_SCHEMAS[table.lower()].columns)
+
+    def _apply_table_filter(self, query: QueryBuilder, table: str) -> QueryBuilder:
+        """Apply the appropriate pose filter for bookmark, status table, or candidates table.
+
+        Args:
+            query (QueryBuilder): query to modify in-place
+            table (str): bookmark name, status table name, or candidates table name
+
+        Returns:
+            QueryBuilder: the same query, modified
+        """
+        if self.is_bookmark(table):
+            query.IN_BOOKMARK(table)
+        elif self._is_statustable(table):
+            query.JOIN(table, "T", "pose_id")
+        elif self._is_candidates_table(table):
+            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
+        return query
 
     def _is_statustable(self, table: str) -> bool:
         """
