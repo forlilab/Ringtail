@@ -42,7 +42,11 @@ from .outputmanager import OutputManager
 from .storagemanager import StorageManager
 from .storagemanager_duckdb import StorageManagerDuckDB, HAS_DUCK
 from .storagemanager_sqlite import StorageManagerSQLite, HAS_SQLITE
-from .parsers import process_docked_mol, VinaMoleculeSupplier, generate_interaction_tuples
+from .parsers import (
+    process_docked_mol,
+    VinaMoleculeSupplier,
+    generate_interaction_tuples,
+)
 
 storage_types = {}
 if HAS_SQLITE:
@@ -671,7 +675,7 @@ class RingtailCore:
         input_bookmark: str = None,
         return_iter: bool = False,
         ligand_name_file=None,
-    ) -> Union[tuple[int, str], iter]:
+    ) -> Union[tuple[int, str], list[tuple]]:
         """Prepare list of filters, then filters and writes all passing pose_ids to a bookmark of given name. Creates an output log text file of all ligand (or all poses, if requested) docking results that passes.
         If clustering is requested, it will first perform the filtering, then cluster, and create a new bookmark of name <bookmark_<cluster_type>_cluster> for each requested cluster type.
         In the case of clustering, the representative ligands will be the ones written to the output log.
@@ -713,7 +717,7 @@ class RingtailCore:
 
         Returns:
             tuple[int, str]: number of ligands passing filter and final bookmark name (may change if eg filtering and clustering)
-            iter (optional): an iterable of all of the filtering results
+            list (optional): an iterable of all of the filtering results
 
         """
 
@@ -1450,7 +1454,7 @@ class RingtailCore:
     # region utilities
 
     @_wrap_exceptions
-    def db_query(self, query: str, params=(), commit=False) -> Union[None, iter]:
+    def db_query(self, query: str, params=(), commit=False) -> list[tuple]:
         """
         Run a db query and return iterable if applicable
 
@@ -1459,7 +1463,7 @@ class RingtailCore:
             params (tuple, optional): parameters, assumes placehodlers in query
 
         Returns:
-            iter: if any
+            list[tuple]: query results
         """
         with self.storageman as sm:
             return sm.db_query(query, params, commit).fetchall()
@@ -1811,7 +1815,9 @@ class RingtailCore:
         with self.storageman as sm:
             # TODO this method is only used here, why not use different method, and why not needed in other method?
             pose_rows = sm.fetch_rdkit_pose_properties(pose_ids)
-            interactions_by_pose = sm.fetch_pose_interactions(pose_ids) if include_interactions else {}
+            interactions_by_pose = (
+                sm.fetch_pose_interactions(pose_ids) if include_interactions else {}
+            )
 
         result = []
         for (

@@ -608,7 +608,7 @@ class StorageManagerDuckDB(StorageManager):
         # check if interaction calcs have been started (and not completed)
         exists = bool(
             self.db_query(
-                f"""SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"""
+                f"""SELECT table_name FROM information_schema.tables WHERE table_name='{table_name}';"""
             ).fetchone()
         )
         if exists:
@@ -1481,7 +1481,7 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             OptionError
         """
-        if type(outfields) == str:
+        if isinstance(outfields, str):
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
         elif isinstance(outfields, Union[list, tuple]):
@@ -1725,7 +1725,7 @@ class StorageManagerDuckDB(StorageManager):
             lim_kw = "MAX"
         try:
             logger.debug(f"Generating percentile filter query for {column}")
-            # use duckdb internal method to calculate percentile, may differ slightly from sqlite manual calc
+            # use duckdb internal method to calculate percentile, may differ slightly from other manual calcs
             percentile_fraction = percentile / 100
             query = f"""
             SELECT quantile_disc(min_val, {percentile_fraction}) AS cutoff
@@ -1929,7 +1929,7 @@ class StorageManagerDuckDB(StorageManager):
         """
         self.db_query(f"""DETACH {new_db_alias};""")
 
-    def db_query(self, query, params: tuple = (), commit=False) -> iter:
+    def db_query(self, query, params: tuple = (), commit=False) -> duckdb.DuckDBPyConnection:
         """Executes provided duckdb query. Returns cursor for results.
             Since cursor remains open, added to list of open cursors
 

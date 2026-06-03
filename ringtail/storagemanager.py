@@ -17,8 +17,7 @@ from .util import db_alias_from_path
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
-from typing import Union, ClassVar
-import time
+from typing import Any, Union, ClassVar
 from importlib.metadata import version
 from .ringtailoptions import Filters, statuses
 from .exceptions import StorageError, OptionError, VersionError, MergeError
@@ -210,7 +209,7 @@ class StorageManager(ABC):
         # perform filtering
         logger.debug("Running filtering query...")
         time0 = time.perf_counter()
-        if input_bookmark == None:
+        if input_bookmark is None:
             input_bookmark = "Results"
 
         self._populate_filter_tables(
@@ -338,19 +337,21 @@ class StorageManager(ABC):
         logger.info(f"Bookmark '{old_name}' renamed to '{new_name}'.")
 
     def get_maxmiss_union(
-        self, total_combinations: int, bookmark_name: str, all_filters={}
-    ):
+        self, total_combinations: int, bookmark_name: str, all_filters=None
+    ) -> tuple[int, str]:
         """
         Get results that are in union considering max miss
 
         Args:
             total_combinations (int): numer of possible combinations
             bookmark_name (str): name of bookmark to store
-            all_filters (dict, optional): All filters used. Defaults to {}.
+            all_filters (dict, optional): All filters used. Defaults to None.
 
         Returns:
-            iter: of passing results
+            int: num passing poses
+            str: union bookmark name
         """
+        all_filters = all_filters or {}
         enumerated_bookmarks = []
         existing_bookmarks = self.get_all_bookmark_names()
         for i in range(total_combinations):
@@ -384,7 +385,7 @@ class StorageManager(ABC):
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
         store_best_pose: bool = False,
-        alternative_database_names: dict = {},
+        alternative_database_names: dict = None,
     ) -> tuple[int, dict, dict]:
         """
         Method to cross reference two or more databases. Will attach all other databases
@@ -409,6 +410,7 @@ class StorageManager(ABC):
             dict: {db_file: new_bookmark_name,}
             dict: "filter" {"wanted":[list of wanted dbs],"unwanted":[list of unwanted dbs]
         """
+        alternative_database_names = alternative_database_names or {}
         processed_wanted = []
         for index, database in enumerate(wanted_dbs):
             if index == 0:
@@ -545,7 +547,7 @@ class StorageManager(ABC):
         for _, file, bookmark in processed_wanted + processed_unwanted:
             dbs_new_bookmark_names.update({file: f"{bookmark_prefix}_{bookmark}"})
 
-            return (len(approved_ligand_names), dbs_new_bookmark_names, filter_dict)
+        return (len(approved_ligand_names), dbs_new_bookmark_names, filter_dict)
 
     def cluster_data(
         self,
@@ -625,7 +627,7 @@ class StorageManager(ABC):
             str(cutoff),
             internal_name,
         )
-        if type(cluster_bookmark_name) == tuple:
+        if isinstance(cluster_bookmark_name, tuple):
             logger.info("Clustering has been ran before, old bookmark will be used.")
             num_clusters = cluster_bookmark_name[1]
             cluster_bookmark_name = cluster_bookmark_name[0]
@@ -892,12 +894,11 @@ class StorageManager(ABC):
         Returns:
             str: sql string that describes selection of data from bookmark
         """
-        if selection != "*":
-            outfields_list = self._format_output_fields(selection, "R", "L")
-        elif selection == "*":
+        if selection == "*":
             raise OptionError(
                 "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
             )
+        outfields_list = self._format_output_fields(selection, "R", "L")
         # start formatting write query
         query = self.QueryBuilder()
         # select stuff from results where pose id in filter poses join ligands for extra fields
@@ -938,10 +939,10 @@ class StorageManager(ABC):
 
     def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
         """
-        Will return data requested in an duckdb formatted query
+        Will return data requested in an SQL-formatted query
 
         Args:
-            query (str): sql query formatted to duckdb database
+            query (str): SQL-formatted query string
 
         Returns:
             tuple[list[str], list[dict]]: list of column names, and list of dicts where each dict is one row,
@@ -1204,7 +1205,7 @@ class StorageManager(ABC):
 
     def fetch_data_for_passing_results(
         self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
-    ) -> iter:
+    ) -> Any:
         """Will return cursor with requested data for outfields for poses that passed filter in bookmark_name
 
         Args:
@@ -1213,7 +1214,7 @@ class StorageManager(ABC):
             order_results (str, optional): if ordering by a column. Defaults to None.
 
         Returns:
-            iter: cursor of data from passing data
+            Any: cursor of data from passing data
 
         Raises:
             OptionError
@@ -1283,9 +1284,9 @@ class StorageManager(ABC):
         Returns:
             tuple: (flexible_residues, flexres_atomnames)
         """
-        if type(receptor) == int:
+        if isinstance(receptor, int):
             selection = "receptor_id = ?"
-        elif type(receptor) == str:
+        elif isinstance(receptor, str):
             selection = "recname = ?"
         query = self.QueryBuilder()
         query.SELECT("flexible_residues", "flexres_atomnames").FROM("Receptors").WHERE(
@@ -1798,7 +1799,7 @@ class StorageManager(ABC):
         ...
 
     def update_database_version(self, new_version: str, backup=False):
-        """Updates sqlite database schema from older versions to new_version.
+        """Updates database schema from older versions to new_version.
 
         Args:
             new_version (str): target version string, e.g. "3.0.0"
@@ -1807,20 +1808,20 @@ class StorageManager(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def db_query(self, query: str, params: iter) -> iter:
-        """Executes provided sql query. Returns iter for results.
+    def db_query(self, query: str, params: tuple = ()) -> Any:
+        """Executes provided sql query. Returns cursor for results.
 
         Args:
             query (str): Formated sql query as string
-            params (iter): parameters to be used in query (assumes query as appropriate place holders)
+            params (tuple): parameters to be used in query (assumes query as appropriate place holders)
 
         Returns:
-            iter: Contains results of query
+            Any: cursor containing results of query
         """
         ...
 
     @abstractmethod
-    def db_update(self, query: str, parameters: list[tuple], commit=True) -> iter:
+    def db_update(self, query: str, parameters: list[tuple], commit=True) -> None:
         """
         A db query that uses executemany
 
@@ -1832,9 +1833,6 @@ class StorageManager(ABC):
         Raises:
             OptionError
             DatabaseInsertionError
-
-        Returns:
-            iter: if requesting return value(s)
         """
         ...
 
@@ -2763,7 +2761,7 @@ class StorageManager(ABC):
         else:
             return include_interactions, exclude_interactions
 
-    def _get_interaction_indices(self, interaction_list: list) -> iter:
+    def _get_interaction_indices(self, interaction_list: list) -> list[tuple]:
         """takes list of interaction info and looks up corresponding interaction index
 
         Args:
@@ -2772,7 +2770,7 @@ class StorageManager(ABC):
                 <rec_resid>, <rec_atom>]
 
         Returns:
-            iter: sqlite cursor with the interaction index/indices
+            list[tuple]: list of tuples with the interaction index/indices
         """
         interaction_info = [
             "interaction_type",

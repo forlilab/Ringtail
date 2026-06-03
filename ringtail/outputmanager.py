@@ -4,6 +4,7 @@
 # Ringtail output manager
 #
 
+from collections.abc import Iterable
 from .exceptions import OutputError
 from .ringtailoptions import Filters
 import os
@@ -76,7 +77,7 @@ class OutputManager:
             self._log_file = None
             self._log_open = False
 
-    def write_filter_results_in_log(self, lines):
+    def write_filter_results_in_log(self, lines: Iterable[tuple]):
         """Writes lines from results iterable into log file
 
         Args:

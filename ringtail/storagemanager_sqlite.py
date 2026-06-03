@@ -268,11 +268,11 @@ class StorageManagerSQLite(StorageManager):
             SELECT M.pose_id, II.interaction_id
             FROM Interactions_temp IT
             JOIN pose_map M
-                ON IT.ligname = L.ligname
-                AND IT.pose_rank = M.pose_rank
+                ON IT.pose_rank = M.pose_rank
                 AND IT.run_number = M.run_number
             JOIN Ligands L
                 ON M.ligand_id = L.ligand_id
+                AND IT.ligname = L.ligname
             JOIN Interaction_indices II
                 ON II.interaction_type = IT.interaction_type
                 AND II.rec_chain = IT.rec_chain
@@ -1393,7 +1393,7 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             OptionError
         """
-        if type(outfields) == str:
+        if isinstance(outfields, str):
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
         elif isinstance(outfields, Union[list, tuple]):
@@ -2304,12 +2304,12 @@ class StorageManagerSQLite(StorageManager):
             logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
             return new_db_alias
 
-    def _check_attached(self) -> iter:
+    def _check_attached(self) -> list[tuple]:
         """
         Check what databases are attached
 
         Returns:
-            iter: attached database names
+            list[tuple]: attached database names
         """
         return self.db_query("PRAGMA database_list;").fetchall()
 

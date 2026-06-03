@@ -23,9 +23,9 @@ class MorganFingerprintCluster:
 
     def __init__(
         self,
-        unclustered_items: iter,
-        rating_data: iter,
-        rdmols: iter,
+        unclustered_items: list,
+        rating_data: list,
+        rdmols: list,
         cutoff_distance: float = 0.5,
     ):
         self.unclustered_items = unclustered_items
@@ -88,8 +88,8 @@ class InteractionBitvectorCluster:
 
     def __init__(
         self,
-        unclustered_items: iter,
-        rating_data: iter,
+        unclustered_items: list,
+        rating_data: list,
         bitvectors: dict,
         cutoff_distance: float = 0.5,
     ):
