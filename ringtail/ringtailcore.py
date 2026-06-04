@@ -7,6 +7,7 @@ import itertools
 import glob
 import os
 from typing import Callable, Union
+from dataclasses import dataclass
 import functools
 from collections.abc import Iterable
 import json
@@ -37,7 +38,7 @@ from .exceptions import (
     RingtailError,
 )
 from .mpmanager import MPManager
-from .receptormanager import ReceptorManager
+from .receptormanager import ReceptorManager, ReceptorData
 from .outputmanager import OutputManager
 from .storagemanager import StorageManager
 from .storagemanager_duckdb import StorageManagerDuckDB, HAS_DUCK
@@ -282,17 +283,7 @@ class RingtailCore:
                 logger.debug(
                     "No receptor file path provided, attempting to load receptor string from database"
                 )
-                # try pdbqt first
-                receptor_data = self.get_receptor_object()
-                results.receptor_string = receptor_data[1]
-                if not results.receptor_string:
-                    # if fail, try json
-                    try:
-                        results.receptor_string = receptor_data[2]
-                    except IndexError:
-                        raise ResultsProcessingError(
-                            "Trying to calculate interactions, but cannot find the receptor in the database. Please ensure to include the receptor_file and save_receptor if the receptor has not already been added to the database."
-                        )
+                results.receptor_string = self.get_receptor_object().receptor_string()
                 if results.receptor_string:
                     logger.debug(
                         f"Receptor string loaded from database (length={len(results.receptor_string)})"
@@ -353,7 +344,7 @@ class RingtailCore:
         elif not isinstance(results, Iterable):
             results = [results]
 
-        receptor_string = receptor_string or self.get_receptor_representation()
+        receptor_string = receptor_string or self.get_receptor_object().receptor_string()
         interaction_finder = (
             make_interaction_finder(receptor_string, interaction_cutoffs)
             if calculate_interactions
@@ -411,7 +402,7 @@ class RingtailCore:
         if not isinstance(mols, Iterable):
             mols = [mols]
 
-        receptor_string = receptor_string or self.get_receptor_representation()
+        receptor_string = receptor_string or self.get_receptor_object().receptor_string()
         interaction_finder = (
             make_interaction_finder(receptor_string, interaction_cutoffs)
             if calculate_interactions
@@ -461,7 +452,7 @@ class RingtailCore:
             if ".json" in extensions:
                 receptor_name, receptor_jsons = self._process_receptor_polymer(receptor)
             elif ".pdbqt" in extensions:
-                receptor_name, receptor_blob = self._process_receptor_pdbqt(receptor)
+                receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(receptor)
         else:
             from meeko import Polymer
 
@@ -475,21 +466,18 @@ class RingtailCore:
                 )
 
         # check if db has receptor added
-        db_name, db_blob, db_jsons = self.get_receptor_object()
-        if db_name:
-            # make all checks if it is possible to add the requested receptor data
-            if receptor_name != db_name:
+        existing = self.get_receptor_object()
+        if existing.name:
+            if receptor_name != existing.name:
                 raise OptionError(
                     "You attempted to add a receptor to a database that already has a receptor in it, and they do not appear to be the same receptor."
                 )
-            # if trying to add blob and there is blob, return
-            if receptor_blob and db_blob:
+            if receptor_blob and existing.blob_str:
                 logger.warning(
                     "The Receptors table already has a .pdbqt blob present, will not add another."
                 )
                 return
-            # if trying to add polymer json and there is polymer json, return
-            if receptor_jsons and db_jsons:
+            if receptor_jsons and existing.polymer_json:
                 logger.warning(
                     "The Receptors table already has a polymer json string present, will not add another."
                 )
@@ -552,7 +540,7 @@ class RingtailCore:
 
         # get receptor representation
         if not receptor_string:
-            receptor_string = self.get_receptor_representation()
+            receptor_string = self.get_receptor_object().receptor_string()
 
         # accounting
         db_commit_counter = 0
@@ -1030,7 +1018,7 @@ class RingtailCore:
         bookmark_name = bookmark_name.lower() if bookmark_name else None
         # check database if polymer not provided, else error
         if not receptor_polymer:
-            _, _, polymer_string = self.get_receptor_object()
+            polymer_string = self.get_receptor_object().polymer_json
             if not polymer_string:
                 raise OptionError(
                     "No receptor polymer provided and no polymer found in the database. Cannot create flexres PDBs."
@@ -1069,7 +1057,7 @@ class RingtailCore:
                     ext = ".pdb"
                 path = f"{root}_{ligand}{ext}"
             else:
-                receptor_name, _, _ = self.get_receptor_object()
+                receptor_name = self.get_receptor_object().name
                 path = f"{receptor_name}_{ligand}.pdb"
 
             pdb_parts = []
@@ -1292,14 +1280,13 @@ class RingtailCore:
         """
         Export receptor in database to pdbqt
         """
-        recname, recstr, recjson = self.get_receptor_object()
+        rec = self.get_receptor_object()
+        recname = rec.name
+        recstr = rec.pdbqt_str()
         if recstr is None:
-            if recjson:
-                recstr = ReceptorManager.polymer_json2pdbqt_str(recjson)
-            else:
-                raise OptionError(
-                    f"No receptor data stored for {recname}. Export failed."
-                )
+            raise OptionError(
+                f"No receptor data stored for {recname}. Export failed."
+            )
         output_manager = OutputManager()
         output_manager.write_receptor_pdbqt(recname, recstr)
 
@@ -1407,47 +1394,22 @@ class RingtailCore:
         return db_alias_from_path(db_path)
 
     @_wrap_exceptions
-    def get_receptor_representation(self) -> str:
-        """
-        Returns -a- representation of the receptor that exists in the database, defaulting to receptor_blob.pdbqt
-        but will use json of pdbqt data is not there (and polymer data is)
-
-        Returns:
-            str: _description_
-        """
-        with self.storageman as sm:
-            rec_data = sm.fetch_receptor_object()
-            if receptor_blob := rec_data.get("receptor_object"):
-                return ReceptorManager.blob2str(receptor_blob)
-            elif polymer_json := rec_data.get("polymer"):
-                return polymer_json
-
     @_wrap_exceptions
-    def get_receptor_object(self, as_pdbqt_str_only: bool = False) -> tuple:
-        """
-        Gets the receptor object from the database
-
-        Args:
-            as_pdbqt_str_only (bool, optional): if json is in db, return it as pdbqt str instead of json string. Defaults to False.
+    def get_receptor_object(self) -> ReceptorData:
+        """Gets the receptor data from the database.
 
         Returns:
-            tuple[str,str, str]: receptor name and receptor blob and receptor serialized polymer as strings
+            ReceptorData: receptor name, pdbqt blob string, and polymer JSON string.
+                Each field may be None if not stored. Use receptor_string() for
+                interaction calculation or pdbqt_str() for pdbqt file export.
         """
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
-            polymer_json = rec_data.get("polymer")
-            if as_pdbqt_str_only and polymer_json:
-                polymer = ReceptorManager.polymer_json2pdbqt_str(polymer_json)
-            else:
-                polymer = polymer_json
-            if rec_data is not None:
-                return (
-                    rec_data.get("recname"),
-                    ReceptorManager.blob2str(rec_data.get("receptor_object")),
-                    polymer,
-                )
-            else:
-                return None, None, None
+            return ReceptorData(
+                name=rec_data.get("recname"),
+                blob_str=ReceptorManager.blob2str(rec_data.get("receptor_object")),
+                polymer_json=rec_data.get("polymer"),
+            )
 
     # endregion
 
@@ -2335,19 +2297,6 @@ class RingtailCore:
                     "The provided input for receptor_polymer is not a valid path or valid JSON, cannot proceed."
                 )
         return receptor_name, polymer_string
-
-    def _process_receptor_pdbqt(self, receptor_file: str) -> tuple[str, bytes]:
-        """
-        Makes dict of rec name and receptor blob from pdbqt file (can be zipped)
-
-        Args:
-            receptor_file (str): pdbqt file
-
-        Returns:
-            tuple[str, bytes]: receptor name and bytes/blob object
-        """
-        receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(receptor_file)
-        return receptor_name, receptor_blob
 
     def _generate_interaction_combinations(self, filters: dict, max_miss: int) -> list:
         """Recursive function to list of tuples of possible interaction filter combinations, excluding up to max_miss interactions per filtering round

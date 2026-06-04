@@ -513,9 +513,9 @@ class TestVinaHandling:
             save_receptor=True,
         )
         receptor_items = tmp_db.get_receptor_object()
-        assert receptor_items[0] == "receptor"
-        assert not receptor_items[1]
-        assert receptor_items[2] is not None
+        assert receptor_items.name == "receptor"
+        assert not receptor_items.blob_str
+        assert receptor_items.polymer_json is not None
 
     def test_write_flexres_pdb(self, tmp_db, tmp_path):
         pytest.importorskip("meeko")

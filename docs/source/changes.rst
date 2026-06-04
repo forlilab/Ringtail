@@ -59,7 +59,7 @@ Enhancements to the codebase
 * `write_molecule_sdfs` method argument `write_nonpassing` has been discontinued, and `ligname` (string or list of strings) has been added. It is assumed that if a `bookmark_name` is provided, only passing poses of each ligand will be written to an SD file. If no `bookmark_name` is provided, each pose of each ligand is written to the SDF.  
 * The method `export_csv` has been broken into three distinct methods, `export_columns_as_csv` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, `export_table_as_csv` where an entire table is exported, and `export_sql_as_csv` where the user specifies a properly formatted SQL prompt
 * The method `export_bookmark_db` 
-* Status selection enabled using `set_ligand_status` API, three new tables included: Accepted, Maybe, Rejected
+* Status selection enabled using `update_pose_status` API, three new tables included: Accepted/1, Maybe/2, Rejected/3 or 0 to remove status
 * The method `drop_bookmark` is now `delete_bookmark`
 * New method `get_bookmark_interactions` to get interaction data from a bookmark
 * Several new APIs to support the GUI, generally not useful outside the GUI
@@ -77,6 +77,7 @@ Changes to code behavior
 * Ringtail bookmarks from e.g., filtering clustering were previously created as database views, which appear as tables that are unrealized until viewing them. This has been replaced by a `Filters` table which holds filter information (previous equivalent was `Bookmarks` table) and the poses passing a given filter are stored in a tall-skinny table `Filtered_poses`. A significant speed increase was enabled by this move, and any other behavior related to bookmarks is the same. 
 * The following columns have been removed from the Ligands table (information now stored in the binary rdkit Mol): `atom_index_map`, `hydrogen_parents`, and `input_model`.
 * `create_rdkit_mol` now `create_rdkit_mols` and supports more efficient database fetching of binary rdkit write_molecule_sdfs
+* The API `find_similar_ligads` has been replaced by `fetch_cluster_options` and `fetch_clustered_similars`, respectively, and the command line interface moved to `rt_process_vs`
 
 Bug fixes
 ===========

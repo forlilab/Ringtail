@@ -333,6 +333,7 @@ LIGANDS_ONLY_COLS = set(LIGANDS_SCHEMA.columns) - set(RESULTS_SCHEMA.columns)
 
 # Table of comments from e.g., visual inspection
 POSE_COMMENTS_SCHEMA = TableSchema(
+    name="Pose_comments",
     columns={
         "pose_id": Column(
             "INTEGER", "pose", primary_key=True, foreign_key="Results.pose_id"

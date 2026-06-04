@@ -1086,9 +1086,10 @@ class StorageManager(ABC):
             tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
         """
 
-        if column not in RESULTS_NUMERIC_COLS:
+        col_spec = RESULTS_SCHEMA.columns.get(column)
+        if col_spec is None or col_spec.sql_type not in NUMERIC_TYPES:
             raise OptionError(
-                f"Requested column {column} in not numeric, percentiles cannot be calcualted."
+                f"Requested column {column} is not a numeric Results column, percentiles cannot be calculated."
             )
         query = self.QueryBuilder()
         query.SELECT(f"{column}").FROM("Results")
@@ -1117,8 +1118,9 @@ class StorageManager(ABC):
         Returns:
             tuple[list[float], list[int]]: bin_edges and per-bin counts
         """
-        if column not in NUMERIC_TYPES:
-            raise OptionError(f"Column {column} is not numeric")
+        col_spec = RESULTS_SCHEMA.columns.get(column)
+        if col_spec is None or col_spec.sql_type not in NUMERIC_TYPES:
+            raise OptionError(f"Column {column} is not a numeric Results column")
 
         # Build filtered base subquery via QueryBuilder + _apply_table_filter.
         # base_params is always [] — all filter conditions embed values as SQL literals.

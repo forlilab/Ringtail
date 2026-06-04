@@ -5,6 +5,7 @@
 #
 
 import gzip
+from dataclasses import dataclass
 from .logutils import get_logger
 
 logger = get_logger(__name__)
@@ -100,3 +101,30 @@ class ReceptorManager:
             dict: dict repr of the pdbqt string
         """
         return ReceptorManager._parse_polymer_json(polymer_json)[1]
+
+
+@dataclass(frozen=True)
+class ReceptorData:
+    """Receptor data retrieved from the database.
+
+    A receptor may be stored as a pdbqt blob (blob_str), a meeko polymer JSON
+    string (polymer_json), or both. Use the accessor methods to get the right
+    representation for each use case rather than reading fields directly.
+    """
+
+    name: str | None
+    blob_str: str | None
+    polymer_json: str | None
+
+    def receptor_string(self) -> str | None:
+        """String for interaction calculation: pdbqt blob str preferred, else polymer JSON.
+        Both formats are accepted by meeko-based interaction finders."""
+        return self.blob_str or self.polymer_json
+
+    def pdbqt_str(self) -> str | None:
+        """Pdbqt-format string, converting polymer JSON if needed. Use for .pdbqt file export."""
+        if self.blob_str:
+            return self.blob_str
+        if self.polymer_json:
+            return ReceptorManager.polymer_json2pdbqt_str(self.polymer_json)
+        return None
