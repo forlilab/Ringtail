@@ -13,7 +13,7 @@ import pandas as pd
 from .logutils import get_logger
 
 logger = get_logger(__name__)
-from .util import db_alias_from_path
+from .util import db_alias_from_path, numlist2str
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
@@ -2301,6 +2301,7 @@ class StorageManager(ABC):
         numerical_filters = []
         interaction_filters = []
         ligand_filters = {}
+        max_miss = 0
         energy_filter_col_name = {
             "eworst": "docking_score",
             "ebest": "docking_score",
@@ -2405,6 +2406,115 @@ class StorageManager(ABC):
         if len(ligand_filters) > 0:
             processed_filters["lig_filters"] = ligand_filters
         return processed_filters
+
+    def _generate_result_filtering_query(
+        self, filters_dict: dict, bookmark_name: str, input_bookmark: str = None
+    ) -> str:
+        """Takes dict of filters, writes SQL filtering string.
+
+        Each filter type becomes an independent WHERE condition combined with AND:
+        - Numerical: direct column conditions on Results
+        - Include interactions: pose_id IN (GROUP BY/HAVING subquery)
+        - Exclude interactions: pose_id NOT IN (simple subquery)
+        - Ligand name: ligand_id IN (Ligands subquery)
+        - RDKit (substruct/position/atoms): in-memory post-filter
+
+        Args:
+            filters_dict (dict): Keys and value formats must match Filters class
+            bookmark_name (str): Name of bookmark to which passing poses are saved
+            input_bookmark (str, optional): Filter over pre-filtered data instead of entire database
+
+        Returns:
+            str: SQL query returning pose_ids of passing results
+        """
+        filtering_window = "Results"
+
+        if input_bookmark is not None:
+            if input_bookmark == bookmark_name:
+                logger.error(
+                    f"Specified 'input_bookmark' and 'bookmark_name' are the same: {bookmark_name}"
+                )
+                raise OptionError(
+                    "'input_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
+                )
+            if (
+                filters_dict["score_percentile"] is not None
+                or filters_dict["le_percentile"] is not None
+            ):
+                raise OptionError(
+                    "Cannot use 'score_percentile' or 'le_percentile' with 'input_bookmark'."
+                )
+            if self.is_bookmark(input_bookmark):
+                filtering_window = f"(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(input_bookmark)}))"
+            elif self._is_statustable(input_bookmark):
+                filtering_window = f"(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {input_bookmark}))"
+
+        processed_filters = self._process_filters_for_query(filters_dict)
+        if not processed_filters:
+            raise OptionError("No filters were provided, cannot filter.")
+
+        where_conditions = []
+        lig_filters = {}
+        rdkit_query = False
+
+        if "num_filters" in processed_filters:
+            where_conditions.append(
+                " AND ".join(f"R.{f}" for f in processed_filters["num_filters"])
+            )
+
+        if "int_filters" in processed_filters:
+            include_interactions, exclude_interactions = (
+                self._prepare_interaction_indices_for_filtering(
+                    interaction_list=processed_filters["int_filters"]
+                )
+            )
+            if include_interactions:
+                where_conditions.append(
+                    f"R.pose_id IN ({self._build_include_interaction_subquery(include_interactions, processed_filters['max_miss'])})"
+                )
+            if exclude_interactions:
+                where_conditions.append(
+                    f"R.pose_id NOT IN ({self._build_exclude_interaction_subquery(exclude_interactions)})"
+                )
+
+        if "lig_filters" in processed_filters:
+            lig_filters = processed_filters["lig_filters"]
+            ligname_query = ""
+            if "ligand_name" in lig_filters:
+                lig_names = lig_filters.pop("ligand_name")
+                ligname_query = "SELECT ligand_id FROM Ligands WHERE " + " OR ".join(
+                    f"ligname LIKE '%{ligname}%'" for ligname in lig_names if ligname
+                )
+            elif "ligand_name_file" in lig_filters:
+                csv_path = lig_filters.pop("ligand_name_file")
+                self._create_ligname_temp_table(csv_path)
+                ligname_query = "SELECT ligand_id FROM Ligands JOIN tmp_lignames ON ligname = tmp_lignames.ligandname"
+            if ligname_query:
+                where_conditions.append(f"R.ligand_id IN ({ligname_query})")
+            if lig_filters:
+                rdkit_query = True
+
+        if rdkit_query:
+            rdkit_partial = f" FROM {filtering_window} R JOIN Ligands ON Ligands.ligand_id = R.ligand_id"
+            if where_conditions:
+                rdkit_partial += f" WHERE {' AND '.join(where_conditions)}"
+            passing_pose_ids = [
+                pid
+                for poseids in self._perform_rdkit_filtering(
+                    rdkit_partial, lig_filters
+                ).values()
+                for pid in poseids
+            ]
+            where_conditions = [
+                f"R.pose_id IN ({','.join(map(str, passing_pose_ids))})"
+            ]
+
+        where_sql = (
+            f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
+        )
+        return (
+            f"SELECT R.pose_id FROM {filtering_window} R {where_sql} ORDER BY R.pose_id"
+        )
 
     def _perform_rdkit_filtering(
         self, partial_query: str, ligand_filters: dict
@@ -2723,6 +2833,51 @@ class StorageManager(ABC):
             )
         else:
             return include_interactions, exclude_interactions
+
+    def _build_include_interaction_subquery(
+        self, include_groups: list, max_miss: int
+    ) -> str:
+        """Build a subquery returning pose_ids that satisfy at least (n_groups - max_miss)
+        of the required interaction groups. Wildcards within a group are collapsed to a
+        single count via CASE group numbering.
+
+        Args:
+            include_groups (list[list[int]]): each inner list is a group of interaction_ids
+                that satisfy one required interaction (multiple IDs arise from wildcard matches)
+            max_miss (int): number of groups a pose is allowed to miss
+
+        Returns:
+            str: SQL subquery returning qualifying pose_ids
+        """
+        all_ids = [iid for group in include_groups for iid in group]
+        case_clauses = " ".join(
+            f"WHEN interaction_id IN ({numlist2str(group, ',')}) THEN {i + 1}"
+            for i, group in enumerate(include_groups)
+        )
+        n_required = len(include_groups) - max_miss
+        return (
+            f"SELECT pose_id FROM Interactions "
+            f"WHERE interaction_id IN ({numlist2str(all_ids, ',')}) "
+            f"GROUP BY pose_id "
+            f"HAVING COUNT(DISTINCT CASE {case_clauses} END) >= {n_required}"
+        )
+
+    def _build_exclude_interaction_subquery(self, exclude_groups: list) -> str:
+        """Build a subquery returning pose_ids that have any of the excluded interactions.
+        Used as NOT IN to reject poses with forbidden interactions.
+
+        Args:
+            exclude_groups (list[list[int]]): each inner list is a group of interaction_ids
+                for one forbidden interaction (multiple IDs from wildcard matches)
+
+        Returns:
+            str: SQL subquery returning pose_ids to exclude
+        """
+        all_ids = [iid for group in exclude_groups for iid in group]
+        return (
+            f"SELECT DISTINCT pose_id FROM Interactions "
+            f"WHERE interaction_id IN ({numlist2str(all_ids, ',')})"
+        )
 
     def _get_interaction_indices(self, interaction_list: list) -> list[tuple]:
         """takes list of interaction info and looks up corresponding interaction index
@@ -3048,11 +3203,6 @@ class StorageManager(ABC):
         """
         pass
 
-    def _generate_result_filtering_query(
-        self, filters_dict, bookmark_name, input_bookmark
-    ):
-        raise NotImplementedError
-
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         """Make query for percentile by calculating energy or leff cutoff
 
@@ -3122,18 +3272,43 @@ class StorageManager(ABC):
 
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
-    ) -> str:
+    ) -> list:
         """Handles string or list input of column names to be outputted, will make sure ligname
         is in the list, and make sure all options are valid
 
         Returns:
-            list: column names for which the data is to be displayed that needs formatting with table alias
-                for which table they belong to
+            list: column names formatted with table aliases
 
         Raises:
             OptionError
         """
-        raise NotImplementedError
+        if isinstance(outfields, str):
+            outfields = outfields.replace(" ", "")
+            outfields_list = outfields.split(",")
+        elif isinstance(outfields, (list, tuple)):
+            outfields_list = list(outfields)
+        else:
+            logger.warning(
+                "The provided outfields is not in a usable format (string or list). Will only use ligname"
+            )
+            outfields_list = []
+        if "ligname" not in [field.lower() for field in outfields_list]:
+            outfields_list.insert(0, "ligname")
+        possible_columns, table_formatted_columns = self._get_possible_output_columns()
+        table_formatted_outfields = []
+        for outfield in outfields_list:
+            if outfield.lower() in possible_columns:
+                table_formatted_outfields.append(
+                    table_formatted_columns[possible_columns.index(outfield.lower())]
+                )
+            else:
+                logger.warning(
+                    f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
+                )
+        return [
+            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
+            for outfield in table_formatted_outfields
+        ]
 
     def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
         """Attaches new database file to current database
