@@ -723,6 +723,13 @@ class StorageManagerDuckDB(StorageManager):
         # create new tables to keep track of merger
         self._create_merge_tables()
         # delete incompatible tables and sequences for main db
+        self.remove_nonresults_tables()
+        # sync sequences to current max values, critical for databases
+        # created via export_bookmark_db where data was inserted with
+        # explicit IDs but sequences were initialized starting at 1
+        self._sync_auto_increment_state()
+
+    def remove_nonresults_tables(self):
         self._delete_table(POSE_CLUSTERS_SCHEMA.name)
         self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
         self.db_query("DROP SEQUENCE IF EXISTS seq_clusterid;")
@@ -730,10 +737,10 @@ class StorageManagerDuckDB(StorageManager):
         self._delete_table(FILTERED_POSES_SCHEMA.name)
         self._delete_table(FILTERS_SCHEMA.name)
         self.db_query("DROP SEQUENCE IF EXISTS seq_filterid;")
-        # sync sequences to current max values, critical for databases
-        # created via export_bookmark_db where data was inserted with
-        # explicit IDs but sequences were initialized starting at 1
-        self._sync_auto_increment_state()
+        self._delete_table("Accepted")
+        self._delete_table("Maybe")
+        self._delete_table("Rejected")
+        self._delete_table("Pose_comments")
 
     def _get_merge_id(self, mergingdb_path: str) -> int:
         """

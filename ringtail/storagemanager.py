@@ -1589,6 +1589,18 @@ class StorageManager(ABC):
         self.db_update("DELETE FROM Maybe WHERE pose_id = ?;", pose_ids, commit=False)
         self.db_update("DELETE FROM Rejected WHERE pose_id = ?;", pose_ids, commit=True)
 
+    def get_candidate_lignames(self) -> list[str]:
+        """
+        #TODO doc string
+
+        Returns:
+            list[str]: _description_
+        """
+        sql = """SELECT DISTINCT ligname FROM Ligands JOIN Results ON Ligands.ligand_id = Results.ligand_id WHERE Results.pose_id IN ({0});""".format(
+            CANDIDATES_SUBQ
+        )
+        return [row[0] for row in self.db_query(sql).fetchall()]
+
     def prepare_column_export_query(
         self, columns: dict[str, str], bookmark: str
     ) -> str:
@@ -1787,6 +1799,13 @@ class StorageManager(ABC):
     def prepare_for_merging(self):
         """
         Prepares the database for merging
+        """
+        ...
+
+    @abstractmethod
+    def remove_nonresults_tables(self):
+        """
+        Deletes non results tables for filtering, clustering, gui tables
         """
         ...
 

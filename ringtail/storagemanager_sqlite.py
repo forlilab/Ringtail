@@ -31,6 +31,11 @@ from .schema import (
     MERGED_TABLES_SCHEMA,
     PK_CONVERSIONS_SCHEMA,
     LIGANDS_SCHEMA,
+    FILTERS_SCHEMA,
+    FILTERED_POSES_SCHEMA,
+    CLUSTERS_SCHEMA,
+    CLUSTER_GROUPS_SCHEMA,
+    POSE_CLUSTERS_SCHEMA,
 )
 
 try:
@@ -672,11 +677,7 @@ class StorageManagerSQLite(StorageManager):
         # create new tables to keep track of merger
         self._create_merge_tables()
         # delete incompatible tables and sequences for main db
-        self._delete_table("Pose_clusters")
-        self._delete_table("Cluster_groups")
-        self._delete_table("Clusters")
-        self._delete_table("Filtered_poses")
-        self._delete_table("Filters")
+        self.remove_nonresults_tables()
         # Drop user-created indices on tables that grow during merge
         for table in ("Results", "Interactions"):
             indices = self.db_query(
@@ -684,6 +685,18 @@ class StorageManagerSQLite(StorageManager):
             ).fetchall()
             for (index_name,) in indices:
                 self.db_query(f"DROP INDEX IF EXISTS {index_name}")
+
+    def remove_nonresults_tables(self):
+        # TODO add pose comment table, status tables
+        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
+        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
+        self._delete_table(CLUSTERS_SCHEMA.name)
+        self._delete_table(FILTERED_POSES_SCHEMA.name)
+        self._delete_table(FILTERS_SCHEMA.name)
+        self._delete_table("Accepted")
+        self._delete_table("Maybe")
+        self._delete_table("Rejected")
+        self._delete_table("Pose_comments")
 
     def _merging_receptors_compatible(self) -> bool:
         """

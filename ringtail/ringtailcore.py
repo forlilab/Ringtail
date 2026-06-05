@@ -344,7 +344,9 @@ class RingtailCore:
         elif not isinstance(results, Iterable):
             results = [results]
 
-        receptor_string = receptor_string or self.get_receptor_object().receptor_string()
+        receptor_string = (
+            receptor_string or self.get_receptor_object().receptor_string()
+        )
         interaction_finder = (
             make_interaction_finder(receptor_string, interaction_cutoffs)
             if calculate_interactions
@@ -402,7 +404,9 @@ class RingtailCore:
         if not isinstance(mols, Iterable):
             mols = [mols]
 
-        receptor_string = receptor_string or self.get_receptor_object().receptor_string()
+        receptor_string = (
+            receptor_string or self.get_receptor_object().receptor_string()
+        )
         interaction_finder = (
             make_interaction_finder(receptor_string, interaction_cutoffs)
             if calculate_interactions
@@ -452,7 +456,9 @@ class RingtailCore:
             if ".json" in extensions:
                 receptor_name, receptor_jsons = self._process_receptor_polymer(receptor)
             elif ".pdbqt" in extensions:
-                receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(receptor)
+                receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(
+                    receptor
+                )
         else:
             from meeko import Polymer
 
@@ -1284,9 +1290,7 @@ class RingtailCore:
         recname = rec.name
         recstr = rec.pdbqt_str()
         if recstr is None:
-            raise OptionError(
-                f"No receptor data stored for {recname}. Export failed."
-            )
+            raise OptionError(f"No receptor data stored for {recname}. Export failed.")
         output_manager = OutputManager()
         output_manager.write_receptor_pdbqt(recname, recstr)
 
@@ -1655,6 +1659,17 @@ class RingtailCore:
         """
         with self.storageman as sm:
             return sm.fetch_pose_interactions(pose_id)
+
+    @_wrap_exceptions
+    def get_candidate_lignames(self) -> list[str]:
+        """
+        #TODO doc string
+
+        Returns:
+            list[str]: _description_
+        """
+        with self.storageman as sm:
+            return sm.get_candidate_lignames()
 
     @_wrap_exceptions
     def get_percentiles(
@@ -2045,6 +2060,14 @@ class RingtailCore:
             sm.complete_merging()
 
         return failed
+
+    @_wrap_exceptions
+    def reset_screening_progress(self):
+        """
+        #TODO doc string
+        """
+        with self.storageman as sm:
+            sm.remove_nonresults_tables()
 
     @_wrap_exceptions
     def update_database_version(
