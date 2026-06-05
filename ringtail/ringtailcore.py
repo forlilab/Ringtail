@@ -2067,7 +2067,7 @@ class RingtailCore:
         #TODO doc string
         """
         with self.storageman as sm:
-            sm.remove_nonresults_tables()
+            sm.reset_screening_tables()
 
     @_wrap_exceptions
     def update_database_version(

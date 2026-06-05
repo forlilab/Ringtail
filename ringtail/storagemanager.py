@@ -926,6 +926,13 @@ class StorageManager(ABC):
         dict_rows = [dict(zip(column_names, row)) for row in rows]
         return column_names, dict_rows
 
+    def reset_screening_tables(self):
+        """
+        Deletes and recreates (clears) non results tables for filtering, clustering, gui tables
+        """
+        self._remove_screening_tables()
+        self._create_screening_tables()
+
     def overwrite_storage(self):
         """
         Will drop all tables in the database.
@@ -1799,13 +1806,6 @@ class StorageManager(ABC):
     def prepare_for_merging(self):
         """
         Prepares the database for merging
-        """
-        ...
-
-    @abstractmethod
-    def remove_nonresults_tables(self):
-        """
-        Deletes non results tables for filtering, clustering, gui tables
         """
         ...
 
@@ -3459,5 +3459,11 @@ class StorageManager(ABC):
             str: formatted sql
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def _remove_screening_tables(self): ...
+
+    @abstractmethod
+    def _create_screening_tables(self): ...
 
     # endregion

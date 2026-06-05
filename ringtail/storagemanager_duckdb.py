@@ -723,24 +723,11 @@ class StorageManagerDuckDB(StorageManager):
         # create new tables to keep track of merger
         self._create_merge_tables()
         # delete incompatible tables and sequences for main db
-        self.remove_nonresults_tables()
+        self._remove_screening_tables()
         # sync sequences to current max values, critical for databases
         # created via export_bookmark_db where data was inserted with
         # explicit IDs but sequences were initialized starting at 1
         self._sync_auto_increment_state()
-
-    def remove_nonresults_tables(self):
-        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
-        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
-        self.db_query("DROP SEQUENCE IF EXISTS seq_clusterid;")
-        self._delete_table(CLUSTERS_SCHEMA.name)
-        self._delete_table(FILTERED_POSES_SCHEMA.name)
-        self._delete_table(FILTERS_SCHEMA.name)
-        self.db_query("DROP SEQUENCE IF EXISTS seq_filterid;")
-        self._delete_table("Accepted")
-        self._delete_table("Maybe")
-        self._delete_table("Rejected")
-        self._delete_table("Pose_comments")
 
     def _get_merge_id(self, mergingdb_path: str) -> int:
         """
@@ -1681,6 +1668,27 @@ class StorageManagerDuckDB(StorageManager):
                 self.conn.commit()
         except duckdb.OperationalError as e:
             raise DatabaseInsertionError(f"Error while committing insert query") from e
+
+    def _remove_screening_tables(self):
+        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
+        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
+        self.db_query("DROP SEQUENCE IF EXISTS seq_clusterid;")
+        self._delete_table(CLUSTERS_SCHEMA.name)
+        self._delete_table(FILTERED_POSES_SCHEMA.name)
+        self._delete_table(FILTERS_SCHEMA.name)
+        self.db_query("DROP SEQUENCE IF EXISTS seq_filterid;")
+        self._delete_table("Accepted")
+        self._delete_table("Maybe")
+        self._delete_table("Rejected")
+        self._delete_table("Pose_comments")
+
+    def _create_screening_tables(self):
+        """
+        #TODO doc string
+        """
+        self._create_filtering_tables()
+        self._create_status_tables()
+        self.ensure_gui_tables()
 
     # endregion
 
