@@ -120,7 +120,8 @@ RESULTS_SCHEMA = TableSchema(
         "flexible_res_coordinates": Column("VARCHAR", "flexible residue coordinates"),
     },
     sqlite_indices=[
-        ["docking_score", "leff"],
+        ["docking_score"],
+        ["leff"],
         ["ligand_id"],
     ],
 )
@@ -188,16 +189,7 @@ INTERACTION_INDICES_SCHEMA = TableSchema(
             "rec_atomid",
         ]
     ],
-    sqlite_indices=[
-        [
-            "interaction_type",
-            "rec_chain",
-            "rec_resname",
-            "rec_resid",
-            "rec_atom",
-            "rec_atomid",
-        ]
-    ],
+    sqlite_indices=[],
 )
 
 INTERACTIONS_SCHEMA = TableSchema(
@@ -217,7 +209,7 @@ INTERACTIONS_SCHEMA = TableSchema(
             foreign_key="Interaction_indices.interaction_id",
         ),
     },
-    sqlite_indices=[["pose_id", "interaction_id"]],
+    sqlite_indices=[["interaction_id"], ["pose_id"]],
 )
 
 FILTERS_SCHEMA = TableSchema(
@@ -245,6 +237,7 @@ FILTERED_POSES_SCHEMA = TableSchema(
         ),
         "pose_id": Column("INTEGER", "pose reference", foreign_key="Results.pose_id"),
     },
+    sqlite_indices=[["filter_id"]],
 )
 
 CLUSTERS_SCHEMA = TableSchema(
@@ -339,7 +332,7 @@ POSE_COMMENTS_SCHEMA = TableSchema(
             "INTEGER", "pose", primary_key=True, foreign_key="Results.pose_id"
         ),
         "comment": Column("VARCHAR", "user comment on pose"),
-    }
+    },
 )
 
 TABLE_SCHEMAS: dict[str, TableSchema] = {

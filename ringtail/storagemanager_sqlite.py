@@ -1384,9 +1384,11 @@ class StorageManagerSQLite(StorageManager):
             (RESULTS_SCHEMA.name, RESULTS_SCHEMA),
             (INTERACTIONS_SCHEMA.name, INTERACTIONS_SCHEMA),
             (INTERACTION_INDICES_SCHEMA.name, INTERACTION_INDICES_SCHEMA),
+            (FILTERED_POSES_SCHEMA.name, FILTERED_POSES_SCHEMA),
         ]:
             for sql in build_create_indices(table, schema):
                 self.db_query(sql)
+        self.db_query("ANALYZE;")
         self.conn.commit()
         logger.info(
             "Indices created for Results, Interactions, and Interaction_indices."
@@ -1909,6 +1911,8 @@ class StorageManagerSQLite(StorageManager):
             con = sqlite3.connect(self.db_file)
             cursor = con.execute("PRAGMA synchronous = OFF;")
             cursor.execute("PRAGMA journal_mode = MEMORY;")
+            cursor.execute("PRAGMA cache_size = -65536;")   # 64 MB page cache
+            cursor.execute("PRAGMA temp_store = MEMORY;")
             con.commit()
             cursor.close()
         except sqlite3.OperationalError as e:

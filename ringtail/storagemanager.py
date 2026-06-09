@@ -2533,9 +2533,7 @@ class StorageManager(ABC):
         where_sql = (
             f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
         )
-        return (
-            f"SELECT R.pose_id FROM {filtering_window} R {where_sql} ORDER BY R.pose_id"
-        )
+        return f"SELECT R.pose_id FROM {filtering_window} R {where_sql}"
 
     def _perform_rdkit_filtering(
         self, partial_query: str, ligand_filters: dict
