@@ -65,7 +65,16 @@ class MPManager:
         # number of processors
         if max_proc is None:
             max_proc = mp.cpu_count()
+        # One process is the writer; the rest are readers. max_proc=1 would leave
+        # zero readers, so nothing ever drains the input queue and process_files
+        # deadlocks. Guard against that by always keeping at least one reader.
         self.num_readers = max_proc - 1
+        if self.num_readers < 1:
+            logger.warning(
+                f"max_proc={max_proc} leaves no reader processes (one is reserved "
+                f"for the writer); using 1 reader so file processing does not hang."
+            )
+            self.num_readers = 1
         # shared queue
         self.queueIn = mp.Queue(maxsize=2 * max_proc)
         self.queueOut = mp.Queue(maxsize=2 * max_proc)
