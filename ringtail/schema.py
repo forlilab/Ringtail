@@ -22,6 +22,7 @@ class Column:
     on_conflict_ignore: bool = False  # SQLite only: ON CONFLICT IGNORE on UNIQUE
     foreign_key: Union[str, None] = None  # "ReferencedTable.column"
     default: Union[str, None] = None  # raw SQL default expression
+    sqlite_only: bool = False  # column created only for SQLite; omitted on DuckDB
 
 
 @dataclass
@@ -34,6 +35,17 @@ class TableSchema:
     # SQLite index column groups. DuckDB ignores these (auto-optimises).
     temporary: bool = False
     name: str = ""
+    without_rowid: bool = False
+    # SQLite only: store the table as a clustered B-tree keyed by its composite
+    # PRIMARY KEY instead of an implicit rowid. Requires primary_key=True on 2+
+    # columns with no autoincrement. DuckDB ignores this flag.
+    duckdb_no_constraints: bool = False
+    # DuckDB only: create the table with plain columns — no PRIMARY KEY and no
+    # FOREIGN KEY constraints. DuckDB strictly enforces both, which makes bulk
+    # inserts into internal/derived tables (e.g. Filtered_poses) very slow: the
+    # unique PK index is maintained per row and FK validation reads the parent
+    # table off disk. Use for tables Ringtail populates itself, where referential
+    # integrity is guaranteed by construction. SQLite ignores this flag.
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +59,10 @@ SQLITE_TYPES: dict[str, str] = {
     "BLOB": "BLOB",
     "DATETIME": "DATETIME",
     "JSON_OR_VARCHAR": "VARCHAR",
+    # 2D float array (coordinates). SQLite has no array type, so it is stored as a
+    # packed float32 BLOB; DuckDB uses a native FLOAT[][] (ALP-compressed, ~8x
+    # smaller than the old JSON text). See StorageManager coordinate (de)serializers.
+    "FLOAT_ARRAY_2D": "BLOB",
 }
 
 DUCKDB_TYPES: dict[str, str] = {
@@ -56,6 +72,7 @@ DUCKDB_TYPES: dict[str, str] = {
     "BLOB": "BLOB",
     "DATETIME": "TIMESTAMP",
     "JSON_OR_VARCHAR": "JSON",
+    "FLOAT_ARRAY_2D": "FLOAT[][]",
 }
 
 # ---------------------------------------------------------------------------
@@ -82,6 +99,7 @@ LIGANDS_SCHEMA = TableSchema(
         "ligand_smile": Column("VARCHAR", "SMILES string"),
         "rdmol": Column("BLOB", "RDKit molecule binary"),
     },
+    sqlite_indices=[["ligname"]],
 )
 
 RESULTS_SCHEMA = TableSchema(
@@ -116,13 +134,13 @@ RESULTS_SCHEMA = TableSchema(
         "unbound_energy": Column("FLOAT", "unbound state energy"),
         "num_interactions": Column("INTEGER", "number of interactions"),
         "num_hb": Column("INTEGER", "hydrogen bonds"),
-        "pose_coordinates": Column("VARCHAR", "pose atom coordinates"),
+        "pose_coordinates": Column("FLOAT_ARRAY_2D", "pose atom coordinates"),
         "flexible_res_coordinates": Column("VARCHAR", "flexible residue coordinates"),
     },
     sqlite_indices=[
         ["docking_score"],
         ["leff"],
-        ["ligand_id"],
+        ["ligand_id", "docking_score", "pose_id"],
     ],
 )
 
@@ -209,7 +227,7 @@ INTERACTIONS_SCHEMA = TableSchema(
             foreign_key="Interaction_indices.interaction_id",
         ),
     },
-    sqlite_indices=[["interaction_id"], ["pose_id"]],
+    sqlite_indices=[["interaction_id", "pose_id"], ["pose_id"], ["interaction_id"]],
 )
 
 FILTERS_SCHEMA = TableSchema(
@@ -233,11 +251,30 @@ FILTERED_POSES_SCHEMA = TableSchema(
     name="Filtered_poses",
     columns={
         "filter_id": Column(
-            "INTEGER", "bookmark reference", foreign_key="Filters.filter_id"
+            "INTEGER",
+            "bookmark reference",
+            primary_key=True,
+            foreign_key="Filters.filter_id",
         ),
-        "pose_id": Column("INTEGER", "pose reference", foreign_key="Results.pose_id"),
+        "pose_id": Column(
+            "INTEGER",
+            "pose reference",
+            primary_key=True,
+            foreign_key="Results.pose_id",
+        ),
+        "ligand_id": Column(
+            "INTEGER",
+            "owning ligand (SQLite only: denormalized to make passing-ligand "
+            "counts a single-table COUNT(DISTINCT) instead of a JOIN into the "
+            "row-store Results table). DuckDB's columnar count-JOIN is already "
+            "cheap, so it omits this column.",
+            sqlite_only=True,
+            foreign_key="Ligands.ligand_id",
+        ),
     },
-    sqlite_indices=[["filter_id"]],
+    sqlite_indices=[],
+    without_rowid=True,
+    duckdb_no_constraints=True,
 )
 
 CLUSTERS_SCHEMA = TableSchema(
@@ -426,7 +463,22 @@ def build_create_table(table_name: str, schema: TableSchema, dialect: str) -> li
     col_defs: list[str] = []
     fk_constraints: list[str] = []
 
+    # DuckDB strictly enforces PK/FK, which cripples bulk inserts into derived
+    # tables. When requested, emit plain columns on DuckDB only.
+    skip_constraints = dialect == "duckdb" and schema.duckdb_no_constraints
+
+    # Composite (non-autoincrement) PKs must be a table-level constraint, not
+    # inline per column — required for WITHOUT ROWID tables and valid in DuckDB.
+    composite_pk_cols = [
+        col_name
+        for col_name, col in schema.columns.items()
+        if col.primary_key and not col.autoincrement
+    ]
+    use_table_pk = len(composite_pk_cols) > 1 and not skip_constraints
+
     for col_name, col in schema.columns.items():
+        if col.sqlite_only and dialect != "sqlite":
+            continue
         type_str = type_map[col.sql_type]
         parts = [col_name, type_str]
 
@@ -437,8 +489,10 @@ def build_create_table(table_name: str, schema: TableSchema, dialect: str) -> li
                 seq = f"seq_{table_name.lower()}_{col_name.lower()}"
                 statements.append(f"CREATE SEQUENCE IF NOT EXISTS {seq} START 1")
                 parts.append(f"DEFAULT nextval('{seq}') PRIMARY KEY")
-        elif col.primary_key:
-            parts.append("PRIMARY KEY")
+        elif col.primary_key and not skip_constraints:
+            if not use_table_pk:
+                parts.append("PRIMARY KEY")
+            # else: deferred to table-level constraint below
 
         if not col.nullable and not col.primary_key and not col.autoincrement:
             parts.append("NOT NULL")
@@ -452,7 +506,7 @@ def build_create_table(table_name: str, schema: TableSchema, dialect: str) -> li
         if col.default:
             parts.append(f"DEFAULT {col.default}")
 
-        if col.foreign_key:
+        if col.foreign_key and not skip_constraints:
             ref_table, ref_col = col.foreign_key.split(".")
             if dialect == "sqlite":
                 fk_constraints.append(
@@ -463,6 +517,9 @@ def build_create_table(table_name: str, schema: TableSchema, dialect: str) -> li
 
         col_defs.append(" ".join(parts))
 
+    if use_table_pk:
+        col_defs.append(f"PRIMARY KEY ({', '.join(composite_pk_cols)})")
+
     for unique_cols in schema.unique_together:
         constraint = f"UNIQUE ({', '.join(unique_cols)})"
         if dialect == "sqlite":
@@ -471,7 +528,10 @@ def build_create_table(table_name: str, schema: TableSchema, dialect: str) -> li
 
     all_defs = col_defs + fk_constraints
     prefix = "CREATE TEMP TABLE" if schema.temporary else "CREATE TABLE"
-    statements.append(f"{prefix} IF NOT EXISTS {table_name} ({', '.join(all_defs)})")
+    create_stmt = f"{prefix} IF NOT EXISTS {table_name} ({', '.join(all_defs)})"
+    if schema.without_rowid and dialect == "sqlite":
+        create_stmt += " WITHOUT ROWID"
+    statements.append(create_stmt)
     return statements
 
 

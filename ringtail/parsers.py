@@ -287,8 +287,10 @@ class VinaMoleculeSupplier:
         results_dict.update(interaction_info)
         results_dict.update(
             {
+                # plain float lists; the storage manager serializes per dialect
+                # (DuckDB FLOAT[][], SQLite packed float32 BLOB)
                 "pose_coordinates": [
-                    json.dumps(coordinate.tolist()) for coordinate in pose_coordinates
+                    coordinate.tolist() for coordinate in pose_coordinates
                 ]
             }
         )
@@ -350,8 +352,9 @@ class ADGPUMoleculeSupplier:
         ligname = ligand_row[0]
         results_dict.update(
             {
+                # plain float lists; serialized per dialect by the storage manager
                 "pose_coordinates": [
-                    json.dumps(coordinate.tolist()) for coordinate in poses_coordinates
+                    coordinate.tolist() for coordinate in poses_coordinates
                 ]
             }
         )
@@ -887,7 +890,15 @@ def process_docked_mol(
     mol, mol_properties = prepare_mol_for_database(
         mol, store_properties=["docking_score", "pose_rank"]
     )
-    ligand_row = [ligname, smiles, mol.ToBinary(Chem.PropertyPickleOptions.AllProps)]
+    ligand_row = [
+        ligname,
+        smiles,
+        mol.ToBinary(
+            Chem.PropertyPickleOptions.MolProps
+            | Chem.PropertyPickleOptions.AtomProps
+            | Chem.PropertyPickleOptions.BondProps
+        ),
+    ]
 
     results_dict.update(mol_properties)
     results_dict.update(
@@ -899,7 +910,7 @@ def process_docked_mol(
     )
     single_pose_coordinate = results_dict["pose_coordinates"][0]
     results_dict["pose_coordinates"] = (
-        json.dumps(single_pose_coordinate.tolist())
+        single_pose_coordinate.tolist()
         if isinstance(single_pose_coordinate, np.ndarray)
         else single_pose_coordinate
     )
@@ -970,7 +981,11 @@ def generate_ligand_data_list_from_pdbqt_dlg(
     rdkit_mol, properties = prepare_mol_for_database(rdkit_mol)
     pose_coordinates = properties.get("pose_coordinates")
     smiles = Chem.MolToSmiles(rdkit_mol)
-    ligand_rdbin = rdkit_mol.ToBinary(Chem.PropertyPickleOptions.AllProps)
+    ligand_rdbin = rdkit_mol.ToBinary(
+        Chem.PropertyPickleOptions.MolProps
+        | Chem.PropertyPickleOptions.AtomProps
+        | Chem.PropertyPickleOptions.BondProps
+    )
 
     ligand_row = [ligname, smiles, ligand_rdbin]
 

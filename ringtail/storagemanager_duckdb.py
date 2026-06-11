@@ -132,7 +132,7 @@ class StorageManagerDuckDB(StorageManager):
             unbound_energy      FLOAT,
             num_interactions     INTEGER,
             num_hb              INTEGER,
-            pose_coordinates         VARCHAR,
+            pose_coordinates         FLOAT[][],
             flexible_res_coordinates   VARCHAR,
             ligname             VARCHAR);
             """
@@ -211,7 +211,7 @@ class StorageManagerDuckDB(StorageManager):
                     num_interactions,
                     num_hb,
                     cluster_size,
-                    pose_coordinates,
+                    CAST(pose_coordinates AS FLOAT[][]),
                     flexible_res_coordinates,
                     ligname FROM incoming_poses;"""
 
@@ -292,8 +292,7 @@ class StorageManagerDuckDB(StorageManager):
                 T.pose_coordinates,
                 T.flexible_res_coordinates
             FROM Results_temp AS T
-            JOIN Ligands AS L ON L.ligname = T.ligname
-            RETURNING pose_id, ligand_id, run_number, pose_rank;"""
+            JOIN Ligands AS L ON L.ligname = T.ligname;"""
 
         temp_to_interaction = """
             INSERT INTO Interactions(pose_id, interaction_id)
@@ -313,8 +312,6 @@ class StorageManagerDuckDB(StorageManager):
                 AND II.rec_atom = IT.rec_atom
                 AND II.rec_atomid = IT.rec_atomid;"""
 
-        mapping = self.db_query(temp_to_results).fetchall()
-
         create_temp_mapping_table = """
         CREATE TEMP TABLE IF NOT EXISTS pose_map(
             pose_id             INTEGER,
@@ -322,12 +319,16 @@ class StorageManagerDuckDB(StorageManager):
             run_number          INTEGER,
             pose_rank           INTEGER);
         """
-
         self.db_query(create_temp_mapping_table)
-        self.db_update(
-            "INSERT INTO pose_map (pose_id, ligand_id, run_number, pose_rank) VALUES (?, ?, ?, ?);",
-            mapping,
-            commit=False,
+        cur_max = self.conn.execute(
+            "SELECT COALESCE(MAX(pose_id), 0) FROM Results"
+        ).fetchone()[0]
+        self.db_query(temp_to_results)  # INSERT INTO Results (no RETURNING)
+        self.db_query(
+            "INSERT INTO pose_map (pose_id, ligand_id, run_number, pose_rank) "
+            "SELECT pose_id, ligand_id, run_number, pose_rank FROM Results "
+            "WHERE pose_id > ?",
+            [cur_max],
         )
         self.db_query(temp_to_interaction)
 
@@ -1249,7 +1250,7 @@ class StorageManagerDuckDB(StorageManager):
             return f"""
             SELECT pose_id FROM Results
             WHERE ligand_id IN (
-                SELECT ligand_id FROM Ligands 
+                SELECT ligand_id FROM Ligands
                 WHERE ligname IN ({ligand_sql_string})
                 )
                 """
@@ -1512,6 +1513,25 @@ class StorageManagerDuckDB(StorageManager):
             )
         return is_compatible, db_schema_ver
 
+    def convert_pose_coordinates_to_native(self):
+        """DuckDB cannot ALTER/DROP a column on a table referenced by foreign keys
+        (Interactions -> Results.pose_id), so an in-place conversion is impossible.
+        The upgrade is a full recreate (which also compacts the file ~3-5x); use the
+        rt_convert_coordinates.py script, which builds a fresh native-format database.
+        """
+        dtype = self.conn.execute(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = 'Results' AND column_name = 'pose_coordinates'"
+        ).fetchone()
+        if dtype and "[]" in dtype[0]:
+            logger.info("pose_coordinates is already a native array; nothing to do.")
+            return
+        raise NotImplementedError(
+            "DuckDB pose_coordinates conversion must recreate the database (DuckDB "
+            "cannot ALTER a foreign-key-referenced table). Run the script: "
+            "rt_convert_coordinates.py <database.db>"
+        )
+
     def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
         """
         Method that checks if the database merging into main is compatible with main,
@@ -1539,6 +1559,7 @@ class StorageManagerDuckDB(StorageManager):
         """
         try:
             conn = duckdb.connect(self.db_file)
+            conn.execute("SET enable_progress_bar=false")
         except duckdb.OperationalError as e:
             raise DatabaseConnectionError(
                 "Error while establishing database connection"

@@ -54,6 +54,12 @@ class StorageManager(ABC):
     _db_schema_ver = "3.0.0"
     QueryBuilder = QueryBuilder
 
+    # Whether Filtered_poses carries a denormalized ligand_id column. SQLite sets
+    # this True so passing-ligand counts are a single-table COUNT(DISTINCT) instead
+    # of a costly JOIN into the row-store Results table. DuckDB leaves it False
+    # (its columnar count-JOIN is cheap) so existing DuckDB databases stay valid.
+    _filtered_poses_has_ligand_id: ClassVar[bool] = False
+
     """Base class for a generic virtual screening database object.
     This class holds some of the common API for StorageManager child classes. 
     Each child class will implement their own functions to write to and read from the database
@@ -253,24 +259,38 @@ class StorageManager(ABC):
         self, bookmark_name: str, grouped_by_ligand: bool = False
     ) -> int:
         """
-        Count poses in bookmark
+        Count poses (or distinct ligands) in a bookmark.
 
         Args:
             bookmark_name (str): bookmark name in which to count
-            grouped_by_ligand (bool, optional): if grouping by ligand, essentially returns passing ligands
+            grouped_by_ligand (bool, optional): if True, returns number of distinct ligands
 
         Returns:
-            int: number of poses (optionally grouped by ligand) in bookmark
+            int: number of poses or ligands in the bookmark
         """
-        query = self.QueryBuilder()
-        query.SELECT("r.pose_id").FROM("results", "r").IN_BOOKMARK(bookmark_name)
-        if grouped_by_ligand:
-            query.GROUP_BY("r.ligand_id")
-        query_string = query.build(count=True)[0]
-        if self.db_query(query_string).fetchone():
-            return self.db_query(query_string).fetchone()[0]
-        else:
+        filter_row = self.conn.execute(
+            "SELECT filter_id FROM Filters WHERE name = ?", (bookmark_name.lower(),)
+        ).fetchone()
+        if filter_row is None:
             return 0
+        filter_id = filter_row[0]
+        if grouped_by_ligand:
+            if self._filtered_poses_has_ligand_id:
+                # SQLite: ligand_id is denormalized into Filtered_poses — single-table count
+                return self.conn.execute(
+                    "SELECT COUNT(DISTINCT ligand_id) FROM Filtered_poses WHERE filter_id = ?",
+                    (filter_id,),
+                ).fetchone()[0]
+            # DuckDB: columnar JOIN to Results reads only the ligand_id column — cheap
+            return self.conn.execute(
+                "SELECT COUNT(DISTINCT R.ligand_id) FROM Filtered_poses FP "
+                "JOIN Results R ON R.pose_id = FP.pose_id WHERE FP.filter_id = ?",
+                (filter_id,),
+            ).fetchone()[0]
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = ?",
+            (filter_id,),
+        ).fetchone()[0]
 
     def get_passing_ligands_count(self, bookmark_name: str) -> int:
         """
@@ -363,8 +383,13 @@ class StorageManager(ABC):
         subq.SELECT("filter_id").FROM("Filters").WHERE(
             f"name IN ({', '.join(enumerated_bookmarks)})"
         )
+        union_cols = (
+            "DISTINCT pose_id, ligand_id"
+            if self._filtered_poses_has_ligand_id
+            else "DISTINCT pose_id"
+        )
         query = self.QueryBuilder()
-        query.SELECT("DISTINCT pose_id").FROM("filtered_poses").WHERE(
+        query.SELECT(union_cols).FROM("filtered_poses").WHERE(
             f"filter_id IN ({subq.build()[0]})"
         )
         bookmark_name = f"{bookmark_name}_union"
@@ -623,8 +648,13 @@ class StorageManager(ABC):
             cluster_bookmark_name = cluster_bookmark_name[0]
         else:
 
+            clustered_cols = (
+                ["pose_id", "ligand_id"]
+                if self._filtered_poses_has_ligand_id
+                else ["pose_id"]
+            )
             clustered_poses = self.QueryBuilder()
-            clustered_poses.SELECT("pose_id").FROM("results").WHERE(
+            clustered_poses.SELECT(*clustered_cols).FROM("results").WHERE(
                 f"pose_id IN ({','.join(str(r) for r in representatives)})"
             )
 
@@ -1265,6 +1295,26 @@ class StorageManager(ABC):
             info = [], []
         return info
 
+    @staticmethod
+    def _serialize_pose_coordinates(coords):
+        """Serialize a list of [x, y, z] floats for storage in the pose_coordinates
+        column. Base/DuckDB store the native nested list (DuckDB FLOAT[][]); SQLite
+        overrides this to pack a float32 BLOB. Returns the value unchanged here.
+        """
+        return coords
+
+    @staticmethod
+    def _deserialize_pose_coordinates(stored):
+        """Inverse of _serialize_pose_coordinates: return a list of [x, y, z] floats.
+        Tolerates legacy JSON-text values from databases written before the native
+        coordinate format (so un-migrated DuckDB databases still read).
+        """
+        if stored is None:
+            return None
+        if isinstance(stored, str):
+            return json.loads(stored)
+        return [list(atom) for atom in stored]
+
     def fetch_rdkit_pose_properties(self, pose_ids) -> list:
         """
         Gets molecular data needed to create rdkit mols for the given pose(s), including
@@ -1292,7 +1342,12 @@ class StorageManager(ABC):
         ).FROM("Results", "R").JOIN("Ligands", "L", "ligand_id").WHERE(
             f"R.pose_id IN ({placeholders})", *pose_ids
         )
-        return self.db_query(*query.build()).fetchall()
+        rows = self.db_query(*query.build()).fetchall()
+        # pose_coordinates (index 5) is stored natively; return it as a list of [x,y,z]
+        return [
+            (*row[:5], self._deserialize_pose_coordinates(row[5]), *row[6:])
+            for row in rows
+        ]
 
     def fetch_columns_from_table_as_dicts(
         self, table: str, columns: list, length: int = None, starting_rowid: int = 0
@@ -2490,8 +2545,13 @@ class StorageManager(ABC):
                 )
             )
             if include_interactions:
+                # EXISTS over the (interaction_id, pose_id) covering index. SQLite does a
+                # fast per-pose point-lookup; DuckDB's optimizer de-correlates this into a
+                # hash semi-join, so the same form is optimal for both dialects.
                 where_conditions.append(
-                    f"R.pose_id IN ({self._build_include_interaction_subquery(include_interactions, processed_filters['max_miss'])})"
+                    self._build_include_interaction_exists_conditions(
+                        include_interactions, processed_filters["max_miss"]
+                    )
                 )
             if exclude_interactions:
                 where_conditions.append(
@@ -2533,7 +2593,12 @@ class StorageManager(ABC):
         where_sql = (
             f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
         )
-        return f"SELECT R.pose_id FROM {filtering_window} R {where_sql}"
+        select_cols = (
+            "R.pose_id, R.ligand_id"
+            if self._filtered_poses_has_ligand_id
+            else "R.pose_id"
+        )
+        return f"SELECT {select_cols} FROM {filtering_window} R {where_sql}"
 
     def _perform_rdkit_filtering(
         self, partial_query: str, ligand_filters: dict
@@ -2644,10 +2709,10 @@ class StorageManager(ABC):
             x = filter[2]
             y = filter[3]
             z = filter[4]
-            # calculate xyz space coordinates
+            # calculate xyz space coordinates (pose_coordinates already a list of [x,y,z])
             xyz = [
                 float(value)
-                for value in json.loads(pose_coordinates)[hit_atom_indices[index]]
+                for value in pose_coordinates[hit_atom_indices[index]]
             ]
             # calculate the sum of squares distances
             d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
@@ -2710,7 +2775,9 @@ class StorageManager(ABC):
                     for filterrow in substruct_pos:
                         # filterrow[0] should be the smarts pattern
                         smarts_mol = _smarts_to_mol(filterrow[0])
-                        pose_coordinates = ligandict["pose_coordinates"]
+                        pose_coordinates = self._deserialize_pose_coordinates(
+                            ligandict["pose_coordinates"]
+                        )
                         # filterrow [1:] should be indices, distance allowance, and coordinates for smarts match
                         substruct_pos_filter = filterrow[1:]
                         for hit_indices in ligand_mol.GetSubstructMatches(smarts_mol):
@@ -2853,6 +2920,40 @@ class StorageManager(ABC):
         else:
             return include_interactions, exclude_interactions
 
+    def _build_include_interaction_exists_conditions(
+        self, include_groups: list, max_miss: int
+    ) -> str:
+        """Build correlated EXISTS conditions checking per-pose interaction requirements.
+
+        Uses the (interaction_id, pose_id) covering index: for each candidate pose SQLite
+        does a fast point-lookup instead of materializing the full interaction result set.
+        For selective energy filters this is 10–100x faster than the IN (subquery) approach.
+
+        Args:
+            include_groups (list[list[int]]): each inner list is a group of interaction_ids
+                that satisfy one required interaction
+            max_miss (int): number of groups a pose is allowed to miss
+
+        Returns:
+            str: SQL WHERE fragment using R.pose_id (caller must alias the Results table as R)
+        """
+
+        def _group_exists(ids: list) -> str:
+            return (
+                f"EXISTS (SELECT 1 FROM Interactions I "
+                f"WHERE I.interaction_id IN ({numlist2str(ids, ',')}) AND I.pose_id = R.pose_id)"
+            )
+
+        if max_miss == 0:
+            return " AND ".join(_group_exists(g) for g in include_groups)
+
+        # General case: pose must satisfy at least (n_groups - max_miss) groups
+        cases = " + ".join(
+            f"(CASE WHEN {_group_exists(g)} THEN 1 ELSE 0 END)" for g in include_groups
+        )
+        n_required = len(include_groups) - max_miss
+        return f"({cases}) >= {n_required}"
+
     def _build_include_interaction_subquery(
         self, include_groups: list, max_miss: int
     ) -> str:
@@ -2868,6 +2969,11 @@ class StorageManager(ABC):
         Returns:
             str: SQL subquery returning qualifying pose_ids
         """
+        # Simple case: one group, no misses — SELECT DISTINCT avoids GROUP BY + COUNT(DISTINCT) temp B-trees
+        if len(include_groups) == 1 and max_miss == 0:
+            ids_str = numlist2str(include_groups[0], ",")
+            return f"SELECT DISTINCT pose_id FROM Interactions WHERE interaction_id IN ({ids_str})"
+
         all_ids = [iid for group in include_groups for iid in group]
         case_clauses = " ".join(
             f"WHEN interaction_id IN ({numlist2str(group, ',')}) THEN {i + 1}"
@@ -2950,23 +3056,22 @@ class StorageManager(ABC):
         Returns:
             int: number of passing poses
         """
-        count_query = f"""SELECT COUNT(pose_id) FROM ({query});"""
-        num_passing_poses = self.conn.execute(count_query).fetchone()[0]
-
-        if not num_passing_poses:
-            return 0
-
         # make sure bookmark name is not a table name
         if name in self.tables_in_db():
             raise OptionError(
                 f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
             )
-        # overwrite bookmark if it exists
+
+        # Capture the old filter_id now so we can delete it only AFTER confirming
+        # the new filter has results — prevents losing the old bookmark on empty filters.
+        old_filter_id = None
         if self.is_bookmark(name):
             logger.warning(
                 f"The bookmark {name} already exists, and will be overwritten by the current filter."
             )
-            self.delete_bookmark(name)
+            old_filter_id = self.conn.execute(
+                "SELECT filter_id FROM Filters WHERE name = ?", (name.lower(),)
+            ).fetchone()[0]
 
         self._begin_transaction()
         insert_query = self.QueryBuilder()
@@ -2980,17 +3085,49 @@ class StorageManager(ABC):
             (name.lower(), query, json.dumps(filters), input_bookmark),
         ).fetchone()[0]
 
-        # insert filtered poses with filter_id
-        insert_query = f"""
-            WITH results_poses AS (
-                {query})
-            INSERT INTO Filtered_poses(filter_id, pose_id) 
-            SELECT {filter_id}, pose_id FROM results_poses;
-            """
-        self.conn.execute(insert_query)
-        self.conn.commit()
+        # single-pass INSERT — no COUNT pre-flight. SQLite also stores ligand_id
+        # (carried for free by the filter query's Results scan) so passing-ligand
+        # counts avoid a JOIN back into the row-store Results table.
+        if self._filtered_poses_has_ligand_id:
+            insert_poses = f"""
+                WITH results_poses AS (
+                    {query})
+                INSERT INTO Filtered_poses(filter_id, pose_id, ligand_id)
+                SELECT {filter_id}, pose_id, ligand_id FROM results_poses;
+                """
+        else:
+            insert_poses = f"""
+                WITH results_poses AS (
+                    {query})
+                INSERT INTO Filtered_poses(filter_id, pose_id)
+                SELECT {filter_id}, pose_id FROM results_poses;
+                """
+        self.conn.execute(insert_poses)
 
-        return num_passing_poses
+        # O(1) existence check — works for both SQLite and DuckDB
+        row = self.conn.execute(
+            "SELECT 1 FROM Filtered_poses WHERE filter_id = ? LIMIT 1", (filter_id,)
+        ).fetchone()
+
+        if row is None:
+            # Nothing matched — clean up the empty filter entry; old bookmark untouched
+            self.conn.execute(
+                "DELETE FROM Filters WHERE filter_id = ?", (filter_id,)
+            )
+            self.conn.commit()
+            return 0
+
+        # Results exist — now safe to remove the old bookmark atomically
+        if old_filter_id is not None:
+            self.conn.execute(
+                "DELETE FROM Filtered_poses WHERE filter_id = ?", (old_filter_id,)
+            )
+            self.conn.execute(
+                "DELETE FROM Filters WHERE filter_id = ?", (old_filter_id,)
+            )
+
+        self.conn.commit()
+        return 1
 
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
         """

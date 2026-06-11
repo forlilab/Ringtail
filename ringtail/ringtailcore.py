@@ -573,7 +573,7 @@ class RingtailCore:
                     [
                         (
                             {"pose_id": pose_id},
-                            json.loads(coordinates),
+                            sm._deserialize_pose_coordinates(coordinates),
                         )
                     ],
                     mol,
@@ -1803,12 +1803,13 @@ class RingtailCore:
             ligname,
             docking_score,
             leff,
-            pose_coords_json,
+            pose_coordinates,
             flexres_coords_json,
             pose_rank,
         ) in pose_rows:
             mol = Chem.Mol(rdmol_binary)
-            pose_coordinates = json.loads(pose_coords_json)
+            # pose_coordinates is already a list of [x,y,z] (deserialized per dialect
+            # by fetch_rdkit_pose_properties)
             if mol.GetNumAtoms() != len(pose_coordinates):
                 logger.error(
                     f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}"
@@ -1906,12 +1907,13 @@ class RingtailCore:
                 _,
                 docking_score,
                 leff,
-                coords_json,
+                coords,
                 fr_coords_json,
                 _,
             ) in rows:
                 try:
-                    coords = json.loads(coords_json)
+                    # coords already deserialized to a list of [x,y,z] by
+                    # fetch_rdkit_pose_properties (per-dialect)
 
                     # In-memory copy of topology (no binary parse for poses 2..N)
                     tmp = Chem.Mol(topology)
@@ -2086,6 +2088,16 @@ class RingtailCore:
             logger.critical("Consent not given for database update. Cancelling...")
             return
         self.storageman.update_database_version(new_version, backup)
+
+    @_wrap_exceptions
+    def convert_pose_coordinates_to_native(self):
+        """Convert an existing database's pose_coordinates column from JSON text to the
+        compact native format (DuckDB FLOAT[][] ~8x smaller; SQLite packed float32 BLOB
+        ~5x smaller and ~65x faster to read). Idempotent and safe to re-run. After
+        conversion, VACUUM (SQLite) or compaction (DuckDB) reclaims the freed space.
+        """
+        with self.storageman:
+            self.storageman.convert_pose_coordinates_to_native()
 
     @_wrap_exceptions
     def db_compatibility_check(self, database_path: str) -> bool:
