@@ -881,11 +881,6 @@ def process_docked_mol(
     smiles = Chem.MolToSmiles(mol)
     interaction_rows = []
     results_dict = results_row() if add_default_columns else {}
-    # Add all Hs with coords before stripping conformers so they are stored.
-    if mol.GetNumConformers() > 0 and any(
-        a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()
-    ):
-        mol = Chem.AddHs(mol, addCoords=True)
     n_heavy = mol.GetNumHeavyAtoms()
     mol, mol_properties = prepare_mol_for_database(
         mol, store_properties=["docking_score", "pose_rank"]
@@ -973,10 +968,6 @@ def generate_ligand_data_list_from_pdbqt_dlg(
     pdbqt_mol = PDBQTMolecule(file_str, name=ligname, is_dlg=is_dlg, skip_typing=True)
     # return the whole list with conformers if requested
     rdkit_mol = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol, only_hs_with_coords=True)[0]
-
-    # Store all H coordinates now so read-time loading skips the expensive AddHs step.
-    # meeko gives us polar Hs; AddHs fills in the nonpolar ones from the existing conformer.
-    rdkit_mol = Chem.AddHs(rdkit_mol, addCoords=True)
 
     rdkit_mol, properties = prepare_mol_for_database(rdkit_mol)
     pose_coordinates = properties.get("pose_coordinates")
