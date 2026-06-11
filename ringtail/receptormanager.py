@@ -117,9 +117,11 @@ class ReceptorData:
     polymer_json: str | None
 
     def receptor_string(self) -> str | None:
-        """String for interaction calculation: pdbqt blob str preferred, else polymer JSON.
-        Both formats are accepted by meeko-based interaction finders."""
-        return self.blob_str or self.polymer_json
+        """String for interaction calculation: meeko Polymer JSON preferred, else
+        pdbqt blob str. The interaction finder reads receptor atoms natively from a
+        Polymer (no pdbqt round-trip) and only parses the pdbqt blob for legacy
+        receptors that have no Polymer JSON."""
+        return self.polymer_json or self.blob_str
 
     def pdbqt_str(self) -> str | None:
         """Pdbqt-format string, converting polymer JSON if needed. Use for .pdbqt file export."""

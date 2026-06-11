@@ -283,13 +283,13 @@ class RingtailCore:
                     )
                 elif ".json" in Path(results.receptor_file_path).suffixes:
                     logger.debug(
-                        "Building receptor string from polymer .json file for interaction calculation"
+                        "Loading polymer .json receptor string for interaction calculation"
                     )
+                    # Pass the polymer JSON straight through: the interaction
+                    # finder reads receptor atoms natively from the Polymer, with
+                    # no pdbqt round-trip.
                     with open(results.receptor_file_path, "r") as f:
-                        polymer_json = f.read()
-                    results.receptor_string = ReceptorManager.polymer_json2pdbqt_str(
-                        polymer_json
-                    )
+                        results.receptor_string = f.read()
                 else:
                     logger.warning(
                         f"Receptor file {results.receptor_file_path} has unrecognized extension — receptor string not set, interactions will not be calculated."
@@ -571,6 +571,13 @@ class RingtailCore:
         if not receptor_string:
             receptor_string = self.get_receptor_object().receptor_string()
 
+        # Build the interaction finder once and reuse it for every pose; the
+        # receptor (KDTree, annotations, atoms) is identical across poses, so
+        # re-parsing/parameterizing it per pose would be wasteful.
+        interaction_finder = make_interaction_finder(
+            receptor_string, [hb_cutoff, vdw_cutoff]
+        )
+
         # accounting
         db_commit_counter = 0
         interactions = []
@@ -600,9 +607,7 @@ class RingtailCore:
                         )
                     ],
                     mol,
-                    receptor_string,
-                    hb_cutoff,
-                    vdw_cutoff,
+                    interaction_finder=interaction_finder,
                 )
                 interactions.extend(generate_interaction_tuples(interaction_dicts))
                 results_counts.append(
