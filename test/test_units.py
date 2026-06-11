@@ -284,7 +284,7 @@ class TestOutput:
         ligands_poses = populated_db._fetch_select_ligands_poses(
             ligand_names=["14303"], bookmark_name="rdkit_test"
         )
-        _, mol, _, _, _, _ = populated_db.create_rdkit_mols(ligands_poses["14303"])[0]
+        _, mol, _, _, _ = populated_db.create_rdkit_mols(ligands_poses["14303"])[0]
         assert mol.GetNumAtoms() == 10
 
     def test_write_sdfs(self, populated_db, tmp_path):

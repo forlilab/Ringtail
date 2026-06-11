@@ -6,7 +6,7 @@
 import itertools
 import glob
 import os
-from typing import Callable, Union
+from typing import Callable, Union, NamedTuple
 from dataclasses import dataclass
 import functools
 from collections.abc import Iterable
@@ -48,6 +48,29 @@ from .parsers import (
     VinaMoleculeSupplier,
     generate_interaction_tuples,
 )
+
+class PoseMol(NamedTuple):
+    """One RDKit mol per pose, returned by RingtailCore.create_rdkit_mols.
+
+    flexres_mols is [] unless flexres_data was passed to the call.
+    """
+
+    pose_id: int
+    mol: object
+    ligname: str
+    flexres_mols: list
+    properties: dict
+
+
+class LigandMol(NamedTuple):
+    """One multi-conformer RDKit mol per ligand, from create_rdkit_mols_by_ligand."""
+
+    ligname: str
+    mol: object
+    flexres_per_pose: list
+    properties: dict
+    flexres_residues: list
+
 
 storage_types = {}
 if HAS_SQLITE:
@@ -1137,7 +1160,9 @@ class RingtailCore:
 
         if all_in_one:
             all_pose_ids = [pid for poses in ligands_poses.values() for pid in poses]
-            mol_results = self.create_rdkit_mols(all_pose_ids, flexres_data)
+            mol_results = self.create_rdkit_mols(
+                all_pose_ids, flexres_data, include_comment=True
+            )
             if not mol_results:
                 logger.error(
                     f"Selected bookmark {bookmark_name} does not exist or does not have any data, cannot write molecule SDFs."
@@ -1148,24 +1173,29 @@ class RingtailCore:
             opm.write_out_mols(
                 sdf_file_name,
                 (
-                    (mol, flexres_mols, properties)
-                    for _, mol, _, flexres_mols, properties, _ in mol_results
+                    (pm.mol, pm.flexres_mols, pm.properties)
+                    for pm in mol_results
                 ),
                 sdf_path,
             )
         else:
-            grouped = self.create_rdkit_mols_by_ligand(ligands_poses, flexres_data)
-            if not grouped:
-                logger.error(
-                    f"Selected bookmark {bookmark_name} does not exist or does not have any data, cannot write molecule SDFs."
-                )
-                return
+            grouped = self.create_rdkit_mols_by_ligand(
+                ligands_poses, flexres_data, include_comment=True
+            )
+            # grouped is a generator (always truthy); track whether it yields
+            # anything so we can report an empty/missing bookmark after iterating.
+            wrote_any = False
             for mol_ligname, mol, all_flexres, properties, _ in grouped:
+                wrote_any = True
                 sdf_file_name = f"{mol_ligname}.sdf"
                 logger.info(
                     f"Writing {mol.GetNumConformers()} conformers to {sdf_file_name}"
                 )
                 opm.write_out_mol(sdf_file_name, mol, all_flexres, properties, sdf_path)
+            if not wrote_any:
+                logger.error(
+                    f"Selected bookmark {bookmark_name} does not exist or does not have any data, cannot write molecule SDFs."
+                )
 
     @_wrap_exceptions
     def fetch_cluster_options(self, ligname: str) -> list[tuple]:
@@ -1770,78 +1800,61 @@ class RingtailCore:
         pose_ids,
         flexres_data: tuple = None,
         include_interactions: bool = True,
-    ) -> list:
+        include_comment: bool = False,
+    ) -> "list[PoseMol]":
         """Create one RDKit mol per pose_id. 1 DB call (no interactions) or 2 (with interactions).
+
+        Flexible-residue mols are built only when flexres_data is provided (and
+        the flexres coordinates are fetched only then); the pose comment is
+        fetched only when include_comment is True. Callers that don't need these
+        (e.g. the GUI viewer) avoid reading them.
 
         Args:
             pose_ids (int | list[int]): one or more pose ids
             flexres_data (tuple, optional): output of make_receptor_flexres_mols(). Defaults to None.
             include_interactions (bool): whether to fetch and embed interaction strings. Defaults to True.
+            include_comment (bool): whether to embed the pose comment in properties. Defaults to False.
 
         Returns:
-            list of (pose_id, mol, ligname, flexres_mols, properties, flexres_residues)
+            list[PoseMol]
         """
         if isinstance(pose_ids, int):
             pose_ids = [pose_ids]
 
-        if flexres_data:
-            flexres_mols_tmpl, flexres_info, _, flexres_residues = flexres_data
-        else:
-            flexres_mols_tmpl, flexres_info, flexres_residues = [], [], []
+        flexres_mols_tmpl, flexres_info, _ = self._unpack_flexres_data(flexres_data)
 
         with self.storageman as sm:
-            # TODO this method is only used here, why not use different method, and why not needed in other method?
-            pose_rows = sm.fetch_rdkit_pose_properties(pose_ids)
+            pose_rows = sm.fetch_rdkit_pose_properties(
+                pose_ids,
+                include_flexres=flexres_data is not None,
+                include_comment=include_comment,
+            )
             interactions_by_pose = (
                 sm.fetch_pose_interactions(pose_ids) if include_interactions else {}
             )
 
         result = []
-        for (
-            pose_id,
-            rdmol_binary,
-            ligname,
-            docking_score,
-            leff,
-            pose_coordinates,
-            flexres_coords_json,
-            pose_rank,
-        ) in pose_rows:
-            mol = Chem.Mol(rdmol_binary)
-            # pose_coordinates is already a list of [x,y,z] (deserialized per dialect
-            # by fetch_rdkit_pose_properties)
-            if mol.GetNumAtoms() != len(pose_coordinates):
-                logger.error(
-                    f"{mol.GetNumAtoms()=} differs from {len(pose_coordinates)=}"
-                )
+        for pose in pose_rows:
+            mol = self._build_pose_mol(
+                pose.rdmol, pose.pose_coordinates, name=pose.ligname
+            )
+            if mol is None:
                 continue
 
-            mol = self._add_conformer(mol, pose_coordinates)
-            if any(a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()):
-                mol = Chem.AddHs(mol, addCoords=True)
-            mol.SetProp("_Name", ligname)
-
             interactions = (
-                interactions_by_pose.get(pose_id, []) if include_interactions else []
+                interactions_by_pose.get(pose.pose_id, [])
+                if include_interactions
+                else []
             )
             interactions_str = (
                 self._interactions_str(interactions) if interactions else None
             )
-            properties = {
-                "Binding energies": [docking_score],
-                "Ligand efficiencies": [leff],
-                "Interactions": [interactions_str] if interactions_str else [],
-                "pose_rank": pose_rank,
-            }
-            if not mol.HasProp("_Name"):
-                properties["_Name"] = ligname
-
-            pose_flexres_mols = self._build_pose_flexres(
-                flexres_mols_tmpl, flexres_info, flexres_coords_json, pose_id
+            properties = self._pose_properties(pose, interactions_str, include_comment)
+            flexres_mols = self._build_pose_flexres(
+                flexres_mols_tmpl, flexres_info, pose.flexres_coordinates, pose.pose_id
             )
-
             result.append(
-                (pose_id, mol, ligname, pose_flexres_mols, properties, flexres_residues)
+                PoseMol(pose.pose_id, mol, pose.ligname, flexres_mols, properties)
             )
 
         return result
@@ -1851,6 +1864,7 @@ class RingtailCore:
         ligands_poses: dict,
         flexres_data: tuple = None,
         include_interactions: bool = True,
+        include_comment: bool = False,
     ):
         """One multi-conformer mol per ligand; all poses become conformers.
 
@@ -1862,33 +1876,36 @@ class RingtailCore:
             ligands_poses (dict): {ligname: [pose_id, ...]} from _fetch_select_ligands_poses
             flexres_data (tuple, optional): output of make_receptor_flexres_mols()
             include_interactions (bool): whether to embed interaction strings
+            include_comment (bool): whether to embed per-pose comments in properties
 
         Yields:
-            (ligname, mol_N_conformers, per_pose_flexres_mols, merged_properties, flexres_residues)
-            where per_pose_flexres_mols is a list of flexres_mol lists, one per pose
+            LigandMol, where flexres_per_pose is a list of flexres_mol lists, one per pose
         """
         all_pose_ids = [pid for poses in ligands_poses.values() for pid in poses]
 
+        flexres_mols_tmpl, flexres_info, flexres_residues = self._unpack_flexres_data(
+            flexres_data
+        )
+
         with self.storageman as sm:
-            pose_rows = sm.fetch_rdkit_pose_properties(all_pose_ids)
+            pose_rows = sm.fetch_rdkit_pose_properties(
+                all_pose_ids,
+                include_flexres=flexres_data is not None,
+                include_comment=include_comment,
+            )
             interactions_by_pose = (
                 sm.fetch_pose_interactions(all_pose_ids) if include_interactions else {}
             )
 
-        # Group raw DB rows by ligand before any RDKit work
+        # Group rows by ligand before any RDKit work
         by_ligand = {}
-        for row in pose_rows:
-            by_ligand.setdefault(row[2], []).append(row)  # row[2] = ligname
+        for pose in pose_rows:
+            by_ligand.setdefault(pose.ligname, []).append(pose)
 
-        if flexres_data:
-            flexres_mols_tmpl, flexres_info, _, flexres_residues = flexres_data
-        else:
-            flexres_mols_tmpl, flexres_info, flexres_residues = [], [], []
-
-        for ligname, rows in by_ligand.items():
+        for ligname, poses in by_ligand.items():
             try:
                 # Deserialize binary ONCE per ligand → topology skeleton (no H, no conformers)
-                topology = Chem.Mol(rows[0][1])
+                topology = Chem.Mol(poses[0].rdmol)
             except Exception:
                 logger.error(f"Failed to deserialize topology for {ligname}, skipping")
                 continue
@@ -1899,58 +1916,46 @@ class RingtailCore:
                 "Ligand efficiencies": [],
                 "Interactions": [],
             }
+            if include_comment:
+                merged_props["Comment"] = []
             all_flexres = []
 
-            for (
-                pose_id,
-                _,
-                _,
-                docking_score,
-                leff,
-                coords,
-                fr_coords_json,
-                _,
-            ) in rows:
-                try:
-                    # coords already deserialized to a list of [x,y,z] by
-                    # fetch_rdkit_pose_properties (per-dialect)
-
-                    # In-memory copy of topology (no binary parse for poses 2..N)
-                    tmp = Chem.Mol(topology)
-                    if tmp.GetNumAtoms() != len(coords):
-                        logger.error(
-                            f"atom/coord mismatch for pose {pose_id}, skipping"
-                        )
-                        continue
-                    tmp = self._add_conformer(tmp, coords)
-                    tmp = Chem.AddHs(tmp, addCoords=True)
-                except Exception:
-                    logger.error(f"Failed to process pose {pose_id}, skipping")
+            for pose in poses:
+                # copy the in-memory topology (no binary re-parse for poses 2..N)
+                mol = self._build_pose_mol(topology, pose.pose_coordinates)
+                if mol is None:
                     continue
 
                 if base_mol is None:
-                    base_mol = tmp
+                    base_mol = mol
                     base_mol.SetProp("_Name", ligname)
                 else:
-                    base_mol.AddConformer(tmp.GetConformer(), assignId=True)
+                    base_mol.AddConformer(mol.GetConformer(), assignId=True)
 
-                interactions = interactions_by_pose.get(pose_id, [])
+                interactions = interactions_by_pose.get(pose.pose_id, [])
                 interactions_str = (
                     self._interactions_str(interactions) if interactions else None
                 )
-                merged_props["Binding energies"].append(docking_score)
-                merged_props["Ligand efficiencies"].append(leff)
+                merged_props["Binding energies"].append(pose.docking_score)
+                merged_props["Ligand efficiencies"].append(pose.leff)
                 if interactions_str:
                     merged_props["Interactions"].append(interactions_str)
+                if include_comment and pose.comment:
+                    merged_props["Comment"].append(pose.comment)
 
                 all_flexres.append(
                     self._build_pose_flexres(
-                        flexres_mols_tmpl, flexres_info, fr_coords_json, pose_id
+                        flexres_mols_tmpl,
+                        flexres_info,
+                        pose.flexres_coordinates,
+                        pose.pose_id,
                     )
                 )
 
             if base_mol is not None:
-                yield (ligname, base_mol, all_flexres, merged_props, flexres_residues)
+                yield LigandMol(
+                    ligname, base_mol, all_flexres, merged_props, flexres_residues
+                )
 
     @_wrap_exceptions
     def make_receptor_flexres_mols(
@@ -2247,6 +2252,64 @@ class RingtailCore:
         return ", ".join(
             f"{r[0]}-{':'.join(str(x) for x in r[1:])}" for r in interactions
         )
+
+    @staticmethod
+    def _unpack_flexres_data(flexres_data):
+        """Unpack make_receptor_flexres_mols() output, tolerating None.
+
+        Returns:
+            (flexres_mols_tmpl, flexres_info, flexres_residues)
+        """
+        if flexres_data:
+            flexres_mols_tmpl, flexres_info, _, flexres_residues = flexres_data
+            return flexres_mols_tmpl, flexres_info, flexres_residues
+        return [], [], []
+
+    def _build_pose_mol(self, skeleton, coords, name: str = None) -> "Chem.Mol | None":
+        """Build a posed RDKit mol from a ligand skeleton and pose coordinates.
+
+        Single source of truth for the skeleton -> posed-mol step shared by
+        create_rdkit_mols and create_rdkit_mols_by_ligand.
+
+        Args:
+            skeleton: rdmol binary (bytes) or a Chem.Mol template to copy
+            coords (list[list[float]]): pose coordinates, one [x, y, z] per atom
+                (already deserialized by fetch_rdkit_pose_properties)
+            name (str, optional): value for the mol's _Name property
+
+        Returns:
+            Chem.Mol with one conformer (explicit Hs added), or None if the
+            atom/coord counts mismatch or the skeleton fails to deserialize.
+        """
+        try:
+            mol = Chem.Mol(skeleton)
+        except Exception:
+            logger.error("Failed to deserialize ligand mol, skipping")
+            return None
+        if mol.GetNumAtoms() != len(coords):
+            logger.error(
+                f"atom/coord mismatch: {mol.GetNumAtoms()} atoms vs {len(coords)} coords, skipping"
+            )
+            return None
+        mol = self._add_conformer(mol, coords)
+        if any(a.GetNumImplicitHs() > 0 for a in mol.GetAtoms()):
+            mol = Chem.AddHs(mol, addCoords=True)
+        if name is not None:
+            mol.SetProp("_Name", name)
+        return mol
+
+    @staticmethod
+    def _pose_properties(pose, interactions_str, include_comment: bool) -> dict:
+        """Build the SDF/viewer property dict for a single pose."""
+        properties = {
+            "Binding energies": [pose.docking_score],
+            "Ligand efficiencies": [pose.leff],
+            "Interactions": [interactions_str] if interactions_str else [],
+            "pose_rank": pose.pose_rank,
+        }
+        if include_comment and pose.comment:
+            properties["Comment"] = pose.comment
+        return properties
 
     @staticmethod
     def _build_pose_flexres(

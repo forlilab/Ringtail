@@ -17,7 +17,7 @@ from .util import db_alias_from_path, numlist2str
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
-from typing import Any, Union, ClassVar
+from typing import Any, Union, ClassVar, NamedTuple
 from importlib.metadata import version
 from .ringtailoptions import Filters, statuses
 from .exceptions import StorageError, OptionError, VersionError, MergeError
@@ -48,6 +48,25 @@ from .schema import (
     build_create_table,
 )
 from collections import defaultdict
+
+
+class PoseData(NamedTuple):
+    """Row returned by StorageManager.fetch_rdkit_pose_properties.
+
+    Optional fields are populated only when the corresponding flag is passed to
+    the fetch: flexres_coordinates is None unless include_flexres=True, and
+    comment is '' unless include_comment=True (and the Pose_comments table exists).
+    """
+
+    pose_id: int
+    rdmol: object
+    ligname: str
+    docking_score: object
+    leff: object
+    pose_coordinates: object
+    pose_rank: object
+    flexres_coordinates: object = None
+    comment: str = ""
 
 
 class StorageManager(ABC):
@@ -1315,19 +1334,35 @@ class StorageManager(ABC):
             return json.loads(stored)
         return [list(atom) for atom in stored]
 
-    def fetch_rdkit_pose_properties(self, pose_ids) -> list:
+    def fetch_rdkit_pose_properties(
+        self,
+        pose_ids,
+        *,
+        include_flexres: bool = False,
+        include_comment: bool = False,
+    ) -> "list[PoseData]":
         """
         Gets molecular data needed to create rdkit mols for the given pose(s), including
         ligand mol binary and name via a JOIN with Ligands.
 
+        Only the columns a caller asks for are fetched: the flexible-residue
+        coordinate blob and the pose comment are both optional, so callers that
+        don't need them (e.g. the GUI viewer) don't pay to read them.
+
         Args:
             pose_ids (int | list[int]): one or more pose ids
+            include_flexres (bool): also fetch flexible_res_coordinates (needed for
+                SDF/PDB export). When False, PoseData.flexres_coordinates is None.
+            include_comment (bool): also LEFT JOIN Pose_comments for the user comment.
+                When False (or the table is absent), PoseData.comment is ''.
 
         Returns:
-            list of (pose_id, rdmol_binary, ligname, docking_score, leff, pose_coordinates, flexible_res_coordinates, pose_rank)
+            list[PoseData]
         """
         if isinstance(pose_ids, int):
             pose_ids = [pose_ids]
+        # Pose_comments is a GUI-only table that may not exist in CLI/older databases
+        has_comments = include_comment and self._is_table(POSE_COMMENTS_SCHEMA.name)
         placeholders = ",".join(["?"] * len(pose_ids))
         query = self.QueryBuilder()
         query.SELECT(
@@ -1337,17 +1372,39 @@ class StorageManager(ABC):
             "R.docking_score",
             "R.leff",
             "R.pose_coordinates",
-            "R.flexible_res_coordinates",
             "R.pose_rank",
-        ).FROM("Results", "R").JOIN("Ligands", "L", "ligand_id").WHERE(
-            f"R.pose_id IN ({placeholders})", *pose_ids
         )
+        if include_flexres:
+            query.SELECT("R.flexible_res_coordinates")
+        if has_comments:
+            query.SELECT("COALESCE(Pc.comment, '') AS comment")
+        query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
+        if has_comments:
+            query.JOIN("Pose_comments", "Pc", "pose_id", kind="LEFT")
+        query.WHERE(f"R.pose_id IN ({placeholders})", *pose_ids)
         rows = self.db_query(*query.build()).fetchall()
-        # pose_coordinates (index 5) is stored natively; return it as a list of [x,y,z]
-        return [
-            (*row[:5], self._deserialize_pose_coordinates(row[5]), *row[6:])
-            for row in rows
-        ]
+
+        result = []
+        for row in rows:
+            # core columns (pose_coordinates stored natively -> list of [x,y,z])
+            pose_id, rdmol, ligname, docking_score, leff, coords, pose_rank = row[:7]
+            extra = row[7:]
+            flexres = extra[0] if include_flexres else None
+            comment = (extra[1] if include_flexres else extra[0]) if has_comments else ""
+            result.append(
+                PoseData(
+                    pose_id,
+                    rdmol,
+                    ligname,
+                    docking_score,
+                    leff,
+                    self._deserialize_pose_coordinates(coords),
+                    pose_rank,
+                    flexres,
+                    comment,
+                )
+            )
+        return result
 
     def fetch_columns_from_table_as_dicts(
         self, table: str, columns: list, length: int = None, starting_rowid: int = 0
