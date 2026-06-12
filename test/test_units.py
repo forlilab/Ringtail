@@ -317,6 +317,41 @@ class TestOutput:
         rtc_bm = RingtailCore(db_file=bookmark_db_name)
         assert rtc_bm.table_length("Results") == 8
 
+    def test_compress_decompress_db(self, populated_db, tmp_path):
+        from ringtail.util import compress_file, decompress_file, detect_db_type
+        import shutil as _sh
+
+        src = populated_db.db_file
+        full = populated_db.table_length("Results")
+
+        # filtered subset -> compress (gzip) -> decompress -> open and verify count
+        populated_db.filter(eworst=-7, output_bookmark="exp")
+        subset = populated_db.export_bookmark_db("exp", str(tmp_path / "subset.db"))
+        populated_db.delete_bookmark("exp")
+        sub_count = RingtailCore(db_file=subset).table_length("Results")
+        assert sub_count == 8
+
+        art = compress_file(subset, str(tmp_path / "subset.db.gz"), method="gzip", level=6)
+        assert art.endswith(".gz") and Path(art).exists()
+        back = decompress_file(art, str(tmp_path / "back.db"))
+        assert detect_db_type(back) in ("sqlite", "duckdb")
+        assert RingtailCore(db_file=back).table_length("Results") == sub_count
+        assert Path(src).exists()  # source database is never destroyed
+
+        # no-filter: compress the whole db -> decompress -> full count preserved
+        art2 = compress_file(src, str(tmp_path / "whole.db.gz"), method="gzip")
+        back2 = decompress_file(art2, str(tmp_path / "whole_back.db"))
+        assert RingtailCore(db_file=back2).table_length("Results") == full
+
+        # zstd -> gzip fallback when the zstd binary is unavailable
+        orig_which = _sh.which
+        _sh.which = lambda x: None if x == "zstd" else orig_which(x)
+        try:
+            fb = compress_file(src, str(tmp_path / "fb.db.zst"), method="zstd")
+        finally:
+            _sh.which = orig_which
+        assert fb.endswith(".gz")
+
     def test_similar_ligands_interaction(self, populated_db, tmp_path):
         populated_db.filter(ebest=-6, interaction_cluster=0.5)
         options = populated_db.fetch_cluster_options("28837")

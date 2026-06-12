@@ -4,10 +4,16 @@
 # Ringtail static utility methods
 #
 
+import os
+import shutil
+import subprocess
 from typing import Union
 from .logutils import get_logger
 
 logger = get_logger(__name__)
+
+# file extension per compression method
+_COMPRESS_EXT = {"zstd": ".zst", "gzip": ".gz", "xz": ".xz"}
 
 
 def numlist2str(list: list, separator: str) -> str:
@@ -95,6 +101,101 @@ def detect_db_type(filepath: str) -> str:
             return "sqlite"
         except Exception:
             raise TypeError(f"Database type not recognized in file {filepath}")
+
+
+def compress_file(
+    src: str, dst: str = None, method: str = "zstd", level: int = 18
+) -> str:
+    """Compress a file to a single artifact, leaving ``src`` untouched.
+
+    Args:
+        src: path to the file to compress (never modified, moved, or deleted).
+        dst: output artifact path. If None, ``src`` + the method's extension.
+        method: "zstd" (default), "gzip", or "xz".
+        level: compression level (zstd 1-22, gzip 1-9, xz 0-9).
+
+    Returns:
+        str: the artifact path actually written (extension reflects the method
+        actually used — note that "zstd" falls back to "gzip" if the zstd binary
+        is unavailable).
+    """
+    if method not in _COMPRESS_EXT:
+        raise ValueError(f"Unknown compression method '{method}'")
+
+    # zstd is a multithreaded shell-out; fall back to stdlib gzip if absent
+    if method == "zstd" and shutil.which("zstd") is None:
+        logger.warning("zstd binary not found on PATH — falling back to gzip.")
+        method = "gzip"
+
+    # normalize dst: strip any known compression suffix, then add the one for the
+    # method actually used (so an explicit dst + gzip fallback can't double-suffix)
+    if dst is None:
+        dst = src
+    for _ext in _COMPRESS_EXT.values():
+        if dst.endswith(_ext):
+            dst = dst[: -len(_ext)]
+            break
+    dst += _COMPRESS_EXT[method]
+
+    logger.info(f"Compressing {src} -> {dst} ({method} -{level})")
+    if method == "zstd":
+        # -T0 = all cores; -f overwrite; --long for better ratio on large files
+        subprocess.run(
+            ["zstd", f"-{level}", "-T0", "--long=27", "-f", "-q", "-o", dst, src],
+            check=True,
+        )
+    elif method == "gzip":
+        import gzip
+
+        with open(src, "rb") as fin, gzip.open(dst, "wb", compresslevel=min(level, 9)) as fout:
+            shutil.copyfileobj(fin, fout, length=1024 * 1024)
+    elif method == "xz":
+        import lzma
+
+        with open(src, "rb") as fin, lzma.open(dst, "wb", preset=min(level, 9)) as fout:
+            shutil.copyfileobj(fin, fout, length=1024 * 1024)
+
+    return dst
+
+
+def decompress_file(src: str, dst: str = None) -> str:
+    """Decompress an artifact produced by :func:`compress_file`.
+
+    Method is inferred from the extension (.zst/.gz/.xz). ``src`` is left intact.
+
+    Args:
+        src: compressed artifact path.
+        dst: output path. If None, ``src`` with the compression suffix removed.
+
+    Returns:
+        str: the decompressed file path.
+    """
+    ext = os.path.splitext(src)[1].lower()
+    if dst is None:
+        dst = src[: -len(ext)] if ext in (".zst", ".gz", ".xz") else src + ".out"
+
+    logger.info(f"Decompressing {src} -> {dst}")
+    if ext == ".zst":
+        if shutil.which("zstd") is None:
+            raise RuntimeError(
+                "zstd binary not found on PATH; cannot decompress a .zst artifact. "
+                "Install zstd or decompress it on a machine that has it."
+            )
+        subprocess.run(["zstd", "-d", "-f", "-q", "-o", dst, src], check=True)
+    elif ext == ".gz":
+        import gzip
+
+        with gzip.open(src, "rb") as fin, open(dst, "wb") as fout:
+            shutil.copyfileobj(fin, fout, length=1024 * 1024)
+    elif ext == ".xz":
+        import lzma
+
+        with lzma.open(src, "rb") as fin, open(dst, "wb") as fout:
+            shutil.copyfileobj(fin, fout, length=1024 * 1024)
+    else:
+        raise ValueError(f"Unrecognized compression extension '{ext}' for {src}")
+
+    return dst
 
 
 def db_alias_from_path(db_path: str) -> str:

@@ -41,6 +41,8 @@ rt_process_vs = "ringtail.cli.rt_process_vs:main"
 rt_upgrade_db = "ringtail.cli.rt_upgrade_db:main"
 rt_merge = "ringtail.cli.rt_merge:main"
 rt_convert_coordinates = "ringtail.cli.rt_convert_coordinates:main"
+rt_compress_db = "ringtail.cli.rt_compress_db:main"
+rt_decompress_db = "ringtail.cli.rt_decompress_db:main"
 
 [project.urls]
 Homepage = "https://github.com/forlilab/Ringtail"
