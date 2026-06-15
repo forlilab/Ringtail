@@ -228,6 +228,7 @@ INTERACTIONS_SCHEMA = TableSchema(
         ),
     },
     sqlite_indices=[["interaction_id", "pose_id"], ["pose_id"], ["interaction_id"]],
+    duckdb_no_constraints=True,
 )
 
 FILTERS_SCHEMA = TableSchema(
