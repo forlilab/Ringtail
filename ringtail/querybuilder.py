@@ -7,7 +7,7 @@
 
 class QueryBuilder:
     """
-    Currently only configured to work with sqlite, will have to subclass once we add more database types
+    'Universal' SQL query builder, currently with DuckDB and SQLITE implementations
     """
 
     def __init__(self):
@@ -21,11 +21,25 @@ class QueryBuilder:
         self.drop_if_exists = None
         self.subqueries = []
         self.params = []
+        self.subquery_params = []
         self.aliases = {}
         self.insert_into = None
         self.returning = None
         self.limit = None
         self.descending = False
+
+    def __repr__(self):
+        """
+        for debugging
+
+        Returns:
+            _type_: _description_
+        """
+        try:
+            sql, params = self.build()
+        except Exception as e:
+            return f"<{type(self).__name__} (unbuildable): {e}>"
+        return f"<{type(self).__name__}: {sql!r} params={params}>"
 
     def INSERT_INTO(self, table_name, *columns):
         if columns:
@@ -71,7 +85,9 @@ class QueryBuilder:
         )
 
     def IN_BOOKMARK(self, bookmark):
-        return self.WHERE(f"{self.aliased('Results')}.pose_id IN ({self.bookmark_query(bookmark)})")
+        return self.WHERE(
+            f"{self.aliased('Results')}.pose_id IN ({self.bookmark_query(bookmark)})"
+        )
 
     def FROM(self, table, alias=None, db_name=None):
         if db_name and alias:
@@ -117,13 +133,15 @@ class QueryBuilder:
         return self
 
     def DESC(self, descending):
-        self.descending = descending
+        """Only works when an ORDER BY column is set."""
+        self.descending = bool(descending)
         return self
 
     def WITH_SUBQUERY(self, name, query, params=None):
         self.subqueries.append((name, query))
         if params:
-            self.params.extend(params)
+            # CTEs render before the main statement, so their params must lead.
+            self.subquery_params.extend(params)
         return self
 
     def DELETE_FROM(self, table: str):
@@ -148,6 +166,19 @@ class QueryBuilder:
         return alias
 
     def build(self, count=False):
+        statements = {
+            "INSERT": bool(self.insert_into),
+            "SELECT": bool(self.selects),
+            "DELETE": bool(self.delete_from),
+            "DROP": bool(self.drop_if_exists),
+        }
+        active = [name for name, is_set in statements.items() if is_set]
+        if len(active) > 1:
+            raise ValueError(
+                f"QueryBuilder has conflicting statement types: {', '.join(active)}. "
+                "Use one builder per statement."
+            )
+
         parts = []
         if self.insert_into:
             parts.append(f"""{self.insert_into}""")
@@ -184,10 +215,10 @@ class QueryBuilder:
             parts.append("GROUP BY " + ", ".join(self.group_bys))
 
         if self.order_by:
-            parts.append("ORDER BY " + self.order_by)
-
-        if self.descending:
-            parts.append("DESC")
+            order_clause = "ORDER BY " + self.order_by
+            if self.descending:
+                order_clause += " DESC"
+            parts.append(order_clause)
 
         if self.limit is not None:
             parts.append(f"LIMIT {self.limit}")
@@ -196,11 +227,12 @@ class QueryBuilder:
             parts.append("RETURNING " + self.returning)
 
         sql = " ".join(parts)
+        params = self.subquery_params + self.params
         if count:
             if not self.selects:
                 raise ValueError("build(count=True) is only valid for SELECT queries")
-            return f"SELECT COUNT(*) FROM ({sql})", self.params
-        return sql, self.params
+            return f"SELECT COUNT(*) FROM ({sql})", params
+        return sql, params
 
 
 class QueryBuilderSQLite(QueryBuilder):
@@ -210,14 +242,30 @@ class QueryBuilderSQLite(QueryBuilder):
 
 class QueryBuilderDuck(QueryBuilder):
     """
-    At some point I need to keep a wrapped SELECTS list so I can keep track,
-    some times I might need to modify how it is wrapped
+    DuckDB rejects bare (non-aggregated) columns in a grouped SELECT, where
+    SQLite tolerates them. GROUP_BY wraps each plain selected column not in the
+    GROUP BY in ANY_VALUE() to keep the query valid, leaving grouped columns and
+    columns that are already aggregates untouched.
     """
 
+    # Prefixes (lowercased, paren-anchored) of select expressions that are
+    # already aggregates and must not be wrapped again.
+    _AGG_PREFIXES = (
+        "any_value(",
+        "count(",
+        "sum(",
+        "min(",
+        "max(",
+        "avg(",
+        "group_concat(",
+    )
+
     def GROUP_BY(self, *fields):
-        self.group_bys.extend(fields)
+        super().GROUP_BY(*fields)
         group_set = {f.lower() for f in self.group_bys}
         for index, item in enumerate(self.selects):
-            if "ANY_VALUE" not in item and item.lower() not in group_set:
-                self.selects[index] = f"ANY_VALUE({item})"
+            stripped = item.strip().lower()
+            if stripped in group_set or stripped.startswith(self._AGG_PREFIXES):
+                continue
+            self.selects[index] = f"ANY_VALUE({item})"
         return self
