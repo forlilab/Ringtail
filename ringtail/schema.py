@@ -76,6 +76,15 @@ DUCKDB_TYPES: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# Schema version
+# ---------------------------------------------------------------------------
+# The database schema version, stamped into the ringtail_schema_version table of
+# every database created by this code. A database with no such table predates
+# versioning (a pre-release lab build) and must be upgraded before use.
+SCHEMA_VERSION = "3.0.0"
+
+
+# ---------------------------------------------------------------------------
 # Table schemas
 # ---------------------------------------------------------------------------
 
@@ -179,6 +188,29 @@ DB_PROPERTIES_SCHEMA = TableSchema(
         "number_of_poses": Column("INTEGER", "number of poses in session"),
     },
 )
+
+SCHEMA_VERSION_SCHEMA = TableSchema(
+    name="ringtail_schema_version",
+    columns={
+        "id": Column(
+            "INTEGER",
+            "row identifier",
+            primary_key=True,
+            autoincrement=True,
+            nullable=False,
+        ),
+        "schema_version": Column(
+            "VARCHAR", "database schema version, e.g. '3.0.0'", nullable=False
+        ),
+        "ringtail_version": Column(
+            "VARCHAR", "ringtail package version that wrote this row"
+        ),
+        "applied_at": Column(
+            "DATETIME", "when this version was stamped", default="CURRENT_TIMESTAMP"
+        ),
+    },
+)
+# Append-only: each create/upgrade adds a row; the latest (max id) is current.
 
 INTERACTION_INDICES_SCHEMA = TableSchema(
     name="Interaction_indices",
@@ -380,6 +412,7 @@ TABLE_SCHEMAS: dict[str, TableSchema] = {
         RESULTS_SCHEMA,
         RECEPTORS_SCHEMA,
         DB_PROPERTIES_SCHEMA,
+        SCHEMA_VERSION_SCHEMA,
         INTERACTION_INDICES_SCHEMA,
         INTERACTIONS_SCHEMA,
         FILTERS_SCHEMA,

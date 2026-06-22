@@ -9,7 +9,6 @@ from .logutils import get_logger
 
 logger = get_logger(__name__)
 from typing import Union
-from importlib.metadata import version
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -53,10 +52,6 @@ class StorageManagerDuckDB(StorageManager):
         conn (duckdb.DuckDBPyConnection): Connection to database
     """
 
-    # "db_schema_ver":list("compatible code versions")
-    _db_schema_code_compatibility = {
-        "3.0.0": ["3.0.0"],
-    }
     QueryBuilder = QueryBuilderDuck
 
     def __init__(
@@ -1100,22 +1095,6 @@ class StorageManagerDuckDB(StorageManager):
                 f"Error during update and insertion of interactions: {e}"
             ) from e
 
-    def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
-        """
-        Method that checks if the database merging into main is compatible with main,
-        and checks if both databases are of appropriately high version where merge has
-        been implemented
-        #NOTE the ringtail duckdb currently does not track schema version
-
-        Args:
-            merging_db_alias (str): alias for the database being merged into main
-
-        Returns:
-            bool: if the two databases are compatible
-        """
-
-        return True
-
     def _sync_auto_increment_state(self):
         """Reset all sequences to current MAX values in their tables"""
         sequence_map = {
@@ -1494,30 +1473,11 @@ class StorageManagerDuckDB(StorageManager):
         logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
         return backup_name
 
-    def check_ringtaildb_version(self) -> tuple[bool, str]:
-        # TODO rejigger for duckdb, metadata table?
-        """
-        Checks the database version and confirms whether the code base is compatible with it
-
-        Returns:
-            bool: whether or not db is compatible with the code base
-            str: current database version
-        """
-        db_schema_ver = "3.0.0"
-        if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
-            is_compatible = True
-        else:
-            is_compatible = False
-            logger.warning(
-                f"Database version {db_schema_ver} is NOT compatible with code base version {version('ringtail')}"
-            )
-        return is_compatible, db_schema_ver
-
     def convert_pose_coordinates_to_native(self):
         """DuckDB cannot ALTER/DROP a column on a table referenced by foreign keys
         (Interactions -> Results.pose_id), so an in-place conversion is impossible.
-        The upgrade is a full recreate (which also compacts the file ~3-5x); use the
-        rt_convert_coordinates.py script, which builds a fresh native-format database.
+        The upgrade requires a full recreate into a fresh native-format database
+        (which also compacts the file ~3-5x).
         """
         dtype = self.conn.execute(
             "SELECT data_type FROM information_schema.columns "
@@ -1528,25 +1488,8 @@ class StorageManagerDuckDB(StorageManager):
             return
         raise NotImplementedError(
             "DuckDB pose_coordinates conversion must recreate the database (DuckDB "
-            "cannot ALTER a foreign-key-referenced table). Run the script: "
-            "rt_convert_coordinates.py <database.db>"
+            "cannot ALTER a foreign-key-referenced table)."
         )
-
-    def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
-        """
-        Method that checks if the database merging into main is compatible with main,
-        and checks if both databases are of appropriately high version where merge has
-        been implemented
-        #NOTE the ringtail duckdb currently does not track schema version
-
-        Args:
-            merging_db_alias (str): alias for the database being merged into main
-
-        Returns:
-            bool: if the two databases are compatible
-        """
-
-        return True
 
     def _create_connection(self):
         """Creates database connection to self.db_file

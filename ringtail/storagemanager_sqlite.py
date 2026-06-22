@@ -1468,67 +1468,30 @@ class StorageManagerSQLite(StorageManager):
                 f"Code base version {code_version} is not compatible with database schema version {db_version}."
             )
 
-    def check_ringtaildb_version(self) -> tuple[bool, str]:
-        """
-        Checks the database version and confirms whether the code base is compatible with it
+    def _legacy_pragma_version(self) -> str:
+        """Read the legacy PRAGMA user_version of a pre-versioning SQLite database.
 
-        Returns:
-            bool: whether or not db is compatible with the code base
-            str: current database version
+        Used only by the 1.x/2.x -> 3.0 in-package upgrade chain to determine where
+        to start. Official (versioned) databases use check_ringtaildb_version in the
+        base class instead. Returns a dotted version string, e.g. '1.0.0'. Ringtail
+        1.0.0 never set user_version (reports '0'); a populated such database is
+        treated as the original 1.0.0 schema.
         """
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
         if db_version == "0":
-            # ringtail 1.0.0 did not have a user version, so catch if database has contents and version 0
             cur.execute(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='Results');"
             )
-            # if db version is 0 but has a results table, it is 1.0.0
             if cur.fetchone()[0] != 0:
                 db_version = "100"
-            # else empty or corrupt database
             else:
+                cur.close()
                 raise StorageError(
                     f"The database requested {self.db_file} does not exist or does not have any tables. Check for spelling errors, else the database may be corrupt (delete the file before using the same name again)"
                 )
-        db_schema_ver = ".".join([*db_version])
-        if version("ringtail") in self._db_schema_code_compatibility[db_schema_ver]:
-            is_compatible = True
-        else:
-            is_compatible = False
-            logger.warning(
-                f"Database version {db_schema_ver} is NOT compatible with code base version {version('ringtail')}"
-            )
         cur.close()
-        return is_compatible, db_schema_ver
-
-    def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
-        """
-        Method that checks if the database merging into main is compatible with main,
-        and checks if both databases are of appropriately high version where merge has
-        been implemented
-
-        Args:
-            merging_db_alias (str): alias for the database being merged into main
-
-        Returns:
-            bool: if the two databases are compatible
-        """
-        main_version = self.db_query("PRAGMA main.user_version").fetchone()[0]
-        merging_version = self.db_query(
-            f"PRAGMA {merging_db_alias}.user_version"
-        ).fetchone()[0]
-
-        if main_version != merging_version:
-            return False
-        if main_version < 300:
-            if main_version == 200:
-                logger.error(
-                    "The database is enabled for merging, but only with an older version of the code. Please contact code maintainer."
-                )
-            return False
-
-        return True
+        return ".".join([*db_version])
 
     def convert_pose_coordinates_to_native(self, chunk_size: int = 100000):
         """Upgrade an existing database whose pose_coordinates is stored as JSON text
@@ -1585,7 +1548,7 @@ class StorageManagerSQLite(StorageManager):
         if backup:
             self.clone()
 
-        original_version = self.check_ringtaildb_version()[1]
+        original_version = self._legacy_pragma_version()
         logger.info(
             f"Upgrading {self.db_file} of version {original_version} to version {new_version}:"
         )

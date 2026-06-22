@@ -19,8 +19,15 @@ from signal import signal, SIGINT
 from rdkit import Chem
 from typing import Any, Union, ClassVar, NamedTuple
 from importlib.metadata import version
+from packaging.version import Version
 from .ringtailoptions import Filters, statuses
-from .exceptions import StorageError, OptionError, VersionError, MergeError
+from .exceptions import (
+    StorageError,
+    OptionError,
+    VersionError,
+    MergeError,
+    DatabaseQueryError,
+)
 from .clustermanager import *
 from .querybuilder import QueryBuilder
 from .schema import (
@@ -45,6 +52,8 @@ from .schema import (
     RECEPTORS_SCHEMA,
     STATUS_TABLE_SCHEMA,
     POSE_COMMENTS_SCHEMA,
+    SCHEMA_VERSION_SCHEMA,
+    SCHEMA_VERSION,
     build_create_table,
 )
 from collections import defaultdict
@@ -70,7 +79,6 @@ class PoseData(NamedTuple):
 
 
 class StorageManager(ABC):
-    _db_schema_ver = "3.0.0"
     QueryBuilder = QueryBuilder
 
     # Whether Filtered_poses carries a denormalized ligand_id column. SQLite sets
@@ -83,11 +91,14 @@ class StorageManager(ABC):
     This class holds some of the common API for StorageManager child classes. 
     Each child class will implement their own functions to write to and read from the database
 
-    Attributes: 
-        _db_schema_ver (str): current database schema version
-        _db_schema_code_compatibility (dict): dictionary showing compatibility of code base versions with relational database schema versions
+    The current schema version lives in schema.SCHEMA_VERSION and is stamped into
+    the ringtail_schema_version table; see check_ringtaildb_version.
+
+    Attributes:
         active_connection (bool): if there is a current open connection to database
         keyboard_interrupt_allowed (bool): if Ctrl+Z will work, for example not supported in a GUI
+        QueryBuilder: dialect of querybuilder
+        _filtered_poses_has_ligand_id (bool): flag that optimizes handling of filtered poses for sqlite vs duckdb
     """
 
     dialect: ClassVar[str]
@@ -216,12 +227,13 @@ class StorageManager(ABC):
         Returns:
             int: number of passing ligands
         """
-        # before we do anything, check that the DB version matches the version number of our module
+        # before we do anything, check that the DB schema version is usable
         rt_version_same, db_rt_version = self.check_ringtaildb_version()
         if not rt_version_same:
-            # NOTE will cause error when any version int is > 10
             raise StorageError(
-                f"Input database was created with Ringtail v{'.'.join([i for i in db_rt_version[:2]] + [db_rt_version[2:]])}. Confirm that this matches current Ringtail version and use Ringtail upgrade script to upgrade database if needed."
+                f"Database schema version '{db_rt_version}' is not compatible with this "
+                f"Ringtail (schema {SCHEMA_VERSION}). Ask your package administrator for "
+                "the script rt_upgrade_from_v3alpha.py to upgrade the database."
             )
 
         # get the final filter query, has a {selection} place holder
@@ -1390,7 +1402,9 @@ class StorageManager(ABC):
             pose_id, rdmol, ligname, docking_score, leff, coords, pose_rank = row[:7]
             extra = row[7:]
             flexres = extra[0] if include_flexres else None
-            comment = (extra[1] if include_flexres else extra[0]) if has_comments else ""
+            comment = (
+                (extra[1] if include_flexres else extra[0]) if has_comments else ""
+            )
             result.append(
                 PoseData(
                     pose_id,
@@ -1822,16 +1836,83 @@ class StorageManager(ABC):
         """
         ...
 
-    @abstractmethod
-    def check_ringtaildb_version(self):
+    def _stamp_schema_version(self, schema_version: str = SCHEMA_VERSION):
+        """Append a row to ringtail_schema_version recording the schema version and
+        the ringtail package version that wrote it."""
+        query = self.QueryBuilder()
+        query.INSERT_INTO(
+            SCHEMA_VERSION_SCHEMA.name, "schema_version", "ringtail_version"
+        )
+        self.db_query(
+            query.build()[0],
+            (schema_version, version("ringtail")),
+            commit=True,
+        )
+
+    def _read_schema_version(self, db_alias: str = None) -> str:
+        """Latest stamped schema version of the current database (db_alias=None) or
+        an attached one. Returns the version string, or None if the table exists but
+        is empty. Raises DatabaseQueryError if the table is absent (unversioned db).
+        Built via QueryBuilder so the optional db-qualification and ORDER BY/LIMIT are
+        rendered for the active dialect.
         """
-        Checks the database version and confirms whether the code base is compatible with it
+        query = self.QueryBuilder()
+        query.SELECT("schema_version").FROM(
+            SCHEMA_VERSION_SCHEMA.name, db_name=db_alias
+        ).ORDER_BY("id").DESC(True).LIMIT(1)
+        row = self.db_query(query.build()[0]).fetchone()
+        return row[0] if row and row[0] else None
+
+    def _has_results_table(self) -> bool:
+        """Whether the database holds Ringtail content (a Results table). Used to
+        tell a brand-new/empty database from a pre-versioning one when the schema
+        version table is absent."""
+        query = self.QueryBuilder()
+        query.SELECT("1").FROM(RESULTS_SCHEMA.name).LIMIT(1)
+        try:
+            self.db_query(query.build()[0])
+        except DatabaseQueryError:
+            return False
+        return True
+
+    def check_ringtaildb_version(self) -> tuple[bool, str]:
+        """Check the database schema version and whether this code can use it.
+
+        The version is read from the ringtail_schema_version table. If that table
+        is missing the lookup raises DatabaseQueryError: the database predates
+        versioning (a pre-release lab build) and must be upgraded — reported as
+        incompatible so callers prompt for the upgrade script. Otherwise
+        compatibility is by major.minor (e.g. a future 3.1 schema is incompatible).
 
         Returns:
-            bool: whether or not db is compatible with the code base
-            str: current database version
+            tuple[bool, str]: (compatible, database schema version)
         """
-        ...
+        try:
+            db_version = self._read_schema_version()
+        except DatabaseQueryError:
+            logger.warning(
+                "Database has no schema version; it predates versioning and must be "
+                "upgraded. Ask your package administrator for the script "
+                "rt_upgrade_from_v3alpha.py."
+            )
+            return False, "unversioned"
+
+        if not db_version:
+            logger.warning(
+                "Database schema version is unset; ask your package administrator "
+                "for the script rt_upgrade_from_v3alpha.py."
+            )
+            return False, "unversioned"
+
+        db_v = Version(db_version)
+        code_v = Version(SCHEMA_VERSION)
+        compatible = (db_v.major, db_v.minor) == (code_v.major, code_v.minor)
+        if not compatible:
+            logger.warning(
+                f"Database schema version {db_version} is NOT compatible with this "
+                f"Ringtail (schema {SCHEMA_VERSION})."
+            )
+        return compatible, db_version
 
     @abstractmethod
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
@@ -2057,10 +2138,18 @@ class StorageManager(ABC):
         self._create_db_properties_table()
         self._create_filtering_tables()
         self._create_status_tables()
+        self._create_schema_version_table()
 
-        self._set_ringtail_db_schema_version(self._db_schema_ver)
+        self._stamp_schema_version(SCHEMA_VERSION)
         if commit:
             self.conn.commit()
+
+    def _create_schema_version_table(self):
+        """Create the ringtail_schema_version table (authoritative schema version)."""
+        for sql in build_create_table(
+            SCHEMA_VERSION_SCHEMA.name, SCHEMA_VERSION_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
 
     def _create_ligands_table(self, name=LIGANDS_SCHEMA.name):
         """Create table for ligands
@@ -2243,11 +2332,21 @@ class StorageManager(ABC):
             # check to see if file exist, and if it does, check that version is matching
             if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
                 self.conn = self._create_connection()
-                compatible, db_version = self.check_ringtaildb_version()
-                if not compatible:
-                    raise VersionError(
-                        f"The database is of version {db_version} which is not compatible with the code base of version {version('ringtail')}"
-                    )
+                # Only an initialized database (one with a Results table) needs a
+                # version check. An empty/uninitialized file — e.g. DuckDB writes a
+                # header on connect, so it is >0 bytes but has no tables — is treated
+                # like a brand-new database and created into.
+                if self._has_results_table():
+                    compatible, db_version = self.check_ringtaildb_version()
+                    if not compatible:
+                        raise VersionError(
+                            f"Database schema version '{db_version}' is not compatible "
+                            f"with this Ringtail (schema {SCHEMA_VERSION}). Ask your "
+                            "package administrator for the script "
+                            "rt_upgrade_from_v3alpha.py to upgrade the database."
+                        )
+                else:
+                    logger.info("Creating a new database file.")
             else:
                 logger.info("Creating a new database file.")
                 self.conn = self._create_connection()
@@ -2767,10 +2866,7 @@ class StorageManager(ABC):
             y = filter[3]
             z = filter[4]
             # calculate xyz space coordinates (pose_coordinates already a list of [x,y,z])
-            xyz = [
-                float(value)
-                for value in pose_coordinates[hit_atom_indices[index]]
-            ]
+            xyz = [float(value) for value in pose_coordinates[hit_atom_indices[index]]]
             # calculate the sum of squares distances
             d2 = (xyz[0] - x) ** 2 + (xyz[1] - y) ** 2 + (xyz[2] - z) ** 2
             if d2 <= sqdist:
@@ -3168,9 +3264,7 @@ class StorageManager(ABC):
 
         if row is None:
             # Nothing matched — clean up the empty filter entry; old bookmark untouched
-            self.conn.execute(
-                "DELETE FROM Filters WHERE filter_id = ?", (filter_id,)
-            )
+            self.conn.execute("DELETE FROM Filters WHERE filter_id = ?", (filter_id,))
             self.conn.commit()
             return 0
 
@@ -3534,19 +3628,42 @@ class StorageManager(ABC):
         raise NotImplementedError
 
     def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
-        """
-        Method that checks if the database merging into main is compatible with main,
-        and checks if both databases are of appropriately high version where merge has
-        been implemented
-        #NOTE the ringtail duckdb currently does not track schema version
+        """Whether the database being merged in is compatible with this one.
+
+        Both must carry the same major.minor schema version, read from each
+        database's ringtail_schema_version table. A database with no such table
+        predates versioning and must be upgraded before merging (see
+        check_ringtaildb_version). Dialect-agnostic via QueryBuilder: the current
+        database is read unqualified and the incoming one via its attach alias.
 
         Args:
-            merging_db_alias (str): alias for the database being merged into main
+            merging_db_alias (str): alias under which the merging database is attached
 
         Returns:
-            bool: if the two databases are compatible
+            bool: if the two databases are compatible for merging
         """
-        raise NotImplementedError
+        try:
+            main_version = self._read_schema_version()
+            merging_version = self._read_schema_version(merging_db_alias)
+        except DatabaseQueryError:
+            logger.error(
+                "One of the databases has no schema version (it predates versioning) "
+                "and must be upgraded before merging. Ask your package administrator "
+                "for the script rt_upgrade_from_v3alpha.py."
+            )
+            return False
+
+        if not (main_version and merging_version):
+            return False
+
+        main_v, merging_v = Version(main_version), Version(merging_version)
+        if (main_v.major, main_v.minor) != (merging_v.major, merging_v.minor):
+            logger.error(
+                f"Cannot merge: schema versions differ (this database "
+                f"{main_version}, merging database {merging_version})."
+            )
+            return False
+        return True
 
     def _get_merge_id(self, mergingdb_path: str) -> int:
         """
