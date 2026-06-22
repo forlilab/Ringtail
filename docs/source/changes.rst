@@ -2,23 +2,46 @@
 
 Changes in Ringtail
 ######################
-Changes in 3.x: New graphical user interface and support for DuckDB
-********************************************************************
+Changes in 3.0: Faster and smaller, and lots of new functionality
+******************************************************************
+
+Ringtail 3 comes with support for the new ADNG docking engine <link>, now uses the DuckDB database engine by default, and includes an overhauled database schema leading to faster screening and filtering. There are new output options including CSV export with custom column choices without needing to know SQL, and new or improved command line tools to handle database merging and compression/decompression. Overall a Ringtail database now takes up less space, and is significantly faster filter and screen. 
+
+Enhancements to the codebase
+==============================
+* Works with ADNG SDF file docking output, and allows receptor to be provided as a `json`
+* DuckDB backend offered as an alternative to SQLite, with overall similar database creating times and significantly enhanced filtering times and smaller file size
+* Abandoned using views to store filtered poses in favor of a long-and-skinny `Filtered_poses` and `Filters` tables, significantly speeding up filtering and especially progressive filtering
+* Multiprocess now uses 'fork' start method for compatibility with multithreaded processes and enables Ringtail on Windows machines #TODO 
+* A larger default chunk size of docking data is parsed before writing to the database 
+* Package handling modernized to use pyproject.toml 
+* Additional filters allow specification of minimun and maximum ligand molecular weight, `ligand_min_molweight` and `ligand_max_molweight`
+* The method `export_bookmark_db` uses enhanced logic which speeds up the creation of a new subset database
+* It's now possible to assign status/flags to poses via the API using `update_pose_status`, such as Accepted/1, Maybe/2, Rejected/3 or 0 to remove status
+* New method `merge_databases` which will safely merge one or more secondary database with the database currently initialized as a Ringtail object. 
+* New method to (re-)calculate interactions for vina and ADNG results. This will delete all interactions present and calculate them all anew based on current receptor data in the database and given vdw and hb cutoffs. Useful if interactions were not calculated during database creation, or if user wants to re-calculate them with new interaction cutoff distances. 
+* Interaction calculations uses a k-d tree of the receptor atoms and batched lookup for all provided poses, built once instead of per pose as previously done, and all atoms in the pose are checked in batch instead of one by one, significantly reducing time to calculate interactions 
+* Ringtail database version is now tracked in a `ringtail_schema_version` table (SQLite `PRAGMA user_version` has been depreceated)
+* A more flexible Pytests harness for advanced users and dvelopers
+
 
 Changes in command line tools
 ==================================================
 * New field `--docking_results`, `--dr` accepts any file input including one or more folders/file paths, one or more single files, and one or more file lists (.txt). The depreceated fields `--file`, `--file_list`, and `--file_path` will remain for compatibility with existing scripts.
+* `--add_interactions` has been replaced with `--no_interactions`/`-ni`, making calculating interactions the default
 * New filter options for molecular weight `--ligand_min_molweight` and `--ligand_max_molweight`
-* There is now one upgrade script with version as input, where there previously was one db upgrade script per version
-* `--storage_type` can be used to specify database engine, with option to use 'duckdb' (defualts to sqlite)
-* `--docking_mode` now only an option for `write` as it is not relevant for the `read` processes
+* New filter input `--ligand_name_file` allows providing a .csv file of ligand names, which will be applied as a filter (e.g., for exporting SDFs for select ligands). Works the same as `--ligand_name` but allows for a larger number of provided names
+* There is now one upgrade CLI `rt_upgrade_db` script with version as input
+* New CLI scripts `rt_compress_db` and `rt_decompress_db` to compress and decompress a database, with optional `--eworst` and `--leworst` filters applied
+* `--storage_type` can be used to specify database engine (defaults to duckdb)
+* `--docking_mode` now only required during `write` 
 * Writing a filter results "log" file has a new command line keyword `--output_log` (still uses shorthand `-l`), is now optional, and will only be done if `--output_log` is specified
-* The command `--logfile` will write logging output to a file
+* The command `--logfile` will write standard logger output to a file
 * The previous `--filter_bookmark` has been changed to `--input_bookmark` for consistency
 * New CLI flag `--print_bookmarks` prints all current bookmarks in the database
 * `--file_pattern` has been discontinued, and is inferred from docking mode (which will attempt to accept file pattern as input)
-* `--export_bookmark_csv` can now be used as a flag (True/False) to export bookmark given in `--bookmark_name`, or with string input as the resulting csv file name. If used in conjunction with `--bookmark_name` and `--outfields` it will produce a csv with the desired columns. Full tables can be exported using the `--bookmar_name` tag, but this will not work with `--outfields`
-* `--outfields` now uses names of columns as they are in the database from the Results, Ligands, and Interaction_indices tables. This inculdes new fields from the interaction table, and that some old fields have changed:
+* `--export_bookmark_csv` can now be used as a flag (True/False) to export bookmark given in `--bookmark_name`, or with string input as the resulting csv file name. If used in conjunction with `--bookmark_name` and `--outfields` it will produce a csv with the desired columns. Full tables (like `Interactions`) can be exported using the `--bookmar_name` tag, but this will not work with `--outfields`
+* `--outfields` now uses the names of columns as they are in the database from the Results, Ligands, and Interaction_indices tables (and not a mix of column names and aliases, as before). This inculdes new fields from the interaction table, and that some old fields have changed:
     ============ ===============
       Old          New
     ============ ===============
@@ -35,56 +58,37 @@ Changes in command line tools
     hb            num_hb
     ============ ===============
 
-
-Enhancements to the codebase
-==============================
-***** Fully developed API can use python for scripting exclusively (see :ref:`API <api>` page for full description)
-* DuckDB offered as an alternative to SQLite, with overall similar database creating times and significantly enhanced filtering times
-* `storage_type` needs only be specified when a database is first created, storage_type will automatically be detected for an existing database (detected storage_type takes precedence over specified storage_type)
-* New dataclass `RingtailDefaults` which are used to a larger extend in method signatures where appropriate
-* Using toml #TODO
+Changes to API and code behavior
+================================
+* Ringtail auto-detects `storage_type` for existing databases
 * Simplified `add_results_from_files` API has only one file input field `docking_results` which will accept a single or a list of, and a mix of files, folders, and lists of file paths. `file`, `file_list`, and `file_path` have been depreceated from the API. 
-* Validation of docking mode adds some flexibility in how a docking engine is reference to, eg ADGPU vs GPU
-* Multiprocess now uses 'fork' start method for compatibility with multithreaded processes such as the GUI
-* Ligand efficiency, a calculated value, is rounded to two decimal points reflect the accuracy of the numbers used to calculate it (docking score and number of atoms)
-* Database write is faster by parsing a larger number of docking results to memory before committing to the database (previously 1 at the time, now 10,000)
+* `docking_mode` specification is more flexible, e.g., 'adgpu', 'gpu', and 'dlg' are all valid for AutoDock-GPU docking mode
+* Database schema is now fully defined in `schema.py`, and any database table and column info is derived from this single source of truth
+* For the methods `filter()` and `cluster()` the keys `bookmark_name` and `filter_bookmark` have been changed to `output_bookmark` and `input_bookmark`, respectively, for clarity
+* The column `nr_interactions` in the Results table is now called `num_interactions` for consistency with `num_hb`
+* The column `ligand_coordinates` in the Results table is now called `pose_coordinates`, and these coordinates are no longer stored as a string (sqlite: float32 BLOB and duckdb: float array)
+* The column `deltas` in the Results table is now called `delta`
+* The following columns have been removed from the Ligands table (information now stored in the binary rdkit Mol): `atom_index_map`, `hydrogen_parents`, and `input_model`.
+* `create_rdkit_mol` now `create_rdkit_mols` and supports more efficient database fetching of binary rdkit write_molecule_sdfs
+* The method `drop_bookmark` is now `delete_bookmark`
+* The API `find_similar_ligads` has been replaced by `fetch_cluster_options` and `fetch_clustered_similars`, respectively
 * `docking_mode` is no longer a property of the Ringtail object, only an argument for writing to the database (i.e., `add_results_from_files`)
-* `access_mode` is an optional initialization argument which alters the behavior of some API methods (defaults to `api`)
-* Additional filters for minimun and maximum ligand molecular weight, `ligand_min_molweight` and `ligand_max_molweight`
-* Will only write a filter log file (e.g., `output_log.txt`) if specified, which significantly enhances filtering speeds when not used
-* New API method for clustering across a pre-filtered bookmark (can technically also cluster all Results)
-* Bookmarks are no longer saved as views (i.e., unrealized tables), instead the criteria of a bookmark (e.g., a dict of filters) is saved in the new `Filters` table with a unique filter_id, and all passing pose_id`s with associated filter_id`s are stored in `Filtered_poses`
+* `access_mode` is an optional initialization argument which alters the behavior of some API methods 
 * The `write_flexres_pdb` method now allows more than one ligand input, for example by providing a bookmark name all ligands in that bookmark will be used to write the same number of PDBs (there will be a warning of attempting to write more than 10 files)
 * The method `export_receptor` is now `export_receptor_pdbqt`, and a modernized version to `write_flexres_pdb` has been added which is compatible with the new receptor Polymer object (this new method works without flexible residues as well)
 * `write_molecule_sdfs` method argument `write_nonpassing` has been discontinued, and `ligname` (string or list of strings) has been added. It is assumed that if a `bookmark_name` is provided, only passing poses of each ligand will be written to an SD file. If no `bookmark_name` is provided, each pose of each ligand is written to the SDF.  
 * The method `export_csv` has been broken into three distinct methods, `export_columns_as_csv` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, `export_table_as_csv` where an entire table is exported, and `export_sql_as_csv` where the user specifies a properly formatted SQL prompt
-* The method `export_bookmark_db` 
-* Status selection enabled using `update_pose_status` API, three new tables included: Accepted/1, Maybe/2, Rejected/3 or 0 to remove status
-* The method `drop_bookmark` is now `delete_bookmark`
-* New method `get_bookmark_interactions` to get interaction data from a bookmark
-* Several new APIs to support the GUI, generally not useful outside the GUI
-* New method `merge_databases` which will safely merge a secondary database with the database currently initialized as a Ringtail object. 
-* New method to assign status (accepted, rejected, maybe) to one or more ligands, poses, and/or ligand poses in a bookmark
-* New method to (re-)calculate interactions for vina and ng results. This will delete all interactions present and calculate them all anew based on current receptor data in the database and given vdw and hb cutoffs.
-
-Changes to code behavior
-=========================
-* The options for creating plots and opening PyMol sessions (and associated methods) have been discontinued in favor for the Ringtail GUI.
-* For the methods `filter()` and `cluster()` the keys `bookmark_name` and `filter_bookmark` have been changed to `output_bookmark` and `input_bookmark`, respectively, for clarity
-* The column `nr_interactions` in the Results table is now called `num_interactions` for consistency with `num_hb`
-* The column `ligand_coordinates` in the Results table is now called `pose_coordinates`
-* The column `deltas` in the Results table is now called `delta`
-* Ringtail bookmarks from e.g., filtering clustering were previously created as database views, which appear as tables that are unrealized until viewing them. This has been replaced by a `Filters` table which holds filter information (previous equivalent was `Bookmarks` table) and the poses passing a given filter are stored in a tall-skinny table `Filtered_poses`. A significant speed increase was enabled by this move, and any other behavior related to bookmarks is the same. 
-* The following columns have been removed from the Ligands table (information now stored in the binary rdkit Mol): `atom_index_map`, `hydrogen_parents`, and `input_model`.
-* `create_rdkit_mol` now `create_rdkit_mols` and supports more efficient database fetching of binary rdkit write_molecule_sdfs
-* The API `find_similar_ligads` has been replaced by `fetch_cluster_options` and `fetch_clustered_similars`, respectively, and the command line interface moved to `rt_process_vs`
+* The options for creating plots and opening PyMol sessions (and associated methods) through the CLI have been discontinued 
+* The class ResultsManager, designed to handle different multi processor options, has been removed
 
 Bug fixes
 ===========
 * For vina results, special docking atoms (for macrocycles and waters) may have been contributing to calculated van der Waals interactions in the database. This is no longer the case, so if e.g., a database is recreated in v3.0.0 from the original docking .PDBQTs the new database may have fewer interactions. 
+* Ligand efficiency, a calculated value, is rounded to two decimal points reflect the accuracy of the numbers used to calculate it (docking score and number of atoms)
+* Will only write a filter log file (e.g., `output_log.txt`) if specified
 * Exporting poses with flexible receptor residues will now export all poses of a given ligand, not just the best scoring one 
 
-
+#TODO add 2.3.1
 Changes in 2.1.1: bug fixes and result plot enhancements
 ********************************************************
 Enhancements
