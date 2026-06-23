@@ -23,16 +23,12 @@ Navigate to the data repository and chose one of several paths of adding results
 
 Input file_sources
 ===================
-By default, the newly-created database will be named ``output.db``. This name may be changed with the ``--output_db``` option.
-Ringtail allows referencing docking results files in multiple ways:
-``--file/-f``: path to a single file such as ``group1/1451.dlg`` (files compressed with gzip such as ``group1/1451.dlg.gz`` are also allowed)
-``--file_path/-fp``: path to a folder containing results. If this folder contains additional folders, use the ``--recursive`` option to traverse all the folders within the path. Adding "/" after the path will also make it recursive.
-``--file_list/-fl``: a text file containing a list of paths to docking results files. A receptor file can also be part of this list. 
-For each of these options you can specify one or more arguments, and we can create a database using all the allowed input options:
+By default, the newly-created database will be named ``output.db``. This name may be changed with the ``--output_db`` or ``-o`` option.
+Ringtail allows multiple formats to provide docking results using ``--docking_results`` or ``-dr``, including paths to one or more single files, path to one or more .txt files containing docking file paths, and paths to one or more directories containing files (use ``--recursive``/``-r`` to search recursively traverse folder). You can specify one or more arguments at once:
 
 .. code-block:: bash
 
-    $ rt_process_vs write --file lig1.dlg lig2.dlg --file_path path1/ path2 --file_list filelist1.txt filelist2.txt --output_db example.db
+    $ rt_process_vs write --docking_results lig1.dlg --docking_results lig2.dlg  folder1/ folder filelist1.txt filelist2.txt --output_db example.db
 
 Example file list:
 
@@ -48,14 +44,14 @@ To include the details of a receptor in the database, it is necessary to provide
 
 .. code-block:: bash
 
-    $ rt_process_vs write --file_list filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor
+    $ rt_process_vs write --docking_results filelist1.txt --receptor_file test_data/4j8m.pdbqt.gz --save_receptor
 
 It is possible to add docking results *or* a receptor file to a database that already exists. For this it is necessary to use the keyword ``--append_results``.
 You can also specify what to do if you are adding duplicate results for a ligand, by invoking the ``--duplicate_handling`` keyword with the value ``IGNORE`` (will not add the newest duplicate) or ``REPLACE`` (will overwrite the newest duplicate). Please note that the ``--duplicate_handling`` option makes database writing significantly slower.
 
 .. code-block:: bash
 
-    $ rt_process_vs write --input_db output.db --file_path test_data/group2 --append_results --duplicate_handling REPLACE
+    $ rt_process_vs write --input_db output.db --docking_results test_data/group2 --append_results --duplicate_handling REPLACE
 
 By default (for DLGs), Ringtail will store the best-scored (lowest energy) binding pose from the first 3 pose clusters in the DLG. For Vina, Ringtail will store the 3 best poses. Additional settings for writing to the database include how to handle the number of poses docked (``--max_poses``, or ``--store_all_poses`` which will overwrite the former).
 
@@ -68,14 +64,14 @@ It is further possible to overwrite a database by use of the argument ``--overwr
 .. code-block:: bash
 
     #AD-GPU
-    $ rt_process_vs write --input_db output.db --file_path test_data/group1 --max_poses 2 --interaction_tolerance 0.8
+    $ rt_process_vs write --input_db output.db --docking_results test_data/group1 --max_poses 2 --interaction_tolerance 0.8
 
     #vina
-    $ rt_process_vs write --input_db output.db --file_path test_data/vina --overwrite --receptor_file receptor.pdbqt --save_receptor --interaction_cutoffs 3.5,4.5
+    $ rt_process_vs write --input_db output.db --docking_results test_data/vina --overwrite --receptor_file receptor.pdbqt --save_receptor --interaction_cutoffs 3.5,4.5
 
 Printing a database summary
 ***************************
-During both ``write`` and ``read`` it is possible to add the tag ``-su`` or ``--summary`` which will print a summary of the database to stdout.
+During both ``write`` and ``read`` it is possible to add the tag ``-su`` or ``--print_summary`` which will print a summary of the database to stdout.
 
 .. code-block:: bash
 
@@ -112,7 +108,7 @@ By default, only the information for the top-scoring binding pose will be writte
 
 .. code-block:: bash
 
-    $ rt_process_vs read --input_db output.db --eworst -6 --outfields Ligand_Name,e,rank,receptor --order_results ref_rmsd --bookmark_name eworst6
+    $ rt_process_vs read --input_db output.db --eworst -6 --outfields ligname,docking_score,pose_rank --order_results ref_rmsd --bookmark_name eworst6
 
 When filtering, the passing results are also saved as a view in the database. This view is named ``passing_results`` by default. The user can specify a name for the view using the ``--bookmark_name`` option. No filtering is performed if no filters are given (see full list of filters :ref:`here <filter_kw_table>`). 
 Filtering may take from seconds to minutes, depending on the size of the database, roughly scaling as O(n) for n database Results rows (i.e. stored poses). Data for poses in a view may be accessed later using the ``--data_from_bookmark`` option.
@@ -158,7 +154,7 @@ Outputs
 *********
 The primary outputs from ``rt_process_vs`` are the database itself (``write`` mode) and the filtering log file (``read`` mode). There are several other output options as well, intended to allow the user to further explore the data from a virtual screening.
 
-Using the ``--export_sdf_path`` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the bookmark given with ``--bookmark_name``. The SDF will contain poses passing the filter/in the bookmark ordered by increasing docking score. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
+Using the ``--export_sdf_path`` option allows the user to specify a directory to save SDF files for ligands passing the given filters or in the bookmark given with ``--bookmark_name``. The SDF will contain poses passing the filter/in the bookmark ordered by increasing docking score, optionally the argument ``--individual_sdf_files`` can be used to output one SDF per ligand. Each ligand is written to its own SDF. This option enables the visualization of docking results, and includes any flexible/covalent ligands from the docking. The binding energies, ligand efficiencies, and interactions are also written as properties within the SDF file, with the order corresponding to the order of the pose order.
 
 If the user wishes to explore the data in CSV format, Ringtail provides two options for exporting CSVs. The first is ``--export_bookmark_csv``, which takes a string for the name of a table or result bookmark in the database and returns the CSV of the data in that table. The file will be saved as ``<table_name>.csv``.
 The second option is ``--export_query_csv``. This takes a string of a properly-formatted SQL query to run on the database, returning the results of that query as ``query.csv``. This option allows the user full, unobstructed access to all data in the database.
@@ -169,12 +165,12 @@ Finally, a receptor stored in the database may be re-exported as a PDBQT with th
 
 Export results from a previous filtering as a CSV
 ==================================================
-
+Filtered poses and their select information can be exported to a csv file, where the user can specify select columns to include in the csv using ``--outfields``:
 .. code-block:: bash
 
-    $ rt_process_vs write --file_path Files/
+    $ rt_process_vs write --docking_results Files/
     $ rt_process_vs read --input_db output.db --score_percentile 0.1 --bookmark_name filter1
-    $ rt_process_vs read --input_db output.db --export_bookmark_csv filter1
+    $ rt_process_vs read --input_db output.db --export_bookmark_csv filter1 --outfields ligname,pose_rank,docking_score,ligand_smile
 
 
 Using a config file
@@ -190,7 +186,7 @@ It is possible to populate the argument list using a config file, which needs to
 
     config_w.json:
         {
-        "file_path": "path1/",
+        "docking_results": "path1/",
         "output_db": "example.db"
         }
 
@@ -207,11 +203,11 @@ The Ringtail API can provide a config file template by running the following scr
 
 Logging
 ********
-Ringtail comes with a global logger object that will write to a new text file for each time ``rt_process_vs`` is called. Any log messages will also be displayed in stdout. and the default logger level is "WARNING". It is possible to change the logger level by adding ``--debug`` for lowest level of logging (will make the process take longer) or ``--verbose`` for some additional, but not very deep, logging. 
+Ringtail comes with a global logger object that will write to a new text file for each time ``rt_process_vs`` is called. Any log messages will also be displayed in stdout. and the default logger level is "WARNING". It is possible to change the logger level by adding ``--debug`` for lowest level of logging (will make the process take longer) or ``--verbose`` for some additional, but not very deep, logging. To write logger output to a log file, use the tag with chosen file name, e.g., ``--logfile ringtail.log`` 
 
 .. code-block:: bash
 
-    $ rt_process_vs write --verbose --file_list filelist1.txt 
+    $ rt_process_vs write --verbose --docking_results filelist1.txt 
 
 Access help message
 ********************
@@ -232,25 +228,24 @@ Keywords pertaining to database write and file handling
 ========================================================
 .. _input_kw_table:
 .. csv-table:: Ringtail input options
-    :header: "Keyword","Description","Default value"
+    :header: "Keyword","Description","Default"
     :widths: 30, 70, 10
-
-    "file", "DLG/Vina PDBQT file(s) to be read into database", None
-    "file_path", "Path(s) to files to read into database", None
-    "file_list", "File(s) with list of files to read into database", None
-    "pattern", "Specify pattern to search for when finding files", "'dlg' or 'pdbqt'"
-    "recursive", "Flag to perform recursive subdirectory search on file_path directory(s)", FALSE
-    "receptor_file", "Use with save_receptor and/or for vina data if interaction calculations are wanted. Give receptor PDBQT.", None
-    "save_receptor", "Flag to specify that receptor file should be imported to database. Receptor file must also be specified with receptor_file", FALSE
-    "max_poses", "Number of clusters for which to store top-scoring pose (dlg) or number of poses (vina) to save in database", 3
-    "store_all_poses", "Flag to indicate that all poses should be stored in database", FALSE
-    "interaction_tolerance", "Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired [note]_ ", "0.8 Å if used"
-    "no_interactions", "If interactions for vina results should not be calculated and stored", FALSE
-    "interaction_cutoffs", "Use values other than defaults for distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0.", "3.7,4.0"
-    "max_proc", "Maximum number of subprocesses to spawn during database writing.", "number of available CPUs or fewer"
-    "append_results", "Add new docking files to existing database given with input_db", FALSE
-    "duplicate_handling", "Specify how dulicate results should be handled. May specify 'ignore' or 'replace'. Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*", None
-    "overwrite", "Flag to overwrite existing database", FALSE
+    "docking_mode", "Docking engine used to perform the molecular docking","|default_docking_mode|"
+    "output_db","Name of the database to which to write the docking output","|default_output_db|"
+    "docking_results", "docking file(s), path(s) to files to read into database, file(s) with list of files to read into database", "|default_docking_results|"
+    "recursive", "Flag to perform recursive subdirectory search on provided directory(s)", "|default_recursive|"
+    "receptor_file", "Use with save_receptor and/or for vina data if interaction calculations are wanted. Give receptor JSON or PDBQT.", "|default_receptor_file|"
+    "save_receptor", "Flag to specify that receptor file should be imported to database. Receptor file must also be specified with receptor_file", "|default_save_receptor|"
+    "max_poses", "Number of top-scoring poses to save in database", "|default_max_poses|"
+    "store_all_poses", "Flag to indicate that all poses should be stored in database", "|default_store_all_poses|"
+    "interaction_tolerance", "Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired [note]_ ", "|default_interaction_tolerance|"
+    "no_interactions", "If interactions for ADNG or vina results should not be calculated and stored", "|default_no_interactions|"
+    "interaction_cutoffs", "Use values other than defaults for distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0.", "|default_interaction_cutoffs|"
+    "max_proc", "Maximum number of subprocesses to spawn during database writing.", "Num available CPUs"
+    "append_results", "Add new docking files to existing database given with input_db", "|default_append_results|"
+    "duplicate_handling", "Specify how dulicate results should be handled. May specify 'ignore' or 'replace'. Unique results determined from ligand and target names and ligand pose. *NB: use of duplicate handling causes increase in database writing time*", "|default_duplicate_handling|"
+    "overwrite", "Flag to overwrite existing database", "|default_overwrite|"
+    "storage_type", "Database engine/backend to use", "|default_storage_type|"
 
 
 Keywords pertaining to filtering 
@@ -260,23 +255,26 @@ Keywords pertaining to filtering
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
 
-    "eworst","Worst energy value accepted (kcal/mol)",None
-    "ebest","Best energy value accepted (kcal/mol)",None
-    "leworst","Worst ligand efficiency value accepted",None
-    "lebest","Best ligand efficiency value accepted",None
-    "score_percentile","Worst energy percentile accepted. Giveas percentage (1 for top 1%, 0.1 for top 0.1%)",1.0
-    "le_percentile","Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%)",None
-    "ligand_name","Search for specific ligand name. Multiple names joined by 'OR'. Multiple filters should be separated by commas",None
-    "ligand_max_atoms","Specify maximum number of heavy atoms a ligand may have",None
-    "ligand_substruct","SMARTS pattern(s) for substructur matching",None
-    "ligand_substruct_pos","SMARTS pattern, index of atom in SMARTS, cutoff distance, and target xyz coordinates. Finds poses in which the specified substructure atom is within the distance cutoff from the target location",None
-    "ligand_operator","logical operator for multiple SMARTS","OR"
-    "vdw_interactions","Filter for van der Waals interaction with given receptor information. [note]_ ",None
-    "hb_interactions","Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting. [note]_ ",None
-    "reactive_interactions","Filter for reation with residue containing specified information. [note]_ ",None
-    "hb_count","Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting. [note]_ ",None
-    "react_any","Filter for poses with reaction with any residue. [note]_ ",FALSE
-    "max_miss","Will filter given interaction filters excluding up to max_miss interactions. Will log and output union of combinations unless used with `enumerate_interaction_combs`. See section for reference. [note]_", 0
+    "eworst","Worst energy value accepted (kcal/mol)","|default_eworst|"
+    "ebest","Best energy value accepted (kcal/mol)","|default_ebest|"
+    "leworst","Worst ligand efficiency value accepted","|default_leworst|"
+    "lebest","Best ligand efficiency value accepted","|default_lebest|"
+    "score_percentile","Worst energy percentile accepted. Giveas percentage (1 for top 1%, 0.1 for top 0.1%)","|default_score_percentile|"
+    "le_percentile","Worst ligand efficiency percentile accepted. Give as percentage (1 for top 1%, 0.1 for top 0.1%)","|default_le_percentile|"
+    "ligand_name","Search for specific ligand name. Multiple names joined by 'OR'. Multiple filters should be separated by commas","|default_ligand_name|"
+    "ligand_name_file","Text file with ligand names, can provide thousands instead, alternative to ligand_name","|default_ligand_name_file|"
+    "ligand_max_atoms","Specify maximum number of heavy atoms a ligand may have","|default_ligand_max_atoms|"
+    "ligand_substruct","SMARTS pattern(s) for substructur matching","|default_ligand_substruct|"
+    "ligand_substruct_pos","SMARTS pattern, index of atom in SMARTS, cutoff distance, and target xyz coordinates. Finds poses in which the specified substructure atom is within the distance cutoff from the target location","|default_ligand_substruct_pos|"
+    "ligand_operator","logical operator for multiple SMARTS","|default_ligand_operator|"
+    "ligand_min_molweight","Minimum molecular weight of ligands", "|default_ligand_min_molweight|"
+    "ligand_max_molweight","Maximum molecular weight of ligands", "|default_ligand_max_molweight|"
+    "vdw_interactions","Filter for van der Waals interaction with given receptor information. [note]_ ","|default_vdw_interactions|"
+    "hb_interactions","Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting. [note]_ ","|default_hb_interactions|"
+    "reactive_interactions","Filter for reation with residue containing specified information. [note]_ ","|default_reactive_interactions|"
+    "hb_count","Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting. [note]_ ","|default_hb_count|"
+    "react_any","Filter for poses with reaction with any residue. [note]_ ","|default_react_any|"
+    "max_miss","Will filter given interaction filters excluding up to max_miss interactions. Will log and output union of combinations unless used with `enumerate_interaction_combs`. See section for reference. [note]_", "|default_max_miss|"
 
 .. [note] Requires interactions are calculated and present in the database.
 
@@ -288,16 +286,17 @@ Keywords pertaining to output of data
     :header: "Keyword","Description","Default value"
     :widths: 30, 70, 10
 
-    "output_log","Name for log of filtered results","output_log.txt"
-    "overwrite","Flag to overwrite existing logfile of same name",FALSE
-    "bookmark_name","Name for bookmark view in database","passing_results"
-    "outfields","Data fields to be written in output (log file and STDOUT). Ligand name always included.","e"
-    "order_results","String for field by which the passing results should be ordered in log file.",None
-    "output_all_poses","Flag that if mutiple poses for same ligand pass filters, log all poses",FALSE
-    "mfpt_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm",0.5
-    "interaction_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm (*)",0.5
-    "enumerate_interactions_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)",FALSE
-
+    "output_log","Name for log of filtered results","|default_output_log|"
+    "overwrite","Flag to overwrite existing logfile of same name","|default_overwrite|"
+    "bookmark_name","Name for bookmark view in database","|default_bookmark_name|"
+    "input_bookmark","Name for bookmark to use as basis for further filtering (as opposed to all results","|default_input_boomark|" 
+    "outfields","Data fields to be written in output (log file and STDOUT). Ligand name always included.","|default_outfields|"
+    "order_results","String for field by which the passing results should be ordered in log file.","|default_order_results|"
+    "output_all_poses","Flag that if mutiple poses for same ligand pass filters, log all poses","|default_output_all_poses|"
+    "mfpt_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm","|default_mfpt_cluster|"
+    "interaction_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm (*)","|default_interaction_cluster|"
+    "enumerate_interactions_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)","|default_enumerate_interactions_combs|"
+    "individual_sdf_files","Whether or not to output one large SDF file with all ligands, or one per ligand","|default_individual_sdf_files|"
 
 Keywords pertaining to output methods
 ======================================
@@ -306,11 +305,15 @@ Keywords pertaining to output methods
     :header: "Keyword","Description","Input options"
     :widths: 10, 30, 10
 
-    "export_csv", "Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv.", "requested_data= bookmark_name OR csv_name, table (bool)"
-    "export_csv", "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]", "requested_data (str), csv_name (str), table (bool)"
+    "print_summary","Prints a summary of the database, incl. number of ligands, poses, interactions, and energy percentiles",None
+    "print_bookmarks","Method that prints name of all screening/filter bookmarks to stdout",None
+    "data_from_bookmark","Method that makes an output log file for an existing bookmark (specified with ``--bookmark_name``)", None
+    "export_bookmark_csv", "Name of database result bookmark or table to be exported as CSV. Output as <table_name>.csv. Use with ``--outfields`` to chose columns to export", "requested_data= bookmark_name OR csv_name, table (bool)"
+    "export_query_csv", "Create csv of the requested SQL query. Output as query.csv. MUST BE PRE-FORMATTED IN SQL SYNTAX e.g. SELECT [columns] FROM [table] WHERE [conditions]", "requested_data (str), csv_name (str), table (bool)"
     "export_bookmark_db", "Export a database containing only the results found in the specified bookmark name. Will save as <core_db_file>_<bookmark_name>.db", "bookmark_name (str)"
     "export_receptor_pdbqt", "Export receptor to pdbqt", None
-    "write_molecule_sdfs", "Write molecule sdfs from a given bookmark to specified path", "sdf_path (str), bookmark_name (str)"
+    "export_sdf_path", "Write molecule sdfs from a given bookmark to specified path", "sdf_path (str), bookmark_name (str)"
     "find_similar_ligands", "Given query ligand name, find ligands previously clustered with that ligand. User prompted at runtime to choose cluster group of interest.", "query_ligname (str)"
     "get_previous_filter_data", "Get data requested in `outfields` from the bookmark of a previous filtering", "outfields (str), bookmark_name (str)"
     "find_similar_ligands", "Find ligands in cluster with query_ligname", "query_ligname (str)"
+    "logfile","File in which to write debug logging to",None

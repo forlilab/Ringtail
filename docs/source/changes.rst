@@ -61,6 +61,7 @@ Changes in command line tools
 Changes to API and code behavior
 ================================
 * Ringtail auto-detects `storage_type` for existing databases
+* Methods that create bookmarks, such as filter() and cluster() now uses `output_bookmark` to name the new, resulting bookmark, instead of `bookmark_name`.
 * Simplified `add_results_from_files` API has only one file input field `docking_results` which will accept a single or a list of, and a mix of files, folders, and lists of file paths. `file`, `file_list`, and `file_path` have been depreceated from the API. 
 * `docking_mode` specification is more flexible, e.g., 'adgpu', 'gpu', and 'dlg' are all valid for AutoDock-GPU docking mode
 * Database schema is now fully defined in `schema.py`, and any database table and column info is derived from this single source of truth
