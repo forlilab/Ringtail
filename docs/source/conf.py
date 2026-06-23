@@ -75,19 +75,13 @@ pygments_style = "sphinx"
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = "furo"
+html_theme = "shibuya"
 html_static_path = ["_static"]
 
-# AutoDock-blue accent for the furo theme (light + dark modes)
+# Shibuya theme options (AutoDock-blue accent; light/dark toggle is built in).
 html_theme_options = {
-    "light_css_variables": {
-        "color-brand-primary": "#1565c0",
-        "color-brand-content": "#1565c0",
-    },
-    "dark_css_variables": {
-        "color-brand-primary": "#6db3f2",
-        "color-brand-content": "#6db3f2",
-    },
+    "accent_color": "blue",
+    "github_url": "https://github.com/forlilab/Ringtail",
 }
 
 autodoc_mock_imports = [

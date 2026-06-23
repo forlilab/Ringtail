@@ -230,6 +230,7 @@ Keywords pertaining to database write and file handling
 .. csv-table:: Ringtail input options
     :header: "Keyword","Description","Default"
     :widths: 30, 70, 10
+    
     "docking_mode", "Docking engine used to perform the molecular docking","|default_docking_mode|"
     "output_db","Name of the database to which to write the docking output","|default_output_db|"
     "docking_results", "docking file(s), path(s) to files to read into database, file(s) with list of files to read into database", "|default_docking_results|"
@@ -239,7 +240,7 @@ Keywords pertaining to database write and file handling
     "max_poses", "Number of top-scoring poses to save in database", "|default_max_poses|"
     "store_all_poses", "Flag to indicate that all poses should be stored in database", "|default_store_all_poses|"
     "interaction_tolerance", "Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired [note]_ ", "|default_interaction_tolerance|"
-    "no_interactions", "If interactions for ADNG or vina results should not be calculated and stored", "|default_no_interactions|"
+    "no_interactions", "If interactions for ADNG or vina results should not be calculated and stored", "False"
     "interaction_cutoffs", "Use values other than defaults for distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0.", "|default_interaction_cutoffs|"
     "max_proc", "Maximum number of subprocesses to spawn during database writing.", "Num available CPUs"
     "append_results", "Add new docking files to existing database given with input_db", "|default_append_results|"
@@ -252,7 +253,7 @@ Keywords pertaining to filtering
 =================================
 .. _filter_kw_table:
 .. csv-table:: Ringtail filters
-    :header: "Keyword","Description","Default value"
+    :header: "Keyword","Description","Default"
     :widths: 30, 70, 10
 
     "eworst","Worst energy value accepted (kcal/mol)","|default_eworst|"
@@ -283,19 +284,19 @@ Keywords pertaining to output of data
 ======================================
 .. _output_kw_table:
 .. csv-table:: Ringtail output options
-    :header: "Keyword","Description","Default value"
+    :header: "Keyword","Description","Default"
     :widths: 30, 70, 10
 
     "output_log","Name for log of filtered results","|default_output_log|"
     "overwrite","Flag to overwrite existing logfile of same name","|default_overwrite|"
     "bookmark_name","Name for bookmark view in database","|default_bookmark_name|"
-    "input_bookmark","Name for bookmark to use as basis for further filtering (as opposed to all results","|default_input_boomark|" 
+    "input_bookmark","Name for bookmark to use as basis for further filtering (as opposed to all results","none" 
     "outfields","Data fields to be written in output (log file and STDOUT). Ligand name always included.","|default_outfields|"
     "order_results","String for field by which the passing results should be ordered in log file.","|default_order_results|"
     "output_all_poses","Flag that if mutiple poses for same ligand pass filters, log all poses","|default_output_all_poses|"
     "mfpt_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the Morgan fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm","|default_mfpt_cluster|"
     "interaction_cluster","Cluster ligands passing given filters based on the Tanimoto distances of the interaction fingerprints. Will output ligand with best (lowest) ligand efficiency from each cluster. Uses Butina clustering algorithm (*)","|default_interaction_cluster|"
-    "enumerate_interactions_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)","|default_enumerate_interactions_combs|"
+    "enumerate_interaction_combs","When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime. (*)","|default_enumerate_interaction_combs|"
     "individual_sdf_files","Whether or not to output one large SDF file with all ligands, or one per ligand","|default_individual_sdf_files|"
 
 Keywords pertaining to output methods

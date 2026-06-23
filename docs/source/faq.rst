@@ -2,11 +2,10 @@
 
 Frequently asked questions
 #############################
-#TODO
-Potential pitfalls
-**********************
-Locked or corrup database
--------------------------
+
+
+Locked or corrupt database
+--------------------------
 Occassionally, errors may occur during database reading/writing that corrupt the database. This may result in the database becoming locked. First, find any processes that still have the database file open:
 
 .. code-block:: bash
