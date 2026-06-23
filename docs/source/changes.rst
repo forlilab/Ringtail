@@ -8,7 +8,31 @@ Changes in 3.0: Faster and smaller, and lots of new functionality
 Ringtail 3 comes with support for the new ADNG docking engine <link>, now uses the DuckDB database engine by default, and includes an overhauled database schema leading to faster screening and filtering. There are new output options including CSV export with custom column choices without needing to know SQL, and new or improved command line tools to handle database merging and compression/decompression. Overall a Ringtail database now takes up less space, and is significantly faster filter and screen. 
 
 Performance metrics
-#TODO
+===================
+The tables below report wall-clock filtering times (database already on disk) for a docking-score filter (``eworst = -6``), then that filter combined with one, and two interaction filters.
+
+Across Ringtail versions, on one ~2-million-ligand screen (Apple M3 Pro, 12 cores, 18 GB RAM):
+
+.. csv-table:: Database size and filtering time, ~2 million ligands
+   :header: "Ringtail","Engine","DB size (GB)","Score (s)","Score + 1 interaction (s)","Score + 2 interactions (s) †"
+
+   "v3","DuckDB","9","0.3","2.6","2.2"
+   "v3","SQLite","14","4.7","12","17"
+   "v2","SQLite","27.7","3.3","31","36"
+   "v1.1","SQLite","25.6","22.7","137","200"
+
+DuckDB filtering also scales well with library size (Linux workstation: Intel i9, 18 cores, 64 GB RAM, SSD):
+
+.. csv-table:: DuckDB (v3) filtering time vs library size
+   :header: "Ligands","Poses","DB size (GB)","Score (s)","Score + 1 interaction (s)","Score + 2 interactions (s) †"
+
+   "100,000","277,048","0.20","1.2","1.4","1.4"
+   "2,000,000","5,448,313","3.3","1.4","5.4","4.0"
+   "9,039,451","24,801,508","15","2.0","16.5","13.8"
+
+† Adding a second interaction filter is sometimes faster than one: the extra constraint reduces the number of matching poses that have to be assembled.
+
+Database size scales roughly linearly with the number of stored poses (~0.6 KB per pose). For moving large databases off an HPC, see :ref:`compress` and :ref:`big_data`.
 
 Enhancements to the codebase
 ==============================

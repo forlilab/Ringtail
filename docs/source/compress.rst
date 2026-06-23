@@ -59,9 +59,15 @@ The same compression is available as ``ringtail.util.compress_file`` and ``decom
     # ...transfer the compressed db, then on the other side:
     db_path = decompress_file("hits.db.zst")                       # -> "hits.db"
 
+Example compression of two ~2-million-ligand databases (zstd level 18, Apple M3 Pro):
+
+.. csv-table:: Example compression (zstd level 18)
+   :header: "Database","Uncompressed","Compressed","Ratio"
+
+   "DuckDB","8.9 GB","3.44 GB","2.79×"
+   "SQLite","14 GB","4.16 GB","3.68×"
+
 .. note::
-   ``zstd`` (the default) is a fast, multithreaded compressor; if the ``zstd`` binary is not
-   on the ``PATH``, Ringtail automatically falls back to ``gzip``. The source file is never
-   modified, moved, or deleted.
+   ``zstd`` (the default) is a fast, multithreaded compressor; if the ``zstd`` binary is not on the ``PATH``, Ringtail automatically falls back to ``gzip``. The source file is never modified, moved, or deleted.
 
 See :ref:`big_data` for how compression fits into a broader strategy for large screens.
