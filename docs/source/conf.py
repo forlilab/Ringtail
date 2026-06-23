@@ -50,6 +50,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
+    "sphinx_design",
 ]
 
 # Prefix autosection labels with the document name so identical section titles in

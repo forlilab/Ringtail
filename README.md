@@ -1,7 +1,12 @@
 ![ringtail logo final](https://user-images.githubusercontent.com/41704502/170797800-53a9d94a-932e-4936-9bea-e2d292b0c62b.png)
 
 (Original artwork by Althea Hansel-Harris)
-
+#TODO 
+--------claude summaru
+Dual-engine (SQLite + DuckDB) schema-first virtual-screening database with a companion
+GUI; native in-Ringtail interaction calculation from meeko Polymers; clustering, pose
+status triage, and database merge; compress/transfer tooling; smaller databases and
+much faster filtering.
 
 # Ringtail
 Package for creating SQLite database from virtual screening results, performing filtering, and exporting results. Compatible with [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina).
