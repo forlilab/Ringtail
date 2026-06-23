@@ -1,7 +1,5 @@
-.. _modules:
-
 ringtail
-##########
+========
 
 .. toctree::
    :maxdepth: 4

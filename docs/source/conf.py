@@ -61,6 +61,11 @@ autosectionlabel_prefix_document = True
 # per version block; nothing references those auto-labels, so silence the duplicates.
 suppress_warnings = ["autosectionlabel.changes"]
 
+# Render docstring "Attributes:" sections as per-class :ivar: fields instead of global
+# attribute targets, so attributes that share a name across classes (e.g. `cutoff` in the
+# two clustermanager classes) don't create an ambiguous cross-reference.
+napoleon_use_ivar = True
+
 templates_path = ["_templates"]
 exclude_patterns = []
 

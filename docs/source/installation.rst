@@ -2,7 +2,7 @@
 
 Installing ringtail
 ###################
-There are three different alternatives to installing Ringtail: through :ref:`conda-forge <condaforge>` which will install all dependencies, through the Python package manager :ref:`PyPi <pypi>` where some packages need to be installed separately, and directly from :ref:`source code <sourcecode>` for advanced users looking to make their own code changes. It is necessary to use an environment manager like conda or mamba to organize your Ringtail :ref:`environment <envsetup>` as some of the dependencies can only be installed in a managed environment. The installation instructions uses conda as an example, but you are free to use any python environment manager. Ringtail 2.0 requires Python 3.9, 3.10, or 3.11). 
+There are three different alternatives to installing Ringtail: through :ref:`conda-forge <condaforge>` which will install all dependencies, through the Python package manager :ref:`PyPi <pypi>` where some packages need to be installed separately, and directly from :ref:`source code <sourcecode>` for advanced users looking to make their own code changes. It is necessary to use an environment manager like conda or mamba to organize your Ringtail :ref:`environment <envsetup>` as some of the dependencies can only be installed in a managed environment. The installation instructions uses conda as an example, but you are free to use any python environment manager. Ringtail 3.0 requires Python ≥3.9. 
 
 .. _pypi:
 
@@ -16,11 +16,12 @@ To install Ringtail from PyPi, create then activate your :ref:`ringtail environm
 
 A few dependencies may be needed, including:
 
-* meeko (another Forli lab tool)
-* rdkit 
+* meeko>=0.7.1 (another Forli lab tool)
+* prody>=2.4.1
+* rdkit >=2025.09.5
 * scipy
 * pandas
-* matplotlib 
+* duckdb (new requirement as of v3)
 
 .. code-block:: bash
 
@@ -34,9 +35,9 @@ If you have a previous version of Ringtail installed you can update the package 
 
     $ pip install -U ringtail
 
-    $ pip install ringtail==2.1.0
+    $ pip install ringtail>=3
 
-Make sure to :ref:`upgrade any databases <upgrade_database>` made with Ringtail v1 if you intend to use them with Ringtail v2.0.
+Make sure to :ref:`upgrade any databases <upgrade_database>` made with an older version of Ringtail if you intend to use them with Ringtail v3.
 
 
 .. _condaforge:
@@ -74,17 +75,24 @@ If you wish to make the code for Ringtail **editable** without having to re-run 
 
 Test installation
 *******************
-If you would like to test your installation of Ringtail, or after you make changes to the code, a set of automated tests are included with the source code. To begin, you must install pytest in the Ringtail environment:
+If you would like to test your installation of Ringtail, or after you make changes to the code, a set of automated tests are included with the source code. This test will take a while if ran using the entire test harness. To begin, you must install pytest in the Ringtail environment:
 
 .. code-block:: bash    
 
     $ pip install pytest
 
-Next, navigate to the ``test`` subdirectory within the cloned Ringtail directory and run pytest by calling
+Next, navigate to the ``test`` subdirectory within the cloned Ringtail directory and run pytest by calling ``pytest``. For more specific unit testing, there are a variety of options including running them only for one database backend.
 
 .. code-block:: bash
 
-    $ pytest
+    $ pytest                                    # run the full suite
+    $ pytest -v                                 # verbose: list each test
+    $ pytest -k duckdb                          # only the DuckDB backend (use 'sqlite' for SQLite)
+    $ pytest test_units.py                      # one module/file
+    $ pytest test_units.py::TestFiltering       # one test class
+    $ pytest test_units.py::TestFiltering::test_filter   # one specific test method
+
+
 
 The compounds used for the testing dataset were taken from the `NCI Diversity Set V <https://wiki.nci.nih.gov/display/NCIDTPdata/Compound+Sets>`_. The receptor used was `PDB: 4J8M <https://www.rcsb.org/structure/4J8M>`_.
 

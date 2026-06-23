@@ -7,14 +7,15 @@
 This script merges two (or more) ringtail databases of db schema version 2.1 or newer, and it aims to maintain all relationships, primary keys, foreign keys, etc.
 The script will take a primary and a secondary database, and merge the secondary database into the primary database.
 By default a backup will be made of the primary database before merging, but the the user has the option to suppress this behavior and proceed without a backup.
-If the merge is not successful, the primary database may have the new merge table, and one or more corrupt data tables. To restore simply delete the corrupt file,
-and remove '.backup' from the filename of the backup file.
+If the merge is not successful, the primary database may have the new merge table, and one or more corrupt data tables. To restore simply delete the corrupt file, and remove '.backup' from the filename of the backup file.
 
 It is recommended that the user chooses as the primary database, whichever file size is larger, as this will minimize the data transfer.
 
 In the "new" merged database there will be two tables describing the merge history:
+
     1. name of db file merged into it, datetime merge started, datetime merge ended
     2. table of primary keys: dbfile, table (bc only one PK per table), original value of PK, new value of PK in merge table
+
     The new PK value will in most instances be created by adding the max PK value from primary database to all PKs from secondary database.
 
 If the user wishes to merge databases of filtered results only they need to run the ringtail command make db from filtered results, and use that database in the merge process.

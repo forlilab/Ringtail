@@ -51,14 +51,15 @@ Ringtail v2 comes with improved database write and filtering speeds. This includ
    get_started
    cmdline
    api
-   database_traversing
    compare
+   big_data
+   compress
 
 .. toctree::
    :maxdepth: 2
    :hidden:
    :caption: Full Python Documentation
 
-   ringtail
+   modules
    genindex
    modindex

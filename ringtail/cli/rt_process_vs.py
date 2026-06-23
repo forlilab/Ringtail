@@ -3,7 +3,7 @@
 
 
 """Script that sets up a command line option parser (cloptionparser) and processes all arguments that are
- used with the ringtail core api.
+used with the ringtail core api.
 This script will allow either a write or a read session at the time.
 Available database operations are described in ringtail.readthedocs.io.
 """

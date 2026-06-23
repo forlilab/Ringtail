@@ -7,10 +7,14 @@ Changes in 3.0: Faster and smaller, and lots of new functionality
 
 Ringtail 3 comes with support for the new ADNG docking engine <link>, now uses the DuckDB database engine by default, and includes an overhauled database schema leading to faster screening and filtering. There are new output options including CSV export with custom column choices without needing to know SQL, and new or improved command line tools to handle database merging and compression/decompression. Overall a Ringtail database now takes up less space, and is significantly faster filter and screen. 
 
+Performance metrics
+#TODO
+
 Enhancements to the codebase
 ==============================
 * Works with ADNG SDF file docking output, and allows receptor to be provided as a `json`
 * DuckDB backend offered as an alternative to SQLite, with overall similar database creating times and significantly enhanced filtering times and smaller file size
+* The Ringtail database schema is now fully defined in `schema.py`, and most storage level methods uses a custom QueryBuilder class to handle building of SQL dynamically (and with specific backend dialects)
 * Abandoned using views to store filtered poses in favor of a long-and-skinny `Filtered_poses` and `Filters` tables, significantly speeding up filtering and especially progressive filtering
 * Multiprocess now uses 'fork' start method for compatibility with multithreaded processes and enables Ringtail on Windows machines #TODO 
 * A larger default chunk size of docking data is parsed before writing to the database 
@@ -29,6 +33,7 @@ Changes in command line tools
 ==================================================
 * New field `--docking_results`, `--dr` accepts any file input including one or more folders/file paths, one or more single files, and one or more file lists (.txt). The depreceated fields `--file`, `--file_list`, and `--file_path` will remain for compatibility with existing scripts.
 * `--add_interactions` has been replaced with `--no_interactions`/`-ni`, making calculating interactions the default
+* `--receptor_file` now accepts a meeko Polymer `.json`
 * New filter options for molecular weight `--ligand_min_molweight` and `--ligand_max_molweight`
 * New filter input `--ligand_name_file` allows providing a .csv file of ligand names, which will be applied as a filter (e.g., for exporting SDFs for select ligands). Works the same as `--ligand_name` but allows for a larger number of provided names
 * There is now one upgrade CLI `rt_upgrade_db` script with version as input
@@ -41,6 +46,7 @@ Changes in command line tools
 * New CLI flag `--print_bookmarks` prints all current bookmarks in the database
 * `--file_pattern` has been discontinued, and is inferred from docking mode (which will attempt to accept file pattern as input)
 * `--export_bookmark_csv` can now be used as a flag (True/False) to export bookmark given in `--bookmark_name`, or with string input as the resulting csv file name. If used in conjunction with `--bookmark_name` and `--outfields` it will produce a csv with the desired columns. Full tables (like `Interactions`) can be exported using the `--bookmar_name` tag, but this will not work with `--outfields`
+* `--plot` and `--pymol` have been discontinued
 * `--outfields` now uses the names of columns as they are in the database from the Results, Ligands, and Interaction_indices tables (and not a mix of column names and aliases, as before). This inculdes new fields from the interaction table, and that some old fields have changed:
     ============ ===============
       Old          New
@@ -57,6 +63,9 @@ Changes in command line tools
     run           run_number
     hb            num_hb
     ============ ===============
+
+* Scripts dealing with upgrading a Ringtail database have been combined into `rt_upgrade_db` where version is specified with `--version`
+* Two new scripts provided to compress, `rt_compress_db`, and decompress, `rt_decompress_db`, a database 
 
 Changes to API and code behavior
 ================================
@@ -76,7 +85,7 @@ Changes to API and code behavior
 * `docking_mode` is no longer a property of the Ringtail object, only an argument for writing to the database (i.e., `add_results_from_files`)
 * `access_mode` is an optional initialization argument which alters the behavior of some API methods 
 * The `write_flexres_pdb` method now allows more than one ligand input, for example by providing a bookmark name all ligands in that bookmark will be used to write the same number of PDBs (there will be a warning of attempting to write more than 10 files)
-* The method `export_receptor` is now `export_receptor_pdbqt`, and a modernized version to `write_flexres_pdb` has been added which is compatible with the new receptor Polymer object (this new method works without flexible residues as well)
+* `export_receptor` is now `export_receptor_pdbqt``write_flexres_pdb` has been modernized to work from the new receptor `Polymer` object (passed in or read from the database) and also works when there are no flexible residues.
 * `write_molecule_sdfs` method argument `write_nonpassing` has been discontinued, and `ligname` (string or list of strings) has been added. It is assumed that if a `bookmark_name` is provided, only passing poses of each ligand will be written to an SD file. If no `bookmark_name` is provided, each pose of each ligand is written to the SDF.  
 * The method `export_csv` has been broken into three distinct methods, `export_columns_as_csv` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, `export_table_as_csv` where an entire table is exported, and `export_sql_as_csv` where the user specifies a properly formatted SQL prompt
 * The options for creating plots and opening PyMol sessions (and associated methods) through the CLI have been discontinued 
@@ -89,7 +98,6 @@ Bug fixes
 * Will only write a filter log file (e.g., `output_log.txt`) if specified
 * Exporting poses with flexible receptor residues will now export all poses of a given ligand, not just the best scoring one 
 
-#TODO add 2.3.1
 Changes in 2.1.1: bug fixes and result plot enhancements
 ********************************************************
 Enhancements

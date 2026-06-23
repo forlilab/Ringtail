@@ -317,3 +317,16 @@ Keywords pertaining to output methods
     "get_previous_filter_data", "Get data requested in `outfields` from the bookmark of a previous filtering", "outfields (str), bookmark_name (str)"
     "find_similar_ligands", "Find ligands in cluster with query_ligname", "query_ligname (str)"
     "logfile","File in which to write debug logging to",None
+
+
+Other command-line tools
+****************************
+Besides ``rt_process_vs``, Ringtail installs several focused command-line utilities, each documented on its topic page:
+
+* ``rt_compare`` — select ligands shared between, or exclusive to, the filter bookmarks of multiple screenings (cross-target comparison). See :ref:`compare`.
+* ``rt_merge`` — merge two or more Ringtail databases of the same target into one. See :ref:`big_data`.
+* ``rt_compress_db`` / ``rt_decompress_db`` — optionally filter, then compress a database for transfer off an HPC, and unpack it again. See :ref:`compress`.
+* ``rt_upgrade_db`` — upgrade databases made with older Ringtail versions (e.g. 1.1.0, 2.0.0) to the current schema version. See :ref:`upgrade_database`.
+* ``rt_generate_config_file`` — write a template JSON configuration file of ``rt_process_vs`` options, which can be passed back with ``-c`` / ``--config``.
+
+Run any of them with ``--help`` for the full list of options.
