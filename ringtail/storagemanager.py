@@ -454,9 +454,13 @@ class StorageManager(ABC):
         A bookmark with specified prefix to the original bookmark name will be stored in each database,
         making the crossreferencing data easily available for later use.
 
+        The second element of each (database, scope) tuple may be a bookmark name
+        OR a status table name ("accepted"/"maybe"/"rejected", any case), letting
+        the intersect/exclude be scoped by acceptance status as well as by bookmark.
+
         Args:
-            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
-            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark or status table name. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, where scope is a bookmark or status table name. Defaults to None.
             bookmark_prefix (str, optional): _description_. Defaults to "crossref".
             store_best_pose (bool, optional): To store just the best pose for a ligand vs all poses in the database. Defaults to False/storing all poses.
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
@@ -515,9 +519,7 @@ class StorageManager(ABC):
             wanted_ctes.append(
                 selection_query.format(
                     db_name=db_name,
-                    bookmark_poses=self._get_bookmark_poses_query(
-                        bookmark.lower(), db_name
-                    ),
+                    bookmark_poses=self._get_scope_poses_query(bookmark, db_name),
                 )
             )
 
@@ -526,9 +528,7 @@ class StorageManager(ABC):
             unwanted_ctes.append(
                 selection_query.format(
                     db_name=db_name,
-                    bookmark_poses=self._get_bookmark_poses_query(
-                        bookmark.lower(), db_name
-                    ),
+                    bookmark_poses=self._get_scope_poses_query(bookmark, db_name),
                 )
             )
 
@@ -577,9 +577,12 @@ class StorageManager(ABC):
         filter_dict = {"wanted": wanted_dbs, "unwanted": unwanted_dbs}
 
         for db_alias, path, bookmark in processed_wanted + processed_unwanted:
+            # lowercase the suffix so the stored bookmark name stays SQLite-safe
+            # and re-queryable when the scope is a (capitalized) status table.
+            new_bookmark_name = f"{bookmark_prefix}_{bookmark.lower()}"
             if alternative_database_names[path].lower() in ["", "main"]:
                 self._populate_filter_tables(
-                    name=f"{bookmark_prefix}_{bookmark}",
+                    name=new_bookmark_name,
                     query=self._crossref_bookmark_builder(
                         approved_ligand_names, store_best_pose
                     ),
@@ -592,7 +595,7 @@ class StorageManager(ABC):
                 # make storageman object
                 with type(self)(path) as db:
                     db._populate_filter_tables(
-                        name=f"{bookmark_prefix}_{bookmark}",
+                        name=new_bookmark_name,
                         query=self._crossref_bookmark_builder(
                             approved_ligand_names, store_best_pose
                         ),
@@ -601,7 +604,9 @@ class StorageManager(ABC):
                     )
 
         for _, file, bookmark in processed_wanted + processed_unwanted:
-            dbs_new_bookmark_names.update({file: f"{bookmark_prefix}_{bookmark}"})
+            dbs_new_bookmark_names.update(
+                {file: f"{bookmark_prefix}_{bookmark.lower()}"}
+            )
 
         return (len(approved_ligand_names), dbs_new_bookmark_names, filter_dict)
 
@@ -1419,6 +1424,28 @@ class StorageManager(ABC):
                 )
             )
         return result
+
+    def fetch_poses_pending_interactions(self, track_table_name: str):
+        """
+        Stream the poses that still need interaction calculation: every pose in
+        Results whose pose_id is not yet recorded in the tracking table. Used by
+        RingtailCore.add_interactions to process poses in commit-sized batches
+        without loading them all into memory.
+
+        Args:
+            track_table_name (str): name of the transaction-tracking table created
+                by create_transaction_tracking_table.
+
+        Yields:
+            tuple: (pose_id, pose_coordinates, rdmol) per pending pose.
+        """
+        query = self.QueryBuilder()
+        query.SELECT("R.pose_id", "R.pose_coordinates", "L.rdmol")
+        query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
+        query.JOIN(track_table_name, "tt", "pose_id", kind="LEFT")
+        query.WHERE("tt.pose_id IS NULL")
+        sql, _ = query.build()
+        yield from self._stream_query(sql)
 
     def fetch_columns_from_table_as_dicts(
         self, table: str, columns: list, length: int = None, starting_rowid: int = 0
@@ -2977,6 +3004,28 @@ class StorageManager(ABC):
             str: query representing the poses in a bookmark
         """
         return self.QueryBuilder.bookmark_query(bookmark_name, alias)
+
+    def _get_scope_poses_query(self, scope_name: str, alias: str = "") -> str:
+        """
+        Returns a pose_id-selecting subquery for either a bookmark OR a status
+        table (Accepted/Maybe/Rejected). Lets crossref scope a database by
+        acceptance status as well as by bookmark.
+
+        Args:
+            scope_name (str): bookmark name or status table name
+            alias (str): attached-database alias to qualify the table with
+
+        Returns:
+            str: query selecting the pose_ids in that scope
+        """
+        if self._is_statustable(scope_name):
+            # _is_statustable only returns True for the three known
+            # statuses.values(), so the interpolation below is injection-safe.
+            # Status tables are created capitalized; .capitalize() maps the
+            # lowercased status value back to the real table name.
+            prefix = f"{alias}." if alias else ""
+            return f"SELECT pose_id FROM {prefix}{scope_name.capitalize()}"
+        return self._get_bookmark_poses_query(scope_name.lower(), alias)
 
     def _generate_interaction_bitvectors(self, pose_ids: tuple[str]) -> dict:
         """

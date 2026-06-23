@@ -7,7 +7,6 @@ import itertools
 import glob
 import os
 from typing import Callable, Union, NamedTuple
-from dataclasses import dataclass
 import functools
 from collections.abc import Iterable
 import json
@@ -32,7 +31,6 @@ from .exceptions import (
     RTCoreError,
     OutputError,
     StorageError,
-    ResultsProcessingError,
     OptionError,
     MergeError,
     RingtailError,
@@ -48,6 +46,7 @@ from .parsers import (
     VinaMoleculeSupplier,
     generate_interaction_tuples,
 )
+
 
 class PoseMol(NamedTuple):
     """One RDKit mol per pose, returned by RingtailCore.create_rdkit_mols.
@@ -132,7 +131,7 @@ class RingtailCore:
         access_mode: str = "api",
     ):
         """Initialize ringtail core, and create a storageman object with the db file.
-        Can set logger level here, otherwise change it by logger.setLevel("level")
+        To change logger level,
 
         Args:
             db_file (str): Database file to initialize core with. Defaults to "output.db".
@@ -530,7 +529,7 @@ class RingtailCore:
         chunk_size: int = RingtailDefaults.chunk_size // 10,
     ):
         """
-        ###NOTE SLOOOOOOW
+        #NOTE can be slow
 
         Args:
             hb_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[0].
@@ -540,10 +539,7 @@ class RingtailCore:
             chunk_size (int, optional): _description_. Defaults to RingtailDefaults.chunk_size,.
 
         Raises:
-            RTCoreError: _description_
-
-        Returns:
-            _type_: _description_
+            RTCoreError: _description
         """
         # make sure user knows risk of calculating interaction in db with existing interactions
         track_table_name = "recomputed_interactions"
@@ -571,9 +567,7 @@ class RingtailCore:
         if not receptor_string:
             receptor_string = self.get_receptor_object().receptor_string()
 
-        # Build the interaction finder once and reuse it for every pose; the
-        # receptor (KDTree, annotations, atoms) is identical across poses, so
-        # re-parsing/parameterizing it per pose would be wasteful.
+        # Build the interaction finder once
         interaction_finder = make_interaction_finder(
             receptor_string, [hb_cutoff, vdw_cutoff]
         )
@@ -590,13 +584,7 @@ class RingtailCore:
             sm.create_transaction_tracking_table(track_table_name)
 
             # process in batches
-            for pose in sm._stream_query(
-                f"""SELECT R.pose_id, R.pose_coordinates, L.rdmol 
-                FROM Results AS R 
-                JOIN Ligands AS L ON L.ligand_id=R.ligand_id 
-                LEFT JOIN {track_table_name} tt ON R.pose_id = tt.pose_id
-                    WHERE tt.pose_id IS NULL;""",
-            ):
+            for pose in sm.fetch_poses_pending_interactions(track_table_name):
                 pose_id, coordinates, rdbin = pose
                 mol = Chem.Mol(rdbin)
                 interaction_dicts, num_hb, num_int = find_interactions(
@@ -926,7 +914,7 @@ class RingtailCore:
         cluster_type: str = "mfp",
         cutoff: float = 0.5,
         input_bookmark: Union[str, None] = None,
-    ) -> tuple[str, int]:
+    ) -> tuple[int, str]:
         """
         Clusters data and saves representatives to output_bookmark.
 
@@ -937,7 +925,7 @@ class RingtailCore:
             input_bookmark (str | None, optional): bookmark to cluster over; None clusters all results.
 
         Returns:
-            tuple[str, int]: output_bookmark, number of cluster representatives
+            tuple[int, str]: number of cluster representatives, output_bookmark
         """
         with self.storageman as sm:
             generated_name, num_clusters = sm.cluster_data(
@@ -949,7 +937,7 @@ class RingtailCore:
         logger.info(
             f"Number of clusters: {num_clusters}.\nPassing poses saved to {output_bookmark}."
         )
-        return output_bookmark, num_clusters
+        return num_clusters, output_bookmark
 
     @_wrap_exceptions
     def write_filter_output(
@@ -1032,7 +1020,7 @@ class RingtailCore:
             OptionError: _description_
 
         Returns:
-            tuple[Chem.rdchem.Mol, dict]: _description_
+            dict: dict of mols for the ligand and for the fleixble residue setups
         """
         """
         Writes a receptor pdb with flexible residues based on the ligand provided
@@ -1062,7 +1050,7 @@ class RingtailCore:
 
         from meeko.export_flexres import pdb_updated_flexres_from_rdkit
 
-        ligands_poses = self._fetch_select_ligands_poses(
+        ligands_poses = self.fetch_select_ligands_poses(
             ligand_names=ligname, bookmark_name=bookmark_name
         )
         if len(ligands_poses) > 10:
@@ -1144,7 +1132,7 @@ class RingtailCore:
         bookmark_name = bookmark_name.lower() if bookmark_name else None
 
         try:
-            ligands_poses = self._fetch_select_ligands_poses(
+            ligands_poses = self.fetch_select_ligands_poses(
                 ligand_names=ligname, bookmark_name=bookmark_name
             )
             flexres_data = self.make_receptor_flexres_mols()
@@ -1177,10 +1165,7 @@ class RingtailCore:
             logger.info(f"Writing {len(mol_results)} poses to {sdf_file_name}")
             opm.write_out_mols(
                 sdf_file_name,
-                (
-                    (pm.mol, pm.flexres_mols, pm.properties)
-                    for pm in mol_results
-                ),
+                ((pm.mol, pm.flexres_mols, pm.properties) for pm in mol_results),
                 sdf_path,
             )
         else:
@@ -1391,9 +1376,13 @@ class RingtailCore:
         A bookmark with specified prefix to the original bookmark name will be stored in each database,
         making the crossreferencing data easily available for later use.
 
+        The second element of each (database, scope) tuple may be a bookmark name
+        OR a status table name ("accepted"/"maybe"/"rejected", any case), letting
+        the intersect/exclude be scoped by acceptance status as well as by bookmark.
+
         Args:
-            wanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
-            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): _description_. Defaults to None.
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark or status table name. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, where scope is a bookmark or status table name. Defaults to None.
             bookmark_prefix (str, optional): _description_. Defaults to "crossref".
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
 
@@ -1432,7 +1421,6 @@ class RingtailCore:
         """
         return db_alias_from_path(db_path)
 
-    @_wrap_exceptions
     @_wrap_exceptions
     def get_receptor_object(self) -> ReceptorData:
         """Gets the receptor data from the database.
@@ -1799,6 +1787,46 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.fetch_bookmark_interactions(bookmark_name)
 
+    def fetch_select_ligands_poses(
+        self,
+        ligand_names: Union[str, list] = None,
+        pose_ids: Union[int, list] = None,
+        bookmark_name: str = None,
+    ) -> dict[str, list[int]]:
+        """
+        Basically give this method anything, and get back a dict with ligand names and
+        the pose ids selected by all the inputs. Can be a combo of ligand names, pose ids,
+        and bookmark/status table. PS The combo only pose_ids and bookmark will work as if just
+        the pose_ids were given.
+
+        Args:
+            ligand_names (Union[str, list], optional): _description_. Defaults to None.
+            pose_ids (Union[int, list], optional): _description_. Defaults to None.
+            bookmark_name (str, optional): _description_. Defaults to None.
+
+        Returns:
+            dict[str, list[int]]: _description_
+        """
+
+        # if just given bookmark, get all ligands in that bookmark
+        if bookmark_name is not None and not self._validate_bookmark_name(
+            bookmark_name
+        ):
+            raise RTCoreError(
+                f"Requested data, -{bookmark_name}-, is not a valid bookmark."
+            )
+
+        # if just pose_id(s), get their ligand names and add to dict
+        # assumes that the specific IDs were given for a reason, bookmark will not be considered
+        pose_ids = [pose_ids] if isinstance(pose_ids, int) else (pose_ids or None)
+        ligand_names = (
+            [ligand_names] if isinstance(ligand_names, str) else (ligand_names or None)
+        )
+        with self.storageman as sm:
+            return sm.fetch_lignames_and_poses_for_selection(
+                bookmark_name, ligand_names, pose_ids
+            )
+
     @_wrap_exceptions
     def create_rdkit_mols(
         self,
@@ -1878,7 +1906,7 @@ class RingtailCore:
         at a time so callers can process/display progressively.
 
         Args:
-            ligands_poses (dict): {ligname: [pose_id, ...]} from _fetch_select_ligands_poses
+            ligands_poses (dict): {ligname: [pose_id, ...]} from fetch_select_ligands_poses
             flexres_data (tuple, optional): output of make_receptor_flexres_mols()
             include_interactions (bool): whether to embed interaction strings
             include_comment (bool): whether to embed per-pose comments in properties
@@ -2018,7 +2046,7 @@ class RingtailCore:
     ) -> list[tuple[str, str]]:
         """
         Merges one or more databases into the primary database. Accepts a list
-        of explicit paths, glob patterns (e.g. "path/to/*.db"), or a mix of both.
+        of explicit paths, glob patterns (e.g. ``path/to/*.db``), or a mix of both.
         Duplicate paths and the primary database itself are automatically excluded.
 
         Args:
@@ -2211,46 +2239,6 @@ class RingtailCore:
             return -1
         else:
             return max_poses
-
-    def _fetch_select_ligands_poses(
-        self,
-        ligand_names: Union[str, list] = None,
-        pose_ids: Union[int, list] = None,
-        bookmark_name: str = None,
-    ) -> dict[str, list[int]]:
-        """
-        Basically give this method anything, and get back a dict with ligand names and
-        the pose ids selected by all the inputs. Can be a combo of ligand names, pose ids,
-        and bookmark/status table. PS The combo only pose_ids and bookmark will work as if just
-        the pose_ids were given.
-
-        Args:
-            ligand_names (Union[str, list], optional): _description_. Defaults to None.
-            pose_ids (Union[int, list], optional): _description_. Defaults to None.
-            bookmark_name (str, optional): _description_. Defaults to None.
-
-        Returns:
-            dict[str, list[int]]: _description_
-        """
-
-        # if just given bookmark, get all ligands in that bookmark
-        if bookmark_name is not None and not self._validate_bookmark_name(
-            bookmark_name
-        ):
-            raise RTCoreError(
-                f"Requested data, -{bookmark_name}-, is not a valid bookmark."
-            )
-
-        # if just pose_id(s), get their ligand names and add to dict
-        # assumes that the specific IDs were given for a reason, bookmark will not be considered
-        pose_ids = [pose_ids] if isinstance(pose_ids, int) else (pose_ids or None)
-        ligand_names = (
-            [ligand_names] if isinstance(ligand_names, str) else (ligand_names or None)
-        )
-        with self.storageman as sm:
-            return sm.fetch_lignames_and_poses_for_selection(
-                bookmark_name, ligand_names, pose_ids
-            )
 
     @staticmethod
     def _interactions_str(interactions: list) -> str:
@@ -2552,7 +2540,7 @@ class RingtailCore:
             )
         count_reps = 0
         if cluster_data.get("mfp"):
-            _, count_reps = self.cluster(
+            count_reps, _ = self.cluster(
                 output_bookmark,
                 "mfp",
                 cluster_data.get("mfp"),
@@ -2561,7 +2549,7 @@ class RingtailCore:
         if cluster_data.get("ifp"):
             # if mfp was also run, chain: cluster the mfp output
             ifp_input = output_bookmark if cluster_data.get("mfp") else input_bookmark
-            _, count_reps = self.cluster(
+            count_reps, _ = self.cluster(
                 output_bookmark,
                 "ifp",
                 cluster_data.get("ifp"),

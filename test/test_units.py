@@ -281,7 +281,7 @@ class TestOutput:
 
     def test_create_rdkitmol(self, populated_db):
         populated_db.filter(ebest=-3, output_bookmark="rdkit_test")
-        ligands_poses = populated_db._fetch_select_ligands_poses(
+        ligands_poses = populated_db.fetch_select_ligands_poses(
             ligand_names=["14303"], bookmark_name="rdkit_test"
         )
         _, mol, _, _, _ = populated_db.create_rdkit_mols(ligands_poses["14303"])[0]
@@ -331,7 +331,9 @@ class TestOutput:
         sub_count = RingtailCore(db_file=subset).table_length("Results")
         assert sub_count == 8
 
-        art = compress_file(subset, str(tmp_path / "subset.db.gz"), method="gzip", level=6)
+        art = compress_file(
+            subset, str(tmp_path / "subset.db.gz"), method="gzip", level=6
+        )
         assert art.endswith(".gz") and Path(art).exists()
         back = decompress_file(art, str(tmp_path / "back.db"))
         assert detect_db_type(back) in ("sqlite", "duckdb")
@@ -466,6 +468,83 @@ class TestMergeDB:
         assert secondary_pose_in_merged != secondary_pose_in_own_db
 
 
+class TestCrossref:
+    """Cross-referencing ligands across databases by bookmark and by status table."""
+
+    @staticmethod
+    def _build_db(path, storage_type, ligands):
+        rtc = RingtailCore(path, storage_type=storage_type)
+        rtc.add_results_from_files(
+            docking_results=[
+                str(TEST_DATA / f"adgpu/group1/{lig}.dlg.gz") for lig in ligands
+            ],
+            docking_mode="adgpu",
+        )
+        return rtc
+
+    @staticmethod
+    def _accept_ligand(rtc, ligname):
+        """Mark the best pose of a ligand as Accepted (status 1)."""
+        pose_id = rtc.db_query(
+            "SELECT pose_id FROM Results WHERE pose_rank = 1 AND ligand_id = "
+            f"(SELECT ligand_id FROM Ligands WHERE ligname = '{ligname}')"
+        )[0][0]
+        rtc.update_pose_status(pose_id, 1)
+
+    @staticmethod
+    def _bookmark_exists(path, name):
+        return name in RingtailCore(path).get_bookmark_names()
+
+    def test_crossref_status_tables(self, tmp_path, storage_type):
+        """Crossref two dbs scoped on the Accepted status table; only the ligand
+        accepted in BOTH databases should pass."""
+        dbA = str(tmp_path / "targetA.db")
+        dbB = str(tmp_path / "targetB.db")
+        # shared ligand "1451"; "1620"/"1751" are unique to one db each
+        rtcA = self._build_db(dbA, storage_type, ["1451", "1620"])
+        rtcB = self._build_db(dbB, storage_type, ["1451", "1751"])
+
+        self._accept_ligand(rtcA, "1451")
+        self._accept_ligand(rtcA, "1620")
+        self._accept_ligand(rtcB, "1451")
+        self._accept_ligand(rtcB, "1751")
+
+        rtcA = RingtailCore(dbA, storage_type=storage_type)
+        count, new_bookmarks, _ = rtcA.cross_reference_databases(
+            wanted_dbs=[(dbA, "accepted"), (dbB, "accepted")],
+        )
+
+        assert count == 1  # only "1451" is accepted in both
+        assert new_bookmarks[dbA] == "crossref_accepted"
+        assert new_bookmarks[dbB] == "crossref_accepted"
+        assert self._bookmark_exists(dbA, "crossref_accepted")
+        assert self._bookmark_exists(dbB, "crossref_accepted")
+
+    def test_crossref_mixed_scope(self, tmp_path, storage_type):
+        """A status table in wanted_dbs interoperates with a bookmark in
+        unwanted_dbs: the shared accepted ligand is excluded by the bookmark."""
+        dbA = str(tmp_path / "targetA.db")
+        dbB = str(tmp_path / "targetB.db")
+        dbC = str(tmp_path / "offtarget.db")
+        rtcA = self._build_db(dbA, storage_type, ["1451", "1620"])
+        rtcB = self._build_db(dbB, storage_type, ["1451", "1751"])
+        rtcC = self._build_db(dbC, storage_type, ["1451"])
+
+        self._accept_ligand(rtcA, "1451")
+        self._accept_ligand(rtcB, "1451")
+        # bookmark in the off-target db that captures the shared ligand
+        rtcC = RingtailCore(dbC, storage_type=storage_type)
+        assert rtcC.filter(eworst=0, output_bookmark="offtarget_hits")[0] >= 1
+
+        rtcA = RingtailCore(dbA, storage_type=storage_type)
+        count, _, _ = rtcA.cross_reference_databases(
+            wanted_dbs=[(dbA, "accepted"), (dbB, "accepted")],
+            unwanted_dbs=[(dbC, "offtarget_hits")],
+        )
+
+        assert count == 0  # "1451" passes wanted intersect but is excluded
+
+
 class TestADGPUHandling:
     def test_reactive_filtering(self, tmp_db):
         tmp_db.add_results_from_files(
@@ -598,11 +677,13 @@ class TestVinaHandling:
         setup_logging(level="DEBUG", logfile=logfile)
 
         tmp_db.add_results_from_files(
-            docking_results=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"), docking_mode="adgpu"
+            docking_results=str(TEST_DATA / "adgpu/group1/1451.dlg.gz"),
+            docking_mode="adgpu",
         )
         rtc2 = RingtailCore(tmp_db.db_file, storage_type=tmp_db.storagetype)
         rtc2.add_results_from_files(
-            docking_results=str(TEST_DATA / "vina/sample-result.pdbqt"), docking_mode="vina"
+            docking_results=str(TEST_DATA / "vina/sample-result.pdbqt"),
+            docking_mode="vina",
         )
         warning = (
             "The following database properties do not agree with the properties last used for this database: \n"
@@ -660,6 +741,35 @@ class TestADNGHandling:
         assert tmp_db.table_length("Results") == 9
         assert tmp_db.table_length("Interactions") == 60
 
+    def test_add_interactions_recalc_larger_cutoffs(self, tmp_db):
+        # populate with interactions at the default cutoffs (3.7 HB, 4.0 VDW)
+        adng_path = TEST_DATA / "adng"
+        tmp_db.add_results_from_files(
+            docking_results=str(adng_path),
+            receptor_file=str(adng_path / "helix--scofu01.json"),
+            save_receptor=True,
+            docking_mode="adng",
+        )
+        interactions_before = tmp_db.table_length("Interactions")
+        hb_before = tmp_db.db_query("SELECT SUM(num_hb) FROM Results")[0][0]
+        assert interactions_before > 0
+
+        # recalculating over existing interactions requires consent; without it the
+        # call is a no-op and the existing interactions are kept
+        tmp_db.add_interactions(hb_cutoff=6.0, vdw_cutoff=7.0)
+        assert tmp_db.table_length("Interactions") == interactions_before
+
+        # with consent, existing interactions are deleted and recomputed with the
+        # larger cutoffs, which captures more contacts -> more interactions and more
+        # hydrogen bonds (num_hb is recomputed in the Results table)
+        tmp_db.add_interactions(hb_cutoff=6.0, vdw_cutoff=7.0, consent=True)
+        interactions_after = tmp_db.table_length("Interactions")
+        hb_after = tmp_db.db_query("SELECT SUM(num_hb) FROM Results")[0][0]
+
+        assert tmp_db.table_length("Results") == 9  # poses themselves unchanged
+        assert interactions_after > interactions_before
+        assert hb_after > hb_before
+
     def test_filtering(self, tmp_db):
         adng_path = TEST_DATA / "adng"
         tmp_db.add_results_from_files(
@@ -693,7 +803,9 @@ class TestOptions:
                 for f in ["127458.dlg.gz", "173101.dlg.gz", "100729.dlg.gz"]
             )
         )
-        tmp_db.add_results_from_files(docking_results=str(filelist), docking_mode="adgpu")
+        tmp_db.add_results_from_files(
+            docking_results=str(filelist), docking_mode="adgpu"
+        )
         tmp_db.filters = Filters(score_percentile=20)
         assert tmp_db.filters.eworst is None
         assert tmp_db.filters.score_percentile == 20
