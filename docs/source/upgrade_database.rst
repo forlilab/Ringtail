@@ -1,36 +1,19 @@
 .. _upgrade_database:
 
-Updating database written with v1.0.0/v1.1.0 to work with v2.0
-###############################################################
+Upgrade any Ringtail database to v3
+###################################
 
-If you have previously written a database with Ringtail v<2.0, it will need to be updated to be compatible with the newest v2.0 Ringtail package. We have included a script ``rt_db_to_v200.py`` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
-
-.. code-block:: bash
-
-    $ rt_db_to_v200.py -d old_database_1.db (required) old_database_2+.db (optional)
-
-
-Multiple databases may be specified at once. The update may take a few minutes per database.
-
-Updating database written with v1.0.0 to work with v1.1.0
-##########################################################
-
-If you have previously written a database with Ringtail v1.0.0, it will need to be updated to be compatible with filtering with v1.1.0. We have included a script ``rt_db_v100_to_v110.py`` to perform this updated. Please note that all existing bookmarks will be removed during the update. The usage is as follows:
+If you have previously written a database with Ringtail v<3.0, it will need to be updated to be compatible with the newest v3 Ringtail package. The CLI ``rt_upgrade_db.py`` will perform this upgrade, and please note that all existing bookmarks and screening tables will be removed during the update. The usage is as follows:
 
 .. code-block:: bash
 
-    $ rt_db_v100_to_v110.py -d 100_database_1.db (required) 100_database_2+.db (optional)
+    $ rt_upgrade_db -d old_database_1.db (required) old_database_2+.db (optional)
 
 
-Multiple databases may be specified at once. The update may take a few minutes per database.
+Multiple databases may be specified at once. The update may take a while depending on the size of the database.
 
-If trying to read a database created with Ringtail v1.0.0 with a newer version of Ringtail, you may encounter errors related to changes to the internal database structure. If you encounter this, run the follow commands (example of database named ``output.db``):
-
+If you need to upgrade an older database to work with any version other than the latest, simply specify the schema version you need to upgrade to:
 .. code-block:: bash
 
-    $ sqlite3 output.db
-    # opens database in sqlite
-    > ALTER TABLE Results RENAME energies_binding TO docking_score;
-    > ALTER TABLE Bookmarks ADD COLUMN filters;
+    $ rt_upgrade_db -d older_database_1.db --version 2.0.0
 
-If you encounter further errors related to views/bookmarks, please contact the ForliLab.

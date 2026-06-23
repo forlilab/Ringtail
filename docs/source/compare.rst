@@ -3,7 +3,6 @@
 Compare docking results from different virtual screenings
 ##########################################################
 
-
 The script ``rt_compare`` is designed to be used with databases already made and filtered. It is used to combine information across multiple virtual screenings to allow or exclude the selection of ligands passing filters across multiple targets/models. This can be useful for filtering out promiscuous ligands, a technique commonly used in exerimental high-throughput screening. It may also be used if selection of ligands binding multiple protein structures/conformations/homologs are desired.
 
 Programmatically, the ``rt_compare`` script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (``--wanted``) or exclusive to some screenings and not others (``--unwanted``). The script uses a subset of commands similar to ``rt_process_vs``.
@@ -15,16 +14,16 @@ Let us assume that kinase1 is our target of interest. It has related proteins ki
 2. Filter each database separately to get a set of virtual hits for each target. Each set of filters may be different as desired (e.g. change interaction filters for analogous residues), and make not of the bookmark name used in each database, here let's say kinase1.db filtering was stored in bookmark ``best_interactions``, while the filters in kinase1a.db and kinase1b.db was the same ``bad_interaction_filter``. (Each databaser and bookmark needs a separate ``--(un)wanted`` keyword.)
 3. Use ``rt_compare`` to find ligands that pass the filters for kinase1 but not kinase1a or kinase1b. This will produce a new bookmark in each database with the original specified bookmark name prefixed the option provuded from ``--save_bookmark`` (defaults to ``crossref``).
 4. There are several output options, each will produce the same output per compared database as poses, energies, et c., will be different. 
-    a. By specifying ``--log`` or ``--log comparison.txt`` the script will create a log file of the same format as the filter output from ``rt_process_vs``. 
+    a. By specifying ``-l`` or ``-l comparison.txt`` the script will create a log file of the same format as the filter output from ``rt_process_vs``. 
     b. Specifying ``-xs`` or ``--export_sdf`` will create one file with all ligands and poses that passed
-    c. Specifying ``-xd`` or ``--export_database`` will create a new database from the crossreferenced bookmark
+    c. Specifying ``-xd`` or ``--export_db`` will create a new database from the crossreferenced bookmark
     d. Other export options maybe used after the cross referencing has been performed, either by connecting to one of the Ringtail databases, and exporting based on the crossreferenced bookmark, or by performing Ringtail actions on an exported filtered database.  
 
 .. code-block:: bash
 
     $ rt_compare --wanted kinase1.db best_interactions --unwanted kinase1a.db bad_interaction_filter --unwanted kinase1b.db bad_interaction_filter
 
-4. Other usage examples and output options given below. For example, one can also select for potential dual-target ligands with
+5. Other usage examples and output options given below. For example, one can also select for potential dual-target ligands with
 
 
 .. code-block:: bash
@@ -87,23 +86,30 @@ Access help message for rt_compare
 Supported arguments for the comparison script
 ***********************************************
 
-+----------------+----+----------------------------------------------------------------------------------------------------------------------------------+------------------+
-| Argument            | Description                                                                                                                      | Default value    |
-+================+====+==================================================================================================================================+==================+
-|--config        | -c | Configuration JSON file to specify new default options. Overridded by command line                                               | no default       |
-+----------------+----+----------------------------------------------------------------------------------------------------------------------------------+------------------+
-|--wanted        | -w | Database files and associated bookmark names for which to include the intersection of ligands                                    | no default       |
-+----------------+----+----------------------------------------------------------------------------------------------------------------------------------+------------------+
-|--unwanted      | -uw| Database files and associated bookmark names for which to exclude the intersection of ligands                                    | no default       |
-+----------------+----+----------------------------------------------------------------------------------------------------------------------------------+------------------+
-|--log           | -l | Name for log file to which results are written                                                                                   | no default       |
-+----------------+----+----------------------------------------------------------------------------------------------------------------------------------+------------------+
-|--save_bookmark | -s | Prefix used with original bookmark name, as the bookmark that will be stored in each database after comparison                   | no default       |
-+----------------+----+----------------------------------------------------------------------------------------------------------------------------------+------------------+
-|--export_db     | -xd| Export the new compared bookmark in each database as a new database                                                              | no default       |
-+----------------+----+----------------------------------------------------------------------------------------------------------------------------------+------------------+
-|--export_sdf    | -xs| Export the new compared bookmark in each database as an SD file of all ligands and poses in that database                        | no default       |
-+----------------+----+----------------------------------------------------------------------------------------------------------------------------------+------------------+
-
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+| Argument         |    | Description                                                                                                                      | Default value         |
++==================+====+==================================================================================================================================+=======================+
+|--config          | -c | Configuration JSON file to specify new default options. Overridded by command line                                               | no default            |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--wanted          | -w | Database files and associated bookmark names for which to include the intersection of ligands                                    | no default            |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--unwanted        | -uw| Database files and associated bookmark names for which to exclude the intersection of ligands                                    | no default            |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--store_best_pose | -bp | Store and export only the best ranked pose per ligand                                                                           | False                 |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--output_log      | -l | Name for log file to which results are written                                                                                   | no default            |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--save_bookmark   | -s | Prefix used with original bookmark name, as the bookmark that will be stored in each database after comparison                   | crossref              |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--export_db       | -xd| Export the new compared bookmark in each database as a new database                                                              |crossref_<bookmark>.db |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--export_sdf      | -xs| Export the new compared bookmark in each database as an SD file of all ligands and poses in that database                        |crossref_<bookmark>.sdf|
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--verbose         | -v | Set log level to info                                                                                                            | no default            |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--debug           | -d | Set log level to debug                                                                                                           | no default            |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
+|--logfile         |    | Optional log file for debug output                                                                                               | no default            |
++------------------+----+----------------------------------------------------------------------------------------------------------------------------------+-----------------------+
 
 
