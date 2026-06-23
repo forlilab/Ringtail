@@ -78,6 +78,7 @@ pygments_style = "sphinx"
 
 html_theme = "shibuya"
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 
 # Shibuya theme options (AutoDock-blue accent; light/dark toggle is built in).
 html_theme_options = {

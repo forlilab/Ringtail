@@ -2,6 +2,9 @@
    Adapt freely, but keep the root toctree directives at the bottom.
 
 .. image:: https://user-images.githubusercontent.com/41704502/170797800-53a9d94a-932e-4936-9bea-e2d292b0c62b.png
+   :width: 350px
+
+.. rst-class:: hide-title
 
 Ringtail
 ##########
@@ -36,32 +39,44 @@ What you can do with Ringtail
    :gutter: 3
 
    .. grid-item-card:: Read any AutoDock output
+      :link: get_started
+      :link-type: ref
 
       Ingest AutoDock-GPU DLGs, AutoDock-Vina PDBQTs, and ADNG SDFs — or docking results
       streamed straight from memory, no files required.
 
    .. grid-item-card:: Filter the way you think
+      :link: cmdline
+      :link-type: ref
 
       Screen by docking score, ligand efficiency, percentiles, receptor interactions
       (hydrogen-bond / van der Waals / reactive), ligand substructure and 3D position, or
       molecular weight.
 
    .. grid-item-card:: Choose your engine
+      :link: big_data
+      :link-type: ref
 
       Store results in DuckDB (fast, the default) or SQLite — the same Ringtail, your choice
       of backend.
 
    .. grid-item-card:: Cluster & compare
+      :link: compare
+      :link-type: ref
 
       Reduce to diverse representatives with Morgan- or interaction-fingerprint clustering, and
       cross-reference ligands across multiple targets to find selective binders.
 
    .. grid-item-card:: Export what you need
+      :link: api
+      :link-type: ref
 
       Write SDFs, CSVs with exactly the columns you want (no SQL required), receptor PDBQTs, or
       a smaller standalone database.
 
    .. grid-item-card:: Built for big data
+      :link: big_data
+      :link-type: ref
 
       Compress databases for transfer off an HPC, merge screens run in batches, and keep working
       smoothly at tens of millions of poses.

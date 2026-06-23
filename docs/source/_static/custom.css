@@ -1,0 +1,6 @@
+/* Landing page: the logo already says "Ringtail", so hide the redundant H1
+   text. Scoped via the `.. rst-class:: hide-title` directive on index.rst's
+   title, so every other page keeps its visible heading. */
+.hide-title > h1 {
+    display: none;
+}
