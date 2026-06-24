@@ -30,7 +30,7 @@ Database size scales roughly linearly with the number of stored poses, see [the 
 
 ## Installation
 
-Ringtail requires Python ≥3.9. It's recommended to install Ringtail in a dedicated environment such as conda or micromamba.
+Ringtail requires Python ≥3.9 and is tested on Linux, macOS, and Windows. It's recommended to install Ringtail in a dedicated environment such as conda or micromamba.
 
 ```bash
 $ conda create -n ringtail python=3.11

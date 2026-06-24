@@ -40,7 +40,7 @@ Enhancements to the codebase
 * DuckDB backend offered as an alternative to SQLite, with overall similar database creating times and significantly enhanced filtering times and smaller file size
 * The Ringtail database schema is now fully defined in `schema.py`, and most storage level methods uses a custom QueryBuilder class to handle building of SQL dynamically (and with specific backend dialects)
 * Abandoned using views to store filtered poses in favor of a long-and-skinny `Filtered_poses` and `Filters` tables, significantly speeding up filtering and especially progressive filtering
-* Multiprocess now uses 'fork' start method for compatibility with multithreaded processes and enables Ringtail on Windows machines #TODO 
+* Parallel result parsing now selects the multiprocessing start method per platform: ``fork`` on Linux, ``spawn`` on macOS and Windows (which does not support ``fork``), meaning Ringtail now runs on Windows in addition to Linux and macOS; the full test suite passes on all three
 * A larger default chunk size of docking data is parsed before writing to the database 
 * Package handling modernized to use pyproject.toml 
 * Additional filters allow specification of minimun and maximum ligand molecular weight, `ligand_min_molweight` and `ligand_max_molweight`
