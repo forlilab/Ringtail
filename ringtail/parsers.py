@@ -214,7 +214,7 @@ class VinaMoleculeSupplier:
 
         if is_file:
             open_fn, _ = _open_fn_and_name(data_pointer)
-            ligname = data_pointer.split(".pdbqt")[0].split("/")[-1]
+            ligname = os.path.basename(data_pointer.split(".pdbqt")[0])
             logger.debug("Parsing vina docking file")
             with open_fn(data_pointer, "rb") as fp:
                 pdbqt_str_list = fp.read().decode("utf-8")
@@ -614,8 +614,8 @@ class ADGPUMoleculeSupplier:
         for line in header_str.splitlines():
             if line[0:11] == "Ligand file":
                 ligname = (
-                    line.split(":", 1)[1].split("/")[-1].split(".")[0].strip()
-                )  # remove path and file extension
+                    line.split(":", 1)[1].strip().replace("\\", "/").split("/")[-1].split(".")[0]
+                )  # remove path and file extension (separator-agnostic)
             # store receptor name and grid parameters
             elif line[:13] == "Receptor name":
                 receptor = line.split()[2]

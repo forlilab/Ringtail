@@ -4,6 +4,7 @@
 # Ringtail receptor manager
 #
 
+import os
 import gzip
 from dataclasses import dataclass
 from .logutils import get_logger
@@ -25,7 +26,7 @@ class ReceptorManager:
         Returns:
             tuple[str, bytes]: rec_name and blob (compressed receptor)
         """
-        rec_name = receptor_file.split(".")[0].split("/")[-1]
+        rec_name = os.path.basename(receptor_file).split(".")[0]
         if receptor_file.endswith(".gz"):
             with open(receptor_file, "rb") as r:
                 receptor = r.read()
