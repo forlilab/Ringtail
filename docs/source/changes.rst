@@ -5,7 +5,7 @@ Changes in Ringtail
 Changes in 3.0: Faster and smaller, and lots of new functionality
 ******************************************************************
 
-Ringtail 3 comes with support for the new ADNG docking engine <link>, now uses the DuckDB database engine by default, and includes an overhauled database schema leading to faster screening and filtering. There are new output options including CSV export with custom column choices without needing to know SQL, and new or improved command line tools to handle database merging and compression/decompression. Overall a Ringtail database now takes up less space, and is significantly faster filter and screen. 
+Ringtail 3 comes with support for the new ADNG docking engine <#TODOlink>, now uses the DuckDB database engine by default, and includes an overhauled database schema leading to faster screening and filtering. There are new output options including CSV export with custom column choices without needing to know SQL, and new or improved command line tools to handle database merging and compression/decompression. Overall a Ringtail database now takes up less space, and is significantly faster filter and screen. 
 
 Performance metrics
 ===================
