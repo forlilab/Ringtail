@@ -1091,7 +1091,7 @@ docking_file_parsers: dict[str, callable] = {
 
 
 ad6_aliases = {
-    "ad6_free_energy": "docking_score",
+    "autodock_free_energy": "docking_score",
     "pose_id": "pose_rank",
     "_Name": "ligname",
 }
